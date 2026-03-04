@@ -127,7 +127,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
     is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-) {
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
@@ -155,12 +155,19 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-    let a = run_alu_w(opcode, &b_word, &c_word).map(F::from_canonical_u8);
-    assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
+    let expected = run_alu_w(opcode, &b_word, &c_word);
+    assert_eq!(
+        expected.map(F::from_canonical_u8),
+        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+    );
+    expected
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test_case(ADDW, 100)]
@@ -235,14 +242,18 @@ fn rand_rv64w_alu_test_persistent(opcode: BaseAluWOpcode, num_ops: usize) {
 
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_alu_test(
     opcode: BaseAluWOpcode,
-    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
+    prank_a: [u32; RV64_WORD_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prank_opcode_flags: Option<[bool; 2]>,
     prank_result_sign: Option<u32>,
@@ -270,13 +281,22 @@ fn run_negative_alu_test(
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut BaseAluWCoreCols<F> = core_row.borrow_mut();
-        let prank_a_word: [u32; RV64_WORD_NUM_LIMBS] =
-            prank_a[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-        cols.a = prank_a_word.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_canonical_u32);
+        if let Some(prank_b) = prank_b {
+            let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            cols.b = prank_b_word.map(F::from_canonical_u32);
+            let prank_rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            adapter_cols.rs1_high = prank_rs1_high.map(F::from_canonical_u32);
+        }
         if let Some(prank_c) = prank_c {
             let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
                 prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
             cols.c = prank_c_word.map(F::from_canonical_u32);
+            let prank_rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            adapter_cols.rs2_high = prank_rs2_high.map(F::from_canonical_u32);
         }
         if let Some(prank_opcode_flags) = prank_opcode_flags {
             cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);
@@ -301,9 +321,10 @@ fn run_negative_alu_test(
 fn rv64_alu_addw_wrong_negative_test() {
     run_negative_alu_test(
         ADDW,
-        [246, 0, 0, 0, 0, 0, 0, 0],
+        [246, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -316,9 +337,10 @@ fn rv64_alu_addw_wrong_negative_test() {
 fn rv64_alu_addw_out_of_range_negative_test() {
     run_negative_alu_test(
         ADDW,
-        [500, 0, 0, 0, 0, 0, 0, 0],
+        [500, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -331,9 +353,10 @@ fn rv64_alu_addw_out_of_range_negative_test() {
 fn rv64_alu_subw_wrong_negative_test() {
     run_negative_alu_test(
         SUBW,
-        [255, 0, 0, 0, 0, 0, 0, 0],
+        [255, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -346,9 +369,10 @@ fn rv64_alu_subw_wrong_negative_test() {
 fn rv64_alu_subw_out_of_range_negative_test() {
     run_negative_alu_test(
         SUBW,
-        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0, 0, 0, 0, 0],
+        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -361,9 +385,10 @@ fn rv64_alu_subw_out_of_range_negative_test() {
 fn rv64_aluw_adapter_unconstrained_imm_limb_test() {
     run_negative_alu_test(
         ADDW,
-        [255, 7, 0, 0, 0, 0, 0, 0],
+        [255, 7, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [255, 7, 0, 0, 0, 0, 0, 0],
+        None,
         Some([511, 6, 0, 0, 0, 0, 0, 0]),
         None,
         None,
@@ -376,9 +401,10 @@ fn rv64_aluw_adapter_unconstrained_imm_limb_test() {
 fn rv64_aluw_adapter_unconstrained_rs2_read_test() {
     run_negative_alu_test(
         ADDW,
-        [2, 2, 2, 2, 0, 0, 0, 0],
+        [2, 2, 2, 2],
         [1, 1, 1, 1, 0, 0, 0, 0],
         [1, 1, 1, 1, 0, 0, 0, 0],
+        None,
         None,
         Some([false, false]),
         None,
@@ -391,9 +417,10 @@ fn rv64_aluw_adapter_unconstrained_rs2_read_test() {
 fn rv64_aluw_wrong_upper_sign_extension_negative_test() {
     run_negative_alu_test(
         ADDW,
-        [5, 0, 0, 0, 0, 0, 0, 0],
+        [5, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [5, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         Some(1),
@@ -406,9 +433,10 @@ fn rv64_aluw_wrong_upper_sign_extension_negative_test() {
 fn rv64_aluw_wrong_upper_sign_extension_negative_to_zero_test() {
     run_negative_alu_test(
         ADDW,
-        [0, 0, 0, 128, 0, 0, 0, 0],
+        [0, 0, 0, 128],
         [0, 0, 0, 128, 255, 255, 255, 255],
         [0, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         Some(0),
@@ -417,177 +445,9 @@ fn rv64_aluw_wrong_upper_sign_extension_negative_to_zero_test() {
     );
 }
 
-#[test]
-fn rv64_aluw_rs1_upper_bytes_trace_tamper_negative_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-    let mem_helper = tester.memory_helper();
-
-    let rd_ptr = 32usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-
-    let mut poisoned_rs1 = [1u8, 2, 3, 4, 11, 12, 13, 14];
-    let clean_rs1 = [1u8, 2, 3, 4, 21, 22, 23, 24];
-    poisoned_rs1[..RV64_WORD_NUM_LIMBS].copy_from_slice(&clean_rs1[..RV64_WORD_NUM_LIMBS]);
-
-    let rs2 = [9u8, 8, 7, 6, 31, 32, 33, 34];
-    let poisoned_write_timestamp = tester.memory.memory.timestamp();
-    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_canonical_u8));
-    tester.write(1, rs1_ptr, clean_rs1.map(F::from_canonical_u8));
-    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
-
-    tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
-        &Instruction::from_usize(ADDW.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
-    );
-
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
-        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
-        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
-        let rs1_aux_base = adapter_cols.reads_aux[0].as_mut();
-        mem_helper
-            .as_borrowed()
-            .fill(poisoned_write_timestamp, read_timestamp, rs1_aux_base);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(true));
-}
-
-#[test]
-fn rv64_aluw_rs2_upper_bytes_trace_tamper_negative_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-    let mem_helper = tester.memory_helper();
-
-    let rd_ptr = 32usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-
-    let rs1 = [1u8, 2, 3, 4, 41, 42, 43, 44];
-    let mut poisoned_rs2 = [9u8, 8, 7, 6, 11, 12, 13, 14];
-    let clean_rs2 = [9u8, 8, 7, 6, 21, 22, 23, 24];
-    poisoned_rs2[..RV64_WORD_NUM_LIMBS].copy_from_slice(&clean_rs2[..RV64_WORD_NUM_LIMBS]);
-
-    let poisoned_write_timestamp = tester.memory.memory.timestamp();
-    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
-    tester.write(1, rs2_ptr, poisoned_rs2.map(F::from_canonical_u8));
-    tester.write(1, rs2_ptr, clean_rs2.map(F::from_canonical_u8));
-
-    tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
-        &Instruction::from_usize(ADDW.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
-    );
-
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
-        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
-        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
-        let rs2_aux_base = adapter_cols.reads_aux[1].as_mut();
-        mem_helper
-            .as_borrowed()
-            .fill(poisoned_write_timestamp, read_timestamp, rs2_aux_base);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(false));
-}
-
-#[test]
-fn rv64_aluw_rd_upper_bytes_trace_tamper_negative_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    let rd_ptr = 32usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-
-    let rd_prev = [19u8, 18, 17, 16, 61, 62, 63, 64];
-    let rs1 = [1u8, 2, 3, 4, 41, 42, 43, 44];
-    let rs2 = [9u8, 8, 7, 6, 31, 32, 33, 34];
-    tester.write(1, rd_ptr, rd_prev.map(F::from_canonical_u8));
-    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
-    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
-
-    tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
-        &Instruction::from_usize(ADDW.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
-    );
-
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
-        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.writes_aux.prev_data[4] = F::from_canonical_u32(1);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(true));
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn run_addw_sanity_test() {
-    // Inputs are sign-extended from 32-bit values; result upper bytes are sign-extension of byte 3.
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 255, 255, 255, 255];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 0, 0, 0, 0];
-    let result = run_alu_w(
-        ADDW,
-        x[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
-        y[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
-    );
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_subw_sanity_test() {
-    // Inputs are sign-extended from 32-bit values; result upper bytes are sign-extension of byte 3.
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 255, 255, 255, 255];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 255, 255, 255, 255];
-    let result = run_alu_w(
-        SUBW,
-        x[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
-        y[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
-    );
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
 
 #[test]
 fn run_addw_noncanonical_upper_bytes_sanity_test() {
@@ -597,7 +457,10 @@ fn run_addw_noncanonical_upper_bytes_sanity_test() {
 
     let rs1 = [170u8, 16, 32, 48, 13, 14, 15, 16];
     let rs2 = [1u8, 2, 3, 4, 21, 22, 23, 24];
-    set_and_execute(
+    // 0x302010AA + 0x04030201 = 0x342312AB (positive, sign-extended to 0x00000000_342312AB)
+    let expected: [u8; RV64_REGISTER_NUM_LIMBS] =
+        0x00000000_342312ABu64.to_le_bytes();
+    let result = set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
@@ -607,6 +470,7 @@ fn run_addw_noncanonical_upper_bytes_sanity_test() {
         Some(false),
         Some(rs2),
     );
+    assert_eq!(result, expected);
 
     let tester = tester
         .build()
@@ -624,7 +488,10 @@ fn run_subw_noncanonical_upper_bytes_sanity_test() {
 
     let rs1 = [0u8, 0, 0, 128, 13, 14, 15, 16];
     let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
-    set_and_execute(
+    // 0x80000000 - 0x00000001 = 0x7FFFFFFF (positive, sign-extended to 0x00000000_7FFFFFFF)
+    let expected: [u8; RV64_REGISTER_NUM_LIMBS] =
+        0x00000000_7FFFFFFFu64.to_le_bytes();
+    let result = set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
@@ -634,6 +501,7 @@ fn run_subw_noncanonical_upper_bytes_sanity_test() {
         Some(false),
         Some(rs2),
     );
+    assert_eq!(result, expected);
 
     let tester = tester
         .build()
