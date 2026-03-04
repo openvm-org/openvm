@@ -53,8 +53,8 @@ use super::{
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
-    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
-    BOUNDARY_AIR_IDX, PROGRAM_CACHED_TRACE_INDEX,
+    VmExecutionConfig, VmState, BOUNDARY_AIR_IDX, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX,
 };
 use crate::{
     arch::{deferral::DeferralState, DEFAULT_RNG_SEED},
