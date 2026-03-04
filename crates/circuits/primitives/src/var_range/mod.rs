@@ -234,4 +234,8 @@ where
         let trace_row_maj = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(trace_row_maj)
     }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(1 << (self.air.range_max_bits() + 1))
+    }
 }
