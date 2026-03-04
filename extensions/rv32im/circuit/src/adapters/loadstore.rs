@@ -8,16 +8,13 @@ use openvm_circuit::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
-    system::{
-        memory::{
-            offline_checker::{
-                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-                MemoryWriteAuxCols,
-            },
-            online::TracingMemory,
-            MemoryAddress, MemoryAuxColsFactory,
+    system::memory::{
+        offline_checker::{
+            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols,
         },
-        native_adapter::util::{memory_read_native, timed_write_native},
+        online::TracingMemory,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -30,7 +27,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -417,11 +414,7 @@ where
                     a.as_canonical_u32(),
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = if e == NATIVE_AS {
-                    memory_read_native(memory.data(), ptr_val).map(|x: F| x.as_canonical_u32())
-                } else {
-                    memory_read(memory.data(), e, ptr_val).map(u32::from)
-                };
+                let prev_data = memory_read(memory.data(), e, ptr_val).map(u32::from);
                 (read_data, prev_data)
             }
         };
@@ -462,11 +455,7 @@ where
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
 
-                    if record.mem_as == 4 {
-                        timed_write_native(memory, ptr, data.map(F::from_u32)).0
-                    } else {
-                        timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
-                    }
+                    timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                     timed_write(

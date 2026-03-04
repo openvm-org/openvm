@@ -26,11 +26,11 @@ use self::{connector::VmConnectorAir, program::ProgramAir, public_values::Public
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
-        ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
-        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
-        RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper,
-        VmCircuitConfig, VmExecutionConfig, VmField, CONNECTOR_AIR_ID, CONST_BLOCK_SIZE,
-        PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+        ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
+        ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor, RowMajorMatrixArena,
+        SystemConfig, VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper, VmCircuitConfig,
+        VmExecutionConfig, VmField, CONNECTOR_AIR_ID, CONST_BLOCK_SIZE, PROGRAM_AIR_ID,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -120,9 +120,6 @@ pub struct SystemRecords<F> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
     pub filtered_exec_frequencies: Vec<u32>,
-    // We always use a [DenseRecordArena] here, regardless of the generic `RA` used for other
-    // execution records.
-    pub access_adapter_records: DenseRecordArena,
     // Perf[jpw]: this should be computed on-device and changed to just touched blocks
     pub touched_memory: TouchedMemory<F>,
     /// The public values of the [PublicValuesChip]. These should only be non-empty if
@@ -151,17 +148,17 @@ pub struct SystemPort {
 }
 
 #[derive(Clone)]
-pub struct SystemAirInventory<SC: StarkProtocolConfig> {
+pub struct SystemAirInventory {
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
-    pub memory: MemoryAirInventory<SC>,
+    pub memory: MemoryAirInventory,
     /// Public values AIR exists if and only if continuations is disabled and `num_public_values`
     /// is greater than 0.
     pub public_values: Option<PublicValuesAir>,
 }
 
-impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
-    pub fn new(
+impl SystemAirInventory {
+    pub fn new<SC: StarkProtocolConfig>(
         config: &SystemConfig,
         port: SystemPort,
         merkle_compression_buses: Option<(PermutationCheckBus, PermutationCheckBus)>,
@@ -184,7 +181,7 @@ impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
             merkle_compression_buses.is_some()
         );
 
-        let memory = MemoryAirInventory::new(
+        let memory = MemoryAirInventory::new::<SC>(
             memory_bridge,
             &config.memory_config,
             range_bus,
@@ -223,7 +220,7 @@ impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
         }
     }
 
-    pub fn into_airs(self) -> Vec<AirRef<SC>> {
+    pub fn into_airs<SC: StarkProtocolConfig>(self) -> Vec<AirRef<SC>> {
         let mut airs: Vec<AirRef<SC>> = Vec::new();
         airs.push(Arc::new(self.program));
         airs.push(Arc::new(self.connector));
@@ -308,7 +305,7 @@ where
             program_bus,
             memory_bridge,
         };
-        let system = SystemAirInventory::new(self, system_port, merkle_compression_buses);
+        let system = SystemAirInventory::new::<SC>(self, system_port, merkle_compression_buses);
 
         let mut inventory = AirInventory::new(self.clone(), system, bus_idx_mgr);
 
@@ -364,7 +361,7 @@ where
 {
     pub fn new(
         config: &SystemConfig,
-        mem_inventory: &MemoryAirInventory<SC>,
+        mem_inventory: &MemoryAirInventory,
         range_checker: SharedVariableRangeCheckerChip,
         hasher_chip: Option<Arc<Poseidon2PeripheryChip<Val<SC>>>>,
     ) -> Self {
@@ -448,7 +445,6 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
-            access_adapter_records,
             touched_memory,
             public_values,
         } = system_records;
@@ -467,9 +463,7 @@ where
             chip.generate_proving_ctx(arena)
         });
 
-        let memory_ctxs = self
-            .memory_controller
-            .generate_proving_ctx(access_adapter_records, touched_memory);
+        let memory_ctxs = self.memory_controller.generate_proving_ctx(touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()

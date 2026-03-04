@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -87,21 +87,9 @@ where
 }
 
 fn is_aot_supported_impl<F: PrimeField32>(
-    inst: &openvm_instructions::instruction::Instruction<F>,
+    _inst: &openvm_instructions::instruction::Instruction<F>,
 ) -> bool {
-    let local_opcode = Rv32LoadStoreOpcode::from_usize(
-        inst.opcode
-            .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-    );
-    let e_u32 = inst.e.as_canonical_u32();
-    let is_native_store = e_u32 == NATIVE_AS;
-    // Writing into native address space is not supported in AOT.
-    match local_opcode {
-        Rv32LoadStoreOpcode::STOREW | Rv32LoadStoreOpcode::STOREH | Rv32LoadStoreOpcode::STOREB => {
-            !is_native_store
-        }
-        _ => true,
-    }
+    true
 }
 
 // arguments of `update_boundary_merkle_heights_f`:
@@ -140,11 +128,6 @@ fn generate_x86_asm_impl<F: PrimeField32>(
     let imm = c.as_canonical_u32();
     let imm_sign = g.as_canonical_u32();
     let imm_extended = (imm + imm_sign * 0xffff0000) as i32;
-    assert_ne!(
-        e_u32, NATIVE_AS,
-        "Storing into native address space should be handled by the fallback operation"
-    );
-
     let a = a.as_canonical_u32() as u8;
     let b = b.as_canonical_u32() as u8;
     let a_reg = a / 4;

@@ -36,13 +36,6 @@ __device__ inline bool same_output_block(
     return (in[lhs_idx].ptr / OUT_BLOCK_SIZE) == (in[rhs_idx].ptr / OUT_BLOCK_SIZE);
 }
 
-__device__ inline uint32_t addr_space_cell_size(
-    uint32_t const *addr_space_offsets,
-    uint32_t addr_space_idx
-) {
-    return addr_space_offsets[addr_space_idx + 1] - addr_space_offsets[addr_space_idx];
-}
-
 /// Read initial memory values for a chunk and convert them to Montgomery-encoded
 /// field elements. The output values must be in Montgomery form because they are
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
@@ -54,6 +47,7 @@ __device__ inline void read_initial_chunk(
     uint32_t address_space,
     uint32_t chunk_ptr
 ) {
+    (void)addr_space_offsets;
     uint32_t addr_space_idx = address_space - 1;
     uint8_t const *mem = initial_mem[addr_space_idx];
     if (!mem) {
@@ -63,23 +57,12 @@ __device__ inline void read_initial_chunk(
         }
         return;
     }
-    uint32_t cell_size = addr_space_cell_size(addr_space_offsets, addr_space_idx);
-    size_t byte_offset = static_cast<size_t>(chunk_ptr) * cell_size;
+    size_t byte_offset = static_cast<size_t>(chunk_ptr);
     #pragma unroll
     for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
-        size_t off = byte_offset + static_cast<size_t>(i) * cell_size;
-        if (cell_size == 4) {
-            // Native32 values are already stored as field elements in Montgomery form
-            out_values[i] = *reinterpret_cast<uint32_t const *>(mem + off);
-        } else if (cell_size == 2) {
-            // Convert u16 value to field element in Montgomery form
-            out_values[i] = Fp(*reinterpret_cast<uint16_t const *>(mem + off)).asRaw();
-        } else if (cell_size == 1) {
-            // Convert u8 value to field element in Montgomery form
-            out_values[i] = Fp(mem[off]).asRaw();
-        } else {
-            out_values[i] = 0;
-        }
+        size_t off = byte_offset + static_cast<size_t>(i);
+        // Convert u8 value to field element in Montgomery form.
+        out_values[i] = Fp(mem[off]).asRaw();
     }
 }
 

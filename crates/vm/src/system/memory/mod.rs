@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use openvm_circuit_primitives::{is_less_than::IsLtSubAir, var_range::VariableRangeCheckerBus};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::PermutationCheckBus,
@@ -9,7 +9,6 @@ use openvm_stark_backend::{
     AirRef, StarkProtocolConfig, Val,
 };
 
-pub mod adapter;
 mod controller;
 pub mod merkle;
 pub mod offline_checker;
@@ -25,8 +24,8 @@ pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 use crate::{
     arch::{MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{
-        adapter::AccessAdapterAir, dimensions::MemoryDimensions, interface::MemoryInterfaceAirs,
-        merkle::MemoryMerkleAir, offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
+        dimensions::MemoryDimensions, interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
+        offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
         volatile::VolatileBoundaryAir,
     },
 };
@@ -71,14 +70,13 @@ impl<S, T> MemoryAddress<S, T> {
 }
 
 #[derive(Clone)]
-pub struct MemoryAirInventory<SC: StarkProtocolConfig> {
+pub struct MemoryAirInventory {
     pub bridge: MemoryBridge,
     pub interface: MemoryInterfaceAirs,
-    pub access_adapters: Vec<AirRef<SC>>,
 }
 
-impl<SC: StarkProtocolConfig> MemoryAirInventory<SC> {
-    pub fn new(
+impl MemoryAirInventory {
+    pub fn new<SC: StarkProtocolConfig>(
         bridge: MemoryBridge,
         mem_config: &MemoryConfig,
         range_bus: VariableRangeCheckerBus,
@@ -117,34 +115,11 @@ impl<SC: StarkProtocolConfig> MemoryAirInventory<SC> {
             );
             MemoryInterfaceAirs::Volatile { boundary }
         };
-        // Memory access adapters - only create if enabled
-        let access_adapters: Vec<AirRef<SC>> = if mem_config.access_adapters_enabled() {
-            let lt_air = IsLtSubAir::new(range_bus, mem_config.timestamp_max_bits);
-            let maan = mem_config.max_access_adapter_n;
-            assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
-            [
-                Arc::new(AccessAdapterAir::<2> { memory_bus, lt_air }) as AirRef<SC>,
-                Arc::new(AccessAdapterAir::<4> { memory_bus, lt_air }) as AirRef<SC>,
-                Arc::new(AccessAdapterAir::<8> { memory_bus, lt_air }) as AirRef<SC>,
-                Arc::new(AccessAdapterAir::<16> { memory_bus, lt_air }) as AirRef<SC>,
-                Arc::new(AccessAdapterAir::<32> { memory_bus, lt_air }) as AirRef<SC>,
-            ]
-            .into_iter()
-            .take(log2_strict_usize(maan))
-            .collect()
-        } else {
-            Vec::new()
-        };
-
-        Self {
-            bridge,
-            interface,
-            access_adapters,
-        }
+        Self { bridge, interface }
     }
 
-    /// The order of memory AIRs is boundary, merkle (if exists), access adapters
-    pub fn into_airs(self) -> Vec<AirRef<SC>> {
+    /// The order of memory AIRs is boundary, merkle (if exists)
+    pub fn into_airs<SC: StarkProtocolConfig>(self) -> Vec<AirRef<SC>> {
         let mut airs: Vec<AirRef<SC>> = Vec::new();
         match self.interface {
             MemoryInterfaceAirs::Volatile { boundary } => {
@@ -155,14 +130,13 @@ impl<SC: StarkProtocolConfig> MemoryAirInventory<SC> {
                 airs.push(Arc::new(merkle));
             }
         }
-        airs.extend(self.access_adapters);
         airs
     }
 }
 
 /// This is O(1) and returns the length of
 /// [`MemoryAirInventory::into_airs`].
-pub fn num_memory_airs(is_persistent: bool, num_access_adapters: usize) -> usize {
-    // boundary + { merkle if is_persistent } + access_adapters (if enabled)
-    1 + usize::from(is_persistent) + num_access_adapters
+pub fn num_memory_airs(is_persistent: bool) -> usize {
+    // boundary + { merkle if is_persistent }
+    1 + usize::from(is_persistent)
 }

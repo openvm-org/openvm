@@ -16,7 +16,6 @@ use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
-    p3_util::log2_strict_usize,
     prover::{
         AirProvingContext, ColMajorMatrix, CpuBackend, CpuDevice, CpuProverError,
         StridedColMajorMatrixView,
@@ -46,7 +45,6 @@ use crate::{
     },
     system::{
         memory::{
-            adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
             MemoryAirInventory, MemoryController, SharedMemoryHelper,
@@ -352,9 +350,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-        let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
-        let memory = TracingMemory::new(mem_config, init_block_size, arena_size_bound);
+        let memory = TracingMemory::new(mem_config, init_block_size);
 
         (range_checker, memory)
     }
@@ -386,7 +382,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
 
     pub fn volatile(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, 1);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let memory_controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
@@ -494,7 +490,7 @@ where
             for mem_chip in memory_tester.chip_for_block.into_values() {
                 self = self.load_periphery((mem_chip.air, mem_chip));
             }
-            let mem_inventory = MemoryAirInventory::new(
+            let mem_inventory = MemoryAirInventory::new::<SC>(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
                 range_checker.bus(),
@@ -503,8 +499,7 @@ where
                     PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
                 )),
             );
-            let ctxs = memory_controller
-                .generate_proving_ctx(memory.access_adapter_records, touched_memory);
+            let ctxs = memory_controller.generate_proving_ctx(touched_memory);
             for (air, ctx) in
                 zip_eq(mem_inventory.into_airs(), ctxs).filter(|(_, ctx)| ctx.height() > 0)
             {

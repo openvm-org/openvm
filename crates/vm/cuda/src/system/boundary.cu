@@ -62,15 +62,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
             // TODO better address space handling
             FpArray<8> init_values;
             if (initial_mem[record.address_space - 1]) {
-                init_values =
-                    record.address_space == 4
-                        ? FpArray<8>::from_raw_array(
-                            reinterpret_cast<uint32_t const *>(
-                                initial_mem[record.address_space - 1]
-                            ) +
-                            record.ptr
-                        )
-                        : FpArray<8>::from_u8_array(initial_mem[record.address_space - 1] + record.ptr);
+                init_values = FpArray<8>::from_u8_array(initial_mem[record.address_space - 1] + record.ptr);
             } else {
                 #pragma unroll
                 for (int i = 0; i < 8; ++i) {

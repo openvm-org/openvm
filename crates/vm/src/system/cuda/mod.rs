@@ -13,7 +13,6 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
 use public_values::PublicValuesChipGPU;
@@ -22,7 +21,6 @@ use crate::system::memory::CHUNK;
 
 pub(crate) const DIGEST_WIDTH: usize = 8;
 
-pub mod access_adapters;
 pub mod boundary;
 pub mod connector;
 pub mod extensions;
@@ -43,7 +41,7 @@ pub struct SystemChipInventoryGPU {
 impl SystemChipInventoryGPU {
     pub fn new(
         config: &SystemConfig,
-        mem_inventory: &MemoryAirInventory<BabyBearPoseidon2Config>,
+        mem_inventory: &MemoryAirInventory,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Option<Arc<Poseidon2PeripheryChipGPU>>,
     ) -> Self {
@@ -111,7 +109,6 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             to_state,
             exit_code,
             filtered_exec_frequencies,
-            access_adapter_records,
             touched_memory,
             public_values,
         } = system_records;
@@ -128,9 +125,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             chip.generate_proving_ctx(arena)
         });
 
-        let memory_ctxs = self
-            .memory_inventory
-            .generate_proving_ctxs(access_adapter_records, touched_memory);
+        let memory_ctxs = self.memory_inventory.generate_proving_ctxs(touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()
