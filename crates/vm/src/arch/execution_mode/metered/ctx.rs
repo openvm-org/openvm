@@ -289,7 +289,11 @@ mod tests {
             vec![1; num_airs],
             vec![0; num_airs],
             vec![false; num_airs],
-            system_config.segmentation_limits.clone(),
+            SegmentationLimits {
+                max_trace_height_bits: 4,
+                max_memory: usize::MAX,
+                max_interactions: u32::MAX,
+            },
             test_cpu_engine().proving_memory_config(),
         );
         segmentation_ctx.instret = 123;

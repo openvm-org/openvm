@@ -9,8 +9,8 @@ use openvm_circuit::{
     system::memory::merkle::public_values::UserPublicValuesProof,
     utils::test_utils::test_system_config,
 };
-use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
-use openvm_rv32im_transpiler::{
+use openvm_riscv_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
+use openvm_riscv_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{

@@ -25,8 +25,8 @@ use openvm_recursion_circuit::{
     prelude::DIGEST_SIZE,
     utils::{poseidon2_hash_slice, poseidon2_hash_slice_with_states},
 };
-use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
-use openvm_rv32im_transpiler::{
+use openvm_riscv_circuit::{Rv32I, Rv32Io, Rv32M};
+use openvm_riscv_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};

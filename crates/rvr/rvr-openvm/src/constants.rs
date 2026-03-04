@@ -5,7 +5,7 @@
 //! buffer allocations — they must match byte-for-byte.
 
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_guest::MAX_HINT_BUFFER_WORDS;
+use openvm_riscv_guest::MAX_HINT_BUFFER_WORDS;
 use rvr_openvm_ext_ffi_common::{
     AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, CHUNK, DEFAULT_PAGE_BITS,
     DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS, DEFERRAL_DIGEST_SIZE, WORD_SIZE,
