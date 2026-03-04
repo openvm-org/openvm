@@ -243,25 +243,6 @@ impl MemoryInventoryGPU {
                             panic!("`merge_records` requires persistent memory")
                         }
                     };
-                    let addr_space_offsets: Vec<u32> = {
-                        let mut offsets = Vec::new();
-                        let mut acc = 0u32;
-                        for addr_sp in persistent
-                            .merkle_tree
-                            .mem_config()
-                            .addr_spaces
-                            .iter()
-                            .skip(ADDR_SPACE_OFFSET as usize)
-                        {
-                            offsets.push(acc);
-                            acc = acc
-                                .checked_add(addr_sp.layout.size() as u32)
-                                .expect("address space offset overflow");
-                        }
-                        offsets.push(acc);
-                        offsets
-                    };
-                    let d_addr_space_offsets = addr_space_offsets.to_device().unwrap();
                     let mut temp_bytes = 0usize;
                     unsafe {
                         inventory::merge_records_get_temp_bytes(
@@ -281,7 +262,6 @@ impl MemoryInventoryGPU {
                             &d_in_records,
                             in_num_records,
                             &d_initial_mem,
-                            &d_addr_space_offsets,
                             &d_tmp_records,
                             &d_out_records,
                             &d_flags,
