@@ -16,7 +16,7 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_IDX, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
+use super::{AnyEnum, VmChipComplex, CONNECTOR_AIR_ID, MEMORY_AIRS_START_IDX, PROGRAM_AIR_ID};
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::SegmentationConfig, AirInventory, AirInventoryError,
@@ -24,7 +24,8 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK, POINTER_MAX_BITS,
+            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET, CHUNK,
+            POINTER_MAX_BITS,
         },
         SystemChipComplex,
     },
@@ -342,7 +343,7 @@ impl SystemConfig {
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
-        BOUNDARY_AIR_IDX
+        MEMORY_AIRS_START_IDX + BOUNDARY_AIR_OFFSET
     }
 
     /// Returns the AIR ID of the memory merkle AIR. Returns None if continuations are not enabled.

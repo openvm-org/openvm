@@ -33,9 +33,8 @@ use super::{GenerationError, PhantomSubExecutor, SystemConfig};
 use crate::{
     arch::Arena,
     system::{
-        memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
-        phantom::PhantomExecutor,
-        SystemAirInventory, SystemChipComplex, SystemRecords,
+        memory::MERKLE_AIR_OFFSET, phantom::PhantomExecutor, SystemAirInventory, SystemChipComplex,
+        SystemRecords,
     },
 };
 
@@ -44,13 +43,11 @@ pub const PROGRAM_AIR_ID: usize = 0;
 /// ProgramAir is the first AIR so its cached trace should be the first main trace.
 pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
 pub const CONNECTOR_AIR_ID: usize = 1;
-/// AIR index of the boundary AIR in the VM circuit.
-pub const BOUNDARY_AIR_IDX: usize = 2;
-/// AIR ID of the Memory Boundary AIR.
-pub const BOUNDARY_AIR_ID: usize = BOUNDARY_AIR_IDX + 1 + BOUNDARY_AIR_OFFSET;
+/// Starting AIR index of memory AIRs in the VM circuit.
+pub const MEMORY_AIRS_START_IDX: usize = 2;
 /// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
-pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
+pub const MERKLE_AIR_ID: usize = MEMORY_AIRS_START_IDX + MERKLE_AIR_OFFSET;
 
 pub type ExecutorId = u32;
 
