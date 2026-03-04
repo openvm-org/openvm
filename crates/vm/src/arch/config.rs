@@ -24,8 +24,7 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK,
-            POINTER_MAX_BITS,
+            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK, POINTER_MAX_BITS,
         },
         SystemChipComplex,
     },

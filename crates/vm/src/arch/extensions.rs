@@ -35,8 +35,7 @@ use crate::{
     system::{
         memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
         phantom::PhantomExecutor,
-        SystemAirInventory, SystemChipComplex,
-        SystemRecords,
+        SystemAirInventory, SystemChipComplex, SystemRecords,
     },
 };
 

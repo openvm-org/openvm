@@ -431,9 +431,7 @@ where
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use crate::system::memory::interface::MemoryInterface;
-
-        use crate::arch::BOUNDARY_AIR_ID;
+        use crate::{arch::BOUNDARY_AIR_ID, system::memory::interface::MemoryInterface};
 
         let boundary_idx = BOUNDARY_AIR_ID;
         let mut access_adapter_offset = boundary_idx + 1;
