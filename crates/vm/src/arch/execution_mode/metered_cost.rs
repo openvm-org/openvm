@@ -4,7 +4,7 @@ use openvm_instructions::riscv::RV32_IMM_AS;
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY as DEFAULT_SEGMENT_MAX_MEMORY,
-        ExecutionCtxTrait, MeteredExecutionCtxTrait, SystemConfig, VmExecState,
+        ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState,
     },
     system::memory::online::GuestMemory,
 };
@@ -24,8 +24,7 @@ pub struct MeteredCostCtx {
 }
 
 impl MeteredCostCtx {
-    pub fn new(widths: Vec<usize>, config: &SystemConfig) -> Self {
-        let _ = config;
+    pub fn new(widths: Vec<usize>) -> Self {
         Self {
             widths,
             max_execution_cost: DEFAULT_MAX_COST,

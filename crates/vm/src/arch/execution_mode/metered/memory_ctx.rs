@@ -298,7 +298,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
-    /// Resolve all lazy updates of each memory access for boundary/poseidon2/merkle chips.
+    /// Resolve all lazy updates of each memory access for poseidon2/merkle chips.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
         self.apply_height_updates(trace_heights, &self.addr_space_access_count);
