@@ -24,7 +24,7 @@ use openvm_circuit::{
         instructions::exe::VmExe,
         Executor, InitFileGenerator, MeteredExecutor, PreflightExecutor, VirtualMachineError,
         VmBuilder, VmExecutionConfig, VmExecutor, VmVerificationError, CONNECTOR_AIR_ID,
-        MEMORY_AIRS_START_IDX, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+        BOUNDARY_AIR_IDX, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
     },
     system::{
         memory::{
@@ -705,9 +705,9 @@ where
                 air_id: CONNECTOR_AIR_ID,
             }
             .into());
-        } else if proof.inner.per_air[2].air_id != MEMORY_AIRS_START_IDX {
+        } else if proof.inner.per_air[2].air_id != BOUNDARY_AIR_IDX {
             return Err(VmVerificationError::SystemAirMissing {
-                air_id: MEMORY_AIRS_START_IDX,
+                air_id: BOUNDARY_AIR_IDX,
             }
             .into());
         }

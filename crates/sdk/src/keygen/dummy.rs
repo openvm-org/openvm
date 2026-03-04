@@ -8,7 +8,7 @@ use openvm_circuit::{
         },
         ContinuationVmProof, Executor, MatrixRecordArena, MeteredExecutor,
         PreflightExecutionOutput, PreflightExecutor, SingleSegmentVmProver, SystemConfig,
-        VirtualMachine, VirtualMachineError, VmBuilder, VmExecutionConfig, MEMORY_AIRS_START_IDX,
+        VirtualMachine, VirtualMachineError, VmBuilder, VmExecutionConfig,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -65,7 +65,6 @@ pub(super) fn compute_root_proof_heights(
     // The following is the same as impl SingleSegmentVmProver for VmLocalProver except we stop
     // after tracegen:
     let mut trace_heights = NATIVE_MAX_TRACE_HEIGHTS.to_vec();
-    trace_heights[MEMORY_AIRS_START_IDX] = num_public_values as u32;
     let state = root_vm.create_initial_state(&root_committed_exe.exe, root_input.write());
     let cached_program_trace = root_vm.transport_committed_exe_to_device(root_committed_exe);
     root_vm.load_program(cached_program_trace);

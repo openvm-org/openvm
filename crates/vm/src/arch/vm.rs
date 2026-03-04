@@ -53,7 +53,7 @@ use super::{
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
-    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MEMORY_AIRS_START_IDX, MERKLE_AIR_ID,
+    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
     PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 use crate::{
@@ -1232,8 +1232,7 @@ where
         let vm = &mut self.vm;
         let exe = &self.exe;
         assert!(!vm.config().as_ref().continuation_enabled);
-        let mut trace_heights = trace_heights.to_vec();
-        trace_heights[MEMORY_AIRS_START_IDX] = vm.config().as_ref().num_public_values as u32;
+        let trace_heights = trace_heights.to_vec();
         let state = self.state.take().expect("State should always be present");
         let num_custom_pvs = state.custom_pvs.len();
         let (proof, final_memory) = vm.prove(&mut self.interpreter, state, None, &trace_heights)?;
