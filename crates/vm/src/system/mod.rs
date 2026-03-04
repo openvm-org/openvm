@@ -433,9 +433,9 @@ where
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
         use crate::system::memory::interface::MemoryInterface;
 
-        use crate::arch::BOUNDARY_AIR_IDX;
+        use crate::arch::BOUNDARY_AIR_ID;
 
-        let boundary_idx = BOUNDARY_AIR_IDX;
+        let boundary_idx = BOUNDARY_AIR_ID;
         let mut access_adapter_offset = boundary_idx + 1;
         match &self.memory_controller.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {

@@ -23,8 +23,8 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
         Executor, InitFileGenerator, MeteredExecutor, PreflightExecutor, VirtualMachineError,
-        VmBuilder, VmExecutionConfig, VmExecutor, VmVerificationError, CONNECTOR_AIR_ID,
-        BOUNDARY_AIR_IDX, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+        VmBuilder, VmExecutionConfig, VmExecutor, VmVerificationError, BOUNDARY_AIR_ID,
+        CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
     },
     system::{
         memory::{
@@ -705,9 +705,9 @@ where
                 air_id: CONNECTOR_AIR_ID,
             }
             .into());
-        } else if proof.inner.per_air[2].air_id != BOUNDARY_AIR_IDX {
+        } else if proof.inner.per_air[2].air_id != BOUNDARY_AIR_ID {
             return Err(VmVerificationError::SystemAirMissing {
-                air_id: BOUNDARY_AIR_IDX,
+                air_id: BOUNDARY_AIR_ID,
             }
             .into());
         }
