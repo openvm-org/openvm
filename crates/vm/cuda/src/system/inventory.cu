@@ -43,11 +43,9 @@ __device__ inline bool same_output_block(
 __device__ inline void read_initial_chunk(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
-    uint32_t const *addr_space_offsets,
     uint32_t address_space,
     uint32_t chunk_ptr
 ) {
-    (void)addr_space_offsets;
     uint32_t addr_space_idx = address_space - 1;
     uint8_t const *mem = initial_mem[addr_space_idx];
     if (!mem) {
@@ -70,7 +68,6 @@ __global__ void cukernel_build_candidates(
     InRec const *in,
     size_t in_num_records,
     uint8_t const *const *initial_mem,
-    uint32_t const *addr_space_offsets,
     OutRec *tmp_out,
     uint32_t *flags
 ) {
@@ -92,7 +89,7 @@ __global__ void cukernel_build_candidates(
     rec.timestamps[1] = 0;
 
     // Fill all values with Montgomery-encoded initial memory
-    read_initial_chunk(rec.values, initial_mem, addr_space_offsets, rec.address_space, chunk_ptr);
+    read_initial_chunk(rec.values, initial_mem, rec.address_space, chunk_ptr);
 
     // Overwrite touched block's values (already Montgomery-encoded in input records)
     uint32_t block_idx = (in[row_idx].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
@@ -138,7 +135,6 @@ extern "C" int _inventory_merge_records(
     uint32_t const *d_in_records,
     size_t in_num_records,
     uint8_t const *const *d_initial_mem,
-    uint32_t const *d_addr_space_offsets,
     uint32_t *d_tmp_records,
     uint32_t *d_out_records,
     uint32_t *d_flags,
@@ -156,7 +152,6 @@ extern "C" int _inventory_merge_records(
         in,
         in_num_records,
         d_initial_mem,
-        d_addr_space_offsets,
         tmp_out,
         d_flags
     );
