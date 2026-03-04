@@ -578,6 +578,22 @@ where
     pub fn timestamp_max_bits(&self) -> usize {
         self.airs.config().memory_config.timestamp_max_bits
     }
+
+    /// Returns constant trace heights for all AIRs in verifying key order.
+    /// System AIRs get `None` (their constant heights are handled separately).
+    /// Extension chips follow in the same order as AIRs in the verifying key
+    /// (reversed insertion order).
+    pub fn constant_trace_heights(&self) -> Vec<Option<usize>> {
+        let num_system = self.airs.config().num_airs();
+        let mut heights = vec![None; num_system];
+        heights.extend(
+            self.chips
+                .iter()
+                .rev()
+                .map(|chip| chip.constant_trace_height()),
+        );
+        heights
+    }
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.

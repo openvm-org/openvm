@@ -81,4 +81,8 @@ impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for BitwiseOperationLookupC
         self.count.fill_zero().unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(Self::num_rows())
+    }
 }

@@ -541,24 +541,22 @@ fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
         .load_periphery_and_prank_trace(block_hasher, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    let result = tester.simple_test();
-    assert!(result.is_err(), "Expected verification to fail");
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
-#[should_panic]
 fn negative_sha256_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha256Config>();
 }
 
 #[test]
-#[should_panic]
 fn negative_sha512_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha512Config>();
 }
 
 #[test]
-#[should_panic]
 fn negative_sha384_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha384Config>();
 }
