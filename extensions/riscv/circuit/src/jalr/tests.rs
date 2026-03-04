@@ -45,43 +45,43 @@ use {
     },
 };
 
-use super::Rv32JalrCoreAir;
+use super::Rv64JalrCoreAir;
 #[cfg(feature = "aot")]
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
-        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        compose, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
+        Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
-    jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrExecutor},
+    jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     test_utils::get_verification_error,
-    Rv32JalrAir, Rv32JalrFiller,
+    Rv64JalrAir, Rv64JalrFiller,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChip<F>>;
+type Harness = TestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChip<F>>;
 
-fn into_limbs(num: u32) -> [u32; 4] {
-    array::from_fn(|i| (num >> (8 * i)) & 255)
+fn into_limbs(num: u32) -> [u32; RV64_REGISTER_NUM_LIMBS] {
+    array::from_fn(|i| if i < 4 { (num >> (8 * i)) & 255 } else { 0 })
 }
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_checker_chip: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv32JalrAir, Rv32JalrExecutor, Rv32JalrChip<F>) {
-    let air = Rv32JalrAir::new(
-        Rv32JalrAdapterAir::new(memory_bridge, execution_bridge),
-        Rv32JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
+) -> (Rv64JalrAir, Rv64JalrExecutor, Rv64JalrChip<F>) {
+    let air = Rv64JalrAir::new(
+        Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
+        Rv64JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
     );
-    let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
-    let chip = Rv32JalrChip::<F>::new(
-        Rv32JalrFiller::new(
-            Rv32JalrAdapterFiller::new(),
+    let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
+    let chip = Rv64JalrChip::<F>::new(
+        Rv64JalrFiller::new(
+            Rv64JalrAdapterFiller::new(),
             bitwise_chip,
             range_checker_chip,
         ),
@@ -95,12 +95,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let range_checker_chip = tester.range_checker().clone();
@@ -127,13 +127,14 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     initial_imm: Option<u32>,
     initial_imm_sign: Option<u32>,
     initial_pc: Option<u32>,
-    rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    rd_ptr: Option<usize>,
 ) {
     let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_sign = initial_imm_sign.unwrap_or(rng.gen_range(0..2));
     let imm_ext = imm + (imm_sign * 0xffff0000);
-    let a = rng.gen_range(0..32) << 2;
-    let b = rng.gen_range(1..32) << 2;
+    let a = rd_ptr.unwrap_or_else(|| rng.gen_range(0..32) << 3);
+    let b = rng.gen_range(1..32) << 3;
     let to_pc = rng.gen_range(0..(1 << PC_BITS));
 
     let rs1 = rs1.unwrap_or(into_limbs((to_pc as u32).wrapping_sub(imm_ext)));
@@ -161,13 +162,17 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     let final_pc = tester.last_to_pc().as_canonical_u32();
 
-    let rs1 = compose(rs1);
+    let rs1 = compose(rs1) as u32;
 
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
-    let rd_data = if a == 0 { [0; 4] } else { rd_data };
+    let rd_data = if a == 0 {
+        [0; RV64_REGISTER_NUM_LIMBS]
+    } else {
+        rd_data
+    };
 
     assert_eq!(next_pc & !1, final_pc);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -194,6 +199,7 @@ fn rand_jalr_test() {
             None,
             None,
             None,
+            None,
         );
     }
 
@@ -214,20 +220,23 @@ fn rand_jalr_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
-    pub rs1_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
     pub to_pc_limbs: Option<[u32; 2]>,
     pub imm_sign: Option<u32>,
+    pub rd_ptr: Option<u32>,
+    pub needs_write: Option<bool>,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_negative_jalr_test(
+fn run_negative_jalr_test_with_rd_ptr(
     opcode: Rv64JalrOpcode,
     initial_pc: Option<u32>,
-    initial_rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    initial_rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     initial_imm: Option<u32>,
     initial_imm_sign: Option<u32>,
+    rd_ptr: Option<usize>,
     prank_vals: JalrPrankValues,
     interaction_error: bool,
 ) {
@@ -246,13 +255,15 @@ fn run_negative_jalr_test(
         initial_imm_sign,
         initial_pc,
         initial_rs1,
+        rd_ptr,
     );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core_cols: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
+        let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        let core_cols: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -269,6 +280,12 @@ fn run_negative_jalr_test(
         if let Some(data) = prank_vals.imm_sign {
             core_cols.imm_sign = F::from_canonical_u32(data);
         }
+        if let Some(rd_ptr) = prank_vals.rd_ptr {
+            adapter_cols.rd_ptr = F::from_canonical_u32(rd_ptr);
+        }
+        if let Some(needs_write) = prank_vals.needs_write {
+            adapter_cols.needs_write = F::from_bool(needs_write);
+        }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -280,6 +297,28 @@ fn run_negative_jalr_test(
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_jalr_test(
+    opcode: Rv64JalrOpcode,
+    initial_pc: Option<u32>,
+    initial_rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    initial_imm: Option<u32>,
+    initial_imm_sign: Option<u32>,
+    prank_vals: JalrPrankValues,
+    interaction_error: bool,
+) {
+    run_negative_jalr_test_with_rd_ptr(
+        opcode,
+        initial_pc,
+        initial_rs1,
+        initial_imm,
+        initial_imm_sign,
+        None,
+        prank_vals,
+        interaction_error,
+    );
 }
 
 #[test]
@@ -313,7 +352,7 @@ fn invalid_cols_negative_tests() {
     run_negative_jalr_test(
         JALR,
         None,
-        Some([23, 154, 67, 28]),
+        Some([23, 154, 67, 28, 0, 0, 0, 0]),
         Some(42512),
         Some(1),
         JalrPrankValues {
@@ -321,6 +360,147 @@ fn invalid_cols_negative_tests() {
             ..Default::default()
         },
         false,
+    );
+
+    run_negative_jalr_test(
+        JALR,
+        None,
+        Some([23, 154, 67, 28, 1, 0, 0, 0]),
+        Some(42512),
+        Some(1),
+        JalrPrankValues::default(),
+        true,
+    );
+}
+
+#[test]
+fn rs1_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let imm_sign = 0usize;
+    let rd_ptr = 16usize;
+    let rs1_ptr = 8usize;
+    let rs1_low = 0x20000u32;
+    let mem_helper = tester.memory_helper();
+
+    let mut poisoned_rs1 = into_limbs(rs1_low);
+    poisoned_rs1[4] = 1;
+    let clean_rs1 = into_limbs(rs1_low);
+    let poisoned_write_timestamp = tester.memory.memory.timestamp();
+
+    // Seed the same source register with a poisoned value, then overwrite with a clean one so
+    // the execution is initially valid.
+    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_canonical_u32));
+    tester.write(1, rs1_ptr, clean_rs1.map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            JALR.global_opcode(),
+            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
+        let rs1_aux_base = adapter_cols.rs1_aux_cols.as_mut();
+        mem_helper
+            .as_borrowed()
+            .fill(poisoned_write_timestamp, read_timestamp, rs1_aux_base);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let imm_sign = 0usize;
+    let rd_ptr = 16usize;
+    let rs1_ptr = 8usize;
+    let rs1_low = 0x20000u32;
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+    tester.write(1, rs1_ptr, into_limbs(rs1_low).map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            JALR.global_opcode(),
+            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
+fn write_suppression_boundary_negative_tests() {
+    run_negative_jalr_test_with_rd_ptr(
+        JALR,
+        Some(0x1234),
+        Some(into_limbs(0x20000)),
+        Some(16),
+        Some(0),
+        Some(0),
+        JalrPrankValues {
+            rd_ptr: Some(8),
+            ..Default::default()
+        },
+        true,
+    );
+
+    run_negative_jalr_test_with_rd_ptr(
+        JALR,
+        Some(0x1234),
+        Some(into_limbs(0x20000)),
+        Some(16),
+        Some(0),
+        Some(8),
+        JalrPrankValues {
+            needs_write: Some(false),
+            ..Default::default()
+        },
+        true,
     );
 }
 
@@ -342,7 +522,7 @@ fn overflow_negative_tests() {
     run_negative_jalr_test(
         JALR,
         None,
-        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
         Some((1 << 15) - 2),
         Some(0),
         JalrPrankValues {
@@ -369,7 +549,27 @@ fn run_jalr_sanity_test() {
     let rs1 = 736482910;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
     assert_eq!(next_pc & !1, 736481674);
-    assert_eq!(rd_data, [252, 36, 14, 47]);
+    assert_eq!(rd_data, [252, 36, 14, 47, 0, 0, 0, 0]);
+}
+
+#[test]
+fn jalr_x0_write_suppression_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_harness(&mut tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        JALR,
+        Some(16),
+        Some(0),
+        Some(0x1234),
+        Some(into_limbs(0x20000)),
+        Some(0),
+    );
 }
 
 #[cfg(feature = "aot")]
@@ -521,6 +721,7 @@ fn test_cuda_rand_jalr_tracegen() {
             &mut harness.dense_arena,
             &mut rng,
             JALR,
+            None,
             None,
             None,
             None,
