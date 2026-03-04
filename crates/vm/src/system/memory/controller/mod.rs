@@ -21,10 +21,9 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::{volatile::VolatileBoundaryChip, AddressMap};
 use crate::{
-    arch::{DenseRecordArena, MemoryConfig, VmField, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
+    arch::{MemoryConfig, VmField, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
     system::{
         memory::{
-            adapter::AccessAdapterInventory,
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
@@ -73,26 +72,22 @@ pub struct MemoryController<F: VmField> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub range_checker: SharedVariableRangeCheckerChip,
+    pub(crate) memory_config: MemoryConfig,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-    pub(crate) access_adapter_inventory: AccessAdapterInventory<F>,
     pub(crate) hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VolatileMemoryTraceHeights {
     pub boundary: usize,
-    pub access_adapters: Vec<usize>,
 }
 
 impl VolatileMemoryTraceHeights {
     /// `heights` must consist of only memory trace heights, in order of AIR IDs.
     pub fn from_slice(heights: &[u32]) -> Self {
-        let boundary = heights[0] as usize;
-        let access_adapters = heights[1..].iter().map(|&h| h as usize).collect();
         Self {
-            boundary,
-            access_adapters,
+            boundary: heights[0] as usize,
         }
     }
 }
@@ -101,18 +96,13 @@ impl VolatileMemoryTraceHeights {
 pub struct PersistentMemoryTraceHeights {
     boundary: usize,
     merkle: usize,
-    access_adapters: Vec<usize>,
 }
 impl PersistentMemoryTraceHeights {
     /// `heights` must consist of only memory trace heights, in order of AIR IDs.
     pub fn from_slice(heights: &[u32]) -> Self {
-        let boundary = heights[0] as usize;
-        let merkle = heights[1] as usize;
-        let access_adapters = heights[2..].iter().map(|&h| h as usize).collect();
         Self {
-            boundary,
-            merkle,
-            access_adapters,
+            boundary: heights[0] as usize,
+            merkle: heights[1] as usize,
         }
     }
 }
@@ -149,11 +139,7 @@ impl<F: VmField> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config,
-            ),
+            memory_config: mem_config,
             range_checker,
             range_checker_bus,
             hasher_chip: None,
@@ -189,11 +175,7 @@ impl<F: VmField> MemoryController<F> {
         Self {
             memory_bus,
             interface_chip,
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config,
-            ),
+            memory_config: mem_config,
             range_checker,
             range_checker_bus,
             hasher_chip: Some(hasher_chip),
@@ -201,7 +183,7 @@ impl<F: VmField> MemoryController<F> {
     }
 
     pub fn memory_config(&self) -> &MemoryConfig {
-        &self.access_adapter_inventory.memory_config
+        &self.memory_config
     }
 
     pub(crate) fn set_override_trace_heights(&mut self, overridden_heights: &[u32]) {
@@ -209,8 +191,6 @@ impl<F: VmField> MemoryController<F> {
             MemoryInterface::Volatile { boundary_chip } => {
                 let oh = VolatileMemoryTraceHeights::from_slice(overridden_heights);
                 boundary_chip.set_overridden_height(oh.boundary);
-                self.access_adapter_inventory
-                    .set_override_trace_heights(oh.access_adapters);
             }
             MemoryInterface::Persistent {
                 boundary_chip,
@@ -220,8 +200,6 @@ impl<F: VmField> MemoryController<F> {
                 let oh = PersistentMemoryTraceHeights::from_slice(overridden_heights);
                 boundary_chip.set_overridden_height(oh.boundary);
                 merkle_chip.set_overridden_height(oh.merkle);
-                self.access_adapter_inventory
-                    .set_override_trace_heights(oh.access_adapters);
             }
         }
     }
@@ -265,7 +243,6 @@ impl<F: VmField> MemoryController<F> {
     // _somehow_.
     pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         &mut self,
-        access_adapter_records: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         match (&mut self.interface_chip, touched_memory) {
@@ -316,8 +293,6 @@ impl<F: VmField> MemoryController<F> {
 
         let mut ret = Vec::new();
 
-        let access_adapters = &mut self.access_adapter_inventory;
-        access_adapters.set_arena(access_adapter_records);
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 ret.push(boundary_chip.generate_proving_ctx(()));
@@ -333,7 +308,6 @@ impl<F: VmField> MemoryController<F> {
                 ret.push(merkle_chip.generate_proving_ctx());
             }
         }
-        ret.extend(access_adapters.generate_proving_ctx());
         ret
     }
 
@@ -343,7 +317,6 @@ impl<F: VmField> MemoryController<F> {
         if self.continuation_enabled() {
             num_airs += 1;
         }
-        num_airs += self.access_adapter_inventory.num_access_adapters();
         num_airs
     }
 }

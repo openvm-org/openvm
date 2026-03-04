@@ -273,7 +273,7 @@ impl GpuChipTestBuilder {
         )));
         Self {
             memory: DeviceMemoryTester::volatile(
-                default_tracing_memory(&mem_config, 1),
+                default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
@@ -611,7 +611,7 @@ impl GpuChipTester {
                 self = self.load_periphery(chip.0.air, chip);
             }
 
-            let airs = MemoryAirInventory::<SC>::new(
+            let airs = MemoryAirInventory::new::<SC>(
                 memory_bridge,
                 &memory_tester.config,
                 memory_tester.range_bus,
@@ -623,7 +623,7 @@ impl GpuChipTester {
             .into_airs();
             let ctxs = memory_tester
                 .inventory
-                .generate_proving_ctxs(memory_tester.memory.access_adapter_records, touched_memory);
+                .generate_proving_ctxs(touched_memory);
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)

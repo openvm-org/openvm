@@ -62,7 +62,6 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
-            adapter::records,
             merkle::{
                 public_values::{UserPublicValuesProof, UserPublicValuesProofError},
                 MemoryMerklePvs,
@@ -638,21 +637,8 @@ where
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let system_config: &SystemConfig = self.config().as_ref();
-        let adapter_offset = system_config.access_adapter_air_id_offset();
-        // ATTENTION: this must agree with `num_memory_airs`
-
-        let num_adapters = system_config.memory_config.num_access_adapters();
-
-        assert_eq!(adapter_offset + num_adapters, system_config.num_airs());
-        let access_adapter_arena_size_bound = records::arena_size_bound(
-            &trace_heights[adapter_offset..adapter_offset + num_adapters],
-        );
         let pc = state.pc();
-        let memory = TracingMemory::from_image(
-            state.memory,
-            system_config.initial_block_size(),
-            access_adapter_arena_size_bound,
-        );
+        let memory = TracingMemory::from_image(state.memory, system_config.initial_block_size());
         let from_state = ExecutionState::new(pc, memory.timestamp());
         let vm_state = VmState::new(
             pc,
@@ -682,7 +668,6 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
-            access_adapter_records: memory.access_adapter_records,
             touched_memory,
         };
         let record_arenas = exec_state.ctx.arenas;
@@ -728,8 +713,6 @@ where
         {
             state.metrics.set_pk_info(&self.pk);
             state.metrics.num_sys_airs = self.config().as_ref().num_airs();
-            state.metrics.access_adapter_offset =
-                self.config().as_ref().access_adapter_air_id_offset();
         }
         state
     }

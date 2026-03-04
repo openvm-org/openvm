@@ -130,7 +130,7 @@ pub struct AirInventory<SC: StarkProtocolConfig> {
     config: SystemConfig,
     /// The system AIRs required by the circuit architecture.
     #[get = "pub"]
-    system: SystemAirInventory<SC>,
+    system: SystemAirInventory,
     /// List of all non-system AIRs in the circuit, in insertion order, which is the **reverse** of
     /// the order they appear in the verifying key.
     ///
@@ -395,7 +395,7 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
     /// Outside of this crate, [AirInventory] must be constructed via [SystemConfig].
     pub(crate) fn new(
         config: SystemConfig,
-        system: SystemAirInventory<SC>,
+        system: SystemAirInventory,
         bus_idx_mgr: BusIndexManager,
     ) -> Self {
         Self {

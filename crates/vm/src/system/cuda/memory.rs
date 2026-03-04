@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET},
     system::{memory::AddressMap, TouchedMemory},
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
@@ -17,7 +17,6 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 use super::{
-    access_adapters::AccessAdapterInventoryGPU,
     boundary::{BoundaryChipGPU, BoundaryFields},
     merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
@@ -26,7 +25,6 @@ use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
     pub boundary: BoundaryChipGPU,
-    pub access_adapters: Option<AccessAdapterInventoryGPU>,
     pub persistent: Option<PersistentMemoryInventoryGPU>,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
@@ -66,22 +64,12 @@ impl MemoryInventoryGPU {
         let addr_space_max_bits = log2_ceil_usize(
             (ADDR_SPACE_OFFSET + 2u32.pow(config.addr_space_height as u32)) as usize,
         );
-        let access_adapters = if config.access_adapters_enabled() {
-            Some(AccessAdapterInventoryGPU::new(
-                range_checker.clone(),
-                config.max_access_adapter_n,
-                config.timestamp_max_bits,
-            ))
-        } else {
-            None
-        };
         Self {
             boundary: BoundaryChipGPU::volatile(
                 range_checker,
                 addr_space_max_bits,
                 config.pointer_max_bits,
             ),
-            access_adapters,
             persistent: None,
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
@@ -90,21 +78,11 @@ impl MemoryInventoryGPU {
 
     pub fn persistent(
         config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
+        _range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     ) -> Self {
-        let access_adapters = if config.access_adapters_enabled() {
-            Some(AccessAdapterInventoryGPU::new(
-                range_checker,
-                config.max_access_adapter_n,
-                config.timestamp_max_bits,
-            ))
-        } else {
-            None
-        };
         Self {
             boundary: BoundaryChipGPU::persistent(hasher_chip.shared_buffer()),
-            access_adapters,
             persistent: Some(PersistentMemoryInventoryGPU {
                 merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
                 initial_memory: Vec::new(),
@@ -167,7 +145,6 @@ impl MemoryInventoryGPU {
     #[instrument(name = "generate_proving_ctxs", skip_all)]
     pub fn generate_proving_ctxs(
         &mut self,
-        access_adapter_arena: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
@@ -383,9 +360,6 @@ impl MemoryInventoryGPU {
             persistent.merkle_tree.drop_subtrees();
             persistent.initial_memory = Vec::new();
         }
-        if let Some(access_adapters) = &mut self.access_adapters {
-            ret.extend(access_adapters.generate_air_proving_ctxs(access_adapter_arena));
-        }
         mem.emit_metrics();
         ret
     }
@@ -430,7 +404,7 @@ mod tests {
         for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS, NATIVE_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17, 32);
+        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
@@ -485,10 +459,7 @@ mod tests {
             MemoryInventoryGPU::persistent(mem_config.clone(), range_checker, hasher_chip);
         inventory.set_initial_memory(&memory.memory);
 
-        let ctxs = inventory.generate_proving_ctxs(
-            DenseRecordArena::with_byte_capacity(0),
-            TouchedMemory::Persistent(Vec::new()),
-        );
+        let ctxs = inventory.generate_proving_ctxs(TouchedMemory::Persistent(Vec::new()));
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert_eq!(
             boundary_ctx.common_main.height(),
@@ -517,7 +488,7 @@ mod tests {
         for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS, NATIVE_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17, 32);
+        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
@@ -622,10 +593,7 @@ mod tests {
                 },
             ),
         ];
-        let ctxs = inventory.generate_proving_ctxs(
-            DenseRecordArena::with_byte_capacity(0),
-            TouchedMemory::Persistent(touched_memory),
-        );
+        let ctxs = inventory.generate_proving_ctxs(TouchedMemory::Persistent(touched_memory));
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert!(
             boundary_ctx.common_main.height() > 0,

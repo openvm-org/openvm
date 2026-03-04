@@ -27,7 +27,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    LocalOpcode, DEFERRAL_AS,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -417,11 +417,7 @@ where
                     a.as_canonical_u32(),
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = if e == DEFERRAL_AS {
-                    memory_read_deferral(memory.data(), ptr_val).map(|x: F| x.as_canonical_u32())
-                } else {
-                    memory_read(memory.data(), e, ptr_val).map(u32::from)
-                };
+                let prev_data = memory_read(memory.data(), e, ptr_val).map(u32::from);
                 (read_data, prev_data)
             }
         };
@@ -462,11 +458,7 @@ where
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
 
-                    if record.mem_as == 4 {
-                        timed_write_deferral(memory, ptr, data.map(F::from_u32)).0
-                    } else {
-                        timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
-                    }
+                    timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                     timed_write(
