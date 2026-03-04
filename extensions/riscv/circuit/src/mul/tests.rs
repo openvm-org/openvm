@@ -32,7 +32,7 @@ use openvm_riscv_transpiler::BaseAluOpcode::ADD;
 use openvm_riscv_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::PrimeCharacteristicRing,
+    p3_field::FieldAlgebra,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -55,28 +55,28 @@ use super::core::run_mul;
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_CELL_BITS,
+        RV64_REGISTER_NUM_LIMBS,
     },
-    mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
-    test_utils::rv32_rand_write_register_or_imm,
-    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
+    mul::{MultiplicationCoreCols, Rv64MultiplicationChip},
+    test_utils::{get_verification_error, rv64_rand_write_register_or_imm},
+    MultiplicationCoreAir, MultiplicationFiller, Rv64MultiplicationAir, Rv64MultiplicationExecutor,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1u32 << RV32_CELL_BITS),
-    (MAX_NUM_LIMBS * (1u32 << RV32_CELL_BITS)),
+    (1u32 << RV64_CELL_BITS),
+    (MAX_NUM_LIMBS * (1u32 << RV64_CELL_BITS)),
 ];
 
 type F = BabyBear;
 type Harness = TestChipHarness<
     F,
-    Rv32MultiplicationExecutor,
-    Rv32MultiplicationAir,
-    Rv32MultiplicationChip<F>,
+    Rv64MultiplicationExecutor,
+    Rv64MultiplicationAir,
+    Rv64MultiplicationChip<F>,
 >;
 
 fn create_harness_fields(
@@ -85,19 +85,19 @@ fn create_harness_fields(
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
-    Rv32MultiplicationAir,
-    Rv32MultiplicationExecutor,
-    Rv32MultiplicationChip<F>,
+    Rv64MultiplicationAir,
+    Rv64MultiplicationExecutor,
+    Rv64MultiplicationChip<F>,
 ) {
-    let air = Rv32MultiplicationAir::new(
-        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
+    let air = Rv64MultiplicationAir::new(
+        Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
         MultiplicationCoreAir::new(*range_tuple_chip.bus(), MulOpcode::CLASS_OFFSET),
     );
     let executor =
-        Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
-    let chip = Rv32MultiplicationChip::<F>::new(
+        Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
+    let chip = Rv64MultiplicationChip::<F>::new(
         MultiplicationFiller::new(
-            Rv32MultAdapterFiller,
+            Rv64MultAdapterFiller,
             range_tuple_chip,
             MulOpcode::CLASS_OFFSET,
         ),
@@ -134,22 +134,22 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: MulOpcode,
-    b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
-    c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
-    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
+    let c = c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
-        rv32_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
+        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
     instruction.e = F::ZERO;
     tester.execute(executor, arena, &instruction);
 
-    let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
+    let (a, _) = run_mul::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(&b, &c);
     assert_eq!(
-        a.map(F::from_u8),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+        a.map(F::from_canonical_u8),
+        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     )
 }
 
@@ -161,7 +161,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_rv32_mul_rand_test() {
+fn run_rv64_mul_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
@@ -194,12 +194,14 @@ fn run_rv32_mul_rand_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
+#[allow(clippy::too_many_arguments)]
 fn run_negative_mul_test(
     opcode: MulOpcode,
-    prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
-    b: [u8; RV32_REGISTER_NUM_LIMBS],
-    c: [u8; RV32_REGISTER_NUM_LIMBS],
+    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
+    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_is_valid: bool,
+    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -217,10 +219,10 @@ fn run_negative_mul_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).expect("row exists").to_vec();
-        let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut MultiplicationCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_u32);
+        cols.a = prank_a.map(F::from_canonical_u32);
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -231,30 +233,30 @@ fn run_negative_mul_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(range_tuple)
         .finalize();
-    tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
-fn rv32_mul_wrong_negative_test() {
+fn rv64_mul_wrong_negative_test() {
     run_negative_mul_test(
         MUL,
-        [63, 247, 125, 234],
-        [51, 109, 78, 142],
-        [197, 85, 150, 32],
+        [63, 247, 125, 232, 252, 163, 203, 218],
+        [51, 109, 78, 142, 73, 35, 25, 206],
+        [197, 85, 150, 32, 88, 77, 201, 19],
+        true,
         true,
     );
 }
 
 #[test]
-fn rv32_mul_is_valid_false_negative_test() {
+fn rv64_mul_is_valid_false_negative_test() {
     run_negative_mul_test(
         MUL,
-        [63, 247, 125, 234],
-        [51, 109, 78, 142],
-        [197, 85, 150, 32],
+        [63, 247, 125, 232, 252, 163, 203, 218],
+        [51, 109, 78, 142, 73, 35, 25, 206],
+        [197, 85, 150, 32, 88, 77, 201, 19],
         false,
+        true,
     );
 }
 
@@ -266,12 +268,12 @@ fn rv32_mul_is_valid_false_negative_test() {
 
 #[test]
 fn run_mul_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [197, 85, 150, 32];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [51, 109, 78, 142];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [63, 247, 125, 232];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 205];
-    let (result, carry) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [159, 65, 2, 228, 66, 204, 249, 3];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [45, 104, 90, 171, 169, 159, 160, 366];
+    let (result, carry) = run_mul::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(&x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
     }
@@ -386,7 +388,7 @@ fn test_aot_mul_randomized_pairs() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value_i32 = rng.random_range(-(1i32 << 11)..(1i32 << 11));
+        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
         let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
         instructions.push(add_immediate(offset, imm_field));
         expected.insert(offset, value_i32 as u32);
