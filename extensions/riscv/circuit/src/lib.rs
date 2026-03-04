@@ -19,18 +19,19 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;
+// TEMP: commented out modules not yet ported to RV64
 mod auipc;
 mod base_alu;
 mod branch_eq;
 mod branch_lt;
 pub mod common;
 mod divrem;
-mod hintstore;
+// mod hintstore;
 mod jal_lui;
 mod jalr;
 mod less_than;
-mod load_sign_extend;
-mod loadstore;
+// mod load_sign_extend;
+// mod loadstore;
 mod mul;
 mod mulh;
 mod shift;
@@ -40,12 +41,12 @@ pub use base_alu::*;
 pub use branch_eq::*;
 pub use branch_lt::*;
 pub use divrem::*;
-pub use hintstore::*;
+// pub use hintstore::*;
 pub use jal_lui::*;
 pub use jalr::*;
 pub use less_than::*;
-pub use load_sign_extend::*;
-pub use loadstore::*;
+// pub use load_sign_extend::*;
+// pub use loadstore::*;
 pub use mul::*;
 pub use mulh::*;
 pub use shift::*;
@@ -93,7 +94,7 @@ impl InitFileGenerator for Rv64IConfig {}
 #[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv64ImConfig {
     #[config]
-    pub rv32i: Rv64IConfig,
+    pub rv64i: Rv64IConfig,
     #[extension]
     pub mul: Rv64M,
 }
@@ -137,14 +138,14 @@ impl Rv64IConfig {
 impl Rv64ImConfig {
     pub fn with_public_values(public_values: usize) -> Self {
         Self {
-            rv32i: Rv64IConfig::with_public_values(public_values),
+            rv64i: Rv64IConfig::with_public_values(public_values),
             mul: Default::default(),
         }
     }
 
     pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
         Self {
-            rv32i: Rv64IConfig::with_public_values_and_segment_len(public_values, segment_len),
+            rv64i: Rv64IConfig::with_public_values_and_segment_len(public_values, segment_len),
             mul: Default::default(),
         }
     }
@@ -202,7 +203,7 @@ where
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv64ICpuBuilder, &config.rv32i, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&Rv64ICpuBuilder, &config.rv64i, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
