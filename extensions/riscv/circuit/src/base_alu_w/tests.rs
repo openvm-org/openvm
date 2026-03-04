@@ -447,6 +447,8 @@ fn rv64_aluw_wrong_upper_sign_extension_negative_to_zero_test() {
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
+///
+/// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
@@ -458,8 +460,7 @@ fn run_addw_noncanonical_upper_bytes_sanity_test() {
     let rs1 = [170u8, 16, 32, 48, 13, 14, 15, 16];
     let rs2 = [1u8, 2, 3, 4, 21, 22, 23, 24];
     // 0x302010AA + 0x04030201 = 0x342312AB (positive, sign-extended to 0x00000000_342312AB)
-    let expected: [u8; RV64_REGISTER_NUM_LIMBS] =
-        0x00000000_342312ABu64.to_le_bytes();
+    let expected: [u8; RV64_REGISTER_NUM_LIMBS] = 0x00000000_342312ABu64.to_le_bytes();
     let result = set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -489,8 +490,7 @@ fn run_subw_noncanonical_upper_bytes_sanity_test() {
     let rs1 = [0u8, 0, 0, 128, 13, 14, 15, 16];
     let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
     // 0x80000000 - 0x00000001 = 0x7FFFFFFF (positive, sign-extended to 0x00000000_7FFFFFFF)
-    let expected: [u8; RV64_REGISTER_NUM_LIMBS] =
-        0x00000000_7FFFFFFFu64.to_le_bytes();
+    let expected: [u8; RV64_REGISTER_NUM_LIMBS] = 0x00000000_7FFFFFFFu64.to_le_bytes();
     let result = set_and_execute(
         &mut tester,
         &mut harness.executor,
