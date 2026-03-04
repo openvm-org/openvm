@@ -76,11 +76,7 @@ impl MemoryInventoryGPU {
         }
     }
 
-    pub fn persistent(
-        config: MemoryConfig,
-        _range_checker: Arc<VariableRangeCheckerChipGPU>,
-        hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
-    ) -> Self {
+    pub fn persistent(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
         Self {
             boundary: BoundaryChipGPU::persistent(hasher_chip.shared_buffer()),
             persistent: Some(PersistentMemoryInventoryGPU {
@@ -365,9 +361,6 @@ mod tests {
             poseidon2::Poseidon2PeripheryChip,
         },
     };
-    use openvm_circuit_primitives::var_range::{
-        VariableRangeCheckerChip, VariableRangeCheckerChipGPU,
-    };
     use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
@@ -376,8 +369,6 @@ mod tests {
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
-    use crate::arch::testing::default_var_range_checker_bus;
-
     #[test]
     fn test_empty_touched_memory_uses_full_chunk_values() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
@@ -422,9 +413,6 @@ mod tests {
         );
         let expected_root = cpu_merkle_tree.root();
 
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(default_var_range_checker_bus()),
-        )));
         let max_buffer_size = (mem_config
             .addr_spaces
             .iter()
@@ -435,8 +423,7 @@ mod tests {
             * 2
             * DIGEST_WIDTH;
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory =
-            MemoryInventoryGPU::persistent(mem_config.clone(), range_checker, hasher_chip);
+        let mut inventory = MemoryInventoryGPU::persistent(mem_config.clone(), hasher_chip);
         inventory.set_initial_memory(&memory.memory);
 
         let ctxs = inventory.generate_proving_ctxs(TouchedMemory::Persistent(Vec::new()));
@@ -533,9 +520,6 @@ mod tests {
         );
         let expected_root = cpu_merkle_tree.root();
 
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(default_var_range_checker_bus()),
-        )));
         let max_buffer_size = (mem_config
             .addr_spaces
             .iter()
@@ -546,8 +530,7 @@ mod tests {
             * 2
             * DIGEST_WIDTH;
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory =
-            MemoryInventoryGPU::persistent(mem_config.clone(), range_checker, hasher_chip);
+        let mut inventory = MemoryInventoryGPU::persistent(mem_config.clone(), hasher_chip);
         inventory.set_initial_memory(&memory.memory);
 
         let touched_memory = vec![

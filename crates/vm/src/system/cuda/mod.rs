@@ -58,11 +58,7 @@ impl SystemChipInventoryGPU {
         let memory_inventory = match &mem_inventory.interface {
             MemoryInterfaceAirs::Persistent { .. } => {
                 assert!(config.continuation_enabled);
-                MemoryInventoryGPU::persistent(
-                    config.memory_config.clone(),
-                    range_checker.clone(),
-                    hasher_chip.unwrap(),
-                )
+                MemoryInventoryGPU::persistent(config.memory_config.clone(), hasher_chip.unwrap())
             }
             MemoryInterfaceAirs::Volatile { .. } => {
                 assert!(!config.continuation_enabled);
