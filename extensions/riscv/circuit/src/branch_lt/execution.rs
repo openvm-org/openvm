@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS, LocalOpcode,
 };
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -52,7 +52,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         } else {
             c as isize
         };
-        if d.as_canonical_u32() != RV32_REGISTER_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchLePreCompute {
@@ -153,8 +153,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
-    let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs2 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.a as u32);
+    let rs2 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
     if jmp {
         pc = (pc as isize + pre_compute.imm) as u32;
@@ -191,7 +191,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Br
 }
 
 trait BranchLessThanOp {
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool;
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool;
 }
 struct BltOp;
 struct BltuOp;
@@ -200,33 +200,33 @@ struct BgeuOp;
 
 impl BranchLessThanOp for BltOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = i32::from_le_bytes(rs1);
-        let rs2 = i32::from_le_bytes(rs2);
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = i64::from_le_bytes(rs1);
+        let rs2 = i64::from_le_bytes(rs2);
         rs1 < rs2
     }
 }
 impl BranchLessThanOp for BltuOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = u32::from_le_bytes(rs1);
-        let rs2 = u32::from_le_bytes(rs2);
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = u64::from_le_bytes(rs1);
+        let rs2 = u64::from_le_bytes(rs2);
         rs1 < rs2
     }
 }
 impl BranchLessThanOp for BgeOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = i32::from_le_bytes(rs1);
-        let rs2 = i32::from_le_bytes(rs2);
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = i64::from_le_bytes(rs1);
+        let rs2 = i64::from_le_bytes(rs2);
         rs1 >= rs2
     }
 }
 impl BranchLessThanOp for BgeuOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = u32::from_le_bytes(rs1);
-        let rs2 = u32::from_le_bytes(rs2);
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = u64::from_le_bytes(rs1);
+        let rs2 = u64::from_le_bytes(rs2);
         rs1 >= rs2
     }
 }
