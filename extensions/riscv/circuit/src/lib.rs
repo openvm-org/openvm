@@ -20,35 +20,35 @@ use serde::{Deserialize, Serialize};
 
 pub mod adapters;
 // TEMP: commented out modules not yet ported to RV64
-// mod auipc;
+mod auipc;
 mod base_alu;
 mod branch_eq;
 mod branch_lt;
 pub mod common;
-// mod divrem;
+mod divrem;
 // mod hintstore;
-// mod jal_lui;
-// mod jalr;
+mod jal_lui;
+mod jalr;
 mod less_than;
 // mod load_sign_extend;
 // mod loadstore;
-// mod mul;
-// mod mulh;
+mod mul;
+mod mulh;
 mod shift;
 
-// pub use auipc::*;
+pub use auipc::*;
 pub use base_alu::*;
 pub use branch_eq::*;
 pub use branch_lt::*;
-// pub use divrem::*;
+pub use divrem::*;
 // pub use hintstore::*;
-// pub use jal_lui::*;
-// pub use jalr::*;
+pub use jal_lui::*;
+pub use jalr::*;
 pub use less_than::*;
 // pub use load_sign_extend::*;
 // pub use loadstore::*;
-// pub use mul::*;
-// pub use mulh::*;
+pub use mul::*;
+pub use mulh::*;
 pub use shift::*;
 
 mod extension;
