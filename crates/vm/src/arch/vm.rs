@@ -228,7 +228,7 @@ where
     }
 
     pub fn build_metered_cost_ctx(&self, widths: &[usize]) -> MeteredCostCtx {
-        MeteredCostCtx::new(widths.to_vec(), self.config.as_ref())
+        MeteredCostCtx::new(widths.to_vec())
     }
 }
 
