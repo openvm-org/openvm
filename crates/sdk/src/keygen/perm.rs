@@ -21,7 +21,7 @@ impl AirIdPermutation {
     }
     #[cfg(feature = "evm-prove")]
     pub fn get_special_air_ids(&self) -> SpecialAirIds {
-        use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
+        use openvm_circuit::arch::{BOUNDARY_AIR_IDX, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
 
         let perm_len = self.perm.len();
         let mut ret = SpecialAirIds {
@@ -34,7 +34,7 @@ impl AirIdPermutation {
                 ret.program_air_id = i;
             } else if air_id == CONNECTOR_AIR_ID {
                 ret.connector_air_id = i;
-            } else if air_id == PUBLIC_VALUES_AIR_ID {
+            } else if air_id == BOUNDARY_AIR_IDX {
                 ret.public_values_air_id = i;
             }
         }

@@ -27,7 +27,7 @@ use crate::{
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
-        VmExecutionConfig, VmField, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+        VmExecutionConfig, VmField, BOUNDARY_AIR_IDX, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -433,7 +433,7 @@ where
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
         use crate::system::memory::interface::MemoryInterface;
 
-        let boundary_idx = PUBLIC_VALUES_AIR_ID;
+        let boundary_idx = BOUNDARY_AIR_IDX;
         let mut access_adapter_offset = boundary_idx + 1;
         match &self.memory_controller.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
@@ -541,6 +541,6 @@ where
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         self.memory_controller
-            .set_override_trace_heights(&heights[PUBLIC_VALUES_AIR_ID..]);
+            .set_override_trace_heights(&heights[BOUNDARY_AIR_IDX..]);
     }
 }
