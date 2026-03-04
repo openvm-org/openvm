@@ -8,7 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::MulOpcode;
@@ -26,7 +26,7 @@ struct MultiPreCompute {
     c: u8,
 }
 
-impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -37,7 +37,7 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
             MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
-        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+        if inst.d.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -51,7 +51,7 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -91,7 +91,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
-    for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -109,33 +109,33 @@ where
         let b = to_i16(inst.b);
         let c = to_i16(inst.c);
 
-        if a % 4 != 0 || b % 4 != 0 || c % 4 != 0 {
+        if a % 8 != 0 || b % 8 != 0 || c % 8 != 0 {
             return Err(AotError::InvalidInstruction);
         }
 
         let mut asm_str = String::new();
 
-        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
-            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 8) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 8) as usize].unwrap()
         } else {
             REG_A_W
         };
 
         if a == c {
             // a = b * c; commutative, so don't need to write to tmp, but should copy c to a first
-            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, str_reg_a, true);
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 8) as u8, str_reg_a, true);
             asm_str += &delta_str_c;
-            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, REG_C_W, false);
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 8) as u8, REG_C_W, false);
             asm_str += &delta_str_b;
             asm_str += &format!("   imul {gpr_reg_c}, {gpr_reg_b}\n");
-            asm_str += &gpr_to_xmm(&gpr_reg_c, (a / 4) as u8);
+            asm_str += &gpr_to_xmm(&gpr_reg_c, (a / 8) as u8);
         } else {
-            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 8) as u8, str_reg_a, true);
             asm_str += &delta_str_b; // data is now in gpr_reg_b
-            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 8) as u8, REG_C_W, false); // data is in gpr_reg_c now
             asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
             asm_str += &format!("   imul {gpr_reg_b}, {gpr_reg_c}\n");
-            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 8) as u8);
         }
 
         Ok(asm_str)
@@ -143,7 +143,7 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -188,7 +188,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MultiplicationExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -205,12 +205,12 @@ where
         let mut asm_str = self.generate_x86_asm(inst, pc)?;
 
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // read [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // read [c:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // write [a:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [b:8]_1
+        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        // read [c:8]_1
+        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        // write [a:8]_1
+        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
 
         Ok(asm_str)
     }
@@ -220,14 +220,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MultiPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rs1 = u32::from_le_bytes(rs1);
-    let rs2 = u32::from_le_bytes(rs2);
+    let rs1: [u8; RV64_REGISTER_NUM_LIMBS] =
+        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV64_REGISTER_NUM_LIMBS] =
+        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs1 = u64::from_le_bytes(rs1);
+    let rs2 = u64::from_le_bytes(rs2);
     let rd = rs1.wrapping_mul(rs2);
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

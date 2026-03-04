@@ -10,7 +10,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LessThanOpcode;
@@ -20,17 +20,20 @@ use super::core::LessThanExecutor;
 #[cfg(feature = "aot")]
 use crate::less_than::execution::aot::common::Width;
 #[allow(unused_imports)]
-use crate::{adapters::imm_to_bytes, common::*};
+use crate::{
+    adapters::{imm_to_bytes, imm_to_u64},
+    common::*,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct LessThanPreCompute {
-    c: u32,
+    c: u64,
     a: u8,
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> LessThanExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -48,20 +51,20 @@ impl<A, const LIMB_BITS: usize> LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS },
             ..
         } = inst;
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS
-            || !(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS)
+        if d.as_canonical_u32() != RV64_REGISTER_AS
+            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let is_imm = e_u32 == RV32_IMM_AS;
+        let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
 
         *data = LessThanPreCompute {
             c: if is_imm {
-                u32::from_le_bytes(imm_to_bytes(c_u32))
+                imm_to_u64(c_u32)
             } else {
-                c_u32
+                c_u32 as u64
             },
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
@@ -82,7 +85,7 @@ macro_rules! dispatch {
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for LessThanExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -197,7 +200,7 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for LessThanExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -275,25 +278,25 @@ unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const E_IS_IMM: bool,
-    const IS_U32: bool,
+    const IS_UNSIGNED: bool,
 >(
     pre_compute: &LessThanPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if E_IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
+        exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
-    let cmp_result = if IS_U32 {
-        u32::from_le_bytes(rs1) < u32::from_le_bytes(rs2)
+    let cmp_result = if IS_UNSIGNED {
+        u64::from_le_bytes(rs1) < u64::from_le_bytes(rs2)
     } else {
-        i32::from_le_bytes(rs1) < i32::from_le_bytes(rs2)
+        i64::from_le_bytes(rs1) < i64::from_le_bytes(rs2)
     };
-    let mut rd = [0u8; RV32_REGISTER_NUM_LIMBS];
+    let mut rd = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd[0] = cmp_result as u8;
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -305,14 +308,14 @@ unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const E_IS_IMM: bool,
-    const IS_U32: bool,
+    const IS_UNSIGNED: bool,
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LessThanPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(pre_compute, exec_state);
+    execute_e12_impl::<F, CTX, E_IS_IMM, IS_UNSIGNED>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -321,7 +324,7 @@ unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const E_IS_IMM: bool,
-    const IS_U32: bool,
+    const IS_UNSIGNED: bool,
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -332,5 +335,5 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(&pre_compute.data, exec_state);
+    execute_e12_impl::<F, CTX, E_IS_IMM, IS_UNSIGNED>(&pre_compute.data, exec_state);
 }

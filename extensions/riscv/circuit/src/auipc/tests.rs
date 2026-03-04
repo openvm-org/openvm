@@ -35,34 +35,34 @@ use {
     },
 };
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcExecutor};
+use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64AuipcExecutor};
 use crate::{
     adapters::{
-        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller,
-        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
+        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
     },
     test_utils::get_verification_error,
-    Rv32AuipcAir, Rv32AuipcFiller,
+    Rv64AuipcAir, Rv64AuipcFiller,
 };
 
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness<RA> = TestChipHarness<F, Rv32AuipcExecutor, Rv32AuipcAir, Rv32AuipcChip<F>, RA>;
+type Harness<RA> = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChip<F>, RA>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv32AuipcAir, Rv32AuipcExecutor, Rv32AuipcChip<F>) {
+) -> (Rv64AuipcAir, Rv64AuipcExecutor, Rv64AuipcChip<F>) {
     let air = VmAirWrapper::new(
-        Rv32RdWriteAdapterAir::new(memory_bridge, execution_bridge),
-        Rv32AuipcCoreAir::new(bitwise_chip.bus()),
+        Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge),
+        Rv64AuipcCoreAir::new(bitwise_chip.bus()),
     );
-    let executor = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor::new());
+    let executor = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor::new());
     let chip = VmChipWrapper::<F, _>::new(
-        Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller::new(), bitwise_chip),
+        Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller::new(), bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -73,12 +73,12 @@ fn create_harness<RA: Arena>(
 ) -> (
     Harness<RA>,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -102,10 +102,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm: Option<u32>,
     initial_pc: Option<u32>,
 ) where
-    Rv32AuipcExecutor: PreflightExecutor<F, RA>,
+    Rv64AuipcExecutor: PreflightExecutor<F, RA>,
 {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
-    let a = rng.gen_range(0..32) << 2;
+    let a = rng.gen_range(0..32) << 3;
 
     tester.execute_with_pc(
         executor,
@@ -115,7 +115,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -160,9 +160,9 @@ fn rand_auipc_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
-    pub rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    pub imm_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
-    pub pc_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 2]>,
+    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
+    pub imm_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
+    pub pc_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 2]>,
 }
 
 fn run_negative_auipc_test(
@@ -190,7 +190,7 @@ fn run_negative_auipc_test(
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core_cols: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
+        let core_cols: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -271,6 +271,45 @@ fn invalid_limb_negative_tests() {
 }
 
 #[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let rd_ptr = 16usize;
+
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(AUIPC.global_opcode(), [rd_ptr, 0, imm, 1, 0]),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
 fn overflow_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
@@ -327,7 +366,7 @@ fn run_auipc_sanity_test() {
     let imm = 11302451;
     let rd_data = run_auipc(initial_pc, imm);
 
-    assert_eq!(rd_data, [210, 107, 113, 186]);
+    assert_eq!(rd_data, [210, 107, 113, 186, 0, 0, 0, 0]);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

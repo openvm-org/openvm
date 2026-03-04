@@ -8,11 +8,11 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    riscv::RV32_REGISTER_AS,
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::Rv32JalrExecutor;
+use super::core::Rv64JalrExecutor;
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -24,7 +24,7 @@ struct JalrPreCompute {
     b: u8,
 }
 
-impl<A> Rv32JalrExecutor<A> {
+impl<A> Rv64JalrExecutor<A> {
     /// Return true if enabled.
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -33,7 +33,7 @@ impl<A> Rv32JalrExecutor<A> {
         data: &mut JalrPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
-        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+        if inst.d.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = JalrPreCompute {
@@ -56,7 +56,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
 {
@@ -138,7 +138,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalrExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
 {
@@ -214,15 +214,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pc = exec_state.pc();
-    let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = u32::from_le_bytes(rs1);
+    let rs1 =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    debug_assert!(rs1[4..].iter().all(|&b| b == 0), "upper bytes of rs1 must be zero");
+    let rs1 = u32::from_le_bytes([rs1[0], rs1[1], rs1[2], rs1[3]]);
     let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
     let to_pc = to_pc - (to_pc & 1);
     debug_assert!(to_pc < (1 << PC_BITS));
-    let rd = (pc + DEFAULT_PC_STEP).to_le_bytes();
+    let mut rd = [0u8; RV64_REGISTER_NUM_LIMBS];
+    rd[..4].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
 
     if ENABLED {
-        exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+        exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
     }
 
     exec_state.set_pc(to_pc);

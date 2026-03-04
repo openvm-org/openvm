@@ -8,7 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::MulHOpcode;
@@ -26,7 +26,7 @@ struct MulHPreCompute {
     c: u8,
 }
 
-impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -55,7 +55,7 @@ macro_rules! dispatch {
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -95,7 +95,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
-    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -116,7 +116,7 @@ where
         let b = to_i16(inst.b);
         let c = to_i16(inst.c);
 
-        if a % 4 != 0 || b % 4 != 0 || c % 4 != 0 {
+        if a % 8 != 0 || b % 8 != 0 || c % 8 != 0 {
             return Err(AotError::InvalidInstruction);
         }
 
@@ -129,14 +129,14 @@ where
             result of hi bits are always stored in `edx`
             can't use REG_C_W, because it is edx, and it gets overridden
         */
-        let (_, delta_str_b) = &xmm_to_gpr((b / 4) as u8, "eax", true);
-        let (gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_A_W, false);
+        let (_, delta_str_b) = &xmm_to_gpr((b / 8) as u8, "eax", true);
+        let (gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 8) as u8, REG_A_W, false);
         asm += delta_str_b;
         asm += delta_str_c;
         match opcode {
             MulHOpcode::MULH => {
                 asm += &format!("   imul {gpr_reg_c}\n");
-                asm += &gpr_to_xmm("edx", (a / 4) as u8);
+                asm += &gpr_to_xmm("edx", (a / 8) as u8);
             }
             MulHOpcode::MULHSU => {
                 // free to modify edx:eax, since mul and imul operations modify anyways
@@ -147,11 +147,11 @@ where
                 asm += "   sar edx, 31\n";
                 asm += &format!("   and edx, {REG_B_W}\n");
                 asm += "   add eax, edx\n";
-                asm += &gpr_to_xmm("eax", (a / 4) as u8);
+                asm += &gpr_to_xmm("eax", (a / 8) as u8);
             }
             MulHOpcode::MULHU => {
                 asm += &format!("   mul {gpr_reg_c}\n");
-                asm += &gpr_to_xmm("edx", (a / 4) as u8);
+                asm += &gpr_to_xmm("edx", (a / 8) as u8);
             }
         }
         Ok(asm)
@@ -159,7 +159,7 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -204,7 +204,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -221,12 +221,12 @@ where
         let mut asm_str = self.generate_x86_asm(inst, pc)?;
 
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // read [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // read [c:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // write [a:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [b:8]_1
+        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        // read [c:8]_1
+        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        // write [a:8]_1
+        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
 
         Ok(asm_str)
     }
@@ -237,12 +237,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOper
     pre_compute: &MulHPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rs1: [u8; RV64_REGISTER_NUM_LIMBS] =
+        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV64_REGISTER_NUM_LIMBS] =
+        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd = <OP as MulHOperation>::compute(rs1, rs2);
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -274,32 +274,32 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Mu
 }
 
 trait MulHOperation {
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4];
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> [u8; 8];
 }
 struct MulHOp;
 struct MulHSuOp;
 struct MulHUOp;
 impl MulHOperation for MulHOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        let rs1 = i32::from_le_bytes(rs1) as i64;
-        let rs2 = i32::from_le_bytes(rs2) as i64;
-        ((rs1.wrapping_mul(rs2) >> 32) as u32).to_le_bytes()
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> [u8; 8] {
+        let rs1 = i64::from_le_bytes(rs1) as i128;
+        let rs2 = i64::from_le_bytes(rs2) as i128;
+        ((rs1.wrapping_mul(rs2) >> 64) as u64).to_le_bytes()
     }
 }
 impl MulHOperation for MulHSuOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        let rs1 = i32::from_le_bytes(rs1) as i64;
-        let rs2 = u32::from_le_bytes(rs2) as i64;
-        ((rs1.wrapping_mul(rs2) >> 32) as u32).to_le_bytes()
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> [u8; 8] {
+        let rs1 = i64::from_le_bytes(rs1) as i128;
+        let rs2 = u64::from_le_bytes(rs2) as i128;
+        ((rs1.wrapping_mul(rs2) >> 64) as u64).to_le_bytes()
     }
 }
 impl MulHOperation for MulHUOp {
     #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        let rs1 = u32::from_le_bytes(rs1) as i64;
-        let rs2 = u32::from_le_bytes(rs2) as i64;
-        ((rs1.wrapping_mul(rs2) >> 32) as u32).to_le_bytes()
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> [u8; 8] {
+        let rs1 = u64::from_le_bytes(rs1) as u128;
+        let rs2 = u64::from_le_bytes(rs2) as u128;
+        ((rs1.wrapping_mul(rs2) >> 64) as u64).to_le_bytes()
     }
 }

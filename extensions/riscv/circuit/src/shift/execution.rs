@@ -8,7 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftOpcode;
@@ -16,12 +16,15 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftExecutor;
 #[allow(unused_imports)]
-use crate::{adapters::imm_to_bytes, common::*};
+use crate::{
+    adapters::{imm_to_bytes, imm_to_u64},
+    common::*,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct ShiftPreCompute {
-    c: u32,
+    c: u64,
     a: u8,
     b: u8,
 }
@@ -39,23 +42,23 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIM
         } = inst;
         let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let e_u32 = e.as_canonical_u32();
-        if inst.d.as_canonical_u32() != RV32_REGISTER_AS
-            || !(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS)
+        if inst.d.as_canonical_u32() != RV64_REGISTER_AS
+            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let is_imm = e_u32 == RV32_IMM_AS;
+        let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
         *data = ShiftPreCompute {
             c: if is_imm {
-                u32::from_le_bytes(imm_to_bytes(c_u32))
+                imm_to_u64(c_u32)
             } else {
-                c_u32
+                c_u32 as u64
             },
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
-        // `d` is always expected to be RV32_REGISTER_AS.
+        // `d` is always expected to be RV64_REGISTER_AS.
         Ok((is_imm, shift_opcode))
     }
 }
@@ -91,7 +94,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
-        // `d` is always expected to be RV32_REGISTER_AS.
+        // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm, shift_opcode)
     }
 
@@ -107,7 +110,7 @@ where
     {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
-        // `d` is always expected to be RV32_REGISTER_AS.
+        // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm, shift_opcode)
     }
 }
@@ -209,7 +212,7 @@ where
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        // `d` is always expected to be RV32_REGISTER_AS.
+        // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e2_handler, is_imm, shift_opcode)
     }
 
@@ -224,7 +227,7 @@ where
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        // `d` is always expected to be RV32_REGISTER_AS.
+        // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e2_handler, is_imm, shift_opcode)
     }
 }
@@ -269,18 +272,18 @@ unsafe fn execute_e12_impl<
     pre_compute: &ShiftPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
+        exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
-    let rs2 = u32::from_le_bytes(rs2);
+    let rs2 = u64::from_le_bytes(rs2);
 
     // Execute the shift operation
     let rd = <OP as ShiftOp>::compute(rs1, rs2);
     // Write the result back to memory
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -323,29 +326,29 @@ unsafe fn execute_e2_impl<
 }
 
 trait ShiftOp {
-    fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4];
+    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8];
 }
 struct SllOp;
 struct SrlOp;
 struct SraOp;
 impl ShiftOp for SllOp {
-    fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4] {
-        let rs1 = u32::from_le_bytes(rs1);
-        // `rs2`'s  other bits are ignored.
-        (rs1 << (rs2 & 0x1F)).to_le_bytes()
+    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
+        let rs1 = u64::from_le_bytes(rs1);
+        // RV64: only the low 6 bits of rs2 are used for the shift amount.
+        (rs1 << (rs2 & 0x3F)).to_le_bytes()
     }
 }
 impl ShiftOp for SrlOp {
-    fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4] {
-        let rs1 = u32::from_le_bytes(rs1);
-        // `rs2`'s  other bits are ignored.
-        (rs1 >> (rs2 & 0x1F)).to_le_bytes()
+    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
+        let rs1 = u64::from_le_bytes(rs1);
+        // RV64: only the low 6 bits of rs2 are used for the shift amount.
+        (rs1 >> (rs2 & 0x3F)).to_le_bytes()
     }
 }
 impl ShiftOp for SraOp {
-    fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4] {
-        let rs1 = i32::from_le_bytes(rs1);
-        // `rs2`'s  other bits are ignored.
-        (rs1 >> (rs2 & 0x1F)).to_le_bytes()
+    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
+        let rs1 = i64::from_le_bytes(rs1);
+        // RV64: only the low 6 bits of rs2 are used for the shift amount.
+        (rs1 >> (rs2 & 0x3F)).to_le_bytes()
     }
 }

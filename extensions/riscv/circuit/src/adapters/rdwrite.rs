@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{
     arch::{
@@ -14,7 +17,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{utils::not, AlignedBytesBorrow};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -22,50 +25,50 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use super::RV32_REGISTER_NUM_LIMBS;
+use super::RV64_REGISTER_NUM_LIMBS;
 use crate::adapters::tracing_write;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv32RdWriteAdapterCols<T> {
+pub struct Rv64RdWriteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
-    pub rd_aux_cols: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv32CondRdWriteAdapterCols<T> {
-    pub inner: Rv32RdWriteAdapterCols<T>,
+pub struct Rv64CondRdWriteAdapterCols<T> {
+    pub inner: Rv64RdWriteAdapterCols<T>,
     pub needs_write: T,
 }
 
-/// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
+/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32RdWriteAdapterAir {
+pub struct Rv64RdWriteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32CondRdWriteAdapterAir {
-    inner: Rv32RdWriteAdapterAir,
+pub struct Rv64CondRdWriteAdapterAir {
+    inner: Rv64RdWriteAdapterAir,
 }
 
-impl<F: Field> BaseAir<F> for Rv32RdWriteAdapterAir {
+impl<F: Field> BaseAir<F> for Rv64RdWriteAdapterAir {
     fn width(&self) -> usize {
-        Rv32RdWriteAdapterCols::<F>::width()
+        Rv64RdWriteAdapterCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAir<F> for Rv32CondRdWriteAdapterAir {
+impl<F: Field> BaseAir<F> for Rv64CondRdWriteAdapterAir {
     fn width(&self) -> usize {
-        Rv32CondRdWriteAdapterCols::<F>::width()
+        Rv64CondRdWriteAdapterCols::<F>::width()
     }
 }
 
-impl Rv32RdWriteAdapterAir {
+impl Rv64RdWriteAdapterAir {
     /// If `needs_write` is provided:
     /// - Only writes if `needs_write`.
     /// - Sets operand `f = needs_write` in the instruction.
@@ -78,7 +81,7 @@ impl Rv32RdWriteAdapterAir {
     fn conditional_eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local_cols: &Rv32RdWriteAdapterCols<AB::Var>,
+        local_cols: &Rv64RdWriteAdapterCols<AB::Var>,
         ctx: AdapterAirContext<
             AB::Expr,
             BasicAdapterInterface<
@@ -87,7 +90,7 @@ impl Rv32RdWriteAdapterAir {
                 0,
                 1,
                 0,
-                RV32_REGISTER_NUM_LIMBS,
+                RV64_REGISTER_NUM_LIMBS,
             >,
         >,
         needs_write: Option<AB::Expr>,
@@ -102,7 +105,7 @@ impl Rv32RdWriteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::F::from_canonical_u32(RV64_REGISTER_AS),
                     local_cols.rd_ptr,
                 ),
                 ctx.writes[0].clone(),
@@ -122,7 +125,7 @@ impl Rv32RdWriteAdapterAir {
                     local_cols.rd_ptr.into(),
                     AB::Expr::ZERO,
                     ctx.instruction.immediate,
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_canonical_u32(RV64_REGISTER_AS),
                     AB::Expr::ZERO,
                     f,
                 ],
@@ -136,9 +139,9 @@ impl Rv32RdWriteAdapterAir {
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64RdWriteAdapterAir {
     type Interface =
-        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
+        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, RV64_REGISTER_NUM_LIMBS>;
 
     fn eval(
         &self,
@@ -146,19 +149,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32RdWriteAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv32RdWriteAdapterCols<AB::Var> = (*local).borrow();
+        let local_cols: &Rv64RdWriteAdapterCols<AB::Var> = (*local).borrow();
         self.conditional_eval(builder, local_cols, ctx, None);
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32RdWriteAdapterCols<_> = local.borrow();
+        let cols: &Rv64RdWriteAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     type Interface =
-        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
+        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, RV64_REGISTER_NUM_LIMBS>;
 
     fn eval(
         &self,
@@ -166,7 +169,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv32CondRdWriteAdapterCols<AB::Var> = (*local).borrow();
+        let local_cols: &Rv64CondRdWriteAdapterCols<AB::Var> = (*local).borrow();
 
         builder.assert_bool(local_cols.needs_write);
         builder
@@ -182,37 +185,37 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32CondRdWriteAdapterCols<_> = local.borrow();
+        let cols: &Rv64CondRdWriteAdapterCols<_> = local.borrow();
         cols.inner.from_state.pc
     }
 }
 
-/// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
+/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct Rv32RdWriteAdapterRecord {
+pub struct Rv64RdWriteAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
     // Will use u32::MAX to indicate no write
     pub rd_ptr: u32,
-    pub rd_aux_record: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub rd_aux_record: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32RdWriteAdapterExecutor;
+pub struct Rv64RdWriteAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32RdWriteAdapterFiller;
+pub struct Rv64RdWriteAdapterFiller;
 
-impl<F> AdapterTraceExecutor<F> for Rv32RdWriteAdapterExecutor
+impl<F> AdapterTraceExecutor<F> for Rv64RdWriteAdapterExecutor
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+    const WIDTH: usize = size_of::<Rv64RdWriteAdapterCols<u8>>();
     type ReadData = ();
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut Rv32RdWriteAdapterRecord;
+    type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
+    type RecordMut<'a> = &'a mut Rv64RdWriteAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -227,7 +230,7 @@ where
         _instruction: &Instruction<F>,
         _record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        // Rv32RdWriteAdapter doesn't read anything
+        // Rv64RdWriteAdapter doesn't read anything
     }
 
     #[inline(always)]
@@ -240,12 +243,12 @@ where
     ) {
         let &Instruction { a, d, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
 
         record.rd_ptr = a.as_canonical_u32();
         tracing_write(
             memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.rd_ptr,
             data,
             &mut record.rd_aux_record.prev_timestamp,
@@ -254,18 +257,18 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
-    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv64RdWriteAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        // - get_record_from_slice correctly interprets the bytes as Rv32RdWriteAdapterRecord
-        let record: &Rv32RdWriteAdapterRecord =
+        // - get_record_from_slice correctly interprets the bytes as Rv64RdWriteAdapterRecord
+        let record: &Rv64RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
 
         adapter_row
             .rd_aux_cols
@@ -281,25 +284,25 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
     }
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32CondRdWriteAdapterExecutor {
-    inner: Rv32RdWriteAdapterExecutor,
+pub struct Rv64CondRdWriteAdapterExecutor {
+    inner: Rv64RdWriteAdapterExecutor,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32CondRdWriteAdapterFiller {
-    inner: Rv32RdWriteAdapterFiller,
+pub struct Rv64CondRdWriteAdapterFiller {
+    inner: Rv64RdWriteAdapterFiller,
 }
 
-impl<F> AdapterTraceExecutor<F> for Rv32CondRdWriteAdapterExecutor
+impl<F> AdapterTraceExecutor<F> for Rv64CondRdWriteAdapterExecutor
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
+    const WIDTH: usize = size_of::<Rv64CondRdWriteAdapterCols<u8>>();
     type ReadData = ();
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut Rv32RdWriteAdapterRecord;
+    type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
+    type RecordMut<'a> = &'a mut Rv64RdWriteAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -314,7 +317,7 @@ where
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::read(
+        <Rv64RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::read(
             &self.inner,
             memory,
             instruction,
@@ -333,7 +336,7 @@ where
         let Instruction { f: enabled, .. } = instruction;
 
         if enabled.is_one() {
-            <Rv32RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::write(
+            <Rv64RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::write(
                 &self.inner,
                 memory,
                 instruction,
@@ -347,30 +350,30 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
-    const WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64CondRdWriteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv64CondRdWriteAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        // - get_record_from_slice correctly interprets the bytes as Rv32RdWriteAdapterRecord
-        let record: &Rv32RdWriteAdapterRecord =
+        // - get_record_from_slice correctly interprets the bytes as Rv64RdWriteAdapterRecord
+        let record: &Rv64RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
 
         adapter_cols.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
 
         if record.rd_ptr != u32::MAX {
             // SAFETY:
             // - adapter_row has sufficient length for the split
-            // - size_of::<Rv32RdWriteAdapterCols<u8>>() is the correct split point
+            // - size_of::<Rv64RdWriteAdapterCols<u8>>() is the correct split point
             unsafe {
                 self.inner.fill_trace_row(
                     mem_helper,
                     adapter_row
-                        .split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())
+                        .split_at_mut_unchecked(size_of::<Rv64RdWriteAdapterCols<u8>>())
                         .0,
                 )
             };
