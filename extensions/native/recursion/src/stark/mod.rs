@@ -191,9 +191,10 @@ where
             // permutation. Also check that permutation is decreasing by height.
             let prev_log_height_plus_one: Usize<_> =
                 builder.eval(RVar::from(MAX_TWO_ADICITY - pcs.config.log_blowup + 1));
-            iter_zip!(builder, air_perm_by_height).for_each(|ptr_vec, builder| {
+            // air_perm_by_height and mask both have length num_airs
+            iter_zip!(builder, air_perm_by_height, mask).for_each(|ptr_vec, builder| {
                 let perm_i = builder.iter_ptr_get(air_perm_by_height, ptr_vec[0]);
-                let mask_i = builder.get(&mask, perm_i.clone());
+                let mask_i = builder.iter_ptr_get(&mask, ptr_vec[1]);
                 builder.assert_usize_eq(mask_i, one.clone());
 
                 let air_proof = builder.get(air_proofs, perm_i.clone());

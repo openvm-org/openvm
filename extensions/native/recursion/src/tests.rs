@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+use openvm_circuit::arch::{ExecutionError, VirtualMachineError};
 use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeCpuBuilder};
+use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::VerificationData,
     interaction::BusIndex,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
@@ -29,8 +32,10 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,
-    types::new_from_inner_multi_vk,
+    hints::Hintable,
+    stark::VerifierProgram,
+    testing_utils::inner::run_recursive_test,
+    types::{new_from_inner_multi_vk, InnerConfig},
 };
 
 pub fn fibonacci_test_proof_input<SC: StarkGenericConfig>(n: usize) -> ProofInputForTest<SC>
@@ -258,5 +263,61 @@ fn test_optional_air() {
             config.clone()
         )
         .is_err());
+    }
+}
+
+#[test]
+fn test_air_perm_by_height_duplicates_not_allowed() {
+    let fri_params_for_proof = FriParameters::new_for_testing(1);
+    let engine = BabyBearPoseidon2Engine::new(fri_params_for_proof);
+
+    // Construct a multi-AIR proof where the first two AIRs are identical (same air + same trace).
+    let n = 1 << 10;
+    let fib0 = FibonacciChip::new(0, 1, n);
+    let fib1 = FibonacciChip::new(0, 1, n);
+    let proof_input = ProofInputForTest::<BabyBearPoseidon2Config> {
+        airs: vec![fib0.air(), fib1.air()],
+        per_air: vec![fib0.generate_proving_ctx(()), fib1.generate_proving_ctx(())],
+    };
+
+    let vparams = proof_input.run_test(&engine).unwrap();
+    let (proof, vk, fri_params) = {
+        let data = vparams.data;
+        let VerificationData { proof, vk } = data;
+        (proof, vk, vparams.fri_params)
+    };
+
+    let advice = new_from_inner_multi_vk(&vk);
+    let program =
+        VerifierProgram::build_with_options(advice, &fri_params, CompilerOptions::default());
+
+    // Malicious witness: tamper only `air_perm_by_height` to be [0, 0].
+    let mut tampered_stream = Vec::new();
+    tampered_stream.extend(proof.commitments.write());
+    tampered_stream.extend(proof.opening.write());
+    tampered_stream.extend(<Vec<_> as Hintable<InnerConfig>>::write(&proof.per_air));
+    tampered_stream.extend(Vec::<usize>::write(&vec![0, 0]));
+    tampered_stream.extend(
+        proof
+            .rap_phase_seq_proof
+            .as_ref()
+            .map(|p| p.logup_pow_witness)
+            .unwrap_or_default()
+            .write(),
+    );
+
+    match execute_program_with_config::<BabyBearPoseidon2Engine, _>(
+        program,
+        tampered_stream,
+        NativeCpuBuilder,
+        test_native_config(),
+    ) {
+        Err(VirtualMachineError::Execution(ExecutionError::Fail {
+            pc: 12,
+            msg: "DebugPanic",
+        })) => {}
+        _ => {
+            panic!("Recursion program did not fail")
+        }
     }
 }
