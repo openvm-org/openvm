@@ -271,6 +271,11 @@ where
             local.prod_u_r_omega,
             ext_field_multiply(local.u_pow, ext_field_add(local.u_pow, local.r_omega_pow)),
         );
+        assert_array_eq(
+            &mut builder.when(local.is_first_hypercube),
+            local.prod_1_r_omega,
+            ext_field_add_scalar(local.r_omega_pow, AB::Expr::ONE),
+        );
 
         assert_array_eq(
             &mut builder.when(local.is_valid - local.is_last_hypercube),
@@ -285,6 +290,14 @@ where
                 ext_field_add(next.u_pow, next.r_omega_pow),
             ),
             next.prod_u_r_omega,
+        );
+        assert_array_eq(
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
+            ext_field_multiply(
+                local.prod_1_r_omega,
+                ext_field_add_scalar(next.r_omega_pow, AB::Expr::ONE),
+            ),
+            next.prod_1_r_omega,
         );
 
         self.sel_uni_bus.add_key_with_lookups(
