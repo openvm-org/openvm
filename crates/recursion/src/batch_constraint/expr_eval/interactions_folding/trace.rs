@@ -141,7 +141,7 @@ impl InteractionsFoldingBlob {
                             sort_idx,
                             interaction_idx,
                             node_idx: inter.bus_index as usize + 1,
-                            idx_in_message: inter.message.len() + 1,
+                            idx_in_message: inter.message.len(),
                             has_interactions: true,
                             is_first_in_air: false,
                             is_last_in_air: interaction_idx + 1 == inters.len(),

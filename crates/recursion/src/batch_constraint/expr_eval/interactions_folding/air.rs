@@ -148,6 +148,13 @@ where
             .when(not::<AB::Expr>(is_same_air.clone()))
             .assert_zero(next.interaction_idx);
 
+        builder
+            .when(local.is_first_in_message + local.is_second_in_message)
+            .assert_zero(local.idx_in_message);
+        builder
+            .when(is_same_message.clone())
+            .assert_one(next.idx_in_message - local.idx_in_message + local.is_first_in_message);
+
         // // =========================== general consistency ================================
         // The row describes an AIR without interactions iff it's first and last in the message,
         // unless the row is invalid

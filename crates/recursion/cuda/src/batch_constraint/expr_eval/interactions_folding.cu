@@ -126,7 +126,7 @@ __global__ void interactions_folding_tracegen(
     COL_WRITE_VALUE(row, InteractionsFoldingCols, is_bus_index, is_bus_index);
 
     uint32_t idx_in_message = is_first_in_message ? 0
-                                                  : (is_bus_index ? (interaction_num_rows - 1)
+                                                  : (is_bus_index ? (interaction_num_rows - 2)
                                                                   : (interaction_row_idx - 1));
     COL_WRITE_VALUE(row, InteractionsFoldingCols, idx_in_message, idx_in_message);
 
