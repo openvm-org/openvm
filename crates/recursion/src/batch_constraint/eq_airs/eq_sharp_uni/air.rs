@@ -198,6 +198,14 @@ where
             local.xi_idx,
             AB::Expr::from_usize(self.l_skip) - AB::Expr::ONE,
         );
+        assert_array_eq(
+            &mut builder
+                .when(local.is_valid)
+                .when(next.is_valid)
+                .when(not(next.is_first_iter)),
+            local.xi,
+            next.xi,
+        );
         // When we drop iter_idx, xi_idx decreases
         builder
             .when(next.is_first_iter * not(next.is_first))
