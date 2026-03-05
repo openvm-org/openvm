@@ -179,7 +179,7 @@ where
         // =========================== Xi and product consistency =============================
         // Boundary conditions
         assert_array_eq(
-            &mut builder.when(local.is_valid * local.is_first),
+            &mut builder.when(local.is_valid * local.is_first_in_interaction),
             local.eq,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
