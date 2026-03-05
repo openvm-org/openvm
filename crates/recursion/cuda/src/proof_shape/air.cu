@@ -43,11 +43,9 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T is_first;
     T is_last;
 
-    T idx;
     T sorted_idx;
     T log_height;
     T n_sign_bit;
-    T need_rot;
 
     T starting_tidx;
     T starting_cidx;
@@ -96,9 +94,6 @@ __device__ __forceinline__ void fill_present_row(
     int32_t n = static_cast<int32_t>(log_height) - static_cast<int32_t>(l_skip);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, log_height, log_height);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, n < 0 ? 1 : 0);
-    COL_WRITE_VALUE(
-        row, typename Cols<MAX_CACHED>::template Type, need_rot, air_data.need_rot ? 1 : 0
-    );
 
     COL_WRITE_VALUE(
         row, typename Cols<MAX_CACHED>::template Type, starting_cidx, trace_data.starting_cidx
@@ -193,7 +188,6 @@ __device__ __forceinline__ void fill_non_present_row(
 ) {
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, log_height, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, need_rot, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, final_cidx);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, Fp::zero());
@@ -236,10 +230,8 @@ __device__ __forceinline__ void fill_summary_row(
 ) {
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_valid, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::one());
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, need_rot, Fp::zero());
     row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
 
     Decomp interaction_decomp, max_interaction_decomp;
@@ -370,9 +362,6 @@ __global__ void proof_shape_tracegen(
 
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_valid, Fp::one());
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::zero());
-            COL_WRITE_VALUE(
-                row, typename Cols<MAX_CACHED>::template Type, idx, trace_height.air_idx
-            );
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, record_idx);
 
             COL_WRITE_VALUE(

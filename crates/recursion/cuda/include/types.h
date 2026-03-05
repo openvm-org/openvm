@@ -35,7 +35,6 @@ typedef struct {
     size_t num_interactions_per_row;
     size_t total_width;
     bool has_preprocessed;
-    bool need_rot;
 } AirData;
 
 typedef struct {

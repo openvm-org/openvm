@@ -83,11 +83,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(sorted_idx == 0);
 
-                cols.idx = F::from_usize(*idx);
                 cols.sorted_idx = F::from_usize(sorted_idx);
                 cols.log_height = F::from_usize(log_height);
                 cols.n_sign_bit = F::from_bool(n.is_negative());
-                cols.need_rot = F::from_bool(child_vk.inner.per_air[*idx].params.need_rot);
                 sorted_idx += 1;
 
                 cols.starting_tidx = F::from_usize(preflight.proof_shape.starting_tidx[*idx]);
@@ -189,10 +187,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(sorted_idx == 0);
 
-                cols.idx = F::from_usize(idx);
                 cols.sorted_idx = F::from_usize(sorted_idx);
                 sorted_idx += 1;
-                cols.need_rot = F::ZERO;
 
                 cols.num_present = num_present;
 
@@ -240,7 +236,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_last = F::ONE;
-                cols.need_rot = F::ZERO;
                 cols.starting_tidx = F::from_usize(preflight.proof_shape.post_tidx);
                 cols.num_present = num_present;
 

@@ -45,7 +45,6 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub is_first: F,
     pub is_last: F,
 
-    pub idx: F,
     pub sorted_idx: F,
     /// Represents log2 trace height when `is_present`.
     ///
@@ -53,8 +52,6 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub log_height: F,
     /// When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`.
     pub n_sign_bit: F,
-    /// Whether this AIR needs rotation openings.
-    pub need_rot: F,
 
     // First possible tidx and non-main cidx of the current AIR
     pub starting_tidx: F,
@@ -245,47 +242,6 @@ where
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
-        // PERMUTATION AND SORTING
-        ///////////////////////////////////////////////////////////////////////////////////////////
-        builder.when(local.is_first).assert_zero(local.sorted_idx);
-        builder
-            .when(next.sorted_idx)
-            .assert_eq(local.sorted_idx, next.sorted_idx - AB::F::ONE);
-
-        self.permutation_bus.send(
-            builder,
-            local.proof_idx,
-            ProofShapePermutationMessage {
-                idx: local.sorted_idx,
-            },
-            local.is_valid,
-        );
-
-        self.permutation_bus.receive(
-            builder,
-            local.proof_idx,
-            ProofShapePermutationMessage { idx: local.idx },
-            local.is_valid,
-        );
-
-        builder
-            .when(and(not(local.is_present), local.is_valid))
-            .assert_zero(local.height);
-        builder
-            .when(and(not(local.is_present), local.is_valid))
-            .assert_zero(local.log_height);
-
-        // Range check difference using ExponentBus to ensure local.log_height >= next.log_height
-        self.range_bus.lookup_key(
-            builder,
-            RangeCheckerBusMessage {
-                value: local.log_height - next.log_height,
-                max_bits: AB::Expr::from_usize(5),
-            },
-            and(local.is_valid, not(next.is_last)),
-        );
-
-        ///////////////////////////////////////////////////////////////////////////////////////////
         // VK FIELD SELECTION
         ///////////////////////////////////////////////////////////////////////////////////////////
         let mut num_interactions_per_row = [AB::Expr::ZERO; NUM_LIMBS];
@@ -296,8 +252,10 @@ where
         let mut has_preprocessed = AB::Expr::ZERO;
         let mut cached_present = vec![AB::Expr::ZERO; self.max_cached];
 
-        // Select values for AirShapeBus
+        // Select AIR idx + other values for AirShapeBus
+        let mut air_idx = AB::Expr::ZERO;
         let mut num_interactions = AB::Expr::ZERO;
+        let mut need_rot = AB::Expr::ZERO;
 
         // Select values for LiftedHeightsBus
         let mut main_common_width = AB::Expr::ZERO;
@@ -318,11 +276,8 @@ where
             let is_current_air = self.idx_encoder.get_flag_expr::<AB>(i, localv.idx_flags);
             let mut when_current = builder.when(is_current_air.clone());
 
-            when_current.assert_eq(local.idx, AB::F::from_usize(i));
-            when_current
-                .when(local.is_present)
-                .assert_eq(local.need_rot, AB::F::from_bool(air_data.need_rot));
-
+            air_idx += is_current_air.clone() * AB::F::from_usize(i);
+            need_rot += is_current_air.clone() * AB::F::from_bool(air_data.need_rot);
             main_common_width += is_current_air.clone() * AB::F::from_usize(air_data.main_width);
             num_dag_nodes += is_current_air.clone() * AB::F::from_usize(air_data.num_dag_nodes);
 
@@ -376,6 +331,49 @@ where
         }
 
         ///////////////////////////////////////////////////////////////////////////////////////////
+        // PERMUTATION AND SORTING
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        builder.when(local.is_first).assert_zero(local.sorted_idx);
+        builder
+            .when(next.sorted_idx)
+            .assert_eq(local.sorted_idx, next.sorted_idx - AB::F::ONE);
+
+        self.permutation_bus.send(
+            builder,
+            local.proof_idx,
+            ProofShapePermutationMessage {
+                idx: local.sorted_idx,
+            },
+            local.is_valid,
+        );
+
+        self.permutation_bus.receive(
+            builder,
+            local.proof_idx,
+            ProofShapePermutationMessage {
+                idx: air_idx.clone(),
+            },
+            local.is_valid,
+        );
+
+        builder
+            .when(and(not(local.is_present), local.is_valid))
+            .assert_zero(local.height);
+        builder
+            .when(and(not(local.is_present), local.is_valid))
+            .assert_zero(local.log_height);
+
+        // Range check difference using ExponentBus to ensure local.log_height >= next.log_height
+        self.range_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: local.log_height - next.log_height,
+                max_bits: AB::Expr::from_usize(5),
+            },
+            and(local.is_valid, not(next.is_last)),
+        );
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
         // TRANSCRIPT OBSERVATIONS
         ///////////////////////////////////////////////////////////////////////////////////////////
         let is_first_idx = self.idx_encoder.get_flag_expr::<AB>(0, localv.idx_flags);
@@ -387,7 +385,7 @@ where
             builder,
             local.proof_idx,
             StartingTidxMessage {
-                air_idx: local.idx * local.is_valid
+                air_idx: air_idx.clone() * local.is_valid
                     + AB::Expr::from_usize(self.per_air.len()) * local.is_last,
                 tidx: local.starting_tidx.into(),
             },
@@ -459,7 +457,7 @@ where
             builder,
             local.proof_idx,
             StartingTidxMessage {
-                air_idx: local.idx + AB::F::ONE,
+                air_idx: air_idx.clone() + AB::F::ONE,
                 tidx,
             },
             local.is_valid,
@@ -498,7 +496,7 @@ where
             AirShapeBusMessage {
                 sort_idx: local.sorted_idx.into(),
                 property_idx: AirShapeProperty::AirId.to_field(),
-                value: local.idx.into(),
+                value: air_idx.clone(),
             },
             local.is_present * num_dag_nodes.clone(),
         );
@@ -524,7 +522,7 @@ where
             AirShapeBusMessage {
                 sort_idx: local.sorted_idx.into(),
                 property_idx: AirShapeProperty::NeedRot.to_field(),
-                value: local.need_rot.into(),
+                value: need_rot.clone(),
             },
             local.is_present * total_width,
         );
@@ -535,10 +533,6 @@ where
         let l_skip = AB::F::from_usize(self.l_skip);
         let n = local.log_height.into() - l_skip;
         builder.when(local.is_valid).assert_bool(local.n_sign_bit);
-        builder.assert_bool(local.need_rot);
-        builder
-            .when(not(local.is_present))
-            .assert_zero(local.need_rot);
         let n_abs = select(local.n_sign_bit, -n.clone(), n.clone());
         // We range check `n_abs` is in `[0, 32)`.
         // We constrain `n = n_sign_bit ? -n_abs : n_abs` and `n := log_height - l_skip`.
@@ -663,7 +657,7 @@ where
                 builder,
                 local.proof_idx,
                 CachedCommitBusMessage {
-                    air_idx: local.idx.into(),
+                    air_idx: air_idx.clone(),
                     cached_idx: AB::Expr::from_usize(cached_idx),
                     cached_commit: localv.cached_commits[cached_idx].map(Into::into),
                 },
@@ -695,7 +689,7 @@ where
             builder,
             local.proof_idx,
             NumPublicValuesMessage {
-                air_idx: local.idx.into(),
+                air_idx: air_idx.clone(),
                 tidx: num_pvs_tidx,
                 num_pvs,
             },
@@ -933,7 +927,7 @@ where
             builder,
             local.proof_idx,
             NLiftMessage {
-                air_idx: local.idx.into(),
+                air_idx,
                 n_lift: (local.log_height - AB::Expr::from_usize(self.l_skip))
                     * (AB::Expr::ONE - local.n_sign_bit),
             },

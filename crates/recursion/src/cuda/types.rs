@@ -32,7 +32,6 @@ pub struct AirData {
     pub num_interactions_per_row: usize,
     pub total_width: usize,
     pub has_preprocessed: bool,
-    pub need_rot: bool,
 }
 
 #[repr(C)]
