@@ -120,6 +120,8 @@ where
             ),
         );
 
+        builder.when_first_row().assert_zero(local.proof_idx);
+
         builder.assert_bool(local.has_interactions);
         builder.assert_bool(local.is_bus_index);
         builder
