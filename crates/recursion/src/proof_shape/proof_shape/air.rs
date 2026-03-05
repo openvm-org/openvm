@@ -961,16 +961,13 @@ where
         let mut diff_val = AB::Expr::ZERO;
 
         for i in (0..NUM_LIMBS).rev() {
-            prefix += diff_marker[i].into();
-            diff_val += diff_marker[i].into()
-                * (max_interactions[i].clone() - local.total_interactions_limbs[i]);
+            let diff_i = max_interactions[i].clone() - local.total_interactions_limbs[i];
+            prefix += diff_marker[i];
+            diff_val += diff_marker[i] * diff_i.clone();
 
             builder.when(local.is_last).assert_bool(diff_marker[i]);
             builder
-                .when(not::<AB::Expr>(prefix.clone()) * local.is_last)
-                .assert_zero(local.total_interactions_limbs[i]);
-            builder
-                .when(local.total_interactions_limbs[i] * local.is_last)
+                .when(diff_i * local.is_last)
                 .assert_one(prefix.clone());
         }
 
