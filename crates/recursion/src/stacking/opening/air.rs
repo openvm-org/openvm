@@ -202,7 +202,7 @@ where
             .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
             .assert_one(next.col_idx - local.col_idx);
 
-        let mut when_last_main = builder.when(and(local.is_main, not(next.is_main)));
+        let mut when_last_main = builder.when(and(local.is_main, not(local.is_transition_main)));
         when_last_main.assert_zero((next.part_idx - AB::F::ONE) * not(local.is_last));
         when_last_main.assert_zero(next.col_idx * not(local.is_last));
 
