@@ -337,10 +337,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
         Self::persistent(mem_config)
     }
 
-    pub fn default_native() -> Self {
-        Self::persistent(MemoryConfig::aggregation())
-    }
-
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
         init_block_size: usize,
