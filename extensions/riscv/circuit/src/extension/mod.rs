@@ -27,9 +27,11 @@ use openvm_riscv_transpiler::{
     BranchEqualOpcode,
     BranchLessThanOpcode,
     DivRemOpcode,
+    DivRemWOpcode,
     LessThanOpcode,
     MulHOpcode,
     MulOpcode,
+    MulWOpcode,
     Rv64AuipcOpcode,
     // TEMP: disabled until ported to RV64
     // Rv64HintStoreOpcode,
@@ -131,8 +133,10 @@ pub enum Rv64IExecutor {
 )]
 pub enum Rv64MExecutor {
     Multiplication(Rv64MultiplicationExecutor),
+    MulW(Rv64MulWExecutor),
     MultiplicationHigh(Rv64MulHExecutor),
     DivRem(Rv64DivRemExecutor),
+    DivRemW(Rv64DivRemWExecutor),
 }
 
 /// RISC-V 64-bit Io Instruction Executors
@@ -646,11 +650,19 @@ impl<F> VmExecutionExtension<F> for Rv64M {
             Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
+        let mul_w =
+            Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
+        inventory.add_executor(mul_w, MulWOpcode::iter().map(|x| x.global_opcode()))?;
+
         let mul_h = Rv64MulHExecutor::new(Rv64MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
         inventory.add_executor(mul_h, MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
         let div_rem = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
         inventory.add_executor(div_rem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let divrem_w =
+            Rv64DivRemWExecutor::new(Rv64MultWAdapterExecutor, DivRemWOpcode::CLASS_OFFSET);
+        inventory.add_executor(divrem_w, DivRemWOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
     }
@@ -701,6 +713,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
         );
         inventory.add_air(mult);
 
+        let mul_w = Rv64MulWAir::new(
+            Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::mul_w::MulWCoreAir::new(range_tuple_checker, MulWOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(mul_w);
+
         let mul_h = Rv64MulHAir::new(
             Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
             MulHCoreAir::new(bitwise_lu, range_tuple_checker),
@@ -712,6 +730,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
             DivRemCoreAir::new(bitwise_lu, range_tuple_checker, DivRemOpcode::CLASS_OFFSET),
         );
         inventory.add_air(div_rem);
+
+        let divrem_w = Rv64DivRemWAir::new(
+            Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::divrem_w::DivRemWCoreAir::new(
+                bitwise_lu,
+                range_tuple_checker,
+                DivRemWOpcode::CLASS_OFFSET,
+            ),
+        );
+        inventory.add_air(divrem_w);
 
         Ok(())
     }
@@ -779,6 +807,17 @@ where
         );
         inventory.add_executor_chip(mult);
 
+        inventory.next_air::<Rv64MulWAir>()?;
+        let mul_w = Rv64MulWChip::new(
+            crate::mul_w::MulWFiller::new(
+                Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
+                range_tuple_checker.clone(),
+                MulWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(mul_w);
+
         inventory.next_air::<Rv64MulHAir>()?;
         let mul_h = Rv64MulHChip::new(
             MulHFiller::new(
@@ -801,6 +840,18 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(div_rem);
+
+        inventory.next_air::<Rv64DivRemWAir>()?;
+        let divrem_w = Rv64DivRemWChip::new(
+            crate::divrem_w::DivRemWFiller::new(
+                Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_tuple_checker.clone(),
+                DivRemWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(divrem_w);
 
         Ok(())
     }
