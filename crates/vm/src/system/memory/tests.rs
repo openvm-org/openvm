@@ -66,10 +66,16 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
     }
 }
 
+fn memory_config_for_test() -> MemoryConfig {
+    let mut memory_config = MemoryConfig::default();
+    memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
+    memory_config
+}
+
 #[test_case(1000)]
 #[test_case(0)]
 fn test_memory_write_volatile(its: usize) {
-    let mut tester = VmChipTestBuilder::<F>::volatile(MemoryConfig::default());
+    let mut tester = VmChipTestBuilder::<F>::volatile(memory_config_for_test());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");
@@ -78,7 +84,7 @@ fn test_memory_write_volatile(its: usize) {
 #[test_case(1000)]
 #[test_case(0)]
 fn test_memory_write_persistent(its: usize) {
-    let mut tester = VmChipTestBuilder::<F>::persistent(MemoryConfig::default());
+    let mut tester = VmChipTestBuilder::<F>::persistent(memory_config_for_test());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");
@@ -88,7 +94,7 @@ fn test_no_adapter_records_for_singleton_accesses<T: Copy + Debug, const BLOCK_S
     address_space: u32,
     mut sample: impl FnMut(&mut StdRng) -> T,
 ) {
-    let memory_config = MemoryConfig::default();
+    let memory_config = memory_config_for_test();
     let mut memory = TracingMemory::new(&memory_config, BLOCK_SIZE, 0);
     let max_ptr = (memory_config.addr_spaces[address_space as usize].num_cells / BLOCK_SIZE) as u32;
 
@@ -125,8 +131,8 @@ fn test_no_adapter_records() {
 #[test_case(0)]
 fn test_cuda_memory_write_volatile(its: usize) {
     use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
-    let mut tester =
-        GpuChipTestBuilder::volatile(MemoryConfig::default(), default_var_range_checker_bus());
+    let memory_config = memory_config_for_test();
+    let mut tester = GpuChipTestBuilder::volatile(memory_config, default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");
@@ -137,8 +143,8 @@ fn test_cuda_memory_write_volatile(its: usize) {
 #[test_case(0)]
 fn test_cuda_memory_write_persistent(its: usize) {
     use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
-    let mut tester =
-        GpuChipTestBuilder::persistent(MemoryConfig::default(), default_var_range_checker_bus());
+    let memory_config = memory_config_for_test();
+    let mut tester = GpuChipTestBuilder::persistent(memory_config, default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");

@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, DEFERRAL_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -305,7 +305,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::persistent(mem_config)
     }
 
@@ -379,7 +378,6 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::volatile(mem_config)
     }
 }

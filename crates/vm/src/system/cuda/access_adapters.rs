@@ -178,7 +178,8 @@ mod tests {
 
     #[test]
     fn test_cuda_access_adapters_cpu_gpu_equivalence() {
-        let mem_config = MemoryConfig::default();
+        let mut mem_config = MemoryConfig::default();
+        mem_config.addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
 
         let mut rng = StdRng::seed_from_u64(42);
         let decomp = mem_config.decomp;
