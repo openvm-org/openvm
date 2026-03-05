@@ -171,18 +171,25 @@ where
         builder
             .when(local.is_first_in_group)
             .assert_zero(local.trace_idx);
+        // For constraints (group_idx=1), idx_parity is 0, so trace_idx always increase by 1.
+        // For interactions (group_idx=0), trace_idx increase by idx_parity.
         builder
             .when(is_same_group.clone())
-            .assert_bool(next.trace_idx - local.trace_idx);
+            .assert_eq(
+                next.trace_idx - local.trace_idx,
+                local.idx_parity + local.group_idx,
+            );
 
         // idx_parity: 0 at group start, alternates within interactions
         builder
             .when(local.is_first_in_group)
             .assert_zero(local.idx_parity);
+        // idx_parity alternates 0/1.
         builder
             .when(local.is_valid)
             .when(is_interaction.clone())
             .assert_eq(local.idx_parity + next.idx_parity, AB::Expr::ONE);
+        // only group 0 can have idx_parity set.
         builder.when(local.idx_parity).assert_zero(local.group_idx);
 
         // idx binding to trace_idx / idx_parity (INT-6397 / INT-6439)
