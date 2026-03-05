@@ -304,9 +304,13 @@ fn test_fail_complex_enabled_disabled_mix() {
 }
 
 #[test]
-fn test_nonzero_counter_with_padding() {
+fn test_fail_nonzero_counter_with_padding() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 5, 1], [1, 5, 0], [0, 6, 0]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
@@ -330,9 +334,13 @@ fn test_all_rows_disabled() {
 }
 
 #[test]
-fn test_first_row_nonzero_counter() {
+fn test_fail_first_row_nonzero_counter() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 2, 1]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
