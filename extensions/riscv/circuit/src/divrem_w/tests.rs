@@ -75,6 +75,12 @@ fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|i| if i + shift < NUM_LIMBS { x[i] } else { ext })
 }
 
+fn word_to_register(x: [u32; RV64_WORD_NUM_LIMBS]) -> [u32; RV64_REGISTER_NUM_LIMBS] {
+    let mut out = [0; RV64_REGISTER_NUM_LIMBS];
+    out[..RV64_WORD_NUM_LIMBS].copy_from_slice(&x);
+    out
+}
+
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
@@ -138,8 +144,9 @@ fn create_harness(
     )
 }
 
-/// Execute a divrem_w instruction. Inputs b and c are 4-limb u32 arrays (each limb in [0, 255]).
-/// They are written as full 8-byte registers with arbitrary upper bytes.
+/// Execute a divrem_w instruction over full 8-byte register inputs.
+/// Only the low 32-bit word participates in the core div/rem relation; upper bytes are
+/// consumed by adapter full-width read constraints.
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
@@ -147,41 +154,48 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
-    b: Option<[u32; RV64_WORD_NUM_LIMBS]>,
-    c: Option<[u32; RV64_WORD_NUM_LIMBS]>,
+    b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
-        rng,
-    ));
-    let c = c.unwrap_or(limb_sra::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
-        generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng),
-        rng.gen_range(0..(RV64_WORD_NUM_LIMBS - 1)),
-    ));
+    let b = b.unwrap_or_else(|| {
+        let mut b = [0; RV64_REGISTER_NUM_LIMBS];
+        let b_word = generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng);
+        b[..RV64_WORD_NUM_LIMBS].copy_from_slice(&b_word);
+        for b_high in b[RV64_WORD_NUM_LIMBS..].iter_mut() {
+            *b_high = rng.gen_range(0..256);
+        }
+        b
+    });
+    let c = c.unwrap_or_else(|| {
+        let mut c = [0; RV64_REGISTER_NUM_LIMBS];
+        let c_word = limb_sra::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
+            generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng),
+            rng.gen_range(0..(RV64_WORD_NUM_LIMBS - 1)),
+        );
+        c[..RV64_WORD_NUM_LIMBS].copy_from_slice(&c_word);
+        for c_high in c[RV64_WORD_NUM_LIMBS..].iter_mut() {
+            *c_high = rng.gen_range(0..256);
+        }
+        c
+    });
 
     // Write full 8-byte registers. Upper bytes are arbitrary and remain adapter-constrained.
     let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let mut rs1_full: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..256)));
-    for i in 0..RV64_WORD_NUM_LIMBS {
-        rs1_full[i] = F::from_canonical_u32(b[i]);
-    }
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, rs1_full);
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_canonical_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_canonical_u32));
 
-    let mut rs2_full: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..256)));
-    for i in 0..RV64_WORD_NUM_LIMBS {
-        rs2_full[i] = F::from_canonical_u32(c[i]);
-    }
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, rs2_full);
+    let b_word: [u32; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let c_word: [u32; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
 
     let is_div = opcode == DIVW || opcode == DIVUW;
     let is_signed = opcode == DIVW || opcode == REMW;
 
-    let (q, r, _, _, _, _) =
-        crate::divrem::run_divrem::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(is_signed, &b, &c);
+    let (q, r, _, _, _, _) = crate::divrem::run_divrem::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
+        is_signed, &b_word, &c_word,
+    );
 
     tester.execute(
         executor,
@@ -220,8 +234,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([98, 188, 163, 127]),
-        Some([0, 0, 0, 0]),
+        Some(word_to_register([98, 188, 163, 127])),
+        Some(word_to_register([0, 0, 0, 0])),
     );
     set_and_execute(
         tester,
@@ -229,8 +243,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([98, 188, 163, 229]),
-        Some([0, 0, 0, 0]),
+        Some(word_to_register([98, 188, 163, 229])),
+        Some(word_to_register([0, 0, 0, 0])),
     );
     set_and_execute(
         tester,
@@ -238,8 +252,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 128]),
-        Some([0, 1, 0, 0]),
+        Some(word_to_register([0, 0, 0, 128])),
+        Some(word_to_register([0, 1, 0, 0])),
     );
     set_and_execute(
         tester,
@@ -247,8 +261,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 127]),
-        Some([0, 1, 0, 0]),
+        Some(word_to_register([0, 0, 0, 127])),
+        Some(word_to_register([0, 1, 0, 0])),
     );
     set_and_execute(
         tester,
@@ -256,8 +270,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
+        Some(word_to_register([0, 0, 0, 0])),
+        Some(word_to_register([0, 0, 0, 0])),
     );
     set_and_execute(
         tester,
@@ -265,8 +279,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 128]),
-        Some([255, 255, 255, 255]),
+        Some(word_to_register([0, 0, 0, 128])),
+        Some(word_to_register([255, 255, 255, 255])),
     );
 }
 
@@ -336,8 +350,8 @@ struct DivRemWPrankValues {
 
 fn run_negative_divremw_test(
     opcode: DivRemWOpcode,
-    b: [u32; RV64_WORD_NUM_LIMBS],
-    c: [u32; RV64_WORD_NUM_LIMBS],
+    b: [u32; RV64_REGISTER_NUM_LIMBS],
+    c: [u32; RV64_REGISTER_NUM_LIMBS],
     prank_vals: DivRemWPrankValues,
     interaction_error: bool,
 ) {
@@ -354,6 +368,24 @@ fn run_negative_divremw_test(
         Some(b),
         Some(c),
     );
+
+    let b_word: [u32; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let c_word: [u32; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+
+    let is_div = opcode == DIVW || opcode == DIVUW;
+    let is_signed = opcode == DIVW || opcode == REMW;
+    let (expected_q, expected_r, _, _, _, _) = crate::divrem::run_divrem::<
+        RV64_WORD_NUM_LIMBS,
+        RV64_CELL_BITS,
+    >(is_signed, &b_word, &c_word);
+    let default_result_sign = prank_vals.result_sign.unwrap_or_else(|| {
+        let output_word = if is_div {
+            prank_vals.q.unwrap_or(expected_q)
+        } else {
+            prank_vals.r.unwrap_or(expected_r)
+        };
+        (output_word[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1
+    });
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
@@ -403,9 +435,7 @@ fn run_negative_divremw_test(
             cols.c = rs2_word.map(F::from_canonical_u32);
             adapter_cols.rs2_high = rs2_high.map(F::from_canonical_u32);
         }
-        if let Some(result_sign) = prank_vals.result_sign {
-            adapter_cols.result_sign = F::from_canonical_u32(result_sign);
-        }
+        adapter_cols.result_sign = F::from_canonical_u32(default_result_sign);
 
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -422,8 +452,8 @@ fn run_negative_divremw_test(
 
 #[test]
 fn rv64_divremw_unsigned_wrong_q_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([98, 188, 163, 229]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([123, 34, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([245, 168, 7, 0]),
         ..Default::default()
@@ -434,8 +464,8 @@ fn rv64_divremw_unsigned_wrong_q_negative_test() {
 
 #[test]
 fn rv64_divremw_unsigned_wrong_r_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([98, 188, 163, 229]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([123, 34, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         r: Some([171, 3, 0, 0]),
         r_prime: Some([171, 3, 0, 0]),
@@ -448,8 +478,8 @@ fn rv64_divremw_unsigned_wrong_r_negative_test() {
 
 #[test]
 fn rv64_divremw_unsigned_high_mult_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 2, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 2, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([128, 0, 0, 1]),
         ..Default::default()
@@ -460,8 +490,8 @@ fn rv64_divremw_unsigned_high_mult_negative_test() {
 
 #[test]
 fn rv64_divremw_unsigned_zero_divisor_wrong_r_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [254, 255, 255, 255];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([254, 255, 255, 255]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         r: Some([255, 255, 255, 255]),
         r_prime: Some([255, 255, 255, 255]),
@@ -474,8 +504,8 @@ fn rv64_divremw_unsigned_zero_divisor_wrong_r_negative_test() {
 
 #[test]
 fn rv64_divremw_signed_wrong_q_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([98, 188, 163, 229]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([123, 34, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([74, 61, 255, 255]),
         ..Default::default()
@@ -486,8 +516,8 @@ fn rv64_divremw_signed_wrong_q_negative_test() {
 
 #[test]
 fn rv64_divremw_signed_wrong_r_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([98, 188, 163, 229]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([123, 34, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         r: Some([212, 241, 255, 255]),
         r_prime: Some([44, 14, 0, 0]),
@@ -500,8 +530,8 @@ fn rv64_divremw_signed_wrong_r_negative_test() {
 
 #[test]
 fn rv64_divremw_signed_high_mult_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 255];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 255];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 255]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 255]);
     let prank_vals = DivRemWPrankValues {
         q: Some([1, 0, 0, 1]),
         ..Default::default()
@@ -512,8 +542,8 @@ fn rv64_divremw_signed_high_mult_negative_test() {
 
 #[test]
 fn rv64_divremw_signed_r_wrong_sign_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([50, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([31, 5, 0, 0]),
         r: Some([242, 255, 255, 255]),
@@ -527,8 +557,8 @@ fn rv64_divremw_signed_r_wrong_sign_negative_test() {
 
 #[test]
 fn rv64_divremw_signed_r_wrong_prime_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([50, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([31, 5, 0, 0]),
         r: Some([242, 255, 255, 255]),
@@ -542,8 +572,8 @@ fn rv64_divremw_signed_r_wrong_prime_negative_test() {
 
 #[test]
 fn rv64_divremw_signed_zero_divisor_wrong_r_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [254, 255, 255, 255];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([254, 255, 255, 255]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         r: Some([255, 255, 255, 255]),
         r_prime: Some([1, 0, 0, 0]),
@@ -556,8 +586,8 @@ fn rv64_divremw_signed_zero_divisor_wrong_r_negative_test() {
 
 #[test]
 fn rv64_divremw_false_zero_divisor_flag_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([50, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([29, 5, 0, 0]),
         r: Some([86, 0, 0, 0]),
@@ -574,8 +604,8 @@ fn rv64_divremw_false_zero_divisor_flag_negative_test() {
 
 #[test]
 fn rv64_divremw_false_r_zero_flag_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([50, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         q: Some([29, 5, 0, 0]),
         r: Some([86, 0, 0, 0]),
@@ -592,8 +622,8 @@ fn rv64_divremw_false_r_zero_flag_negative_test() {
 
 #[test]
 fn rv64_divremw_unset_zero_divisor_flag_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         zero_divisor: Some(false),
         ..Default::default()
@@ -606,8 +636,8 @@ fn rv64_divremw_unset_zero_divisor_flag_negative_test() {
 
 #[test]
 fn rv64_divremw_wrong_r_zero_flag_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         zero_divisor: Some(false),
         r_zero: Some(true),
@@ -621,8 +651,8 @@ fn rv64_divremw_wrong_r_zero_flag_negative_test() {
 
 #[test]
 fn rv64_divremw_unset_r_zero_flag_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 1, 0]);
     let prank_vals = DivRemWPrankValues {
         r_zero: Some(false),
         ..Default::default()
@@ -635,8 +665,8 @@ fn rv64_divremw_unset_r_zero_flag_negative_test() {
 
 #[test]
 fn rv64_divremw_adapter_wrong_rs1_upper_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [7, 0, 0, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [2, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([7, 0, 0, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([2, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         rs1: Some([7, 0, 0, 0, 1, 2, 3, 4]),
         ..Default::default()
@@ -646,8 +676,8 @@ fn rv64_divremw_adapter_wrong_rs1_upper_negative_test() {
 
 #[test]
 fn rv64_divremw_adapter_wrong_rs2_upper_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [7, 0, 0, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [2, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([7, 0, 0, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([2, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         rs2: Some([2, 0, 0, 0, 5, 6, 7, 8]),
         ..Default::default()
@@ -657,8 +687,8 @@ fn rv64_divremw_adapter_wrong_rs2_upper_negative_test() {
 
 #[test]
 fn rv64_divremw_wrong_upper_sign_extension_negative_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [7, 0, 0, 0];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [2, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([7, 0, 0, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([2, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         result_sign: Some(1),
         ..Default::default()
@@ -668,13 +698,35 @@ fn rv64_divremw_wrong_upper_sign_extension_negative_test() {
 
 #[test]
 fn rv64_divremw_wrong_upper_sign_extension_negative_to_zero_test() {
-    let b: [u32; RV64_WORD_NUM_LIMBS] = [254, 255, 255, 255];
-    let c: [u32; RV64_WORD_NUM_LIMBS] = [1, 0, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([254, 255, 255, 255]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([1, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
         result_sign: Some(0),
         ..Default::default()
     };
     run_negative_divremw_test(DIVW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_wrong_upper_sign_extension_remuw_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([7, 0, 0, 0]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([2, 0, 0, 0]);
+    let prank_vals = DivRemWPrankValues {
+        result_sign: Some(1),
+        ..Default::default()
+    };
+    run_negative_divremw_test(REMUW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_wrong_upper_sign_extension_remw_negative_to_zero_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([254, 255, 255, 255]);
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([3, 0, 0, 0]);
+    let prank_vals = DivRemWPrankValues {
+        result_sign: Some(0),
+        ..Default::default()
+    };
+    run_negative_divremw_test(REMW, b, c, prank_vals, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

@@ -248,6 +248,9 @@ fn run_negative_mulw_test(
         Some(c),
     );
 
+    let default_result_sign =
+        prank_result_sign.unwrap_or((prank_a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1);
+
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -272,9 +275,7 @@ fn run_negative_mulw_test(
             cols.c = prank_c_word.map(F::from_canonical_u32);
             adapter_cols.rs2_high = prank_c_high.map(F::from_canonical_u32);
         }
-        if let Some(prank_result_sign) = prank_result_sign {
-            adapter_cols.result_sign = F::from_canonical_u32(prank_result_sign);
-        }
+        adapter_cols.result_sign = F::from_canonical_u32(default_result_sign);
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
