@@ -115,7 +115,7 @@ impl MemoryInventoryGPU {
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
-        let partition = touched_memory.into_persistent();
+        let partition = touched_memory;
         let persistent = self
             .persistent
             .as_mut()
@@ -342,7 +342,7 @@ mod tests {
         let mut inventory = MemoryInventoryGPU::persistent(mem_config.clone(), hasher_chip);
         inventory.set_initial_memory(&memory.memory);
 
-        let ctxs = inventory.generate_proving_ctxs(TouchedMemory::Persistent(Vec::new()));
+        let ctxs = inventory.generate_proving_ctxs(Vec::new());
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert_eq!(
             boundary_ctx.common_main.height(),
@@ -432,7 +432,7 @@ mod tests {
                 },
             ),
         ];
-        let ctxs = inventory.generate_proving_ctxs(TouchedMemory::Persistent(touched_memory));
+        let ctxs = inventory.generate_proving_ctxs(touched_memory);
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert!(
             boundary_ctx.common_main.height() > 0,

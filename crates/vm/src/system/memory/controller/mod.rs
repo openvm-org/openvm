@@ -178,7 +178,7 @@ impl<F: VmField> MemoryController<F> {
         &mut self,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
-        let final_memory = touched_memory.into_persistent();
+        let final_memory = touched_memory;
         let MemoryInterface {
             boundary_chip,
             merkle_chip,

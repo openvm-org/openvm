@@ -466,10 +466,8 @@ where
             let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
-                (
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                ),
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             );
             let ctxs = memory_controller.generate_proving_ctx(touched_memory);
             for (air, ctx) in

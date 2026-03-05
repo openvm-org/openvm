@@ -589,10 +589,8 @@ impl GpuChipTester {
             let airs = MemoryAirInventory::new(
                 memory_bridge,
                 &memory_tester.config,
-                (
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                ),
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             )
             .into_airs();
             let ctxs = memory_tester

@@ -828,9 +828,7 @@ impl TracingMemory {
     #[instrument(name = "memory_finalize", skip_all)]
     pub fn finalize<F: Field>(&mut self) -> TouchedMemory<F> {
         let touched_blocks = self.touched_blocks();
-        TouchedMemory::Persistent(
-            self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks),
-        )
+        self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks)
     }
 
     /// Returns the list of all touched blocks. The list is sorted by address.

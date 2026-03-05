@@ -126,17 +126,7 @@ pub struct SystemRecords<F> {
     pub public_values: Vec<F>,
 }
 
-pub enum TouchedMemory<F> {
-    Persistent(TimestampedEquipartition<F, CONST_BLOCK_SIZE>),
-}
-
-impl<F> TouchedMemory<F> {
-    pub fn into_persistent(self) -> TimestampedEquipartition<F, CONST_BLOCK_SIZE> {
-        match self {
-            Self::Persistent(memory) => memory,
-        }
-    }
-}
+pub type TouchedMemory<F> = TimestampedEquipartition<F, CONST_BLOCK_SIZE>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 #[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
@@ -167,7 +157,8 @@ impl SystemAirInventory {
     pub fn new(
         config: &SystemConfig,
         port: SystemPort,
-        merkle_compression_buses: (PermutationCheckBus, PermutationCheckBus),
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         let SystemPort {
             execution_bus,
@@ -185,7 +176,8 @@ impl SystemAirInventory {
         let memory = MemoryAirInventory::new(
             memory_bridge,
             &config.memory_config,
-            merkle_compression_buses,
+            merkle_bus,
+            compression_bus,
         );
 
         let public_values = if config.has_public_values_chip() {
@@ -294,7 +286,6 @@ where
         let merkle_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
         let compression_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
         let direct_bus_idx = compression_bus.index;
-        let merkle_compression_buses = (merkle_bus, compression_bus);
         let memory_bridge =
             MemoryBridge::new(memory_bus, self.memory_config.timestamp_max_bits, range_bus);
         let system_port = SystemPort {
@@ -302,7 +293,7 @@ where
             program_bus,
             memory_bridge,
         };
-        let system = SystemAirInventory::new(self, system_port, merkle_compression_buses);
+        let system = SystemAirInventory::new(self, system_port, merkle_bus, compression_bus);
 
         let mut inventory = AirInventory::new(self.clone(), system, bus_idx_mgr);
 

@@ -128,9 +128,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         Self {
             boundary_idx: config.memory_boundary_air_id(),
-            merkle_tree_index: config
-                .memory_merkle_air_id()
-                .expect("memory merkle AIR must always exist"),
+            merkle_tree_index: config.memory_merkle_air_id(),
             chunk,
             chunk_bits,
             memory_dimensions,

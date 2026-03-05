@@ -349,8 +349,8 @@ impl SystemConfig {
     }
 
     /// Returns the AIR ID of the memory merkle AIR.
-    pub fn memory_merkle_air_id(&self) -> Option<usize> {
-        Some(self.memory_boundary_air_id() + 1)
+    pub fn memory_merkle_air_id(&self) -> usize {
+        self.memory_boundary_air_id() + 1
     }
 
     /// Whether the AIR ID must be present in a valid v2 proof.
@@ -361,7 +361,7 @@ impl SystemConfig {
         air_id == PROGRAM_AIR_ID
             || air_id == CONNECTOR_AIR_ID
             || air_id == self.memory_boundary_air_id()
-            || Some(air_id) == self.memory_merkle_air_id()
+            || air_id == self.memory_merkle_air_id()
     }
 
     /// This is O(1) and returns the length of

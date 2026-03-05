@@ -1025,9 +1025,7 @@ mod tests {
     fn keygen_marks_required_airs_for_continuations() {
         let engine = test_cpu_engine();
         let config = SystemConfig::default().with_continuations();
-        let merkle_air_id = config
-            .memory_merkle_air_id()
-            .expect("continuations should have a merkle AIR");
+        let merkle_air_id = config.memory_merkle_air_id();
         let boundary_air_id = config.memory_boundary_air_id();
 
         let (_vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config).unwrap();

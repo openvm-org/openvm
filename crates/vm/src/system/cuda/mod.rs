@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
     system::{
         connector::VmConnectorChip,
-        memory::{online::GuestMemory, MemoryAirInventory},
+        memory::online::GuestMemory,
         SystemChipComplex, SystemRecords,
     },
 };
@@ -41,7 +41,6 @@ pub struct SystemChipInventoryGPU {
 impl SystemChipInventoryGPU {
     pub fn new(
         config: &SystemConfig,
-        _mem_inventory: &MemoryAirInventory,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     ) -> Self {

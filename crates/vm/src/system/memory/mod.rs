@@ -73,10 +73,10 @@ impl MemoryAirInventory {
     pub fn new(
         bridge: MemoryBridge,
         mem_config: &MemoryConfig,
-        merkle_compression_buses: (PermutationCheckBus, PermutationCheckBus),
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         let memory_bus = bridge.memory_bus();
-        let (merkle_bus, compression_bus) = merkle_compression_buses;
         let memory_dims = MemoryDimensions {
             addr_space_height: mem_config.addr_space_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
