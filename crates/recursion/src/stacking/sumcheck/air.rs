@@ -315,6 +315,9 @@ where
 
         builder.assert_bool(local.has_r);
         builder
+            .when(and(local.is_valid, not(local.is_last)))
+            .assert_bool(local.has_r - next.has_r);
+        builder
             .when(not(local.has_r))
             .assert_zero(local.eq_rot_mult);
 
