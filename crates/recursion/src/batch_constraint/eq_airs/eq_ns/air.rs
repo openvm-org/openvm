@@ -34,6 +34,8 @@ pub struct EqNsColumns<T> {
     pub proof_idx: T,
 
     pub n: T,
+    pub n_logup: T,
+    pub n_max: T,
     pub n_less_than_n_logup: T,
     pub n_less_than_n_max: T,
     pub is_transition_and_n_less_than_n_max: T,
@@ -138,6 +140,46 @@ where
             .assert_one(local.n_less_than_n_max);
         builder
             .when(not(local.is_valid))
+            .assert_zero(local.n_less_than_n_max);
+        builder.when(not(local.is_valid)).assert_zero(local.n_logup);
+        builder.when(not(local.is_valid)).assert_zero(local.n_max);
+        builder
+            .when(is_transition.clone())
+            .assert_eq(local.n_logup, next.n_logup);
+        builder
+            .when(is_transition.clone())
+            .assert_eq(local.n_max, next.n_max);
+
+        // When n_less_than_n_(logup|max) changes, it's because n was n_logup/n_max
+        builder
+            .when(local.n_less_than_n_logup)
+            .when(not(next.n_less_than_n_logup))
+            .assert_eq(next.n, next.n_logup);
+        builder
+            .when(local.n_less_than_n_max)
+            .when(not(next.n_less_than_n_max))
+            .assert_eq(next.n, next.n_max);
+
+        // These flags are zero on the last row.
+        // If n_logup/n_max is positive, the corresponding flag is one on the first row.
+        // Therefore, it changes at some point, which we constrained to be at the proper `n`.
+        // If n_logup/n_max is zero, then the corresponding flag is forced to be zero,
+        //   because if it was one at the first row, it wouldn't have a proper row to change.
+        builder
+            .when(local.n_logup)
+            .when(local.is_first)
+            .assert_one(local.n_less_than_n_logup);
+        builder
+            .when(local.n_max)
+            .when(local.is_first)
+            .assert_one(local.n_less_than_n_max);
+        builder
+            .when(local.is_valid)
+            .when(not::<AB::Expr>(is_transition.clone()))
+            .assert_zero(local.n_less_than_n_logup);
+        builder
+            .when(local.is_valid)
+            .when(not::<AB::Expr>(is_transition.clone()))
             .assert_zero(local.n_less_than_n_max);
         // ========================= r consistency ==============================
         assert_array_eq(
