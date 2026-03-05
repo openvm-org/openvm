@@ -171,9 +171,11 @@ where
             .when(local.n_at_least_n_lift)
             .assert_one(local.two_to_the_n_lift);
 
-        builder.when(within_one_air.clone()).assert_eq(
+        builder.when(next.is_valid - next.is_first).assert_eq(
             next.running_idx,
-            local.running_idx + next.is_first_in_interaction * local.two_to_the_n_lift,
+            local.running_idx
+                + (next.is_first_in_interaction - local.has_no_interactions)
+                    * local.two_to_the_n_lift,
         );
 
         // =========================== Xi and product consistency =============================
