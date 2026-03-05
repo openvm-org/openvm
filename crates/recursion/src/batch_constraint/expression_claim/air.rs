@@ -147,7 +147,6 @@ where
             ),
         );
 
-
         // Derived expressions:
         // is_interaction: true for interaction group (group_idx == 0)
         let is_interaction: AB::Expr = AB::Expr::ONE - local.group_idx.into();
@@ -161,7 +160,9 @@ where
 
         // Each proof starts with group 0 (interactions) and ends with 1 (constraints).
         builder.when(local.is_first).assert_zero(local.group_idx);
-        builder.when(is_last_in_proof.clone()).assert_one(local.group_idx);
+        builder
+            .when(is_last_in_proof.clone())
+            .assert_one(local.group_idx);
 
         // === Claim indexing constraints ===
         builder.assert_bool(local.idx_parity);
@@ -173,12 +174,10 @@ where
             .assert_zero(local.trace_idx);
         // For constraints (group_idx=1), idx_parity is 0, so trace_idx always increase by 1.
         // For interactions (group_idx=0), trace_idx increase by idx_parity.
-        builder
-            .when(is_same_group.clone())
-            .assert_eq(
-                next.trace_idx - local.trace_idx,
-                local.idx_parity + local.group_idx,
-            );
+        builder.when(is_same_group.clone()).assert_eq(
+            next.trace_idx - local.trace_idx,
+            local.idx_parity + local.group_idx,
+        );
 
         // idx_parity: 0 at group start, alternates within interactions
         builder
