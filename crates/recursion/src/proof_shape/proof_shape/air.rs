@@ -567,7 +567,8 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // LIFTED HEIGHTS LOOKUP + STACKING COMMITMENTS
         ///////////////////////////////////////////////////////////////////////////////////////////
-        // lifted_height = max(2^log_height, 2^l_skip)
+        // Note that log_lifted_height = max(log_height, l_skip) is constrained to be
+        // at most n_stack + l_skip in the stacking module by EqBitsAir.
         let lifted_height = select(
             local.n_sign_bit,
             AB::F::from_usize(1 << self.l_skip),
