@@ -214,7 +214,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                 .for_each(|(i, chunk)| {
                     let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
                     let record = &records[i];
-                    let air_idx = preflight.proof_shape.sorted_trace_vdata[record.sort_idx].0;
                     cols.is_valid = F::ONE;
                     cols.proof_idx = F::from_usize(pidx);
                     cols.beta_tidx = F::from_usize(beta_tidx);
@@ -230,14 +229,8 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                     was_first_interaction_in_message = record.is_mult;
                     cols.is_bus_index = F::from_bool(record.is_bus_index);
                     cols.idx_in_message = F::from_usize(record.idx_in_message);
-                    if !record.is_bus_index {
-                        cols.value.copy_from_slice(
-                            blob.common_blob.expr_evals[[pidx, air_idx]][record.node_idx]
-                                .as_basis_coefficients_slice(),
-                        );
-                    } else {
-                        cols.value[0] = cols.node_idx;
-                    }
+                    cols.value
+                        .copy_from_slice(record.value.as_basis_coefficients_slice());
                     cols.beta.copy_from_slice(beta_slice);
 
                     if !record.has_interactions || record.is_mult {
@@ -288,10 +281,7 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                         cur_acc_num += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
                             * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
                         if cols.has_interactions == F::ZERO {
-                            // AIR with no interactions doesn't have "second in message"
-                            cur_acc_denom += EF::from_basis_coefficients_slice(&cols.cur_sum)
-                                .unwrap()
-                                * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
+                            debug_assert_eq!(cols.cur_sum, [F::ZERO; D_EF]);
                         }
                     } else if is_first_in_message_indices.contains(&(i - 1)) {
                         // Case 2: second in message, accumulate the denom
@@ -403,7 +393,7 @@ pub(in crate::batch_constraint) mod cuda {
                     if inters.is_empty() {
                         // Note differs from what is written in CPU blob generation, but matches
                         // tracegen
-                        air_values.push(vec![expr_evals[[pidx, *air_idx]][0]]);
+                        air_values.push(vec![EF::ZERO]);
                         node_idxs.push(0);
                         proof_interaction_records.push(InteractionRecord {
                             interaction_num_rows: 1,

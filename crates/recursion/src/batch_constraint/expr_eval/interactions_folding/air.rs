@@ -208,6 +208,11 @@ where
                 .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),
             local.final_acc_num,
         );
+        assert_zeros(
+            &mut builder
+                .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),
+            local.final_acc_denom,
+        );
         // final_acc_denom only changes when it's second in message
         assert_array_eq(
             &mut builder.when(
