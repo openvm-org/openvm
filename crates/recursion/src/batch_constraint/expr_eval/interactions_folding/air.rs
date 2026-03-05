@@ -223,6 +223,23 @@ where
                 ext_field_multiply(local.cur_sum, local.eq_3b),
             ),
         );
+        // the running sums are zero on the last row of the proof
+        assert_zeros(
+            &mut builder.when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first_in_air,
+            )),
+            local.final_acc_num,
+        );
+        assert_zeros(
+            &mut builder.when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first_in_air,
+            )),
+            local.final_acc_denom,
+        );
         // Constraint is_second_in_message
         builder.assert_bool(local.is_second_in_message);
         builder
