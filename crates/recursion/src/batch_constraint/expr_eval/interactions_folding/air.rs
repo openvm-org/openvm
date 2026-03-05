@@ -123,6 +123,9 @@ where
         builder.assert_bool(local.has_interactions);
         builder.assert_bool(local.is_bus_index);
         builder
+            .when(local.is_bus_index)
+            .assert_one(local.has_interactions);
+        builder
             .when(local.has_interactions + local.is_bus_index)
             .assert_one(local.is_valid);
         let is_same_proof = next.is_valid - next.is_first;
