@@ -192,7 +192,7 @@ where
         // only group 0 can have idx_parity set.
         builder.when(local.idx_parity).assert_zero(local.group_idx);
 
-        // idx binding to trace_idx / idx_parity (INT-6397 / INT-6439)
+        // idx binding to trace_idx / idx_parity
         // Interaction rows: idx = 2 * trace_idx + idx_parity
         builder
             .when(local.is_valid)
@@ -214,7 +214,7 @@ where
             local.mu.map(Into::into),
         );
 
-        // === Hyperdim metadata constancy within numerator/denominator pairs (INT-6399) ===
+        // === Hyperdim metadata constancy within numerator/denominator pairs ===
         // A numerator row (idx_parity=0, is_interaction=1) is always followed by its
         // denominator (idx_parity=1) due to the alternation constraint. Ensure they
         // share the same trace metadata so the hyperdim lookup on the numerator binds both.
@@ -239,7 +239,7 @@ where
                 ext_field_multiply::<AB::Expr>(next.cur_sum, local.mu),
             ),
         );
-        // Terminal base case: last row of each proof's fold (INT-6402)
+        // Terminal base case: last row of each proof's fold
         assert_array_eq(
             &mut builder.when(is_last_in_proof),
             local.cur_sum,
