@@ -321,6 +321,9 @@ where
             let mut when_current = builder.when(is_current_air.clone());
 
             when_current.assert_eq(local.idx, AB::F::from_usize(i));
+            when_current
+                .when(local.is_present)
+                .assert_eq(local.need_rot, AB::F::from_bool(air_data.need_rot));
 
             main_common_width += is_current_air.clone() * AB::F::from_usize(air_data.main_width);
 

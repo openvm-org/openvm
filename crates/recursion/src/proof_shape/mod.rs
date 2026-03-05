@@ -43,6 +43,7 @@ mod cuda_abi;
 #[derive(Clone)]
 pub struct AirMetadata {
     is_required: bool,
+    need_rot: bool,
     num_public_values: usize,
     num_interactions: usize,
     main_width: usize,
@@ -110,6 +111,7 @@ impl ProofShapeModule {
             .iter()
             .map(|avk| AirMetadata {
                 is_required: avk.is_required,
+                need_rot: avk.params.need_rot,
                 num_public_values: avk.params.num_public_values,
                 num_interactions: avk.num_interactions,
                 main_width: avk.params.width.common_main,
