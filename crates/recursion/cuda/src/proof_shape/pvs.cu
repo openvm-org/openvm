@@ -46,7 +46,6 @@ __global__ void public_values_tracegen(
         COL_WRITE_VALUE(row, PublicValuesCols, value, pv_data.value);
     } else {
         row.fill_zero(0, sizeof(PublicValuesCols<uint8_t>));
-        COL_WRITE_VALUE(row, PublicValuesCols, proof_idx, NUM_PROOFS);
     }
 }
 

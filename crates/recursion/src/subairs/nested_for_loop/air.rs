@@ -88,9 +88,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize> SubAir<AB>
                 builder.when(parent_is_first)
             };
             self.eval_first_row(&mut builder_when_first_row, &local_io, local_is_first);
-            builder_when_first_row
-                .when(local_io.is_enabled.clone())
-                .assert_zero(local_io.counter[level].clone());
+            builder_when_first_row.assert_zero(local_io.counter[level].clone());
 
             // Transition constraints
             let mut builder_when_transition = if level == 0 {
