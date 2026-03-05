@@ -20,7 +20,6 @@ typedef struct {
     size_t cached_idx;
     size_t starting_cidx;
     size_t total_interactions;
-    size_t num_air_id_lookups;
 } TraceMetadata;
 
 typedef struct {

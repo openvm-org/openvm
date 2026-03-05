@@ -13,28 +13,7 @@ use crate::{
     },
     system::{Preflight, POW_CHECKER_HEIGHT},
     tracegen::RowMajorChip,
-    utils::interaction_length,
 };
-
-pub(crate) fn compute_air_shape_lookup_counts(
-    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-) -> Vec<usize> {
-    child_vk
-        .inner
-        .per_air
-        .iter()
-        .map(|avk| {
-            let dag = &avk.symbolic_constraints;
-            dag.constraints.nodes.len()
-                + avk.unused_variables.len()
-                + dag
-                    .interactions
-                    .iter()
-                    .map(interaction_length)
-                    .sum::<usize>()
-        })
-        .collect::<Vec<_>>()
-}
 
 #[derive(derive_new::new)]
 pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -91,8 +70,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
             let mut cidx = 1usize;
             let mut num_present = 0usize;
 
-            let bc_air_shape_lookups = compute_air_shape_lookup_counts(child_vk);
-
             // Present AIRs
             for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
                 let chunk = chunks.next().unwrap();
@@ -135,12 +112,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 total_interactions += num_interactions;
 
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
-                cols.num_air_id_lookups = F::from_usize(bc_air_shape_lookups[*idx]);
-                let trace_width = &child_vk.inner.per_air[*idx].params.width;
-                let num_columns = trace_width.common_main
-                    + trace_width.preprocessed.iter().copied().sum::<usize>()
-                    + trace_width.cached_mains.iter().copied().sum::<usize>();
-                cols.num_columns = F::from_usize(num_columns);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -230,7 +201,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
-                cols.num_columns = F::ZERO;
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -271,7 +241,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_last = F::ONE;
                 cols.need_rot = F::ZERO;
-                cols.num_columns = F::ZERO;
                 cols.starting_tidx = F::from_usize(preflight.proof_shape.post_tidx);
                 cols.num_present = num_present;
 

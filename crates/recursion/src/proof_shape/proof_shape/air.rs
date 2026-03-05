@@ -93,9 +93,6 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     /// Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.
     pub n_max: F,
     pub is_n_max_greater: F,
-
-    pub num_air_id_lookups: F,
-    pub num_columns: F,
 }
 
 // Variable-length columns are stored at the end
@@ -306,6 +303,7 @@ where
         let mut main_common_width = AB::Expr::ZERO;
         let mut preprocessed_stacked_width = AB::Expr::ZERO;
         let mut cached_widths = vec![AB::Expr::ZERO; self.max_cached];
+        let mut num_dag_nodes = AB::Expr::ZERO;
 
         // Select values for CommitmentsBus
         let mut preprocessed_commit = [AB::Expr::ZERO; DIGEST_SIZE];
@@ -326,6 +324,7 @@ where
                 .assert_eq(local.need_rot, AB::F::from_bool(air_data.need_rot));
 
             main_common_width += is_current_air.clone() * AB::F::from_usize(air_data.main_width);
+            num_dag_nodes += is_current_air.clone() * AB::F::from_usize(air_data.num_dag_nodes);
 
             if air_data.num_public_values != 0 {
                 has_pvs += is_current_air.clone();
@@ -501,7 +500,7 @@ where
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: local.idx.into(),
             },
-            local.is_present * local.num_air_id_lookups,
+            local.is_present * num_dag_nodes.clone(),
         );
 
         self.air_shape_bus.add_key_with_lookups(
@@ -515,6 +514,10 @@ where
             local.is_present,
         );
 
+        let total_width = main_common_width.clone()
+            + preprocessed_stacked_width.clone()
+            + cached_widths.iter().cloned().sum::<AB::Expr>();
+
         self.air_shape_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
@@ -523,7 +526,7 @@ where
                 property_idx: AirShapeProperty::NeedRot.to_field(),
                 value: local.need_rot.into(),
             },
-            local.is_present * local.num_columns,
+            local.is_present * total_width,
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -536,9 +539,6 @@ where
         builder
             .when(not(local.is_present))
             .assert_zero(local.need_rot);
-        builder
-            .when(not(local.is_present))
-            .assert_zero(local.num_columns);
         let n_abs = select(local.n_sign_bit, -n.clone(), n.clone());
         // We range check `n_abs` is in `[0, 32)`.
         // We constrain `n = n_sign_bit ? -n_abs : n_abs` and `n := log_height - l_skip`.
@@ -561,7 +561,7 @@ where
                 n_abs: n_abs.clone(),
                 n_sign_bit: local.n_sign_bit.into(),
             },
-            local.is_present * (local.num_air_id_lookups + AB::F::ONE),
+            local.is_present * (num_dag_nodes + AB::F::ONE),
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
