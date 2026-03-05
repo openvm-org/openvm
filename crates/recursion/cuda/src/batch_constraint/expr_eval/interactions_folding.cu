@@ -25,7 +25,6 @@ template <typename T> struct InteractionsFoldingCols {
     T air_idx;
     T sort_idx;
     T interaction_idx;
-    T node_idx;
 
     T has_interactions;
 
@@ -57,7 +56,6 @@ __global__ void interactions_folding_tracegen(
     uint2 *__restrict__ idx_keys,                                // [num_valid_rows]
     const AffineFpExt *__restrict__ cur_sum_evals,               // [num_valid_rows]
     const FpExt *__restrict__ values,                            // [num_valid_rows]
-    const uint32_t *node_idxs,                                   // [num_valid_rows]
     const PtrArray<uint32_t, NUM_PROOFS> air_interaction_bounds, // [NUM_PROOFS][num_airs]
     const PtrArray<TraceHeight, NUM_PROOFS> sorted_trace_vdata,  // [NUM_PROOFS][num_airs]
     const PtrArray<InteractionRecord, NUM_PROOFS> records,       // [NUM_PROOFS}[num_interactions]
@@ -110,11 +108,9 @@ __global__ void interactions_folding_tracegen(
     COL_WRITE_VALUE(row, InteractionsFoldingCols, proof_idx, proof_idx);
 
     auto [air_idx, log_height] = sorted_trace_vdata[proof_idx][sort_idx];
-    uint32_t node_idx = node_idxs[global_row_idx];
     COL_WRITE_VALUE(row, InteractionsFoldingCols, air_idx, air_idx);
     COL_WRITE_VALUE(row, InteractionsFoldingCols, sort_idx, sort_idx);
     COL_WRITE_VALUE(row, InteractionsFoldingCols, interaction_idx, interaction_idx);
-    COL_WRITE_VALUE(row, InteractionsFoldingCols, node_idx, node_idx);
 
     COL_WRITE_VALUE(row, InteractionsFoldingCols, has_interactions, has_interactions);
 
@@ -233,7 +229,6 @@ extern "C" int _interactions_folding_tracegen(
     uint2 *d_idx_keys,
     AffineFpExt *d_cur_sum_evals,
     const FpExt *d_values,
-    const uint32_t *d_node_idxs,
     uint32_t *h_row_bounds,
     uint32_t **d_air_interaction_bounds,
     uint32_t **d_interaction_row_bounds,
@@ -281,7 +276,6 @@ extern "C" int _interactions_folding_tracegen(
              d_idx_keys,
              d_cur_sum_evals,
              d_values,
-             d_node_idxs,
              PtrArray<uint32_t, NUM_PROOFS>(d_air_interaction_bounds),
              PtrArray<TraceHeight, NUM_PROOFS>(d_sorted_trace_vdata),
              PtrArray<InteractionRecord, NUM_PROOFS>(d_records),

@@ -220,7 +220,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                     cols.air_idx = F::from_usize(record.air_idx);
                     cols.sort_idx = F::from_usize(record.sort_idx);
                     cols.interaction_idx = F::from_usize(record.interaction_idx);
-                    cols.node_idx = F::from_usize(record.node_idx);
                     cols.has_interactions = F::from_bool(record.has_interactions);
                     cols.is_first_in_air = F::from_bool(record.is_first_in_air);
                     cols.is_first_in_message =
@@ -333,14 +332,14 @@ pub(in crate::batch_constraint) mod cuda {
     pub struct InteractionsFoldingBlobGpu {
         // Per proof, per AIR, per interaction, per index
         pub values: Vec<Vec<Vec<Vec<EF>>>>,
-        // Per valid row
-        pub node_idxs: Vec<u32>,
         // Per proof, per interaction
         pub interaction_records: Vec<Vec<InteractionRecord>>,
         // Per proof
         pub interactions_folding_per_proof: Vec<FpExtWithTidx>,
         // For compatibility with CPU tracegen
         pub folded_claims: MultiProofVecVec<(isize, EF)>,
+        // The number of valid rows
+        pub num_valid_rows: usize,
     }
 
     impl InteractionsFoldingBlobGpu {
@@ -362,7 +361,6 @@ pub(in crate::batch_constraint) mod cuda {
             let mut global_current_row = 0;
 
             let mut values = Vec::with_capacity(preflights.len());
-            let mut node_idxs = vec![];
             let mut interaction_records = Vec::with_capacity(preflights.len());
             let mut interactions_folding_per_proof = Vec::with_capacity(preflights.len());
             let mut folded_claims = MultiProofVecVec::new();
@@ -394,7 +392,6 @@ pub(in crate::batch_constraint) mod cuda {
                         // Note differs from what is written in CPU blob generation, but matches
                         // tracegen
                         air_values.push(vec![EF::ZERO]);
-                        node_idxs.push(0);
                         proof_interaction_records.push(InteractionRecord {
                             interaction_num_rows: 1,
                             global_start_row: global_current_row,
@@ -423,7 +420,6 @@ pub(in crate::batch_constraint) mod cuda {
 
                             let mut interaction_values = Vec::with_capacity(interaction_num_rows);
                             interaction_values.push(expr_evals[[pidx, *air_idx]][inter.count]);
-                            node_idxs.push(inter.count as u32);
 
                             let mut beta_pow = EF::ONE;
                             let mut cur_sum = EF::ZERO;
@@ -432,13 +428,11 @@ pub(in crate::batch_constraint) mod cuda {
                                 cur_sum += beta_pow * value;
                                 beta_pow *= beta;
                                 interaction_values.push(value);
-                                node_idxs.push(node_idx as u32);
                             }
 
                             let bus_value = EF::from_u16(inter.bus_index + 1);
                             cur_sum += beta_pow * bus_value;
                             interaction_values.push(bus_value);
-                            node_idxs.push(inter.bus_index as u32 + 1);
                             denom_sum += cur_sum * eq_3b;
 
                             air_values.push(interaction_values);
@@ -461,10 +455,10 @@ pub(in crate::batch_constraint) mod cuda {
 
             Self {
                 values,
-                node_idxs,
                 interaction_records,
                 interactions_folding_per_proof,
                 folded_claims,
+                num_valid_rows: global_current_row as usize,
             }
         }
     }
@@ -498,7 +492,7 @@ pub(in crate::batch_constraint) mod cuda {
             let mut air_interaction_bounds = Vec::with_capacity(preflights_gpu.len());
             let mut interaction_row_bounds = Vec::with_capacity(preflights_gpu.len());
 
-            let expected_num_valid_rows = blob.node_idxs.len();
+            let expected_num_valid_rows = blob.num_valid_rows;
             let mut idx_keys = Vec::with_capacity(expected_num_valid_rows);
             let mut flat_values = Vec::with_capacity(expected_num_valid_rows);
 
@@ -557,7 +551,6 @@ pub(in crate::batch_constraint) mod cuda {
 
             let d_idx_keys = idx_keys.to_device().unwrap();
             let d_values = flat_values.to_device().unwrap();
-            let d_node_idxs = blob.node_idxs.to_device().unwrap();
             let d_cur_sum_evals = DeviceBuffer::<AffineFpExt>::with_capacity(d_values.len());
 
             let d_air_interaction_bounds = air_interaction_bounds
@@ -594,7 +587,6 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_idx_keys,
                     &d_cur_sum_evals,
                     &d_values,
-                    &d_node_idxs,
                     &row_bounds,
                     d_air_interaction_bounds,
                     d_interaction_row_bounds,

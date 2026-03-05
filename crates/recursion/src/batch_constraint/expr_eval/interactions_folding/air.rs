@@ -35,7 +35,6 @@ pub struct InteractionsFoldingCols<T> {
     pub air_idx: T,
     pub sort_idx: T,
     pub interaction_idx: T,
-    pub node_idx: T,
 
     pub has_interactions: T,
 
