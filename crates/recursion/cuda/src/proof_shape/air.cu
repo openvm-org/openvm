@@ -239,7 +239,6 @@ __device__ __forceinline__ void fill_summary_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, need_rot, Fp::zero());
     row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
 
@@ -267,6 +266,13 @@ __device__ __forceinline__ void fill_summary_row(
     // limb_to_range_check
     COL_WRITE_VALUE(
         row, typename Cols<MAX_CACHED>::template Type, height, interaction_decomp[nonzero_idx]
+    );
+    // limb_to_range_check_inv
+    COL_WRITE_VALUE(
+        row,
+        typename Cols<MAX_CACHED>::template Type,
+        n_sign_bit,
+        inv(interaction_decomp[nonzero_idx])
     );
     // msb_limb_zero_bits_exp
     COL_WRITE_VALUE(

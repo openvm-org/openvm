@@ -3,7 +3,7 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
-use p3_field::{PrimeCharacteristicRing, PrimeField32};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
@@ -277,6 +277,12 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 });
                 // limb_to_range_check
                 cols.height = msb_limb;
+                // limb_to_range_check_inv
+                cols.n_sign_bit = if msb_limb != F::ZERO {
+                    msb_limb.inverse()
+                } else {
+                    F::ZERO
+                };
                 // msb_limb_zero_bits_exp
                 cols.log_height = F::from_usize(1 << msb_limb_zero_bits);
 

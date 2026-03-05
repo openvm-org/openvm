@@ -534,7 +534,7 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         let l_skip = AB::F::from_usize(self.l_skip);
         let n = local.log_height.into() - l_skip;
-        builder.assert_bool(local.n_sign_bit);
+        builder.when(local.is_valid).assert_bool(local.n_sign_bit);
         builder.assert_bool(local.need_rot);
         builder
             .when(not(local.is_present))
@@ -818,8 +818,14 @@ where
         // non_zero_marker column array defined below, and the remaining number of leading 0 bits
         // needed within the limb using msb_limb_zero_bits_exp. Column limb_to_range_check is used
         // to store the value of the most significant limb to range check.
+        //
+        // We constrain limb_to_range_check to be non-zero by asserting it has an inverse when the
+        // total number of interactions is non-zero. When the total number of interactions is zero,
+        // n_logup must also be 0.
         let non_zero_marker = local.lifted_height_limbs;
         let limb_to_range_check = local.height;
+        let limb_to_range_check_inv = local.n_sign_bit;
+        let limb_times_inv = limb_to_range_check * limb_to_range_check_inv;
         let msb_limb_zero_bits_exp = local.log_height;
         let n_logup = local.starting_cidx;
 
@@ -833,18 +839,20 @@ where
             msb_limb_zero_bits += non_zero_marker[i] * AB::F::from_usize((i + 1) * LIMB_BITS);
 
             builder.when(local.is_last).assert_bool(non_zero_marker[i]);
-            builder
-                .when(not::<AB::Expr>(prefix.clone()) * local.is_last)
-                .assert_zero(local.total_interactions_limbs[i]);
-            builder
-                .when(local.total_interactions_limbs[i] * local.is_last)
-                .assert_one(prefix.clone());
+
+            let mut when_non_zero_limb =
+                builder.when(local.total_interactions_limbs[i] * local.is_last);
+            when_non_zero_limb.assert_one(prefix.clone());
+            when_non_zero_limb.assert_one(limb_times_inv.clone());
         }
 
-        builder.when(local.is_last).assert_bool(prefix.clone());
-        builder
-            .when(local.is_last)
-            .assert_eq(limb_to_range_check, expected_limb_to_range_check);
+        let mut when_last = builder.when(local.is_last);
+
+        when_last.assert_bool(prefix.clone());
+        when_last
+            .when(not::<AB::Expr>(limb_times_inv))
+            .assert_zero(n_logup);
+        when_last.assert_eq(limb_to_range_check, expected_limb_to_range_check);
         msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);
 
         self.pow_bus.lookup_key(
