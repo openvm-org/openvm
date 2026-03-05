@@ -83,15 +83,6 @@ pub enum SystemOpcode {
     PHANTOM,
 }
 
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
-)]
-#[opcode_offset = 0x020]
-#[repr(usize)]
-pub enum PublishOpcode {
-    PUBLISH,
-}
-
 // =================================================================================================
 // For internal dev use only
 // =================================================================================================

@@ -255,13 +255,8 @@ pub struct SystemConfig {
     pub continuation_enabled: bool,
     /// Memory configuration
     pub memory_config: MemoryConfig,
-    /// `num_public_values` has different meanings in single segment mode and continuation mode.
-    /// In single segment mode, `num_public_values` is the number of public values of
-    /// `PublicValuesChip`. In this case, verifier can read public values directly.
-    /// In continuation mode, public values are stored in a special address space.
-    /// `num_public_values` indicates the number of allowed addresses in that address space. The
-    /// verifier cannot read public values directly, but they can decommit the public values
-    /// from the memory merkle root.
+    /// Public values are stored in a special address space.
+    /// `num_public_values` indicates the number of allowed addresses in that address space.
     pub num_public_values: usize,
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
