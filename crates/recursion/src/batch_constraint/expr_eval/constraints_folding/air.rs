@@ -19,7 +19,9 @@ use crate::{
         ExpressionClaimBus, ExpressionClaimMessage,
     },
     bus::{
-        AirShapeBus, AirShapeBusMessage, AirShapeProperty, NLiftBus, NLiftMessage, TranscriptBus,
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, ConstraintsFoldingInputBus,
+        ConstraintsFoldingInputMessage, FractionFolderInputTidxBus, FractionFolderInputTidxMessage,
+        NLiftBus, NLiftMessage, TranscriptBus,
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
@@ -54,6 +56,8 @@ pub struct ConstraintsFoldingAir {
     pub eq_n_outer_bus: EqNOuterBus,
     pub n_lift_bus: NLiftBus,
     pub air_shape_bus: AirShapeBus,
+    pub constraints_folding_input_bus: ConstraintsFoldingInputBus,
+    pub fraction_folder_input_tidx_bus: FractionFolderInputTidxBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
@@ -177,6 +181,22 @@ where
                 value: ext_field_multiply(folded_sum, local.eq_n),
             },
             local.is_first_in_air * local.is_valid,
+        );
+        self.constraints_folding_input_bus.receive(
+            builder,
+            local.proof_idx,
+            ConstraintsFoldingInputMessage {
+                tidx: local.lambda_tidx,
+            },
+            local.is_first,
+        );
+        self.fraction_folder_input_tidx_bus.send(
+            builder,
+            local.proof_idx,
+            FractionFolderInputTidxMessage {
+                tidx: local.lambda_tidx + AB::Expr::from_usize(D_EF),
+            },
+            local.is_first,
         );
         self.transcript_bus.sample_ext(
             builder,

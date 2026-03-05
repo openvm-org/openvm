@@ -458,7 +458,7 @@ where
             local.proof_idx,
             StartingTidxMessage {
                 air_idx: air_idx.clone() + AB::F::ONE,
-                tidx,
+                tidx: tidx.clone(),
             },
             local.is_valid,
         );

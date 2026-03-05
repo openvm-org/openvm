@@ -18,7 +18,8 @@ use crate::{
     },
     bus::{
         BatchConstraintModuleBus, BatchConstraintModuleMessage, FractionFolderInputBus,
-        FractionFolderInputMessage, TranscriptBus,
+        FractionFolderInputMessage, FractionFolderInputTidxBus, FractionFolderInputTidxMessage,
+        TranscriptBus,
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply},
@@ -46,6 +47,7 @@ pub struct FractionsFolderCols<T> {
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
+    pub fraction_folder_input_tidx_bus: FractionFolderInputTidxBus,
     pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub sumcheck_bus: SumcheckClaimBus,
     pub mu_bus: BatchConstraintConductorBus,
@@ -192,6 +194,12 @@ where
             },
             local.is_first,
         );
+        self.fraction_folder_input_tidx_bus.receive(
+            builder,
+            local.proof_idx,
+            FractionFolderInputTidxMessage { tidx: local.tidx },
+            is_last.clone(),
+        );
 
         // Sample mu
         self.transcript_bus.sample_ext(
@@ -232,11 +240,8 @@ where
             local.proof_idx,
             BatchConstraintModuleMessage {
                 // Skip lambda
-                tidx: local.tidx - AB::Expr::from_usize(D_EF),
-                gkr_input_layer_claim: [
-                    local.cur_p_sum.map(Into::into),
-                    local.cur_q_sum.map(Into::into),
-                ],
+                tidx: local.tidx,
+                gkr_input_layer_claim: [local.cur_p_sum, local.cur_q_sum],
             },
             is_last,
         );
