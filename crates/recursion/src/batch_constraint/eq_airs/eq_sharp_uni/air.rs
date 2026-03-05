@@ -199,10 +199,10 @@ where
             AB::Expr::from_usize(self.l_skip) - AB::Expr::ONE,
         );
         assert_array_eq(
-            &mut builder
-                .when(local.is_valid)
-                .when(next.is_valid)
-                .when(not(next.is_first_iter)),
+            &mut builder.when(LoopSubAir::local_is_transition(
+                next.is_valid,
+                next.is_first_iter,
+            )),
             local.xi,
             next.xi,
         );
@@ -359,9 +359,11 @@ where
         // ============================= EF values consistency ==========================
         assert_array_eq(&mut builder.when(is_same_proof.clone()), next.r, local.r);
         assert_array_eq(
-            &mut builder
-                .when(local.is_valid)
-                .when(not::<AB::Expr>(is_same_proof.clone())),
+            &mut builder.when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first,
+            )),
             local.cur_sum,
             local.coeff,
         );

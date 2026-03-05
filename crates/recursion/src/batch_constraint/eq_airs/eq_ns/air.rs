@@ -178,12 +178,10 @@ where
             .when(local.is_first)
             .assert_one(local.n_less_than_n_max);
         builder
-            .when(local.is_valid)
-            .when(not::<AB::Expr>(is_transition.clone()))
+            .when(is_last.clone())
             .assert_zero(local.n_less_than_n_logup);
         builder
-            .when(local.is_valid)
-            .when(not::<AB::Expr>(is_transition.clone()))
+            .when(is_last.clone())
             .assert_zero(local.n_less_than_n_max);
         // ========================= r consistency ==============================
         assert_array_eq(

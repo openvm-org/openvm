@@ -141,10 +141,7 @@ where
             .assert_eq(local.idx, AB::Expr::from_usize(self.l_skip));
 
         // ======================== Values recalculation ==========================
-        assert_one_ext(
-            &mut builder.when(local.is_valid).when(local.is_first),
-            local.res,
-        );
+        assert_one_ext(&mut builder.when(local.is_first), local.res);
 
         let mut when_transition = builder.when(is_transition);
         assert_array_eq(
