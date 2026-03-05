@@ -359,6 +359,13 @@ where
         // ============================= EF values consistency ==========================
         assert_array_eq(&mut builder.when(is_same_proof.clone()), next.r, local.r);
         assert_array_eq(
+            &mut builder
+                .when(local.is_valid)
+                .when(not::<AB::Expr>(is_same_proof.clone())),
+            local.cur_sum,
+            local.coeff,
+        );
+        assert_array_eq(
             &mut builder.when(is_same_proof),
             local.cur_sum,
             ext_field_add(local.coeff, ext_field_multiply(local.r, next.cur_sum)),
