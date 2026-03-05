@@ -213,6 +213,14 @@ where
             and(local.is_first_hypercube, not(local.is_first)),
         );
 
+        // Constrain one_half_pow
+        builder
+            .when(local.is_first_hypercube)
+            .assert_one(local.one_half_pow * AB::Expr::TWO);
+        builder
+            .when(local.is_valid - local.is_last_hypercube)
+            .assert_eq(next.one_half_pow * AB::Expr::TWO, local.one_half_pow);
+
         /*
          * Constrain the running product of (u^{2^i} + r'^{2^i})
          */
