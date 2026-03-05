@@ -57,7 +57,7 @@ use super::{
     PROGRAM_CACHED_TRACE_INDEX,
 };
 use crate::{
-    arch::{deferral::DeferralState, DEFAULT_RNG_SEED},
+    arch::deferral::DeferralState,
     execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -657,7 +657,6 @@ where
             memory,
             state.streams,
             state.rng,
-            state.custom_pvs,
             #[cfg(feature = "metrics")]
             state.metrics,
         );
@@ -690,7 +689,6 @@ where
             memory.data,
             exec_state.vm_state.streams,
             exec_state.vm_state.rng,
-            exec_state.vm_state.custom_pvs,
             #[cfg(feature = "metrics")]
             exec_state.vm_state.metrics,
         );
@@ -852,9 +850,8 @@ where
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM
-    /// memory is persistent The behavior of this function differs depending on whether
-    /// continuations is enabled or not. We recommend to call the functions [`verify_segments`]
-    /// or [`verify_single`] directly instead.
+    /// memory is persistent. The behavior of this function differs depending on whether
+    /// continuations is enabled or not.
     pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<E::SC>,
@@ -868,7 +865,9 @@ where
             verify_segments(&self.engine, vk, proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
-            verify_single(&self.engine, vk, &proofs[0]).map_err(VmVerificationError::StarkError)
+            self.engine
+                .verify(vk, &proofs[0])
+                .map_err(VmVerificationError::StarkError)
         }
     }
 
@@ -1053,19 +1052,6 @@ pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
 }
 
-/// Prover for a specific exe in a specific single-segment VM using a specific Stark config.
-///
-/// Does not run metered execution and directly runs preflight execution. The `prove` function must
-/// be provided with the expected maximum `trace_heights` to use to allocate record arena
-/// capacities.
-pub trait SingleSegmentVmProver<SC: StarkProtocolConfig> {
-    fn prove(
-        &mut self,
-        input: impl Into<Streams<Val<SC>>>,
-        trace_heights: &[u32],
-    ) -> Result<Proof<SC>, VirtualMachineError>;
-}
-
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
 /// program directly on bare metal.
 ///
@@ -1212,57 +1198,6 @@ where
             user_public_values,
         })
     }
-}
-
-impl<E, VB> SingleSegmentVmProver<E::SC> for VmInstance<E, VB>
-where
-    E: StarkEngine,
-    Val<E::SC>: PrimeField32,
-    VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-        PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-{
-    #[instrument(name = "total_proof", skip_all)]
-    fn prove(
-        &mut self,
-        input: impl Into<Streams<Val<E::SC>>>,
-        trace_heights: &[u32],
-    ) -> Result<Proof<E::SC>, VirtualMachineError> {
-        self.reset_state(input);
-        let vm = &mut self.vm;
-        let exe = &self.exe;
-        assert!(!vm.config().as_ref().continuation_enabled);
-        let trace_heights = trace_heights.to_vec();
-        let state = self.state.take().expect("State should always be present");
-        let num_custom_pvs = state.custom_pvs.len();
-        let (proof, final_memory) = vm.prove(&mut self.interpreter, state, None, &trace_heights)?;
-        let final_memory = final_memory.ok_or(ExecutionError::DidNotTerminate)?;
-        // Put back state to avoid re-allocation
-        self.state = Some(VmState::new_with_defaults(
-            exe.pc_start,
-            final_memory,
-            vec![],
-            DEFAULT_RNG_SEED,
-            num_custom_pvs,
-        ));
-        Ok(proof)
-    }
-}
-
-/// Verifies a single proof. This should be used for proof of VM without continuations.
-///
-/// ## Note
-/// This function does not check any public values or extract the starting pc or commitment
-/// to the [VmCommittedExe].
-pub fn verify_single<E>(
-    engine: &E,
-    vk: &MultiStarkVerifyingKey<E::SC>,
-    proof: &Proof<E::SC>,
-) -> Result<(), VerifierError<<E::SC as StarkProtocolConfig>::EF>>
-where
-    E: StarkEngine,
-{
-    engine.verify(vk, proof)
 }
 
 /// The payload of a verified guest VM execution.

@@ -26,8 +26,6 @@ pub struct VmState<F, MEM = GuestMemory> {
     pub memory: MEM,
     pub streams: Streams<F>,
     pub rng: StdRng,
-    /// The public values of the PublicValuesAir when it exists
-    pub(crate) custom_pvs: Vec<Option<F>>,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
 }
@@ -42,20 +40,17 @@ impl<F, MEM> VmState<F, MEM> {
 }
 
 impl<F: Clone, MEM> VmState<F, MEM> {
-    /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
     pub fn new_with_defaults(
         pc: u32,
         memory: MEM,
         streams: impl Into<Streams<F>>,
         seed: u64,
-        num_custom_pvs: usize,
     ) -> Self {
         Self {
             pc,
             memory,
             streams: streams.into(),
             rng: StdRng::seed_from_u64(seed),
-            custom_pvs: vec![None; num_custom_pvs],
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }
@@ -84,7 +79,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         inputs: impl Into<Streams<F>>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
-        VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED, 0)
+        VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
     }
 
     pub fn reset(
