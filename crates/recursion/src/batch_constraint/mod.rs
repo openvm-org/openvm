@@ -404,6 +404,7 @@ impl AirModule for BatchConstraintModule {
             expression_claim_bus: self.expression_claim_bus,
             eq_n_outer_bus: self.eq_n_outer_bus,
             n_lift_bus: self.n_lift_bus,
+            air_shape_bus: self.air_shape_bus,
         };
         // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         vec![

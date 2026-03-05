@@ -15,7 +15,9 @@ use crate::{
         ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNOuterBus, EqNOuterMessage,
         ExpressionClaimBus, ExpressionClaimMessage,
     },
-    bus::{NLiftBus, NLiftMessage, TranscriptBus},
+    bus::{
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, NLiftBus, NLiftMessage, TranscriptBus,
+    },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
@@ -48,6 +50,7 @@ pub struct ConstraintsFoldingAir {
     pub expression_claim_bus: ExpressionClaimBus,
     pub eq_n_outer_bus: EqNOuterBus,
     pub n_lift_bus: NLiftBus,
+    pub air_shape_bus: AirShapeBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
@@ -180,6 +183,17 @@ where
                 value: local.eq_n.map(Into::into),
             },
             local.is_first_in_air * local.is_valid,
+        );
+
+        self.air_shape_bus.lookup_key(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sort_idx.into(),
+                property_idx: AirShapeProperty::AirId.to_field(),
+                value: local.air_idx.into(),
+            },
+            local.is_first_in_air,
         );
     }
 }
