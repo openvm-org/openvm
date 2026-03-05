@@ -224,6 +224,14 @@ impl MemoryConfig {
         addr_spaces
     }
 
+    /// Config for aggregation usage with only native address space.
+    pub fn aggregation() -> Self {
+        let mut addr_spaces =
+            Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
+        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
+    }
+
     pub fn min_block_size_bits(&self) -> Vec<u8> {
         self.addr_spaces
             .iter()

@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, DEFERRAL_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
