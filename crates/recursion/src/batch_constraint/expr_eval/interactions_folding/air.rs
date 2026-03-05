@@ -223,6 +223,11 @@ where
                 ext_field_multiply(local.cur_sum, local.eq_3b),
             ),
         );
+        assert_array_eq(
+            &mut builder.when(is_same_message.clone()),
+            local.eq_3b,
+            next.eq_3b,
+        );
         // the running sums are zero on the last row of the proof
         assert_zeros(
             &mut builder.when(LoopSubAir::local_is_last(
