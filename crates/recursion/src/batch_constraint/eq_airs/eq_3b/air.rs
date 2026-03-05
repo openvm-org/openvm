@@ -111,6 +111,12 @@ where
             ),
         );
 
+        // ======================= incides boundary conditions =========================
+        builder.when(local.is_first).assert_zero(local.sort_idx);
+        builder
+            .when(local.is_first_in_air)
+            .assert_zero(local.interaction_idx);
+
         builder.assert_bool(local.n_at_least_n_lift);
         builder.assert_bool(local.nth_bit);
         builder.assert_bool(local.has_no_interactions);
