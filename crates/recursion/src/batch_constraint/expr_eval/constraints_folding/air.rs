@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::{assert_array_eq, not},
+    SubAir,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -19,7 +22,7 @@ use crate::{
         AirShapeBus, AirShapeBusMessage, AirShapeProperty, NLiftBus, NLiftMessage, TranscriptBus,
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
+    utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -130,6 +133,13 @@ where
         assert_array_eq(
             &mut builder.when(AB::Expr::ONE - is_same_air.clone()),
             local.cur_sum,
+            local.value,
+        );
+        // If we don't have constraints then `value` is zero
+        assert_zeros(
+            &mut builder
+                .when(local.is_first)
+                .when(not::<AB::Expr>(is_same_air.clone())),
             local.value,
         );
 
