@@ -1,13 +1,10 @@
 #include "launcher.cuh"
 #include "primitives/fp_array.cuh"
-#include "primitives/less_than.cuh"
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
-#include <cassert>
 
 inline constexpr size_t PERSISTENT_CHUNK = 8;
 inline constexpr size_t BLOCKS_PER_CHUNK = 2;
-inline constexpr size_t VOLATILE_CHUNK = 1;
 
 template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     uint32_t address_space;
@@ -23,19 +20,6 @@ template <typename T> struct PersistentBoundaryCols {
     T values[PERSISTENT_CHUNK];
     T hash[PERSISTENT_CHUNK];
     T timestamps[BLOCKS_PER_CHUNK];
-};
-
-inline constexpr size_t ADDR_ELTS = 2;
-inline constexpr size_t NUM_AS_LIMBS = 1;
-
-template <typename T> struct VolatileBoundaryCols {
-    T address_space_limbs[NUM_AS_LIMBS];
-    T pointer_limbs[AUX_LEN];
-    T initial_data;
-    T final_data;
-    T final_timestamp;
-    T is_valid;
-    LessThanArrayAuxCols<T, ADDR_ELTS, AUX_LEN> addr_lt_aux;
 };
 
 __global__ void cukernel_persistent_boundary_tracegen(
@@ -96,82 +80,6 @@ __global__ void cukernel_persistent_boundary_tracegen(
     }
 }
 
-__global__ void cukernel_volatile_boundary_tracegen(
-    Fp *trace,
-    size_t height,
-    size_t width,
-    BoundaryRecord<VOLATILE_CHUNK, 1> const *records,
-    size_t num_records,
-    uint32_t *range_checker,
-    size_t range_checker_num_bins,
-    size_t as_max_bits,
-    size_t ptr_max_bits
-) {
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row = RowSlice(trace + idx, height);
-    VariableRangeChecker rc(range_checker, range_checker_num_bins);
-    assert(idx < height);
-
-    if (idx < num_records) {
-        if (idx == num_records - 1) {
-            // For the sake of always filling `addr_lt_aux`
-            row.fill_zero(0, width);
-        }
-        BoundaryRecord<VOLATILE_CHUNK, 1> record = records[idx];
-        rc.decompose(
-            record.address_space,
-            as_max_bits,
-            row.slice_from(COL_INDEX(VolatileBoundaryCols, address_space_limbs)),
-            NUM_AS_LIMBS
-        );
-        rc.decompose(
-            record.ptr,
-            ptr_max_bits,
-            row.slice_from(COL_INDEX(VolatileBoundaryCols, pointer_limbs)),
-            AUX_LEN
-        );
-        COL_WRITE_VALUE(row, VolatileBoundaryCols, initial_data, Fp::zero());
-        COL_WRITE_VALUE(row, VolatileBoundaryCols, final_data, record.values[0]);
-        COL_WRITE_VALUE(row, VolatileBoundaryCols, final_timestamp, record.timestamps[0]);
-        COL_WRITE_VALUE(row, VolatileBoundaryCols, is_valid, Fp::one());
-
-        if (idx != num_records - 1) {
-            BoundaryRecord<VOLATILE_CHUNK, 1> next_record = records[idx + 1];
-            uint32_t curr[ADDR_ELTS] = {record.address_space, record.ptr};
-            uint32_t next[ADDR_ELTS] = {next_record.address_space, next_record.ptr};
-            IsLessThanArray::generate_subrow(
-                rc,
-                max(as_max_bits, ptr_max_bits),
-                FpArray<ADDR_ELTS>::from_u32_array(curr),
-                FpArray<ADDR_ELTS>::from_u32_array(next),
-                AUX_LEN,
-                RowSlice(row.slice_from(COL_INDEX(VolatileBoundaryCols, addr_lt_aux.diff_marker))),
-                row.slice_from(COL_INDEX(VolatileBoundaryCols, addr_lt_aux.diff_inv)).ptr,
-                RowSlice(row.slice_from(COL_INDEX(VolatileBoundaryCols, addr_lt_aux.lt_decomp))),
-                nullptr
-            );
-        }
-    } else {
-        row.fill_zero(0, width);
-    }
-
-    if (idx == height - 1 && num_records > 0) {
-        uint32_t zeros[ADDR_ELTS] = {0, 0};
-        FpArray<ADDR_ELTS> zeros_fp = FpArray<ADDR_ELTS>::from_raw_array(zeros);
-        IsLessThanArray::generate_subrow(
-            rc,
-            max(as_max_bits, ptr_max_bits),
-            zeros_fp,
-            zeros_fp,
-            AUX_LEN,
-            RowSlice(row.slice_from(COL_INDEX(VolatileBoundaryCols, addr_lt_aux.diff_marker))),
-            row.slice_from(COL_INDEX(VolatileBoundaryCols, addr_lt_aux.diff_inv)).ptr,
-            RowSlice(row.slice_from(COL_INDEX(VolatileBoundaryCols, addr_lt_aux.lt_decomp))),
-            nullptr
-        );
-    }
-}
-
 extern "C" int _persistent_boundary_tracegen(
     Fp *d_trace,
     size_t height,
@@ -197,34 +105,6 @@ extern "C" int _persistent_boundary_tracegen(
         d_poseidon2_buffer,
         d_poseidon2_buffer_idx,
         poseidon2_capacity
-    );
-    return CHECK_KERNEL();
-}
-
-extern "C" int _volatile_boundary_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    uint32_t const *d_raw_records,
-    size_t num_records,
-    uint32_t *d_range_checker,
-    size_t range_checker_num_bins,
-    size_t as_max_bits,
-    size_t ptr_max_bits
-) {
-    auto [grid, block] = kernel_launch_params(height, 512);
-    auto d_records =
-        reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK, 1> const *>(d_raw_records);
-    cukernel_volatile_boundary_tracegen<<<grid, block>>>(
-        d_trace,
-        height,
-        width,
-        d_records,
-        num_records,
-        d_range_checker,
-        range_checker_num_bins,
-        as_max_bits,
-        ptr_max_bits
     );
     return CHECK_KERNEL();
 }

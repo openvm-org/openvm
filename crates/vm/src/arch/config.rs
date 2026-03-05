@@ -348,14 +348,9 @@ impl SystemConfig {
         PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
     }
 
-    /// Returns the AIR ID of the memory merkle AIR. Returns None if continuations are not enabled.
+    /// Returns the AIR ID of the memory merkle AIR.
     pub fn memory_merkle_air_id(&self) -> Option<usize> {
-        let boundary_idx = self.memory_boundary_air_id();
-        if self.continuation_enabled {
-            Some(boundary_idx + 1)
-        } else {
-            None
-        }
+        Some(self.memory_boundary_air_id() + 1)
     }
 
     /// Whether the AIR ID must be present in a valid v2 proof.
@@ -372,7 +367,7 @@ impl SystemConfig {
     /// This is O(1) and returns the length of
     /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
     pub fn num_airs(&self) -> usize {
-        self.memory_boundary_air_id() + num_memory_airs(self.continuation_enabled)
+        self.memory_boundary_air_id() + num_memory_airs()
     }
 
     pub fn initial_block_size(&self) -> usize {

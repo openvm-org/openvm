@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::PermutationCheckBus,
-    p3_field::Field,
-    p3_util::{log2_ceil_usize, log2_strict_usize},
-    AirRef, StarkProtocolConfig, Val,
+    interaction::PermutationCheckBus, p3_util::log2_strict_usize, AirRef, StarkProtocolConfig,
 };
 
 mod controller;
@@ -16,17 +12,15 @@ pub mod online;
 pub mod persistent;
 #[cfg(test)]
 mod tests;
-pub mod volatile;
 
 pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 use crate::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::MemoryConfig,
     system::memory::{
         dimensions::MemoryDimensions, interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
         offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
-        volatile::VolatileBoundaryAir,
     },
 };
 
@@ -76,67 +70,44 @@ pub struct MemoryAirInventory {
 }
 
 impl MemoryAirInventory {
-    pub fn new<SC: StarkProtocolConfig>(
+    pub fn new(
         bridge: MemoryBridge,
         mem_config: &MemoryConfig,
-        range_bus: VariableRangeCheckerBus,
-        merkle_compression_buses: Option<(PermutationCheckBus, PermutationCheckBus)>,
+        merkle_compression_buses: (PermutationCheckBus, PermutationCheckBus),
     ) -> Self {
         let memory_bus = bridge.memory_bus();
-        let interface = if let Some((merkle_bus, compression_bus)) = merkle_compression_buses {
-            // Persistent memory
-            let memory_dims = MemoryDimensions {
-                addr_space_height: mem_config.addr_space_height,
-                address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-            };
-            let boundary = PersistentBoundaryAir::<CHUNK> {
-                memory_dims,
-                memory_bus,
-                merkle_bus,
-                compression_bus,
-            };
-            let merkle = MemoryMerkleAir::<CHUNK> {
-                memory_dimensions: memory_dims,
-                merkle_bus,
-                compression_bus,
-            };
-            MemoryInterfaceAirs::Persistent { boundary, merkle }
-        } else {
-            // Volatile memory
-            let addr_space_height = mem_config.addr_space_height;
-            assert!(addr_space_height < Val::<SC>::bits() - 2);
-            let addr_space_max_bits =
-                log2_ceil_usize((ADDR_SPACE_OFFSET + 2u32.pow(addr_space_height as u32)) as usize);
-            let boundary = VolatileBoundaryAir::new(
-                memory_bus,
-                addr_space_max_bits,
-                mem_config.pointer_max_bits,
-                range_bus,
-            );
-            MemoryInterfaceAirs::Volatile { boundary }
+        let (merkle_bus, compression_bus) = merkle_compression_buses;
+        let memory_dims = MemoryDimensions {
+            addr_space_height: mem_config.addr_space_height,
+            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
         };
+        let boundary = PersistentBoundaryAir::<CHUNK> {
+            memory_dims,
+            memory_bus,
+            merkle_bus,
+            compression_bus,
+        };
+        let merkle = MemoryMerkleAir::<CHUNK> {
+            memory_dimensions: memory_dims,
+            merkle_bus,
+            compression_bus,
+        };
+        let interface = MemoryInterfaceAirs { boundary, merkle };
         Self { bridge, interface }
     }
 
     /// The order of memory AIRs is boundary, merkle (if exists)
     pub fn into_airs<SC: StarkProtocolConfig>(self) -> Vec<AirRef<SC>> {
-        let mut airs: Vec<AirRef<SC>> = Vec::new();
-        match self.interface {
-            MemoryInterfaceAirs::Volatile { boundary } => {
-                airs.push(Arc::new(boundary));
-            }
-            MemoryInterfaceAirs::Persistent { boundary, merkle } => {
-                airs.push(Arc::new(boundary));
-                airs.push(Arc::new(merkle));
-            }
-        }
-        airs
+        vec![
+            Arc::new(self.interface.boundary),
+            Arc::new(self.interface.merkle),
+        ]
     }
 }
 
 /// This is O(1) and returns the length of
 /// [`MemoryAirInventory::into_airs`].
-pub fn num_memory_airs(is_persistent: bool) -> usize {
-    // boundary + { merkle if is_persistent }
-    1 + usize::from(is_persistent)
+pub const fn num_memory_airs() -> usize {
+    // boundary + merkle
+    2
 }

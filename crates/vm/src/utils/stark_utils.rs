@@ -342,7 +342,6 @@ fn validate_metered_estimates<E, VB>(
         // For some airs, the overestimates are expected
         if air_name.contains("MemoryMerkleAir")
             || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("VolatileBoundaryAir")
             || air_name.contains("PersistentBoundaryAir")
             || air_name.contains("NativeAdapterAir")
         {

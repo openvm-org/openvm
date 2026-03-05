@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
     system::{
         connector::VmConnectorChip,
-        memory::{interface::MemoryInterfaceAirs, online::GuestMemory, MemoryAirInventory},
+        memory::{online::GuestMemory, MemoryAirInventory},
         SystemChipComplex, SystemRecords,
     },
 };
@@ -41,9 +41,9 @@ pub struct SystemChipInventoryGPU {
 impl SystemChipInventoryGPU {
     pub fn new(
         config: &SystemConfig,
-        mem_inventory: &MemoryAirInventory,
+        _mem_inventory: &MemoryAirInventory,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-        hasher_chip: Option<Arc<Poseidon2PeripheryChipGPU>>,
+        hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     ) -> Self {
         let cpu_range_checker = range_checker.cpu_chip.clone().unwrap();
 
@@ -55,16 +55,8 @@ impl SystemChipInventoryGPU {
             config.memory_config.timestamp_max_bits,
         ));
 
-        let memory_inventory = match &mem_inventory.interface {
-            MemoryInterfaceAirs::Persistent { .. } => {
-                assert!(config.continuation_enabled);
-                MemoryInventoryGPU::persistent(config.memory_config.clone(), hasher_chip.unwrap())
-            }
-            MemoryInterfaceAirs::Volatile { .. } => {
-                assert!(!config.continuation_enabled);
-                MemoryInventoryGPU::volatile(config.memory_config.clone(), range_checker.clone())
-            }
-        };
+        let memory_inventory =
+            MemoryInventoryGPU::persistent(config.memory_config.clone(), hasher_chip);
 
         let public_values_chip = config.has_public_values_chip().then(|| {
             PublicValuesChipGPU::new(
@@ -90,9 +82,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
     }
 
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
-        if self.memory_inventory.persistent.is_some() {
-            self.memory_inventory.set_initial_memory(&memory.memory);
-        }
+        self.memory_inventory.set_initial_memory(&memory.memory);
     }
 
     fn generate_proving_ctx(
@@ -131,12 +121,13 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
     }
 
     fn memory_top_tree(&self) -> Option<&[[F; CHUNK]]> {
-        self.memory_inventory
+        let top_tree = &self
+            .memory_inventory
             .persistent
             .as_ref()
-            .and_then(|persistent| {
-                let top_tree = &persistent.merkle_tree.top_roots_host;
-                (!top_tree.is_empty()).then_some(top_tree.as_slice())
-            })
+            .expect("GPU memory inventory must be persistent")
+            .merkle_tree
+            .top_roots_host;
+        (!top_tree.is_empty()).then_some(top_tree.as_slice())
     }
 }

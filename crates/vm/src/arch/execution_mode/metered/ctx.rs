@@ -61,13 +61,12 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             "air_name={}",
             segmentation_ctx.air_names[memory_ctx.boundary_idx]
         );
-        if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
-            debug_assert!(
-                segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
-                "air_name={}",
-                segmentation_ctx.air_names[merkle_tree_index]
-            );
-        }
+        let merkle_tree_index = memory_ctx.merkle_tree_index;
+        debug_assert!(
+            segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
+            "air_name={}",
+            segmentation_ctx.air_names[merkle_tree_index]
+        );
         let mut ctx = Self {
             trace_heights,
             is_trace_height_constant,

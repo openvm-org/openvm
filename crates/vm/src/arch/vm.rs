@@ -653,10 +653,7 @@ where
         interpreter.reset_execution_frequencies();
         execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
         let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
-        let touched_memory = exec_state
-            .vm_state
-            .memory
-            .finalize::<Val<E::SC>>(system_config.continuation_enabled);
+        let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
         #[cfg(feature = "perf-metrics")]
         crate::metrics::end_segment_metrics(&mut exec_state);
 

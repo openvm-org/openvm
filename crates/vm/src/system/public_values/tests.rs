@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_IMM_AS, LocalOpcode, PublishOpcode, NATIVE_AS,
+    instruction::Instruction, riscv::RV32_IMM_AS, LocalOpcode, PublishOpcode,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -20,9 +20,20 @@ use rand::{rngs::StdRng, Rng};
 
 #[cfg(feature = "cuda")]
 use crate::system::cuda::public_values::PublicValuesChipGPU;
+#[cfg(feature = "cuda")]
 use crate::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{GpuChipTestBuilder, GpuTestChipHarness, RANGE_CHECKER_BUS},
+        EmptyAdapterCoreLayout,
+    },
+    system::{
+        native_adapter::NativeAdapterRecord, public_values::PublicValuesRecord,
+        VariableRangeCheckerBus,
+    },
+};
+use crate::{
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, MemoryConfig, PreflightExecutor, SystemConfig, VmCoreAir,
     },
     system::{
@@ -34,17 +45,6 @@ use crate::{
         },
     },
     utils::test_cpu_engine,
-};
-#[cfg(feature = "cuda")]
-use crate::{
-    arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness, RANGE_CHECKER_BUS},
-        EmptyAdapterCoreLayout,
-    },
-    system::{
-        native_adapter::NativeAdapterRecord, public_values::PublicValuesRecord,
-        VariableRangeCheckerBus,
-    },
 };
 
 type F = BabyBear;
@@ -139,26 +139,12 @@ fn set_and_execute<E, RA>(
     E: PreflightExecutor<F, RA>,
     RA: Arena,
 {
-    let (b, e) = if rng.random_bool(0.5) {
-        let val = F::from_u32(rng.random_range(0..F::ORDER_U32));
-        public_values.push(val);
-        (val, F::from_u32(RV32_IMM_AS))
-    } else {
-        let ptr = gen_pointer(rng, 4);
-        let val = F::from_u32(rng.random_range(0..F::ORDER_U32));
-        public_values.push(val);
-        tester.write(NATIVE_AS as usize, ptr, [val]);
-        (F::from_u32(ptr as u32), F::from_u32(NATIVE_AS))
-    };
-
-    let (c, f) = if rng.random_bool(0.5) {
-        (F::from_u32(idx), F::from_u32(RV32_IMM_AS))
-    } else {
-        let ptr = gen_pointer(rng, 4);
-        let val = F::from_u32(idx);
-        tester.write(NATIVE_AS as usize, ptr, [val]);
-        (F::from_u32(ptr as u32), F::from_u32(NATIVE_AS))
-    };
+    let val = F::from_u32(rng.random_range(0..F::ORDER_U32));
+    public_values.push(val);
+    let b = val;
+    let e = F::from_u32(RV32_IMM_AS);
+    let c = F::from_u32(idx);
+    let f = F::from_u32(RV32_IMM_AS);
 
     let instruction = Instruction {
         opcode: PublishOpcode::PUBLISH.global_opcode(),
@@ -179,7 +165,7 @@ fn public_values_rand_test() {
     let mut rng = create_seeded_rng();
     let system_config = SystemConfig::default();
     let mem_config = MemoryConfig::default();
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    let mut tester = VmChipTestBuilder::persistent(mem_config);
     tester.set_num_public_values(system_config.num_public_values);
 
     let mut harness = create_test_chips(&tester, &system_config);
@@ -327,7 +313,7 @@ fn test_cuda_public_values_tracegen() {
     let system_config = SystemConfig::default();
     let mem_config = MemoryConfig::default();
     let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
-    let mut tester = GpuChipTestBuilder::volatile(mem_config.clone(), bus);
+    let mut tester = GpuChipTestBuilder::persistent(mem_config.clone(), bus);
     tester.custom_pvs = vec![None; system_config.num_public_values];
 
     let mut harness = create_cuda_test_harness(&tester, &mem_config, &system_config);

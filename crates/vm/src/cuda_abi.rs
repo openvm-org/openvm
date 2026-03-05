@@ -21,18 +21,6 @@ pub mod boundary {
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
         ) -> i32;
-
-        fn _volatile_boundary_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_raw_records: *const u32,
-            num_records: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: usize,
-            as_max_bits: usize,
-            ptr_max_bits: usize,
-        ) -> i32;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -56,30 +44,6 @@ pub mod boundary {
             d_poseidon2_raw_buffer.as_mut_ptr(),
             d_poseidon2_buffer_idx.as_mut_ptr(),
             d_poseidon2_raw_buffer.len(),
-        ))
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn volatile_boundary_tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        width: usize,
-        d_records: &DeviceBuffer<u32>,
-        num_records: usize,
-        d_range_checker: &DeviceBuffer<F>,
-        as_max_bits: usize,
-        ptr_max_bits: usize,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_volatile_boundary_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.as_ptr(),
-            num_records,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len(),
-            as_max_bits,
-            ptr_max_bits,
         ))
     }
 }

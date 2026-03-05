@@ -334,12 +334,11 @@ impl<F: VmField> VmChipTestBuilder<F> {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-        // TODO: Check if need to revert to volatile memory, after access adapters are removed
         Self::persistent(mem_config)
     }
 
     pub fn default_native() -> Self {
-        Self::volatile(MemoryConfig::aggregation())
+        Self::persistent(MemoryConfig::aggregation())
     }
 
     fn range_checker_and_memory(
@@ -366,27 +365,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
             PermutationCheckBus::new(MEMORY_MERKLE_BUS),
             PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             hasher_chip,
-        );
-        Self {
-            memory: MemoryTester::new(memory_controller, memory),
-            streams: Default::default(),
-            rng: StdRng::seed_from_u64(0),
-            custom_pvs: Vec::new(),
-            execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            internal_rng: StdRng::seed_from_u64(0),
-            default_register: 0,
-            default_pointer: 0,
-        }
-    }
-
-    pub fn volatile(mem_config: MemoryConfig) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
-        let memory_controller = MemoryController::with_volatile_memory(
-            MemoryBus::new(MEMORY_BUS),
-            mem_config,
-            range_checker,
         );
         Self {
             memory: MemoryTester::new(memory_controller, memory),
@@ -482,22 +460,20 @@ where
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
             let mut memory_controller = memory_tester.controller;
-            let is_persistent = memory_controller.continuation_enabled();
             let mut memory = memory_tester.memory;
-            let touched_memory = memory.finalize::<Val<SC>>(is_persistent);
+            let touched_memory = memory.finalize::<Val<SC>>();
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
             for mem_chip in memory_tester.chip_for_block.into_values() {
                 self = self.load_periphery((mem_chip.air, mem_chip));
             }
-            let mem_inventory = MemoryAirInventory::new::<SC>(
+            let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
-                range_checker.bus(),
-                is_persistent.then_some((
+                (
                     PermutationCheckBus::new(MEMORY_MERKLE_BUS),
                     PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                )),
+                ),
             );
             let ctxs = memory_controller.generate_proving_ctx(touched_memory);
             for (air, ctx) in
