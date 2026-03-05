@@ -163,9 +163,12 @@ where
          */
         builder.assert_bool(local.is_main);
         builder.when(local.is_main).assert_one(local.is_valid);
-        builder.when(local.is_first).assert_one(local.is_main);
         builder.when(local.is_main).assert_zero(local.part_idx);
         builder.when(local.is_main).assert_zero(local.commit_idx);
+
+        builder.when(local.is_first).assert_one(local.is_main);
+        builder.when(local.is_first).assert_zero(local.sort_idx);
+        builder.when(local.is_first).assert_zero(local.col_idx);
 
         builder.assert_bool(local.is_transition_main);
         builder
@@ -206,6 +209,13 @@ where
         when_last_main.assert_zero((next.part_idx - AB::F::ONE) * not(local.is_last));
         when_last_main.assert_zero(next.col_idx * not(local.is_last));
 
+        /*
+         * Note that we utilize the LiftedHeightsBus interaction to constrain the (sort_idx,
+         * part_idx) sorting for non-main commits. Each non-zero commit_idx is constrained to
+         * its exact sort_idx and part_idx, so we only need to constrain that (a) commit_idx
+         * increases by 0/1 within a proof and (b) col_idx increases by 1 within a commit and
+         * is reset between commits.
+         */
         builder
             .when(and(local.is_valid, not(local.is_last)))
             .assert_bool(next.commit_idx - local.commit_idx);
@@ -213,6 +223,10 @@ where
             .when(and(local.is_transition_main, not(local.is_main)))
             .when_ne(local.commit_idx + AB::F::ONE, next.commit_idx)
             .assert_one(next.col_idx - local.col_idx);
+        builder
+            .when(and(local.is_transition_main, not(local.is_main)))
+            .when_ne(local.commit_idx, next.commit_idx)
+            .assert_zero(next.col_idx);
 
         /*
          * Compute col_claim[0] + lambda * rot_claim + ... (i.e. RLC of column/rotation claims)
