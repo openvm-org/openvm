@@ -44,13 +44,11 @@ pub const PROGRAM_AIR_ID: usize = 0;
 /// ProgramAir is the first AIR so its cached trace should be the first main trace.
 pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
 pub const CONNECTOR_AIR_ID: usize = 1;
-/// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
-/// continuations is enabled.
+/// Reserved AIR ID for PublicValuesAir (currently unused).
 pub const PUBLIC_VALUES_AIR_ID: usize = 2;
 /// AIR ID of the Memory Boundary AIR.
 pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSET;
-/// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
-/// Merkle AIR commits start/final memory states.
+/// AIR ID of the Memory Merkle AIR. Commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 pub type ExecutorId = u32;

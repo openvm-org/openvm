@@ -89,7 +89,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         )));
 
         let mut inventory = ChipInventory::new(airs);
-        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
+        // PublicValuesChip is currently unused (has_public_values_chip always returns false).
         if config.has_public_values_chip() {
             assert_eq!(
                 inventory.executor_idx_to_insertion_idx.len(),

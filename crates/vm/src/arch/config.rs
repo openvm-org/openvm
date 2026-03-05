@@ -244,24 +244,15 @@ impl MemoryConfig {
 }
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
-/// are managed by the architecture, including configuration for continuations support.
+/// are managed by the architecture.
 #[derive(Debug, Clone, Serialize, Deserialize, Setters, WithSetters)]
 pub struct SystemConfig {
     /// The maximum constraint degree any chip is allowed to use.
     #[getset(set_with = "pub")]
     pub max_constraint_degree: usize,
-    /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
-    /// each segment is proved by a proof. Each proof commits the before and after state of the
-    /// corresponding segment.
-    /// False if the VM is in single segment mode. In this mode, an execution is proved by a single
-    /// proof.
-    pub continuation_enabled: bool,
     /// Memory configuration
     pub memory_config: MemoryConfig,
-    /// `num_public_values` has different meanings in single segment mode and continuation mode.
-    /// In single segment mode, `num_public_values` is the number of public values of
-    /// `PublicValuesChip`. In this case, verifier can read public values directly.
-    /// In continuation mode, public values are stored in a special address space.
+    /// Public values are stored in a special address space.
     /// `num_public_values` indicates the number of allowed addresses in that address space. The
     /// verifier cannot read public values directly, but they can decommit the public values
     /// from the memory merkle root.
@@ -290,7 +281,6 @@ impl SystemConfig {
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
-            continuation_enabled: true,
             memory_config,
             num_public_values,
             profiling: false,
@@ -304,16 +294,6 @@ impl SystemConfig {
             memory_config,
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
         )
-    }
-
-    pub fn with_continuations(mut self) -> Self {
-        self.continuation_enabled = true;
-        self
-    }
-
-    pub fn without_continuations(mut self) -> Self {
-        self.continuation_enabled = false;
-        self
     }
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
@@ -340,12 +320,12 @@ impl SystemConfig {
     }
 
     pub fn has_public_values_chip(&self) -> bool {
-        !self.continuation_enabled && self.num_public_values > 0
+        false
     }
 
-    /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
+    /// Returns the AIR ID of the memory boundary AIR.
     pub fn memory_boundary_air_id(&self) -> usize {
-        PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
+        PUBLIC_VALUES_AIR_ID
     }
 
     /// Returns the AIR ID of the memory merkle AIR.
@@ -355,9 +335,6 @@ impl SystemConfig {
 
     /// Whether the AIR ID must be present in a valid v2 proof.
     pub fn is_required_air_id(&self, air_id: usize) -> bool {
-        if !self.continuation_enabled {
-            return false;
-        }
         air_id == PROGRAM_AIR_ID
             || air_id == CONNECTOR_AIR_ID
             || air_id == self.memory_boundary_air_id()

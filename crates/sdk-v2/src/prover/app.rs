@@ -121,7 +121,6 @@ where
             + MeteredExecutor<Val<E::SC>>
             + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        assert!(self.vm_config().as_ref().continuation_enabled);
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),

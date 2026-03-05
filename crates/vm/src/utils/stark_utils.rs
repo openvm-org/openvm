@@ -16,8 +16,8 @@ use crate::arch::VmState;
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
+        ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
@@ -259,8 +259,8 @@ where
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
-    match vm.verify(&vk, &proofs) {
-        Ok(()) => {}
+    match verify_segments(&vm.engine, &vk, &proofs) {
+        Ok(_) => {}
         Err(err) => {
             panic!("segment proofs should verify: {err}");
         }

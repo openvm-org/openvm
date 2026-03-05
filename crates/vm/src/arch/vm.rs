@@ -835,27 +835,6 @@ where
         Ok((proof, final_memory))
     }
 
-    /// Verify segment proofs, checking continuation boundary conditions between segments if VM
-    /// memory is persistent The behavior of this function differs depending on whether
-    /// continuations is enabled or not. We recommend to call the functions [`verify_segments`]
-    /// or [`verify_single`] directly instead.
-    pub fn verify(
-        &self,
-        vk: &MultiStarkVerifyingKey<E::SC>,
-        proofs: &[Proof<E::SC>],
-    ) -> Result<(), VmVerificationError<E::SC>>
-    where
-        Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
-        Val<E::SC>: PrimeField32,
-    {
-        if self.config().as_ref().continuation_enabled {
-            verify_segments(&self.engine, vk, proofs).map(|_| ())
-        } else {
-            assert_eq!(proofs.len(), 1);
-            verify_single(&self.engine, vk, &proofs[0]).map_err(VmVerificationError::StarkError)
-        }
-    }
-
     /// Transforms the program into a cached trace and commits it _on device_ using the proof system
     /// polynomial commitment scheme.
     ///
@@ -958,7 +937,6 @@ where
         // VmConnectorAir always has a constant trace height of 2
         constant_trace_heights[CONNECTOR_AIR_ID] = Some(2);
         if config.has_public_values_chip() {
-            // Public values chip is only present when there's a single segment
             constant_trace_heights[PUBLIC_VALUES_AIR_ID] = Some(config.num_public_values);
         }
 
@@ -1024,7 +1002,7 @@ mod tests {
     #[test]
     fn keygen_marks_required_airs_for_continuations() {
         let engine = test_cpu_engine();
-        let config = SystemConfig::default().with_continuations();
+        let config = SystemConfig::default();
         let merkle_air_id = config.memory_merkle_air_id();
         let boundary_air_id = config.memory_boundary_air_id();
 
@@ -1233,7 +1211,6 @@ where
         self.reset_state(input);
         let vm = &mut self.vm;
         let exe = &self.exe;
-        assert!(!vm.config().as_ref().continuation_enabled);
         let mut trace_heights = trace_heights.to_vec();
         trace_heights[PUBLIC_VALUES_AIR_ID] = vm.config().as_ref().num_public_values as u32;
         let state = self.state.take().expect("State should always be present");

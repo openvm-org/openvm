@@ -94,8 +94,7 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
 
-    /// This function only returns `Some` when continuations is enabled.
-    /// When continuations is enabled, it returns the top merkle sub-tree of the memory merkle tree
+    /// Returns the top merkle sub-tree of the memory merkle tree
     /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
     /// tree formed from the roots of the sub-trees for each address space.
     ///
@@ -121,8 +120,7 @@ pub struct SystemRecords<F> {
     pub filtered_exec_frequencies: Vec<u32>,
     // Perf[jpw]: this should be computed on-device and changed to just touched blocks
     pub touched_memory: TouchedMemory<F>,
-    /// The public values of the [PublicValuesChip]. These should only be non-empty if
-    /// continuations are disabled.
+    /// The public values of the [PublicValuesChip]. Currently unused (always empty).
     pub public_values: Vec<F>,
 }
 
@@ -148,8 +146,7 @@ pub struct SystemAirInventory {
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
     pub memory: MemoryAirInventory,
-    /// Public values AIR exists if and only if continuations is disabled and `num_public_values`
-    /// is greater than 0.
+    /// Public values AIR. Currently always `None`.
     pub public_values: Option<PublicValuesAir>,
 }
 
@@ -227,14 +224,13 @@ impl SystemAirInventory {
 impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
-    /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
-    /// executor for [PublicValuesExecutor] if continuations is disabled. It will always add an
-    /// executor for [PhantomChip], which handles all phantom sub-executors.
+    /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will always
+    /// add an executor for [PhantomChip], which handles all phantom sub-executors.
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
         let mut inventory = ExecutorInventory::new(self.clone());
-        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
+        // PublicValuesChip is currently unused (has_public_values_chip always returns false).
         if self.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);
 
@@ -303,7 +299,7 @@ where
 
         assert_eq!(inventory.ext_airs().len(), POSEIDON2_INSERTION_IDX);
         // Add direct poseidon2 AIR for persistent memory.
-        // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
+        // Currently we never use poseidon2 opcodes directly: we will need
         // special handling when that happens
         let air = new_poseidon2_periphery_air(
             vm_poseidon2_config(),
@@ -472,7 +468,7 @@ where
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let mut inventory = ChipInventory::new(airs);
-        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
+        // PublicValuesChip is currently unused (has_public_values_chip always returns false).
         if config.has_public_values_chip() {
             assert_eq!(
                 inventory.executor_idx_to_insertion_idx.len(),
