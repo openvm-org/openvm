@@ -158,10 +158,12 @@ where
         /*
          * Constrain the sortedness of each ColumnClaimsMessage. Main claims (i.e part_idx = 0)
          * should be first and sorted by sort_idx and then col_idx. The remaining claims should
-         * be sorted by sort_idx, then part_idx, and finally col_idx.
+         * be sorted by sort_idx, then part_idx, and finally col_idx. Note that each proof must
+         * have at least one main claim.
          */
         builder.assert_bool(local.is_main);
-        builder.when(not(local.is_valid)).assert_zero(local.is_main);
+        builder.when(local.is_main).assert_one(local.is_valid);
+        builder.when(local.is_first).assert_one(local.is_main);
         builder.when(local.is_main).assert_zero(local.part_idx);
         builder.when(local.is_main).assert_zero(local.commit_idx);
 
@@ -172,6 +174,18 @@ where
         builder
             .when(local.is_transition_main)
             .assert_one(and(local.is_valid, next.is_valid));
+        builder
+            .when(and::<AB::Expr>(
+                and(local.is_main, next.is_main),
+                not(local.is_last),
+            ))
+            .assert_one(local.is_transition_main);
+        builder
+            .when(and(
+                and::<AB::Expr>(not(local.is_main), not(next.is_main)),
+                next.is_valid,
+            ))
+            .assert_one(local.is_transition_main);
         builder
             .when(local.is_transition_main)
             .assert_zero(local.is_last);
