@@ -97,6 +97,8 @@ where
                 .map_into(),
             ),
         );
+        builder.when_first_row().assert_zero(local.proof_idx);
+        builder.when(local.is_first).assert_zero(local.sort_idx);
 
         let is_same_proof = next.is_valid - next.is_first;
         let is_same_air = next.is_valid - next.is_first_in_air;
