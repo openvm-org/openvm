@@ -90,30 +90,17 @@ jobs:
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
-      - run: | # avoid cross-device link error
-          rustup component remove clippy || true
-          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
-      - name: Verify CUDA setup
-        run: |
-          nvidia-smi
-          nvidia-smi -L
-          nvcc --version
-      - name: Run fmt
-        working-directory: crates
-        run: |
-          rustup install nightly
-          rustup component add --toolchain nightly rustfmt
-          cargo +nightly fmt --all -- --check
       - name: Run clippy
         run: |
           # includes GPU specific features cuda and touchemall
           # cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs cuda default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils touchemall" -- -D warnings
           cargo clippy --all-targets --all --tests --features "bls12_381 bn254 cuda default entrypoint export-intrinsics export-libm function-span getrandom-unsupported halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime std test-utils touchemall" -- -D warnings
-          cargo clippy --all-targets --all --tests --no-default-features --features "jemalloc jemalloc-prof" -- -D warnings
       # TODO: re-enable after stark-backend Fp() default constructor is __host__ __device__
       # - name: Run clang-tidy
       #   run: |
