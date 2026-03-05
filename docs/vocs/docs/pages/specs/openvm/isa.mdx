@@ -187,10 +187,7 @@ These data structures are **not** part of the guest state, and their state depen
 ### User Public Outputs
 
 To make program outputs public, OpenVM allows the user to specify a list of field elements to make public. To populate
-this list, users can use:
-
-- If continuations are enabled: `REVEAL_RV32` (from the RV32IM extension)
-- If continuations are disabled: `PUBLISH` (from the system extension)
+this list, users can use `REVEAL_RV32` (from the RV32IM extension).
 
 The list is of length `num_public_values`, where `num_public_values` is a VM configuration parameter. By default, any element in the list that is never initialized is set to zero.
 
@@ -277,7 +274,6 @@ The opcodes below are supported by the OpenVM system and do not belong to any VM
 | --------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TERMINATE | `_, _, c`   | Terminates execution with exit code `c`. Sets `to_pc = from_pc`.                                                                                                              |
 | PHANTOM   | `_, _, c`   | Sets `to_pc = from_pc + DEFAULT_PC_STEP`. The operand `c` determines which phantom instruction (see below) is run.                                                            |
-| PUBLISH   | `a,b,_,d,e` | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to `num_public_values`. Only valid when continuations are disabled. |
 
 The behavior of the PHANTOM opcode is determined by the operand `c`.
 More specifically, the low 16-bits `c.as_canonical_u32() & 0xffff` are used as a discriminant to determine a phantom
