@@ -107,7 +107,7 @@ where
         // When we are within one air, constraint_idx increases by 0/1
         builder
             .when(is_same_air.clone())
-            .assert_bool(next.constraint_idx - local.constraint_idx);
+            .assert_one(next.constraint_idx - local.constraint_idx);
         // First constraint_idx within an air is zero
         builder
             .when(local.is_first_in_air)
