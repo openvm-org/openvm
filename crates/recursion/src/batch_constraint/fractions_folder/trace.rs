@@ -8,7 +8,6 @@ use p3_maybe_rayon::prelude::*;
 use crate::{
     batch_constraint::fractions_folder::FractionsFolderCols,
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::pow_tidx_count,
 };
 
 pub struct FractionsFolderTraceGenerator;
@@ -57,7 +56,6 @@ impl RowMajorChip<F> for FractionsFolderTraceGenerator {
         }
         debug_assert_eq!(trace_slices.len(), proofs.len());
 
-        let logup_pow_offset = pow_tidx_count(ctx.vk.inner.params.logup.pow_bits);
         trace_slices
             .par_iter_mut()
             .zip(proofs.par_iter().zip(preflights.par_iter()))
@@ -70,7 +68,6 @@ impl RowMajorChip<F> for FractionsFolderTraceGenerator {
                 let height = npa.len();
                 let mu_tidx = preflight.batch_constraint.tidx_before_univariate - D_EF;
                 let mu_slice = &preflight.transcript.values()[mu_tidx..mu_tidx + D_EF];
-                let tidx_alpha_beta = preflight.proof_shape.post_tidx + logup_pow_offset;
 
                 debug_assert_eq!(rows.len(), height * width);
 
@@ -93,8 +90,7 @@ impl RowMajorChip<F> for FractionsFolderTraceGenerator {
                     });
 
                 let mut cur_p_sum = [F::ZERO; D_EF];
-                let mut cur_q_sum: [_; D_EF] =
-                    core::array::from_fn(|i| preflight.transcript.values()[tidx_alpha_beta + i]);
+                let mut cur_q_sum: [_; D_EF] = [F::ZERO; D_EF];
 
                 let mu = EF::from_basis_coefficients_slice(mu_slice).unwrap();
                 let mut cur_hash = EF::ZERO;
