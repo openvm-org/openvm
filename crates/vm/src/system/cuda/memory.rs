@@ -362,17 +362,14 @@ mod tests {
         },
     };
     use openvm_cuda_backend::prelude::F;
-    use openvm_instructions::{
-        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        NATIVE_AS,
-    };
+    use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
     #[test]
     fn test_empty_touched_memory_uses_full_chunk_values() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS, NATIVE_AS] {
+        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
         let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
@@ -381,28 +378,6 @@ mod tests {
         unsafe {
             memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
             memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV32_MEMORY_AS, 0, [9, 10, 11, 12]);
-            memory.write::<F, { DIGEST_WIDTH * 2 }>(
-                NATIVE_AS,
-                0,
-                [
-                    F::from_u32(21),
-                    F::from_u32(22),
-                    F::from_u32(23),
-                    F::from_u32(24),
-                    F::from_u32(25),
-                    F::from_u32(26),
-                    F::from_u32(27),
-                    F::from_u32(28),
-                    F::from_u32(21),
-                    F::from_u32(22),
-                    F::from_u32(23),
-                    F::from_u32(24),
-                    F::from_u32(25),
-                    F::from_u32(26),
-                    F::from_u32(27),
-                    F::from_u32(28),
-                ],
-            );
         }
 
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
@@ -452,7 +427,7 @@ mod tests {
     #[test]
     fn test_touched_memory_updates_memory_address_space() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS, NATIVE_AS] {
+        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
         let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
@@ -461,39 +436,11 @@ mod tests {
         unsafe {
             memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
             memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV32_MEMORY_AS, 0, [9, 10, 11, 12]);
-            memory.write::<F, { DIGEST_WIDTH * 2 }>(
-                NATIVE_AS,
-                0,
-                [
-                    F::from_u32(21),
-                    F::from_u32(22),
-                    F::from_u32(23),
-                    F::from_u32(24),
-                    F::from_u32(25),
-                    F::from_u32(26),
-                    F::from_u32(27),
-                    F::from_u32(28),
-                    F::from_u32(21),
-                    F::from_u32(22),
-                    F::from_u32(23),
-                    F::from_u32(24),
-                    F::from_u32(25),
-                    F::from_u32(26),
-                    F::from_u32(27),
-                    F::from_u32(28),
-                ],
-            );
         }
 
         let mut final_memory = memory.clone();
         let touched_bytes = [101u8, 102, 103, 104];
         let touched_bytes_late = [111u8, 112, 113, 114];
-        let touched_native_values = [
-            F::from_u32(201),
-            F::from_u32(202),
-            F::from_u32(203),
-            F::from_u32(204),
-        ];
         unsafe {
             final_memory.write::<u8, { crate::arch::CONST_BLOCK_SIZE }>(
                 RV32_MEMORY_AS,
@@ -504,11 +451,6 @@ mod tests {
                 RV32_MEMORY_AS,
                 crate::arch::CONST_BLOCK_SIZE as u32,
                 touched_bytes_late,
-            );
-            final_memory.write::<F, { crate::arch::CONST_BLOCK_SIZE }>(
-                NATIVE_AS,
-                DIGEST_WIDTH as u32,
-                touched_native_values,
             );
         }
 
@@ -546,13 +488,6 @@ mod tests {
                 TimestampedValues {
                     timestamp: 3,
                     values: touched_bytes_late.map(F::from_u8),
-                },
-            ),
-            (
-                (NATIVE_AS, DIGEST_WIDTH as u32),
-                TimestampedValues {
-                    timestamp: 2,
-                    values: touched_native_values,
                 },
             ),
         ];
