@@ -353,16 +353,6 @@ where
             .when(not::<AB::Expr>(local.is_last_for_claim))
             .assert_eq(local.row_idx + local.lifted_height, next.row_idx);
 
-        builder
-            .when(and::<AB::Expr>(
-                and(local.is_last_for_claim, not(local.is_last)),
-                not::<AB::Expr>(next.commit_idx - local.commit_idx),
-            ))
-            .assert_eq(
-                local.row_idx + local.lifted_height,
-                AB::F::from_usize(1 << (self.n_stack + self.l_skip)),
-            );
-
         assert_array_eq(
             builder,
             ext_field_multiply(local.lambda_pow, local.eq_bits),
@@ -424,6 +414,26 @@ where
             },
             and(local.is_valid, local.is_last_for_claim),
         );
+
+        /*
+         * Constrain that each non-terminal is_last_for_claim wrap corresponds to the
+         * stacked column being filled, i.e. local.row_idx + local.lifted_height ==
+         * 2^{n_stack + l_skip}. The converse is implicit, from the interaction with
+         * EqBitsAir we must have row_idx < 2^{num_bits + log_lifted_height}, which
+         * is 2^{n_stack + l_skip}.
+         */
+        builder
+            .when(and(local.is_valid, not(local.is_last_for_claim)))
+            .assert_one(next.is_valid);
+        builder
+            .when(and::<AB::Expr>(
+                and(local.is_last_for_claim, not(local.is_last)),
+                not::<AB::Expr>(next.commit_idx - local.commit_idx),
+            ))
+            .assert_eq(
+                local.row_idx + local.lifted_height,
+                AB::F::from_usize(1 << (self.n_stack + self.l_skip)),
+            );
 
         /*
          * Constrain correctness of lookup values via interactions. Heights are received
