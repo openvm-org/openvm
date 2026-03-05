@@ -133,11 +133,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
             sbox_registers,
         ));
         inventory.add_periphery_chip(hasher_chip.clone());
-        let system = SystemChipInventoryGPU::new(
-            config,
-            range_checker,
-            hasher_chip,
-        );
+        let system = SystemChipInventoryGPU::new(config, range_checker, hasher_chip);
 
         let phantom_chip = PhantomChipGPU::new();
         inventory.add_executor_chip(phantom_chip);

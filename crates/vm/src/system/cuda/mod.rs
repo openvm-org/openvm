@@ -5,9 +5,7 @@ use memory::MemoryInventoryGPU;
 use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
     system::{
-        connector::VmConnectorChip,
-        memory::online::GuestMemory,
-        SystemChipComplex, SystemRecords,
+        connector::VmConnectorChip, memory::online::GuestMemory, SystemChipComplex, SystemRecords,
     },
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
