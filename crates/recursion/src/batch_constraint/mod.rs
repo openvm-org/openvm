@@ -46,9 +46,9 @@ use crate::{
     },
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
-        EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus, FractionFolderInputBus,
-        HyperdimBus, NLiftBus, PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus,
-        TranscriptBus, XiRandomnessBus,
+        EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
+        FractionFolderInputBus, HyperdimBus, NLiftBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
+        StackingModuleBus, TranscriptBus, XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerCpuTraceGenerator},
     system::{
@@ -93,6 +93,7 @@ pub struct BatchConstraintModule {
     sumcheck_bus: SumcheckClaimBus,
     expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     n_lift_bus: NLiftBus,
+    eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
 
     zero_n_bus: EqZeroNBus,
     eq_sharp_uni_bus: EqSharpUniBus,
@@ -141,6 +142,7 @@ impl BatchConstraintModule {
             eq_neg_result_bus: bus_inventory.eq_neg_result_bus,
             expression_claim_n_max_bus: bus_inventory.expression_claim_n_max_bus,
             n_lift_bus: bus_inventory.n_lift_bus,
+            eq_n_logup_n_max_bus: bus_inventory.eq_n_logup_n_max_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             univariate_sumcheck_input_bus: UnivariateSumcheckInputBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
@@ -349,6 +351,7 @@ impl AirModule for BatchConstraintModule {
             r_xi_bus: self.batch_constraint_conductor_bus,
             sel_hypercube_bus: self.sel_hypercube_bus,
             eq_n_outer_bus: self.eq_n_outer_bus,
+            eq_n_logup_n_max_bus: self.eq_n_logup_n_max_bus,
             l_skip,
         };
         let eq_3b_air = Eq3bAir {

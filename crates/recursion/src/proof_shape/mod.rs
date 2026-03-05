@@ -249,6 +249,7 @@ impl AirModule for ProofShapeModule {
             commitments_bus: self.bus_inventory.commitments_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             n_lift_bus: self.bus_inventory.n_lift_bus,
+            eq_n_logup_n_max_bus: self.bus_inventory.eq_n_logup_n_max_bus,
             cached_commit_bus: self.bus_inventory.cached_commit_bus,
             continuations_enabled: self.continuations_enabled,
         };

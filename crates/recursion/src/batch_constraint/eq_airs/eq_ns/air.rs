@@ -18,7 +18,10 @@ use crate::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, EqNOuterBus, EqNOuterMessage, EqZeroNBus, EqZeroNMessage,
     },
-    bus::{SelHypercubeBus, SelHypercubeBusMessage, XiRandomnessBus, XiRandomnessMessage},
+    bus::{
+        EqNsNLogupMaxBus, EqNsNLogupMaxMessage, SelHypercubeBus, SelHypercubeBusMessage,
+        XiRandomnessBus, XiRandomnessMessage,
+    },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
         base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
@@ -62,6 +65,7 @@ pub struct EqNsAir {
     pub r_xi_bus: BatchConstraintConductorBus,
     pub sel_hypercube_bus: SelHypercubeBus,
     pub eq_n_outer_bus: EqNOuterBus,
+    pub eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
 
     pub l_skip: usize,
 }
@@ -333,6 +337,15 @@ where
                 value: ext_field_multiply(next.eq_sharp, next.r_product),
             },
             next.is_valid * next.num_traces * AB::Expr::TWO, // two because num+denom per trace
+        );
+        self.eq_n_logup_n_max_bus.lookup_key(
+            builder,
+            local.proof_idx,
+            EqNsNLogupMaxMessage {
+                n_logup: local.n_logup,
+                n_max: local.n_max,
+            },
+            local.is_first,
         );
     }
 }
