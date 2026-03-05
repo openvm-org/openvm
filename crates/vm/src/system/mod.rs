@@ -211,9 +211,8 @@ impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
 impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
-    /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
-    /// executor for [PublicValuesExecutor] if continuations is disabled. It will always add an
-    /// executor for [PhantomChip], which handles all phantom sub-executors.
+    /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will always
+    /// add an executor for [PhantomChip], which handles all phantom sub-executors.
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
@@ -528,7 +527,7 @@ impl<SC: StarkProtocolConfig> SystemWithFixedTraceHeights for SystemChipInventor
 where
     Val<SC>: VmField,
 {
-    /// Warning: this does not set the override for the PublicValuesChip. The PublicValuesChip
+    /// Warning: this does not set the override for the program chip. The program chip
     /// override must be set via the RecordArena.
     fn override_trace_heights(&mut self, heights: &[u32]) {
         assert_eq!(
