@@ -3,8 +3,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-            RANGE_TUPLE_CHECKER_BUS,
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
         Arena, ExecutionBridge, PreflightExecutor,
     },
@@ -35,20 +35,29 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32MultAdapterRecord, DivRemCoreRecord, Rv32DivRemChipGpu},
+    openvm_circuit::arch::{
+        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::{DivRemWCoreAir, DivRemWFiller, Rv64DivRemWChip};
 use crate::{
     adapters::{
-        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor, Rv64MultWAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
+        Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
-    divrem::{DivRemCoreCols, DivRemCoreSpecialCase},
+    divrem::{run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase},
     test_utils::get_verification_error,
     Rv64DivRemWAir, Rv64DivRemWExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
+// the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
     (1 << RV64_CELL_BITS) as u32,
@@ -81,8 +90,7 @@ fn create_harness_fields(
             DivRemWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor =
-        Rv64DivRemWExecutor::new(Rv64MultWAdapterExecutor, DivRemWOpcode::CLASS_OFFSET);
+    let executor = Rv64DivRemWExecutor::new(Rv64MultWAdapterExecutor, DivRemWOpcode::CLASS_OFFSET);
     let chip = Rv64DivRemWChip::<F>::new(
         DivRemWFiller::new(
             Rv64MultWAdapterFiller::new(bitwise_chip.clone()),
@@ -142,16 +150,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     c: Option<[u32; RV64_WORD_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng));
+    let b = b.unwrap_or(generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
+        rng,
+    ));
     let c = c.unwrap_or(limb_sra::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
         generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng),
         rng.gen_range(0..(RV64_WORD_NUM_LIMBS - 1)),
     ));
 
-    // Write full 8-byte registers. Upper bytes are arbitrary (adapter ignores them for the core).
-    let rs1_ptr = openvm_circuit::arch::testing::memory::gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2_ptr = openvm_circuit::arch::testing::memory::gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rd_ptr = openvm_circuit::arch::testing::memory::gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    // Write full 8-byte registers. Upper bytes are arbitrary and remain adapter-constrained.
+    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let mut rs1_full: [F; RV64_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..256)));
@@ -195,6 +205,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 }
 
+// Test special cases in addition to random cases (i.e. zero divisor with b > 0,
+// zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
 fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
@@ -202,16 +214,60 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
 ) {
-    // zero divisor with b > 0
-    set_and_execute(tester, executor, arena, rng, opcode, Some([98, 188, 163, 127]), Some([0, 0, 0, 0]));
-    // zero divisor with b < 0
-    set_and_execute(tester, executor, arena, rng, opcode, Some([98, 188, 163, 229]), Some([0, 0, 0, 0]));
-    // r = 0 cases
-    set_and_execute(tester, executor, arena, rng, opcode, Some([0, 0, 0, 128]), Some([0, 1, 0, 0]));
-    set_and_execute(tester, executor, arena, rng, opcode, Some([0, 0, 0, 127]), Some([0, 1, 0, 0]));
-    set_and_execute(tester, executor, arena, rng, opcode, Some([0, 0, 0, 0]), Some([0, 0, 0, 0]));
-    // signed overflow
-    set_and_execute(tester, executor, arena, rng, opcode, Some([0, 0, 0, 128]), Some([255, 255, 255, 255]));
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([98, 188, 163, 127]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([98, 188, 163, 229]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([0, 1, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 127]),
+        Some([0, 1, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([255, 255, 255, 255]),
+    );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -273,6 +329,9 @@ struct DivRemWPrankValues {
     pub diff_val: Option<u32>,
     pub zero_divisor: Option<bool>,
     pub r_zero: Option<bool>,
+    pub rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    pub rs2: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    pub result_sign: Option<u32>,
 }
 
 fn run_negative_divremw_test(
@@ -299,7 +358,9 @@ fn run_negative_divremw_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut DivRemWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut DivRemWCoreCols<F> = core_row.borrow_mut();
 
         if let Some(q) = prank_vals.q {
             cols.q = q.map(F::from_canonical_u32);
@@ -325,6 +386,25 @@ fn run_negative_divremw_test(
         }
         if let Some(r_zero) = prank_vals.r_zero {
             cols.r_zero = F::from_bool(r_zero);
+        }
+        if let Some(rs1) = prank_vals.rs1 {
+            let rs1_word: [u32; RV64_WORD_NUM_LIMBS] =
+                rs1[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            let rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                rs1[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.b = rs1_word.map(F::from_canonical_u32);
+            adapter_cols.rs1_high = rs1_high.map(F::from_canonical_u32);
+        }
+        if let Some(rs2) = prank_vals.rs2 {
+            let rs2_word: [u32; RV64_WORD_NUM_LIMBS] =
+                rs2[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            let rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                rs2[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.c = rs2_word.map(F::from_canonical_u32);
+            adapter_cols.rs2_high = rs2_high.map(F::from_canonical_u32);
+        }
+        if let Some(result_sign) = prank_vals.result_sign {
+            adapter_cols.result_sign = F::from_canonical_u32(result_sign);
         }
 
         *trace = RowMajorMatrix::new(values, trace.width());
@@ -353,11 +433,121 @@ fn rv64_divremw_unsigned_wrong_q_negative_test() {
 }
 
 #[test]
+fn rv64_divremw_unsigned_wrong_r_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        r: Some([171, 3, 0, 0]),
+        r_prime: Some([171, 3, 0, 0]),
+        diff_val: Some(31),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, true);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_unsigned_high_mult_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 2, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        q: Some([128, 0, 0, 1]),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, true);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_unsigned_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        r: Some([255, 255, 255, 255]),
+        r_prime: Some([255, 255, 255, 255]),
+        diff_val: Some(255),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, true);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, true);
+}
+
+#[test]
 fn rv64_divremw_signed_wrong_q_negative_test() {
     let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
     let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
     let prank_vals = DivRemWPrankValues {
         q: Some([74, 61, 255, 255]),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVW, b, c, prank_vals, true);
+    run_negative_divremw_test(REMW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_signed_wrong_r_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        r: Some([212, 241, 255, 255]),
+        r_prime: Some([44, 14, 0, 0]),
+        diff_val: Some(20),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVW, b, c, prank_vals, true);
+    run_negative_divremw_test(REMW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_signed_high_mult_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 255];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 255];
+    let prank_vals = DivRemWPrankValues {
+        q: Some([1, 0, 0, 1]),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVW, b, c, prank_vals, true);
+    run_negative_divremw_test(REMW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_signed_r_wrong_sign_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        q: Some([31, 5, 0, 0]),
+        r: Some([242, 255, 255, 255]),
+        r_prime: Some([242, 255, 255, 255]),
+        diff_val: Some(192),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_signed_r_wrong_prime_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        q: Some([31, 5, 0, 0]),
+        r: Some([242, 255, 255, 255]),
+        r_prime: Some([14, 0, 0, 0]),
+        diff_val: Some(36),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_signed_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        r: Some([255, 255, 255, 255]),
+        r_prime: Some([1, 0, 0, 0]),
+        diff_val: Some(1),
         ..Default::default()
     };
     run_negative_divremw_test(DIVW, b, c, prank_vals, true);
@@ -380,6 +570,111 @@ fn rv64_divremw_false_zero_divisor_flag_negative_test() {
     run_negative_divremw_test(REMUW, b, c, prank_vals, false);
     run_negative_divremw_test(DIVW, b, c, prank_vals, false);
     run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_false_r_zero_flag_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        q: Some([29, 5, 0, 0]),
+        r: Some([86, 0, 0, 0]),
+        r_prime: Some([86, 0, 0, 0]),
+        diff_val: Some(36),
+        r_zero: Some(true),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, false);
+    run_negative_divremw_test(DIVW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_unset_zero_divisor_flag_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        zero_divisor: Some(false),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, false);
+    run_negative_divremw_test(DIVW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_wrong_r_zero_flag_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        zero_divisor: Some(false),
+        r_zero: Some(true),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, false);
+    run_negative_divremw_test(DIVW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_unset_r_zero_flag_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 1, 0];
+    let prank_vals = DivRemWPrankValues {
+        r_zero: Some(false),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMUW, b, c, prank_vals, false);
+    run_negative_divremw_test(DIVW, b, c, prank_vals, false);
+    run_negative_divremw_test(REMW, b, c, prank_vals, false);
+}
+
+#[test]
+fn rv64_divremw_adapter_wrong_rs1_upper_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [7, 0, 0, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [2, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        rs1: Some([7, 0, 0, 0, 1, 2, 3, 4]),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_adapter_wrong_rs2_upper_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [7, 0, 0, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [2, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        rs2: Some([2, 0, 0, 0, 5, 6, 7, 8]),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_wrong_upper_sign_extension_negative_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [7, 0, 0, 0];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [2, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        result_sign: Some(1),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVUW, b, c, prank_vals, true);
+}
+
+#[test]
+fn rv64_divremw_wrong_upper_sign_extension_negative_to_zero_test() {
+    let b: [u32; RV64_WORD_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [1, 0, 0, 0];
+    let prank_vals = DivRemWPrankValues {
+        result_sign: Some(0),
+        ..Default::default()
+    };
+    run_negative_divremw_test(DIVW, b, c, prank_vals, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -408,6 +703,24 @@ fn run_divremw_unsigned_sanity_test() {
 }
 
 #[test]
+fn run_divremw_unsigned_zero_divisor_test() {
+    let x: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
+    let y: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let q: [u32; RV64_WORD_NUM_LIMBS] = [255, 255, 255, 255];
+
+    let (res_q, res_r, x_sign, y_sign, q_sign, case) =
+        crate::divrem::run_divrem::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+    for i in 0..RV64_WORD_NUM_LIMBS {
+        assert_eq!(q[i], res_q[i]);
+        assert_eq!(x[i], res_r[i]);
+    }
+    assert!(!x_sign);
+    assert!(!y_sign);
+    assert!(!q_sign);
+    assert_eq!(case, DivRemCoreSpecialCase::ZeroDivisor);
+}
+
+#[test]
 fn run_divremw_signed_sanity_test() {
     let x: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
     let y: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 0, 0];
@@ -427,6 +740,24 @@ fn run_divremw_signed_sanity_test() {
 }
 
 #[test]
+fn run_divremw_signed_zero_divisor_test() {
+    let x: [u32; RV64_WORD_NUM_LIMBS] = [98, 188, 163, 229];
+    let y: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+    let q: [u32; RV64_WORD_NUM_LIMBS] = [255, 255, 255, 255];
+
+    let (res_q, res_r, x_sign, y_sign, q_sign, case) =
+        crate::divrem::run_divrem::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_WORD_NUM_LIMBS {
+        assert_eq!(q[i], res_q[i]);
+        assert_eq!(x[i], res_r[i]);
+    }
+    assert!(x_sign);
+    assert!(!y_sign);
+    assert!(q_sign);
+    assert_eq!(case, DivRemCoreSpecialCase::ZeroDivisor);
+}
+
+#[test]
 fn run_divremw_signed_overflow_test() {
     let x: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 128];
     let y: [u32; RV64_WORD_NUM_LIMBS] = [255, 255, 255, 255];
@@ -442,4 +773,163 @@ fn run_divremw_signed_overflow_test() {
     assert!(y_sign);
     assert!(!q_sign);
     assert_eq!(case, DivRemCoreSpecialCase::SignedOverflow);
+}
+
+#[test]
+fn run_divremw_signed_min_dividend_test() {
+    let x: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 128];
+    let y: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 255, 255];
+    let q: [u32; RV64_WORD_NUM_LIMBS] = [236, 147, 0, 0];
+    let r: [u32; RV64_WORD_NUM_LIMBS] = [156, 149, 255, 255];
+
+    let (res_q, res_r, x_sign, y_sign, q_sign, case) =
+        crate::divrem::run_divrem::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_WORD_NUM_LIMBS {
+        assert_eq!(q[i], res_q[i]);
+        assert_eq!(r[i], res_r[i]);
+    }
+    assert!(x_sign);
+    assert!(y_sign);
+    assert!(!q_sign);
+    assert_eq!(case, DivRemCoreSpecialCase::None);
+}
+
+#[test]
+fn run_divremw_zero_quotient_test() {
+    let x: [u32; RV64_WORD_NUM_LIMBS] = [255, 255, 255, 255];
+    let y: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 1];
+    let q: [u32; RV64_WORD_NUM_LIMBS] = [0, 0, 0, 0];
+
+    let (res_q, res_r, x_sign, y_sign, q_sign, case) =
+        crate::divrem::run_divrem::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_WORD_NUM_LIMBS {
+        assert_eq!(q[i], res_q[i]);
+        assert_eq!(x[i], res_r[i]);
+    }
+    assert!(x_sign);
+    assert!(!y_sign);
+    assert!(!q_sign);
+    assert_eq!(case, DivRemCoreSpecialCase::None);
+}
+
+#[test]
+fn run_sltu_diff_idx_test() {
+    let x: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 254, 67];
+    let y: [u32; RV64_WORD_NUM_LIMBS] = [123, 34, 255, 67];
+    assert_eq!(run_sltu_diff_idx(&x, &y, true), 2);
+    assert_eq!(run_sltu_diff_idx(&y, &x, false), 2);
+    assert_eq!(run_sltu_diff_idx(&x, &x, false), RV64_WORD_NUM_LIMBS);
+}
+
+#[test]
+fn run_mul_carries_signed_sanity_test() {
+    let d: [u32; RV64_WORD_NUM_LIMBS] = [197, 85, 150, 32];
+    let q: [u32; RV64_WORD_NUM_LIMBS] = [51, 109, 78, 142];
+    let r: [u32; RV64_WORD_NUM_LIMBS] = [200, 8, 68, 255];
+    let c = [40, 101, 126, 206, 304, 376, 450, 464];
+    let carry = run_mul_carries::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(true, &d, &q, &r, true);
+    for (expected_c, actual_c) in c.iter().zip(carry.iter()) {
+        assert_eq!(*expected_c, *actual_c)
+    }
+}
+
+#[test]
+fn run_mul_unsigned_sanity_test() {
+    let d: [u32; RV64_WORD_NUM_LIMBS] = [197, 85, 150, 32];
+    let q: [u32; RV64_WORD_NUM_LIMBS] = [51, 109, 78, 142];
+    let r: [u32; RV64_WORD_NUM_LIMBS] = [200, 8, 68, 255];
+    let c = [40, 101, 126, 206, 107, 93, 18, 0];
+    let carry = run_mul_carries::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(false, &d, &q, &r, true);
+    for (expected_c, actual_c) in c.iter().zip(carry.iter()) {
+        assert_eq!(*expected_c, *actual_c)
+    }
+}
+
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let dummy_range_tuple_chip =
+        SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        dummy_range_tuple_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32DivRemChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.range_tuple_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(DIV, 100)]
+#[test_case(DIVU, 100)]
+#[test_case(REM, 100)]
+#[test_case(REMU, 100)]
+fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default()
+        .with_bitwise_op_lookup(default_bitwise_lookup_bus())
+        .with_range_tuple_checker(RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            TUPLE_CHECKER_SIZES,
+        ));
+
+    let mut harness = create_cuda_harness(&tester);
+
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
+    }
+    set_and_execute_special_cases(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+    );
+
+    type Record<'a> = (
+        &'a mut Rv32MultAdapterRecord,
+        &'a mut DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+    );
+
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }

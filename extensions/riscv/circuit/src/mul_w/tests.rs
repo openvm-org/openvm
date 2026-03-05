@@ -1,5 +1,13 @@
+#[cfg(feature = "aot")]
+use std::collections::HashMap;
 use std::{array, borrow::BorrowMut, sync::Arc};
 
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{VmExecutor, VmState};
+#[cfg(feature = "aot")]
+use openvm_circuit::{
+    arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+};
 use openvm_circuit::{
     arch::{
         testing::{
@@ -21,7 +29,20 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::MulWOpcode::{self, MULW};
+#[cfg(feature = "aot")]
+use openvm_instructions::{
+    exe::VmExe,
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    SystemOpcode,
+};
+#[cfg(feature = "aot")]
+use openvm_riscv_transpiler::BaseAluOpcode::ADD;
+use openvm_riscv_transpiler::{
+    MulOpcode,
+    MulWOpcode::{self, MULW},
+};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::FieldAlgebra,
@@ -33,26 +54,37 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32MultAdapterRecord, MultiplicationCoreRecord, Rv32MultiplicationChipGpu},
+    openvm_circuit::arch::{
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::{MulWCoreAir, MulWFiller, Rv64MulWChip};
+#[cfg(feature = "aot")]
+use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor, Rv64MultWAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
+        Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
     test_utils::{get_verification_error, rv64_rand_write_register_or_imm},
     Rv64MulWAir, Rv64MulWExecutor,
 };
 
-type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
+// the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
     (1u32 << RV64_CELL_BITS),
     (MAX_NUM_LIMBS * (1u32 << RV64_CELL_BITS)),
 ];
 
+type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChip<F>>;
 type MulWCoreCols<T> = MultiplicationCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
@@ -136,14 +168,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let c = c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
 
-    let (mut instruction, rd) = rv64_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        None,
-        MULW.global_opcode().as_usize(),
-        rng,
-    );
+    let (mut instruction, rd) =
+        rv64_rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
     instruction.e = F::ZERO;
     tester.execute(executor, arena, &instruction);
 
@@ -203,7 +229,10 @@ fn run_negative_mulw_test(
     prank_a: [u32; RV64_WORD_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prank_is_valid: bool,
+    prank_result_sign: Option<u32>,
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -222,8 +251,30 @@ fn run_negative_mulw_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut MulWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut MulWCoreCols<F> = core_row.borrow_mut();
+
         cols.a = prank_a.map(F::from_canonical_u32);
+        if let Some(prank_b) = prank_b {
+            let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_b_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.b = prank_b_word.map(F::from_canonical_u32);
+            adapter_cols.rs1_high = prank_b_high.map(F::from_canonical_u32);
+        }
+        if let Some(prank_c) = prank_c {
+            let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_c_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.c = prank_c_word.map(F::from_canonical_u32);
+            adapter_cols.rs2_high = prank_c_high.map(F::from_canonical_u32);
+        }
+        if let Some(prank_result_sign) = prank_result_sign {
+            adapter_cols.result_sign = F::from_canonical_u32(prank_result_sign);
+        }
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -244,7 +295,10 @@ fn rv64_mulw_wrong_negative_test() {
         [63, 247, 125, 234],
         [51, 109, 78, 142, 0, 0, 0, 0],
         [197, 85, 150, 32, 0, 0, 0, 0],
+        None,
+        None,
         true,
+        None,
         true,
     );
 }
@@ -255,7 +309,68 @@ fn rv64_mulw_is_valid_false_negative_test() {
         [63, 247, 125, 234],
         [51, 109, 78, 142, 0, 0, 0, 0],
         [197, 85, 150, 32, 0, 0, 0, 0],
+        None,
+        None,
         false,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_adapter_wrong_rs1_upper_negative_test() {
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 13, 14, 15, 16],
+        [2, 0, 0, 0, 21, 22, 23, 24],
+        Some([1, 0, 0, 0, 99, 98, 97, 96]),
+        None,
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_adapter_wrong_rs2_upper_negative_test() {
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 13, 14, 15, 16],
+        [2, 0, 0, 0, 21, 22, 23, 24],
+        None,
+        Some([2, 0, 0, 0, 95, 94, 93, 92]),
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_wrong_upper_sign_extension_negative_test() {
+    // 1 * 2 = 2 (positive), so result_sign must be 0.
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        Some(1),
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_wrong_upper_sign_extension_negative_to_zero_test() {
+    // 0x80000000 * 1 = 0x80000000 (negative), so result_sign must be 1.
+    run_negative_mulw_test(
+        [0, 0, 0, 128],
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        Some(0),
         true,
     );
 }
@@ -270,9 +385,9 @@ fn rv64_mulw_is_valid_false_negative_test() {
 fn run_mulw_sanity_test() {
     let x: [u8; RV64_WORD_NUM_LIMBS] = [197, 85, 150, 32];
     let y: [u8; RV64_WORD_NUM_LIMBS] = [51, 109, 78, 142];
-    let (result, carry) = crate::mul::run_mul::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(&x, &y);
     let z: [u8; RV64_WORD_NUM_LIMBS] = [63, 247, 125, 232];
     let c: [u32; RV64_WORD_NUM_LIMBS] = [39, 100, 126, 205];
+    let (result, carry) = crate::mul::run_mul::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(&x, &y);
     for i in 0..RV64_WORD_NUM_LIMBS {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
@@ -289,7 +404,260 @@ fn run_mulw_sign_extension_test() {
     let result = run_mulw(&[1, 0, 0, 0], &[1, 0, 0, 0]);
     assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
 
-    // MULW of 0xFFFFFFFF * 0xFFFFFFFF = 1 (wrapping), sign-extended to 0x00000000_00000001
+    // MULW of 0xFFFFFFFF * 0xFFFFFFFF = 1, sign-extended to 0x00000000_00000001
     let result = run_mulw(&[255, 255, 255, 255], &[255, 255, 255, 255]);
     assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
+}
+#[cfg(feature = "aot")]
+fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program);
+    let config = Rv64ImConfig::default();
+    let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
+
+    let interpreter = executor
+        .interpreter_instance(&exe)
+        .expect("interpreter build must succeed");
+    let interp_state = interpreter
+        .execute(vec![], None)
+        .expect("interpreter execution must succeed");
+
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_state = aot_instance
+        .execute(vec![], None)
+        .expect("AOT execution must succeed");
+
+    assert_eq!(interp_state.pc(), aot_state.pc());
+
+    let hasher = vm_poseidon2_hasher::<BabyBear>();
+    let tree1 = MerkleTree::from_memory(&interp_state.memory.memory, &memory_dimensions, &hasher);
+    let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
+    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+
+    (interp_state, aot_state)
+}
+
+#[cfg(feature = "aot")]
+fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    u32::from_le_bytes(bytes)
+}
+
+#[cfg(feature = "aot")]
+fn add_immediate(rd: usize, imm: u32) -> Instruction<F> {
+    Instruction::from_usize(
+        ADD.global_opcode(),
+        [
+            rd,
+            0,
+            imm as usize,
+            RV32_REGISTER_AS as usize,
+            RV32_IMM_AS as usize,
+        ],
+    )
+}
+
+#[cfg(feature = "aot")]
+fn mul_register(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        MulOpcode::MUL.global_opcode(),
+        [
+            rd,
+            rs1,
+            rs2,
+            RV32_REGISTER_AS as usize,
+            RV32_REGISTER_AS as usize,
+        ],
+    )
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_basic() {
+    let instructions = vec![
+        add_immediate(4, 7),
+        add_immediate(8, 11),
+        mul_register(12, 4, 8),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    let interp_x3 = read_register(&interp_state, 12);
+    let aot_x3 = read_register(&aot_state, 12);
+    assert_eq!(interp_x3, 77);
+    assert_eq!(interp_x3, aot_x3);
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_upper_xmm() {
+    let instructions = vec![
+        add_immediate(4, 5),
+        add_immediate(12, 9),
+        mul_register(4, 4, 12),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 45);
+    assert_eq!(interp_x1, aot_x1);
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_randomized_pairs() {
+    let offsets: [usize; 12] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48];
+    let mut rng = create_seeded_rng();
+    let mut instructions = Vec::new();
+    let mut expected = HashMap::new();
+
+    for &offset in &offsets {
+        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
+        instructions.push(add_immediate(offset, imm_field));
+        expected.insert(offset, value_i32 as u32);
+    }
+
+    for (i, &rd_offset) in offsets.iter().enumerate() {
+        let rs1_offset = offsets[i];
+        let rs2_offset = offsets[(i + 3) % offsets.len()];
+        instructions.push(mul_register(rd_offset, rs1_offset, rs2_offset));
+
+        let rs1_val = *expected.get(&rs1_offset).unwrap();
+        let rs2_val = *expected.get(&rs2_offset).unwrap();
+        expected.insert(rd_offset, rs1_val.wrapping_mul(rs2_val));
+    }
+
+    instructions.push(Instruction::from_isize(
+        SystemOpcode::TERMINATE.global_opcode(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    for (offset, expected_val) in expected {
+        let interp_val = read_register(&interp_state, offset);
+        let aot_val = read_register(&aot_state, offset);
+        assert_eq!(
+            interp_val, expected_val,
+            "unexpected value at offset {offset}"
+        );
+        assert_eq!(interp_val, aot_val, "AOT mismatch at offset {offset}");
+    }
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_chained_dependencies() {
+    let instructions = vec![
+        add_immediate(4, 3),
+        add_immediate(8, 5),
+        mul_register(12, 4, 8),
+        mul_register(4, 12, 8),
+        mul_register(8, 4, 12),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    let interp_x3 = read_register(&interp_state, 12);
+    let aot_x3 = read_register(&aot_state, 12);
+    assert_eq!(interp_x3, 15);
+    assert_eq!(interp_x3, aot_x3);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 75);
+    assert_eq!(interp_x1, aot_x1);
+
+    let interp_x2 = read_register(&interp_state, 8);
+    let aot_x2 = read_register(&aot_state, 8);
+    assert_eq!(interp_x2, 1125);
+    assert_eq!(interp_x2, aot_x2);
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32MultiplicationExecutor,
+    Rv32MultiplicationAir,
+    Rv32MultiplicationChipGpu,
+    Rv32MultiplicationChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+    let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_range_tuple_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32MultiplicationChipGpu::new(
+        tester.range_checker(),
+        tester.range_tuple_checker(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_rand_mul_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default().with_range_tuple_checker(
+        RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES),
+    );
+
+    let mut harness = create_cuda_harness(&tester);
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            MulOpcode::MUL,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv32MultAdapterRecord,
+        &'a mut MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
