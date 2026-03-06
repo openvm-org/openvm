@@ -539,7 +539,6 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usiz
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
