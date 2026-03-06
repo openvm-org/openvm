@@ -214,6 +214,10 @@ where
         /*
          * Constrain transcript operations and send the final tidx to SumcheckRoundsAir.
          */
+        let mut when_same_proof = builder.when(and(local.is_valid, not(local.is_last)));
+        when_same_proof.assert_one(next.is_valid);
+        when_same_proof.assert_eq(local.tidx + AB::Expr::from_usize(D_EF), next.tidx);
+
         self.stacking_tidx_bus.receive(
             builder,
             local.proof_idx,
