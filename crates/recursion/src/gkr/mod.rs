@@ -273,6 +273,7 @@ impl AirModule for GkrModule {
             layer_output_bus: self.layer_output_bus,
             xi_sampler_bus: self.xi_sampler_bus,
             constraints_folding_input_bus: self.bus_inventory.constraints_folding_input_bus,
+            interactions_folding_input_bus: self.bus_inventory.interactions_folding_input_bus,
         };
 
         let gkr_layer_air = GkrLayerAir {

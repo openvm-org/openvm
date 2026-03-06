@@ -498,7 +498,7 @@ where
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: air_idx.clone(),
             },
-            local.is_present * (num_dag_nodes.clone() + AB::Expr::ONE),
+            local.is_present * (num_dag_nodes.clone() + AB::Expr::TWO),
         );
 
         self.air_shape_bus.add_key_with_lookups(

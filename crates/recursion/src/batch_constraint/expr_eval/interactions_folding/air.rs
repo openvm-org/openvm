@@ -18,7 +18,10 @@ use crate::{
         Eq3bBus, Eq3bMessage, ExpressionClaimBus, ExpressionClaimMessage, InteractionsFoldingBus,
         InteractionsFoldingMessage,
     },
-    bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
+    bus::{
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, InteractionsFoldingInputBus,
+        InteractionsFoldingInputMessage, TranscriptBus,
+    },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{assert_zeros, ext_field_add, ext_field_multiply},
 };
@@ -63,6 +66,7 @@ pub struct InteractionsFoldingCols<T> {
 
 pub struct InteractionsFoldingAir {
     pub interaction_bus: InteractionsFoldingBus,
+    pub interactions_folding_input_bus: InteractionsFoldingInputBus,
     pub air_shape_bus: AirShapeBus,
     pub transcript_bus: TranscriptBus,
     pub expression_claim_bus: ExpressionClaimBus,
@@ -160,6 +164,10 @@ where
             .assert_one(next.idx_in_message - local.idx_in_message + local.is_first_in_message);
 
         // // =========================== general consistency ================================
+        // air_idx is the same within an air
+        builder
+            .when(is_same_air.clone())
+            .assert_eq(local.air_idx, next.air_idx);
         // The row describes an AIR without interactions iff it's first and last in the message,
         // unless the row is invalid
         builder.when(local.is_valid).assert_eq(
@@ -357,6 +365,24 @@ where
                 value: (local.interaction_idx + AB::Expr::ONE) * local.has_interactions,
             },
             next_is_first_in_air_or_invalid * local.is_valid,
+        );
+        self.air_shape_bus.lookup_key(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sort_idx.into(),
+                property_idx: AirShapeProperty::AirId.to_field(),
+                value: local.air_idx.into(),
+            },
+            local.is_first_in_air,
+        );
+        self.interactions_folding_input_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingInputMessage {
+                tidx: local.beta_tidx,
+            },
+            local.is_first,
         );
 
         self.eq_3b_bus.receive(
