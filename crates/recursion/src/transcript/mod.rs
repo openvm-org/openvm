@@ -199,7 +199,6 @@ impl TranscriptModule {
                         break;
                     }
                 }
-                cols.permuted = F::from_bool(permuted);
 
                 prev_poseidon_state = cols.prev_state;
                 if permuted {

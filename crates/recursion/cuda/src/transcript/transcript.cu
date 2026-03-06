@@ -17,7 +17,6 @@ template <typename T> struct TranscriptCols {
     T is_sample;
     T mask[CHUNK];
 
-    T permuted;
     T prev_state[WIDTH];
     T post_state[WIDTH];
 };
@@ -69,7 +68,6 @@ __global__ void transcript_air_tracegen_kernel(
     COL_WRITE_VALUE(row, TranscriptCols, is_proof_start, row_idx == 0);
     COL_WRITE_VALUE(row, TranscriptCols, is_sample, is_sample);
     COL_WRITE_VALUE(row, TranscriptCols, tidx, tidx);
-    COL_WRITE_VALUE(row, TranscriptCols, permuted, permuted);
 
 #pragma unroll
     for (uint8_t i = 0; i < CHUNK; i++) {
