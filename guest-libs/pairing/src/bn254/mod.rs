@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use core::ops::{Add, Neg};
+use core::ops::Add;
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
@@ -47,12 +47,14 @@ impl CyclicGroup for G1Affine {
     const GENERATOR: Self = G1Affine {
         x: Bn254Fp::from_const_u8(1),
         y: Bn254Fp::from_const_u8(2),
+        z: Bn254Fp::from_const_u8(1),
     };
     const NEG_GENERATOR: Self = G1Affine {
         x: Bn254Fp::from_const_u8(1),
         y: Bn254Fp::from_const_bytes(hex!(
             "45FD7CD8168C203C8DCA7168916A81975D588181B64550B829A031E1724E6430"
         )),
+        z: Bn254Fp::from_const_u8(1),
     };
 }
 
@@ -62,12 +64,11 @@ mod g2 {
     use hex_literal::hex;
     use openvm_algebra_guest::Field;
     use openvm_ecc_guest::{
-        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
+        impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group,
     };
 
     use super::{Fp, Fp2};
 
-    const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
     // 3 / (9 + u)
     // validated by a test below
     const B: Fp2 = Fp2::new(
@@ -78,7 +79,7 @@ mod g2 {
             "d215c38506bda2e452182de584a04fa7f4fdd8eeadaf2ccdd4fef03ab0139700"
         )),
     );
-    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_proj!(G2Affine, Fp2, B);
     impl_sw_group_ops!(G2Affine, Fp2);
 
     #[test]
