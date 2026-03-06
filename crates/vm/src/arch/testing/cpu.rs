@@ -319,16 +319,6 @@ impl VmChipTestBuilder<BabyBear> {
 }
 
 impl<F: VmField> VmChipTestBuilder<F> {
-    pub fn default_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config)
-    }
-
-    pub fn default_native() -> Self {
-        Self::volatile(MemoryConfig::aggregation())
-    }
-
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
         init_block_size: usize,
@@ -342,37 +332,17 @@ impl<F: VmField> VmChipTestBuilder<F> {
         (range_checker, memory)
     }
 
-    pub fn persistent(mem_config: MemoryConfig) -> Self {
+    pub fn from_config(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
-        let memory_controller = MemoryController::with_persistent_memory(
+        let memory_controller = MemoryController::new(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
             PermutationCheckBus::new(MEMORY_MERKLE_BUS),
             PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             hasher_chip,
-        );
-        Self {
-            memory: MemoryTester::new(memory_controller, memory),
-            streams: Default::default(),
-            rng: StdRng::seed_from_u64(0),
-            execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            internal_rng: StdRng::seed_from_u64(0),
-            default_register: 0,
-            default_pointer: 0,
-        }
-    }
-
-    pub fn volatile(mem_config: MemoryConfig) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
-        let memory_controller = MemoryController::with_volatile_memory(
-            MemoryBus::new(MEMORY_BUS),
-            mem_config,
-            range_checker,
         );
         Self {
             memory: MemoryTester::new(memory_controller, memory),
@@ -393,7 +363,8 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config)
+        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+        Self::from_config(mem_config)
     }
 }
 
@@ -466,22 +437,18 @@ where
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
             let mut memory_controller = memory_tester.controller;
-            let is_persistent = memory_controller.continuation_enabled();
             let mut memory = memory_tester.memory;
-            let touched_memory = memory.finalize::<Val<SC>>(is_persistent);
+            let touched_memory = memory.finalize::<Val<SC>>();
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
             for mem_chip in memory_tester.chip_for_block.into_values() {
                 self = self.load_periphery((mem_chip.air, mem_chip));
             }
-            let mem_inventory = MemoryAirInventory::new::<SC>(
+            let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
-                range_checker.bus(),
-                is_persistent.then_some((
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                )),
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             );
             let ctxs = memory_controller.generate_proving_ctx(touched_memory);
             for (air, ctx) in

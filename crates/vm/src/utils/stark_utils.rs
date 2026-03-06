@@ -16,8 +16,8 @@ use crate::arch::VmState;
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
+        ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
@@ -83,7 +83,7 @@ where
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let params = SystemParams::new_for_testing(20); // max log_trace_height=20
+    let params = SystemParams::new_for_testing(22); // max log_trace_height=22
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         params,
@@ -259,8 +259,8 @@ where
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
-    match vm.verify(&vk, &proofs) {
-        Ok(()) => {}
+    match verify_segments(&vm.engine, &vk, &proofs) {
+        Ok(_) => {}
         Err(err) => {
             panic!("segment proofs should verify: {err}");
         }
@@ -280,7 +280,7 @@ where
 /// Note: Metered execution stores un-padded counts, so we pad them for comparison.
 /// The proving context trace height (realized) is already padded.
 /// For most AIRs, estimated_padded should exactly equal realized.
-/// For MemoryMerkleAir, Poseidon2PeripheryAir, and PersistentBoundaryAir, it is expected that
+/// For MemoryMerkleAir, Poseidon2PeripheryAir, and MemoryBoundaryAir, it is expected that
 /// estimated >> realized.
 fn validate_metered_estimates<E, VB>(
     vm: &VirtualMachine<E, VB>,
@@ -342,8 +342,7 @@ fn validate_metered_estimates<E, VB>(
         // For some airs, the overestimates are expected
         if air_name.contains("MemoryMerkleAir")
             || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("VolatileBoundaryAir")
-            || air_name.contains("PersistentBoundaryAir")
+            || air_name.contains("MemoryBoundaryAir")
             || air_name.contains("NativeAdapterAir")
         {
             continue;

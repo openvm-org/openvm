@@ -40,30 +40,7 @@ pub struct DeviceMemoryTester {
 }
 
 impl DeviceMemoryTester {
-    pub fn volatile(
-        memory: TracingMemory,
-        mem_bus: MemoryBus,
-        mem_config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
-        let mut chip_for_block = HashMap::new();
-        for log_block_size in 0..6 {
-            let block_size = 1 << log_block_size;
-            chip_for_block.insert(block_size, FixedSizeMemoryTester::new(mem_bus, block_size));
-        }
-        let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
-        Self {
-            chip_for_block,
-            memory,
-            inventory: MemoryInventoryGPU::volatile(mem_config.clone(), range_checker),
-            hasher_chip: None,
-            config: mem_config,
-            mem_bus,
-            range_bus,
-        }
-    }
-
-    pub fn persistent(
+    pub fn new(
         memory: TracingMemory,
         mem_bus: MemoryBus,
         mem_config: MemoryConfig,
@@ -81,7 +58,7 @@ impl DeviceMemoryTester {
             sbox_regs,
         ));
         let mut inventory =
-            MemoryInventoryGPU::persistent(mem_config.clone(), poseidon2_periphery.clone());
+            MemoryInventoryGPU::new(mem_config.clone(), poseidon2_periphery.clone());
         inventory.set_initial_memory(&memory.data.memory);
         Self {
             chip_for_block,

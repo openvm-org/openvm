@@ -1,22 +1,20 @@
 # Memory overview
 
 - [Basic performed interactions](#basic-performed-interactions)
-- [Boundary chips](#boundary-chips)
+- [Memory boundary chip](#memory-boundary-chip)
 - [Invariants](#invariants)
 - [Soundness proof](#soundness-proof)
   - [Time goes forward](#time-goes-forward)
   - [Memory consistency](#memory-consistency)
-- [Volatile and persistent memory](#volatile-and-persistent-memory)
-  - [Volatile Memory: `VolatileBoundaryChip`](#volatile-memory-volatileboundarychip)
-  - [Persistent Memory: `PersistentBoundaryChip`](#persistent-memory-persistentboundarychip)
+- [The `MemoryBoundaryChip`](#the-memoryboundarychip)
 - [Implementation details](#implementation-details)
 - [What to take into account when adding a new chip](#what-to-take-into-account-when-adding-a-new-chip)
 
 ---
 
-Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `pointer`), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{29}$. We assume that memory is initialized at timestamp $0$. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
+Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `pointer`), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{\text{timestamp\_max\_bits}}$ (in the current implementation, `timestamp_max_bits <= 29`). We assume that memory is initialized at timestamp $0$. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
 
-Our memory is split into **online** and **offline** memory. Online memory provides actual data and generates access records during program execution, while offline memory uses those records to verify memory consistency. Below we describe how offline memory works. First, we look at the interactions on the memory bus and why they are sound in our ecosystem. Next, we discuss two different memory models, namely, **volatile** and **persistent** memory.
+Our memory is split into **online** and **offline** memory. Online memory provides actual data and generates access records during program execution, while offline memory uses those records to verify memory consistency. Below we describe how offline memory works. First, we look at the interactions on the memory bus and why they are sound in our ecosystem. Next, we discuss how the boundary chip commits to both the initial and final memory state.
 
 We use the offline memory checking argument of [BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
 
@@ -68,19 +66,13 @@ impl<T: PrimeCharacteristicRing, V: Copy + Into<T>, const N: usize> MemoryWriteO
 
 Every instruction executor does this via the **memory controller** API.
 
-## Boundary chips
+## Memory boundary chip
 
-However, the only unaccounted for interactions are the initial birth of a segment and the final memory state. We use **boundary chips** to handle them.
+The only unaccounted for interactions are the initial birth of a segment and the final memory state. We use the **memory boundary chip** (`MemoryBoundaryChip`) to handle them.
 
-In **volatile** memory, we use `VolatileBoundaryChip` to handle the initial memory state. It does the following:
-- The chip assumes that all initial memory is filled with zeroes.
-- However, **initial memory is unconstrained** -- so the result of such program's execution is going to be something along the lines of "there is some way to fill the initial memory that this program finishes correctly".
+The `MemoryBoundaryChip` commits to both the initial and final memory state. The initial memory is provided as part of the program, and the chip produces commitments (Merkle roots) for both the initial and final states. These commitments become part of the public values used later in proof aggregation (see [Continuations](/specs/architecture/continuations)).
 
-In **persistent** memory, we use `PersistentBoundaryChip` to handle the final memory state. It does the following:
-- There is some initial memory specified in the program.
-- The chip _commits_ to the initial memory -- see below.
-
-Both boundary chips perform, for every subsegment ever existed in our nice set, a receive interaction on birth and a send interaction on death.
+The memory boundary chip performs, for every touched memory chunk, a send interaction on birth and a receive interaction on death.
 
 ## Invariants
 
@@ -91,9 +83,7 @@ The following invariants **must** be maintained by the memory architecture:
 
 Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
 
-Invariant 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the boundary chips:
-- VolatileBoundaryChip constrains the range checks outright.
-- PersistentBoundaryChip populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. PersistentBoundaryChip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
+Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `MemoryBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
 
 :::warning
 At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
@@ -106,87 +96,47 @@ We note an observation that may be useful in soundness analysis of instruction e
 Assume that the MEMORY_BUS interactions and the constraints mentioned above are satisfied.
 
 ### Time goes forward
-  
+
 In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](/specs/architecture/circuit-architecture#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Memory consistency
 
 To show that memory is consistent, consider any interactions with segments containing some `address`. They can be done by:
 
-- Boundary chip: one send with the initial timestamp and some value at this address, one receive with the final timestamp and some value at this address. The fact that there is only one send/receive is guaranteed by the fact that we ensure in the boundary chip that all the addresses are distinct.
-- Access adapter: each row corresponds to a merge or a split, and therefore for each row, if its split/merged segment contains `address`, we have exactly one send and exactly one receive corresponding to this row. They have the same value at this address, and the send timestamp is at least the receive timestamp -- and strictly greater unless these operations are within one memory access.
+- Memory boundary chip: one send with the initial timestamp and some value at this address, one receive with the final timestamp and some value at this address. The fact that there is only one send/receive is guaranteed by the fact that we ensure in the memory boundary chip that all the addresses are distinct.
 - Instruction executors via memory bridge: one receive with the previous timestamp and some value at this address, one send with the new timestamp and some value at this address. We also have `prev_timestamp < timestamp`.
 
-To prove memory consistency, we need to show that, if we only consider basic interactions and boundary interactions, then accessing an address always gives us something that has the last value observed at this address (in a broad sense: for example, this includes "writing to `[3, 5)` generates a record where previous data at `4` is the last value written to or read from `4`, be it from `[4, 5)`, `[2, 10)` or any other segment containing `4`"). In other words, for every receive interaction with timestamp $t$ and value $v$ corresponding to this address, the value $v$ is the value from any _basic_ (not split/merge) send interaction with the greatest existing timestamp $t'$ less than $t$.
+To prove memory consistency, we need to show that accessing an address always gives us the last value observed at that address. In other words, for every receive interaction with timestamp $t$ and value $v$ corresponding to this address, the value $v$ is the value from the send interaction with the greatest timestamp $t'$ less than $t$.
 
-For every row that gets handled by a memory bridge, draw a directed edge from the previous timestamp to the new timestamp with capacity $1$. We know that in the obtained network, where the source and the sink are defined by the boundary interactions, all edges go left to right, and the maximal flow is $1$ (because there is only one edge from the source, therefore the minimal cut is $1$). Since all edges go left to right, there are no circulation in this network. Hence, all edges represent exactly one path from the source to the sink. Therefore, for every vertex (which is a timestamp), the value for the edge going to this vertex (the last receive interaction) equals the value for the edge going from this vertex (the considered send instruction).
+For every row that gets handled by a memory bridge, draw a directed edge from the previous timestamp to the new timestamp with capacity $1$. We know that in the obtained network, where the source and the sink are defined by the boundary interactions, all edges go left to right, and the maximal flow is $1$ (because there is only one edge from the source, therefore the minimal cut is $1$). Since all edges go left to right, there is no circulation in this network. Hence, all edges represent exactly one path from the source to the sink. Therefore, for every vertex (which is a timestamp), the value for the edge going to this vertex (the last receive interaction) equals the value for the edge going from this vertex (the considered send instruction).
 
-:::info
-Technically, it is possible to add artificial rows in the access adapter AIRs that do nothing: for example, the one corresponding to splitting a segment `[7, 11)` into two and the one merging it back, all at the same timestamp and with the same data completely unrelated to the actual execution. However, this cannot be abused by memory accesses: informally, because this kind of happens at the same time and nobody gets to read these values, and formally, because even if a flow has a circulation, it still can be decomposed into paths and a circulation, and we only consider the path in the argument above.
-:::
+## The `MemoryBoundaryChip`
 
-## Volatile and persistent memory
+The `MemoryBoundaryChip` commits to both the initial and final memory state, making these commitments available as public values for proof aggregation.
 
-There are two memory interfaces: **volatile** and **persistent**. From the memory POV, the difference is:
-- In volatile memory, both initial and final memory are unconstrained.
-- In persistent memory, we commit to the initial memory and to the final memory. These commitments are used for establishing memory consistency between segments.
+- **Commitments:**
+  The chip takes the initial memory (provided as part of the program) and computes a commitment over it by incorporating it into a Merkle tree. When the segment finishes, the chip produces a final commitment (Merkle root) that reflects every change made during execution.
+- **Field: Expand Direction:**
+  Each memory chunk is tagged with an `expand_direction` field:
+  - `expand_direction = 1` indicates a boundary row representing the initial memory state.
+  - `expand_direction = -1` indicates a boundary row representing the final memory state.
+  - `expand_direction = 0` marks rows that are not relevant (padding rows where all interaction multiplicities are zero).
+- **Multiple Buses:**
+  To enforce these commitments, the `MemoryBoundaryChip` interacts with three buses:
+  - **Merkle Bus:**
+    For initial memory rows, it sends a record with `expand_direction = 1`, and for final memory rows, it receives a record with `expand_direction = -1`. This allows the Merkle chip to build and later verify a full commitment over the memory.
+  - **Compression Bus:**
+    It sends the values and hash arrays for each chunk. The multiplicity of these interactions is determined by the square of the `expand_direction` (so that both initial and final rows are treated uniformly in the compression process).
+  - **Memory Bus:**
+    It performs the basic send/receive interactions that balance out each memory operation, similar to the ones described in the "Basic performed interactions" section.
 
-### Volatile Memory: `VolatileBoundaryChip`
-
-- **Purpose:**
-  In volatile memory, we assume that the initial memory is filled with zeros and that it is unconstrained. The `VolatileBoundaryChip` is used mainly for bookkeeping: it tracks the starting state of memory without enforcing a cryptographic commitment. This means that when a program begins execution, the chip simply "accepts" the initial (zeroed) memory without additional checks.
-
-- **Key Points:**
-  - **No Commitment:**
-    The chip does not compute a Merkle tree root for the initial memory state. Instead, any memory value that gets revealed later comes directly from the execution trace.
-  - **Distinctness Check:**
-    It ensures that the addresses used are distinct by enforcing a sort order across boundary records.
-
-For instance, this is how distinctness is enforced:
-
-```rust
-// Assert local addr < next addr when next.is_valid
-// This ensures the addresses in non-padding rows are all sorted
-let lt_io = IsLtArrayIo {
-    x: [local.addr_space, local.pointer].map(Into::into),
-    y: [next.addr_space, next.pointer].map(Into::into),
-    out: AB::Expr::ONE,
-    count: next.is_valid.into(),
-};
-// N.B.: this will do range checks (but not other constraints) on the last row if the first row has is_valid = 1 due to wraparound
-self.addr_lt_air
-    .eval(builder, (lt_io, (&local.addr_lt_aux).into()));
-```
-
-### Persistent Memory: `PersistentBoundaryChip`
-
-- **Purpose:**
-  When operating in persistent memory mode, the final state of memory must be verifiable. The `PersistentBoundaryChip` commits not only to the final memory state but also to the initial state provided by the program. These commitments become part of the public values used later in proof aggregation, see [Continuations](/specs/architecture/continuations).
-
-- **Key Points:**
-  - **Commitments:**
-    The chip takes the initial memory (which is provided as part of the program) and computes a commitment over it—typically by incorporating it into a Merkle tree. Later, when the segment finishes, the chip produces a final commitment (Merkle root) that reflects every change made during execution.
-  - **Field: Expand Direction:**
-    Each memory chunk is tagged with an `expand_direction` field:
-    - `expand_direction = 1` indicates a boundary row representing the initial memory state.
-    - `expand_direction = -1` indicates a boundary row representing the final memory state.
-    - `expand_direction = 0` marks rows that are not relevant (for example, intermediary rows produced by splits/merges that cancel out).
-  - **Multiple Buses:**
-    To enforce these commitments, the PersistentBoundaryChip interacts with three buses:
-    - **Merkle Bus:**
-      For initial memory rows, it sends a record (for example, with a tag `0`), and for final memory rows, it receives a record (with a tag `1`). This allows the Merkle chip to build and later verify a full commitment over the memory.
-    - **Compression Bus:**
-      It sends the values and hash arrays for each chunk. The multiplicity of these interactions is determined by the square of the `expand_direction` (so that both initial and final rows are treated uniformly in the compression process).
-    - **Memory Bus:**
-      It performs the basic send/receive interactions that balance out each memory operation, similar to the ones described in the “Basic performed interactions” section.
-
-The uniqueness of the addresses is achieved by the interactions on the merkle bus. The other chip that does interactions there is the **merkle chip**, which build the merkle tree, and to balance everything out, the boundary chip's interactions must correspond to the leaves of the merkle tree, thus, all distinct.
+The uniqueness of the addresses is achieved by the interactions on the merkle bus. The other chip that does interactions there is the **merkle chip**, which builds the merkle tree, and to balance everything out, the memory boundary chip's interactions must correspond to the leaves of the merkle tree, thus, all distinct.
 
 ## Implementation details
 
 In this model, there is no central memory/offline checker AIR. Every chip is responsible for doing the necessary interactions discussed above for its memory operations. For this, every chip's AIR must have some auxiliary columns for every memory operation. The auxiliary columns include `prev_timestamp` and, for Write operations, `prev_data`.
 
-When we use Volatile Memory as the Memory Interface (PersistentBoundaryAir in the implementation), we do not, at the AIR level, constrain the initial memory. This means that if the first operation on an address is a Read, the corresponding data can be anything -- it's up to the program to read from addresses that have been written to.
+The initial memory state is constrained at the AIR level by the `MemoryBoundaryChip`, which commits to it via the `initial_memory_root` Merkle root (a public value) and sends initial values on the memory bus at timestamp $0$.
 
 ## What to take into account when adding a new chip
 

@@ -652,10 +652,7 @@ where
         interpreter.reset_execution_frequencies();
         execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
         let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
-        let touched_memory = exec_state
-            .vm_state
-            .memory
-            .finalize::<Val<E::SC>>(system_config.continuation_enabled);
+        let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
         #[cfg(feature = "perf-metrics")]
         crate::metrics::end_segment_metrics(&mut exec_state);
 
@@ -829,28 +826,6 @@ where
         Ok((proof, final_memory))
     }
 
-    /// Verify segment proofs, checking continuation boundary conditions between segments if VM
-    /// memory is persistent. The behavior of this function differs depending on whether
-    /// continuations is enabled or not.
-    pub fn verify(
-        &self,
-        vk: &MultiStarkVerifyingKey<E::SC>,
-        proofs: &[Proof<E::SC>],
-    ) -> Result<(), VmVerificationError<E::SC>>
-    where
-        Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
-        Val<E::SC>: PrimeField32,
-    {
-        if self.config().as_ref().continuation_enabled {
-            verify_segments(&self.engine, vk, proofs).map(|_| ())
-        } else {
-            assert_eq!(proofs.len(), 1);
-            self.engine
-                .verify(vk, &proofs[0])
-                .map_err(VmVerificationError::StarkError)
-        }
-    }
-
     /// Transforms the program into a cached trace and commits it _on device_ using the proof system
     /// polynomial commitment scheme.
     ///
@@ -1013,10 +988,8 @@ mod tests {
     #[test]
     fn keygen_marks_required_airs_for_continuations() {
         let engine = test_cpu_engine();
-        let config = SystemConfig::default().with_continuations();
-        let merkle_air_id = config
-            .memory_merkle_air_id()
-            .expect("continuations should have a merkle AIR");
+        let config = SystemConfig::default();
+        let merkle_air_id = config.memory_merkle_air_id();
         let boundary_air_id = config.memory_boundary_air_id();
 
         let (_vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config).unwrap();
