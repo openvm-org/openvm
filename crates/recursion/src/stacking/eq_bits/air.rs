@@ -115,7 +115,9 @@ where
 
         /*
          * Receive the parent b_value and eq_bits(u[0..k - 1], b[0..k - 1]) eval, as
-         * well as the value of u_{n_stack - num_bits + 1}.
+         * well as the value of u_{n_stack - num_bits + 1}. Note that this forces
+         * each num_bits to be in [0, n_stack], as lookups are only provided for this
+         * range and idx = 0 lookups are all consumed by EqBaseAir.
          */
         self.eq_rand_values_bus.lookup_key(
             builder,

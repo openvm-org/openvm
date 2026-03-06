@@ -158,12 +158,17 @@ where
         /*
          * Constrain the sortedness of each ColumnClaimsMessage. Main claims (i.e part_idx = 0)
          * should be first and sorted by sort_idx and then col_idx. The remaining claims should
-         * be sorted by sort_idx, then part_idx, and finally col_idx.
+         * be sorted by sort_idx, then part_idx, and finally col_idx. Note that each proof must
+         * have at least one main claim.
          */
         builder.assert_bool(local.is_main);
-        builder.when(not(local.is_valid)).assert_zero(local.is_main);
+        builder.when(local.is_main).assert_one(local.is_valid);
         builder.when(local.is_main).assert_zero(local.part_idx);
         builder.when(local.is_main).assert_zero(local.commit_idx);
+
+        builder.when(local.is_first).assert_one(local.is_main);
+        builder.when(local.is_first).assert_zero(local.sort_idx);
+        builder.when(local.is_first).assert_zero(local.col_idx);
 
         builder.assert_bool(local.is_transition_main);
         builder
@@ -172,6 +177,18 @@ where
         builder
             .when(local.is_transition_main)
             .assert_one(and(local.is_valid, next.is_valid));
+        builder
+            .when(and::<AB::Expr>(
+                and(local.is_main, next.is_main),
+                not(local.is_last),
+            ))
+            .assert_one(local.is_transition_main);
+        builder
+            .when(and(
+                and::<AB::Expr>(not(local.is_main), not(next.is_main)),
+                next.is_valid,
+            ))
+            .assert_one(local.is_transition_main);
         builder
             .when(local.is_transition_main)
             .assert_zero(local.is_last);
@@ -188,10 +205,17 @@ where
             .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
             .assert_one(next.col_idx - local.col_idx);
 
-        let mut when_last_main = builder.when(and(local.is_main, not(next.is_main)));
+        let mut when_last_main = builder.when(and(local.is_main, not(local.is_transition_main)));
         when_last_main.assert_zero((next.part_idx - AB::F::ONE) * not(local.is_last));
         when_last_main.assert_zero(next.col_idx * not(local.is_last));
 
+        /*
+         * Note that we utilize the LiftedHeightsBus interaction to constrain the (sort_idx,
+         * part_idx) sorting for non-main commits. Each non-zero commit_idx is constrained to
+         * its exact sort_idx and part_idx, so we only need to constrain that (a) commit_idx
+         * increases by 0/1 within a proof and (b) col_idx increases by 1 within a commit and
+         * is reset between commits.
+         */
         builder
             .when(and(local.is_valid, not(local.is_last)))
             .assert_bool(next.commit_idx - local.commit_idx);
@@ -199,6 +223,10 @@ where
             .when(and(local.is_transition_main, not(local.is_main)))
             .when_ne(local.commit_idx + AB::F::ONE, next.commit_idx)
             .assert_one(next.col_idx - local.col_idx);
+        builder
+            .when(and(local.is_transition_main, not(local.is_main)))
+            .when_ne(local.commit_idx, next.commit_idx)
+            .assert_zero(next.col_idx);
 
         /*
          * Compute col_claim[0] + lambda * rot_claim + ... (i.e. RLC of column/rotation claims)
@@ -325,16 +353,6 @@ where
             .when(not::<AB::Expr>(local.is_last_for_claim))
             .assert_eq(local.row_idx + local.lifted_height, next.row_idx);
 
-        builder
-            .when(and::<AB::Expr>(
-                and(local.is_last_for_claim, not(local.is_last)),
-                not::<AB::Expr>(next.commit_idx - local.commit_idx),
-            ))
-            .assert_eq(
-                local.row_idx + local.lifted_height,
-                AB::F::from_usize(1 << (self.n_stack + self.l_skip)),
-            );
-
         assert_array_eq(
             builder,
             ext_field_multiply(local.lambda_pow, local.eq_bits),
@@ -396,6 +414,26 @@ where
             },
             and(local.is_valid, local.is_last_for_claim),
         );
+
+        /*
+         * Constrain that each non-terminal is_last_for_claim wrap corresponds to the
+         * stacked column being filled, i.e. local.row_idx + local.lifted_height ==
+         * 2^{n_stack + l_skip}. The converse is implicit, from the interaction with
+         * EqBitsAir we must have row_idx < 2^{num_bits + log_lifted_height}, which
+         * is 2^{n_stack + l_skip}.
+         */
+        builder
+            .when(and(local.is_valid, not(local.is_last_for_claim)))
+            .assert_one(next.is_valid);
+        builder
+            .when(and::<AB::Expr>(
+                and(local.is_last_for_claim, not(local.is_last)),
+                not::<AB::Expr>(next.commit_idx - local.commit_idx),
+            ))
+            .assert_eq(
+                local.row_idx + local.lifted_height,
+                AB::F::from_usize(1 << (self.n_stack + self.l_skip)),
+            );
 
         /*
          * Constrain correctness of lookup values via interactions. Heights are received
