@@ -35,7 +35,6 @@ pub struct InteractionsFoldingCols<T> {
     pub air_idx: T,
     pub sort_idx: T,
     pub interaction_idx: T,
-    pub node_idx: T,
 
     pub has_interactions: T,
 
@@ -120,8 +119,13 @@ where
             ),
         );
 
+        builder.when_first_row().assert_zero(local.proof_idx);
+
         builder.assert_bool(local.has_interactions);
         builder.assert_bool(local.is_bus_index);
+        builder
+            .when(local.is_bus_index)
+            .assert_one(local.has_interactions);
         builder
             .when(local.has_interactions + local.is_bus_index)
             .assert_one(local.is_valid);
@@ -147,6 +151,13 @@ where
         builder
             .when(not::<AB::Expr>(is_same_air.clone()))
             .assert_zero(next.interaction_idx);
+
+        builder
+            .when(local.is_first_in_message + local.is_second_in_message)
+            .assert_zero(local.idx_in_message);
+        builder
+            .when(is_same_message.clone())
+            .assert_one(next.idx_in_message - local.idx_in_message + local.is_first_in_message);
 
         // // =========================== general consistency ================================
         // The row describes an AIR without interactions iff it's first and last in the message,
@@ -198,6 +209,11 @@ where
                 .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),
             local.final_acc_num,
         );
+        assert_zeros(
+            &mut builder
+                .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),
+            local.final_acc_denom,
+        );
         // final_acc_denom only changes when it's second in message
         assert_array_eq(
             &mut builder.when(
@@ -215,6 +231,28 @@ where
                 next.final_acc_denom,
                 ext_field_multiply(local.cur_sum, local.eq_3b),
             ),
+        );
+        assert_array_eq(
+            &mut builder.when(is_same_message.clone()),
+            local.eq_3b,
+            next.eq_3b,
+        );
+        // the running sums are zero on the last row of the proof
+        assert_zeros(
+            &mut builder.when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first_in_air,
+            )),
+            local.final_acc_num,
+        );
+        assert_zeros(
+            &mut builder.when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first_in_air,
+            )),
+            local.final_acc_denom,
         );
         // Constraint is_second_in_message
         builder.assert_bool(local.is_second_in_message);
