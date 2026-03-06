@@ -5,11 +5,11 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_util::log2_strict_usize, AirRef, StarkProtocolConfig,
 };
 
+pub mod boundary;
 mod controller;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
-pub mod boundary;
 #[cfg(test)]
 mod tests;
 
@@ -19,8 +19,8 @@ pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
-        dimensions::MemoryDimensions, interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
-        boundary::BoundaryAir, offline_checker::MemoryBridge,
+        boundary::MemoryBoundaryAir, dimensions::MemoryDimensions, interface::MemoryInterfaceAirs,
+        merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
     },
 };
 
@@ -81,7 +81,7 @@ impl MemoryAirInventory {
             addr_space_height: mem_config.addr_space_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
         };
-        let boundary = BoundaryAir::<CHUNK> {
+        let boundary = MemoryBoundaryAir::<CHUNK> {
             memory_dims,
             memory_bus,
             merkle_bus,

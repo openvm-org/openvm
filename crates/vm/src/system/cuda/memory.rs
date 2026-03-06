@@ -15,14 +15,14 @@ use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProving
 use tracing::instrument;
 
 use super::{
-    boundary::BoundaryChipGPU,
+    boundary::MemoryBoundaryChipGPU,
     merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
-    pub boundary: BoundaryChipGPU,
+    pub boundary: MemoryBoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
@@ -56,7 +56,7 @@ impl MemoryInventoryGPU {
 
     pub fn new(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
         Self {
-            boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer()),
+            boundary: MemoryBoundaryChipGPU::new(hasher_chip.shared_buffer()),
             merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
             initial_memory: Vec::new(),
             merkle_records: None,
@@ -111,9 +111,8 @@ impl MemoryInventoryGPU {
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
                     break 'left res;
                 }
-                let layout = &self.merkle_tree.mem_config().addr_spaces
-                    [ADDR_SPACE_OFFSET as usize]
-                    .layout;
+                let layout =
+                    &self.merkle_tree.mem_config().addr_spaces[ADDR_SPACE_OFFSET as usize].layout;
                 let one_cell_size = layout.size();
                 let mut values = vec![0u8; one_cell_size * DIGEST_WIDTH];
                 unsafe {
@@ -147,15 +146,13 @@ impl MemoryInventoryGPU {
             };
             let d_merkle_touched_memory = merkle_words.to_device().unwrap();
 
-            let unpadded_merkle_height =
-                self.merkle_tree.calculate_unpadded_height(&partition);
+            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;
             }
 
-            self.boundary
-                .finalize_records::<DIGEST_WIDTH>(Vec::new());
+            self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
             mem.tracing_info("merkle update");
             self.merkle_tree.finalize();
             self.merkle_tree.update_with_touched_blocks(
@@ -239,8 +236,7 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device().unwrap());
 
-            let unpadded_merkle_height =
-                self.merkle_tree.calculate_unpadded_height(&partition);
+            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;

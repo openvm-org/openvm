@@ -24,10 +24,10 @@ use crate::{
     arch::{MemoryConfig, VmField, CONST_BLOCK_SIZE},
     system::{
         memory::{
+            boundary::MemoryBoundaryChip,
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            boundary::BoundaryChip,
         },
         poseidon2::Poseidon2PeripheryChip,
         TouchedMemory,
@@ -111,7 +111,7 @@ impl<F: VmField> MemoryController<F> {
         };
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface {
-            boundary_chip: BoundaryChip::new(
+            boundary_chip: MemoryBoundaryChip::new(
                 memory_dims,
                 memory_bus,
                 merkle_bus,

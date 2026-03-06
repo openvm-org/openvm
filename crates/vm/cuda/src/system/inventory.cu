@@ -5,7 +5,7 @@
 #include <cstdint>
 
 /// Record representing a memory chunk with BLOCKS sub-blocks of cells.
-/// Matches the Rust-side repr(C) `BoundaryRecord` layout.
+/// Matches the Rust-side repr(C) `MemoryBoundaryRecord` layout.
 ///
 /// Note on uint32_t encoding: only `values` stores Montgomery-encoded BabyBear
 /// field elements (Fp::asRaw()). All other fields (`address_space`, `ptr`,
