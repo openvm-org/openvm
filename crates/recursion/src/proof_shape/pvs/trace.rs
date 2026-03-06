@@ -77,11 +77,6 @@ impl RowMajorChip<F> for PublicValuesTraceGenerator {
             }
         }
 
-        for chunk in chunks {
-            let cols: &mut PublicValuesCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_usize(proofs.len());
-        }
-
         Some(RowMajorMatrix::new(trace, width))
     }
 }

@@ -134,17 +134,16 @@ where
             builder,
             (
                 NestedForLoopIoCols {
-                    is_enabled: local.is_enabled,
-                    counter: [local.proof_idx, local.layer_idx],
-                    is_first: [local.is_proof_start, local.is_first_round],
+                    is_enabled: local.is_enabled.into(),
+                    counter: [local.proof_idx.into(), local.layer_idx - AB::F::ONE],
+                    is_first: [local.is_proof_start.into(), local.is_first_round.into()],
                 }
                 .map_into(),
                 NestedForLoopIoCols {
-                    is_enabled: next.is_enabled,
-                    counter: [next.proof_idx, next.layer_idx],
-                    is_first: [next.is_proof_start, next.is_first_round],
-                }
-                .map_into(),
+                    is_enabled: next.is_enabled.into(),
+                    counter: [next.proof_idx.into(), next.layer_idx - AB::F::ONE],
+                    is_first: [next.is_proof_start.into(), next.is_first_round.into()],
+                },
             ),
         );
 
