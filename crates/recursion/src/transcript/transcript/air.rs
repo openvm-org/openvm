@@ -136,7 +136,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         }
 
         let mut when_same_proof = builder.when(local_next_same_proof.clone());
-        when_same_proof.assert_eq(next.tidx, local.tidx + count);
+        when_same_proof.assert_eq(next.tidx, local.tidx + count.clone());
+
+        // If local.is_sample = next.is_sample, there have to be CHUNK operations
+        when_same_proof
+            .when_ne(local.is_sample, not(next.is_sample))
+            .assert_eq(count, AB::Expr::from_usize(CHUNK));
 
         // Permute on all non-final rows except when going from sample to observe
         when_same_proof
