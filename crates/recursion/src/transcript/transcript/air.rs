@@ -1,6 +1,9 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::utils::{and, not, or};
+use openvm_circuit_primitives::{
+    utils::{and, not, or},
+    SubAir,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -14,6 +17,7 @@ use crate::{
         FinalTranscriptStateBus, FinalTranscriptStateMessage, Poseidon2PermuteBus,
         Poseidon2PermuteMessage, TranscriptBus, TranscriptBusMessage,
     },
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     transcript::poseidon2::{CHUNK, POSEIDON2_WIDTH},
 };
 
@@ -31,8 +35,6 @@ pub struct TranscriptCols<T> {
     /// are sent with multiplicity 0 or 1, this also functions as the lookup count.
     pub mask: [T; CHUNK],
 
-    /// indicator, whether the state is permutation from previous row's state
-    pub permuted: T,
     /// The poseidon2 state.
     pub prev_state: [T; POSEIDON2_WIDTH],
     pub post_state: [T; POSEIDON2_WIDTH],
@@ -67,6 +69,25 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         // Constraints
         ///////////////////////////////////////////////////////////////////////
         let is_valid = local.mask[0];
+        let next_valid = next.mask[0];
+
+        NestedForLoopSubAir::<1> {}.eval(
+            builder,
+            (
+                NestedForLoopIoCols {
+                    is_enabled: is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_proof_start],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_proof_start],
+                }
+                .map_into(),
+            ),
+        );
 
         builder.when(local.is_proof_start).assert_zero(local.tidx);
         builder.when(local.is_proof_start).assert_one(is_valid);
@@ -84,7 +105,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         }
 
         let mut count = AB::Expr::ZERO;
-        let local_next_same_proof = next.mask[0] * (AB::Expr::ONE - next.is_proof_start);
+        let local_next_same_proof = next_valid - next.is_proof_start;
         for i in 0..CHUNK {
             builder.assert_bool(local.mask[i]);
             count += local.mask[i].into();
@@ -112,9 +133,13 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
                 .assert_eq(local.post_state[i + CHUNK], next.prev_state[i + CHUNK]);
         }
 
-        builder
-            .when(local_next_same_proof) // if next is valid
-            .assert_eq(next.tidx, local.tidx + count);
+        let mut when_same_proof = builder.when(local_next_same_proof.clone());
+        when_same_proof.assert_eq(next.tidx, local.tidx + count.clone());
+
+        // If local.is_sample = next.is_sample, there have to be CHUNK operations
+        when_same_proof
+            .when_ne(local.is_sample, not(next.is_sample))
+            .assert_eq(count, AB::Expr::from_usize(CHUNK));
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
@@ -146,18 +171,20 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
             );
         }
 
-        builder.assert_bool(local.permuted);
+        // Permute on all non-final rows except when going from sample to observe,
+        // and never on the final row.
+        let permuted =
+            local_next_same_proof * not::<AB::Expr>(and(local.is_sample, not(next.is_sample)));
         self.poseidon2_permute_bus.lookup_key(
             builder,
             Poseidon2PermuteMessage {
                 input: local.prev_state,
                 output: local.post_state,
             },
-            local.permuted,
+            permuted,
         );
 
         if let Some(final_state_bus) = self.final_state_bus {
-            let next_valid = next.mask[0];
             final_state_bus.send(
                 builder,
                 local.proof_idx,
