@@ -16,8 +16,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        BatchConstraintModuleBus, BatchConstraintModuleMessage, GkrModuleBus, GkrModuleMessage,
-        TranscriptBus,
+        BatchConstraintModuleBus, BatchConstraintModuleMessage, ConstraintsFoldingInputBus,
+        ConstraintsFoldingInputMessage, GkrModuleBus, GkrModuleMessage, TranscriptBus,
     },
     gkr::bus::{
         GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
@@ -74,6 +74,7 @@ pub struct GkrInputAir {
     pub layer_input_bus: GkrLayerInputBus,
     pub layer_output_bus: GkrLayerOutputBus,
     pub xi_sampler_bus: GkrXiSamplerBus,
+    pub constraints_folding_input_bus: ConstraintsFoldingInputBus,
 }
 
 impl<F: Field> BaseAir<F> for GkrInputAir {
@@ -283,12 +284,19 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             BatchConstraintModuleMessage {
-                tidx: tidx_end,
+                tidx: tidx_end.clone() + AB::Expr::from_usize(D_EF),
                 gkr_input_layer_claim: [
                     local.input_layer_claim[0].map(Into::into),
                     ext_field_subtract(local.input_layer_claim[1], local.alpha_logup),
                 ],
             },
+            local.is_enabled,
+        );
+
+        self.constraints_folding_input_bus.send(
+            builder,
+            local.proof_idx,
+            ConstraintsFoldingInputMessage { tidx: tidx_end },
             local.is_enabled,
         );
 
