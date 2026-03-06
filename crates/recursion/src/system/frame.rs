@@ -8,6 +8,8 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
 
+use crate::utils::interaction_length;
+
 /*
  * Modified versions of the STARK and multi-STARK verifying keys for AirModule
  * implementations. AirModules should use MultiStarkVerifyingKeyFrame instead
@@ -20,6 +22,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Dig
 pub struct StarkVkeyFrame {
     pub preprocessed_data: Option<VerifierSinglePreprocessedData<Digest>>,
     pub params: StarkVerifyingParams,
+    pub num_dag_nodes: usize,
     pub num_interactions: usize,
     pub max_constraint_degree: u8,
     pub is_required: bool,
@@ -37,6 +40,7 @@ impl From<&StarkVerifyingKey<F, Digest>> for StarkVkeyFrame {
         Self {
             preprocessed_data: vk.preprocessed_data.clone(),
             params: vk.params.clone(),
+            num_dag_nodes: compute_num_dag_nodes(vk),
             num_interactions: vk.num_interactions(),
             max_constraint_degree: vk.max_constraint_degree,
             is_required: vk.is_required,
@@ -52,4 +56,15 @@ impl From<&MultiStarkVerifyingKey<BabyBearPoseidon2Config>> for MultiStarkVkeyFr
             max_constraint_degree: mvk.max_constraint_degree(),
         }
     }
+}
+
+fn compute_num_dag_nodes<F, DIGEST>(vk: &StarkVerifyingKey<F, DIGEST>) -> usize {
+    let dag = &vk.symbolic_constraints;
+    dag.constraints.nodes.len()
+        + vk.unused_variables.len()
+        + dag
+            .interactions
+            .iter()
+            .map(interaction_length)
+            .sum::<usize>()
 }
