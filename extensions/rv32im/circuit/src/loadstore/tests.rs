@@ -538,9 +538,11 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+    // Use smaller pointer_max_bits to keep Merkle tree GPU allocations manageable.
+    mem_config.pointer_max_bits = 20;
+    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 20;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
     }
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 
