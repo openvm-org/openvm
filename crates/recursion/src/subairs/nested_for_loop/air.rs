@@ -6,7 +6,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 /// A SubAir that constrains the `is_first` flags for nested for-loops.
 ///
 /// Enabled rows must appear contiguously at the beginning of the trace (no interspersed padding),
-/// and the `is_enabled` flag is enforced to be boolean.
+/// and the `is_enabled` flag is enforced to be boolean. Each tracked counter is also zeroed on
+/// the first enabled row of its scope.
 ///
 /// Tracks `DEPTH_MINUS_ONE` loop counters (all loops except the innermost).
 #[derive(Default)]
@@ -78,7 +79,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize> SubAir<AB>
                 .when(local_io.is_first[level].clone())
                 .assert_one(local_io.is_enabled.clone());
 
-            // First row constraint
+            // First row constraint: mark the loop boundary and zero the counter for this scope.
             let mut builder_when_first_row = if level == 0 {
                 builder.when_first_row()
             } else {
@@ -87,6 +88,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize> SubAir<AB>
                 builder.when(parent_is_first)
             };
             self.eval_first_row(&mut builder_when_first_row, &local_io, local_is_first);
+            builder_when_first_row.assert_zero(local_io.counter[level].clone());
 
             // Transition constraints
             let mut builder_when_transition = if level == 0 {

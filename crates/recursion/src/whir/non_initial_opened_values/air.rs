@@ -85,37 +85,37 @@ where
             builder,
             (
                 NestedForLoopIoCols {
-                    is_enabled: local.is_enabled,
+                    is_enabled: local.is_enabled.into(),
                     counter: [
-                        local.proof_idx,
-                        local.whir_round,
-                        local.query_idx,
-                        local.coset_idx,
+                        local.proof_idx.into(),
+                        local.whir_round - AB::F::ONE,
+                        local.query_idx.into(),
+                        local.coset_idx.into(),
                     ],
                     is_first: [
                         local.is_first_in_proof,
                         local.is_first_in_round,
                         local.is_first_in_query,
                         local.is_enabled,
-                    ],
-                }
-                .map_into(),
+                    ]
+                    .map(Into::into),
+                },
                 NestedForLoopIoCols {
-                    is_enabled: next.is_enabled,
+                    is_enabled: next.is_enabled.into(),
                     counter: [
-                        next.proof_idx,
-                        next.whir_round,
-                        next.query_idx,
-                        next.coset_idx,
+                        next.proof_idx.into(),
+                        next.whir_round - AB::F::ONE,
+                        next.query_idx.into(),
+                        next.coset_idx.into(),
                     ],
                     is_first: [
                         next.is_first_in_proof,
                         next.is_first_in_round,
                         next.is_first_in_query,
                         next.is_enabled,
-                    ],
-                }
-                .map_into(),
+                    ]
+                    .map(Into::into),
+                },
             ),
         );
 

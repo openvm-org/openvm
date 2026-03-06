@@ -2,7 +2,7 @@
 
 ## Overview
 
-This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by a const generic `DEPTH_MINUS_ONE` (e.g., `NestedForLoopSubAir<1>` for a single nested loop, `NestedForLoopSubAir<2>` for two nested loops). It also enforces that `is_enabled` is boolean and that disabled rows only appear after all enabled rows.
+This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by a const generic `DEPTH_MINUS_ONE` (e.g., `NestedForLoopSubAir<1>` for a single nested loop, `NestedForLoopSubAir<2>` for two nested loops). It also enforces that `is_enabled` is boolean, that disabled rows only appear after all enabled rows, and that each tracked loop counter starts at `0` when its scope begins.
 
 ## Columns
 
@@ -18,7 +18,7 @@ For a nested loop with `DEPTH` levels (numbered 0 to `DEPTH-1`), where level 0 i
 ### Behavior
 
 - Whenever the next row stays enabled, each `counter[level]` either stays the same or increases by 1.
-- `counter[level]` values do not necessarily start at 0.
+- Each tracked `counter[level]` is forced to start at `0` on the first enabled row of its scope.
 - Enabled rows must be contiguous and once `is_enabled = 0`, all later rows must also be disabled.
 - Padding rows are unconstrained except that they must keep `is_enabled = 0` (by definition).
 
@@ -26,11 +26,13 @@ For a nested loop with `DEPTH` levels (numbered 0 to `DEPTH-1`), where level 0 i
 
 **What this SubAir constrains:**
 - `is_enabled` is boolean and once it becomes `0`, it stays `0` for all subsequent rows
+- `counter[level]` is `0` on the first enabled row of each tracked loop scope
 - `counter[level]` increments by 0 or 1 for all parent loops (excludes innermost loop, levels 0 to `DEPTH-2`)
 - `is_first[level]` flags for all loops (excludes outermost loop, levels 1 to `DEPTH-1`) are set correctly at loop iteration boundaries (on enabled rows only)
 
 **What the caller must constrain:**
-- Initial or final values of `counter[level]` (for all parent loops, excludes innermost loop)
+- Final values of `counter[level]` (for all parent loops, excludes innermost loop)
+- Any non-zero-based interpretation of a tracked loop index
 - `is_first[level]` flags on disabled rows (if required; this SubAir does NOT constrain them when `is_enabled = 0`)
 - Innermost loop counter and its behavior (see example below)
 
@@ -138,6 +140,26 @@ builder.when_first_row().when(local_io.is_enabled).assert_one(local_io.is_first[
 builder.when(parent_is_first).when(local_io.is_enabled).assert_one(local_io.is_first[level]);
 ```
 
+#### First enabled row resets `counter[level]` to `0`
+
+For the outermost tracked counter this happens on the first row of the trace. For deeper tracked
+counters it happens when the enclosing scope starts.
+
+$$
+\text{is\_enabled} \Rightarrow \text{counter[level]} = 0\quad \text{(first row of scope)} \qquad (3a)
+$$
+```rust
+// Level 0 (outermost tracked counter)
+builder
+    .when_first_row()
+    .assert_zero(local_io.counter[0]);
+
+// Level > 0 (tracked counter inside an enclosing scope)
+builder
+    .when(parent_is_first)
+    .assert_zero(local_io.counter[level]);
+```
+
 ### 4. Loop Constraints
 
 #### 4.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$)
@@ -180,6 +202,7 @@ These cases apply at each loop level independently.
 ### 1. Single Row ($\text{is\_enabled} = 1$)
 
 - By (3): $\text{is\_first} = 1$
+- By (3a): the tracked counter for that scope starts at `0`
 
 Single enabled row has `is_first` set.
 
