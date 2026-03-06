@@ -1,6 +1,9 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::utils::{and, not, or};
+use openvm_circuit_primitives::{
+    utils::{and, not, or},
+    SubAir,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -14,6 +17,7 @@ use crate::{
         FinalTranscriptStateBus, FinalTranscriptStateMessage, Poseidon2PermuteBus,
         Poseidon2PermuteMessage, TranscriptBus, TranscriptBusMessage,
     },
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     transcript::poseidon2::{CHUNK, POSEIDON2_WIDTH},
 };
 
@@ -67,6 +71,25 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         // Constraints
         ///////////////////////////////////////////////////////////////////////
         let is_valid = local.mask[0];
+        let next_valid = next.mask[0];
+
+        NestedForLoopSubAir::<1> {}.eval(
+            builder,
+            (
+                NestedForLoopIoCols {
+                    is_enabled: is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_proof_start],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_proof_start],
+                }
+                .map_into(),
+            ),
+        );
 
         builder.when(local.is_proof_start).assert_zero(local.tidx);
         builder.when(local.is_proof_start).assert_one(is_valid);
@@ -84,7 +107,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         }
 
         let mut count = AB::Expr::ZERO;
-        let local_next_same_proof = next.mask[0] * (AB::Expr::ONE - next.is_proof_start);
+        let local_next_same_proof = next_valid * (AB::Expr::ONE - next.is_proof_start);
         for i in 0..CHUNK {
             builder.assert_bool(local.mask[i]);
             count += local.mask[i].into();
@@ -157,7 +180,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         );
 
         if let Some(final_state_bus) = self.final_state_bus {
-            let next_valid = next.mask[0];
             final_state_bus.send(
                 builder,
                 local.proof_idx,
