@@ -220,7 +220,7 @@ where
             builder,
             local.proof_idx,
             SumcheckClaimMessage {
-                round: AB::Expr::ZERO,
+                round: AB::Expr::NEG_ONE,
                 value: local.cur_hash.map(Into::into),
             },
             is_last.clone(),
