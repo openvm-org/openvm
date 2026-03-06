@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
     },
     system::memory::{
@@ -34,6 +34,7 @@ use {
         },
         EmptyAdapterCoreLayout,
     },
+    openvm_instructions::riscv::RV32_MEMORY_AS,
 };
 
 use super::{run_write_data, LoadStoreCoreAir, Rv32LoadStoreChip};
@@ -123,8 +124,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let rs1 = rs1.unwrap_or(ptr_val.wrapping_sub(imm_ext).to_le_bytes());
     let ptr_val = imm_ext.wrapping_add(u32::from_le_bytes(rs1));
-    let a = gen_pointer(rng, 4);
-    let b = gen_pointer(rng, 4);
+    let max_addr = 1usize << tester.address_bits();
+    let a = rng.random_range(0..(max_addr - 4)) / 4 * 4;
+    let b = rng.random_range(0..(max_addr - 4)) / 4 * 4;
 
     let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
     let mem_as = mem_as.unwrap_or(if is_load {
@@ -538,9 +540,11 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    // Use smaller pointer_max_bits to keep Merkle tree GPU allocations manageable.
+    // Reduce pointer_max_bits and num_cells to avoid ~4GB Merkle tree GPU allocations.
+    // Merkle trees are now always built (volatile path was removed with access adapters).
     mem_config.pointer_max_bits = 20;
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 20;
+    mem_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
     }
