@@ -40,7 +40,7 @@ impl From<&StarkVerifyingKey<F, Digest>> for StarkVkeyFrame {
         Self {
             preprocessed_data: vk.preprocessed_data.clone(),
             params: vk.params.clone(),
-            num_dag_nodes: compute_num_dag_nodes(&vk),
+            num_dag_nodes: compute_num_dag_nodes(vk),
             num_interactions: vk.num_interactions(),
             max_constraint_degree: vk.max_constraint_degree,
             is_required: vk.is_required,

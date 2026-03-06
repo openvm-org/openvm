@@ -209,7 +209,7 @@ where
         self.idx_encoder.eval(builder, localv.idx_flags);
         builder
             .when(local.is_valid)
-            .assert_one(self.idx_encoder.is_valid::<AB>(&localv.idx_flags));
+            .assert_one(self.idx_encoder.is_valid::<AB>(localv.idx_flags));
 
         NestedForLoopSubAir::<1> {}.eval(
             builder,
