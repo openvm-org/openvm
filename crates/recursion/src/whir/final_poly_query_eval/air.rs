@@ -113,13 +113,14 @@ where
             builder,
             (
                 NestedForLoopIoCols {
-                    is_enabled: local.is_enabled,
+                    is_enabled: local.is_enabled.into(),
                     counter: [
-                        local.proof_idx,
-                        local.whir_round,
-                        local.query_idx,
-                        local.phase_idx,
-                        local.eval_idx,
+                        local.proof_idx.into(),
+                        local.whir_round.into(),
+                        local.query_idx.into(),
+                        // Phase idx starts at 1 on the last round.
+                        local.phase_idx - local.is_last_round,
+                        local.eval_idx.into(),
                     ],
                     is_first: [
                         local.is_first_in_proof,
@@ -127,17 +128,17 @@ where
                         local.is_first_in_query,
                         local.is_first_in_phase,
                         local.is_enabled,
-                    ],
-                }
-                .map_into(),
+                    ]
+                    .map(Into::into),
+                },
                 NestedForLoopIoCols {
-                    is_enabled: next.is_enabled,
+                    is_enabled: next.is_enabled.into(),
                     counter: [
-                        next.proof_idx,
-                        next.whir_round,
-                        next.query_idx,
-                        next.phase_idx,
-                        next.eval_idx,
+                        next.proof_idx.into(),
+                        next.whir_round.into(),
+                        next.query_idx.into(),
+                        next.phase_idx - next.is_last_round,
+                        next.eval_idx.into(),
                     ],
                     is_first: [
                         next.is_first_in_proof,
@@ -145,9 +146,9 @@ where
                         next.is_first_in_query,
                         next.is_first_in_phase,
                         next.is_enabled,
-                    ],
-                }
-                .map_into(),
+                    ]
+                    .map(Into::into),
+                },
             ),
         );
 
