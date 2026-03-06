@@ -152,13 +152,11 @@ $$
 // Level 0 (outermost tracked counter)
 builder
     .when_first_row()
-    .when(local_io.is_enabled)
     .assert_zero(local_io.counter[0]);
 
 // Level > 0 (tracked counter inside an enclosing scope)
 builder
     .when(parent_is_first)
-    .when(local_io.is_enabled)
     .assert_zero(local_io.counter[level]);
 ```
 
