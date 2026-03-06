@@ -13,13 +13,12 @@ use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, TwoAdicF
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use strum::EnumCount;
-use strum_macros::EnumIter;
 
 use crate::{
     batch_constraint::expr_eval::{
         default_poseidon2_sub_chip, generate_dag_commit_info,
         symbolic_expression::air::{
-            CachedSymbolicExpressionColumns, SingleMainSymbolicExpressionColumns,
+            CachedSymbolicExpressionColumns, NodeKind, SingleMainSymbolicExpressionColumns,
             ENCODER_MAX_DEGREE, NUM_FLAGS,
         },
         DagCommitCols, DagCommitInfo,
@@ -399,38 +398,6 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
 
         Some(RowMajorMatrix::new(main_trace, main_width))
     }
-}
-
-#[derive(Debug, Clone, Copy, EnumIter, EnumCount)]
-pub(crate) enum NodeKind {
-    // Args: (col_idx, is_next)
-    VarPreprocessed = 0,
-    // Args: (col_idx, is_next)
-    VarMain = 1,
-    // Args: (pv_idx,)
-    VarPublicValue = 2,
-    // Args: ()
-    SelIsFirst = 3,
-    // Args: ()
-    SelIsLast = 4,
-    // Args: ()
-    SelIsTransition = 5,
-    // Args: (val,)
-    Constant = 6,
-    // Args: (left_node_idx, right_node_idx)
-    Add = 7,
-    // Args: (left_node_idx, right_node_idx)
-    Sub = 8,
-    // Args: (node_idx,)
-    Neg = 9,
-    // Args: (left_node_idx, right_node_idx)
-    Mul = 10,
-    // Args: (node_idx,)
-    InteractionMult = 11,
-    // Args: (node_idx, idx_in_message)
-    InteractionMsgComp = 12,
-    // Args: (node_idx,)
-    InteractionBusIndex = 13,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -306,7 +306,6 @@ impl AirModule for BatchConstraintModule {
 
         let symbolic_expression_air = SymbolicExpressionAir {
             expr_bus: self.symbolic_expression_bus,
-            claim_bus: self.expression_claim_bus,
             air_shape_bus: self.air_shape_bus,
             column_claims_bus: self.column_opening_bus,
             interactions_folding_bus: self.interactions_folding_bus,
@@ -315,7 +314,6 @@ impl AirModule for BatchConstraintModule {
             public_values_bus: self.public_values_bus,
             sel_hypercube_bus: self.sel_hypercube_bus,
             sel_uni_bus: self.sel_uni_bus,
-            eq_neg_internal_bus: self.eq_neg_internal_bus,
             cnt_proofs: self.max_num_proofs,
             dag_commit_subair: (!self.has_cached).then_some(Arc::new(DagCommitSubAir::new())),
         };
