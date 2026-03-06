@@ -111,6 +111,12 @@ where
             ),
         );
 
+        // ======================= incides boundary conditions =========================
+        builder.when(local.is_first).assert_zero(local.sort_idx);
+        builder
+            .when(local.is_first_in_air)
+            .assert_zero(local.interaction_idx);
+
         builder.assert_bool(local.n_at_least_n_lift);
         builder.assert_bool(local.nth_bit);
         builder.assert_bool(local.has_no_interactions);
@@ -171,15 +177,17 @@ where
             .when(local.n_at_least_n_lift)
             .assert_one(local.two_to_the_n_lift);
 
-        builder.when(within_one_air.clone()).assert_eq(
+        builder.when(next.is_valid - next.is_first).assert_eq(
             next.running_idx,
-            local.running_idx + next.is_first_in_interaction * local.two_to_the_n_lift,
+            local.running_idx
+                + (next.is_first_in_interaction - local.has_no_interactions)
+                    * local.two_to_the_n_lift,
         );
 
         // =========================== Xi and product consistency =============================
         // Boundary conditions
         assert_array_eq(
-            &mut builder.when(local.is_valid * local.is_first),
+            &mut builder.when(local.is_valid * local.is_first_in_interaction),
             local.eq,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
