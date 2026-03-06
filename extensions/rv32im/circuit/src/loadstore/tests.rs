@@ -539,10 +539,12 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
+    let mut mem_config = MemoryConfig {                                                                                                           
+        pointer_max_bits: 20,
+        ..Default::default()                                                                                                                  
+    }; 
     // Reduce pointer_max_bits and num_cells to avoid ~4GB Merkle tree GPU allocations.
     // Merkle trees are now always built (volatile path was removed with access adapters).
-    mem_config.pointer_max_bits = 20;
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 20;
     mem_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STOREW, STOREB, STOREH].contains(&opcode) {

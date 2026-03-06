@@ -5,12 +5,12 @@ use openvm_keccak256_guest::KECCAK_OUTPUT_SIZE;
 #[cfg(not(any(target_os = "zkvm", feature = "tiny_keccak")))]
 compile_error!("Keccak256 requires the 'tiny_keccak' feature to be enabled on non-zkvm targets");
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
 mod host_impl;
 #[cfg(target_os = "zkvm")]
 mod zkvm_impl;
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
 pub use host_impl::{set_keccak256, Keccak256};
 #[cfg(target_os = "zkvm")]
 pub use zkvm_impl::{native_keccak256, set_keccak256, Keccak256};
