@@ -107,7 +107,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         }
 
         let mut count = AB::Expr::ZERO;
-        let local_next_same_proof = next_valid * (AB::Expr::ONE - next.is_proof_start);
+        let local_next_same_proof = next_valid - next.is_proof_start;
         for i in 0..CHUNK {
             builder.assert_bool(local.mask[i]);
             count += local.mask[i].into();
@@ -135,9 +135,21 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
                 .assert_eq(local.post_state[i + CHUNK], next.prev_state[i + CHUNK]);
         }
 
+        let mut when_same_proof = builder.when(local_next_same_proof.clone());
+        when_same_proof.assert_eq(next.tidx, local.tidx + count);
+
+        // Permute on all non-final rows except when going from sample to observe
+        when_same_proof
+            .when(not(local.is_sample))
+            .assert_one(local.permuted);
+        when_same_proof
+            .when(local.is_sample)
+            .assert_eq(local.permuted, next.is_sample);
+
+        // We never permute on the final row
         builder
-            .when(local_next_same_proof) // if next is valid
-            .assert_eq(next.tidx, local.tidx + count);
+            .when(not::<AB::Expr>(local_next_same_proof))
+            .assert_zero(local.permuted);
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
