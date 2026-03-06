@@ -139,7 +139,7 @@ where
             ),
         );
         builder
-            .when(local.is_first_in_round)
+            .when(local.is_first_in_query)
             .assert_eq(local.twiddle, AB::Expr::ONE);
         builder
             .when(is_same_query.clone())
