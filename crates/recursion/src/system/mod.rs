@@ -24,11 +24,11 @@ use crate::{
     bus::{
         AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, DagCommitBus, EqNegBaseRandBus, EqNegResultBus,
-        ExpressionClaimNMaxBus, FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus,
-        HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus, Poseidon2CompressBus,
-        Poseidon2PermuteBus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
-        TranscriptBus, WhirModuleBus, WhirMuBus, WhirOpeningPointBus, WhirOpeningPointLookupBus,
-        XiRandomnessBus,
+        EqNsNLogupMaxBus, ExpressionClaimNMaxBus, FinalTranscriptStateBus, FractionFolderInputBus,
+        GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus,
+        Poseidon2CompressBus, Poseidon2PermuteBus, PublicValuesBus, SelUniBus, StackingIndicesBus,
+        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirMuBus, WhirOpeningPointBus,
+        WhirOpeningPointLookupBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -238,6 +238,7 @@ pub struct BusInventory {
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
     pub n_lift_bus: NLiftBus,
+    pub eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
 
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
@@ -368,6 +369,7 @@ impl BusInventory {
             expression_claim_n_max_bus: ExpressionClaimNMaxBus::new(b.new_bus_idx()),
             fraction_folder_input_bus: FractionFolderInputBus::new(b.new_bus_idx()),
             n_lift_bus: NLiftBus::new(b.new_bus_idx()),
+            eq_n_logup_n_max_bus: EqNsNLogupMaxBus::new(b.new_bus_idx()),
 
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
