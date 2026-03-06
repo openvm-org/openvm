@@ -61,8 +61,8 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
 
 #[test_case(1000)]
 #[test_case(0)]
-fn test_memory_write_persistent(its: usize) {
-    let mut tester = VmChipTestBuilder::<F>::persistent(MemoryConfig::default());
+fn test_memory_write(its: usize) {
+    let mut tester = VmChipTestBuilder::<F>::from_config(MemoryConfig::default());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");
@@ -71,10 +71,10 @@ fn test_memory_write_persistent(its: usize) {
 #[cfg(feature = "cuda")]
 #[test_case(1000)]
 #[test_case(0)]
-fn test_cuda_memory_write_persistent(its: usize) {
+fn test_cuda_memory_write(its: usize) {
     use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
     let mut tester =
-        GpuChipTestBuilder::persistent(MemoryConfig::default(), default_var_range_checker_bus());
+        GpuChipTestBuilder::new(MemoryConfig::default(), default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");

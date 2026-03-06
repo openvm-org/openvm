@@ -165,7 +165,7 @@ fn public_values_rand_test() {
     let mut rng = create_seeded_rng();
     let system_config = SystemConfig::default();
     let mem_config = MemoryConfig::default();
-    let mut tester = VmChipTestBuilder::persistent(mem_config);
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
     tester.set_num_public_values(system_config.num_public_values);
 
     let mut harness = create_test_chips(&tester, &system_config);
@@ -313,7 +313,7 @@ fn test_cuda_public_values_tracegen() {
     let system_config = SystemConfig::default();
     let mem_config = MemoryConfig::default();
     let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
-    let mut tester = GpuChipTestBuilder::persistent(mem_config.clone(), bus);
+    let mut tester = GpuChipTestBuilder::new(mem_config.clone(), bus);
     tester.custom_pvs = vec![None; system_config.num_public_values];
 
     let mut harness = create_cuda_test_harness(&tester, &mem_config, &system_config);

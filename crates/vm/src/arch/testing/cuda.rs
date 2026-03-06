@@ -251,30 +251,19 @@ impl Default for GpuChipTestBuilder {
         let mut mem_config = MemoryConfig::default();
         // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config, default_var_range_checker_bus())
+        Self::new(mem_config, default_var_range_checker_bus())
     }
 }
 
 impl GpuChipTestBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn new_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config, default_var_range_checker_bus())
-    }
-
-    pub fn persistent(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
             VariableRangeCheckerChip::new(bus),
         )));
         Self {
-            memory: DeviceMemoryTester::persistent(
+            memory: DeviceMemoryTester::new(
                 default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
                 mem_bus,
                 mem_config,

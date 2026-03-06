@@ -23,15 +23,11 @@ use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
     pub boundary: BoundaryChipGPU,
-    pub persistent: Option<PersistentMemoryInventoryGPU>,
-    #[cfg(feature = "metrics")]
-    pub(super) unpadded_merkle_height: usize,
-}
-
-pub struct PersistentMemoryInventoryGPU {
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
+    #[cfg(feature = "metrics")]
+    pub(super) unpadded_merkle_height: usize,
 }
 
 #[repr(C)]
@@ -58,14 +54,12 @@ impl MemoryInventoryGPU {
         unsafe { std::mem::transmute::<F, u32>(value) }
     }
 
-    pub fn persistent(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
+    pub fn new(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
         Self {
             boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer()),
-            persistent: Some(PersistentMemoryInventoryGPU {
-                merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
-                initial_memory: Vec::new(),
-                merkle_records: None,
-            }),
+            merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
+            initial_memory: Vec::new(),
+            merkle_records: None,
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
         }
@@ -74,10 +68,6 @@ impl MemoryInventoryGPU {
     #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
         let mem = MemTracker::start("set initial memory");
-        let persistent = self
-            .persistent
-            .as_mut()
-            .expect("`set_initial_memory` requires persistent memory");
         for (addr_sp, raw_mem) in initial_memory
             .get_memory()
             .iter()
@@ -89,18 +79,17 @@ impl MemoryInventoryGPU {
                 addr_sp,
                 raw_mem.len()
             );
-            persistent.initial_memory.push(if raw_mem.is_empty() {
+            self.initial_memory.push(if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
                 raw_mem
                     .to_device()
                     .expect("failed to copy memory to device")
             });
-            persistent
-                .merkle_tree
-                .build_async(&persistent.initial_memory[addr_sp], addr_sp);
+            self.merkle_tree
+                .build_async(&self.initial_memory[addr_sp], addr_sp);
         }
-        self.boundary.initial_leaves = persistent
+        self.boundary.initial_leaves = self
             .initial_memory
             .iter()
             .skip(1)
@@ -116,17 +105,13 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
         let partition = touched_memory;
-        let persistent = self
-            .persistent
-            .as_mut()
-            .expect("persistent touched memory requires persistent memory interface");
         let merkle_proof_ctx = if partition.is_empty() {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; DIGEST_WIDTH];
-                if persistent.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
+                if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
                     break 'left res;
                 }
-                let layout = &persistent.merkle_tree.mem_config().addr_spaces
+                let layout = &self.merkle_tree.mem_config().addr_spaces
                     [ADDR_SPACE_OFFSET as usize]
                     .layout;
                 let one_cell_size = layout.size();
@@ -134,7 +119,7 @@ impl MemoryInventoryGPU {
                 unsafe {
                     cuda_memcpy::<true, false>(
                         values.as_mut_ptr() as *mut std::ffi::c_void,
-                        persistent.initial_memory[ADDR_SPACE_OFFSET as usize].as_ptr()
+                        self.initial_memory[ADDR_SPACE_OFFSET as usize].as_ptr()
                             as *const std::ffi::c_void,
                         values.len(),
                     )
@@ -163,17 +148,17 @@ impl MemoryInventoryGPU {
             let d_merkle_touched_memory = merkle_words.to_device().unwrap();
 
             let unpadded_merkle_height =
-                persistent.merkle_tree.calculate_unpadded_height(&partition);
+                self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;
             }
 
             self.boundary
-                .finalize_records_persistent::<DIGEST_WIDTH>(Vec::new());
+                .finalize_records::<DIGEST_WIDTH>(Vec::new());
             mem.tracing_info("merkle update");
-            persistent.merkle_tree.finalize();
-            persistent.merkle_tree.update_with_touched_blocks(
+            self.merkle_tree.finalize();
+            self.merkle_tree.update_with_touched_blocks(
                 unpadded_merkle_height,
                 &d_merkle_touched_memory,
                 true,
@@ -228,10 +213,10 @@ impl MemoryInventoryGPU {
             // Send records to boundary chip
             let out_num_records = d_out_num_records.to_host().unwrap()[0];
             self.boundary
-                .finalize_records_persistent_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
+                .finalize_records_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
 
             // Send records to memory merkle tree
-            let out_records = self.boundary.persistent_records().to_host().unwrap();
+            let out_records = self.boundary.records().to_host().unwrap();
             let record_words = 4 + DIGEST_WIDTH;
             let mut merkle_records = Vec::with_capacity(out_num_records);
             for i in 0..out_num_records {
@@ -252,21 +237,20 @@ impl MemoryInventoryGPU {
                     merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
                 )
             };
-            persistent.merkle_records = Some(merkle_words.to_device().unwrap());
+            self.merkle_records = Some(merkle_words.to_device().unwrap());
 
             let unpadded_merkle_height =
-                persistent.merkle_tree.calculate_unpadded_height(&partition);
+                self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;
             }
 
             mem.tracing_info("merkle update");
-            persistent.merkle_tree.finalize();
-            persistent.merkle_tree.update_with_touched_blocks(
+            self.merkle_tree.finalize();
+            self.merkle_tree.update_with_touched_blocks(
                 unpadded_merkle_height,
-                persistent
-                    .merkle_records
+                self.merkle_records
                     .as_ref()
                     .expect("missing merkle records"),
                 false,
@@ -275,14 +259,14 @@ impl MemoryInventoryGPU {
         mem.tracing_info("boundary tracegen");
         let ret = vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx];
         mem.tracing_info("dropping merkle tree");
-        persistent.merkle_tree.drop_subtrees();
-        persistent.initial_memory = Vec::new();
+        self.merkle_tree.drop_subtrees();
+        self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret
     }
 }
 
-impl Drop for PersistentMemoryInventoryGPU {
+impl Drop for MemoryInventoryGPU {
     fn drop(&mut self) {
         // WARNING: The merkle subtree events must be completed before dropping the initial memory
         // buffers. This prevents buffers from dropping before build_async completes.
@@ -339,7 +323,7 @@ mod tests {
             * 2
             * DIGEST_WIDTH;
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory = MemoryInventoryGPU::persistent(mem_config.clone(), hasher_chip);
+        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip);
         inventory.set_initial_memory(&memory.memory);
 
         let ctxs = inventory.generate_proving_ctxs(Vec::new());
@@ -413,7 +397,7 @@ mod tests {
             * 2
             * DIGEST_WIDTH;
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory = MemoryInventoryGPU::persistent(mem_config.clone(), hasher_chip);
+        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip);
         inventory.set_initial_memory(&memory.memory);
 
         let touched_memory = vec![

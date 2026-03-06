@@ -330,13 +330,6 @@ impl VmChipTestBuilder<BabyBear> {
 }
 
 impl<F: VmField> VmChipTestBuilder<F> {
-    pub fn default_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-        Self::persistent(mem_config)
-    }
-
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
         init_block_size: usize,
@@ -350,11 +343,11 @@ impl<F: VmField> VmChipTestBuilder<F> {
         (range_checker, memory)
     }
 
-    pub fn persistent(mem_config: MemoryConfig) -> Self {
+    pub fn from_config(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
-        let memory_controller = MemoryController::with_persistent_memory(
+        let memory_controller = MemoryController::new(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
@@ -383,7 +376,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-        Self::persistent(mem_config)
+        Self::from_config(mem_config)
     }
 }
 

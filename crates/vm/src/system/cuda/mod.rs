@@ -53,7 +53,7 @@ impl SystemChipInventoryGPU {
         ));
 
         let memory_inventory =
-            MemoryInventoryGPU::persistent(config.memory_config.clone(), hasher_chip);
+            MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip);
 
         let public_values_chip = config.has_public_values_chip().then(|| {
             PublicValuesChipGPU::new(
@@ -120,9 +120,6 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
     fn memory_top_tree(&self) -> Option<&[[F; CHUNK]]> {
         let top_tree = &self
             .memory_inventory
-            .persistent
-            .as_ref()
-            .expect("GPU memory inventory must be persistent")
             .merkle_tree
             .top_roots_host;
         (!top_tree.is_empty()).then_some(top_tree.as_slice())

@@ -27,7 +27,7 @@ use crate::{
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            persistent::PersistentBoundaryChip,
+            boundary::BoundaryChip,
         },
         poseidon2::Poseidon2PeripheryChip,
         TouchedMemory,
@@ -79,11 +79,11 @@ pub struct MemoryController<F: VmField> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PersistentMemoryTraceHeights {
+pub struct MemoryTraceHeights {
     boundary: usize,
     merkle: usize,
 }
-impl PersistentMemoryTraceHeights {
+impl MemoryTraceHeights {
     /// `heights` must consist of only memory trace heights, in order of AIR IDs.
     pub fn from_slice(heights: &[u32]) -> Self {
         Self {
@@ -94,10 +94,10 @@ impl PersistentMemoryTraceHeights {
 }
 
 impl<F: VmField> MemoryController<F> {
-    /// Creates a new memory controller for persistent memory.
+    /// Creates a new memory controller.
     ///
     /// Call `set_initial_memory` to set the initial memory state after construction.
-    pub fn with_persistent_memory(
+    pub fn new(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: SharedVariableRangeCheckerChip,
@@ -111,7 +111,7 @@ impl<F: VmField> MemoryController<F> {
         };
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface {
-            boundary_chip: PersistentBoundaryChip::new(
+            boundary_chip: BoundaryChip::new(
                 memory_dims,
                 memory_bus,
                 merkle_bus,
@@ -135,7 +135,7 @@ impl<F: VmField> MemoryController<F> {
     }
 
     pub(crate) fn set_override_trace_heights(&mut self, overridden_heights: &[u32]) {
-        let oh = PersistentMemoryTraceHeights::from_slice(overridden_heights);
+        let oh = MemoryTraceHeights::from_slice(overridden_heights);
         self.interface_chip
             .boundary_chip
             .set_overridden_height(oh.boundary);
@@ -144,7 +144,7 @@ impl<F: VmField> MemoryController<F> {
             .set_overridden_height(oh.merkle);
     }
 
-    /// This only sets the initial memory image for the persistent boundary and merkle tree chips.
+    /// This only sets the initial memory image for the boundary and merkle tree chips.
     /// Tracing memory should be set separately.
     pub(crate) fn set_initial_memory(&mut self, memory: AddressMap) {
         self.interface_chip.initial_memory = memory;

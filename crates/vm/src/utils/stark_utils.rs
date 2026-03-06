@@ -280,7 +280,7 @@ where
 /// Note: Metered execution stores un-padded counts, so we pad them for comparison.
 /// The proving context trace height (realized) is already padded.
 /// For most AIRs, estimated_padded should exactly equal realized.
-/// For MemoryMerkleAir, Poseidon2PeripheryAir, and PersistentBoundaryAir, it is expected that
+/// For MemoryMerkleAir, Poseidon2PeripheryAir, and BoundaryAir, it is expected that
 /// estimated >> realized.
 fn validate_metered_estimates<E, VB>(
     vm: &VirtualMachine<E, VB>,
@@ -342,7 +342,7 @@ fn validate_metered_estimates<E, VB>(
         // For some airs, the overestimates are expected
         if air_name.contains("MemoryMerkleAir")
             || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("PersistentBoundaryAir")
+            || air_name.contains("BoundaryAir")
             || air_name.contains("NativeAdapterAir")
         {
             continue;

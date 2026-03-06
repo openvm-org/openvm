@@ -76,7 +76,7 @@ pub(crate) const PV_EXECUTOR_IDX: usize = 0;
 ///
 /// The [SystemChipComplex] is meant to be constructible once the VM configuration is known, and it
 /// can be loaded with arbitrary programs supported by the instruction set available to its
-/// configuration. The [SystemChipComplex] is meant to persistent between instances of proof
+/// configuration. The [SystemChipComplex] is meant to persist between instances of proof
 /// generation.
 pub trait SystemChipComplex<RA, PB: ProverBackend> {
     /// Loads the program in the form of a cached trace with prover data.
@@ -298,7 +298,7 @@ where
         inventory.add_air(range_checker);
 
         assert_eq!(inventory.ext_airs().len(), POSEIDON2_INSERTION_IDX);
-        // Add direct poseidon2 AIR for persistent memory.
+        // Add direct poseidon2 AIR for memory merkle tree.
         // Currently we never use poseidon2 opcodes directly: we will need
         // special handling when that happens
         let air = new_poseidon2_periphery_air(
@@ -353,7 +353,7 @@ where
             config.memory_config.timestamp_max_bits,
         );
         let memory_bus = mem_inventory.bridge.memory_bus();
-        let memory_controller = MemoryController::<Val<SC>>::with_persistent_memory(
+        let memory_controller = MemoryController::<Val<SC>>::new(
             memory_bus,
             config.memory_config.clone(),
             range_checker.clone(),

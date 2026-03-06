@@ -40,7 +40,7 @@ pub struct DeviceMemoryTester {
 }
 
 impl DeviceMemoryTester {
-    pub fn persistent(
+    pub fn new(
         memory: TracingMemory,
         mem_bus: MemoryBus,
         mem_config: MemoryConfig,
@@ -58,7 +58,7 @@ impl DeviceMemoryTester {
             sbox_regs,
         ));
         let mut inventory =
-            MemoryInventoryGPU::persistent(mem_config.clone(), poseidon2_periphery.clone());
+            MemoryInventoryGPU::new(mem_config.clone(), poseidon2_periphery.clone());
         inventory.set_initial_memory(&memory.data.memory);
         Self {
             chip_for_block,

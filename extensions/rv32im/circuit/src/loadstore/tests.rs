@@ -214,9 +214,9 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    // Use persistent memory so initial block size matches the 4-byte alignment and
+    // Use custom memory config so initial block size matches the 4-byte alignment and
     // avoids access-adapter split/merge paths when adapters are disabled.
-    let mut tester = VmChipTestBuilder::persistent(mem_config);
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
@@ -267,8 +267,8 @@ fn run_negative_loadstore_test(
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    // Use persistent memory so the min block size matches alignment without needing adapters.
-    let mut tester = VmChipTestBuilder::persistent(mem_config);
+    // Use custom memory config so the min block size matches alignment without needing adapters.
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
     set_and_execute(
@@ -542,7 +542,7 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usiz
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = GpuChipTestBuilder::persistent(mem_config, default_var_range_checker_bus());
+    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 
     let mut harness = create_cuda_harness(&tester);
     for _ in 0..num_ops {

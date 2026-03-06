@@ -36,7 +36,7 @@ pub const BLOCKS_PER_CHUNK: usize = CHUNK / CONST_BLOCK_SIZE;
 /// accessed timestamp---in either the initial or final memory state.
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
-pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
+pub struct BoundaryCols<T, const CHUNK: usize> {
     // `expand_direction` =  1 corresponds to initial memory state
     // `expand_direction` = -1 corresponds to final memory state
     // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
@@ -59,27 +59,27 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
 ///   `merkle_bus`.
 #[derive(Clone, Debug)]
-pub struct PersistentBoundaryAir<const CHUNK: usize> {
+pub struct BoundaryAir<const CHUNK: usize> {
     pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
 }
 
-impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
+impl<const CHUNK: usize, F> BaseAir<F> for BoundaryAir<CHUNK> {
     fn width(&self) -> usize {
-        PersistentBoundaryCols::<F, CHUNK>::width()
+        BoundaryCols::<F, CHUNK>::width()
     }
 }
 
-impl<const CHUNK: usize, F> BaseAirWithPublicValues<F> for PersistentBoundaryAir<CHUNK> {}
-impl<const CHUNK: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<CHUNK> {}
+impl<const CHUNK: usize, F> BaseAirWithPublicValues<F> for BoundaryAir<CHUNK> {}
+impl<const CHUNK: usize, F> PartitionedBaseAir<F> for BoundaryAir<CHUNK> {}
 
-impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<CHUNK> {
+impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for BoundaryAir<CHUNK> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
-        let local: &PersistentBoundaryCols<AB::Var, CHUNK> = (*local).borrow();
+        let local: &BoundaryCols<AB::Var, CHUNK> = (*local).borrow();
 
         // `direction` should be -1, 0, 1
         builder.assert_eq(
@@ -137,8 +137,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
     }
 }
 
-pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
-    pub air: PersistentBoundaryAir<CHUNK>,
+pub struct BoundaryChip<F, const CHUNK: usize> {
+    pub air: BoundaryAir<CHUNK>,
     pub touched_labels: TouchedLabels<F, CHUNK>,
     overridden_height: Option<usize>,
 }
@@ -192,7 +192,7 @@ impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
     }
 }
 
-impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
+impl<const CHUNK: usize, F: PrimeField32> BoundaryChip<F, CHUNK> {
     pub fn new(
         memory_dimensions: MemoryDimensions,
         memory_bus: MemoryBus,
@@ -200,7 +200,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         compression_bus: PermutationCheckBus,
     ) -> Self {
         Self {
-            air: PersistentBoundaryAir {
+            air: BoundaryAir {
                 memory_dims: memory_dimensions,
                 memory_bus,
                 merkle_bus,
@@ -302,14 +302,14 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     }
 }
 
-impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, CHUNK>
+impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for BoundaryChip<Val<SC>, CHUNK>
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let trace = {
-            let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
+            let width = BoundaryCols::<Val<SC>, CHUNK>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
             let mut height = (2 * self.touched_labels.len()).next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
@@ -331,7 +331,7 @@ where
                 .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
                     let (initial_row, final_row) = row.split_at_mut(width);
-                    *initial_row.borrow_mut() = PersistentBoundaryCols {
+                    *initial_row.borrow_mut() = BoundaryCols {
                         expand_direction: Val::<SC>::ONE,
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
@@ -340,7 +340,7 @@ where
                         timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_CHUNK],
                     };
 
-                    *final_row.borrow_mut() = PersistentBoundaryCols {
+                    *final_row.borrow_mut() = BoundaryCols {
                         expand_direction: Val::<SC>::NEG_ONE,
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
