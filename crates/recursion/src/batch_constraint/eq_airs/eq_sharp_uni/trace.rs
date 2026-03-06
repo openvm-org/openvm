@@ -137,7 +137,6 @@ impl RowMajorChip<F> for EqSharpUniTraceGenerator {
                     cols.is_valid = F::ONE;
                     cols.is_first = F::from_bool(i == 0);
                     cols.proof_idx = F::from_usize(pidx);
-                    cols.is_first_iter = F::ONE;
                     cols.xi_idx = F::from_u32(record.xi_idx);
                     cols.xi
                         .copy_from_slice(record.xi.as_basis_coefficients_slice());

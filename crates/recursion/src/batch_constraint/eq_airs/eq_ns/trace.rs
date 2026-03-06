@@ -135,6 +135,8 @@ impl RowMajorChip<F> for EqNsTraceGenerator {
                     cols.is_first = F::from_bool(i == 0);
                     cols.proof_idx = F::from_usize(pidx);
                     cols.n = F::from_usize(i);
+                    cols.n_logup = F::from_usize(record.n_logup);
+                    cols.n_max = F::from_usize(record.n_max);
                     cols.n_less_than_n_logup = F::from_bool(i < record.n_logup);
                     cols.n_less_than_n_max = F::from_bool(i < record.n_max);
                     cols.is_transition_and_n_less_than_n_max =
