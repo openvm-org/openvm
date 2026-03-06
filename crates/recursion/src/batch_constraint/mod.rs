@@ -47,8 +47,9 @@ use crate::{
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
         ConstraintsFoldingInputBus, EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus,
-        ExpressionClaimNMaxBus, FractionFolderInputBus, HyperdimBus, NLiftBus, PublicValuesBus,
-        SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        ExpressionClaimNMaxBus, FractionFolderInputBus, HyperdimBus, InteractionsFoldingInputBus,
+        NLiftBus, PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
+        XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerCpuTraceGenerator},
     system::{
@@ -80,6 +81,7 @@ pub struct BatchConstraintModule {
     xi_randomness_bus: XiRandomnessBus,
     gkr_claim_bus: BatchConstraintModuleBus,
     constraints_folding_input_bus: ConstraintsFoldingInputBus,
+    interactions_folding_input_bus: InteractionsFoldingInputBus,
     fraction_folder_input_bus: FractionFolderInputBus,
     univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     stacking_module_bus: StackingModuleBus,
@@ -133,6 +135,7 @@ impl BatchConstraintModule {
             xi_randomness_bus: bus_inventory.xi_randomness_bus,
             gkr_claim_bus: bus_inventory.bc_module_bus,
             constraints_folding_input_bus: bus_inventory.constraints_folding_input_bus,
+            interactions_folding_input_bus: bus_inventory.interactions_folding_input_bus,
             fraction_folder_input_bus: bus_inventory.fraction_folder_input_bus,
             stacking_module_bus: bus_inventory.stacking_module_bus,
             column_opening_bus: bus_inventory.column_claims_bus,
@@ -397,6 +400,7 @@ impl AirModule for BatchConstraintModule {
             transcript_bus: self.transcript_bus,
             air_shape_bus: self.air_shape_bus,
             interaction_bus: self.interactions_folding_bus,
+            interactions_folding_input_bus: self.interactions_folding_input_bus,
             expression_claim_bus: self.expression_claim_bus,
             eq_3b_bus: self.eq_3b_bus,
         };

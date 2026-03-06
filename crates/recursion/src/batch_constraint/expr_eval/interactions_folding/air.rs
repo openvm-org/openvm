@@ -18,7 +18,10 @@ use crate::{
         Eq3bBus, Eq3bMessage, ExpressionClaimBus, ExpressionClaimMessage, InteractionsFoldingBus,
         InteractionsFoldingMessage,
     },
-    bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
+    bus::{
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, InteractionsFoldingInputBus,
+        InteractionsFoldingInputMessage, TranscriptBus,
+    },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{assert_zeros, ext_field_add, ext_field_multiply},
 };
@@ -63,6 +66,7 @@ pub struct InteractionsFoldingCols<T> {
 
 pub struct InteractionsFoldingAir {
     pub interaction_bus: InteractionsFoldingBus,
+    pub interactions_folding_input_bus: InteractionsFoldingInputBus,
     pub air_shape_bus: AirShapeBus,
     pub transcript_bus: TranscriptBus,
     pub expression_claim_bus: ExpressionClaimBus,
@@ -367,6 +371,14 @@ where
                 value: local.air_idx.into(),
             },
             local.is_first_in_air,
+        );
+        self.interactions_folding_input_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingInputMessage {
+                tidx: local.beta_tidx,
+            },
+            local.is_first,
         );
 
         self.eq_3b_bus.receive(
