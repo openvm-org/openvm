@@ -35,8 +35,6 @@ pub struct TranscriptCols<T> {
     /// are sent with multiplicity 0 or 1, this also functions as the lookup count.
     pub mask: [T; CHUNK],
 
-    /// indicator, whether the state is permutation from previous row's state
-    pub permuted: T,
     /// The poseidon2 state.
     pub prev_state: [T; POSEIDON2_WIDTH],
     pub post_state: [T; POSEIDON2_WIDTH],
@@ -143,19 +141,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
             .when_ne(local.is_sample, not(next.is_sample))
             .assert_eq(count, AB::Expr::from_usize(CHUNK));
 
-        // Permute on all non-final rows except when going from sample to observe
-        when_same_proof
-            .when(not(local.is_sample))
-            .assert_one(local.permuted);
-        when_same_proof
-            .when(local.is_sample)
-            .assert_eq(local.permuted, next.is_sample);
-
-        // We never permute on the final row
-        builder
-            .when(not::<AB::Expr>(local_next_same_proof))
-            .assert_zero(local.permuted);
-
         ///////////////////////////////////////////////////////////////////////
         // Interactions
         ///////////////////////////////////////////////////////////////////////
@@ -186,14 +171,17 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
             );
         }
 
-        builder.assert_bool(local.permuted);
+        // Permute on all non-final rows except when going from sample to observe,
+        // and never on the final row.
+        let permuted =
+            local_next_same_proof * not::<AB::Expr>(and(local.is_sample, not(next.is_sample)));
         self.poseidon2_permute_bus.lookup_key(
             builder,
             Poseidon2PermuteMessage {
                 input: local.prev_state,
                 output: local.post_state,
             },
-            local.permuted,
+            permuted,
         );
 
         if let Some(final_state_bus) = self.final_state_bus {
