@@ -627,3 +627,12 @@ pub struct EqNegBaseRandMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(EqNegBaseRandBus, EqNegBaseRandMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct EqNsNLogupMaxMessage<T> {
+    pub n_logup: T,
+    pub n_max: T,
+}
+
+define_typed_per_proof_lookup_bus!(EqNsNLogupMaxBus, EqNsNLogupMaxMessage);

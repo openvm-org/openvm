@@ -18,10 +18,11 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         AirShapeBus, AirShapeBusMessage, AirShapeProperty, CachedCommitBus, CachedCommitBusMessage,
-        CommitmentsBus, CommitmentsBusMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
-        FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
-        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus,
-        NLiftMessage, TranscriptBus, TranscriptBusMessage,
+        CommitmentsBus, CommitmentsBusMessage, EqNsNLogupMaxBus, EqNsNLogupMaxMessage,
+        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, FractionFolderInputBus,
+        FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
+        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus, NLiftMessage,
+        TranscriptBus, TranscriptBusMessage,
     },
     primitives::bus::{
         PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
@@ -164,6 +165,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub commitments_bus: CommitmentsBus,
     pub transcript_bus: TranscriptBus,
     pub n_lift_bus: NLiftBus,
+    pub eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
 
     // For continuations
     pub cached_commit_bus: CachedCommitBus,
@@ -887,6 +889,16 @@ where
                 n_logup: n_logup.into(),
                 n_max: local.n_max.into(),
                 is_n_max_greater: local.is_n_max_greater.into(),
+            },
+            local.is_last,
+        );
+
+        self.eq_n_logup_n_max_bus.add_key_with_lookups(
+            builder,
+            local.proof_idx,
+            EqNsNLogupMaxMessage {
+                n_logup,
+                n_max: local.n_max,
             },
             local.is_last,
         );

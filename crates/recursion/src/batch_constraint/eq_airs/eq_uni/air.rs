@@ -19,7 +19,7 @@ use crate::{
         BatchConstraintInnerMessageType, EqZeroNBus, EqZeroNMessage,
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{ext_field_add, ext_field_multiply, ext_field_one_minus},
+    utils::{assert_one_ext, ext_field_add, ext_field_multiply, ext_field_one_minus},
 };
 
 #[derive(AlignedBorrow, Clone, Copy)]
@@ -141,6 +141,8 @@ where
             .assert_eq(local.idx, AB::Expr::from_usize(self.l_skip));
 
         // ======================== Values recalculation ==========================
+        assert_one_ext(&mut builder.when(local.is_first), local.res);
+
         let mut when_transition = builder.when(is_transition);
         assert_array_eq(
             &mut when_transition,

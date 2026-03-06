@@ -198,6 +198,14 @@ where
             local.xi_idx,
             AB::Expr::from_usize(self.l_skip) - AB::Expr::ONE,
         );
+        assert_array_eq(
+            &mut builder.when(LoopSubAir::local_is_transition(
+                next.is_valid,
+                next.is_first_iter,
+            )),
+            local.xi,
+            next.xi,
+        );
         // When we drop iter_idx, xi_idx decreases
         builder
             .when(next.is_first_iter * not(next.is_first))
@@ -350,6 +358,15 @@ where
             .assert_one(next.idx - local.idx);
         // ============================= EF values consistency ==========================
         assert_array_eq(&mut builder.when(is_same_proof.clone()), next.r, local.r);
+        assert_array_eq(
+            &mut builder.when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first,
+            )),
+            local.cur_sum,
+            local.coeff,
+        );
         assert_array_eq(
             &mut builder.when(is_same_proof),
             local.cur_sum,
