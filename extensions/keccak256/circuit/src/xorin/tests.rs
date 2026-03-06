@@ -309,8 +309,16 @@ fn cuda_set_and_execute(
     let buffer_ptr = gen_pointer(rng, len);
     let input_ptr = gen_pointer(rng, len);
 
-    tester.write(1, buffer_reg, (buffer_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, input_reg, (input_ptr as u32).to_le_bytes().map(F::from_u8));
+    tester.write(
+        1,
+        buffer_reg,
+        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+    );
+    tester.write(
+        1,
+        input_reg,
+        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+    );
     tester.write(1, len_reg, (len as u32).to_le_bytes().map(F::from_u8));
 
     let buffer_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
