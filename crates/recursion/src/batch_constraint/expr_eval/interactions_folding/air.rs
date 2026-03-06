@@ -164,6 +164,10 @@ where
             .assert_one(next.idx_in_message - local.idx_in_message + local.is_first_in_message);
 
         // // =========================== general consistency ================================
+        // air_idx is the same within an air
+        builder
+            .when(is_same_air.clone())
+            .assert_eq(local.air_idx, next.air_idx);
         // The row describes an AIR without interactions iff it's first and last in the message,
         // unless the row is invalid
         builder.when(local.is_valid).assert_eq(
