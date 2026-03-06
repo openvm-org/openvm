@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::{assert_array_eq, not},
+    SubAir,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -15,9 +18,12 @@ use crate::{
         ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNOuterBus, EqNOuterMessage,
         ExpressionClaimBus, ExpressionClaimMessage,
     },
-    bus::{NLiftBus, NLiftMessage, TranscriptBus},
+    bus::{
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, ConstraintsFoldingInputBus,
+        ConstraintsFoldingInputMessage, NLiftBus, NLiftMessage, TranscriptBus,
+    },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
+    utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -48,6 +54,8 @@ pub struct ConstraintsFoldingAir {
     pub expression_claim_bus: ExpressionClaimBus,
     pub eq_n_outer_bus: EqNOuterBus,
     pub n_lift_bus: NLiftBus,
+    pub air_shape_bus: AirShapeBus,
+    pub constraints_folding_input_bus: ConstraintsFoldingInputBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
@@ -91,15 +99,21 @@ where
                 .map_into(),
             ),
         );
+        builder.when_first_row().assert_zero(local.proof_idx);
+        builder.when(local.is_first).assert_zero(local.sort_idx);
 
         let is_same_proof = next.is_valid - next.is_first;
         let is_same_air = next.is_valid - next.is_first_in_air;
 
         // =========================== indices consistency ===============================
-        // When we are within one air, constraint_idx increases by 0/1
+        // When we are within one air, constraint_idx increases by 1
         builder
             .when(is_same_air.clone())
-            .assert_bool(next.constraint_idx - local.constraint_idx);
+            .assert_one(next.constraint_idx - local.constraint_idx);
+        // air_idx doesn't change within an air
+        builder
+            .when(is_same_air.clone())
+            .assert_eq(local.air_idx, next.air_idx);
         // First constraint_idx within an air is zero
         builder
             .when(local.is_first_in_air)
@@ -127,6 +141,13 @@ where
         assert_array_eq(
             &mut builder.when(AB::Expr::ONE - is_same_air.clone()),
             local.cur_sum,
+            local.value,
+        );
+        // If we don't have constraints then `value` is zero
+        assert_zeros(
+            &mut builder
+                .when(local.is_first)
+                .when(not::<AB::Expr>(is_same_air.clone())),
             local.value,
         );
 
@@ -163,6 +184,14 @@ where
             },
             local.is_first_in_air * local.is_valid,
         );
+        self.constraints_folding_input_bus.receive(
+            builder,
+            local.proof_idx,
+            ConstraintsFoldingInputMessage {
+                tidx: local.lambda_tidx,
+            },
+            local.is_first,
+        );
         self.transcript_bus.sample_ext(
             builder,
             local.proof_idx,
@@ -180,6 +209,17 @@ where
                 value: local.eq_n.map(Into::into),
             },
             local.is_first_in_air * local.is_valid,
+        );
+
+        self.air_shape_bus.lookup_key(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sort_idx.into(),
+                property_idx: AirShapeProperty::AirId.to_field(),
+                value: local.air_idx.into(),
+            },
+            local.is_first_in_air,
         );
     }
 }

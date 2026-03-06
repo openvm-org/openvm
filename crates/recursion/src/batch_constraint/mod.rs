@@ -46,9 +46,9 @@ use crate::{
     },
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
-        EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
-        FractionFolderInputBus, HyperdimBus, NLiftBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
-        StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        ConstraintsFoldingInputBus, EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus,
+        ExpressionClaimNMaxBus, FractionFolderInputBus, HyperdimBus, NLiftBus, PublicValuesBus,
+        SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerCpuTraceGenerator},
     system::{
@@ -79,6 +79,7 @@ pub struct BatchConstraintModule {
     constraint_sumcheck_randomness_bus: ConstraintSumcheckRandomnessBus,
     xi_randomness_bus: XiRandomnessBus,
     gkr_claim_bus: BatchConstraintModuleBus,
+    constraints_folding_input_bus: ConstraintsFoldingInputBus,
     fraction_folder_input_bus: FractionFolderInputBus,
     univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     stacking_module_bus: StackingModuleBus,
@@ -131,6 +132,7 @@ impl BatchConstraintModule {
             constraint_sumcheck_randomness_bus: bus_inventory.constraint_randomness_bus,
             xi_randomness_bus: bus_inventory.xi_randomness_bus,
             gkr_claim_bus: bus_inventory.bc_module_bus,
+            constraints_folding_input_bus: bus_inventory.constraints_folding_input_bus,
             fraction_folder_input_bus: bus_inventory.fraction_folder_input_bus,
             stacking_module_bus: bus_inventory.stacking_module_bus,
             column_opening_bus: bus_inventory.column_claims_bus,
@@ -404,6 +406,8 @@ impl AirModule for BatchConstraintModule {
             expression_claim_bus: self.expression_claim_bus,
             eq_n_outer_bus: self.eq_n_outer_bus,
             n_lift_bus: self.n_lift_bus,
+            air_shape_bus: self.air_shape_bus,
+            constraints_folding_input_bus: self.constraints_folding_input_bus,
         };
         // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         vec![

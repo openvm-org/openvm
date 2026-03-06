@@ -636,3 +636,11 @@ pub struct EqNsNLogupMaxMessage<T> {
 }
 
 define_typed_per_proof_lookup_bus!(EqNsNLogupMaxBus, EqNsNLogupMaxMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct ConstraintsFoldingInputMessage<T> {
+    pub tidx: T,
+}
+
+define_typed_per_proof_permutation_bus!(ConstraintsFoldingInputBus, ConstraintsFoldingInputMessage);
