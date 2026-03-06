@@ -12,20 +12,19 @@ use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 use strum::{EnumCount, IntoEnumIterator};
+use strum_macros::EnumIter;
 
-use super::trace::NodeKind;
 use crate::{
     batch_constraint::{
         bus::{
-            ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNegInternalBus, ExpressionClaimBus,
-            InteractionsFoldingBus, InteractionsFoldingMessage, SymbolicExpressionBus,
-            SymbolicExpressionMessage,
+            ConstraintsFoldingBus, ConstraintsFoldingMessage, InteractionsFoldingBus,
+            InteractionsFoldingMessage, SymbolicExpressionBus, SymbolicExpressionMessage,
         },
         expr_eval::{dag_commit_cols_to_cached_cols, DagCommitCols, DagCommitPvs, DagCommitSubAir},
     },
     bus::{
-        AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus,
-        HyperdimBusMessage, PublicValuesBus, PublicValuesBusMessage, SelHypercubeBus,
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, ColumnClaimsBus, ColumnClaimsMessage,
+        HyperdimBus, HyperdimBusMessage, PublicValuesBus, PublicValuesBusMessage, SelHypercubeBus,
         SelHypercubeBusMessage, SelUniBus, SelUniBusMessage,
     },
     utils::{
@@ -37,6 +36,38 @@ use crate::{
 pub(in crate::batch_constraint) const NUM_FLAGS: usize = 4;
 pub(in crate::batch_constraint) const ENCODER_MAX_DEGREE: u32 = 2;
 pub(in crate::batch_constraint) const FLAG_MODULUS: u32 = ENCODER_MAX_DEGREE + 1;
+
+#[derive(Debug, Clone, Copy, EnumIter, EnumCount)]
+pub(crate) enum NodeKind {
+    // Args: (col_idx, is_next)
+    VarPreprocessed = 0,
+    // Args: (col_idx, is_next)
+    VarMain = 1,
+    // Args: (pv_idx,)
+    VarPublicValue = 2,
+    // Args: ()
+    SelIsFirst = 3,
+    // Args: ()
+    SelIsLast = 4,
+    // Args: ()
+    SelIsTransition = 5,
+    // Args: (val,)
+    Constant = 6,
+    // Args: (left_node_idx, right_node_idx)
+    Add = 7,
+    // Args: (left_node_idx, right_node_idx)
+    Sub = 8,
+    // Args: (node_idx,)
+    Neg = 9,
+    // Args: (left_node_idx, right_node_idx)
+    Mul = 10,
+    // Args: (node_idx,)
+    InteractionMult = 11,
+    // Args: (node_idx, idx_in_message)
+    InteractionMsgComp = 12,
+    // Args: (node_idx,)
+    InteractionBusIndex = 13,
+}
 
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
@@ -71,7 +102,6 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
 
 pub struct SymbolicExpressionAir<F: Field> {
     pub expr_bus: SymbolicExpressionBus,
-    pub claim_bus: ExpressionClaimBus,
     pub hyperdim_bus: HyperdimBus,
     pub air_shape_bus: AirShapeBus,
     pub column_claims_bus: ColumnClaimsBus,
@@ -80,7 +110,6 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub public_values_bus: PublicValuesBus,
     pub sel_hypercube_bus: SelHypercubeBus,
     pub sel_uni_bus: SelUniBus,
-    pub eq_neg_internal_bus: EqNegInternalBus,
 
     pub cnt_proofs: usize,
     pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
@@ -206,6 +235,9 @@ where
 
             builder.assert_bool(cols.is_present);
             builder.when(cols.is_n_neg).assert_one(cols.is_present);
+            builder
+                .when(cols.is_present)
+                .assert_one(enc.is_valid::<AB>(&flags));
 
             let mut value = [AB::Expr::ZERO; D_EF];
             for node_kind in NodeKind::iter() {
@@ -302,7 +334,7 @@ where
                 proof_idx,
                 AirShapeBusMessage {
                     sort_idx: cols.sort_idx.into(),
-                    property_idx: AB::Expr::ZERO,
+                    property_idx: AirShapeProperty::AirId.to_field(),
                     value: cached_cols.air_idx.into(),
                 },
                 cols.is_present,
