@@ -37,10 +37,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{
-    memory_read, memory_read_deferral, timed_write, timed_write_deferral, tracing_read,
-    RV32_CELL_BITS,
-};
+use crate::adapters::{memory_read, timed_write, tracing_read, RV32_CELL_BITS};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store

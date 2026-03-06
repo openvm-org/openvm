@@ -26,9 +26,8 @@ use crate::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
         ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor, RowMajorMatrixArena,
-        SystemConfig, VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper, VmCircuitConfig,
-        VmExecutionConfig, VmField, CONNECTOR_AIR_ID, CONST_BLOCK_SIZE, PROGRAM_AIR_ID,
-        PUBLIC_VALUES_AIR_ID,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField,
+        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, CONST_BLOCK_SIZE, PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -446,6 +445,6 @@ where
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         self.memory_controller
-            .set_override_trace_heights(&heights[MEMORY_AIRS_START_IDX..]);
+            .set_override_trace_heights(&heights[BOUNDARY_AIR_ID..]);
     }
 }
