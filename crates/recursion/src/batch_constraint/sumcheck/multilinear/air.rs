@@ -93,12 +93,6 @@ where
         let s_deg = self.max_constraint_degree + 1;
 
         ///////////////////////////////////////////////////////////////////////
-        // Boolean Constraints
-        ///////////////////////////////////////////////////////////////////////
-
-        builder.assert_bool(local.is_dummy);
-
-        ///////////////////////////////////////////////////////////////////////
         // Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
@@ -125,8 +119,19 @@ where
         let is_last_eval =
             LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first_eval);
 
+        let is_same_proof = LoopSubAir::local_is_transition(next.is_valid, next.is_proof_start);
         let is_proof_end =
             LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_proof_start);
+
+        // is_dummy forces a proof to be a single row
+        builder.assert_bool(local.is_dummy);
+        builder.when(local.is_dummy).assert_one(local.is_valid);
+        builder
+            .when(local.is_dummy)
+            .assert_one(local.is_proof_start);
+        builder
+            .when(local.is_dummy)
+            .assert_one(is_proof_end.clone());
 
         let is_not_dummy = AB::Expr::ONE - local.is_dummy;
 
@@ -241,7 +246,7 @@ where
         ///////////////////////////////////////////////////////////////////////
 
         builder
-            .when(is_transition_eval.clone())
+            .when(is_same_proof)
             .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(D_EF));
 
         ///////////////////////////////////////////////////////////////////////
