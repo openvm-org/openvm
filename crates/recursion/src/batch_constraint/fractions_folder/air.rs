@@ -18,8 +18,7 @@ use crate::{
     },
     bus::{
         BatchConstraintModuleBus, BatchConstraintModuleMessage, FractionFolderInputBus,
-        FractionFolderInputMessage, FractionFolderInputTidxBus, FractionFolderInputTidxMessage,
-        TranscriptBus,
+        FractionFolderInputMessage, TranscriptBus,
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply},
@@ -47,7 +46,6 @@ pub struct FractionsFolderCols<T> {
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
-    pub fraction_folder_input_tidx_bus: FractionFolderInputTidxBus,
     pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub sumcheck_bus: SumcheckClaimBus,
     pub mu_bus: BatchConstraintConductorBus,
@@ -193,12 +191,6 @@ where
                 num_present_airs: local.air_idx + AB::Expr::ONE,
             },
             local.is_first,
-        );
-        self.fraction_folder_input_tidx_bus.receive(
-            builder,
-            local.proof_idx,
-            FractionFolderInputTidxMessage { tidx: local.tidx },
-            is_last.clone(),
         );
 
         // Sample mu

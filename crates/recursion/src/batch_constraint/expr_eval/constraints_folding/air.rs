@@ -20,8 +20,7 @@ use crate::{
     },
     bus::{
         AirShapeBus, AirShapeBusMessage, AirShapeProperty, ConstraintsFoldingInputBus,
-        ConstraintsFoldingInputMessage, FractionFolderInputTidxBus, FractionFolderInputTidxMessage,
-        NLiftBus, NLiftMessage, TranscriptBus,
+        ConstraintsFoldingInputMessage, NLiftBus, NLiftMessage, TranscriptBus,
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
@@ -57,7 +56,6 @@ pub struct ConstraintsFoldingAir {
     pub n_lift_bus: NLiftBus,
     pub air_shape_bus: AirShapeBus,
     pub constraints_folding_input_bus: ConstraintsFoldingInputBus,
-    pub fraction_folder_input_tidx_bus: FractionFolderInputTidxBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
@@ -108,10 +106,14 @@ where
         let is_same_air = next.is_valid - next.is_first_in_air;
 
         // =========================== indices consistency ===============================
-        // When we are within one air, constraint_idx increases by 0/1
+        // When we are within one air, constraint_idx increases by 1
         builder
             .when(is_same_air.clone())
             .assert_one(next.constraint_idx - local.constraint_idx);
+        // air_idx doesn't change within an air
+        builder
+            .when(is_same_air.clone())
+            .assert_eq(local.air_idx, next.air_idx);
         // First constraint_idx within an air is zero
         builder
             .when(local.is_first_in_air)
@@ -187,14 +189,6 @@ where
             local.proof_idx,
             ConstraintsFoldingInputMessage {
                 tidx: local.lambda_tidx,
-            },
-            local.is_first,
-        );
-        self.fraction_folder_input_tidx_bus.send(
-            builder,
-            local.proof_idx,
-            FractionFolderInputTidxMessage {
-                tidx: local.lambda_tidx + AB::Expr::from_usize(D_EF),
             },
             local.is_first,
         );

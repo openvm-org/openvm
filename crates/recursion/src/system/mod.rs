@@ -25,11 +25,10 @@ use crate::{
         AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
         EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
-        FinalTranscriptStateBus, FractionFolderInputBus, FractionFolderInputTidxBus, GkrModuleBus,
-        HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus, Poseidon2CompressBus,
-        Poseidon2PermuteBus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
-        TranscriptBus, WhirModuleBus, WhirMuBus, WhirOpeningPointBus, WhirOpeningPointLookupBus,
-        XiRandomnessBus,
+        FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
+        LiftedHeightsBus, MerkleVerifyBus, NLiftBus, Poseidon2CompressBus, Poseidon2PermuteBus,
+        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
+        WhirModuleBus, WhirMuBus, WhirOpeningPointBus, WhirOpeningPointLookupBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -239,7 +238,6 @@ pub struct BusInventory {
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub constraints_folding_input_bus: ConstraintsFoldingInputBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
-    pub fraction_folder_input_tidx_bus: FractionFolderInputTidxBus,
     pub n_lift_bus: NLiftBus,
     pub eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
 
@@ -372,7 +370,6 @@ impl BusInventory {
             expression_claim_n_max_bus: ExpressionClaimNMaxBus::new(b.new_bus_idx()),
             constraints_folding_input_bus: ConstraintsFoldingInputBus::new(b.new_bus_idx()),
             fraction_folder_input_bus: FractionFolderInputBus::new(b.new_bus_idx()),
-            fraction_folder_input_tidx_bus: FractionFolderInputTidxBus::new(b.new_bus_idx()),
             n_lift_bus: NLiftBus::new(b.new_bus_idx()),
             eq_n_logup_n_max_bus: EqNsNLogupMaxBus::new(b.new_bus_idx()),
 
