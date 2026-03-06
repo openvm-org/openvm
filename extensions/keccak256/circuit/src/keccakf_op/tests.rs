@@ -261,7 +261,7 @@ fn cuda_set_and_execute(
     let buffer_reg = gen_pointer(rng, 4);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
-    tester.write(1, buffer_reg, buffer_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, buffer_reg, (buffer_ptr as u32).to_le_bytes().map(F::from_u8));
 
     let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.random()).collect();
     for (i, chunk) in state_data.chunks(4).enumerate() {
@@ -367,7 +367,7 @@ fn test_keccakf_cuda_tracegen_zero_state() {
     let buffer_reg = gen_pointer(&mut rng, 4);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
-    tester.write(1, buffer_reg, buffer_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, buffer_reg, (buffer_ptr as u32).to_le_bytes().map(F::from_u8));
 
     for i in 0..(KECCAK_STATE_BYTES / 4) {
         tester.write(2, buffer_ptr + i * 4, [F::ZERO; 4]);
