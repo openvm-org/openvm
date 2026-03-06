@@ -458,7 +458,7 @@ where
             local.proof_idx,
             StartingTidxMessage {
                 air_idx: air_idx.clone() + AB::F::ONE,
-                tidx,
+                tidx: tidx.clone(),
             },
             local.is_valid,
         );
@@ -498,7 +498,7 @@ where
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: air_idx.clone(),
             },
-            local.is_present * num_dag_nodes.clone(),
+            local.is_present * (num_dag_nodes.clone() + AB::Expr::ONE),
         );
 
         self.air_shape_bus.add_key_with_lookups(

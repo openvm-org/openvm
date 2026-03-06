@@ -232,11 +232,8 @@ where
             local.proof_idx,
             BatchConstraintModuleMessage {
                 // Skip lambda
-                tidx: local.tidx - AB::Expr::from_usize(D_EF),
-                gkr_input_layer_claim: [
-                    local.cur_p_sum.map(Into::into),
-                    local.cur_q_sum.map(Into::into),
-                ],
+                tidx: local.tidx,
+                gkr_input_layer_claim: [local.cur_p_sum, local.cur_q_sum],
             },
             is_last,
         );
