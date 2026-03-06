@@ -87,6 +87,9 @@ where
         builder
             .when(next.is_valid * (next.air_idx - local.air_idx))
             .assert_one(next.is_first_in_air);
+        builder
+            .when(local.is_first_in_air)
+            .assert_zero(local.pv_idx);
 
         let is_same_air = local.is_valid * next.is_valid * not(next.is_first_in_air);
         self.num_pvs_bus.receive(
