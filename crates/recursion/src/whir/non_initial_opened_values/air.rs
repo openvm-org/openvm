@@ -197,6 +197,7 @@ where
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1)
                     - local.whir_round,
                 height: AB::Expr::ZERO,
+                is_leaf: AB::Expr::ONE,
                 leaf_sub_idx: local.coset_idx.into(),
                 commit_major: local.whir_round.into(),
                 commit_minor: AB::Expr::ZERO,

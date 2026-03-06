@@ -421,6 +421,8 @@ pub struct MerkleVerifyBusMessage<T> {
     /// The height of this value, [0, k) are for the hashing leaves part, [k, total_depth) are for
     /// the merkle proof part.
     pub height: T,
+    /// Boolean value that indicates if this message is for the hashing leaves or Merkle proof part
+    pub is_leaf: T,
     /// For the leaves, it will be 0 ~ 2^k - 1, for the next intermediate values, it will be 0 ~
     /// 2^{k-1} - 1 0 for merkle proof part.
     pub leaf_sub_idx: T,
