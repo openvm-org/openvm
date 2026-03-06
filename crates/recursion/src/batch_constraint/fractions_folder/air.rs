@@ -123,18 +123,28 @@ where
         // Running Sum Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // Initialize running sum
+        // Initialize running sums
         assert_array_eq(
             &mut builder.when(local.is_first),
             local.cur_p_sum,
             local.sum_claim_p,
         );
+        assert_array_eq(
+            &mut builder.when(local.is_first),
+            local.cur_q_sum,
+            local.sum_claim_q,
+        );
 
-        // Add air sum to running sum
+        // Add air sums to running sums
         assert_array_eq(
             &mut builder.when(is_transition.clone()),
             next.cur_p_sum,
             ext_field_add(local.cur_p_sum, next.sum_claim_p),
+        );
+        assert_array_eq(
+            &mut builder.when(is_transition.clone()),
+            next.cur_q_sum,
+            ext_field_add(local.cur_q_sum, next.sum_claim_q),
         );
 
         ///////////////////////////////////////////////////////////////////////
