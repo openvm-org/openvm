@@ -171,10 +171,16 @@ where
             .when(local.is_first)
             .assert_zero(local.stacked_col_idx);
 
-        builder.when(is_continuing_valid.clone()).assert_zero(
-            (next.commit_idx - local.commit_idx - AB::Expr::ONE)
-                * (next.stacked_col_idx - local.stacked_col_idx - AB::Expr::ONE),
-        );
+        let mut when_same_proof = builder.when(is_continuing_valid.clone());
+        let commit_delta = next.commit_idx - local.commit_idx;
+
+        when_same_proof.assert_bool(commit_delta.clone());
+        when_same_proof
+            .when(commit_delta.clone())
+            .assert_zero(next.stacked_col_idx);
+        when_same_proof
+            .when(not::<AB::Expr>(commit_delta))
+            .assert_one(next.stacked_col_idx - local.stacked_col_idx);
 
         /*
          * Constrain global_col_idx: starts at 0, is forced by NestedForLoopSubAir
