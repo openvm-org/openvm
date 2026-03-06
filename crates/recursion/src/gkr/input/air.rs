@@ -25,7 +25,7 @@ use crate::{
     },
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::proof_idx::{ProofIdxIoCols, ProofIdxSubAir},
-    utils::{assert_zeros, pow_tidx_count},
+    utils::{assert_zeros, ext_field_subtract, pow_tidx_count},
 };
 
 #[repr(C)]
@@ -284,7 +284,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.proof_idx,
             BatchConstraintModuleMessage {
                 tidx: tidx_end,
-                gkr_input_layer_claim: local.input_layer_claim.map(|claim| claim.map(Into::into)),
+                gkr_input_layer_claim: [
+                    local.input_layer_claim[0].map(Into::into),
+                    ext_field_subtract(local.input_layer_claim[1], local.alpha_logup),
+                ],
             },
             local.is_enabled,
         );
