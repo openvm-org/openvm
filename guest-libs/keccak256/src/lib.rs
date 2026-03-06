@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
+#[cfg(any(target_os = "zkvm", feature = "tiny_keccak"))]
 use openvm_keccak256_guest::KECCAK_OUTPUT_SIZE;
 
 #[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
