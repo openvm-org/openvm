@@ -17,7 +17,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         BatchConstraintModuleBus, BatchConstraintModuleMessage, ConstraintsFoldingInputBus,
-        ConstraintsFoldingInputMessage, GkrModuleBus, GkrModuleMessage, TranscriptBus,
+        ConstraintsFoldingInputMessage, GkrModuleBus, GkrModuleMessage,
+        InteractionsFoldingInputBus, InteractionsFoldingInputMessage, TranscriptBus,
     },
     gkr::bus::{
         GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
@@ -75,6 +76,7 @@ pub struct GkrInputAir {
     pub layer_output_bus: GkrLayerOutputBus,
     pub xi_sampler_bus: GkrXiSamplerBus,
     pub constraints_folding_input_bus: ConstraintsFoldingInputBus,
+    pub interactions_folding_input_bus: InteractionsFoldingInputBus,
 }
 
 impl<F: Field> BaseAir<F> for GkrInputAir {
@@ -297,6 +299,14 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             ConstraintsFoldingInputMessage { tidx: tidx_end },
+            local.is_enabled,
+        );
+        self.interactions_folding_input_bus.send(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingInputMessage {
+                tidx: local.tidx + AB::Expr::from_usize(logup_pow_offset + D_EF), // skip alpha
+            },
             local.is_enabled,
         );
 
