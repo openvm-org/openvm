@@ -266,7 +266,7 @@ where
             builder,
             local.proof_idx,
             SumcheckClaimMessage {
-                round: AB::Expr::ZERO,
+                round: AB::Expr::NEG_ONE,
                 value: local.sum_at_roots.map(Into::into),
             },
             is_last.clone(),
