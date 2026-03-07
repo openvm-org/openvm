@@ -1,27 +1,24 @@
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey,
-    p3_field::PrimeField32,
-    proof::Proof,
-    prover::ProvingContext,
-    Com, StarkEngine, SystemParams, Val,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof,
+    prover::ProvingContext, Com, StarkEngine, SystemParams, Val,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::*,
-    p3_baby_bear::BabyBear,
-    utils::setup_tracing,
+    config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::setup_tracing,
 };
 
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 #[cfg(feature = "aot")]
 use crate::arch::VmState;
 #[cfg(feature = "aot")]
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
+        ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -86,7 +83,7 @@ where
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let params = SystemParams::new_for_testing(20); // max log_trace_height=20
+    let params = SystemParams::new_for_testing(22); // max log_trace_height=22
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         params,
@@ -262,8 +259,8 @@ where
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
-    match vm.verify(&vk, &proofs) {
-        Ok(()) => {}
+    match verify_segments(&vm.engine, &vk, &proofs) {
+        Ok(_) => {}
         Err(err) => {
             panic!("segment proofs should verify: {err}");
         }
@@ -283,8 +280,8 @@ where
 /// Note: Metered execution stores un-padded counts, so we pad them for comparison.
 /// The proving context trace height (realized) is already padded.
 /// For most AIRs, estimated_padded should exactly equal realized.
-/// For MemoryMerkleAir, Poseidon2PeripheryAir, PersistentBoundaryAir, and AccessAdapterAir, it is
-/// expected that estimated >> realized
+/// For MemoryMerkleAir, Poseidon2PeripheryAir, and PersistentBoundaryAir, it is expected that
+/// estimated >> realized.
 fn validate_metered_estimates<E, VB>(
     vm: &VirtualMachine<E, VB>,
     estimated_heights: &[u32],
@@ -343,15 +340,10 @@ fn validate_metered_estimates<E, VB>(
         );
 
         // For some airs, the overestimates are expected
-        let system_config: &SystemConfig = vm.config().as_ref();
-        let skip_access_adapter =
-            system_config.access_adapters_enabled() && air_name.contains("AccessAdapterAir");
         if air_name.contains("MemoryMerkleAir")
             || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("VolatileBoundaryAir")
             || air_name.contains("PersistentBoundaryAir")
             || air_name.contains("NativeAdapterAir")
-            || skip_access_adapter
         {
             continue;
         }
