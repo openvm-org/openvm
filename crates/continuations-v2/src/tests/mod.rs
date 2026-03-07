@@ -14,18 +14,20 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{
-    interaction::LogUpSecurityParameters, keygen::types::MultiStarkVerifyingKey, proof::Proof,
-    StarkEngine, SystemParams, WhirConfig, WhirParams,
+    keygen::types::MultiStarkVerifyingKey, proof::Proof, StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::{DIGEST_SIZE, F},
-    p3_baby_bear::BabyBear,
+    config::{
+        app_params_with_100_bits_security,
+        baby_bear_poseidon2::{DIGEST_SIZE, F},
+        internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
+    },
     utils::setup_tracing_with_log_level,
 };
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
-use p3_field::{PrimeCharacteristicRing, PrimeField32};
+use p3_field::PrimeCharacteristicRing;
 use test_case::test_case;
 use tracing::Level;
 
@@ -79,47 +81,29 @@ const LOG_MAX_TRACE_HEIGHT: usize = 20;
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
 pub(in crate::tests) fn app_system_params() -> SystemParams {
-    let l_skip = 4;
-    let n_stack = 17;
-    let w_stack = 2048;
-    let log_blowup = 1;
-    let whir_params = WhirParams {
-        k: 4,
-        log_final_poly_len: 10,
-        query_phase_pow_bits: 16,
-    };
-    let whir = WhirConfig::new(log_blowup, l_skip + n_stack, whir_params, 100);
-    SystemParams {
-        l_skip,
-        n_stack,
-        w_stack,
-        log_blowup,
-        whir,
-        logup: LogUpSecurityParameters {
-            max_interaction_count: BabyBear::ORDER_U32,
-            log_max_message_length: 7,
-            pow_bits: 16,
-        },
-        max_constraint_degree: 4,
-    }
+    app_params_with_100_bits_security(21)
 }
 
 pub(in crate::tests) fn leaf_system_params() -> SystemParams {
-    app_system_params()
+    leaf_params_with_100_bits_security()
 }
 
 pub(in crate::tests) fn internal_system_params() -> SystemParams {
-    app_system_params()
+    internal_params_with_100_bits_security()
 }
 
 #[cfg(feature = "cuda")]
 pub(in crate::tests) fn compression_system_params() -> SystemParams {
-    app_system_params()
+    use openvm_stark_sdk::config::compression_params_with_100_bits_security;
+
+    compression_params_with_100_bits_security()
 }
 
 #[cfg(feature = "cuda")]
 pub(in crate::tests) fn root_system_params() -> SystemParams {
-    app_system_params()
+    use openvm_stark_sdk::config::root_params_with_100_bits_security;
+
+    root_params_with_100_bits_security()
 }
 
 pub(in crate::tests) fn test_rv32im_config() -> Rv32ImConfig {

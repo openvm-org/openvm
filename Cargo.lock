@@ -3189,7 +3189,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fgeneric-gpuengine#c6baf814bd2c4ebdfd4346122718cf7975f547bc"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fwhir-ldr#64cc7c5466d036daaf2b0609c5f8c3f8f94ed6e9"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -3200,7 +3200,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fgeneric-gpuengine#c6baf814bd2c4ebdfd4346122718cf7975f547bc"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fwhir-ldr#64cc7c5466d036daaf2b0609c5f8c3f8f94ed6e9"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -3224,7 +3224,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fgeneric-gpuengine#c6baf814bd2c4ebdfd4346122718cf7975f547bc"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fwhir-ldr#64cc7c5466d036daaf2b0609c5f8c3f8f94ed6e9"
 dependencies = [
  "cc",
  "glob",
@@ -3233,7 +3233,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fgeneric-gpuengine#c6baf814bd2c4ebdfd4346122718cf7975f547bc"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fwhir-ldr#64cc7c5466d036daaf2b0609c5f8c3f8f94ed6e9"
 dependencies = [
  "bytesize",
  "ctor",
@@ -3927,7 +3927,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fgeneric-gpuengine#c6baf814bd2c4ebdfd4346122718cf7975f547bc"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fwhir-ldr#64cc7c5466d036daaf2b0609c5f8c3f8f94ed6e9"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -3961,7 +3961,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fgeneric-gpuengine#c6baf814bd2c4ebdfd4346122718cf7975f547bc"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fwhir-ldr#64cc7c5466d036daaf2b0609c5f8c3f8f94ed6e9"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
