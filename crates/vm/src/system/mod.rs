@@ -308,7 +308,7 @@ where
             config.memory_config.timestamp_max_bits,
         );
         let memory_bus = mem_inventory.bridge.memory_bus();
-        let memory_controller = MemoryController::<Val<SC>>::new(
+        let memory_controller = MemoryController::<Val<SC>>::with_persistent_memory(
             memory_bus,
             config.memory_config.clone(),
             range_checker.clone(),

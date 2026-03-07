@@ -94,10 +94,10 @@ impl PersistentMemoryTraceHeights {
 }
 
 impl<F: VmField> MemoryController<F> {
-    /// Creates a new memory controller.
+    /// Creates a new memory controller for persistent memory.
     ///
     /// Call `set_initial_memory` to set the initial memory state after construction.
-    pub fn new(
+    pub fn with_persistent_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: SharedVariableRangeCheckerChip,

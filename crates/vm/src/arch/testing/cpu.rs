@@ -340,7 +340,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
         setup_tracing_with_log_level(Level::INFO);
         let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
-        let memory_controller = MemoryController::new(
+        let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
