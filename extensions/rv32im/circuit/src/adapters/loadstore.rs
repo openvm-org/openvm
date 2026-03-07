@@ -27,7 +27,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    LocalOpcode, DEFERRAL_AS,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -456,6 +456,7 @@ where
                 STOREW | STOREH | STOREB => {
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
+
                     timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {

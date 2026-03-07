@@ -103,12 +103,8 @@ impl BitSet {
 #[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     memory_dimensions: MemoryDimensions,
-    min_block_size_bits: Vec<u8>,
     pub boundary_idx: usize,
-    pub merkle_tree_index: Option<usize>,
-    pub adapter_offset: usize,
-    pub access_adapters_enabled: bool,
-    continuations_enabled: bool,
+    pub merkle_tree_index: usize,
     chunk: u32,
     chunk_bits: u32,
     pub page_indices: BitSet,
@@ -131,15 +127,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             Self::calculate_checkpoint_capacity(segment_check_insns);
 
         Self {
-            min_block_size_bits: config.memory_config.min_block_size_bits(),
             boundary_idx: config.memory_boundary_air_id(),
             merkle_tree_index: config.memory_merkle_air_id(),
-            adapter_offset: config.access_adapter_air_id_offset(),
-            access_adapters_enabled: config.access_adapters_enabled(),
             chunk,
             chunk_bits,
             memory_dimensions,
-            continuations_enabled: config.continuation_enabled,
             page_indices: BitSet::new(bitset_size),
             addr_space_access_count: vec![0; addr_space_size].into(),
             page_indices_since_checkpoint: vec![0; page_indices_since_checkpoint_cap]
@@ -155,13 +147,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     #[inline(always)]
     pub(crate) fn add_register_merkle_heights(&mut self) {
-        if self.continuations_enabled {
-            self.update_boundary_merkle_heights(
-                RV32_REGISTER_AS,
-                0,
-                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
-            );
-        }
+        self.update_boundary_merkle_heights(
+            RV32_REGISTER_AS,
+            0,
+            (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+        );
     }
 
     /// For each memory access, record the minimal necessary data to update heights of
@@ -216,53 +206,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
-    #[inline(always)]
-    pub fn update_adapter_heights(
-        &mut self,
-        trace_heights: &mut [u32],
-        address_space: u32,
-        size_bits: u32,
-    ) {
-        self.update_adapter_heights_batch(trace_heights, address_space, size_bits, 1);
-    }
-
-    #[inline(always)]
-    pub fn update_adapter_heights_batch(
-        &self,
-        trace_heights: &mut [u32],
-        address_space: u32,
-        size_bits: u32,
-        num: u32,
-    ) {
-        if !self.access_adapters_enabled {
-            return;
-        }
-
-        debug_assert!((address_space as usize) < self.min_block_size_bits.len());
-
-        // SAFETY: address_space passed is usually a hardcoded constant or derived from an
-        // Instruction where it is bounds checked before passing
-        let align_bits = unsafe {
-            *self
-                .min_block_size_bits
-                .get_unchecked(address_space as usize)
-        };
-        debug_assert!(
-            align_bits as u32 <= size_bits,
-            "align_bits ({align_bits}) must be <= size_bits ({size_bits})"
-        );
-
-        for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
-            let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
-            debug_assert!(adapter_idx < trace_heights.len());
-            // SAFETY: trace_heights is initialized taking access adapters into account
-            unsafe {
-                *trace_heights.get_unchecked_mut(adapter_idx) +=
-                    num << (size_bits - adapter_bits + 1);
-            }
-        }
-    }
-
     /// Initialize state for a new segment
     #[inline(always)]
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
@@ -274,16 +217,14 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         unsafe {
             *trace_heights.get_unchecked_mut(self.boundary_idx) = 0;
         }
-        if let Some(merkle_tree_idx) = self.merkle_tree_index {
-            // SAFETY: merkle_tree_idx is guaranteed to be in bounds
-            unsafe {
-                *trace_heights.get_unchecked_mut(merkle_tree_idx) = 0;
-            }
-            let poseidon2_idx = trace_heights.len() - 2;
-            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
-            unsafe {
-                *trace_heights.get_unchecked_mut(poseidon2_idx) = 0;
-            }
+        // SAFETY: merkle_tree_index is guaranteed to be in bounds
+        unsafe {
+            *trace_heights.get_unchecked_mut(self.merkle_tree_index) = 0;
+        }
+        let poseidon2_idx = trace_heights.len() - 2;
+        // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
+        unsafe {
+            *trace_heights.get_unchecked_mut(poseidon2_idx) = 0;
         }
 
         // Apply height updates for all pages accessed since last checkpoint, and
@@ -331,44 +272,26 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
         }
 
-        if let Some(merkle_tree_idx) = self.merkle_tree_index {
-            debug_assert!(merkle_tree_idx < trace_heights.len());
-            debug_assert!(trace_heights.len() >= 2);
+        debug_assert!(self.merkle_tree_index < trace_heights.len());
+        debug_assert!(trace_heights.len() >= 2);
 
-            let poseidon2_idx = trace_heights.len() - 2;
-            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
-            unsafe {
-                *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2;
-            }
-
-            let merkle_height = self.memory_dimensions.overall_height();
-            let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
-            // SAFETY: merkle_tree_idx is guaranteed to be in bounds
-            unsafe {
-                *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * page_access_count * 2;
-                *trace_heights.get_unchecked_mut(merkle_tree_idx) += nodes * page_access_count * 2;
-            }
+        let poseidon2_idx = trace_heights.len() - 2;
+        // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
+        unsafe {
+            *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2;
         }
 
-        for address_space in 0..addr_space_access_count.len() {
-            // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
-            let x = unsafe { *addr_space_access_count.get_unchecked(address_space) };
-            if x > 0 {
-                // Initial **and** final handling of touched pages requires send (resp. receive) in
-                // chunk-sized units for the merkle chip
-                // Corresponds to `handle_uninitialized_memory` and `handle_touched_blocks` in
-                // online.rs
-                self.update_adapter_heights_batch(
-                    trace_heights,
-                    address_space as u32,
-                    self.chunk_bits,
-                    x << (PAGE_BITS + 1),
-                );
-            }
+        let merkle_height = self.memory_dimensions.overall_height();
+        let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
+        // SAFETY: merkle_tree_index is guaranteed to be in bounds
+        unsafe {
+            *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * page_access_count * 2;
+            *trace_heights.get_unchecked_mut(self.merkle_tree_index) +=
+                nodes * page_access_count * 2;
         }
     }
 
-    /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
+    /// Resolve all lazy updates of each memory access for poseidon2/merkle chips.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
         self.apply_height_updates(trace_heights, &self.addr_space_access_count);

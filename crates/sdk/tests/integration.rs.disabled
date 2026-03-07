@@ -465,7 +465,6 @@ fn test_sdk_standard_with_p256() -> eyre::Result<()> {
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
     let sdk = Sdk::new(small_test_app_config(1))?;
-    assert!(sdk.app_config().app_vm_config.as_ref().continuation_enabled);
     let (_, app_vk) = sdk.app_keygen();
     let app_proof = sdk
         .app_prover(app_exe_for_test())?

@@ -92,41 +92,31 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 
-        let hasher_chip = if config.continuation_enabled {
-            let max_buffer_size = (config.segmentation_config.limits.max_trace_height as usize)
-                .next_power_of_two() * 2 // seems like a reliable estimate
-                * (DIGEST_WIDTH * 2); // size of one record
-            assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
-            let sbox_registers = if config.max_constraint_degree >= 7 {
-                0
-            } else {
-                1
-            };
-            // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
-            let _direct_bus = if sbox_registers == 0 {
-                inventory
-                    .next_air::<Poseidon2PeripheryAir<BabyBear, 0>>()?
-                    .bus
-            } else {
-                inventory
-                    .next_air::<Poseidon2PeripheryAir<BabyBear, 1>>()?
-                    .bus
-            };
-            let chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-                max_buffer_size,
-                sbox_registers,
-            ));
-            inventory.add_periphery_chip(chip.clone());
-            Some(chip)
+        let max_buffer_size = (config.segmentation_config.limits.max_trace_height as usize)
+            .next_power_of_two() * 2 // seems like a reliable estimate
+            * (DIGEST_WIDTH * 2); // size of one record
+        assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+        let sbox_registers = if config.max_constraint_degree >= 7 {
+            0
         } else {
-            None
+            1
         };
-        let system = SystemChipInventoryGPU::new(
-            config,
-            &inventory.airs().system().memory,
-            range_checker,
-            hasher_chip,
-        );
+        // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
+        let _direct_bus = if sbox_registers == 0 {
+            inventory
+                .next_air::<Poseidon2PeripheryAir<BabyBear, 0>>()?
+                .bus
+        } else {
+            inventory
+                .next_air::<Poseidon2PeripheryAir<BabyBear, 1>>()?
+                .bus
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            max_buffer_size,
+            sbox_registers,
+        ));
+        inventory.add_periphery_chip(hasher_chip.clone());
+        let system = SystemChipInventoryGPU::new(config, range_checker, hasher_chip);
 
         let phantom_chip = PhantomChipGPU::new();
         inventory.add_executor_chip(phantom_chip);
