@@ -12,17 +12,13 @@ use tracing::instrument;
 
 use crate::{
     arch::{
-        AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
-        RecordArena, CONST_BLOCK_SIZE, MAX_CELL_BYTE_SIZE,
+        AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, CONST_BLOCK_SIZE,
+        MAX_CELL_BYTE_SIZE,
     },
     system::{
-        memory::{
-            adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
-            MemoryAddress, TimestampedEquipartition, TimestampedValues,
-        },
+        memory::{MemoryAddress, TimestampedEquipartition, TimestampedValues},
         TouchedMemory,
     },
-    utils::slice_as_bytes,
 };
 
 mod basic;
@@ -449,30 +445,16 @@ pub struct TracingMemory {
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
-    pub access_adapter_records: DenseRecordArena,
 }
 
-// min_block_size * cell_size never exceeds 8
-const INITIAL_CELL_BUFFER: &[u8] = &[0u8; 8];
-// min_block_size never exceeds 8
-const INITIAL_TIMESTAMP_BUFFER: &[u32] = &[INITIAL_TIMESTAMP; 8];
-
 impl TracingMemory {
-    pub fn new(
-        mem_config: &MemoryConfig,
-        initial_block_size: usize,
-        access_adapter_arena_size_bound: usize,
-    ) -> Self {
+    pub fn new(mem_config: &MemoryConfig, initial_block_size: usize) -> Self {
         let image = GuestMemory::new(AddressMap::from_mem_config(mem_config));
-        Self::from_image(image, initial_block_size, access_adapter_arena_size_bound)
+        Self::from_image(image, initial_block_size)
     }
 
     /// Constructor from pre-existing memory image.
-    pub fn from_image(
-        image: GuestMemory,
-        initial_block_size: usize,
-        access_adapter_arena_size_bound: usize,
-    ) -> Self {
+    pub fn from_image(image: GuestMemory, initial_block_size: usize) -> Self {
         let (meta, min_block_size): (Vec<_>, Vec<_>) =
             zip_eq(image.memory.get_memory(), &image.memory.config)
                 .map(|(mem, addr_sp)| {
@@ -482,15 +464,12 @@ impl TracingMemory {
                     (PagedVec::new(total_metadata_len), min_block_size as u32)
                 })
                 .unzip();
-        let access_adapter_records =
-            DenseRecordArena::with_byte_capacity(access_adapter_arena_size_bound);
         Self {
             data: image,
             meta,
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
             initial_block_size,
-            access_adapter_records,
         }
     }
 
@@ -576,52 +555,6 @@ impl TracingMemory {
         }
     }
 
-    pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
-        if header.block_size == header.lowest_block_size {
-            return;
-        }
-        // SAFETY:
-        // - header.address_space is validated during instruction decoding and within bounds
-        // - header.pointer and header.type_size define valid memory bounds within the address space
-        // - The memory access range (header.pointer * header.type_size)..(header.pointer +
-        //   header.block_size) * header.type_size is within the allocated size for the address
-        //   space, preventing out of bounds access
-        let data_slice = unsafe {
-            self.data.memory.get_u8_slice(
-                header.address_space,
-                (header.pointer * header.type_size) as usize,
-                (header.block_size * header.type_size) as usize,
-            )
-        };
-
-        let record_mut = self
-            .access_adapter_records
-            .alloc(AccessLayout::from_record_header(&header));
-        *record_mut.header = header;
-        record_mut.data.copy_from_slice(data_slice);
-        // we don't mind garbage values in prev_*
-    }
-
-    /// `data_slice` is the underlying data of the record in raw host memory format.
-    pub(crate) fn add_merge_record(
-        &mut self,
-        header: AccessRecordHeader,
-        data_slice: &[u8],
-        prev_ts: &[u32],
-    ) {
-        if header.block_size == header.lowest_block_size {
-            return;
-        }
-
-        let record_mut = self
-            .access_adapter_records
-            .alloc(AccessLayout::from_record_header(&header));
-        *record_mut.header = header;
-        record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
-        record_mut.data.copy_from_slice(data_slice);
-        record_mut.timestamps.copy_from_slice(prev_ts);
-    }
-
     /// Calculate splits and merges needed for a memory access.
     /// Returns Some((splits, merge)) or None if no operations needed.
     #[inline(always)]
@@ -672,7 +605,7 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn split_by_meta<T: Copy, const MIN_BLOCK_SIZE: usize>(
+    fn split_by_meta<const MIN_BLOCK_SIZE: usize>(
         &mut self,
         start_ptr: u32,
         timestamp: u32,
@@ -695,14 +628,6 @@ impl TracingMemory {
                 AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
             );
         }
-        self.add_split_record(AccessRecordHeader {
-            timestamp_and_mask: timestamp,
-            address_space: address_space as u32,
-            pointer: start_ptr,
-            block_size: block_size as u32,
-            lowest_block_size: MIN_BLOCK_SIZE as u32,
-            type_size: size_of::<T>() as u32,
-        });
     }
 
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
@@ -713,7 +638,6 @@ impl TracingMemory {
         &mut self,
         address_space: usize,
         pointer: usize,
-        prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
         debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
         // SAFETY:
@@ -739,7 +663,7 @@ impl TracingMemory {
                 let (_, block_metadata) =
                     self.get_block_metadata::<ALIGN>(address_space, split_ptr);
                 let timestamp = block_metadata.timestamp();
-                self.split_by_meta::<T, ALIGN>(
+                self.split_by_meta::<ALIGN>(
                     split_ptr as u32,
                     timestamp,
                     split_size as u8,
@@ -761,7 +685,7 @@ impl TracingMemory {
                 let timestamp = if block_metadata.block_size() > 0 {
                     block_metadata.timestamp()
                 } else {
-                    self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
+                    self.handle_uninitialized_memory::<ALIGN>(address_space, ptr);
                     INITIAL_TIMESTAMP
                 };
 
@@ -775,21 +699,6 @@ impl TracingMemory {
                 seg_idx += 1;
             }
 
-            // Create the merge record
-            self.add_merge_record(
-                AccessRecordHeader {
-                    timestamp_and_mask: max_timestamp,
-                    address_space: address_space as u32,
-                    pointer: merge_ptr as u32,
-                    block_size: merge_size as u32,
-                    lowest_block_size: ALIGN as u32,
-                    type_size: size_of::<T>() as u32,
-                },
-                // SAFETY: T is plain old data
-                unsafe { slice_as_bytes(prev_values) },
-                &prev_ts_buf[..seg_idx],
-            );
-
             max_timestamp
         } else {
             self.get_timestamp::<ALIGN>(address_space, pointer)
@@ -802,7 +711,7 @@ impl TracingMemory {
 
     /// Handle uninitialized memory by creating appropriate split or merge records.
     #[inline(always)]
-    fn handle_uninitialized_memory<T: Copy, const ALIGN: usize>(
+    fn handle_uninitialized_memory<const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
@@ -812,27 +721,14 @@ impl TracingMemory {
             let segment_index = pointer / ALIGN;
             let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
             let start_ptr = (block_start * ALIGN) as u32;
-            self.split_by_meta::<T, ALIGN>(
+            self.split_by_meta::<ALIGN>(
                 start_ptr,
                 INITIAL_TIMESTAMP,
                 self.initial_block_size as u8,
                 address_space,
             );
         } else {
-            // Create a merge record for single-byte initialization
             debug_assert_eq!(self.initial_block_size, 1);
-            self.add_merge_record(
-                AccessRecordHeader {
-                    timestamp_and_mask: INITIAL_TIMESTAMP,
-                    address_space: address_space as u32,
-                    pointer: pointer as u32,
-                    block_size: ALIGN as u32,
-                    lowest_block_size: self.initial_block_size as u32,
-                    type_size: size_of::<T>() as u32,
-                },
-                &INITIAL_CELL_BUFFER[..ALIGN],
-                &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
-            );
         }
     }
 
@@ -868,11 +764,8 @@ impl TracingMemory {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
-            address_space as usize,
-            pointer as usize,
-            &values,
-        );
+        let t_prev =
+            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
         self.timestamp += 1;
 
         (t_prev, values)
@@ -911,11 +804,8 @@ impl TracingMemory {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values_prev = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
-            address_space as usize,
-            pointer as usize,
-            &values_prev,
-        );
+        let t_prev =
+            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
         self.data.write(address_space, pointer, values);
         self.timestamp += 1;
 
@@ -936,17 +826,9 @@ impl TracingMemory {
 
     /// Finalize the boundary and merkle chips.
     #[instrument(name = "memory_finalize", skip_all)]
-    pub fn finalize<F: Field>(&mut self, is_persistent: bool) -> TouchedMemory<F> {
+    pub fn finalize<F: Field>(&mut self) -> TouchedMemory<F> {
         let touched_blocks = self.touched_blocks();
-
-        match is_persistent {
-            false => TouchedMemory::Volatile(
-                self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
-            ),
-            true => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks),
-            ),
-        }
+        self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks)
     }
 
     /// Returns the list of all touched blocks. The list is sorted by address.
@@ -1023,28 +905,8 @@ impl TracingMemory {
                 current_address = MemoryAddress::new(addr_space, ptr);
             }
 
-            if block_size > min_block_size as u8 {
-                self.add_split_record(AccessRecordHeader {
-                    timestamp_and_mask: timestamp,
-                    address_space: addr_space,
-                    pointer: ptr,
-                    block_size: block_size as u32,
-                    lowest_block_size: min_block_size as u32,
-                    type_size: cell_size as u32,
-                });
-            }
             if min_block_size > CHUNK {
                 assert_eq!(current_cnt, 0);
-                for i in (0..block_size as u32).step_by(min_block_size) {
-                    self.add_split_record(AccessRecordHeader {
-                        timestamp_and_mask: timestamp,
-                        address_space: addr_space,
-                        pointer: ptr + i,
-                        block_size: min_block_size as u32,
-                        lowest_block_size: CHUNK as u32,
-                        type_size: cell_size as u32,
-                    });
-                }
                 // SAFETY: touched blocks are in bounds
                 let values = unsafe {
                     self.data.memory.get_u8_slice(
@@ -1096,18 +958,6 @@ impl TracingMemory {
                             .iter()
                             .max()
                             .unwrap();
-                        self.add_merge_record(
-                            AccessRecordHeader {
-                                timestamp_and_mask: timestamp,
-                                address_space: addr_space,
-                                pointer: current_address.pointer,
-                                block_size: CHUNK as u32,
-                                lowest_block_size: min_block_size as u32,
-                                type_size: cell_size as u32,
-                            },
-                            &current_values[..CHUNK * cell_size],
-                            &current_timestamps[..CHUNK / min_block_size],
-                        );
                         final_memory.push((
                             (current_address.address_space, current_address.pointer),
                             TimestampedValues {

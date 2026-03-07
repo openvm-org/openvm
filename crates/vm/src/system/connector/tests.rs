@@ -61,7 +61,7 @@ fn test_vm_connector_wrong_is_terminate() {
 }
 
 fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingContext<PB>)) {
-    let vm_config = SystemConfig::default().without_continuations();
+    let vm_config = SystemConfig::default();
     let engine = test_cpu_engine();
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();

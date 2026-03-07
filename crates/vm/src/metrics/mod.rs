@@ -27,8 +27,6 @@ pub struct VmMetrics {
     pub debug_infos: ProgramDebugInfo,
     #[cfg(feature = "perf-metrics")]
     pub(crate) num_sys_airs: usize,
-    #[cfg(feature = "perf-metrics")]
-    pub(crate) access_adapter_offset: usize,
     pub(crate) main_widths: Vec<usize>,
     pub(crate) total_widths: Vec<usize>,
 
@@ -98,47 +96,14 @@ pub fn update_instruction_metrics<F, RA, Executor>(
     }
 }
 
-// Memory access adapter height calculation is slow, so only do it if this is the end of
-// execution.
-// We also clear the current trace cell counts so there aren't negative diffs at the start of the
-// next segment.
+// We clear the current trace cell counts so there aren't negative diffs at the start of the next
+// segment.
 #[cfg(feature = "perf-metrics")]
 pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>)
 where
     F: Clone + Send + Sync,
     RA: Arena,
 {
-    use std::iter::zip;
-
-    use crate::system::memory::adapter::AccessAdapterInventory;
-
-    let access_adapter_offset = state.metrics.access_adapter_offset;
-    let num_sys_airs = state.metrics.num_sys_airs;
-    let mut now_heights = vec![0; num_sys_airs - access_adapter_offset];
-    AccessAdapterInventory::<F>::compute_heights_from_arena(
-        &state.memory.access_adapter_records,
-        &mut now_heights,
-    );
-    let now_trace_cells = zip(
-        &state.metrics.main_widths[access_adapter_offset..],
-        &now_heights,
-    )
-    .map(|(main_width, h)| main_width * h)
-    .collect_vec();
-    for (air_name, &now_value) in itertools::izip!(
-        &state.metrics.air_names[access_adapter_offset..],
-        &now_trace_cells,
-    ) {
-        if now_value != 0 {
-            let labels = [
-                ("air_name", air_name.clone()),
-                ("opcode", String::default()),
-                ("dsl_ir", String::default()),
-                ("cycle_tracker_span", "memory_access_adapters".to_owned()),
-            ];
-            counter!("cells_used", &labels).increment(now_value as u64);
-        }
-    }
     state.metrics.current_trace_cells.fill(0);
 }
 
