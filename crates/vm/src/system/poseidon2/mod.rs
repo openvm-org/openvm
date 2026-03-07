@@ -1,6 +1,7 @@
 //! Chip to handle **native kernel** instructions for Poseidon2 `compress` and `permute`.
 //! This chip is put in `intrinsics` for organizational convenience, but
-//! it is used as a system chip for persistent memory and as a native kernel chip for aggregation.
+//! it is used as a system chip for the memory merkle tree and as a native kernel chip for
+//! aggregation.
 //!
 //! Note that neither `compress` nor `permute` on its own
 //! is a cryptographic hash. `permute` is a cryptographic permutation, which can be made
