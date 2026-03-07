@@ -249,57 +249,19 @@ impl Default for GpuChipTestBuilder {
         let mut mem_config = MemoryConfig::default();
         // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::volatile(mem_config, default_var_range_checker_bus())
+        Self::new(mem_config, default_var_range_checker_bus())
     }
 }
 
 impl GpuChipTestBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn new_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config, default_var_range_checker_bus())
-    }
-
-    pub fn volatile(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
             VariableRangeCheckerChip::new(bus),
         )));
         Self {
-            memory: DeviceMemoryTester::volatile(
-                default_tracing_memory(&mem_config, 1),
-                mem_bus,
-                mem_config,
-                range_checker.clone(),
-            ),
-            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            streams: Default::default(),
-            var_range_checker: range_checker,
-            bitwise_op_lookup: None,
-            range_tuple_checker: None,
-            rng: StdRng::seed_from_u64(0),
-            default_register: 0,
-            default_pointer: 0,
-            #[cfg(feature = "metrics")]
-            metrics: VmMetrics::default(),
-        }
-    }
-
-    pub fn persistent(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(bus),
-        )));
-        Self {
-            memory: DeviceMemoryTester::persistent(
+            memory: DeviceMemoryTester::new(
                 default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
                 mem_bus,
                 mem_config,
@@ -603,27 +565,23 @@ impl GpuChipTester {
 
     pub fn finalize(mut self) -> Self {
         if let Some(mut memory_tester) = self.memory.take() {
-            let is_persistent = memory_tester.inventory.continuation_enabled();
-            let touched_memory = memory_tester.memory.finalize::<F>(is_persistent);
+            let touched_memory = memory_tester.memory.finalize::<F>();
             let memory_bridge = memory_tester.memory_bridge();
 
             for chip in memory_tester.chip_for_block.into_values() {
                 self = self.load_periphery(chip.0.air, chip);
             }
 
-            let airs = MemoryAirInventory::<SC>::new(
+            let airs = MemoryAirInventory::new(
                 memory_bridge,
                 &memory_tester.config,
-                memory_tester.range_bus,
-                is_persistent.then_some((
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                )),
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             )
             .into_airs();
             let ctxs = memory_tester
                 .inventory
-                .generate_proving_ctxs(memory_tester.memory.access_adapter_records, touched_memory);
+                .generate_proving_ctxs(touched_memory);
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)

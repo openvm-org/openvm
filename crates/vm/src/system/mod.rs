@@ -24,15 +24,14 @@ use self::{connector::VmConnectorAir, program::ProgramAir};
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
-        ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
-        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
-        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
-        VmExecutionConfig, VmField, CONNECTOR_AIR_ID, MEMORY_AIRS_START_IDX, PROGRAM_AIR_ID,
+        ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
+        ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor, RowMajorMatrixArena,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField,
+        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, CONST_BLOCK_SIZE, PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
         memory::{
-            interface::{MemoryInterface, MemoryInterfaceAirs},
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
             MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
@@ -65,7 +64,7 @@ const POSEIDON2_INSERTION_IDX: usize = 1;
 ///
 /// The [SystemChipComplex] is meant to be constructible once the VM configuration is known, and it
 /// can be loaded with arbitrary programs supported by the instruction set available to its
-/// configuration. The [SystemChipComplex] is meant to persistent between instances of proof
+/// configuration. The [SystemChipComplex] is meant to persist between instances of proof
 /// generation.
 pub trait SystemChipComplex<RA, PB: ProverBackend> {
     /// Loads the program in the form of a cached trace with prover data.
@@ -83,8 +82,7 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
 
-    /// This function only returns `Some` when continuations is enabled.
-    /// When continuations is enabled, it returns the top merkle sub-tree of the memory merkle tree
+    /// Returns the top merkle sub-tree of the memory merkle tree
     /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
     /// tree formed from the roots of the sub-trees for each address space.
     ///
@@ -108,17 +106,11 @@ pub struct SystemRecords<F> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
     pub filtered_exec_frequencies: Vec<u32>,
-    // We always use a [DenseRecordArena] here, regardless of the generic `RA` used for other
-    // execution records.
-    pub access_adapter_records: DenseRecordArena,
     // Perf[jpw]: this should be computed on-device and changed to just touched blocks
     pub touched_memory: TouchedMemory<F>,
 }
 
-pub enum TouchedMemory<F> {
-    Persistent(TimestampedEquipartition<F, CONST_BLOCK_SIZE>),
-    Volatile(TimestampedEquipartition<F, 1>),
-}
+pub type TouchedMemory<F> = TimestampedEquipartition<F, CONST_BLOCK_SIZE>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 #[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
@@ -135,17 +127,18 @@ pub struct SystemPort {
 }
 
 #[derive(Clone)]
-pub struct SystemAirInventory<SC: StarkProtocolConfig> {
+pub struct SystemAirInventory {
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
-    pub memory: MemoryAirInventory<SC>,
+    pub memory: MemoryAirInventory,
 }
 
-impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
+impl SystemAirInventory {
     pub fn new(
         config: &SystemConfig,
         port: SystemPort,
-        merkle_compression_buses: Option<(PermutationCheckBus, PermutationCheckBus)>,
+        merkle_bus: PermutationCheckBus,
+        compression_bus: PermutationCheckBus,
     ) -> Self {
         let SystemPort {
             execution_bus,
@@ -160,16 +153,11 @@ impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
             range_bus,
             config.memory_config.timestamp_max_bits,
         );
-        assert_eq!(
-            config.continuation_enabled,
-            merkle_compression_buses.is_some()
-        );
-
         let memory = MemoryAirInventory::new(
             memory_bridge,
             &config.memory_config,
-            range_bus,
-            merkle_compression_buses,
+            merkle_bus,
+            compression_bus,
         );
 
         Self {
@@ -187,7 +175,7 @@ impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
         }
     }
 
-    pub fn into_airs(self) -> Vec<AirRef<SC>> {
+    pub fn into_airs<SC: StarkProtocolConfig>(self) -> Vec<AirRef<SC>> {
         let mut airs: Vec<AirRef<SC>> = Vec::new();
         airs.push(Arc::new(self.program));
         airs.push(Arc::new(self.connector));
@@ -247,13 +235,9 @@ where
         let range_bus =
             VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), self.memory_config.decomp);
 
-        let merkle_compression_buses = if self.continuation_enabled {
-            let merkle_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
-            let compression_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
-            Some((merkle_bus, compression_bus))
-        } else {
-            None
-        };
+        let merkle_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
+        let compression_bus = PermutationCheckBus::new(bus_idx_mgr.new_bus_idx());
+        let direct_bus_idx = compression_bus.index;
         let memory_bridge =
             MemoryBridge::new(memory_bus, self.memory_config.timestamp_max_bits, range_bus);
         let system_port = SystemPort {
@@ -261,7 +245,7 @@ where
             program_bus,
             memory_bridge,
         };
-        let system = SystemAirInventory::new(self, system_port, merkle_compression_buses);
+        let system = SystemAirInventory::new(self, system_port, merkle_bus, compression_bus);
 
         let mut inventory = AirInventory::new(self.clone(), system, bus_idx_mgr);
 
@@ -269,20 +253,16 @@ where
         // Range checker is always the first AIR in the inventory
         inventory.add_air(range_checker);
 
-        if self.continuation_enabled {
-            assert_eq!(inventory.ext_airs().len(), POSEIDON2_INSERTION_IDX);
-            // Add direct poseidon2 AIR for persistent memory.
-            // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
-            // special handling when that happens
-            let (_, compression_bus) = merkle_compression_buses.unwrap();
-            let direct_bus_idx = compression_bus.index;
-            let air = new_poseidon2_periphery_air(
-                vm_poseidon2_config(),
-                LookupBus::new(direct_bus_idx),
-                self.max_constraint_degree,
-            );
-            inventory.add_air_ref(air);
-        }
+        assert_eq!(inventory.ext_airs().len(), POSEIDON2_INSERTION_IDX);
+        // Add direct poseidon2 AIR for memory merkle tree.
+        // Currently we never use poseidon2 opcodes directly: we will need
+        // special handling when that happens
+        let air = new_poseidon2_periphery_air(
+            vm_poseidon2_config(),
+            LookupBus::new(direct_bus_idx),
+            self.max_constraint_degree,
+        );
+        inventory.add_air_ref(air);
         let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let phantom = PhantomAir {
             execution_bridge,
@@ -316,9 +296,9 @@ where
 {
     pub fn new(
         config: &SystemConfig,
-        mem_inventory: &MemoryAirInventory<SC>,
+        mem_inventory: &MemoryAirInventory,
         range_checker: SharedVariableRangeCheckerChip,
-        hasher_chip: Option<Arc<Poseidon2PeripheryChip<Val<SC>>>>,
+        hasher_chip: Arc<Poseidon2PeripheryChip<Val<SC>>>,
     ) -> Self {
         // We create an empty program chip: the program should be loaded later (and can be swapped
         // out). The execution frequencies are supplied only after execution.
@@ -328,30 +308,14 @@ where
             config.memory_config.timestamp_max_bits,
         );
         let memory_bus = mem_inventory.bridge.memory_bus();
-        let memory_controller = match &mem_inventory.interface {
-            MemoryInterfaceAirs::Persistent {
-                boundary: _,
-                merkle,
-            } => {
-                assert!(config.continuation_enabled);
-                MemoryController::<Val<SC>>::with_persistent_memory(
-                    memory_bus,
-                    config.memory_config.clone(),
-                    range_checker.clone(),
-                    merkle.merkle_bus,
-                    merkle.compression_bus,
-                    hasher_chip.unwrap(),
-                )
-            }
-            MemoryInterfaceAirs::Volatile { boundary: _ } => {
-                assert!(!config.continuation_enabled);
-                MemoryController::with_volatile_memory(
-                    memory_bus,
-                    config.memory_config.clone(),
-                    range_checker.clone(),
-                )
-            }
-        };
+        let memory_controller = MemoryController::<Val<SC>>::with_persistent_memory(
+            memory_bus,
+            config.memory_config.clone(),
+            range_checker.clone(),
+            mem_inventory.interface.merkle.merkle_bus,
+            mem_inventory.interface.merkle.compression_bus,
+            hasher_chip,
+        );
 
         Self {
             program_chip,
@@ -386,7 +350,6 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
-            access_adapter_records,
             touched_memory,
         } = system_records;
 
@@ -396,9 +359,7 @@ where
         self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
 
-        let memory_ctxs = self
-            .memory_controller
-            .generate_proving_ctx(access_adapter_records, touched_memory);
+        let memory_ctxs = self.memory_controller.generate_proving_ctx(touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()
@@ -407,13 +368,8 @@ where
     }
 
     fn memory_top_tree(&self) -> Option<&[[Val<SC>; CHUNK]]> {
-        match &self.memory_controller.interface_chip {
-            MemoryInterface::Persistent { merkle_chip, .. } => {
-                let top_tree = &merkle_chip.top_tree;
-                (!top_tree.is_empty()).then_some(top_tree.as_slice())
-            }
-            MemoryInterface::Volatile { .. } => None,
-        }
+        let top_tree = &self.memory_controller.interface_chip.merkle_chip.top_tree;
+        (!top_tree.is_empty()).then_some(top_tree.as_slice())
     }
 }
 
@@ -446,23 +402,18 @@ where
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 
-        let hasher_chip = if config.continuation_enabled {
-            assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
-            // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
-            if config.max_constraint_degree >= 7 {
-                inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?;
-            } else {
-                inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?;
-            };
-            let chip = Arc::new(Poseidon2PeripheryChip::new(
-                vm_poseidon2_config(),
-                config.max_constraint_degree,
-            ));
-            inventory.add_periphery_chip(chip.clone());
-            Some(chip)
+        assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+        // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
+        if config.max_constraint_degree >= 7 {
+            inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?;
         } else {
-            None
+            inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?;
         };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(
+            vm_poseidon2_config(),
+            config.max_constraint_degree,
+        ));
+        inventory.add_periphery_chip(hasher_chip.clone());
         let system = SystemChipInventory::new(
             config,
             &inventory.airs().system().memory,
@@ -494,6 +445,6 @@ where
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         self.memory_controller
-            .set_override_trace_heights(&heights[MEMORY_AIRS_START_IDX..]);
+            .set_override_trace_heights(&heights[BOUNDARY_AIR_ID..]);
     }
 }

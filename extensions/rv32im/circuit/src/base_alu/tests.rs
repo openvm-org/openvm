@@ -187,47 +187,6 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-#[test_case(ADD, 100)]
-#[test_case(SUB, 100)]
-#[test_case(XOR, 100)]
-#[test_case(OR, 100)]
-#[test_case(AND, 100)]
-fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
-    let mut rng = create_seeded_rng();
-
-    let mut tester = VmChipTestBuilder::default_persistent();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    // TODO(AG): make a more meaningful test for memory accesses
-    tester.write(2, 1024, [F::ONE; 4]);
-    tester.write(2, 1028, [F::ONE; 4]);
-    // Avoid wider-than-min-block accesses when access adapters are disabled
-    let sm1 = tester.read(2, 1024);
-    let sm2 = tester.read(2, 1028);
-    assert_eq!(sm1, [F::ONE; 4]);
-    assert_eq!(sm2, [F::ONE; 4]);
-
-    for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
-            &mut rng,
-            opcode,
-            None,
-            None,
-            None,
-        );
-    }
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
