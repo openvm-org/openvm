@@ -1,8 +1,8 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    persistent::{PersistentBoundaryAir, PersistentBoundaryChip},
     merkle::{MemoryMerkleAir, MemoryMerkleChip},
+    persistent::{PersistentBoundaryAir, PersistentBoundaryChip},
     MemoryImage, CHUNK,
 };
 

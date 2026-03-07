@@ -24,10 +24,10 @@ use crate::{
     arch::{MemoryConfig, VmField, CONST_BLOCK_SIZE},
     system::{
         memory::{
-            persistent::PersistentBoundaryChip,
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
+            persistent::PersistentBoundaryChip,
         },
         poseidon2::Poseidon2PeripheryChip,
         TouchedMemory,

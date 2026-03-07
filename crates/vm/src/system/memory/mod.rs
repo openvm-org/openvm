@@ -5,11 +5,11 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_util::log2_strict_usize, AirRef, StarkProtocolConfig,
 };
 
-pub mod persistent;
 mod controller;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
+pub mod persistent;
 #[cfg(test)]
 mod tests;
 
@@ -19,8 +19,8 @@ pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
-        persistent::PersistentBoundaryAir, dimensions::MemoryDimensions, interface::MemoryInterfaceAirs,
-        merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
+        dimensions::MemoryDimensions, interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
+        offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
     },
 };
 
