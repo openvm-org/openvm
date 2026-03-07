@@ -127,9 +127,8 @@ impl<
 
         // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
         // the correct amount of bits
-        let limb_shift = AB::F::from_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
 
         for pair in need_range_check.chunks(2) {
             self.bus
