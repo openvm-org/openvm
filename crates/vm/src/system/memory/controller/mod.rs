@@ -24,7 +24,7 @@ use crate::{
     arch::{MemoryConfig, VmField, CONST_BLOCK_SIZE},
     system::{
         memory::{
-            boundary::MemoryBoundaryChip,
+            persistent::PersistentBoundaryChip,
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
@@ -79,11 +79,11 @@ pub struct MemoryController<F: VmField> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct MemoryTraceHeights {
+pub struct PersistentMemoryTraceHeights {
     boundary: usize,
     merkle: usize,
 }
-impl MemoryTraceHeights {
+impl PersistentMemoryTraceHeights {
     /// `heights` must consist of only memory trace heights, in order of AIR IDs.
     pub fn from_slice(heights: &[u32]) -> Self {
         Self {
@@ -111,7 +111,7 @@ impl<F: VmField> MemoryController<F> {
         };
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface {
-            boundary_chip: MemoryBoundaryChip::new(
+            boundary_chip: PersistentBoundaryChip::new(
                 memory_dims,
                 memory_bus,
                 merkle_bus,
@@ -135,7 +135,7 @@ impl<F: VmField> MemoryController<F> {
     }
 
     pub(crate) fn set_override_trace_heights(&mut self, overridden_heights: &[u32]) {
-        let oh = MemoryTraceHeights::from_slice(overridden_heights);
+        let oh = PersistentMemoryTraceHeights::from_slice(overridden_heights);
         self.interface_chip
             .boundary_chip
             .set_overridden_height(oh.boundary);

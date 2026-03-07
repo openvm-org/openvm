@@ -15,14 +15,14 @@ use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProving
 use tracing::instrument;
 
 use super::{
-    boundary::MemoryBoundaryChipGPU,
+    boundary::BoundaryChipGPU,
     merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
-    pub boundary: MemoryBoundaryChipGPU,
+    pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
@@ -56,7 +56,7 @@ impl MemoryInventoryGPU {
 
     pub fn new(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
         Self {
-            boundary: MemoryBoundaryChipGPU::new(hasher_chip.shared_buffer()),
+            boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer()),
             merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
             initial_memory: Vec::new(),
             merkle_records: None,

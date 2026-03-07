@@ -1,19 +1,19 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    boundary::{MemoryBoundaryAir, MemoryBoundaryChip},
+    persistent::{PersistentBoundaryAir, PersistentBoundaryChip},
     merkle::{MemoryMerkleAir, MemoryMerkleChip},
     MemoryImage, CHUNK,
 };
 
 #[derive(Clone)]
 pub struct MemoryInterfaceAirs {
-    pub boundary: MemoryBoundaryAir<CHUNK>,
+    pub boundary: PersistentBoundaryAir<CHUNK>,
     pub merkle: MemoryMerkleAir<CHUNK>,
 }
 
 pub struct MemoryInterface<F> {
-    pub boundary_chip: MemoryBoundaryChip<F, CHUNK>,
+    pub boundary_chip: PersistentBoundaryChip<F, CHUNK>,
     pub merkle_chip: MemoryMerkleChip<CHUNK, F>,
     pub initial_memory: MemoryImage,
 }

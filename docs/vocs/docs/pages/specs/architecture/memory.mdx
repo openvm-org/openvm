@@ -6,7 +6,7 @@
 - [Soundness proof](#soundness-proof)
   - [Time goes forward](#time-goes-forward)
   - [Memory consistency](#memory-consistency)
-- [The `MemoryBoundaryChip`](#the-memoryboundarychip)
+- [The `PersistentBoundaryChip`](#the-persistentboundarychip)
 - [Implementation details](#implementation-details)
 - [What to take into account when adding a new chip](#what-to-take-into-account-when-adding-a-new-chip)
 
@@ -68,9 +68,9 @@ Every instruction executor does this via the **memory controller** API.
 
 ## Memory boundary chip
 
-The only unaccounted for interactions are the initial birth of a segment and the final memory state. We use the **memory boundary chip** (`MemoryBoundaryChip`) to handle them.
+The only unaccounted for interactions are the initial birth of a segment and the final memory state. We use the **memory boundary chip** (`PersistentBoundaryChip`) to handle them.
 
-The `MemoryBoundaryChip` commits to both the initial and final memory state. The initial memory is provided as part of the program, and the chip produces commitments (Merkle roots) for both the initial and final states. These commitments become part of the public values used later in proof aggregation (see [Continuations](/specs/architecture/continuations)).
+The `PersistentBoundaryChip` commits to both the initial and final memory state. The initial memory is provided as part of the program, and the chip produces commitments (Merkle roots) for both the initial and final states. These commitments become part of the public values used later in proof aggregation (see [Continuations](/specs/architecture/continuations)).
 
 The memory boundary chip performs, for every touched memory chunk, a send interaction on birth and a receive interaction on death.
 
@@ -83,7 +83,7 @@ The following invariants **must** be maintained by the memory architecture:
 
 Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
 
-Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `MemoryBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
+Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `PersistentBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
 
 :::warning
 At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
@@ -110,9 +110,9 @@ To prove memory consistency, we need to show that accessing an address always gi
 
 For every row that gets handled by a memory bridge, draw a directed edge from the previous timestamp to the new timestamp with capacity $1$. We know that in the obtained network, where the source and the sink are defined by the boundary interactions, all edges go left to right, and the maximal flow is $1$ (because there is only one edge from the source, therefore the minimal cut is $1$). Since all edges go left to right, there is no circulation in this network. Hence, all edges represent exactly one path from the source to the sink. Therefore, for every vertex (which is a timestamp), the value for the edge going to this vertex (the last receive interaction) equals the value for the edge going from this vertex (the considered send instruction).
 
-## The `MemoryBoundaryChip`
+## The `PersistentBoundaryChip`
 
-The `MemoryBoundaryChip` commits to both the initial and final memory state, making these commitments available as public values for proof aggregation.
+The `PersistentBoundaryChip` commits to both the initial and final memory state, making these commitments available as public values for proof aggregation.
 
 - **Commitments:**
   The chip takes the initial memory (provided as part of the program) and computes a commitment over it by incorporating it into a Merkle tree. When the segment finishes, the chip produces a final commitment (Merkle root) that reflects every change made during execution.
@@ -122,7 +122,7 @@ The `MemoryBoundaryChip` commits to both the initial and final memory state, mak
   - `expand_direction = -1` indicates a boundary row representing the final memory state.
   - `expand_direction = 0` marks rows that are not relevant (padding rows where all interaction multiplicities are zero).
 - **Multiple Buses:**
-  To enforce these commitments, the `MemoryBoundaryChip` interacts with three buses:
+  To enforce these commitments, the `PersistentBoundaryChip` interacts with three buses:
   - **Merkle Bus:**
     For initial memory rows, it sends a record with `expand_direction = 1`, and for final memory rows, it receives a record with `expand_direction = -1`. This allows the Merkle chip to build and later verify a full commitment over the memory.
   - **Compression Bus:**
@@ -136,7 +136,7 @@ The uniqueness of the addresses is achieved by the interactions on the merkle bu
 
 In this model, there is no central memory/offline checker AIR. Every chip is responsible for doing the necessary interactions discussed above for its memory operations. For this, every chip's AIR must have some auxiliary columns for every memory operation. The auxiliary columns include `prev_timestamp` and, for Write operations, `prev_data`.
 
-The initial memory state is constrained at the AIR level by the `MemoryBoundaryChip`, which commits to it via the `initial_memory_root` Merkle root (a public value) and sends initial values on the memory bus at timestamp $0$.
+The initial memory state is constrained at the AIR level by the `PersistentBoundaryChip`, which commits to it via the `initial_memory_root` Merkle root (a public value) and sends initial values on the memory bus at timestamp $0$.
 
 ## What to take into account when adding a new chip
 

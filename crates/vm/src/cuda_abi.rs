@@ -10,7 +10,7 @@ pub mod boundary {
     use super::*;
 
     extern "C" {
-        fn _boundary_tracegen(
+        fn _persistent_boundary_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -24,7 +24,7 @@ pub mod boundary {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn boundary_tracegen(
+    pub unsafe fn persistent_boundary_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         width: usize,
@@ -34,7 +34,7 @@ pub mod boundary {
         d_poseidon2_raw_buffer: &DeviceBuffer<F>,
         d_poseidon2_buffer_idx: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_boundary_tracegen(
+        CudaError::from_result(_persistent_boundary_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
