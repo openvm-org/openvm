@@ -1,15 +1,15 @@
 use clap::Args;
 use openvm_sdk_config::SdkVmConfig;
-use openvm_stark_backend::{SystemParams, WhirConfig, WhirParams};
-use openvm_stark_sdk::config::log_up_params::log_up_security_params_baby_bear_100_bits;
+use openvm_stark_backend::SystemParams;
+use openvm_stark_sdk::config::{
+    compression_params_with_100_bits_security, internal_params_with_100_bits_security,
+    leaf_params_with_100_bits_security,
+};
+pub use openvm_stark_sdk::config::{
+    DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP, DEFAULT_COMPRESSION_LOG_BLOWUP,
+    DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
+};
 use serde::{Deserialize, Serialize};
-
-pub const DEFAULT_APP_L_SKIP: usize = 4;
-pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
-pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
-pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
-pub const DEFAULT_COMPRESSION_LOG_BLOWUP: usize = 4;
-pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 2;
 
 // WARNING: These currently serve as both the DEFAULT and MAXIMUM number of
 // children for the leaf and internal aggregation layers, as the max number
@@ -50,9 +50,9 @@ pub struct AggregationSystemParams {
 impl Default for AggregationSystemParams {
     fn default() -> Self {
         Self {
-            leaf: default_leaf_params(DEFAULT_LEAF_LOG_BLOWUP),
-            internal: default_internal_params(DEFAULT_INTERNAL_LOG_BLOWUP),
-            compression: Some(default_compression_params(DEFAULT_COMPRESSION_LOG_BLOWUP)),
+            leaf: leaf_params_with_100_bits_security(),
+            internal: internal_params_with_100_bits_security(),
+            compression: Some(compression_params_with_100_bits_security()),
         }
     }
 }
@@ -86,130 +86,3 @@ impl Default for AggregationTreeConfig {
         }
     }
 }
-
-/// App params are configurable for max_log_height = l_skip + n_stack.
-/// `l_skip` is tuned separately for performance.
-/// `log_final_poly_len` is determined from `l_skip, n_stack` and adjusted in multiples of `k_whir`
-/// to be <= 10;
-pub fn default_app_params(log_blowup: usize, l_skip: usize, n_stack: usize) -> SystemParams {
-    let k_whir = 4;
-    let max_constraint_degree = 4;
-    let w_stack = 2048;
-    generic_system_params(
-        log_blowup,
-        l_skip,
-        n_stack,
-        w_stack,
-        k_whir,
-        max_constraint_degree,
-    )
-}
-
-pub fn default_leaf_params(log_blowup: usize) -> SystemParams {
-    let l_skip = 4;
-    let n_stack = 17;
-    let k_whir = 4;
-    let max_constraint_degree = 4;
-    let w_stack = 2048;
-    generic_system_params(
-        log_blowup,
-        l_skip,
-        n_stack,
-        w_stack,
-        k_whir,
-        max_constraint_degree,
-    )
-}
-
-pub fn default_internal_params(log_blowup: usize) -> SystemParams {
-    let l_skip = 2;
-    let n_stack = 17;
-    let k_whir = 4;
-    let max_constraint_degree = 4;
-    let w_stack = 512;
-    generic_system_params(
-        log_blowup,
-        l_skip,
-        n_stack,
-        w_stack,
-        k_whir,
-        max_constraint_degree,
-    )
-}
-
-/// Compression params are optimized to minimize the size of the WHIR proof given ~50
-/// million trace cells. Parameters were chosen by computing the proof size for each
-/// of the set of reasonable parameters, and selecting the best config. Intuitively,
-/// a large n_stack + l_skip reduces stacking width, and the other parameters are then
-/// balanced to reduce size maximally.
-///
-/// NOTE: Proof size largely depends on log_blowup - a higher log_blowup corresponds
-/// to a smaller proof.
-pub fn default_compression_params(log_blowup: usize) -> SystemParams {
-    let l_skip = 2;
-    let n_stack = 20;
-    let k_whir = 4;
-    let max_constraint_degree = 4;
-    let whir_params = WhirParams {
-        k: k_whir,
-        log_final_poly_len: 11,
-        query_phase_pow_bits: WHIR_POW_BITS,
-    };
-    let w_stack = 16;
-    let whir_config = WhirConfig::new(log_blowup, l_skip + n_stack, whir_params, SECURITY_LEVEL);
-    SystemParams {
-        l_skip,
-        n_stack,
-        w_stack,
-        log_blowup,
-        whir: whir_config,
-        logup: log_up_security_params_baby_bear_100_bits(),
-        max_constraint_degree,
-    }
-}
-
-pub fn default_root_params(log_blowup: usize) -> SystemParams {
-    let l_skip = 2;
-    let n_stack = 17;
-    let k_whir = 4;
-    let max_constraint_degree = 4;
-    let w_stack = 64;
-    generic_system_params(
-        log_blowup,
-        l_skip,
-        n_stack,
-        w_stack,
-        k_whir,
-        max_constraint_degree,
-    )
-}
-
-pub fn generic_system_params(
-    log_blowup: usize,
-    l_skip: usize,
-    n_stack: usize,
-    w_stack: usize,
-    k_whir: usize,
-    max_constraint_degree: usize,
-) -> SystemParams {
-    let whir_params = WhirParams {
-        k: k_whir,
-        log_final_poly_len: WHIR_MAX_LOG_FINAL_POLY_LEN,
-        query_phase_pow_bits: WHIR_POW_BITS,
-    };
-    let whir_config = WhirConfig::new(log_blowup, l_skip + n_stack, whir_params, SECURITY_LEVEL);
-    SystemParams {
-        l_skip,
-        n_stack,
-        w_stack,
-        log_blowup,
-        whir: whir_config,
-        logup: log_up_security_params_baby_bear_100_bits(),
-        max_constraint_degree,
-    }
-}
-
-// TODO: move to openvm-stark-backend
-const WHIR_MAX_LOG_FINAL_POLY_LEN: usize = 10;
-const WHIR_POW_BITS: usize = 20;
-const SECURITY_LEVEL: usize = 100;
