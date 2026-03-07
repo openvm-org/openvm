@@ -8,14 +8,19 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuProverError};
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    DEFERRAL_AS,
+};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
     prover::AirProvingContext,
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, StarkTestError, SystemParams, Val,
+    VerificationData,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -39,7 +44,6 @@ use crate::{
     },
     system::{
         memory::{
-            adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
             MemoryAirInventory, MemoryController, SharedMemoryHelper,
@@ -318,16 +322,6 @@ impl VmChipTestBuilder<BabyBear> {
 }
 
 impl<F: VmField> VmChipTestBuilder<F> {
-    pub fn default_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config)
-    }
-
-    pub fn default_native() -> Self {
-        Self::volatile(MemoryConfig::aggregation())
-    }
-
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
         init_block_size: usize,
@@ -336,14 +330,12 @@ impl<F: VmField> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-        let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
-        let memory = TracingMemory::new(mem_config, init_block_size, arena_size_bound);
+        let memory = TracingMemory::new(mem_config, init_block_size);
 
         (range_checker, memory)
     }
 
-    pub fn persistent(mem_config: MemoryConfig) -> Self {
+    pub fn from_config(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
@@ -366,26 +358,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
             default_pointer: 0,
         }
     }
-
-    pub fn volatile(mem_config: MemoryConfig) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, 1);
-        let memory_controller = MemoryController::with_volatile_memory(
-            MemoryBus::new(MEMORY_BUS),
-            mem_config,
-            range_checker,
-        );
-        Self {
-            memory: MemoryTester::new(memory_controller, memory),
-            streams: Default::default(),
-            rng: StdRng::seed_from_u64(0),
-            execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            internal_rng: StdRng::seed_from_u64(0),
-            default_register: 0,
-            default_pointer: 0,
-        }
-    }
 }
 
 impl<F: VmField> Default for VmChipTestBuilder<F> {
@@ -394,7 +366,8 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config)
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
+        Self::from_config(mem_config)
     }
 }
 
@@ -467,9 +440,8 @@ where
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
             let mut memory_controller = memory_tester.controller;
-            let is_persistent = memory_controller.continuation_enabled();
             let mut memory = memory_tester.memory;
-            let touched_memory = memory.finalize::<Val<SC>>(is_persistent);
+            let touched_memory = memory.finalize::<Val<SC>>();
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
             for mem_chip in memory_tester.chip_for_block.into_values() {
@@ -478,14 +450,10 @@ where
             let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
-                range_checker.bus(),
-                is_persistent.then_some((
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                )),
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             );
-            let ctxs = memory_controller
-                .generate_proving_ctx(memory.access_adapter_records, touched_memory);
+            let ctxs = memory_controller.generate_proving_ctx(touched_memory);
             for (air, ctx) in
                 zip_eq(mem_inventory.into_airs(), ctxs).filter(|(_, ctx)| ctx.height() > 0)
             {
