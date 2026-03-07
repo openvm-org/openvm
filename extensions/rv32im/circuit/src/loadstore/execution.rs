@@ -13,7 +13,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, DEFERRAL_AS,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -30,13 +30,13 @@ struct LoadStorePreCompute {
 }
 
 impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
-    /// Return (local_opcode, enabled, is_native_store)
+    /// Return (local_opcode, enabled)
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LoadStorePreCompute,
-    ) -> Result<(Rv32LoadStoreOpcode, bool, bool), StaticProgramError> {
+    ) -> Result<(Rv32LoadStoreOpcode, bool), StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -71,40 +71,32 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
-        let is_native_store = e_u32 == DEFERRAL_AS;
-
         *data = LoadStorePreCompute {
             imm_extended,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
             e: e_u32 as u8,
         };
-        Ok((local_opcode, enabled, is_native_store))
+        Ok((local_opcode, enabled))
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $local_opcode:ident, $enabled:ident, $is_native_store:ident) => {
-        match ($local_opcode, $enabled, $is_native_store) {
-            (LOADW, true, _) => Ok($execute_impl::<_, _, U8, LoadWOp, true>),
-            (LOADW, false, _) => Ok($execute_impl::<_, _, U8, LoadWOp, false>),
-            (LOADHU, true, _) => Ok($execute_impl::<_, _, U8, LoadHUOp, true>),
-            (LOADHU, false, _) => Ok($execute_impl::<_, _, U8, LoadHUOp, false>),
-            (LOADBU, true, _) => Ok($execute_impl::<_, _, U8, LoadBUOp, true>),
-            (LOADBU, false, _) => Ok($execute_impl::<_, _, U8, LoadBUOp, false>),
-            (STOREW, true, false) => Ok($execute_impl::<_, _, U8, StoreWOp, true>),
-            (STOREW, false, false) => Ok($execute_impl::<_, _, U8, StoreWOp, false>),
-            (STOREW, true, true) => Ok($execute_impl::<_, _, F, StoreWOp, true>),
-            (STOREW, false, true) => Ok($execute_impl::<_, _, F, StoreWOp, false>),
-            (STOREH, true, false) => Ok($execute_impl::<_, _, U8, StoreHOp, true>),
-            (STOREH, false, false) => Ok($execute_impl::<_, _, U8, StoreHOp, false>),
-            (STOREH, true, true) => Ok($execute_impl::<_, _, F, StoreHOp, true>),
-            (STOREH, false, true) => Ok($execute_impl::<_, _, F, StoreHOp, false>),
-            (STOREB, true, false) => Ok($execute_impl::<_, _, U8, StoreBOp, true>),
-            (STOREB, false, false) => Ok($execute_impl::<_, _, U8, StoreBOp, false>),
-            (STOREB, true, true) => Ok($execute_impl::<_, _, F, StoreBOp, true>),
-            (STOREB, false, true) => Ok($execute_impl::<_, _, F, StoreBOp, false>),
-            (_, _, _) => unreachable!(),
+    ($execute_impl:ident, $local_opcode:ident, $enabled:ident) => {
+        match ($local_opcode, $enabled) {
+            (LOADW, true) => Ok($execute_impl::<_, _, U8, LoadWOp, true>),
+            (LOADW, false) => Ok($execute_impl::<_, _, U8, LoadWOp, false>),
+            (LOADHU, true) => Ok($execute_impl::<_, _, U8, LoadHUOp, true>),
+            (LOADHU, false) => Ok($execute_impl::<_, _, U8, LoadHUOp, false>),
+            (LOADBU, true) => Ok($execute_impl::<_, _, U8, LoadBUOp, true>),
+            (LOADBU, false) => Ok($execute_impl::<_, _, U8, LoadBUOp, false>),
+            (STOREW, true) => Ok($execute_impl::<_, _, U8, StoreWOp, true>),
+            (STOREW, false) => Ok($execute_impl::<_, _, U8, StoreWOp, false>),
+            (STOREH, true) => Ok($execute_impl::<_, _, U8, StoreHOp, true>),
+            (STOREH, false) => Ok($execute_impl::<_, _, U8, StoreHOp, false>),
+            (STOREB, true) => Ok($execute_impl::<_, _, U8, StoreBOp, true>),
+            (STOREB, false) => Ok($execute_impl::<_, _, U8, StoreBOp, false>),
+            (_, _) => unreachable!(),
         }
     };
 }
@@ -127,9 +119,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, local_opcode, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -143,9 +134,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, local_opcode, enabled)
     }
 }
 
@@ -170,9 +160,8 @@ where
     {
         let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_handler, local_opcode, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -188,9 +177,8 @@ where
     {
         let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_handler, local_opcode, enabled)
     }
 }
 
