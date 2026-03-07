@@ -178,8 +178,6 @@ pub struct MemoryConfig {
     pub timestamp_max_bits: usize,
     /// Limb size used by the range checker
     pub decomp: usize,
-    /// Maximum N AccessAdapter AIR to support.
-    pub max_access_adapter_n: usize,
 }
 
 impl Default for MemoryConfig {
@@ -190,7 +188,7 @@ impl Default for MemoryConfig {
         addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
         addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
 
@@ -210,16 +208,8 @@ impl MemoryConfig {
         addr_spaces[RV32_REGISTER_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
 
-        #[cfg(feature = "legacy-v1-3-mem-align")]
-        {
-            addr_spaces[RV32_MEMORY_AS as usize] =
-                AddressSpaceHostConfig::new(0, 1, MemoryCellType::U8);
-        }
-        #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-        {
-            addr_spaces[RV32_MEMORY_AS as usize] =
-                AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
-        }
+        addr_spaces[RV32_MEMORY_AS as usize] =
+            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
 
         addr_spaces[PUBLIC_VALUES_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
@@ -232,7 +222,7 @@ impl MemoryConfig {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 
     pub fn min_block_size_bits(&self) -> Vec<u8> {
@@ -241,40 +231,15 @@ impl MemoryConfig {
             .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
             .collect()
     }
-
-    /// Returns true if the Native address space (AS 4) is used.
-    /// Native AS is considered "used" if the host config allocates cells for it.
-    ///
-    /// When access adapters are disabled, all memory accesses must be of the
-    /// standard block size (i.e., 4 for address spaces 1-3).
-    pub fn access_adapters_enabled(&self) -> bool {
-        self.addr_spaces
-            .get(NATIVE_AS as usize)
-            .is_some_and(|config| config.num_cells > 0)
-    }
-
-    pub fn num_access_adapters(&self) -> usize {
-        if self.access_adapters_enabled() {
-            log2_strict_usize(self.max_access_adapter_n)
-        } else {
-            0
-        }
-    }
 }
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
-/// are managed by the architecture, including configuration for continuations support.
+/// are managed by the architecture.
 #[derive(Debug, Clone, Serialize, Deserialize, Setters, WithSetters)]
 pub struct SystemConfig {
     /// The maximum constraint degree any chip is allowed to use.
     #[getset(set_with = "pub")]
     pub max_constraint_degree: usize,
-    /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
-    /// each segment is proved by a proof. Each proof commits the before and after state of the
-    /// corresponding segment.
-    /// False if the VM is in single segment mode. In this mode, an execution is proved by a single
-    /// proof.
-    pub continuation_enabled: bool,
     /// Memory configuration
     pub memory_config: MemoryConfig,
     /// Public values are stored in a special address space.
@@ -304,7 +269,6 @@ impl SystemConfig {
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
-            continuation_enabled: true,
             memory_config,
             num_public_values,
             profiling: false,
@@ -318,16 +282,6 @@ impl SystemConfig {
             memory_config,
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
         )
-    }
-
-    pub fn with_continuations(mut self) -> Self {
-        self.continuation_enabled = true;
-        self
-    }
-
-    pub fn without_continuations(mut self) -> Self {
-        self.continuation_enabled = false;
-        self
     }
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
@@ -358,54 +312,27 @@ impl SystemConfig {
         BOUNDARY_AIR_ID
     }
 
-    /// Returns the AIR ID of the memory merkle AIR. Returns None if continuations are not enabled.
-    pub fn memory_merkle_air_id(&self) -> Option<usize> {
-        let boundary_idx = self.memory_boundary_air_id();
-        if self.continuation_enabled {
-            Some(boundary_idx + 1)
-        } else {
-            None
-        }
-    }
-
-    /// AIR ID for the first memory access adapter AIR.
-    pub fn access_adapter_air_id_offset(&self) -> usize {
-        let boundary_idx = self.memory_boundary_air_id();
-        // boundary, (if persistent memory) merkle AIRs
-        boundary_idx + 1 + usize::from(self.continuation_enabled)
+    /// Returns the AIR ID of the memory merkle AIR.
+    pub fn memory_merkle_air_id(&self) -> usize {
+        self.memory_boundary_air_id() + 1
     }
 
     /// Whether the AIR ID must be present in a valid v2 proof.
     pub fn is_required_air_id(&self, air_id: usize) -> bool {
-        if !self.continuation_enabled {
-            return false;
-        }
         air_id == PROGRAM_AIR_ID
             || air_id == CONNECTOR_AIR_ID
             || air_id == self.memory_boundary_air_id()
-            || Some(air_id) == self.memory_merkle_air_id()
+            || air_id == self.memory_merkle_air_id()
     }
 
     /// This is O(1) and returns the length of
     /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
     pub fn num_airs(&self) -> usize {
-        self.memory_boundary_air_id()
-            + num_memory_airs(
-                self.continuation_enabled,
-                self.memory_config.num_access_adapters(),
-            )
+        self.memory_boundary_air_id() + num_memory_airs()
     }
 
     pub fn initial_block_size(&self) -> usize {
-        match self.continuation_enabled {
-            true => CONST_BLOCK_SIZE,
-            false => 1,
-        }
-    }
-
-    /// Returns true if access adapters are enabled.
-    pub fn access_adapters_enabled(&self) -> bool {
-        self.memory_config.access_adapters_enabled()
+        CONST_BLOCK_SIZE
     }
 }
 
