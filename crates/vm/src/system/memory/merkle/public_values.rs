@@ -243,7 +243,7 @@ mod tests {
     type F = BabyBear;
     #[test]
     fn test_public_value_happy_path() {
-        let mut vm_config = SystemConfig::default().without_continuations();
+        let mut vm_config = SystemConfig::default();
         let addr_space_height = 4;
         vm_config.memory_config.addr_space_height = addr_space_height;
         vm_config.memory_config.pointer_max_bits = 5;
