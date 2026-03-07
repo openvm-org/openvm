@@ -1,12 +1,10 @@
-use std::num::NonZero;
-
 use getset::WithSetters;
 use openvm_instructions::riscv::RV32_IMM_AS;
 
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY as DEFAULT_SEGMENT_MAX_MEMORY,
-        ExecutionCtxTrait, MeteredExecutionCtxTrait, SystemConfig, VmExecState,
+        ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState,
     },
     system::memory::online::GuestMemory,
 };
@@ -14,57 +12,9 @@ use crate::{
 const DEFAULT_MAX_SEGMENTS: u64 = 100;
 pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_MEMORY as u64;
 
-#[derive(Clone, Debug)]
-pub struct AccessAdapterCtx {
-    min_block_size_bits: Vec<u8>,
-    idx_offset: usize,
-}
-
-impl AccessAdapterCtx {
-    pub fn new(config: &SystemConfig) -> Self {
-        Self {
-            min_block_size_bits: config.memory_config.min_block_size_bits(),
-            idx_offset: config.access_adapter_air_id_offset(),
-        }
-    }
-
-    #[inline(always)]
-    pub fn update_cells(
-        &self,
-        cost: &mut u64,
-        address_space: u32,
-        size_bits: u32,
-        widths: &[usize],
-    ) {
-        debug_assert!((address_space as usize) < self.min_block_size_bits.len());
-
-        // SAFETY: address_space passed is usually a hardcoded constant or derived from an
-        // Instruction where it is bounds checked before passing
-        let align_bits = unsafe {
-            *self
-                .min_block_size_bits
-                .get_unchecked(address_space as usize)
-        };
-        debug_assert!(
-            align_bits as u32 <= size_bits,
-            "align_bits ({align_bits}) must be <= size_bits ({size_bits})"
-        );
-
-        for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
-            let adapter_idx = self.idx_offset + adapter_bits as usize - 1;
-            debug_assert!(adapter_idx < widths.len());
-            // SAFETY: widths is initialized taking access adapters into account
-            let width = unsafe { *widths.get_unchecked(adapter_idx) };
-            let height_delta = 1 << (size_bits - adapter_bits + 1);
-            *cost += (height_delta as u64) * (width as u64);
-        }
-    }
-}
-
 #[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCostCtx {
     pub widths: Vec<usize>,
-    pub access_adapter_ctx: Option<AccessAdapterCtx>,
     #[getset(set_with = "pub")]
     pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
@@ -74,13 +24,9 @@ pub struct MeteredCostCtx {
 }
 
 impl MeteredCostCtx {
-    pub fn new(widths: Vec<usize>, config: &SystemConfig) -> Self {
-        let access_adapter_ctx = config
-            .access_adapters_enabled()
-            .then(|| AccessAdapterCtx::new(config));
+    pub fn new(widths: Vec<usize>) -> Self {
         Self {
             widths,
-            access_adapter_ctx,
             max_execution_cost: DEFAULT_MAX_COST,
             cost: 0,
             instret: 0,
@@ -112,13 +58,6 @@ impl ExecutionCtxTrait for MeteredCostCtx {
         // Prevent unbounded memory accesses per instruction
         if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
             self.panic_cost_exceeded();
-        }
-
-        // Handle access adapter updates
-        // SAFETY: size passed is always a non-zero power of 2
-        let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
-        if let Some(ctx) = self.access_adapter_ctx.as_mut() {
-            ctx.update_cells(&mut self.cost, address_space, size_bits, &self.widths);
         }
     }
 

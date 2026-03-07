@@ -111,7 +111,6 @@ mod ec_addne_tests {
         WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
     >;
 
-
     fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
@@ -213,7 +212,6 @@ mod ec_addne_tests {
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
-
 
     #[allow(clippy::too_many_arguments)]
     fn set_and_execute_ec_addne<
@@ -415,11 +413,7 @@ mod ec_addne_tests {
     }
 
     #[cfg(feature = "cuda")]
-    fn run_cuda_ec_addne<
-        const BLOCKS: usize,
-        const BLOCK_SIZE: usize,
-        const NUM_LIMBS: usize,
-    >(
+    fn run_cuda_ec_addne<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
     ) {
@@ -560,8 +554,6 @@ mod ec_double_tests {
         MatrixRecordArena<F>,
     >;
 
-
-
     fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
@@ -670,7 +662,6 @@ mod ec_double_tests {
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
-
 
     #[allow(clippy::too_many_arguments)]
     fn set_and_execute_ec_double<
