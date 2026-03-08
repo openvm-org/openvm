@@ -280,9 +280,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             }
         }
 
-        // Apply height updates for all pages accessed since last checkpoint, and
-        // initialize page_indices for the new segment.
-        let mut addr_space_access_count = vec![0; self.addr_space_access_count.len()];
+        // Reuse self.addr_space_access_count (already zeroed by lazy_update_boundary_heights).
         let pages_len = self.page_indices_since_checkpoint_len;
         for i in 0..pages_len {
             // SAFETY: i is within 0..pages_len and pages_len is the slice length.
@@ -292,15 +290,17 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                     .memory_dimensions
                     .index_to_label((page_id as u64) << PAGE_BITS);
                 let addr_space_idx = addr_space as usize;
-                debug_assert!(addr_space_idx < addr_space_access_count.len());
+                debug_assert!(addr_space_idx < self.addr_space_access_count.len());
                 // SAFETY: addr_space_idx is bounds checked in debug and derived from a valid page
                 // id.
                 unsafe {
-                    *addr_space_access_count.get_unchecked_mut(addr_space_idx) += 1;
+                    *self
+                        .addr_space_access_count
+                        .get_unchecked_mut(addr_space_idx) += 1;
                 }
             }
         }
-        self.apply_height_updates(trace_heights, &addr_space_access_count);
+        self.apply_height_updates(trace_heights, &self.addr_space_access_count);
 
         // Add merkle height contributions for all registers
         self.add_register_merkle_heights();
