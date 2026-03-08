@@ -27,7 +27,10 @@ use openvm_circuit::{
 };
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine, SystemParams};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine;
+use openvm_stark_sdk::config::{
+    baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine,
+    root_params_with_100_bits_security,
+};
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
@@ -38,10 +41,7 @@ use verify_stark::{
 };
 
 use crate::{
-    config::{
-        default_root_params, AggregationConfig, AggregationSystemParams, AggregationTreeConfig,
-        DEFAULT_ROOT_LOG_BLOWUP,
-    },
+    config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::AggProvingKey,
     prover::{
         compute_root_proof_heights, AggProver, AppProver, CompressionProver, EvmProver, RootProver,
@@ -478,7 +478,7 @@ where
             .get_or_init(|| {
                 // TODO[INT-6073]: store root_params
                 let system_config = self.app_config.app_vm_config.as_ref();
-                let root_params = default_root_params(DEFAULT_ROOT_LOG_BLOWUP);
+                let root_params = root_params_with_100_bits_security();
 
                 let trace_heights = compute_root_proof_heights(
                     system_config.clone(),

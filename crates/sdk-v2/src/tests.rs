@@ -1,12 +1,11 @@
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_stark_backend::StarkEngine;
+use openvm_stark_sdk::config::app_params_with_100_bits_security;
 use openvm_transpiler::elf::Elf;
 
 use crate::{
-    config::{
-        default_app_params, AggregationSystemParams, DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP,
-    },
+    config::{AggregationSystemParams, DEFAULT_APP_L_SKIP},
     Sdk, StdIn,
 };
 
@@ -15,7 +14,7 @@ type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Posei
 #[test]
 fn test_root_prover_trace_heights() -> Result<()> {
     let n_stack = 19;
-    let app_params = default_app_params(DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP, n_stack);
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
 
     let elf = Elf::decode(
