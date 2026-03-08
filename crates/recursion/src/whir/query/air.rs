@@ -128,6 +128,9 @@ where
             },
             local.is_first_in_round,
         );
+        builder
+            .when(is_same_round.clone())
+            .assert_one(next.tidx - local.tidx);
         assert_array_eq(
             &mut builder.when(is_same_round.clone()),
             next.gamma,
