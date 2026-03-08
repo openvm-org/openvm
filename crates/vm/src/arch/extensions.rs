@@ -130,7 +130,7 @@ pub struct AirInventory<SC: StarkProtocolConfig> {
     config: SystemConfig,
     /// The system AIRs required by the circuit architecture.
     #[get = "pub"]
-    system: SystemAirInventory<SC>,
+    system: SystemAirInventory,
     /// List of all non-system AIRs in the circuit, in insertion order, which is the **reverse** of
     /// the order they appear in the verifying key.
     ///
@@ -395,7 +395,7 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
     /// Outside of this crate, [AirInventory] must be constructed via [SystemConfig].
     pub(crate) fn new(
         config: SystemConfig,
-        system: SystemAirInventory<SC>,
+        system: SystemAirInventory,
         bus_idx_mgr: BusIndexManager,
     ) -> Self {
         Self {
@@ -577,6 +577,22 @@ where
     pub fn timestamp_max_bits(&self) -> usize {
         self.airs.config().memory_config.timestamp_max_bits
     }
+
+    /// Returns constant trace heights for all AIRs in verifying key order.
+    /// System AIRs get `None` (their constant heights are handled separately).
+    /// Extension chips follow in the same order as AIRs in the verifying key
+    /// (reversed insertion order).
+    pub fn constant_trace_heights(&self) -> Vec<Option<usize>> {
+        let num_system = self.airs.config().num_airs();
+        let mut heights = vec![None; num_system];
+        heights.extend(
+            self.chips
+                .iter()
+                .rev()
+                .map(|chip| chip.constant_trace_height()),
+        );
+        heights
+    }
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.
@@ -752,7 +768,7 @@ mod tests {
     use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
     use super::*;
-    use crate::{arch::VmCircuitConfig, system::memory::interface::MemoryInterfaceAirs};
+    use crate::arch::VmCircuitConfig;
 
     #[allow(dead_code)]
     #[derive(Copy, Clone)]
@@ -833,12 +849,7 @@ mod tests {
         assert_eq!(port.memory_bridge.memory_bus().index(), 1);
         assert_eq!(port.program_bus.index(), 2);
         assert_eq!(port.memory_bridge.range_bus().index(), 3);
-        match &system.memory.interface {
-            MemoryInterfaceAirs::Persistent { boundary, .. } => {
-                assert_eq!(boundary.merkle_bus.index, 4);
-                assert_eq!(boundary.compression_bus.index, 5);
-            }
-            _ => unreachable!(),
-        };
+        assert_eq!(system.memory.interface.boundary.merkle_bus.index, 4);
+        assert_eq!(system.memory.interface.boundary.compression_bus.index, 5);
     }
 }

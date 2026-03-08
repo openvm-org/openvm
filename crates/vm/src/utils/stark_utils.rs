@@ -1,19 +1,23 @@
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof, Com, StarkEngine,
-    SystemParams, Val,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof,
+    prover::ProvingContext, Com, StarkEngine, SystemParams, Val,
 };
-use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::setup_tracing};
-use p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::setup_tracing,
+};
 
 #[cfg(feature = "aot")]
-use crate::arch::{SystemConfig, VmState};
+use crate::arch::SystemConfig;
+#[cfg(feature = "aot")]
+use crate::arch::VmState;
 #[cfg(feature = "aot")]
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
+        ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
@@ -79,7 +83,7 @@ where
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let params = SystemParams::new_for_testing(20); // max log_trace_height=20
+    let params = SystemParams::new_for_testing(22); // max log_trace_height=22
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         params,
@@ -223,12 +227,12 @@ where
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;
-    for segment in segments {
+    for (seg_idx, segment) in segments.iter().enumerate() {
         let Segment {
             num_insns,
             trace_heights,
             ..
-        } = segment;
+        } = segment.clone();
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
         let PreflightExecutionOutput {
@@ -245,6 +249,9 @@ where
         exit_code = system_records.exit_code;
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+
+        validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx);
+
         if debug {
             debug_proving_ctx(&vm, &ctx);
         }
@@ -252,8 +259,8 @@ where
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
-    match vm.verify(&vk, &proofs) {
-        Ok(()) => {}
+    match verify_segments(&vm.engine, &vk, &proofs) {
+        Ok(_) => {}
         Err(err) => {
             panic!("segment proofs should verify: {err}");
         }
@@ -266,4 +273,92 @@ where
         .collect();
 
     Ok((final_memory, vdata))
+}
+
+/// Validates that metered execution estimates match realized trace heights.
+///
+/// Note: Metered execution stores un-padded counts, so we pad them for comparison.
+/// The proving context trace height (realized) is already padded.
+/// For most AIRs, estimated_padded should exactly equal realized.
+/// For MemoryMerkleAir, Poseidon2PeripheryAir, and PersistentBoundaryAir, it is expected that
+/// estimated >> realized.
+fn validate_metered_estimates<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    estimated_heights: &[u32],
+    ctx: &ProvingContext<E::PB>,
+    seg_idx: usize,
+) where
+    E: StarkEngine,
+    VB: VmBuilder<E>,
+{
+    let air_names: Vec<_> = vm.air_names().collect();
+
+    // Iterate over all AIRs, not just those in ctx.per_trace
+    for (air_id, &estimated_u32) in estimated_heights.iter().enumerate() {
+        let estimated = estimated_u32 as usize;
+        // Look up realized height from ctx.per_trace, or 0 if not present
+        let realized = ctx
+            .per_trace
+            .iter()
+            .find(|(id, _)| *id == air_id)
+            .map(|(_, air_ctx)| air_ctx.height())
+            .unwrap_or(0);
+
+        // Pad the estimated height (realized is already padded from proving context)
+        let estimated_padded = next_power_of_two_or_zero(estimated);
+        let air_name = air_names.get(air_id).unwrap_or(&"unknown");
+
+        #[cfg(feature = "metrics")]
+        {
+            metrics::gauge!(
+                "metered_estimated_height",
+                "air_id" => air_id.to_string(),
+                "air_name" => air_name.to_string(),
+                "segment" => seg_idx.to_string(),
+            )
+            .set(estimated_padded as f64);
+            metrics::gauge!(
+                "metered_realized_height",
+                "air_id" => air_id.to_string(),
+                "air_name" => air_name.to_string(),
+                "segment" => seg_idx.to_string(),
+            )
+            .set(realized as f64);
+        }
+
+        // Check for underestimation: padded estimate should be >= realized
+        assert!(
+            estimated_padded >= realized,
+            "Metered estimation underestimate for AIR {} ({}): estimated {} (padded {}) < realized {} \
+             (segment {})",
+            air_id,
+            air_name,
+            estimated,
+            estimated_padded,
+            realized,
+            seg_idx
+        );
+
+        // For some airs, the overestimates are expected
+        if air_name.contains("MemoryMerkleAir")
+            || air_name.contains("Poseidon2PeripheryAir")
+            || air_name.contains("PersistentBoundaryAir")
+            || air_name.contains("NativeAdapterAir")
+        {
+            continue;
+        }
+
+        // Check that estimated_padded exactly matches realized
+        assert!(
+            estimated_padded == realized,
+            "Metered estimation mismatch for AIR {} ({}): estimated {} (padded {}) != realized {} \
+             (segment {})",
+            air_id,
+            air_name,
+            estimated,
+            estimated_padded,
+            realized,
+            seg_idx
+        );
+    }
 }

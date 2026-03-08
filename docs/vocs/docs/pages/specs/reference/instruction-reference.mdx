@@ -129,13 +129,14 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | ------------- | ---------- | ------------- |
 | Keccak | `Rv32KeccakOpcode::KECCAK256` | KECCAK256_RV32 |
 
-## SHA2-256 Extension
+## SHA-2 Extension
 
 #### Instructions
 
-| VM Extension | `LocalOpcode` | ISA Instruction |
-| ------------- | ---------- | ------------- |
-| SHA2-256 | `Rv32Sha256Opcode::SHA256` | SHA256_RV32 |
+| VM Extension  | `LocalOpcode`            | ISA Instruction          |
+| ------------- | ------------------------ | ------------------------ |
+| SHA-2         | `Rv32Sha2Opcode::SHA256` | SHA256_UPDATE_RV32       |
+| SHA-2         | `Rv32Sha2Opcode::SHA512` | SHA512_UPDATE_RV32       |
 
 ## BigInt Extension
 
@@ -182,6 +183,14 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `Fp2Opcode::DIV` | DIV\<Fp2\> |
 | Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV\<Fp2\> |
 
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| Algebra | `ModularPhantom::HintNonQr` | HintNonQr\<N\> |
+| Algebra | `ModularPhantom::HintSqrt` | HintSqrt\<N\> |
+
+
 ## Elliptic Curve Extension
 
 #### Instructions
@@ -192,19 +201,3 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE\<C\> |
 | Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
 | Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
-
-#### Phantom Sub-Instructions
-
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| Elliptic Curve | `EccPhantom::HintDecompress` | HintDecompress |
-
-## Pairing Extension
-
-#### Instructions
-
-#### Phantom Sub-Instructions
-
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| Pairing | `PairingPhantom::HintDecompress` | HintDecompress |

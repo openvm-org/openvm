@@ -235,4 +235,8 @@ where
         let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
         AirProvingContext::simple_no_pis(trace)
     }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(self.air.height() as usize)
+    }
 }

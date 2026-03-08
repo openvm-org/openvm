@@ -7,16 +7,21 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    DEFERRAL_AS,
+};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
-    p3_util::log2_strict_usize,
     prover::{
-        AirProvingContext, ColMajorMatrix, CpuBackend, CpuProverError, StridedColMajorMatrixView,
+        AirProvingContext, ColMajorMatrix, CpuBackend, CpuDevice, CpuProverError,
+        StridedColMajorMatrixView,
     },
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, StarkTestError, SystemParams, Val,
+    VerificationData,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -36,13 +41,13 @@ use crate::{
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
+        CONST_BLOCK_SIZE,
     },
     system::{
         memory::{
-            adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
-            MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
+            MemoryAirInventory, MemoryController, SharedMemoryHelper,
         },
         poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
         program::ProgramBus,
@@ -176,7 +181,15 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_u8));
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address
+        // space). The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        let ptr_bytes = (pointer as u32).to_le_bytes();
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+            let chunk: [u8; CONST_BLOCK_SIZE] =
+                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
+            self.write::<CONST_BLOCK_SIZE>(1, register + i, chunk.map(F::from_u8));
+        }
         (register, pointer)
     }
 
@@ -226,17 +239,25 @@ impl<F: VmField> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(1usize, register, pointer.to_le_bytes().map(F::from_u8));
-        if NUM_LIMBS.is_power_of_two() {
-            for (i, &write) in writes.iter().enumerate() {
-                self.write(2usize, pointer + i * NUM_LIMBS, write);
-            }
-        } else {
-            for (i, &write) in writes.iter().enumerate() {
-                let ptr = pointer + i * NUM_LIMBS;
-                for j in (0..NUM_LIMBS).step_by(4) {
-                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
-                }
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address
+        // space). The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        let ptr_bytes = (pointer as u32).to_le_bytes();
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+            let chunk: [u8; CONST_BLOCK_SIZE] =
+                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
+            self.write::<CONST_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_u8));
+        }
+        // Always write in CONST_BLOCK_SIZE-byte chunks to avoid generating
+        // access adapter records when access adapters are disabled.
+        for (i, &write) in writes.iter().enumerate() {
+            let ptr = pointer + i * NUM_LIMBS;
+            for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+                self.write::<CONST_BLOCK_SIZE>(
+                    2usize,
+                    ptr + j,
+                    write[j..j + CONST_BLOCK_SIZE].try_into().unwrap(),
+                );
             }
         }
     }
@@ -302,16 +323,6 @@ impl VmChipTestBuilder<BabyBear> {
 }
 
 impl<F: VmField> VmChipTestBuilder<F> {
-    pub fn default_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config)
-    }
-
-    pub fn default_native() -> Self {
-        Self::volatile(MemoryConfig::aggregation())
-    }
-
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
         init_block_size: usize,
@@ -320,16 +331,14 @@ impl<F: VmField> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-        let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
-        let memory = TracingMemory::new(mem_config, init_block_size, arena_size_bound);
+        let memory = TracingMemory::new(mem_config, init_block_size);
 
         (range_checker, memory)
     }
 
-    pub fn persistent(mem_config: MemoryConfig) -> Self {
+    pub fn from_config(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CHUNK);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
         let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
@@ -350,26 +359,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
             default_pointer: 0,
         }
     }
-
-    pub fn volatile(mem_config: MemoryConfig) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, 1);
-        let memory_controller = MemoryController::with_volatile_memory(
-            MemoryBus::new(MEMORY_BUS),
-            mem_config,
-            range_checker,
-        );
-        Self {
-            memory: MemoryTester::new(memory_controller, memory),
-            streams: Default::default(),
-            rng: StdRng::seed_from_u64(0),
-            execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            internal_rng: StdRng::seed_from_u64(0),
-            default_register: 0,
-            default_pointer: 0,
-        }
-    }
 }
 
 impl<F: VmField> Default for VmChipTestBuilder<F> {
@@ -378,7 +367,8 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::volatile(mem_config)
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
+        Self::from_config(mem_config)
     }
 }
 
@@ -451,9 +441,8 @@ where
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
             let mut memory_controller = memory_tester.controller;
-            let is_persistent = memory_controller.continuation_enabled();
             let mut memory = memory_tester.memory;
-            let touched_memory = memory.finalize::<Val<SC>>(is_persistent);
+            let touched_memory = memory.finalize::<Val<SC>>();
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
             for mem_chip in memory_tester.chip_for_block.into_values() {
@@ -462,14 +451,10 @@ where
             let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
-                range_checker.bus(),
-                is_persistent.then_some((
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                )),
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             );
-            let ctxs = memory_controller
-                .generate_proving_ctx(memory.access_adapter_records, touched_memory);
+            let ctxs = memory_controller.generate_proving_ctx(touched_memory);
             for (air, ctx) in
                 zip_eq(mem_inventory.into_airs(), ctxs).filter(|(_, ctx)| ctx.height() > 0)
             {
@@ -527,20 +512,39 @@ where
         self
     }
 
-    // TODO[jpw]: put back once we can make it generic in SC
-    // /// Given a function to produce an engine from the max trace height,
-    // /// runs a simple test on that engine
-    // pub fn test<E, P: Fn() -> E>(
-    //     self, // do no take ownership so it's easier to prank
-    //     engine_provider: P,
-    // ) -> Result<VerificationData<SC>, VerificationError>
-    // where
-    //     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    // {
-    //     assert!(self.memory.is_none(), "Memory must be finalized");
-    //     let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
-    //     engine_provider().run_test_impl(airs, ctxs)
-    // }
+    pub fn load_periphery_and_prank_trace<A, C, P>(
+        mut self,
+        (air, chip): (A, C),
+        modify_trace: P,
+    ) -> Self
+    where
+        A: AnyAir<SC> + 'static,
+        C: Chip<(), CpuBackend<SC>>,
+        P: Fn(&mut RowMajorMatrix<Val<SC>>),
+    {
+        let mut ctx = chip.generate_proving_ctx(());
+        let mut trace =
+            StridedColMajorMatrixView::from(ctx.common_main.as_view()).to_row_major_matrix();
+        modify_trace(&mut trace);
+        ctx.common_main = ColMajorMatrix::from_row_major(&trace);
+        self.air_ctxs.push((Arc::new(air), ctx));
+        self
+    }
+
+    /// Given a function to produce an engine from the max trace height,
+    /// runs a simple test on that engine
+    pub fn test<E, P: Fn() -> E>(
+        self, // do no take ownership so it's easier to prank
+        engine_provider: P,
+    ) -> Result<VerificationData<SC>, StarkTestError<CpuProverError, SC::EF>>
+    where
+        E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+        SC::EF: Ord,
+    {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        engine_provider().run_test(airs, ctxs)
+    }
 }
 
 /// Concrete `StarkTestError` type alias for BabyBear Poseidon2 CPU tests.

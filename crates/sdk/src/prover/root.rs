@@ -73,7 +73,6 @@ impl RootVerifierLocalProver {
         // See `SingleSegmentVmProver::prove` for explanation
         let vm = &mut self.inner.vm;
         Self::permute_pk(vm, &self.air_id_inv_perm);
-        assert!(!vm.config().as_ref().continuation_enabled);
         let input = input.write();
         let state = vm.create_initial_state(&exe, input);
         vm.transport_init_memory_to_device(&state.memory);
@@ -126,7 +125,6 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         input: impl Into<Streams<F>>,
         _: &[u32],
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        assert!(!self.vm_config().as_ref().continuation_enabled);
         // The following is unrolled from SingleSegmentVmProver for VmLocalProver and
         // VirtualMachine::prove to add special logic around ensuring trace heights are fixed and
         // then reordering the trace matrices so the heights are sorted.
@@ -143,7 +141,6 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         // could maybe be replaced by only changing `executor_idx_to_air_idx`, but applying the
         // permutation is conceptually simpler to track.
         Self::permute_pk(vm, &self.air_id_inv_perm);
-        assert!(!vm.config().as_ref().continuation_enabled);
         vm.transport_init_memory_to_device(&state.memory);
 
         let trace_heights = &self.fixed_air_heights;

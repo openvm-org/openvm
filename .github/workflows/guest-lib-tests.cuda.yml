@@ -31,6 +31,7 @@ jobs:
       matrix:
         crates: # group crates on the same runner based on test time
           - { names: "sha2 keccak256" }
+          - { names: "verify_stark" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
@@ -52,7 +53,7 @@ jobs:
               - ".github/workflows/guest-lib-tests.cuda.yml"
               - "crates/sdk/guest/fib/**"
             sha2:
-              - "extensions/sha256/**"
+              - "extensions/sha2/**"
               - "guest-libs/sha2/**"
             keccak256:
               - "extensions/keccak256/**"
@@ -137,6 +138,9 @@ jobs:
                 elif [[ "$crate" == "ruint" ]]; then
                   # only run integration tests because other tests are not OpenVM related
                   SPECIAL_ARGS="test_matrix_power"
+                elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
+                  # also run proving tests
+                  SPECIAL_ARGS="--run-ignored=all"
                 fi
 
                 ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1

@@ -17,8 +17,8 @@ openvm-ecc-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
-openvm-sha256-circuit = { workspace = true }
-openvm-sha256-transpiler = { workspace = true }
+openvm-sha2-circuit = { workspace = true }
+openvm-sha2-transpiler = { workspace = true }
 openvm-pairing-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
@@ -41,7 +41,7 @@ cuda = [
     "openvm-bigint-circuit/cuda",
     "openvm-ecc-circuit/cuda",
     "openvm-keccak256-circuit/cuda",
-    "openvm-sha256-circuit/cuda",
+    "openvm-sha2-circuit/cuda",
     "openvm-pairing-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
 ]
@@ -51,7 +51,7 @@ metrics = [
 tco = [
     "openvm-circuit/tco",
     "openvm-rv32im-circuit/tco",
-    "openvm-sha256-circuit/tco",
+    "openvm-sha2-circuit/tco",
     "openvm-keccak256-circuit/tco",
     "openvm-bigint-circuit/tco",
     "openvm-algebra-circuit/tco",
@@ -61,7 +61,7 @@ tco = [
 aot = [
     "openvm-circuit/aot",
     "openvm-rv32im-circuit/aot",
-    "openvm-sha256-circuit/aot",
+    "openvm-sha2-circuit/aot",
     "openvm-keccak256-circuit/aot",
     "openvm-bigint-circuit/aot",
     "openvm-algebra-circuit/aot",

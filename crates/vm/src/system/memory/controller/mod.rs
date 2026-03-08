@@ -12,20 +12,18 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::PermutationCheckBus,
     p3_field::PrimeField32,
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
-    p3_util::{log2_ceil_usize, log2_strict_usize},
+    p3_util::log2_strict_usize,
     prover::{AirProvingContext, CpuBackend},
     StarkProtocolConfig,
 };
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
-use super::{volatile::VolatileBoundaryChip, AddressMap};
+use super::AddressMap;
 use crate::{
-    arch::{DenseRecordArena, MemoryConfig, VmField, ADDR_SPACE_OFFSET},
+    arch::{MemoryConfig, VmField, CONST_BLOCK_SIZE},
     system::{
         memory::{
-            adapter::AccessAdapterInventory,
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
@@ -74,93 +72,28 @@ pub struct MemoryController<F: VmField> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub range_checker: SharedVariableRangeCheckerChip,
+    pub(crate) memory_config: MemoryConfig,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-    pub(crate) access_adapter_inventory: AccessAdapterInventory<F>,
     pub(crate) hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct VolatileMemoryTraceHeights {
-    pub boundary: usize,
-    pub access_adapters: Vec<usize>,
-}
-
-impl VolatileMemoryTraceHeights {
-    /// `heights` must consist of only memory trace heights, in order of AIR IDs.
-    pub fn from_slice(heights: &[u32]) -> Self {
-        let boundary = heights[0] as usize;
-        let access_adapters = heights[1..].iter().map(|&h| h as usize).collect();
-        Self {
-            boundary,
-            access_adapters,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PersistentMemoryTraceHeights {
     boundary: usize,
     merkle: usize,
-    access_adapters: Vec<usize>,
 }
 impl PersistentMemoryTraceHeights {
     /// `heights` must consist of only memory trace heights, in order of AIR IDs.
     pub fn from_slice(heights: &[u32]) -> Self {
-        let boundary = heights[0] as usize;
-        let merkle = heights[1] as usize;
-        let access_adapters = heights[2..].iter().map(|&h| h as usize).collect();
         Self {
-            boundary,
-            merkle,
-            access_adapters,
+            boundary: heights[0] as usize,
+            merkle: heights[1] as usize,
         }
     }
 }
 
 impl<F: VmField> MemoryController<F> {
-    pub(crate) fn continuation_enabled(&self) -> bool {
-        match &self.interface_chip {
-            MemoryInterface::Volatile { .. } => false,
-            MemoryInterface::Persistent { .. } => true,
-        }
-    }
-    pub fn with_volatile_memory(
-        memory_bus: MemoryBus,
-        mem_config: MemoryConfig,
-        range_checker: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        let range_checker_bus = range_checker.bus();
-        assert!(mem_config.pointer_max_bits <= F::bits() - 2);
-        assert!(mem_config
-            .addr_spaces
-            .iter()
-            .all(|&space| space.num_cells <= (1 << mem_config.pointer_max_bits)));
-        assert!(mem_config.addr_space_height < F::bits() - 2);
-        let addr_space_max_bits = log2_ceil_usize(
-            (ADDR_SPACE_OFFSET + 2u32.pow(mem_config.addr_space_height as u32)) as usize,
-        );
-        Self {
-            memory_bus,
-            interface_chip: MemoryInterface::Volatile {
-                boundary_chip: VolatileBoundaryChip::new(
-                    memory_bus,
-                    addr_space_max_bits,
-                    mem_config.pointer_max_bits,
-                    range_checker.clone(),
-                ),
-            },
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config,
-            ),
-            range_checker,
-            range_checker_bus,
-            hasher_chip: None,
-        }
-    }
-
     /// Creates a new memory controller for persistent memory.
     ///
     /// Call `set_initial_memory` to set the initial memory state after construction.
@@ -177,7 +110,7 @@ impl<F: VmField> MemoryController<F> {
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
         };
         let range_checker_bus = range_checker.bus();
-        let interface_chip = MemoryInterface::Persistent {
+        let interface_chip = MemoryInterface {
             boundary_chip: PersistentBoundaryChip::new(
                 memory_dims,
                 memory_bus,
@@ -190,11 +123,7 @@ impl<F: VmField> MemoryController<F> {
         Self {
             memory_bus,
             interface_chip,
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config,
-            ),
+            memory_config: mem_config,
             range_checker,
             range_checker_bus,
             hasher_chip: Some(hasher_chip),
@@ -202,42 +131,23 @@ impl<F: VmField> MemoryController<F> {
     }
 
     pub fn memory_config(&self) -> &MemoryConfig {
-        &self.access_adapter_inventory.memory_config
+        &self.memory_config
     }
 
     pub(crate) fn set_override_trace_heights(&mut self, overridden_heights: &[u32]) {
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                let oh = VolatileMemoryTraceHeights::from_slice(overridden_heights);
-                boundary_chip.set_overridden_height(oh.boundary);
-                self.access_adapter_inventory
-                    .set_override_trace_heights(oh.access_adapters);
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                let oh = PersistentMemoryTraceHeights::from_slice(overridden_heights);
-                boundary_chip.set_overridden_height(oh.boundary);
-                merkle_chip.set_overridden_height(oh.merkle);
-                self.access_adapter_inventory
-                    .set_override_trace_heights(oh.access_adapters);
-            }
-        }
+        let oh = PersistentMemoryTraceHeights::from_slice(overridden_heights);
+        self.interface_chip
+            .boundary_chip
+            .set_overridden_height(oh.boundary);
+        self.interface_chip
+            .merkle_chip
+            .set_overridden_height(oh.merkle);
     }
 
-    /// This only sets the initial memory image for the persistent boundary and merkle tree chips.
+    /// This only sets the initial memory image for the boundary and merkle tree chips.
     /// Tracing memory should be set separately.
     pub(crate) fn set_initial_memory(&mut self, memory: AddressMap) {
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { .. } => {
-                // Skip initialization for volatile memory
-            }
-            MemoryInterface::Persistent { initial_memory, .. } => {
-                *initial_memory = memory;
-            }
-        }
+        self.interface_chip.initial_memory = memory;
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
@@ -266,66 +176,51 @@ impl<F: VmField> MemoryController<F> {
     // _somehow_.
     pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         &mut self,
-        access_adapter_records: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
-        match (&mut self.interface_chip, touched_memory) {
-            (
-                MemoryInterface::Volatile { boundary_chip },
-                TouchedMemory::Volatile(final_memory),
-            ) => {
-                boundary_chip.finalize(final_memory);
-            }
-            (
-                MemoryInterface::Persistent {
-                    boundary_chip,
-                    merkle_chip,
-                    initial_memory,
-                },
-                TouchedMemory::Persistent(final_memory),
-            ) => {
-                let hasher = self.hasher_chip.as_ref().unwrap();
-                boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
-                let final_memory_values = final_memory
-                    .into_par_iter()
-                    .map(|(key, value)| (key, value.values))
-                    .collect();
-                merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
-            }
-            _ => panic!("TouchedMemory incorrect type"),
-        }
+        let final_memory = touched_memory;
+        let MemoryInterface {
+            boundary_chip,
+            merkle_chip,
+            initial_memory,
+        } = &mut self.interface_chip;
 
-        let mut ret = Vec::new();
+        let hasher = self.hasher_chip.as_ref().unwrap();
+        boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
-        let access_adapters = &mut self.access_adapter_inventory;
-        access_adapters.set_arena(access_adapter_records);
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                ret.push(boundary_chip.generate_proving_ctx(()));
+        // Rechunk CONST_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
+        // Note: Equipartition key is (addr_space, ptr) where ptr is the starting pointer
+        let final_memory_values: Equipartition<F, CHUNK> = {
+            use std::collections::BTreeMap;
+            let mut chunk_map: BTreeMap<(u32, u32), [F; CHUNK]> = BTreeMap::new();
+            for ((addr_space, ptr), ts_values) in final_memory {
+                // Align to CHUNK boundary to get the chunk's starting pointer
+                let chunk_ptr = (ptr / CHUNK as u32) * CHUNK as u32;
+                let block_idx_in_chunk = ((ptr % CHUNK as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                let entry = chunk_map.entry((addr_space, chunk_ptr)).or_insert_with(|| {
+                    // Initialize with values from initial memory
+                    std::array::from_fn(|i| unsafe {
+                        initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
+                    })
+                });
+                // Copy values for this block
+                for (i, val) in ts_values.values.into_iter().enumerate() {
+                    entry[block_idx_in_chunk * CONST_BLOCK_SIZE + i] = val;
+                }
             }
-            MemoryInterface::Persistent {
-                merkle_chip,
-                boundary_chip,
-                ..
-            } => {
-                debug_assert_eq!(ret.len(), BOUNDARY_AIR_OFFSET);
-                ret.push(boundary_chip.generate_proving_ctx(()));
-                debug_assert_eq!(ret.len(), MERKLE_AIR_OFFSET);
-                ret.push(merkle_chip.generate_proving_ctx());
-            }
-        }
-        ret.extend(access_adapters.generate_proving_ctx());
-        ret
+            chunk_map
+        };
+        merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
+
+        vec![
+            boundary_chip.generate_proving_ctx(()),
+            merkle_chip.generate_proving_ctx(),
+        ]
     }
 
     /// Return the number of AIRs in the memory controller.
     pub fn num_airs(&self) -> usize {
-        let mut num_airs = 1;
-        if self.continuation_enabled() {
-            num_airs += 1;
-        }
-        num_airs += self.access_adapter_inventory.num_access_adapters();
-        num_airs
+        2
     }
 }
 
