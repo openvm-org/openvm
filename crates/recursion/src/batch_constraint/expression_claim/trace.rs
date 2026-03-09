@@ -157,13 +157,6 @@ impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
 
             cur_height += claims.len();
         }
-        trace[cur_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut ExpressionClaimCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-            });
         Some(RowMajorMatrix::new(trace, width))
     }
 }

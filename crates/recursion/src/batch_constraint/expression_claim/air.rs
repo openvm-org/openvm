@@ -33,8 +33,8 @@ use crate::{
 /// Rows are structured as a nested loop: for each proof, group 0 (interactions) comes first,
 /// then group 1 (constraints). Within the interaction group, each trace occupies 2 rows
 /// (numerator then denominator). Within the constraint group, each trace occupies 1 row.
-/// `NestedForLoopSubAir<2>` enforces canonical enumeration of `(proof_idx, group_idx)`;
-/// `trace_idx` and `idx_parity` are caller-managed within each group.
+/// `NestedForLoopSubAir<4>` enforces canonical nested enumeration over
+/// `(proof_idx, group_idx, trace_idx, idx_parity)`.
 ///
 /// Example for t = 2 traces (one proof):
 ///
@@ -53,7 +53,7 @@ use crate::{
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct ExpressionClaimCols<T> {
-    // --- Loop structure (enforced by NestedForLoopSubAir<2>) ---
+    // --- Loop structure (enforced by NestedForLoopSubAir<4>) ---
     pub is_valid: T,
     /// First row of a proof. Marks proof boundaries.
     pub is_first: T,
@@ -125,25 +125,47 @@ where
         let local: &ExpressionClaimCols<AB::Var> = (*local).borrow();
         let next: &ExpressionClaimCols<AB::Var> = (*next).borrow();
 
-        // === Loop structure via NestedForLoopSubAir<2> ===
-        // Enforces: is_valid contiguity, proof_idx and group_idx monotone (0/1 increments),
-        // is_first/is_first_in_group boolean and correctly placed at boundaries.
-        type LoopSubAir = NestedForLoopSubAir<2>;
+        // === Loop structure via NestedForLoopSubAir<4> ===
+        // Enforces canonical nested enumeration for:
+        // [proof_idx, group_idx, trace_idx, idx_parity]
+        // with first-flags:
+        // [is_first, is_first_in_group, is_valid - idx_parity, is_valid].
+        type LoopSubAir = NestedForLoopSubAir<4>;
+        let local_is_trace_start = local.is_valid - local.idx_parity;
+        let next_is_trace_start = next.is_valid - next.idx_parity;
         LoopSubAir {}.eval(
             builder,
             (
                 NestedForLoopIoCols {
-                    is_enabled: local.is_valid,
-                    counter: [local.proof_idx, local.group_idx],
-                    is_first: [local.is_first, local.is_first_in_group],
-                }
-                .map_into(),
+                    is_enabled: local.is_valid.into(),
+                    counter: [
+                        local.proof_idx.into(),
+                        local.group_idx.into(),
+                        local.trace_idx.into(),
+                        local.idx_parity.into(),
+                    ],
+                    is_first: [
+                        local.is_first.into(),
+                        local.is_first_in_group.into(),
+                        local_is_trace_start,
+                        local.is_valid.into(),
+                    ],
+                },
                 NestedForLoopIoCols {
-                    is_enabled: next.is_valid,
-                    counter: [next.proof_idx, next.group_idx],
-                    is_first: [next.is_first, next.is_first_in_group],
-                }
-                .map_into(),
+                    is_enabled: next.is_valid.into(),
+                    counter: [
+                        next.proof_idx.into(),
+                        next.group_idx.into(),
+                        next.trace_idx.into(),
+                        next.idx_parity.into(),
+                    ],
+                    is_first: [
+                        next.is_first.into(),
+                        next.is_first_in_group.into(),
+                        next_is_trace_start,
+                        next.is_valid.into(),
+                    ],
+                },
             ),
         );
 
@@ -151,38 +173,19 @@ where
         // is_interaction: true for interaction group (group_idx == 0)
         let is_interaction: AB::Expr = AB::Expr::ONE - local.group_idx.into();
         // is_same_proof: next row is valid and within the same proof
-        let is_same_proof: AB::Expr = next.is_valid - next.is_first;
-        // is_same_group: next row is valid and within the same group
-        let is_same_group: AB::Expr = next.is_valid - next.is_first_in_group;
+        let is_same_proof: AB::Expr = LoopSubAir::local_is_transition(next.is_valid, next.is_first);
         // is_last_in_proof: current row is the last row of its proof
         let is_last_in_proof: AB::Expr =
             LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first);
 
         // Each proof starts with group 0 (interactions) and ends with 1 (constraints).
-        builder.when(local.is_first).assert_zero(local.group_idx);
+        // Start with group 0 is guaranteed by NestedForLoop
         builder
             .when(is_last_in_proof.clone())
             .assert_one(local.group_idx);
 
         // === Claim indexing constraints ===
-        builder.assert_bool(local.idx_parity);
         builder.assert_bool(local.n_sign);
-
-        // trace_idx resets to 0 at each group boundary and is monotone within a group
-        builder
-            .when(local.is_first_in_group)
-            .assert_zero(local.trace_idx);
-        // For constraints (group_idx=1), idx_parity is 0, so trace_idx always increase by 1.
-        // For interactions (group_idx=0), trace_idx increase by idx_parity.
-        builder.when(is_same_group.clone()).assert_eq(
-            next.trace_idx - local.trace_idx,
-            local.idx_parity + local.group_idx,
-        );
-
-        // idx_parity: 0 at group start, alternates within interactions
-        builder
-            .when(local.is_first_in_group)
-            .assert_zero(local.idx_parity);
         // idx_parity alternates 0/1.
         builder
             .when(local.is_valid)
@@ -193,16 +196,12 @@ where
 
         // idx binding to trace_idx / idx_parity
         // Interaction rows: idx = 2 * trace_idx + idx_parity
-        builder
-            .when(local.is_valid)
-            .when(is_interaction.clone())
-            .assert_eq(
-                local.idx,
-                local.trace_idx * AB::Expr::TWO + local.idx_parity,
-            );
+        builder.when(is_interaction.clone()).assert_eq(
+            local.idx,
+            local.trace_idx * AB::Expr::TWO + local.idx_parity,
+        );
         // Constraint rows: idx = trace_idx
         builder
-            .when(local.is_valid)
             .when(local.group_idx)
             .assert_eq(local.idx, local.trace_idx);
 
