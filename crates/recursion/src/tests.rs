@@ -644,7 +644,7 @@ mod cuda {
     use itertools::zip_eq;
     use openvm_cuda_backend::{prelude::SC, BabyBearPoseidon2GpuEngine};
     use openvm_cuda_common::copy::MemCopyD2H;
-    use openvm_stark_backend::prover::{MatrixDimensions, MatrixView};
+    use openvm_stark_backend::prover::MatrixDimensions;
     #[cfg(feature = "touchemall")]
     use openvm_stark_sdk::config::baby_bear_poseidon2::F;
     use openvm_stark_sdk::utils::setup_tracing_with_log_level;
@@ -733,12 +733,14 @@ mod cuda {
                 continue;
             }
             let gpu = gpu.to_host().unwrap();
+            let cpu_height = cpu.height();
+            let cpu_width = cpu.width();
 
-            for r in 0..cpu.height() {
-                for c in 0..cpu.width() {
+            for r in 0..cpu_height {
+                for c in 0..cpu_width {
                     assert_eq!(
-                        gpu[c * cpu.height() + r],
-                        *cpu.get(r, c).unwrap(),
+                        gpu[c * cpu_height + r],
+                        cpu.values[c * cpu_height + r],
                         "Mismatch for {} at row {r} column {c}",
                         name
                     );
