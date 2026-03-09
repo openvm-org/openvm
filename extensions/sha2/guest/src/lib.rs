@@ -12,8 +12,8 @@ pub const SHA2_FUNCT3: u8 = 0b100;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Sha2BaseFunct7 {
-    Sha256 = 0x1,
-    Sha512 = 0x2,
+    Sha256 = 0x2,
+    Sha512 = 0x3,
 }
 
 /// zkvm native implementation of sha256 compression function
