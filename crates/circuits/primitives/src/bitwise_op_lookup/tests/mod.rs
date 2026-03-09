@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
 use dummy::DummyAir;
-use openvm_cpu_backend::CpuBackendError;
+use openvm_cpu_backend::CpuProverError;
 use openvm_stark_backend::{
     any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
@@ -133,7 +133,7 @@ fn test_bitwise_operation_lookup() {
 
 fn run_negative_test(
     bad_row: (u32, u32, u32, BitwiseOperation),
-) -> Result<VerificationData<BabyBearPoseidon2Config>, StarkTestError<CpuBackendError, EF>> {
+) -> Result<VerificationData<BabyBearPoseidon2Config>, StarkTestError<CpuProverError, EF>> {
     let bus = BitwiseOperationLookupBus::new(0);
     let lookup = BitwiseOperationLookupChip::<NUM_BITS>::new(bus);
 

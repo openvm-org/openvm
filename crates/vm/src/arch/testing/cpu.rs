@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
-use openvm_cpu_backend::{CpuBackend, CpuBackendError};
+use openvm_cpu_backend::{CpuBackend, CpuProverError};
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
@@ -541,7 +541,7 @@ where
 
 /// Concrete `StarkTestError` type alias for BabyBear Poseidon2 CPU tests.
 pub type TestStarkError =
-    openvm_stark_backend::StarkTestError<CpuBackendError, baby_bear_poseidon2::EF>;
+    openvm_stark_backend::StarkTestError<CpuProverError, baby_bear_poseidon2::EF>;
 
 impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test(self) -> Result<VerificationData<BabyBearPoseidon2Config>, TestStarkError> {
