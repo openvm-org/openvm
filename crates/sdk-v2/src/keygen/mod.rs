@@ -15,6 +15,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 
+// TODO[jpw]: copied from v1, needs update
+// pub mod perm;
+// #[cfg(feature = "evm-prove")]
+// pub mod static_verifier;
+
 /// This is lightweight to clone as it contains smart pointers to the proving keys.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppProvingKey<VC> {

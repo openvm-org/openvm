@@ -6,6 +6,8 @@ edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
+# TODO[jpw]: fix examples for v2
+autoexamples = false
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
@@ -43,7 +45,18 @@ toml = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
-
+evm-prove = []
+# evm-prove = [
+#     "openvm-continuations/static-verifier",
+#     "dep:snark-verifier",
+#     "dep:snark-verifier-sdk",
+# ]
+evm-verify = []
+# evm-verify = [
+#     "evm-prove",
+#     "dep:alloy-sol-types",
+#     "dep:forge-fmt",
+# ]
 metrics = ["continuations-v2/metrics", "openvm-sdk-config/metrics"]
 aot = [
     "openvm-circuit/aot",
@@ -78,3 +91,11 @@ cuda = [
     "openvm-sdk-config/cuda",
     "continuations-v2/cuda",
 ]
+
+# [[example]]
+# name = "sdk_evm"
+# path = "examples/sdk_evm.rs"
+# required-features = ["evm-verify"]
+
+# [package.metadata.cargo-shear]
+# ignored = ["derive_more", "rand"]
