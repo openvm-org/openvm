@@ -5,8 +5,8 @@ This specification describes the overall architecture and default VM extensions 
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
-- [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
-- [SHA2](#sha-2-extension): An extension implementing the SHA-256 and SHA-512 hash functions compatibly with RISC-V memory.
+- [Keccak-256](#keccak-extension): An extension implementing low-level Keccak sponge operations (XOR-in and keccak-f[1600] permutation) compatibly with RISC-V memory, used to implement the Keccak-256 hash function.
+- [SHA2](#sha-2-extension): An extension implementing the SHA-256, SHA-384, and SHA-512 hash functions compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including
   multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex
@@ -539,12 +539,22 @@ The native extension defines the following phantom sub-instructions.
 
 ### Keccak Extension
 
-The Keccak extension supports the Keccak256 hash function. The extension operates on address spaces `1` and `2`, meaning
-all memory cells are constrained to be bytes.
+The Keccak extension supports the Keccak-256 hash function via two low-level opcodes that decompose the Keccak sponge
+construction into its constituent operations: absorbing input (XOR-in) and permuting state (keccak-f[1600]). Together,
+these opcodes can be used to implement the full Keccak-256 hash function, including incremental/streaming hashing.
 
-| Name           | Operands    | Description                                                                                                       |
-| -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Performs memory accesses with block size `4`. |
+The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
+All memory accesses use block size `4`.
+
+The Keccak-f[1600] state is a 200-byte buffer in address space `2`. The absorption rate is 136 bytes (1088 bits),
+corresponding to a capacity of 512 bits for Keccak-256.
+
+In the instructions below, let `buf = r32{0}(a)`, `inp = r32{0}(b)`, and `len = r32{0}(c)`.
+
+| Name    | Operands      | Description                                                                                                                                                                                                                                  |
+| ------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| XORIN   | `a,b,c,1,2`  | XORs input bytes into a state buffer in-place. For `i` in `0..len`, sets `[buf+i]_2 ^= [inp+i]_2`. Reads `len/4` four-byte words from both the buffer at `buf` and the input at `inp`, and writes `len/4` four-byte words back to `buf`. The instruction is only valid when `len` is a positive multiple of `4` and at most `136`. |
+| KECCAKF | `a,_,_,1,2`  | Applies the keccak-f[1600] permutation in-place on a 200-byte state buffer: `[buf:200]_2 = keccakf([buf:200]_2)`. Reads 50 four-byte words from `buf`, applies the permutation, and writes 50 four-byte words back. |
 
 ### SHA-2 Extension
 
