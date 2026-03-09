@@ -13,8 +13,9 @@ use super::{
 /// - Final row uses Sha256DigestCols
 ///
 /// Note that for soundness, we require that there is always a padding row after the last digest row
-/// in the trace. Right now, this is true because the unpadded height is a multiple of 17, and thus
-/// not a power of 2.
+/// in the trace. This is enforced by `when_last_row` constraints in the AIR (the last row must be
+/// a padding row). It also holds naturally because the unpadded height is a multiple of 17, and
+/// thus not a power of 2.
 ///
 /// Sha256RoundCols and Sha256DigestCols share the same first 3 fields:
 /// - flags

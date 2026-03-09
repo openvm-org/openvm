@@ -262,6 +262,14 @@ impl Sha256Air {
         builder
             .when_first_row()
             .assert_one(local_cols.flags.is_round_row);
+        // The last row must be a padding row to ensure at least one complete block
+        // (with a digest row) exists in the trace
+        builder
+            .when_last_row()
+            .assert_zero(local_cols.flags.is_round_row);
+        builder
+            .when_last_row()
+            .assert_zero(local_cols.flags.is_digest_row);
         // If we are in a padding row, the next row must also be a padding row
         builder
             .when_transition()
@@ -307,6 +315,11 @@ impl Sha256Air {
         builder
             .when_first_row()
             .assert_one(local_cols.flags.global_block_idx);
+
+        // Local block index is 0 on first row
+        builder
+            .when_first_row()
+            .assert_zero(local_cols.flags.local_block_idx);
 
         // Global block index is constant on all rows in a block
         builder.when(local_cols.flags.is_round_row).assert_eq(
