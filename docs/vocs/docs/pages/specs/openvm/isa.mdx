@@ -4,7 +4,6 @@ OpenVM supports an extensible instruction set, with different groups of opcodes 
 This specification describes the overall architecture and default VM extensions which ship with OpenVM, which are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
-- [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
 - [Keccak-256](#keccak-extension): An extension implementing low-level Keccak sponge operations (XOR-in and keccak-f[1600] permutation) compatibly with RISC-V memory, used to implement the Keccak-256 hash function.
 - [SHA2](#sha-2-extension): An extension implementing the SHA-256, SHA-384, and SHA-512 hash functions compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including
@@ -444,7 +443,6 @@ construction into its constituent operations: absorbing input (XOR-in) and permu
 these opcodes can be used to implement the full Keccak-256 hash function, including incremental/streaming hashing.
 
 The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
-All memory accesses use block size `4`.
 
 The Keccak-f[1600] state is a 200-byte buffer in address space `2`. The absorption rate is 136 bytes (1088 bits),
 corresponding to a capacity of 512 bits for Keccak-256.
@@ -641,5 +639,5 @@ The pairing extension defines the following phantom sub-instructions.
 
 ## Acknowledgements
 
-The design of the native extension was inspired by [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with
+The design of the (now deprecated) native extension was inspired by [Valida](https://github.com/valida-xyz/valida-compiler/issues/2) with
 changes suggested by Max Gillet for compatibility with existing ISAs.
