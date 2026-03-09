@@ -757,9 +757,8 @@ impl BatchConstraintModule {
     where
         E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
     {
-        let cached_trace_rm =
+        let cached_trace =
             expr_eval::generate_symbolic_expr_cached_trace(&self.cached_trace_record(child_vk));
-        let cached_trace = cached_trace_rm;
         let (commitment, data) = engine.device().commit(&[&cached_trace]).unwrap();
         CommittedTraceData {
             commitment,
