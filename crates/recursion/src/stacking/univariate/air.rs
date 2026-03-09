@@ -105,6 +105,11 @@ where
             ),
         );
 
+        builder.when(local.is_valid).assert_eq(
+            local.is_last,
+            NestedForLoopSubAir::<1>::local_is_last(local.is_valid, next.is_valid, next.is_first),
+        );
+
         builder.assert_bool(local.is_last);
         builder
             .when(and(local.is_valid, local.is_last))
