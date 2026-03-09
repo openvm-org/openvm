@@ -138,6 +138,11 @@ where
         let is_transition = LoopSubAir::local_is_transition(next.is_enabled, next.is_first);
         let is_last = LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first);
 
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition.clone())
+            .assert_eq(next.is_dummy, local.is_dummy);
+
         // Layer index starts from 0
         builder.when(local.is_first).assert_zero(local.layer_idx);
         // Layer index increments by 1

@@ -151,9 +151,19 @@ where
             LoopSubAir::local_is_transition(next.is_enabled, next.is_first_round);
         let is_last_round =
             LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_round);
+        let is_transition_proof = next.is_enabled - next.is_proof_start;
+
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition_proof)
+            .assert_eq(next.is_dummy, local.is_dummy);
 
         // Sumcheck round flag starts at 0
         builder.when(local.is_first_round).assert_zero(local.round);
+        // Layer metadata must remain same
+        builder
+            .when(is_transition_round.clone())
+            .assert_eq(next.is_last_layer, local.is_last_layer);
         // Sumcheck round flag increments by 1
         builder
             .when(is_transition_round.clone())

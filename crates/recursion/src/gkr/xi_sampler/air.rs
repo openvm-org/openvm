@@ -103,6 +103,11 @@ where
         let is_last_challenge =
             LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_challenge);
 
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition_challenge.clone())
+            .assert_eq(next.is_dummy, local.is_dummy);
+
         // Challenge index increments by 1
         builder
             .when(is_transition_challenge.clone())
