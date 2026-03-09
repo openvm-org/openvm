@@ -248,7 +248,8 @@ fn test_internal_recursive_vk_stabilization(def_hook_commit_set: bool) -> Result
     let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
     let def_hook_commit = def_hook_commit_set.then_some([F::ZERO; DIGEST_SIZE]);
 
-    let leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    const MAX_LEAF_NUM_PROOFS: usize = 3;
+    let leaf_prover = InnerProver::<MAX_LEAF_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_vk),
         leaf_system_params(),
         false,

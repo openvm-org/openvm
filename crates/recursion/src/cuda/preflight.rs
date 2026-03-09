@@ -10,8 +10,7 @@ use crate::{
     cuda::{
         to_device_or_nullptr,
         types::{TraceHeight, TraceMetadata},
-    },
-    system::Preflight,
+    }, proof_shape::proof_shape::compute_air_shape_lookup_counts, system::Preflight
 };
 
 /*
@@ -106,6 +105,8 @@ impl PreflightGpu {
         let mut total_interactions = 0;
         let l_skip = vk.inner.params.l_skip;
 
+        let bc_air_shape_lookups = compute_air_shape_lookup_counts(vk);
+
         let (sorted_trace_heights, sorted_trace_metadata): (Vec<_>, Vec<_>) = preflight
             .proof_shape
             .sorted_trace_vdata
@@ -119,6 +120,7 @@ impl PreflightGpu {
                     cached_idx: sorted_cached_commits.len(),
                     starting_cidx: cidx,
                     total_interactions,
+                    num_air_id_lookups: bc_air_shape_lookups[*air_idx],
                 };
                 cidx += vdata.cached_commitments.len()
                     + vk.inner.per_air[*air_idx].preprocessed_data.is_some() as usize;
