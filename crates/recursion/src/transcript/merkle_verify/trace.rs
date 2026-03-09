@@ -125,9 +125,6 @@ pub fn generate_trace(
         }
 
         let cols: &mut MerkleVerifyCols<F> = row.borrow_mut();
-        if idx_in_proof == 0 {
-            cols.is_proof_start = F::ONE;
-        }
         // determine the layer and offset in the leaf_tree
         // 0th layer: [0, num_leaves / 2)
         // 1st layer: [num_leaves / 2, num_leaves / 2 + num_leaves / 4)
@@ -136,16 +133,12 @@ pub fn generate_trace(
 
         cols.is_valid = F::ONE;
         cols.proof_idx = F::from_usize(proof_idx);
-        cols.merkle_proof_idx = F::from_usize(merkle_proof_idx);
         cols.commit_major = F::from_usize(commit_major);
         cols.commit_minor = F::from_usize(commit_minor);
         cols.total_depth = F::from_usize(depth + k + 1);
 
         if i == depth + num_leaves - 1 {
             cols.is_last_merkle = F::ONE;
-        }
-        if i == 0 {
-            cols.is_first_merkle = F::ONE;
         }
 
         if let Some(combination_indices) = combination_indices {
@@ -159,10 +152,9 @@ pub fn generate_trace(
             cols.compression_output = output;
 
             cols.idx = F::from_usize(merkle_idx); // const idx for leaves part
-            cols.idx_parity = F::from_usize(merkle_idx % 2);
             cols.height = F::from_usize(combination_indices.source_layer);
-            cols.recv_left = F::ONE;
-            cols.recv_right = F::ONE;
+            cols.is_last_leaf = F::from_bool(combination_indices.source_layer + 1 == k);
+            cols.recv_flag = F::TWO;
 
             let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
             input_state[..DIGEST_SIZE].copy_from_slice(&cols.left);
@@ -192,11 +184,11 @@ pub fn generate_trace(
             if cur_idx % 2 == 0 {
                 cols.left = cur_hash;
                 cols.right = sibling;
-                cols.recv_left = F::ONE;
+                cols.recv_flag = F::ZERO;
             } else {
                 cols.left = sibling;
                 cols.right = cur_hash;
-                cols.recv_right = F::ONE;
+                cols.recv_flag = F::ONE;
             }
 
             let output = poseidon2_compress_with_capacity(cols.left, cols.right).0;
@@ -206,8 +198,7 @@ pub fn generate_trace(
             input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
             poseidon2_compress_inputs.push(input_state);
 
-            cols.idx = F::from_usize(cur_idx);
-            cols.idx_parity = F::from_usize(cur_idx % 2);
+            cols.idx = F::from_usize(merkle_idx);
             cols.height = F::from_usize(i + 1 - num_leaves + k);
             cols.is_combining_leaves = F::ZERO;
 
