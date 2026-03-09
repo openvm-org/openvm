@@ -55,6 +55,7 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
     "recursion-circuit/cuda",
+    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
 touchemall = [
     "cuda",
