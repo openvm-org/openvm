@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use itertools::{izip, Itertools};
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     p3_maybe_rayon::prelude::*,
     proof::{Proof, StackingProof},
-    prover::{AirProvingContext, CpuBackend},
+    prover::AirProvingContext,
     AirRef, FiatShamirTranscript, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};

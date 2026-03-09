@@ -4,12 +4,13 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
@@ -237,7 +238,6 @@ impl<R, SC: StarkProtocolConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
     /// Generates trace and resets all internal counters to 0.
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace_row_maj = self.generate_trace::<Val<SC>>();
-        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
-        AirProvingContext::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(trace_row_maj)
     }
 }

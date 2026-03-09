@@ -1,11 +1,9 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
+use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::Permutation;
-use openvm_stark_backend::{
-    proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-};
+use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, poseidon2_perm, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
@@ -166,7 +164,7 @@ pub fn generate_proving_ctx(
 
     AirProvingContext {
         cached_mains: vec![],
-        common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+        common_main: RowMajorMatrix::new(trace, width),
         public_values,
     }
 }

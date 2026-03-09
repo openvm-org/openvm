@@ -12,6 +12,7 @@ links = "circuit-primitives-cuda"
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
+openvm-cpu-backend = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
@@ -25,7 +26,7 @@ tracing.workspace = true
 [dev-dependencies]
 test-case.workspace = true
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 
 [build-dependencies]
 openvm-cuda-builder.workspace = true

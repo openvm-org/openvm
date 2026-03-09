@@ -18,13 +18,10 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerBus,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;

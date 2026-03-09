@@ -1,6 +1,7 @@
 use std::borrow::BorrowMut;
 
-use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix, CpuBackend};
+use openvm_cpu_backend::CpuBackend;
+use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -29,7 +30,5 @@ pub fn generate_proving_ctx(
         cols.proof_idx = F::from_usize(*proof_idx);
     }
 
-    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
-        trace, width,
-    )))
+    AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width))
 }

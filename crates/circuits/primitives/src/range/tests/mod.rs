@@ -2,9 +2,7 @@ use std::{iter, sync::Arc};
 
 use list::ListChip;
 use openvm_stark_backend::{
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, prover::AirProvingContext,
     AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
@@ -62,13 +60,9 @@ fn test_list_range_checker() {
     }
     all_chips.push(Arc::new(range_checker.air));
 
-    let all_traces_vec: Vec<_> = lists_traces
+    let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
-        .collect();
-    let all_traces = all_traces_vec
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 

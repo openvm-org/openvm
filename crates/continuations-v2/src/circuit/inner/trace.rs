@@ -1,10 +1,11 @@
 use itertools::Itertools;
+use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
-    prover::{AirProvingContext, CpuBackend, ProverBackend},
+    prover::{AirProvingContext, ProverBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use verify_stark::pvs::DeferralPvs;

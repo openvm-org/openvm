@@ -1,9 +1,10 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 use itertools::Itertools;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    prover::{AirProvingContext, CpuBackend, ProvingContext},
+    prover::{AirProvingContext, ProvingContext},
     test_utils::{
         default_test_params_small, test_system_params_small,
         test_system_params_small_with_poly_len, CachedFixture11, FibFixture, InteractionsFixture11,

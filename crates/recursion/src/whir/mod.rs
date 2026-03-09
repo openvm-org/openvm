@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use itertools::{izip, Itertools};
 use openvm_circuit_primitives::encoder::Encoder;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     p3_maybe_rayon::prelude::*,
     poly_common::{eval_mle_evals_at_point, interpolate_quadratic_at_012, Squarable},
     proof::{Proof, WhirProof},
-    prover::{AirProvingContext, CpuBackend},
+    prover::AirProvingContext,
     AirRef, FiatShamirTranscript, StarkProtocolConfig, SystemParams, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};

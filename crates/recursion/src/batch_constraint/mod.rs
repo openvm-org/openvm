@@ -2,12 +2,13 @@ use core::iter::zip;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     air_builders::symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
     keygen::types::MultiStarkVerifyingKey,
     poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     proof::{column_openings_by_rot, BatchConstraintProof, Proof},
-    prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, TraceCommitter},
+    prover::{AirProvingContext, CommittedTraceData, TraceCommitter},
     AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
@@ -758,7 +759,7 @@ impl BatchConstraintModule {
     {
         let cached_trace_rm =
             expr_eval::generate_symbolic_expr_cached_trace(&self.cached_trace_record(child_vk));
-        let cached_trace = ColMajorMatrix::from_row_major(&cached_trace_rm);
+        let cached_trace = cached_trace_rm;
         let (commitment, data) = engine.device().commit(&[&cached_trace]).unwrap();
         CommittedTraceData {
             commitment,

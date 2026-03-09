@@ -1,9 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_stark_backend::{
-    proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-};
+use openvm_cpu_backend::CpuBackend;
+use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
@@ -86,9 +84,7 @@ pub fn generate_proving_ctx(
         row_idx += 1;
     }
 
-    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
-        trace, width,
-    )))
+    AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width))
 }
 
 fn count_cached_commitments(proof: &Proof<BabyBearPoseidon2Config>) -> usize {

@@ -11,7 +11,7 @@ license.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }

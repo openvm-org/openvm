@@ -4,10 +4,8 @@ use openvm_circuit::{
     arch::{instructions::DEFERRAL_AS, POSEIDON2_WIDTH},
     system::memory::dimensions::MemoryDimensions,
 };
-use openvm_stark_backend::{
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    StarkProtocolConfig,
-};
+use openvm_cpu_backend::CpuBackend;
+use openvm_stark_backend::{prover::AirProvingContext, StarkProtocolConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, DIGEST_SIZE, F,
 };
@@ -219,9 +217,7 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
     }
 
     (
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
-            trace, width,
-        ))),
+        AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width)),
         poseidon2_inputs,
     )
 }

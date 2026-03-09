@@ -3,6 +3,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 use derivative::Derivative;
 use itertools::Itertools;
 use openvm_circuit::{arch::hasher::poseidon2::Poseidon2Hasher, primitives::Chip};
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
@@ -12,10 +13,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{
-        stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
-        CpuBackend, TraceCommitter,
-    },
+    prover::{stacked_pcs::StackedPcsData, AirProvingContext, CommittedTraceData, TraceCommitter},
     Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
@@ -57,10 +55,7 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
         e: &E,
     ) -> Self {
         let trace = generate_cached_trace(&exe.program);
-        let (commit, prover_data) = e
-            .device()
-            .commit(&[&ColMajorMatrix::from_row_major(&trace)])
-            .unwrap();
+        let (commit, prover_data) = e.device().commit(&[&trace]).unwrap();
         Self {
             exe: Arc::new(exe),
             program_commitment: commit,
@@ -76,7 +71,7 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
         CommittedTraceData {
             commitment: self.prover_data.commit().unwrap(),
             data: self.prover_data.clone(),
-            trace: ColMajorMatrix::from_row_major(&self.trace),
+            trace: (*self.trace).clone(),
         }
     }
 
@@ -130,7 +125,7 @@ impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
             .par_iter_mut()
             .zip(self.filtered_exec_frequencies.par_iter())
             .for_each(|(f, x)| *f = Val::<SC>::from_u32(*x));
-        let common_trace = ColMajorMatrix::new(freqs, 1);
+        let common_trace = RowMajorMatrix::new(freqs, 1);
         AirProvingContext {
             cached_mains: vec![cached],
             common_main: common_trace,

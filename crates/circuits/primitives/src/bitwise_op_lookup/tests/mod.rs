@@ -1,12 +1,13 @@
 use std::{iter, sync::Arc};
 
 use dummy::DummyAir;
+use openvm_cpu_backend::CpuBackendError;
 use openvm_stark_backend::{
     any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::{AirProvingContext, ColMajorMatrix, CpuProverError},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     AirRef, StarkEngine, StarkTestError, VerificationData,
 };
@@ -121,8 +122,7 @@ fn test_bitwise_operation_lookup() {
     traces.push(lookup.generate_trace());
 
     let traces = traces
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -133,7 +133,7 @@ fn test_bitwise_operation_lookup() {
 
 fn run_negative_test(
     bad_row: (u32, u32, u32, BitwiseOperation),
-) -> Result<VerificationData<BabyBearPoseidon2Config>, StarkTestError<CpuProverError, EF>> {
+) -> Result<VerificationData<BabyBearPoseidon2Config>, StarkTestError<CpuBackendError, EF>> {
     let bus = BitwiseOperationLookupBus::new(0);
     let lookup = BitwiseOperationLookupChip::<NUM_BITS>::new(bus);
 
@@ -163,8 +163,7 @@ fn run_negative_test(
     ];
 
     let traces = traces
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 

@@ -22,12 +22,13 @@ openvm-pairing-guest = { workspace = true, features = [
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
+openvm-cpu-backend = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
-openvm-stark-sdk = { workspace = true, optional = true }
+openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
@@ -45,7 +46,7 @@ halo2curves-axiom = { workspace = true }
 openvm-pairing-guest = { workspace = true }
 
 [dev-dependencies]
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }

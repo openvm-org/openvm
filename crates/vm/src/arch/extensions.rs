@@ -20,10 +20,11 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir},
     AnyChip, Chip,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::BusIndex,
-    prover::{AirProvingContext, CpuBackend, MatrixDimensions, ProverBackend, ProvingContext},
+    prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;

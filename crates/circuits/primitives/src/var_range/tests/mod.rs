@@ -1,13 +1,9 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    any_air_arc_vec,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
-    utils::disable_debug_builder,
-    AirRef, StarkEngine, StarkTestError,
+    any_air_arc_vec, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, prover::AirProvingContext, utils::disable_debug_builder, AirRef,
+    StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -98,13 +94,9 @@ fn test_variable_range_checker_chip_send() {
 
     let var_range_checker_trace: RowMajorMatrix<F> = var_range_checker.generate_trace();
 
-    let all_traces_vec: Vec<_> = lists_traces
+    let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .collect();
-    let all_traces = all_traces_vec
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -153,8 +145,7 @@ fn negative_test_variable_range_checker_chip_send() {
     );
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = [list_trace, var_range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -216,13 +207,9 @@ fn test_variable_range_checker_chip_range_check() {
 
     let var_range_checker_trace = var_range_checker.generate_trace();
 
-    let all_traces_vec: Vec<_> = lists_traces
+    let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .collect();
-    let all_traces = all_traces_vec
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -269,8 +256,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
     );
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = [list_trace, var_range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 

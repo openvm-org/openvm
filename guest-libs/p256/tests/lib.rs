@@ -116,10 +116,8 @@ mod guest_tests {
                 arch::{MatrixRecordArena, VmField},
                 system::SystemChipInventory,
             },
-            openvm_stark_backend::{
-                prover::{CpuBackend, CpuDevice},
-                StarkEngine, StarkProtocolConfig, Val,
-            },
+            openvm_cpu_backend::{CpuBackend, CpuDevice},
+            openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val},
         };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]

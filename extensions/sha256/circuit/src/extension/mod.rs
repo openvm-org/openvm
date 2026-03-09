@@ -14,13 +14,10 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
-use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 

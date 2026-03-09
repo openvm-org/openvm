@@ -11,12 +11,13 @@ use openvm_circuit_primitives::{
     },
     Chip, SubAir,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, MatrixDimensions},
+    prover::{AirProvingContext, MatrixDimensions},
     utils::disable_debug_builder,
     AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, StarkTestError, Val,
 };
@@ -69,7 +70,7 @@ where
             SHA256_WIDTH,
             records,
         );
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 
@@ -146,18 +147,8 @@ fn negative_sha256_test_bad_final_hash() {
         });
     };
 
-    // Modify the air_ctx: convert ColMajorMatrix to RowMajorMatrix, modify, convert back
-    let w = air_ctx.common_main.width();
-    let h = air_ctx.common_main.height();
-    let mut rm_values = F::zero_vec(w * h);
-    for r in 0..h {
-        for c in 0..w {
-            rm_values[r * w + c] = air_ctx.common_main.values[c * h + r];
-        }
-    }
-    let mut trace = RowMajorMatrix::new(rm_values, w);
-    modify_trace(&mut trace);
-    air_ctx.common_main = ColMajorMatrix::from_row_major(&trace);
+    // Modify the air_ctx common_main trace directly
+    modify_trace(&mut air_ctx.common_main);
 
     disable_debug_builder();
     let mut params = SystemParams::new_for_testing(20);

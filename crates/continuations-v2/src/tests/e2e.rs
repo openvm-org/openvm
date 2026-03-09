@@ -25,7 +25,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::{
     proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, DeviceDataTransporter, ProvingContext},
+    prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
     AirRef, PartitionedBaseAir, StarkEngine,
 };
 use openvm_stark_sdk::{
@@ -243,7 +243,7 @@ fn generate_dummy_def_proof(
             0,
             AirProvingContext {
                 cached_mains: vec![],
-                common_main: ColMajorMatrix::from_row_major(&trace),
+                common_main: trace,
                 public_values: pvs,
             },
         )],

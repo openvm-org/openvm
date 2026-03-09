@@ -7,15 +7,14 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
+use openvm_cpu_backend::{CpuBackend, CpuBackendError};
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{
-        AirProvingContext, ColMajorMatrix, CpuBackend, CpuProverError, StridedColMajorMatrixView,
-    },
+    prover::AirProvingContext,
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
 };
 use openvm_stark_sdk::{
@@ -519,10 +518,7 @@ where
     {
         let arena = harness.arena;
         let mut ctx = harness.chip.generate_proving_ctx(arena);
-        let mut trace =
-            StridedColMajorMatrixView::from(ctx.common_main.as_view()).to_row_major_matrix();
-        modify_trace(&mut trace);
-        ctx.common_main = ColMajorMatrix::from_row_major(&trace);
+        modify_trace(&mut ctx.common_main);
         self.air_ctxs.push((Arc::new(harness.air), ctx));
         self
     }
@@ -545,7 +541,7 @@ where
 
 /// Concrete `StarkTestError` type alias for BabyBear Poseidon2 CPU tests.
 pub type TestStarkError =
-    openvm_stark_backend::StarkTestError<CpuProverError, baby_bear_poseidon2::EF>;
+    openvm_stark_backend::StarkTestError<CpuBackendError, baby_bear_poseidon2::EF>;
 
 impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test(self) -> Result<VerificationData<BabyBearPoseidon2Config>, TestStarkError> {

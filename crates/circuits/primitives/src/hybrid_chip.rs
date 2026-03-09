@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
+use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major, prelude::SC, GpuBackend,
 };
-use openvm_stark_backend::prover::{AirProvingContext, CpuBackend};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::Chip;
 

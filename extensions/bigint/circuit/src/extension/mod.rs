@@ -25,13 +25,10 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_circuit::Rv32ImCpuProverExt;
-use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::*;

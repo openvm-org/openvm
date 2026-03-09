@@ -3,13 +3,12 @@ use std::{
     sync::Arc,
 };
 
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
-    prover::{AirProvingContext, CpuBackend},
-    verifier::VerifierError,
+    p3_field::PrimeCharacteristicRing, prover::AirProvingContext, verifier::VerifierError,
     StarkEngine,
 };
 use openvm_stark_sdk::{

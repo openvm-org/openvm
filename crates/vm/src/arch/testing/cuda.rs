@@ -15,6 +15,7 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
     data_transporter::assert_eq_host_and_device_matrix_col_maj,
     prelude::{EF, F, SC},
@@ -26,7 +27,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    prover::{AirProvingContext, CpuBackend},
+    prover::AirProvingContext,
     AirRef, AnyAir, StarkEngine, Val, VerificationData,
 };
 use openvm_stark_sdk::utils::setup_tracing_with_log_level;

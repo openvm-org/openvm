@@ -1,10 +1,8 @@
 use std::{array::from_fn, sync::Mutex};
 
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::Field,
-    p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    p3_air::BaseAir, p3_field::Field, p3_matrix::dense::RowMajorMatrix, prover::AirProvingContext,
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkProtocolConfig,
 };
@@ -54,7 +52,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
         SC: StarkProtocolConfig<F = F>,
     {
         let trace = self.trace();
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 

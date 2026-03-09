@@ -1,6 +1,6 @@
+use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
-use openvm_stark_backend::prover::CpuBackend;
 use recursion_circuit::system::VerifierSubCircuit;
 
 use crate::{
