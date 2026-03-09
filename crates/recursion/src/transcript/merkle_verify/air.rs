@@ -37,21 +37,22 @@ use crate::bus::{
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct MerkleVerifyCols<T> {
+    /// Index of the proof this row is for
     pub proof_idx: T,
-    pub is_proof_start: T,
-    pub merkle_proof_idx: T,
+    /// Indicator: whether this row is valid
     pub is_valid: T,
-    /// Indicator: whether this is the first row of a merkle proof
-    pub is_first_merkle: T,
     /// Indicator: whether this is the last row of a merkle proof
     pub is_last_merkle: T,
 
+    /// Indicator: whether this row hashes two leaves or is part of the Merkle path proof
     pub is_combining_leaves: T,
+    /// Indicator: whether this row is the root of the hashed leaves
+    pub is_last_leaf: T,
+    /// Row node index of this node in the leaf hash tree, 0 if is_combining_leaves is false
     pub leaf_sub_idx: T,
 
-    /// The merkle idx, of the current level
+    /// The merkle idx of the leaf hash root
     pub idx: T,
-    pub idx_parity: T, // 0 for even, 1 for odd, of the merkle idx
     /// Total depth of the merkle proof including the leaves part = merkle_proof.len() + 1 + k
     pub total_depth: T,
     /// 0 -> total_depth - 1, where leaves are at height 0, combined leaf hash is at height k
@@ -60,9 +61,8 @@ pub struct MerkleVerifyCols<T> {
     pub left: [T; DIGEST_SIZE],
     pub right: [T; DIGEST_SIZE],
 
-    /// Indicator: whether to receive the left/right value
-    pub recv_left: T,
-    pub recv_right: T,
+    /// Flag that indicates what to receive; 0 for left, 1 for right, 2 for both
+    pub recv_flag: T,
 
     pub commit_major: T,
     pub commit_minor: T,
@@ -85,6 +85,7 @@ pub struct MerkleVerifyAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub commitments_bus: CommitmentsBus,
+    pub k: usize,
 }
 
 impl<F: Field> BaseAir<F> for MerkleVerifyAir {
@@ -99,23 +100,17 @@ impl<F: Field> PartitionedBaseAir<F> for MerkleVerifyAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (
-            main.row_slice(0).expect("window should have two elements"),
-            main.row_slice(1).expect("window should have two elements"),
-        );
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &MerkleVerifyCols<AB::Var> = (*local).borrow();
-        let next: &MerkleVerifyCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
         // Constraints
         ///////////////////////////////////////////////////////////////////////
         builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_proof_start);
-        builder.assert_bool(local.is_first_merkle);
         builder.assert_bool(local.is_last_merkle);
         builder.assert_bool(local.is_combining_leaves);
-        builder.assert_bool(local.recv_left);
-        builder.assert_bool(local.recv_right);
+        builder.assert_bool(local.is_last_leaf);
+        builder.assert_tern(local.recv_flag);
 
         // At the last row, the cur hash should be consistent with the commit
         for i in 0..DIGEST_SIZE {
@@ -124,48 +119,51 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 .assert_eq(local.left[i], local.right[i]);
         }
 
-        // Boundary constraints
-        builder
-            .when(local.is_first_merkle)
-            .assert_zero(local.height);
+        // Last row for a Merkle tree should have height + 1 == total_depth
         builder
             .when(local.is_last_merkle)
-            .assert_eq(local.total_depth, local.height + AB::Expr::ONE);
+            .assert_eq(local.height + AB::Expr::ONE, local.total_depth);
 
-        // transition of idx and depth, during merkle proof part
-        let is_merkle_transition = (AB::Expr::ONE - local.is_last_merkle)
-            * local.is_valid
-            * (AB::Expr::ONE - local.is_combining_leaves);
+        // When is_combining_leaves is false, leaf_sub_idx must be 0
         builder
-            .when(is_merkle_transition.clone())
-            .assert_eq(local.height + AB::Expr::ONE, next.height);
-        builder.assert_bool(local.idx_parity);
-        builder.when(is_merkle_transition.clone()).assert_eq(
-            local.idx,
-            next.idx * AB::Expr::from_usize(2) + local.idx_parity,
-        );
+            .when(AB::Expr::ONE - local.is_combining_leaves)
+            .assert_zero(local.leaf_sub_idx);
 
-        // Always receive both left and right for combining leaves part, otherwise receive only one
-        // of them
+        // On the last leaf, leaf_sub_idx must be 0 and height + 1 must be k
+        builder
+            .when(local.is_last_leaf)
+            .assert_one(local.is_combining_leaves);
+        builder
+            .when(local.is_last_leaf)
+            .assert_zero(local.leaf_sub_idx);
+        builder
+            .when(local.is_last_leaf)
+            .assert_eq(local.height + AB::Expr::ONE, AB::Expr::from_usize(self.k));
+
+        // Receive both left and right for combining leaves part, otherwise receive only one
         builder
             .when(local.is_combining_leaves)
-            .assert_one(local.recv_left);
+            .assert_one(local.is_valid);
         builder
             .when(local.is_combining_leaves)
-            .assert_one(local.recv_right);
+            .assert_eq(local.recv_flag, AB::Expr::TWO);
         builder
-            .when((AB::Expr::ONE - local.is_combining_leaves) * local.is_valid)
-            .assert_one(local.recv_right + local.recv_left);
+            .when_ne(local.is_combining_leaves, AB::Expr::ONE)
+            .assert_bool(local.recv_flag);
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
         ///////////////////////////////////////////////////////////////////////
 
         // This is 2x / 2x + 1 if it's a combining leaves part, otherwise it's 0.
-        let left_leaf_sub_idx =
-            local.is_combining_leaves * local.leaf_sub_idx * AB::Expr::from_usize(2);
-        let right_leaf_sub_idx = local.is_combining_leaves
-            * (local.leaf_sub_idx * AB::Expr::from_usize(2) + AB::Expr::ONE);
+        let left_leaf_sub_idx = local.is_combining_leaves * local.leaf_sub_idx * AB::Expr::TWO;
+        let right_leaf_sub_idx =
+            local.is_combining_leaves * (local.leaf_sub_idx * AB::Expr::TWO + AB::Expr::ONE);
+
+        let recv_left = (local.recv_flag - AB::Expr::ONE).square();
+        let recv_right =
+            local.recv_flag * (AB::Expr::from_u8(3) - local.recv_flag) * AB::F::TWO.inverse();
+
         self.merkle_verify_bus.receive(
             builder,
             local.proof_idx,
@@ -174,11 +172,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 merkle_idx: local.idx.into(),
                 total_depth: local.total_depth.into(),
                 height: local.height.into(),
+                is_leaf: local.is_combining_leaves.into(),
                 leaf_sub_idx: left_leaf_sub_idx,
                 commit_major: local.commit_major.into(),
                 commit_minor: local.commit_minor.into(),
             },
-            local.is_valid * local.recv_left,
+            local.is_valid * recv_left,
         );
         self.merkle_verify_bus.receive(
             builder,
@@ -188,24 +187,23 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 merkle_idx: local.idx.into(),
                 total_depth: local.total_depth.into(),
                 height: local.height.into(),
+                is_leaf: local.is_combining_leaves.into(),
                 leaf_sub_idx: right_leaf_sub_idx,
                 commit_major: local.commit_major.into(),
                 commit_minor: local.commit_minor.into(),
             },
-            local.is_valid * local.recv_right,
+            local.is_valid * recv_right,
         );
-        // At "combining leaves" part, the idx is the same for all the rows.
-        // Otherwise the idx should be half of the previous idx, which is just next.idx.
-        let send_merkle_idx = local.idx * local.is_combining_leaves
-            + (AB::Expr::ONE - local.is_combining_leaves) * next.idx;
+
         self.merkle_verify_bus.send(
             builder,
             local.proof_idx,
             MerkleVerifyBusMessage {
                 value: local.compression_output.map(Into::into),
-                merkle_idx: send_merkle_idx,
+                merkle_idx: local.idx.into(),
                 total_depth: local.total_depth.into(),
                 height: local.height + AB::Expr::ONE,
+                is_leaf: local.is_combining_leaves - local.is_last_leaf,
                 leaf_sub_idx: local.leaf_sub_idx.into(),
                 commit_major: local.commit_major.into(),
                 commit_minor: local.commit_minor.into(),
