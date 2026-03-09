@@ -20,7 +20,7 @@ jobs:
   cuda-backend:
     name: recursion cuda tracegen tests
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/family=g6+g5+g6e
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/family=g6.*+g5+g6e
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v6
