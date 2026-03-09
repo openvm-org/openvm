@@ -251,7 +251,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
         traces
             .into_iter()
-            .map(|trace| AirProvingContext::simple_no_pis(trace))
+            .map(AirProvingContext::simple_no_pis)
             .collect()
     }
 

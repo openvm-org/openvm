@@ -404,7 +404,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         // Finally, make the RawInput structs
         Some(
             [transcript_trace, poseidon2_trace, merkle_verify_trace]
-                .map(|trace| AirProvingContext::simple_no_pis(trace))
+                .map(AirProvingContext::simple_no_pis)
                 .into_iter()
                 .collect(),
         )

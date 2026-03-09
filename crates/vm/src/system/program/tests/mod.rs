@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, MatrixDimensions},
+    prover::AirProvingContext,
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine, StarkTestError,
 };

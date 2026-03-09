@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, MatrixDimensions},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, StarkTestError, Val,
 };
