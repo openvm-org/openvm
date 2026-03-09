@@ -146,6 +146,23 @@ where
             .assert_eq(next.layer_idx, local.layer_idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
+        // Dummy Row Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition.clone())
+            .assert_eq(next.is_dummy, local.is_dummy);
+        // Any proof segment with more than one layer row must be non-dummy
+        builder
+            .when(is_transition.clone())
+            .assert_zero(local.is_dummy);
+
+        // Dummy rows are only allowed as a singleton placeholder row
+        builder.when(local.is_dummy).assert_one(local.is_first);
+        builder.when(local.is_dummy).assert_one(is_last.clone());
+
+        ///////////////////////////////////////////////////////////////////////
         // Root Layer Constraints
         ///////////////////////////////////////////////////////////////////////
 
