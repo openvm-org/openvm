@@ -209,7 +209,6 @@ fn random_test(
         height + 3,
         20,
         17,
-        32,
     );
 
     let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
@@ -302,7 +301,6 @@ fn expand_test_no_accesses() {
         height + 3,
         20,
         17,
-        32,
     );
     let md = mem_config.memory_dimensions();
 
@@ -351,7 +349,6 @@ fn expand_test_negative() {
         height + 3,
         20,
         17,
-        32,
     );
     let md = mem_config.memory_dimensions();
 

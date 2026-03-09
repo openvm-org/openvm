@@ -1,5 +1,3 @@
-use std::num::NonZero;
-
 use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
@@ -63,19 +61,12 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             "air_name={}",
             segmentation_ctx.air_names[memory_ctx.boundary_idx]
         );
-        if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
-            debug_assert!(
-                segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
-                "air_name={}",
-                segmentation_ctx.air_names[merkle_tree_index]
-            );
-        }
+        let merkle_tree_index = memory_ctx.merkle_tree_index;
         debug_assert!(
-            segmentation_ctx.air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
+            segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
             "air_name={}",
-            segmentation_ctx.air_names[memory_ctx.adapter_offset]
+            segmentation_ctx.air_names[merkle_tree_index]
         );
-
         let mut ctx = Self {
             trace_heights,
             is_trace_height_constant,
@@ -242,12 +233,6 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
             size.is_power_of_two(),
             "size must be a power of 2, got {size}"
         );
-
-        // Handle access adapter updates
-        // SAFETY: size passed is always a non-zero power of 2
-        let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
-        self.memory_ctx
-            .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
 
         // Handle merkle tree updates
         if address_space != RV32_REGISTER_AS {

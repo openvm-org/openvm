@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
     },
     system::memory::{
@@ -10,9 +10,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
-};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -36,6 +34,7 @@ use {
         },
         EmptyAdapterCoreLayout,
     },
+    openvm_instructions::riscv::RV32_MEMORY_AS,
 };
 
 use super::{run_write_data, LoadStoreCoreAir, Rv32LoadStoreChip};
@@ -125,14 +124,15 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let rs1 = rs1.unwrap_or(ptr_val.wrapping_sub(imm_ext).to_le_bytes());
     let ptr_val = imm_ext.wrapping_add(u32::from_le_bytes(rs1));
-    let a = gen_pointer(rng, 4);
-    let b = gen_pointer(rng, 4);
+    let max_addr = 1usize << tester.address_bits();
+    let a = rng.random_range(0..(max_addr - 4)) / 4 * 4;
+    let b = rng.random_range(0..(max_addr - 4)) / 4 * 4;
 
     let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
     let mem_as = mem_as.unwrap_or(if is_load {
         2
     } else {
-        *[2, 3, 4].choose(rng).unwrap()
+        *[2, 3].choose(rng).unwrap()
     });
 
     let shift_amount = ptr_val % 4;
@@ -150,9 +150,6 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         tester.write(1, a, some_prev_data);
         tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
     } else {
-        if mem_as == 4 {
-            some_prev_data = array::from_fn(|_| rng.random());
-        }
         if a == 0 {
             read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
         }
@@ -216,11 +213,12 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    // Use custom memory config so initial block size matches the 4-byte alignment and
+    // avoids access-adapter split/merge paths when adapters are disabled.
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
@@ -268,11 +266,11 @@ fn run_negative_loadstore_test(
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    // Use custom memory config so the min block size matches alignment without needing adapters.
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
     set_and_execute(
@@ -541,13 +539,18 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
+    let mut mem_config = MemoryConfig {
+        pointer_max_bits: 20,
+        ..Default::default()
+    };
+    // Reduce pointer_max_bits and num_cells to avoid ~4GB Merkle tree GPU allocations.
+    // Merkle trees are now always built (volatile path was removed with access adapters).
+    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 20;
+    mem_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
     }
-    let mut tester = GpuChipTestBuilder::volatile(mem_config, default_var_range_checker_bus());
+    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 
     let mut harness = create_cuda_harness(&tester);
     for _ in 0..num_ops {

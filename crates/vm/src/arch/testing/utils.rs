@@ -11,12 +11,9 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
 };
-use openvm_stark_backend::{p3_field::Field, p3_util::log2_strict_usize};
+use openvm_stark_backend::p3_field::Field;
 
-use crate::{
-    arch::MemoryConfig,
-    system::memory::{adapter::records::arena_size_bound, online::TracingMemory},
-};
+use crate::{arch::MemoryConfig, system::memory::online::TracingMemory};
 
 pub fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
     // setting default range_max_bits to 17 because that's the default decomp value in MemoryConfig
@@ -49,7 +46,5 @@ pub fn dummy_memory_helper<F: Field>(
 }
 
 pub fn default_tracing_memory(mem_config: &MemoryConfig, init_block_size: usize) -> TracingMemory {
-    let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-    let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
-    TracingMemory::new(mem_config, init_block_size, arena_size_bound)
+    TracingMemory::new(mem_config, init_block_size)
 }
