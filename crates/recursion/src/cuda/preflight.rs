@@ -10,7 +10,9 @@ use crate::{
     cuda::{
         to_device_or_nullptr,
         types::{TraceHeight, TraceMetadata},
-    }, proof_shape::proof_shape::compute_air_shape_lookup_counts, system::Preflight
+    },
+    proof_shape::proof_shape::compute_air_shape_lookup_counts,
+    system::Preflight,
 };
 
 /*
