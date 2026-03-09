@@ -1,13 +1,25 @@
 # Keccak256
 
-The OpenVM Keccak256 guest library provides two functions for use in your guest code:
+The OpenVM Keccak256 guest library (`openvm-keccak256`) provides access to an accelerated Keccak-256 hash function.
 
+The library provides:
 - `keccak256(input: &[u8]) -> [u8; 32]`: Computes the Keccak-256 hash of the input data and returns it as an array of 32 bytes.
-- `set_keccak256(input: &[u8], output: &mut [u8; 32])`: Sets the output to the Keccak-256 hash of the input data into the provided output buffer.
+- `set_keccak256(input: &[u8], output: &mut [u8; 32])`: Computes the Keccak-256 hash of the input data into the provided output buffer.
+- `Keccak256` struct: Implements the [`tiny_keccak::Hasher`](https://docs.rs/tiny-keccak/latest/tiny_keccak/trait.Hasher.html) trait for incremental hashing via `update` and `finalize` methods.
+
+The `Keccak256` struct can be used to incrementally hash a stream of bytes:
+```rust
+fn update(&mut self, data: &[u8]);
+fn finalize(self, output: &mut [u8]);
+```
 
 See the full example [here](https://github.com/openvm-org/openvm/blob/main/examples/keccak/src/main.rs).
 
-## Example
+### Example
+
+The following example can be run as guest code or host code (i.e. run in the zkvm or natively).
+To run with guest code, use `cargo openvm run`, and for host code use `cargo run`.
+The implementation for `Keccak256` falls back to using `tiny_keccak` when running as host code.
 
 ```rust
 // [!include ~/snippets/examples/keccak/src/main.rs:imports]
