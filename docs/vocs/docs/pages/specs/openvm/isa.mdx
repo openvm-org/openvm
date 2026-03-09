@@ -134,14 +134,11 @@ to. Address space `0` is considered a read-only array with `[a]_0 = a` for any `
 #### Memory Accesses and Block Accesses
 
 VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space.
-The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and each address space has a minimum block size that is
-configurable. All block accesses must be at pointers that are a multiple of the minimum block size. For address
-spaces `1`, `2`, and `3`, the minimum block size is 4, meaning all accesses must be at pointer addresses that are
-divisible by 4. However, RISC-V instructions like `lb`, `lh`, `sb`, and `sh` still work despite having minimum
+The block size is fixed to constant size `4` across all instructions in the ISA.
+All block accesses must be at pointers that are a multiple of the block size (`4`). 
+However, RISC-V instructions like `lb`, `lh`, `sb`, and `sh` still work despite having minimum
 block size requirements equal to the size of the access (1 byte for `lb`/`sb`, 2 bytes for `lh`/`sh`) because these
-instructions are implemented by doing a block access of size 4. For the native address space (`4`), the minimum
-block size is 1, so accesses can start from any pointer address. For address spaces beyond `4`, the minimum
-block size defaults to 1 but can be configured.
+instructions are implemented by doing a block access of size 4.
 Block accesses are not supported for address space `0`.
 
 #### Address Spaces
@@ -157,7 +154,7 @@ introduce additional address spaces:
 | `1`           | Registers   | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.        |
 | `2`           | User Memory | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.        |
 | `3`           | User IO     |                                                                                   |
-| `4`           | Native      | Elements are typically full native field elements.                                |
+| `4`           | Deferral    | Elements are typically full native field elements.                                |
 
 When adding a new user address space, the invariants of the memory cells in that address space must be declared, and all
 instructions must ensure that these invariants are preserved.
@@ -173,10 +170,9 @@ structures during runtime execution:
 - `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of runtime
   execution
 - `hint_stream`: a queue of values populated during runtime execution
-  via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`, `NativeHintInput`, and
-  `NativeHintBits`.
+  via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`.
 - `hint_space`: a vector of vectors of field elements used to store hints during runtime execution
-  via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`. The outer `hint_space` vector is append-only, but
+  via [phantom sub-instructions](#phantom-sub-instructions). The outer `hint_space` vector is append-only, but
   each internal `hint_space[hint_id]` vector may be mutated, including deletions, by the host.
 - `kv_store`: a read-only key-value store for hints. Executors(e.g. `Rv32HintLoadByKey`) can read data from `kv_store`
   at runtime. `kv_store` is designed for general purposes so both key and value are byte arrays. Encoding of key/value
@@ -229,7 +225,7 @@ We define **guest instruction execution** to be the subset of instruction execut
 - User Public Outputs
 
 Guest instruction execution may still depend on read access to the host state.
-For example, instructions like `HINT_STORE_RV32` (from the RV32IM extension) and `HINT_STOREW`, `HINT_STOREW4` (from the native extension) can
+For example, instructions like `HINT_STORE_RV32` (from the RV32IM extension) can
 read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.
 
 ⚠️ Safeguards:
@@ -440,102 +436,6 @@ The RV32IM extension defines the following phantom sub-instructions.
 | Rv32PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
 | Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                                 |
 | Rv32HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[r32{0}{a}:r32{0}{b}]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
-### Native Extension
-
-The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It
-does not constrain memory elements to be bytes and most instructions only write to address space `4`, with the notable
-exception of CASTF.
-
-#### Base
-
-In the instructions below, `d,e` must be either `0` or `4` except in CASTF, which may write to address space `2`.
-Additional restrictions are applied on a per-instruction basis. In particular, the immediate address space `0` is
-allowed for non-vectorized
-reads but not allowed for writes. When using immediates, we interpret `[a]_0` as the immediate value `a`.
-
-| Name         | Operands    | Description                                                                                                                                                                                                                                                                                |
-|--------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| LOADW        | `a,b,c,4,4` | Set `[a]_4 = [[c]_4 + b]_4`.                                                                                                                                                                                                                                                               |
-| STOREW       | `a,b,c,4,4` | Set `[[c]_4 + b]_4 = [a]_4`.                                                                                                                                                                                                                                                               |
-| LOADW4       | `a,b,c,4,4` | Set `[a:4]_4 = [[c]_4 + b:4]_4`.                                                                                                                                                                                                                                                           |
-| STOREW4      | `a,b,c,4,4` | Set `[[c]_4 + b:4]_4 = [a:4]_4`.                                                                                                                                                                                                                                                           |
-| JAL          | `a,b,_,4`   | Jump to address and link: set `[a]_4 = (pc + DEFAU````LT````_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                          |
-| RANGE_CHECK  | `a,b,c,4`   | Assert that `[a]_4 = x + y * 2^16` for some `x < 2^b` and `y < 2^c`. `b` must be in [0,16] and `c` must be in [0, 14].                                                                                                                                                                     |
-| BEQ          | `a,b,c,d,e` | If `[a]_d == [b]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                               |
-| BNE          | `a,b,c,d,e` | If `[a]_d != [b]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                               |
-| HINT_STOREW  | `_,b,c,4,4` | Set `[[c]_4 + b]_4 = next element from hint stream`.                                                                                                                                                                                                                                       |
-| HINT_STOREW4 | `_,b,c,4,4` | Set `[[c]_4 + b:4]_4 = next 4 elements from hint stream`.                                                                                                                                                                                                                                  |
-| CASTF        | `a,b,_,2,4` | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_2` to the unique array such that `sum_{i=0}^3 [a + i]_2 * 2^{8i} = [b]_4` where `[a + i]_2 < 2^8` for `i = 0..2` and `[a + 3]_2 < 2^6`. This opcode constrains that `[b]_4` must be at most 30-bits. |
-
-#### Field Arithmetic
-
-This instruction set does native field operations. Below, `e,f` must be either `0` or `4`.
-When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
-and `c`, respectively.
-
-| Name | Operands      | Description                                               |
-| ---- | ------------- | --------------------------------------------------------- |
-| ADDF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e + [c]_f`.                              |
-| SUBF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e - [c]_f`.                              |
-| MULF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e * [c]_f`.                              |
-| DIVF | `a,b,c,4,e,f` | Set `[a]_4 = [b]_e / [c]_f`. Division by zero is invalid. |
-
-#### Extension Field Arithmetic
-
-This is only enabled when the native field is `BabyBear`. The quartic extension field is defined by the irreducible
-polynomial $x^4 - 11$, which matches Plonky3.
-All elements in the field extension can be represented as a vector `[a_0,a_1,a_2,a_3]` which represents the
-polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
-
-The instructions read and write from address space `4` and do block access with block size `4`.
-
-| Name    | Operands        | Description                                                                                   |
-| ------- | --------------- | --------------------------------------------------------------------------------------------- |
-| FE4ADD  | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 + [c:4]_4` with vector addition.                                       |
-| FE4SUB  | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 - [c:4]_4` with vector subtraction.                                    |
-| BBE4MUL | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 * [c:4]_4` with extension field multiplication.                        |
-| BBE4DIV | `a, b, c, 4, 4` | Set `[a:4]_4 = [b:4]_4 / [c:4]_4` with extension field division. Division by zero is invalid. |
-
-#### Hashes
-
-The instructions below do block accesses with block size `1` and `CHUNK` in address space `4`.
-
-| Name                                                                                                                                                                                                                  | Operands    | Description                                                                                                                                                                                                                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| COMP_POS2 `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,4,4` | Applies the Poseidon2 compression function to the inputs `[[b]_4:CHUNK]_4` and `[[c]_4:CHUNK]_4`, writing the result to `[[a]_4:CHUNK]_4`.                                                                                                                                                                                                              |
-| PERM_POS2 `[WIDTH, PID]`                                                                                                                                                                                              | `a,b,_,4,4` | Applies the Poseidon2 permutation function to `[[b]_4:WIDTH]_4` and writes the result to `[[a]_4:WIDTH]_4`. <br/><br/> Each array of `WIDTH` elements is read/written in two batches of size `CHUNK`. This is nearly the same as `COMP_POS2` except that the whole input state is contiguous in memory, and the full output state is written to memory. |
-
-The native extension uses the following Poseidon2 constants:
-
-- `PID`: This identifier provides domain separation between different Poseidon2 constants. We use `0` to identify [
-  `POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48),
-  but the Mat4 used is Plonky3's with a Montgomery reduction.
-- `CHUNK`: We use `CHUNK = 8` for the native extension.
-- `WIDTH`: We use `WIDTH = 16` for the native extension.
-
-The input (of size `WIDTH`) is read in two batches of size `CHUNK`, and, similarly, the output is written in either one
-or two batches of size `CHUNK`, depending on the output size of the corresponding opcode.
-
-#### Proof Verification
-
-We have the following special opcodes tailored to optimize FRI proof verification. They access address space `4`.
-
-| Name                                                                                                                                                                                                                     | Operands        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| VERIFY_BATCH `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a,b,c,d,e,f,g` | Further described [here](https://github.com/openvm-org/openvm/blob/main/extensions/native/circuit/src/poseidon2/README.md). Due to already having a large number of operands, the address space is fixed to be `AS::Native = 4`. Computes `mmcs::verify_batch`. In the native address space, `[a], [b], [e], [f]` should be the array start pointers for the dimensions array, the opened values array (which contains more arrays) and the commitment (which is an array of length `CHUNK`). `[c]` should be the length of the opened values array (and so should be equal to the length of the dimensions array as well). `[d]` should be the hint id of proofs. `g` should be the reciprocal of the size (in field elements) of the values contained in the opened values array: if the opened values array contains field elements, `g` should be 1; if the opened values array contains extension field elements, `g` should be 1/4. |
-| FRI_REDUCED_OPENING                                                                                                                                                                                                      | `a,b,c,d,e,f,g` | Let `a_ptr = [a]_4`, `b_ptr = [b]_4`, `length = [c]_4`, `alpha = [d:EXT_DEG]_4`, `hint_id = [f]_4`, `is_init = [g]_4`. `a_ptr` is the address of Felt array `a_arr` and `b_ptr` is the address of Ext array `b_arr`. Compute `sum((b_arr[i] - a_arr[i]) * alpha ^ i)` for `i=0..length` and write the value into `[e:EXT_DEG]_4`. It is required that `is_init` is boolean. If `is_init == 0`, read content of `a_arr` from the hint space at index `hint_id` and write into `a_arr`. Otherwise, read `a_arr` from memory.  This instruction removes elements from `hint_space[hint_id]` as they are read. |
-
-#### Phantom Sub-Instructions
-
-The native extension defines the following phantom sub-instructions.
-
-| Name            | Discriminant | Operands      | Description                                                                                                                                                                                                                          |
-| --------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| NativePrint     | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.                                                                                                                                                                                |
-| NativeHintInput | 0x11         | `_`           | Pops a vector `hint` of field elements from `input_stream` and sets `hint_stream` to equal the vector `[[F::from_usize(hint.len())], hint].concat()`. The hint stream must previously be empty.                            |
-| NativeHintBits  | 0x12         | `a,b,c_upper` | Sets `hint_stream` to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`. The hint stream must previously be empty.                                                                                           |
-| NativeHintLoad  | 0x13         | `_`           | Pops a vector `hint` of field elements from `input_stream` and appends it to `hint_space`. Sets `hint_stream` to contain a length-1 vector containing the index of `hint` in `hint_space`. The hint stream must previously be empty. |
-| NativeHintFelt  | 0x14         | `_`           | Pops a field element from `input_stream` and set `hint_stream` equal to it. The hint stream must previously be empty.                                                                                                                |
 
 ### Keccak Extension
 
