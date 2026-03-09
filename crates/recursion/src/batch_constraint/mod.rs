@@ -1091,14 +1091,19 @@ pub mod cuda_tracegen {
 
     impl BatchConstraintModule {
         /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
-        /// committed PCS data.
+        /// committed PCS data. The engine may use any GPU backend (e.g. BabyBear Poseidon2 or
+        /// BabyBear Bn254 Poseidon2) — only its `device().commit()` method is called.
         pub fn commit_child_vk_gpu<E>(
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        ) -> CommittedTraceData<GpuBackend>
+        ) -> CommittedTraceData<E::PB>
         where
-            E: StarkEngine<SC = BabyBearPoseidon2Config, PB = GpuBackend>,
+            E: StarkEngine,
+            E::PB: openvm_stark_backend::prover::ProverBackend<
+                Val = F,
+                Matrix = openvm_cuda_backend::base::DeviceMatrix<F>,
+            >,
         {
             let cached_trace_record = build_cached_trace_record(child_vk, true);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);

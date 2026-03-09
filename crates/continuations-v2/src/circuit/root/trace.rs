@@ -6,7 +6,10 @@ use openvm_circuit::{
     system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
 };
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_cuda_backend::{
+    data_transporter::transport_air_proving_ctx_to_device, BabyBearBn254Poseidon2HashScheme,
+    GenericGpuBackend, GpuBackend,
+};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
@@ -106,6 +109,65 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceG
             (None, vec![])
         };
         (paths_ctx.into_iter().collect_vec(), paths_inputs)
+    }
+}
+
+/// Coerces `AirProvingContext<GpuBackend>` into the Bn254 backend context.
+///
+/// Safe because both backends share `Val = BabyBear` and `Matrix = DeviceMatrix<F>`.
+/// Panics in debug builds if `cached_mains` is non-empty (commitment types differ).
+#[cfg(feature = "cuda")]
+fn coerce_gpu_to_bn254_ctx(
+    ctx: AirProvingContext<GpuBackend>,
+) -> AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
+    debug_assert!(ctx.cached_mains.is_empty());
+    AirProvingContext {
+        cached_mains: vec![],
+        common_main: ctx.common_main,
+        public_values: ctx.public_values,
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootTraceGenImpl {
+    fn new(deferral_enabled: bool) -> Self {
+        Self { deferral_enabled }
+    }
+
+    fn generate_pre_verifier_subcircuit_ctx(
+        &self,
+        proof: &Proof<BabyBearPoseidon2Config>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
+        memory_dimensions: MemoryDimensions,
+    ) -> (
+        Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
+        Vec<[F; POSEIDON2_WIDTH]>,
+    ) {
+        let (cpu_ctxs, inputs) =
+            self.generate_pre_verifier_subcircuit_ctx(proof, user_pvs_proof, memory_dimensions);
+        let gpu_ctxs = cpu_ctxs
+            .into_iter()
+            .map(|ctx| coerce_gpu_to_bn254_ctx(transport_air_proving_ctx_to_device(ctx)))
+            .collect_vec();
+        (gpu_ctxs, inputs)
+    }
+
+    fn generate_other_proving_ctxs(
+        &self,
+        proof: &Proof<BabyBearPoseidon2Config>,
+        memory_dimensions: MemoryDimensions,
+        deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+    ) -> (
+        Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
+        Vec<[F; POSEIDON2_WIDTH]>,
+    ) {
+        let (cpu_ctxs, inputs) =
+            self.generate_other_proving_ctxs(proof, memory_dimensions, deferral_merkle_proofs);
+        let gpu_ctxs = cpu_ctxs
+            .into_iter()
+            .map(|ctx| coerce_gpu_to_bn254_ctx(transport_air_proving_ctx_to_device(ctx)))
+            .collect_vec();
+        (gpu_ctxs, inputs)
     }
 }
 

@@ -1133,7 +1133,10 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 pub mod cuda_tracegen {
     use std::iter::zip;
 
-    use openvm_cuda_backend::{prelude::SC, GpuBackend};
+    use openvm_cuda_backend::{
+        prelude::SC, BabyBearBn254Poseidon2HashScheme, GenericGpuBackend, GpuBackend,
+    };
+    use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config;
 
     use super::*;
     use crate::{
@@ -1346,6 +1349,205 @@ pub mod cuda_tracegen {
                 return None;
             }
             // Caution: this must be done after GKR and WHIR tracegen
+            tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
+                .in_scope(|| {
+                    tracing::trace_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
+                        || {
+                            let pow_bits_trace = power_checker_gen.generate_trace();
+                            ctx_per_trace.push(AirProvingContext::simple_no_pis(pow_bits_trace));
+                        },
+                    );
+                });
+            let exp_bits_trace = tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen")
+                .in_scope(|| exp_bits_len_gen.generate_trace_device(exp_bits_len_required))?;
+            ctx_per_trace.push(AirProvingContext::simple_no_pis(exp_bits_trace));
+            Some(ctx_per_trace)
+        }
+    }
+
+    /// Converts an `AirProvingContext<GpuBackend>` into an
+    /// `AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>`.
+    ///
+    /// This is safe because both backends share `Val = BabyBear` and `Matrix = DeviceMatrix<F>`.
+    /// The only field that differs is `Commitment` (inside `cached_mains`), so this function
+    /// panics if `cached_mains` is non-empty.
+    fn coerce_gpu_ctx_to_bn254(
+        ctx: AirProvingContext<GpuBackend>,
+    ) -> AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
+        debug_assert!(
+            ctx.cached_mains.is_empty(),
+            "cannot coerce context with cached_mains: commitment types differ between GpuBackend and Bn254 backend"
+        );
+        AirProvingContext {
+            cached_mains: vec![],
+            common_main: ctx.common_main,
+            public_values: ctx.public_values,
+        }
+    }
+
+    impl<const MAX_NUM_PROOFS: usize>
+        VerifierTraceGen<
+            GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>,
+            BabyBearBn254Poseidon2Config,
+        > for VerifierSubCircuit<MAX_NUM_PROOFS>
+    {
+        fn new(
+            child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
+            config: VerifierConfig,
+        ) -> Self {
+            Self::new_with_options(child_mvk, config)
+        }
+
+        fn commit_child_vk<
+            E: StarkEngine<
+                SC = BabyBearBn254Poseidon2Config,
+                PB = GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>,
+            >,
+        >(
+            &self,
+            engine: &E,
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        ) -> CommittedTraceData<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
+            self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
+        }
+
+        fn cached_trace_record(
+            &self,
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        ) -> CachedTraceRecord {
+            self.batch_constraint.cached_trace_record(child_vk)
+        }
+
+        #[tracing::instrument(name = "subcircuit_generate_proving_ctxs_bn254", skip_all)]
+        fn generate_proving_ctxs<
+            TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+                + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+        >(
+            &self,
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+            cached_trace_ctx: CachedTraceCtx<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>,
+            proofs: &[Proof<BabyBearPoseidon2Config>],
+            external_data: &mut VerifierExternalData<
+                GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>,
+            >,
+            initial_transcript: TS,
+        ) -> Option<Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>>
+        {
+            debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
+            let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
+            let proofs_gpu = proofs
+                .iter()
+                .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu))
+                .collect::<Vec<_>>();
+            let span = tracing::Span::current();
+            let mut preflights_cpu = std::thread::scope(|s| {
+                let handles: Vec<_> = proofs
+                    .iter()
+                    .map(|proof| {
+                        let sponge = initial_transcript.clone();
+                        let span = span.clone();
+                        s.spawn(move || {
+                            let _guard = span.enter();
+                            self.run_preflight(sponge, child_vk, proof)
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().unwrap())
+                    .collect::<Vec<_>>()
+            });
+
+            // Construct a GpuBackend-typed external_data view.
+            // This is safe because GpuBackend and GenericGpuBackend<Bn254HS> share the same
+            // Val = BabyBear, so all field types are identical.
+            let mut gpu_external_data = VerifierExternalData::<GpuBackend> {
+                poseidon2_compress_inputs: external_data.poseidon2_compress_inputs,
+                range_check_inputs: external_data.range_check_inputs,
+                required_heights: external_data.required_heights,
+                // Move the &mut pointer out so writes propagate back to the caller's variable.
+                final_transcript_state: external_data.final_transcript_state.take(),
+            };
+
+            if let Some(final_transcript_state) = &mut gpu_external_data.final_transcript_state {
+                debug_assert_eq!(preflights_cpu.len(), 1);
+                debug_assert!(preflights_cpu[0].transcript.samples().last().unwrap());
+                let state = *preflights_cpu[0].transcript.perm_results().last().unwrap();
+                *(*final_transcript_state) = state;
+                preflights_cpu[0].poseidon2_compress_inputs.push(state);
+            }
+
+            let power_checker_gen =
+                Arc::new(PowerCheckerGpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::hybrid());
+            let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
+
+            let (module_required, power_checker_required, exp_bits_len_required) =
+                self.split_required_heights(gpu_external_data.required_heights);
+
+            let preflights_gpu = zip(proofs, preflights_cpu)
+                .map(|(proof, preflight_cpu)| PreflightGpu::new(child_vk, proof, &preflight_cpu))
+                .collect::<Vec<_>>();
+            let modules = vec![
+                TraceModuleRef::BatchConstraint(&self.batch_constraint),
+                TraceModuleRef::Transcript(&self.transcript),
+                TraceModuleRef::ProofShape(&self.proof_shape),
+                TraceModuleRef::Gkr(&self.gkr),
+                TraceModuleRef::Stacking(&self.stacking),
+                TraceModuleRef::Whir(&self.whir),
+            ];
+
+            // Borrow cached_trace_ctx for passing to modules, then consume it in the match below.
+            let cached_trace_record_for_modules = match &cached_trace_ctx {
+                CachedTraceCtx::Records(cached_trace_record) => Some(cached_trace_record),
+                CachedTraceCtx::PcsData(_) => None,
+            };
+
+            let mut ctxs_by_module_gpu = Vec::with_capacity(modules.len());
+            for (module, required_heights) in modules.into_iter().zip(module_required) {
+                ctxs_by_module_gpu.push(module.generate_gpu_ctxs(
+                    &child_vk_gpu,
+                    &proofs_gpu,
+                    &preflights_gpu,
+                    &power_checker_gen,
+                    &exp_bits_len_gen,
+                    &cached_trace_record_for_modules,
+                    &gpu_external_data,
+                    required_heights,
+                )?);
+            }
+            // The borrow of cached_trace_ctx via cached_trace_record_for_modules ends here.
+
+            // Convert GpuBackend contexts to Bn254 backend contexts.
+            // All cached_mains are empty at this point; they will be set below if needed.
+            let mut ctxs_by_module: Vec<
+                Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
+            > = ctxs_by_module_gpu
+                .into_iter()
+                .map(|module_ctxs| {
+                    module_ctxs
+                        .into_iter()
+                        .map(coerce_gpu_ctx_to_bn254)
+                        .collect()
+                })
+                .collect();
+
+            match cached_trace_ctx {
+                CachedTraceCtx::PcsData(child_vk_pcs_data) => {
+                    assert!(self.batch_constraint.has_cached);
+                    ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                        .cached_mains = vec![child_vk_pcs_data];
+                }
+                CachedTraceCtx::Records(cached_trace_record) => {
+                    assert!(!self.batch_constraint.has_cached);
+                    ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                        .public_values =
+                        cached_trace_record.dag_commit_info.unwrap().commit.to_vec();
+                }
+            };
+            let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
+            if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
+                return None;
+            }
             tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
                 .in_scope(|| {
                     tracing::trace_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(

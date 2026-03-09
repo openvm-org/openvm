@@ -27,7 +27,7 @@ cfg-if.workspace = true
 num-bigint.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
-openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
 
 [dev-dependencies]
 openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
