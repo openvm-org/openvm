@@ -5,9 +5,11 @@ use openvm_circuit::{
     arch::POSEIDON2_WIDTH,
     system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
 };
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_cuda_backend::GpuBackend;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
@@ -129,7 +131,7 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
             self.generate_pre_verifier_subcircuit_ctx(proof, user_pvs_proof, memory_dimensions);
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(cpu_proving_ctx_to_gpu)
             .collect_vec();
         (gpu_ctxs, inputs)
     }
@@ -147,7 +149,7 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
             self.generate_other_proving_ctxs(proof, memory_dimensions, deferral_merkle_proofs);
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(cpu_proving_ctx_to_gpu)
             .collect_vec();
         (gpu_ctxs, inputs)
     }

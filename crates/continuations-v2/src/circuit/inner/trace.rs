@@ -1,7 +1,9 @@
 use itertools::Itertools;
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_cuda_backend::GpuBackend;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
@@ -145,7 +147,7 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         );
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(cpu_proving_ctx_to_gpu)
             .collect_vec();
         (gpu_ctxs, poseidon2_inputs)
     }
@@ -160,7 +162,7 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
             self.generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app);
         cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(cpu_proving_ctx_to_gpu)
             .collect_vec()
     }
 }

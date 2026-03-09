@@ -73,7 +73,8 @@ impl ProgramChipGPU {
         trace: DeviceMatrix<F>,
         device: &GpuDevice,
     ) -> CommittedTraceData<GpuBackend> {
-        let (commitment, data) = device.commit(&[&trace]).unwrap();
+        let (commitment, data) =
+            <GpuDevice as TraceCommitter<GpuBackend>>::commit(device, &[&trace]).unwrap();
         CommittedTraceData {
             commitment,
             data: Arc::new(data),
@@ -134,7 +135,7 @@ mod tests {
         LocalOpcode,
         SystemOpcode::*,
     };
-    use openvm_stark_backend::StarkEngine;
+    use openvm_stark_backend::{prover::ColMajorMatrix, StarkEngine};
 
     use super::ProgramChipGPU;
     use crate::{
@@ -154,7 +155,8 @@ mod tests {
         let cpu_cached = cpu_committed_exe.get_committed_trace();
 
         // NOTE: This compares the stacked matrices, not the original cached trace
-        assert_eq_host_and_device_matrix_col_maj(&cpu_cached.trace, &gpu_cached.trace);
+        let cpu_trace_cm = ColMajorMatrix::from_row_major(&cpu_cached.trace);
+        assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, &gpu_cached.trace);
         assert_eq!(gpu_cached.commitment, cpu_cached.commitment);
     }
 

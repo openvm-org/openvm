@@ -1,8 +1,10 @@
 use std::borrow::Borrow;
 
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_cuda_backend::GpuBackend;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
@@ -119,9 +121,9 @@ impl DeferralHookTraceGen<GpuBackend> for DeferralHookTraceGenImpl {
         } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children);
 
         DeferralHookPreCtx {
-            verifier_pvs_ctx: transport_air_proving_ctx_to_device(verifier_pvs_ctx),
-            decommit_ctx: transport_air_proving_ctx_to_device(decommit_ctx),
-            onion_ctx: transport_air_proving_ctx_to_device(onion_ctx),
+            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx),
+            decommit_ctx: cpu_proving_ctx_to_gpu(decommit_ctx),
+            onion_ctx: cpu_proving_ctx_to_gpu(onion_ctx),
             poseidon2_inputs,
         }
     }

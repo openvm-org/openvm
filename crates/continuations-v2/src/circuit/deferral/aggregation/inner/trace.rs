@@ -1,9 +1,11 @@
 use std::borrow::Borrow;
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_cuda_backend::GpuBackend;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
@@ -174,9 +176,9 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
             child_merkle_depth,
         );
         DeferralInnerPreCtx {
-            verifier_pvs_ctx: transport_air_proving_ctx_to_device(verifier_pvs_ctx),
-            def_pvs_ctx: transport_air_proving_ctx_to_device(def_pvs_ctx),
-            input_ctx: transport_air_proving_ctx_to_device(input_ctx),
+            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx),
+            def_pvs_ctx: cpu_proving_ctx_to_gpu(def_pvs_ctx),
+            input_ctx: cpu_proving_ctx_to_gpu(input_ctx),
             poseidon2_inputs,
         }
     }
