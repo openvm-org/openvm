@@ -746,7 +746,7 @@ mod cuda {
                 for c in 0..cpu_width {
                     assert_eq!(
                         gpu[c * cpu_height + r],
-                        cpu.values[c * cpu_height + r],
+                        cpu.values[r * cpu_width + c],
                         "Mismatch for {} at row {r} column {c}",
                         name
                     );
