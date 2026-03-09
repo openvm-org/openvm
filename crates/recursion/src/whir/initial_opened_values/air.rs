@@ -302,6 +302,7 @@ where
                 merkle_idx: local.merkle_idx_bit_src.into(),
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1),
                 height: AB::Expr::ZERO,
+                is_leaf: AB::Expr::ONE,
                 leaf_sub_idx: local.coset_idx.into(),
                 value: array::from_fn(|i| local.post_state[i].into()),
                 commit_major: AB::Expr::ZERO,
