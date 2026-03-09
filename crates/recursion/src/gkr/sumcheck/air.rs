@@ -153,17 +153,8 @@ where
             LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_round);
         let is_transition_proof = next.is_enabled - next.is_proof_start;
 
-        // A proof can't contribute both dummy and non-dummy rows
-        builder
-            .when(is_transition_proof)
-            .assert_eq(next.is_dummy, local.is_dummy);
-
         // Sumcheck round flag starts at 0
         builder.when(local.is_first_round).assert_zero(local.round);
-        // Layer metadata must remain same
-        builder
-            .when(is_transition_round.clone())
-            .assert_eq(next.is_last_layer, local.is_last_layer);
         // Sumcheck round flag increments by 1
         builder
             .when(is_transition_round.clone())
@@ -174,8 +165,45 @@ where
             .assert_eq(local.round, local.layer_idx - AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
+        // Dummy Row Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition_proof.clone())
+            .assert_eq(next.is_dummy, local.is_dummy);
+        // Any proof segment with more than one row must be non-dummy
+        builder
+            .when(is_transition_proof.clone())
+            .assert_zero(local.is_dummy);
+
+        // Dummy rows are only allowed as a singleton placeholder row
+        builder
+            .when(local.is_dummy)
+            .assert_one(local.is_proof_start);
+        builder
+            .when(local.is_dummy)
+            .assert_one(local.is_first_round);
+        builder
+            .when(local.is_dummy)
+            .assert_one(is_last_round.clone());
+        builder.when(local.is_dummy).assert_one(local.is_last_layer);
+        // Dummy rows must be strict no-ops
+        assert_array_eq(&mut builder.when(local.is_dummy), local.eq_out, local.eq_in);
+        assert_array_eq(
+            &mut builder.when(local.is_dummy),
+            local.claim_out,
+            local.claim_in,
+        );
+
+        ///////////////////////////////////////////////////////////////////////
         // Round Constraints
         ///////////////////////////////////////////////////////////////////////
+
+        // Layer metadata must remain same
+        builder
+            .when(is_transition_round.clone())
+            .assert_eq(next.is_last_layer, local.is_last_layer);
 
         // Eq initialization: eq_in = 1 at first round
         assert_one_ext(&mut builder.when(local.is_first_round), local.eq_in);
