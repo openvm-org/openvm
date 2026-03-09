@@ -647,7 +647,10 @@ mod cuda {
     use openvm_stark_backend::prover::MatrixDimensions;
     #[cfg(feature = "touchemall")]
     use openvm_stark_sdk::config::baby_bear_poseidon2::F;
-    use openvm_stark_sdk::utils::setup_tracing_with_log_level;
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::BabyBearPoseidon2RefEngine,
+        utils::setup_tracing_with_log_level,
+    };
     use test_case::test_matrix;
     use tracing::Level;
 
@@ -660,12 +663,15 @@ mod cuda {
         num_proofs: usize,
     ) {
         setup_tracing_with_log_level(Level::INFO);
+        // Use reference engine for the test fixture to remove any testing dependence on the
+        // cpu backend prover.
+        let ref_engine = BabyBearPoseidon2RefEngine::<DuplexSponge>::new(params.clone());
         let cpu_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
         let gpu_engine = BabyBearPoseidon2GpuEngine::new(params);
-        let (pk, vk) = fx.keygen(&cpu_engine);
+        let (pk, vk) = fx.keygen(&ref_engine);
         assert!(num_proofs <= 5);
         let proofs = (0..num_proofs)
-            .map(|_| fx.prove(&cpu_engine, &pk))
+            .map(|_| fx.prove(&ref_engine, &pk))
             .collect_vec();
         let vk = Arc::new(vk);
 
