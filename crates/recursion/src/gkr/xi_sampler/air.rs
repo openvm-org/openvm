@@ -109,6 +109,27 @@ where
             .assert_eq(next.idx, local.idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
+        // Dummy Row Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition_challenge.clone())
+            .assert_eq(next.is_dummy, local.is_dummy);
+        // Any proof segment with more than one challenge row must be non-dummy
+        builder
+            .when(is_transition_challenge.clone())
+            .assert_zero(local.is_dummy);
+
+        // Dummy rows are only allowed as a singleton placeholder row
+        builder
+            .when(local.is_dummy)
+            .assert_one(local.is_first_challenge);
+        builder
+            .when(local.is_dummy)
+            .assert_one(is_last_challenge.clone());
+
+        ///////////////////////////////////////////////////////////////////////
         // Transition Constraints
         ///////////////////////////////////////////////////////////////////////
 
