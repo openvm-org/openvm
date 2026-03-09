@@ -92,7 +92,11 @@ impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
                     cols.is_first = F::from_bool(i == 0);
                     cols.is_valid = F::ONE;
                     cols.proof_idx = F::from_usize(pidx);
-                    cols.is_interaction = F::from_bool(is_interaction);
+                    // group_idx: 0 for interactions, 1 for constraints
+                    cols.group_idx = F::from_bool(!is_interaction);
+                    // is_first_in_group: true at start of proof (i==0) and at start of
+                    // constraint group (i == 2*num_present)
+                    cols.is_first_in_group = F::from_bool(i == 0 || i == 2 * num_present);
                     cols.num_multilinear_sumcheck_rounds = F::from_usize(num_rounds);
                     cols.idx = F::from_usize(if i < 2 * num_present {
                         i
@@ -133,7 +137,7 @@ impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
                 .for_each(|chunk| {
                     let cols: &mut ExpressionClaimCols<_> = chunk.borrow_mut();
                     // if it's interaction, we need to multiply by eq_sharp_ns and norm_factor
-                    let multiplier = if cols.is_interaction == F::ONE {
+                    let multiplier = if cols.group_idx == F::ZERO {
                         let mut mult =
                             EF::from_basis_coefficients_slice(&cols.eq_sharp_ns).unwrap();
                         if cols.n_sign == F::ONE && cols.idx.as_canonical_u32() % 2 == 0 {
@@ -153,13 +157,6 @@ impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
 
             cur_height += claims.len();
         }
-        trace[cur_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut ExpressionClaimCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-            });
         Some(RowMajorMatrix::new(trace, width))
     }
 }
