@@ -7,8 +7,8 @@ use openvm_circuit::{
 };
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{
-    data_transporter::transport_air_proving_ctx_to_device, BabyBearBn254Poseidon2HashScheme,
-    GenericGpuBackend,
+    data_transporter::transport_air_proving_ctx_to_device, BabyBearBn254Poseidon2GpuEngine,
+    BabyBearBn254Poseidon2HashScheme,
 };
 use openvm_stark_backend::{
     proof::Proof,
@@ -113,7 +113,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceG
 }
 
 #[cfg(feature = "cuda")]
-impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootTraceGenImpl {
+impl RootTraceGen<BabyBearBn254Poseidon2GpuEngine> for RootTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -124,7 +124,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
     ) -> (
-        Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
+        Vec<AirProvingContext<BabyBearBn254Poseidon2GpuEngine>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (cpu_ctxs, inputs) =
@@ -142,7 +142,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> (
-        Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
+        Vec<AirProvingContext<BabyBearBn254Poseidon2GpuEngine>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (cpu_ctxs, inputs) =
