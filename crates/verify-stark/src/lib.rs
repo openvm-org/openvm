@@ -131,26 +131,48 @@ pub fn verify_vm_stark_proof_decoded(
     }
 
     // Check app_dag_commit against expected_commits.
-    if app_dag_commit != vk.baseline.app_dag_commit {
-        return Err(VerifyStarkError::AppDagCommitMismatch {
-            expected: vk.baseline.app_dag_commit,
-            actual: app_dag_commit,
+    if app_dag_commit.cached_commit != vk.baseline.app_dag_commit.cached_commit {
+        return Err(VerifyStarkError::AppDagCachedCommitMismatch {
+            expected: vk.baseline.app_dag_commit.cached_commit,
+            actual: app_dag_commit.cached_commit,
+        });
+    }
+    if app_dag_commit.vk_pre_hash != vk.baseline.app_dag_commit.vk_pre_hash {
+        return Err(VerifyStarkError::AppDagPreHashMismatch {
+            expected: vk.baseline.app_dag_commit.vk_pre_hash,
+            actual: app_dag_commit.vk_pre_hash,
         });
     }
 
     // Check leaf_dag_commit against expected_commits.
-    if leaf_dag_commit != vk.baseline.leaf_dag_commit {
-        return Err(VerifyStarkError::LeafDagCommitMismatch {
-            expected: vk.baseline.leaf_dag_commit,
-            actual: leaf_dag_commit,
+    if leaf_dag_commit.cached_commit != vk.baseline.leaf_dag_commit.cached_commit {
+        return Err(VerifyStarkError::LeafDagCachedCommitMismatch {
+            expected: vk.baseline.leaf_dag_commit.cached_commit,
+            actual: leaf_dag_commit.cached_commit,
+        });
+    }
+    if leaf_dag_commit.vk_pre_hash != vk.baseline.leaf_dag_commit.vk_pre_hash {
+        return Err(VerifyStarkError::LeafDagPreHashMismatch {
+            expected: vk.baseline.leaf_dag_commit.vk_pre_hash,
+            actual: leaf_dag_commit.vk_pre_hash,
         });
     }
 
     // Check internal_for_leaf_dag_commit against expected_commits.
-    if internal_for_leaf_dag_commit != vk.baseline.internal_for_leaf_dag_commit {
-        return Err(VerifyStarkError::InternalForLeafDagCommitMismatch {
-            expected: vk.baseline.internal_for_leaf_dag_commit,
-            actual: internal_for_leaf_dag_commit,
+    if internal_for_leaf_dag_commit.cached_commit
+        != vk.baseline.internal_for_leaf_dag_commit.cached_commit
+    {
+        return Err(VerifyStarkError::InternalForLeafDagCachedCommitMismatch {
+            expected: vk.baseline.internal_for_leaf_dag_commit.cached_commit,
+            actual: internal_for_leaf_dag_commit.cached_commit,
+        });
+    }
+    if internal_for_leaf_dag_commit.vk_pre_hash
+        != vk.baseline.internal_for_leaf_dag_commit.vk_pre_hash
+    {
+        return Err(VerifyStarkError::InternalForLeafDagPreHashMismatch {
+            expected: vk.baseline.internal_for_leaf_dag_commit.vk_pre_hash,
+            actual: internal_for_leaf_dag_commit.vk_pre_hash,
         });
     }
 
@@ -161,10 +183,20 @@ pub fn verify_vm_stark_proof_decoded(
     }
 
     // Check internal_recursive_dag_commit against expected_commits.
-    if internal_recursive_dag_commit != vk.baseline.internal_recursive_dag_commit {
-        return Err(VerifyStarkError::InternalRecursiveDagCommitMismatch {
-            expected: vk.baseline.internal_recursive_dag_commit,
-            actual: internal_recursive_dag_commit,
+    if internal_recursive_dag_commit.cached_commit
+        != vk.baseline.internal_recursive_dag_commit.cached_commit
+    {
+        return Err(VerifyStarkError::InternalRecursiveDagCachedCommitMismatch {
+            expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
+            actual: internal_recursive_dag_commit.cached_commit,
+        });
+    }
+    if internal_recursive_dag_commit.vk_pre_hash
+        != vk.baseline.internal_recursive_dag_commit.vk_pre_hash
+    {
+        return Err(VerifyStarkError::InternalRecursiveDagPreHashMismatch {
+            expected: vk.baseline.internal_recursive_dag_commit.vk_pre_hash,
+            actual: internal_recursive_dag_commit.vk_pre_hash,
         });
     }
 

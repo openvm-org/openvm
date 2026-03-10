@@ -12,7 +12,9 @@ use recursion_circuit::bus::{
 
 use crate::utils::digests_to_poseidon2_input;
 
-/// SubAir to hash several digests
+/// SubAir to hash N digest-sized elements into a single digest using a chain of Poseidon2
+/// operations: N−1 permutations followed by 1 compression. Each step absorbs one element
+/// into the capacity portion of the running state.
 #[derive(Clone, Debug, derive_new::new)]
 pub struct HashSliceSubAir {
     pub compress_bus: Poseidon2CompressBus,

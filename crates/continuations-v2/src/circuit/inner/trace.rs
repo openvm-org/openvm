@@ -8,7 +8,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use verify_stark::pvs::{DagCommit, DeferralPvs};
 
-use crate::circuit::SubCircuitTraceData;
+use crate::circuit::{SingleAirTraceData, SubCircuitTraceData};
 
 #[derive(Copy, Clone)]
 pub enum ProofsType {
@@ -54,14 +54,17 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         child_is_app: bool,
         child_dag_commit: DagCommit<F>,
     ) -> SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> {
-        let (verifier_pvs_ctx, mut poseidon2_compress_inputs, poseidon2_permute_inputs) =
-            super::verifier::generate_proving_ctx(
-                proofs,
-                proofs_type,
-                child_is_app,
-                child_dag_commit,
-                self.deferral_enabled,
-            );
+        let SingleAirTraceData {
+            air_proving_ctx: verifier_pvs_ctx,
+            mut poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
+        } = super::verifier::generate_proving_ctx(
+            proofs,
+            proofs_type,
+            child_is_app,
+            child_dag_commit,
+            self.deferral_enabled,
+        );
         let vm_pvs_ctx = super::vm_pvs::generate_proving_ctx(
             proofs,
             proofs_type,

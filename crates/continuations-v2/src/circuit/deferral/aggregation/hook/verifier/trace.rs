@@ -1,6 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
@@ -19,10 +18,16 @@ use crate::{
             DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
         },
         subair::hash_slice_trace,
+        SingleAirTraceData,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
     SC,
 };
+
+pub struct DeferralHookVerifierTraceCtx {
+    pub trace_data: SingleAirTraceData<CpuBackend<BabyBearPoseidon2Config>>,
+    pub def_vk_commit: [F; DIGEST_SIZE],
+}
 
 pub fn def_vk_commit_from_verifier_pvs(verifier_pvs: &VerifierBasePvs<F>) -> [F; DIGEST_SIZE] {
     let hash_elements = [
@@ -40,12 +45,7 @@ pub fn generate_proving_ctx(
     proof: &Proof<SC>,
     input_onion: [F; DIGEST_SIZE],
     output_onion: [F; DIGEST_SIZE],
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-    [F; DIGEST_SIZE],
-) {
+) -> DeferralHookVerifierTraceCtx {
     let verifier_pvs: &VerifierBasePvs<F> = proof.public_values[DEF_AGG_VERIFIER_AIR_ID]
         .as_slice()
         .borrow();
@@ -106,14 +106,16 @@ pub fn generate_proving_ctx(
         digests_to_poseidon2_input(input_onion_padded, output_onion_padded),
     ]);
 
-    (
-        AirProvingContext {
-            cached_mains: vec![],
-            common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
-            public_values,
+    DeferralHookVerifierTraceCtx {
+        trace_data: SingleAirTraceData {
+            air_proving_ctx: AirProvingContext {
+                cached_mains: vec![],
+                common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+                public_values,
+            },
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
         },
-        poseidon2_compress_inputs,
-        poseidon2_permute_inputs,
         def_vk_commit,
-    )
+    }
 }

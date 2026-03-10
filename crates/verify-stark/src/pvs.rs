@@ -11,7 +11,7 @@ pub const CONSTRAINT_EVAL_AIR_ID: usize = 3;
 #[derive(AlignedBorrow, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct DagCommit<F> {
     /// Cached trace commit of this verifier circuit's SymbolicExpressionAir, which is derived
-    /// from the its child_vk.
+    /// from its child_vk.
     pub cached_commit: [F; DIGEST_SIZE],
     /// Field pre_hash of the child MultiStarkVerifyingKey.
     pub vk_pre_hash: [F; DIGEST_SIZE],
@@ -57,9 +57,9 @@ pub struct VerifierDefPvs<F> {
     /// Ternary flag to indicate which public values this Proof contains. Should be 0 if it
     /// has only VM public values defined, 1 if only deferral public values, and 2 if both.
     pub deferral_flag: F,
-    /// Commit to the deferral hook verifying key, computed by compressing together the app,
-    /// leaf, and internal-for-leaf DAG commits when deferral_flag == 1. Is set exactly when
-    /// internal_for_leaf_dag_commit is set.
+    /// Commit to the deferral hook verifying key, computed by hashing the cached_commit and
+    /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits when
+    /// deferral_flag == 1. Is set exactly when internal_for_leaf_dag_commit is set.
     pub def_hook_vk_commit: [F; DIGEST_SIZE],
 }
 

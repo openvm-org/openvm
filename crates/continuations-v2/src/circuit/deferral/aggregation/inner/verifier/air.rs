@@ -334,7 +334,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             is_internal_flag_zero.clone() * def_dag_commit.vk_pre_hash[i].into()
                 + is_internal_flag_one.clone() * leaf_dag_commit.vk_pre_hash[i].into()
                 + is_recursion_flag_one.clone() * internal_for_leaf_dag_commit.vk_pre_hash[i].into()
-                + is_recursion_flag_two.clone() * internal_recursive_dag_commit.vk_pre_hash[i].into()
+                + is_recursion_flag_two.clone()
+                    * internal_recursive_dag_commit.vk_pre_hash[i].into()
         });
 
         self.pre_hash_bus.receive(

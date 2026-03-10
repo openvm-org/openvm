@@ -11,7 +11,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIG
 use p3_field::PrimeCharacteristicRing;
 use verify_stark::pvs::VerifierBasePvs;
 
-use crate::SC;
+use crate::{circuit::SingleAirTraceData, SC};
 
 pub type DeferralIoCommit<F> = ([F; DIGEST_SIZE], [F; DIGEST_SIZE]);
 
@@ -84,8 +84,15 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookT
             output_onion,
         } = super::onion::generate_proving_ctx(def_vk_commit, io_commits);
 
-        let (verifier_pvs_ctx, verifier_p2_compress_inputs, verifier_p2_permute_inputs, _) =
-            super::verifier::generate_proving_ctx(proof, input_onion, output_onion);
+        let super::verifier::DeferralHookVerifierTraceCtx {
+            trace_data:
+                SingleAirTraceData {
+                    air_proving_ctx: verifier_pvs_ctx,
+                    poseidon2_compress_inputs: verifier_p2_compress_inputs,
+                    poseidon2_permute_inputs: verifier_p2_permute_inputs,
+                },
+            ..
+        } = super::verifier::generate_proving_ctx(proof, input_onion, output_onion);
 
         DeferralHookPreCtx {
             verifier_pvs_ctx,

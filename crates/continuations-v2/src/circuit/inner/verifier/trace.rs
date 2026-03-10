@@ -16,6 +16,7 @@ use crate::circuit::{
         ProofsType,
     },
     subair::hash_slice_trace,
+    SingleAirTraceData,
 };
 
 #[derive(Copy, Clone)]
@@ -32,11 +33,7 @@ pub fn generate_proving_ctx(
     child_is_app: bool,
     child_dag_commit: DagCommit<F>,
     deferral_enabled: bool,
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-) {
+) -> SingleAirTraceData<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
     debug_assert!(num_proofs > 0);
 
@@ -207,13 +204,13 @@ pub fn generate_proving_ctx(
         base_pvs.to_vec()
     };
 
-    (
-        AirProvingContext {
+    SingleAirTraceData {
+        air_proving_ctx: AirProvingContext {
             cached_mains: vec![],
             common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
             public_values,
         },
         poseidon2_compress_inputs,
         poseidon2_permute_inputs,
-    )
+    }
 }

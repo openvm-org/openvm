@@ -233,8 +233,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * We need to verify the commits to the app executable and vk. The app_vk_commit is
-         * constrained to be the hashed combination of the child's app, leaf, and internal-
-         * for-leaf DAG commits.
+         * constrained to be hash_slice of the 6 vk_commit_components (cached_commit and
+         * vk_pre_hash for each of the child's app, leaf, and internal-for-leaf DAG commits).
          */
         let vk_commit_components: Vec<_> = vk_commit_components(&local.child_verifier_pvs)
             .into_iter()

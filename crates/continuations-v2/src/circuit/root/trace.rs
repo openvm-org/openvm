@@ -22,7 +22,7 @@ use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use crate::circuit::{
     deferral::verify::DeferralMerkleProofs,
     root::{commit, memory},
-    SubCircuitTraceData,
+    SingleAirTraceData, SubCircuitTraceData,
 };
 
 // Trait that root provers use to remain generic in PB. Tracegen returns the AIR proving
@@ -58,8 +58,11 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceG
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
     ) -> SubCircuitTraceData<CpuBackend<SC>> {
-        let (verifier_ctx, verifier_compress_inputs, verifier_permute_inputs) =
-            super::verifier::generate_proving_ctx(proof, self.deferral_enabled);
+        let SingleAirTraceData {
+            air_proving_ctx: verifier_ctx,
+            poseidon2_compress_inputs: verifier_compress_inputs,
+            poseidon2_permute_inputs: verifier_permute_inputs,
+        } = super::verifier::generate_proving_ctx(proof, self.deferral_enabled);
         let (commit_ctx, commit_inputs) =
             commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
         let (memory_ctx, memory_inputs) = memory::generate_proving_input(

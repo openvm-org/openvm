@@ -1,6 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_poseidon2_air::Permutation;
 use openvm_stark_backend::{
     proof::Proof,
@@ -24,6 +23,7 @@ use crate::{
             RootVerifierPvs,
         },
         subair::hash_slice_trace,
+        SingleAirTraceData,
     },
     utils::pad_slice_to_poseidon2_input,
 };
@@ -31,11 +31,7 @@ use crate::{
 pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     proof: &Proof<BabyBearPoseidon2Config>,
     deferral_enabled: bool,
-) -> (
-    AirProvingContext<CpuBackend<SC>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-) {
+) -> SingleAirTraceData<CpuBackend<SC>> {
     let base_width = RootVerifierPvsCols::<u8>::width();
     let def_width = RootDefVerifierCols::<u8>::width();
     let width = base_width + if deferral_enabled { def_width } else { 0 };
@@ -121,13 +117,13 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         def_cols.child_def_pvs = *def_pvs;
     }
 
-    (
-        AirProvingContext {
+    SingleAirTraceData {
+        air_proving_ctx: AirProvingContext {
             cached_mains: vec![],
             common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
             public_values,
         },
         poseidon2_compress_inputs,
         poseidon2_permute_inputs,
-    )
+    }
 }

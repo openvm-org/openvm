@@ -196,13 +196,13 @@ impl<
     pub fn get_dag_commit(&self, is_self_recursive: bool) -> DagCommit<PB::Val> {
         if is_self_recursive {
             DagCommit {
-                cached_commit: self.self_vk_pcs_data.as_ref().unwrap().commitment.into(),
-                vk_pre_hash: self.vk.pre_hash.into(),
+                cached_commit: self.self_vk_pcs_data.as_ref().unwrap().commitment,
+                vk_pre_hash: self.vk.pre_hash,
             }
         } else {
             DagCommit {
-                cached_commit: self.child_vk_pcs_data.commitment.into(),
-                vk_pre_hash: self.child_vk.pre_hash.into(),
+                cached_commit: self.child_vk_pcs_data.commitment,
+                vk_pre_hash: self.child_vk.pre_hash,
             }
         }
     }

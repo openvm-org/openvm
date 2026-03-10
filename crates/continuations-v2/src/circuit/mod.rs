@@ -20,6 +20,12 @@ pub struct SubCircuitTraceData<PB: ProverBackend> {
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
 }
 
+pub struct SingleAirTraceData<PB: ProverBackend> {
+    pub air_proving_ctx: AirProvingContext<PB>,
+    pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+}
+
 // TODO: move to stark-backend-v2
 pub trait Circuit<SC: StarkProtocolConfig<F = F>> {
     fn airs(&self) -> Vec<AirRef<SC>>;

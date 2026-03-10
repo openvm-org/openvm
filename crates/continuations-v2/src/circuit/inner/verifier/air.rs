@@ -130,7 +130,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          *   - recursion_flag == 1: 2nd (i.e. index 1) internal_recursive layer
          *   - recursion_flag == 1: 3rd internal_recursive layer or beyond
          */
-        // constrain the verifier pvs flags and internal_recursive_dag_tommit are the same
+        // constrain the verifier pvs flags and internal_recursive_dag_commit are the same
         // across all valid rows
         let both_valid = and(local.is_valid, next.is_valid);
         let mut when_both_valid = builder.when(both_valid.clone());
@@ -512,14 +512,14 @@ impl VerifierPvsAir {
             .when_ne(def_local.child_pvs.deferral_flag, AB::F::ONE)
             .assert_eq(base_local.child_pvs.internal_flag, AB::F::TWO);
 
-        // constrain that def_hook_vk_commit is unset when internal_for_leaf_dag_commit is
+        // constrain that def_hook_vk_commit is unset when internal_flag < 2
         assert_zeros(
             &mut builder.when(base_local.child_pvs.internal_flag - AB::F::TWO),
             def_local.child_pvs.def_hook_vk_commit,
         );
 
         /*
-         * We need to receive dedeferral-specific public values from ProofShapeModule to
+         * We need to receive deferral-specific public values from ProofShapeModule to
          * ensure the values being read are correct.
          */
         let verifier_pvs_id = AB::Expr::from_usize(VERIFIER_PVS_AIR_ID);
@@ -585,8 +585,8 @@ impl VerifierPvsAir {
             def_hook_vk_commit,
         );
 
-        // constrain def_hook_vk_commit's value when internal_dag is 2 and deferral_flag
-        // is 1
+        // constrain def_hook_vk_commit = hash_slice(vk_commit_components) when
+        // internal_flag is 2 and deferral_flag is 1
         let compute_def_hook_commit = internal_flag.into()
             * (internal_flag.into() - AB::Expr::ONE)
             * deferral_flag.into()

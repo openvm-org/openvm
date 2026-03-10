@@ -101,7 +101,7 @@ pub struct RootVerifierPvs<F> {
     /// the starting app memory state (i.e. initial_root), and the initial app program counter
     /// (i.e. initial_pc).
     pub app_exe_commit: [F; DIGEST_SIZE],
-    /// Commit to the app-level verifying key, computed by compressing together the app, leaf,
-    /// and internal-for-leaf DAG commits.
+    /// Commit to the app-level verifying key, computed by hashing the cached_commit and
+    /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits.
     pub app_vk_commit: [F; DIGEST_SIZE],
 }

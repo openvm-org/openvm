@@ -68,6 +68,7 @@ pub struct DeferralHookPvsAir {
 }
 
 impl DeferralHookPvsAir {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         public_values_bus: PublicValuesBus,
         cached_commit_bus: CachedCommitBus,
@@ -208,8 +209,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Commit def_vk_commit should be the compression of def_dag_commit (which is called
-         * app_dag_commit in the struct), leaf_dag_commit, and internal_for_leaf_dag_commit.
+         * Commit def_vk_commit is hash_slice of the 6 vk_commit_components (cached_commit and
+         * vk_pre_hash for each of def_dag_commit (called app_dag_commit in the struct),
+         * leaf_dag_commit, and internal_for_leaf_dag_commit).
          * We constrain this here and send def_vk_commit to its bus.
          */
         let vk_commit_components: Vec<_> = vk_commit_components(&local.verifier_pvs)
