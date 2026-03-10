@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - develop-v2.0.0-beta
 
 permissions:
   contents: write
@@ -39,7 +40,7 @@ jobs:
       - name: Rebase Feature Branches
         run: |
           # List of feature branches to maintain
-          FEATURE_BRANCHES=("develop-v2.0.0-beta")
+          FEATURE_BRANCHES=("develop-v2.0.0-rc.1")
 
           FAILED_BRANCHES=()
           SUCCEEDED_BRANCHES=()
