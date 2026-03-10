@@ -19,7 +19,8 @@ pub struct DeferralHookPreCtx<PB: ProverBackend> {
     pub verifier_pvs_ctx: AirProvingContext<PB>,
     pub decommit_ctx: AirProvingContext<PB>,
     pub onion_ctx: AirProvingContext<PB>,
-    pub poseidon2_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
 }
 
 // Trait used to remain generic in PB.
@@ -74,7 +75,7 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookT
         );
 
         let verifier_pvs: &VerifierBasePvs<F> = proof.public_values[0].as_slice().borrow();
-        let (_, def_vk_commit) = super::verifier::def_vk_commit_from_verifier_pvs(verifier_pvs);
+        let def_vk_commit = super::verifier::def_vk_commit_from_verifier_pvs(verifier_pvs);
 
         let super::onion::OnionTraceCtx {
             proving_ctx: onion_ctx,
@@ -83,18 +84,19 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookT
             output_onion,
         } = super::onion::generate_proving_ctx(def_vk_commit, io_commits);
 
-        let (verifier_pvs_ctx, verifier_p2_inputs, _) =
+        let (verifier_pvs_ctx, verifier_p2_compress_inputs, verifier_p2_permute_inputs, _) =
             super::verifier::generate_proving_ctx(proof, input_onion, output_onion);
 
         DeferralHookPreCtx {
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,
-            poseidon2_inputs: verifier_p2_inputs
+            poseidon2_compress_inputs: verifier_p2_compress_inputs
                 .into_iter()
                 .chain(decommit_p2_inputs)
                 .chain(onion_p2_inputs)
                 .collect(),
+            poseidon2_permute_inputs: verifier_p2_permute_inputs,
         }
     }
 }
@@ -114,14 +116,16 @@ impl DeferralHookTraceGen<GpuBackend> for DeferralHookTraceGenImpl {
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,
-            poseidon2_inputs,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
         } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children);
 
         DeferralHookPreCtx {
             verifier_pvs_ctx: transport_air_proving_ctx_to_device(verifier_pvs_ctx),
             decommit_ctx: transport_air_proving_ctx_to_device(decommit_ctx),
             onion_ctx: transport_air_proving_ctx_to_device(onion_ctx),
-            poseidon2_inputs,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
         }
     }
 }

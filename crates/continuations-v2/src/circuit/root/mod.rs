@@ -8,9 +8,10 @@ use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bn254::CommitBytes,
+    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         root::bus::{DeferralAccPathBus, DeferralMerkleRootsBus},
+        subair::HashSliceSubAir,
         Circuit,
     },
 };
@@ -24,10 +25,12 @@ pub mod verifier;
 mod trace;
 pub use trace::*;
 
+pub(crate) const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
+
 #[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub(crate) internal_recursive_dag_commit: CommitBytes,
+    pub(crate) internal_recursive_dag_commit: DagCommitBytes,
     pub(crate) def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
@@ -47,10 +50,15 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
         let verifier_pvs_air = verifier::RootVerifierPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
+            pre_hash_bus: bus_inventory.pre_hash_bus,
             poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
             memory_merkle_commit_bus,
             def_acc_paths_bus,
             def_merkle_roots_bus: memory_merkle_roots_bus,
+            hash_slice_subair: HashSliceSubAir {
+                compress_bus: bus_inventory.poseidon2_compress_bus,
+                permute_bus: bus_inventory.poseidon2_permute_bus,
+            },
             expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
             expected_def_hook_commit: self.def_hook_commit,
         };

@@ -30,6 +30,8 @@ pub mod error;
 pub mod pvs;
 pub mod vk;
 
+pub(crate) type DagCommit = pvs::DagCommit<F>;
+
 // Final internal recursive STARK proof to be verified against the baseline
 #[derive(Clone, Debug)]
 pub struct NonRootStarkProof {

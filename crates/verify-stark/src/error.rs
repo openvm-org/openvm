@@ -3,6 +3,8 @@ use openvm_stark_backend::verifier::VerifierError;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use thiserror::Error;
 
+use crate::DagCommit;
+
 #[derive(Error, Debug)]
 pub enum VerifyStarkError {
     #[error("Stark verifier failed with error: {0}")]
@@ -12,13 +14,25 @@ pub enum VerifyStarkError {
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
     AppExeCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app DAG commit: expected {expected:?}, actual {actual:?}")]
-    AppDagCommitMismatch { expected: Digest, actual: Digest },
+    AppDagCommitMismatch {
+        expected: DagCommit,
+        actual: DagCommit,
+    },
     #[error("Invalid leaf DAG commit: expected {expected:?}, actual {actual:?}")]
-    LeafDagCommitMismatch { expected: Digest, actual: Digest },
+    LeafDagCommitMismatch {
+        expected: DagCommit,
+        actual: DagCommit,
+    },
     #[error("Invalid internal for leaf DAG commit: expected {expected:?}, actual {actual:?}")]
-    InternalForLeafDagCommitMismatch { expected: Digest, actual: Digest },
+    InternalForLeafDagCommitMismatch {
+        expected: DagCommit,
+        actual: DagCommit,
+    },
     #[error("Invalid internal recursive DAG commit: expected {expected:?}, actual {actual:?}")]
-    InternalRecursiveDagCommitMismatch { expected: Digest, actual: Digest },
+    InternalRecursiveDagCommitMismatch {
+        expected: DagCommit,
+        actual: DagCommit,
+    },
     #[error("Invalid compression commit: expected {expected:?}, actual {actual:?}")]
     CompressionCommitMismatch { expected: Vec<F>, actual: Vec<F> },
     #[error("Compression commit should not be defined if not enabled, actual {actual:?}")]

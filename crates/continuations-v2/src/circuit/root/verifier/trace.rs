@@ -18,17 +18,24 @@ use verify_stark::pvs::{
 };
 
 use crate::{
-    circuit::root::{
-        verifier::air::{RootDefVerifierCols, RootVerifierPvsCols},
-        RootVerifierPvs,
+    circuit::{
+        root::{
+            verifier::air::{RootDefVerifierCols, RootVerifierPvsCols},
+            RootVerifierPvs,
+        },
+        subair::hash_slice_trace,
     },
-    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
+    utils::pad_slice_to_poseidon2_input,
 };
 
 pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     proof: &Proof<BabyBearPoseidon2Config>,
     deferral_enabled: bool,
-) -> (AirProvingContext<CpuBackend<SC>>, Vec<[F; POSEIDON2_WIDTH]>) {
+) -> (
+    AirProvingContext<CpuBackend<SC>>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let base_width = RootVerifierPvsCols::<u8>::width();
     let def_width = RootDefVerifierCols::<u8>::width();
     let width = base_width + if deferral_enabled { def_width } else { 0 };
@@ -62,6 +69,8 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         .unwrap();
 
     let mut poseidon2_compress_inputs = Vec::with_capacity(5);
+    let mut poseidon2_permute_inputs = Vec::new();
+
     poseidon2_compress_inputs.extend_from_slice(&[
         padded_program_commit,
         padded_initial_root,
@@ -70,40 +79,39 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
 
     cols.intermediate_exe_commit =
         poseidon2_compress_with_capacity(cols.program_commit_hash, cols.initial_root_hash).0;
-    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+    poseidon2_compress_inputs.push(crate::utils::digests_to_poseidon2_input(
         cols.program_commit_hash,
         cols.initial_root_hash,
     ));
 
-    cols.intermediate_vk_commit = poseidon2_compress_with_capacity(
-        child_verifier_pvs.app_dag_commit,
-        child_verifier_pvs.leaf_dag_commit,
-    )
-    .0;
-    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
-        child_verifier_pvs.app_dag_commit,
-        child_verifier_pvs.leaf_dag_commit,
-    ));
+    let vk_elements = [
+        child_verifier_pvs.app_dag_commit.cached_commit,
+        child_verifier_pvs.app_dag_commit.vk_pre_hash,
+        child_verifier_pvs.leaf_dag_commit.cached_commit,
+        child_verifier_pvs.leaf_dag_commit.vk_pre_hash,
+        child_verifier_pvs
+            .internal_for_leaf_dag_commit
+            .cached_commit,
+        child_verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+    ];
+    let (intermediate_vk_states, app_vk_commit) = hash_slice_trace(
+        &vk_elements,
+        Some(&mut poseidon2_permute_inputs),
+        Some(&mut poseidon2_compress_inputs),
+    );
+    cols.intermediate_vk_states = intermediate_vk_states.try_into().unwrap();
 
     let mut public_values = vec![F::ZERO; RootVerifierPvs::<u8>::width()];
     let root_pvs: &mut RootVerifierPvs<F> = public_values.as_mut_slice().borrow_mut();
 
     root_pvs.app_exe_commit =
         poseidon2_compress_with_capacity(cols.intermediate_exe_commit, cols.initial_pc_hash).0;
-    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+    poseidon2_compress_inputs.push(crate::utils::digests_to_poseidon2_input(
         cols.intermediate_exe_commit,
         cols.initial_pc_hash,
     ));
 
-    root_pvs.app_vk_commit = poseidon2_compress_with_capacity(
-        cols.intermediate_vk_commit,
-        child_verifier_pvs.internal_for_leaf_dag_commit,
-    )
-    .0;
-    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
-        cols.intermediate_vk_commit,
-        child_verifier_pvs.internal_for_leaf_dag_commit,
-    ));
+    root_pvs.app_vk_commit = app_vk_commit;
 
     if deferral_enabled {
         let def_verifier_pvs: &VerifierDefPvs<F> = def_pvs_slice.borrow();
@@ -120,5 +128,6 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
             public_values,
         },
         poseidon2_compress_inputs,
+        poseidon2_permute_inputs,
     )
 }

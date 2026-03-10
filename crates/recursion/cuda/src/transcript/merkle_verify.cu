@@ -119,8 +119,6 @@ __global__ void cukernel_merkle_verify_tracegen(
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, proof_idx, Fp(static_cast<uint32_t>(record.proof_idx))
         );
-        bool proof_start =
-            record.proof_idx < num_proofs && global_row == proof_row_starts[record.proof_idx];
         COL_WRITE_VALUE(row, MerkleVerifyCols, is_valid, Fp::one());
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, is_last_merkle, bool_to_fp(local_row + 1 == record.num_rows)

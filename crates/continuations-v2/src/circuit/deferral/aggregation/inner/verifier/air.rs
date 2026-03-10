@@ -1,21 +1,22 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::utils::{and, assert_array_eq, not};
+use openvm_circuit_primitives::utils::{and, not};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use recursion_circuit::{
-    bus::{CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage},
-    utils::assert_zeros,
+use recursion_circuit::bus::{
+    CachedCommitBus, CachedCommitBusMessage, PreHashBus, PreHashMessage, PublicValuesBus,
+    PublicValuesBusMessage,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{VerifierBasePvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 
 use crate::circuit::{
     deferral::aggregation::inner::bus::{DefPvsConsistencyBus, DefPvsConsistencyMessage},
+    utils::{assert_dag_commit_eq, assert_dag_commit_unset},
     CONSTRAINT_EVAL_CACHED_INDEX,
 };
 
@@ -38,6 +39,7 @@ pub enum DeferralChildLevel {
 pub struct DeferralVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
+    pub pre_hash_bus: PreHashBus,
     pub def_pvs_consistency_bus: DefPvsConsistencyBus,
 }
 
@@ -106,22 +108,22 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             local.child_pvs.recursion_flag,
             next.child_pvs.recursion_flag,
         );
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut when_both,
             local.child_pvs.app_dag_commit,
             next.child_pvs.app_dag_commit,
         );
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut when_both,
             local.child_pvs.leaf_dag_commit,
             next.child_pvs.leaf_dag_commit,
         );
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut when_both,
             local.child_pvs.internal_for_leaf_dag_commit,
             next.child_pvs.internal_for_leaf_dag_commit,
         );
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut when_both,
             local.child_pvs.internal_recursive_dag_commit,
             next.child_pvs.internal_recursive_dag_commit,
@@ -147,22 +149,22 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .when(is_leaf.clone())
             .assert_zero(local.child_pvs.internal_flag);
 
-        assert_zeros(
+        assert_dag_commit_unset(
             &mut builder.when(is_leaf.clone()),
             local.child_pvs.app_dag_commit,
         );
-        assert_zeros(
+        assert_dag_commit_unset(
             &mut builder.when(
                 (local.child_pvs.internal_flag - AB::F::ONE)
                     * (local.child_pvs.internal_flag - AB::F::TWO),
             ),
             local.child_pvs.leaf_dag_commit,
         );
-        assert_zeros(
+        assert_dag_commit_unset(
             &mut builder.when(local.child_pvs.internal_flag - AB::F::TWO),
             local.child_pvs.internal_for_leaf_dag_commit,
         );
-        assert_zeros(
+        assert_dag_commit_unset(
             &mut builder.when(local.child_pvs.recursion_flag - AB::F::TWO),
             local.child_pvs.internal_recursive_dag_commit,
         );
@@ -236,7 +238,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .assert_eq(internal_flag, local.child_pvs.internal_flag + AB::F::ONE);
 
         // constrain def_dag_commit is set at all internal levels
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut builder.when(is_internal),
             local.child_pvs.app_dag_commit,
             def_dag_commit,
@@ -246,7 +248,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         builder
             .when(local.child_pvs.internal_flag)
             .assert_zero(internal_flag.into() - AB::F::TWO);
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut builder.when(local.child_pvs.internal_flag),
             local.child_pvs.leaf_dag_commit,
             leaf_dag_commit,
@@ -261,14 +263,14 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         builder
             .when(local.child_pvs.recursion_flag)
             .assert_eq(recursion_flag, AB::F::TWO);
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut builder.when(local.child_pvs.recursion_flag),
             local.child_pvs.internal_for_leaf_dag_commit,
             internal_for_leaf_dag_commit,
         );
 
         // constrain verifier-specific pvs at internal_recursive levels after the second
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut builder.when(
                 local.child_pvs.recursion_flag * (local.child_pvs.recursion_flag - AB::F::ONE),
             ),
@@ -292,10 +294,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             * local.child_pvs.recursion_flag
             * AB::F::TWO.inverse();
         let cached_commit = from_fn(|i| {
-            is_internal_flag_zero.clone() * local.child_pvs.app_dag_commit[i]
-                + is_internal_flag_one.clone() * local.child_pvs.leaf_dag_commit[i]
-                + is_recursion_flag_one.clone() * local.child_pvs.internal_for_leaf_dag_commit[i]
-                + is_recursion_flag_two.clone() * local.child_pvs.internal_recursive_dag_commit[i]
+            is_internal_flag_zero.clone() * local.child_pvs.app_dag_commit.cached_commit[i]
+                + is_internal_flag_one.clone() * local.child_pvs.leaf_dag_commit.cached_commit[i]
+                + is_recursion_flag_one.clone()
+                    * local.child_pvs.internal_for_leaf_dag_commit.cached_commit[i]
+                + is_recursion_flag_two.clone()
+                    * local.child_pvs.internal_recursive_dag_commit.cached_commit[i]
         });
 
         self.cached_commit_bus.receive(
@@ -307,6 +311,37 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 cached_commit,
             },
             local.is_valid * is_internal,
+        );
+
+        /*
+         * Unlike the cached commits, we receive the pre-hash on the same layer that it's
+         * observed. We receive it from ProofShapeModule also.
+         */
+        let half = AB::F::TWO.inverse();
+        let internal_flag = internal_flag.into();
+        let recursion_flag = recursion_flag.into();
+
+        let is_internal_flag_zero = (internal_flag.clone() - AB::Expr::ONE)
+            * (internal_flag.clone() - AB::Expr::TWO)
+            * half;
+        let is_internal_flag_one = (AB::Expr::TWO - internal_flag.clone()) * internal_flag.clone();
+        let is_recursion_flag_one =
+            (AB::Expr::TWO - recursion_flag.clone()) * recursion_flag.clone();
+        let is_recursion_flag_two =
+            (recursion_flag.clone() - AB::Expr::ONE) * recursion_flag.clone() * half;
+
+        let vk_pre_hash = from_fn(|i| {
+            is_internal_flag_zero.clone() * def_dag_commit.vk_pre_hash[i].into()
+                + is_internal_flag_one.clone() * leaf_dag_commit.vk_pre_hash[i].into()
+                + is_recursion_flag_one.clone() * internal_for_leaf_dag_commit.vk_pre_hash[i].into()
+                + is_recursion_flag_two.clone() * internal_recursive_dag_commit.vk_pre_hash[i].into()
+        });
+
+        self.pre_hash_bus.receive(
+            builder,
+            local.proof_idx,
+            PreHashMessage { vk_pre_hash },
+            local.is_valid,
         );
     }
 }

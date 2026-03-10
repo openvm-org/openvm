@@ -4,6 +4,7 @@ use num_bigint::BigUint;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use p3_bn254::Bn254;
 use p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField32};
+use verify_stark::pvs::DagCommit;
 
 pub const BN254_BYTES: usize = 32;
 
@@ -51,9 +52,9 @@ impl From<[Bn254; 1]> for CommitBytes {
     }
 }
 
-impl From<CommitBytes> for [u32; DIGEST_SIZE] {
+impl<F: PrimeCharacteristicRing> From<CommitBytes> for [F; DIGEST_SIZE] {
     fn from(value: CommitBytes) -> Self {
-        bytes_to_u32_digest(&value.0)
+        bytes_to_u32_digest(&value.0).map(F::from_u32)
     }
 }
 
@@ -114,4 +115,19 @@ fn bytes_to_u32_digest(bytes: &[u8; BN254_BYTES]) -> [u32; DIGEST_SIZE] {
 
 fn u32_digest_to_bytes(digest: &[u32; DIGEST_SIZE]) -> [u8; BN254_BYTES] {
     bn254_to_bytes(babybear_digest_to_bn254(&digest.map(F::from_u32)))
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct DagCommitBytes {
+    pub cached_commit: CommitBytes,
+    pub pre_hash: CommitBytes,
+}
+
+impl<F: PrimeCharacteristicRing> From<DagCommitBytes> for DagCommit<F> {
+    fn from(value: DagCommitBytes) -> Self {
+        DagCommit {
+            cached_commit: value.cached_commit.into(),
+            vk_pre_hash: value.pre_hash.into(),
+        }
+    }
 }

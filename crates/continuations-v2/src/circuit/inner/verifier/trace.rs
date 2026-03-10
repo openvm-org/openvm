@@ -5,19 +5,17 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{DagCommit, VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID};
 
-use crate::{
-    circuit::inner::{
+use crate::circuit::{
+    inner::{
         verifier::air::{VerifierCombinedPvs, VerifierDeferralCols, VerifierPvsCols},
         ProofsType,
     },
-    utils::digests_to_poseidon2_input,
+    subair::hash_slice_trace,
 };
 
 #[derive(Copy, Clone)]
@@ -32,10 +30,11 @@ pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
     proofs_type: ProofsType,
     child_is_app: bool,
-    child_dag_commit: [F; DIGEST_SIZE],
+    child_dag_commit: DagCommit<F>,
     deferral_enabled: bool,
 ) -> (
     AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    Vec<[F; POSEIDON2_WIDTH]>,
     Vec<[F; POSEIDON2_WIDTH]>,
 ) {
     let num_proofs = proofs.len();
@@ -46,13 +45,6 @@ pub fn generate_proving_ctx(
     }
 
     let mut child_level = VerifierChildLevel::App;
-    let mut intermediate_def_vk_commit = None;
-
-    let def_proof = match proofs_type {
-        ProofsType::Vm => None,
-        ProofsType::Deferral | ProofsType::Combined => Some(&proofs[0]),
-        ProofsType::Mix => Some(&proofs[1]),
-    };
 
     if !child_is_app {
         let proof = &proofs[0];
@@ -65,21 +57,6 @@ pub fn generate_proving_ctx(
             F::TWO => VerifierChildLevel::InternalRecursive,
             _ => unreachable!(),
         };
-        if matches!(
-            child_level,
-            VerifierChildLevel::InternalForLeaf | VerifierChildLevel::InternalRecursive
-        ) {
-            intermediate_def_vk_commit = def_proof.map(|p| {
-                let child_pvs: &VerifierBasePvs<F> = p.public_values[VERIFIER_PVS_AIR_ID]
-                    .as_slice()[0..VerifierBasePvs::<F>::width()]
-                    .borrow();
-                poseidon2_compress_with_capacity(
-                    child_pvs.app_dag_commit,
-                    child_pvs.leaf_dag_commit,
-                )
-                .0
-            });
-        }
     }
 
     let height = num_proofs.next_power_of_two();
@@ -93,7 +70,8 @@ pub fn generate_proving_ctx(
 
     let mut trace = vec![F::ZERO; height * width];
     let mut chunks = trace.chunks_exact_mut(width);
-    let mut poseidon2_inputs = vec![];
+    let mut poseidon2_compress_inputs = vec![];
+    let mut poseidon2_permute_inputs = vec![];
     let mut trailing_deferral_flag = F::ZERO;
 
     for (proof_idx, proof) in proofs.iter().enumerate() {
@@ -125,36 +103,6 @@ pub fn generate_proving_ctx(
                 let def_cols: &mut VerifierDeferralCols<_> = def_chunk.borrow_mut();
                 let def_pvs: &VerifierDefPvs<_> = def_pv_chunk.borrow();
                 def_cols.child_pvs = *def_pvs;
-                if let Some(commit) = intermediate_def_vk_commit {
-                    def_cols.intermediate_def_vk_commit = commit;
-
-                    if def_pvs.deferral_flag == F::ONE {
-                        let app_dag_commit = base_pvs.app_dag_commit;
-                        let leaf_dag_commit = base_pvs.leaf_dag_commit;
-
-                        let internal_for_leaf_dag_commit =
-                            if matches!(child_level, VerifierChildLevel::InternalRecursive) {
-                                let ret = base_pvs.internal_for_leaf_dag_commit;
-                                poseidon2_inputs.push(digests_to_poseidon2_input(
-                                    app_dag_commit,
-                                    leaf_dag_commit,
-                                ));
-                                poseidon2_inputs.push(digests_to_poseidon2_input(commit, ret));
-                                ret
-                            } else {
-                                child_dag_commit
-                            };
-
-                        if matches!(proofs_type, ProofsType::Deferral) {
-                            poseidon2_inputs
-                                .push(digests_to_poseidon2_input(app_dag_commit, leaf_dag_commit));
-                            poseidon2_inputs.push(digests_to_poseidon2_input(
-                                commit,
-                                internal_for_leaf_dag_commit,
-                            ));
-                        }
-                    }
-                }
                 trailing_deferral_flag = def_pvs.deferral_flag;
             }
         }
@@ -204,19 +152,50 @@ pub fn generate_proving_ctx(
         }
     };
 
+    let mut def_hook_vk_commit = None;
+    if deferral_enabled && deferral_flag_pv == F::ONE && base_pvs.internal_flag == F::TWO {
+        let hash_elements = [
+            base_pvs.app_dag_commit.cached_commit,
+            base_pvs.app_dag_commit.vk_pre_hash,
+            base_pvs.leaf_dag_commit.cached_commit,
+            base_pvs.leaf_dag_commit.vk_pre_hash,
+            base_pvs.internal_for_leaf_dag_commit.cached_commit,
+            base_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+        ];
+
+        let mut row_compress_inputs = vec![];
+        let mut row_permute_inputs = vec![];
+        let (intermediate_states_vec, computed_def_hook_vk_commit) = hash_slice_trace(
+            &hash_elements,
+            Some(&mut row_permute_inputs),
+            Some(&mut row_compress_inputs),
+        );
+        let intermediate_states: [[F; POSEIDON2_WIDTH]; 5] =
+            intermediate_states_vec.try_into().unwrap();
+
+        for chunk in trace.chunks_exact_mut(width) {
+            let (_, def_chunk) = chunk.split_at_mut(base_width);
+            let def_cols: &mut VerifierDeferralCols<_> = def_chunk.borrow_mut();
+            def_cols.intermediate_states = intermediate_states;
+        }
+
+        for &input in &row_compress_inputs {
+            poseidon2_compress_inputs.extend((0..height).map(|_| input));
+        }
+        for &input in &row_permute_inputs {
+            poseidon2_permute_inputs.extend((0..height).map(|_| input));
+        }
+        def_hook_vk_commit = Some(computed_def_hook_vk_commit);
+    }
+
     let public_values = if deferral_enabled {
         let last_row_def: &VerifierDeferralCols<F> =
             trace[(num_proofs - 1) * width + base_width..num_proofs * width].borrow();
         let mut def_pvs = last_row_def.child_pvs;
         def_pvs.deferral_flag = deferral_flag_pv;
 
-        if deferral_flag_pv == F::ONE && matches!(child_level, VerifierChildLevel::InternalForLeaf)
-        {
-            def_pvs.def_hook_vk_commit = poseidon2_compress_with_capacity(
-                intermediate_def_vk_commit.unwrap(),
-                base_pvs.internal_for_leaf_dag_commit,
-            )
-            .0;
+        if let Some(def_hook_vk_commit) = def_hook_vk_commit {
+            def_pvs.def_hook_vk_commit = def_hook_vk_commit;
         }
 
         let mut combined = vec![F::ZERO; VerifierCombinedPvs::<u8>::width()];
@@ -234,6 +213,7 @@ pub fn generate_proving_ctx(
             common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
             public_values,
         },
-        poseidon2_inputs,
+        poseidon2_compress_inputs,
+        poseidon2_permute_inputs,
     )
 }

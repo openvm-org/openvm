@@ -27,9 +27,9 @@ use crate::{
         EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
         FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         InteractionsFoldingInputBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus,
-        Poseidon2CompressBus, Poseidon2PermuteBus, PublicValuesBus, SelUniBus, StackingIndicesBus,
-        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirMuBus, WhirOpeningPointBus,
-        WhirOpeningPointLookupBus, XiRandomnessBus,
+        Poseidon2CompressBus, Poseidon2PermuteBus, PreHashBus, PublicValuesBus, SelUniBus,
+        StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus, WhirMuBus,
+        WhirOpeningPointBus, WhirOpeningPointLookupBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -75,6 +75,7 @@ impl Default for VerifierConfig {
 #[derive(Debug)]
 pub struct VerifierExternalData<'a> {
     pub poseidon2_compress_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
+    pub poseidon2_permute_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
     pub range_check_inputs: &'a Vec<usize>,
     pub required_heights: Option<&'a [usize]>,
     pub final_transcript_state: Option<&'a mut [F; POSEIDON2_WIDTH]>,
@@ -128,6 +129,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
 
         let mut external_data = VerifierExternalData {
             poseidon2_compress_inputs: &poseidon2_compress_inputs,
+            poseidon2_permute_inputs: &poseidon2_compress_inputs,
             range_check_inputs: &range_check_inputs,
             required_heights: None,
             final_transcript_state: None,
@@ -258,6 +260,7 @@ pub struct BusInventory {
 
     // Continuations buses
     pub cached_commit_bus: CachedCommitBus,
+    pub pre_hash_bus: PreHashBus,
     pub dag_commit_bus: DagCommitBus,
     pub final_state_bus: FinalTranscriptStateBus,
 }
@@ -393,6 +396,7 @@ impl BusInventory {
 
             // Continuation buses
             cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
+            pre_hash_bus: PreHashBus::new(b.new_bus_idx()),
             dag_commit_bus: DagCommitBus::new(b.new_bus_idx()),
             final_state_bus: FinalTranscriptStateBus::new(b.new_bus_idx()),
         }
@@ -478,7 +482,10 @@ impl<'a> TraceModuleRef<'a> {
                 child_vk,
                 proofs,
                 preflights,
-                external_data.poseidon2_compress_inputs,
+                &(
+                    external_data.poseidon2_permute_inputs,
+                    external_data.poseidon2_compress_inputs,
+                ),
                 required_heights,
             ),
             TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(
@@ -1172,7 +1179,10 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    external_data.poseidon2_compress_inputs,
+                    &(
+                        external_data.poseidon2_permute_inputs,
+                        external_data.poseidon2_compress_inputs,
+                    ),
                     required_heights,
                 ),
                 TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(

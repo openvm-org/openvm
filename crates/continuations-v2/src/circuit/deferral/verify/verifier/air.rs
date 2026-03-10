@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
-use openvm_circuit_primitives::utils::assert_array_eq;
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -12,19 +12,19 @@ use p3_matrix::Matrix;
 use recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, FinalTranscriptStateBus,
-        FinalTranscriptStateMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-        PublicValuesBus, PublicValuesBusMessage,
+        FinalTranscriptStateMessage, Poseidon2CompressBus, Poseidon2CompressMessage, PreHashBus,
+        PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
     },
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{
-    DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID,
-    VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
+    DagCommit, DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID,
+    DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
 };
 
 use crate::{
-    bn254::CommitBytes,
+    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         deferral::{
             verify::{
@@ -33,10 +33,15 @@ use crate::{
             },
             DeferralCircuitPvs,
         },
-        root::bus::{
-            DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
-            DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
+        root::{
+            bus::{
+                DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
+                DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
+            },
+            NUM_DIGESTS_IN_VK_COMMIT,
         },
+        subair::{HashSliceCtx, HashSliceSubAir},
+        utils::{assert_dag_commit_eq, assert_dag_commit_unset, vk_commit_components},
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
@@ -53,7 +58,7 @@ pub struct DeferredVerifyPvsCols<F> {
     pub initial_pc_hash: [F; DIGEST_SIZE],
 
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
-    pub intermediate_vk_commit: [F; DIGEST_SIZE],
+    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
 
     pub app_exe_commit: [F; DIGEST_SIZE],
     pub app_vk_commit: [F; DIGEST_SIZE],
@@ -63,7 +68,9 @@ pub struct DeferredVerifyPvsCols<F> {
 pub struct DeferredVerifyPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
+    pub pre_hash_bus: PreHashBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
+    pub hash_slice_subair: HashSliceSubAir,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
     pub output_val_bus: OutputValBus,
     pub output_commit_bus: OutputCommitBus,
@@ -72,7 +79,7 @@ pub struct DeferredVerifyPvsAir {
     pub def_acc_paths_bus: DeferralAccPathBus,
     pub def_merkle_roots_bus: DeferralMerkleRootsBus,
 
-    pub expected_internal_recursive_dag_commit: CommitBytes,
+    pub expected_internal_recursive_dag_commit: DagCommitBytes,
     pub expected_def_hook_commit: Option<CommitBytes>,
 }
 
@@ -182,9 +189,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * same).
          */
         let cached_commit = from_fn(|i| {
-            local.child_verifier_pvs.internal_for_leaf_dag_commit[i]
+            local
+                .child_verifier_pvs
+                .internal_for_leaf_dag_commit
+                .cached_commit[i]
                 * (AB::Expr::TWO - local.child_verifier_pvs.recursion_flag)
-                + local.child_verifier_pvs.internal_recursive_dag_commit[i]
+                + local
+                    .child_verifier_pvs
+                    .internal_recursive_dag_commit
+                    .cached_commit[i]
                     * (local.child_verifier_pvs.recursion_flag - AB::F::ONE)
         });
         self.cached_commit_bus.receive(
@@ -198,18 +211,24 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             AB::F::ONE,
         );
 
-        assert_zeros(
+        self.pre_hash_bus.receive(
+            builder,
+            AB::F::ZERO,
+            PreHashMessage::<AB::F> {
+                vk_pre_hash: self.expected_internal_recursive_dag_commit.pre_hash.into(),
+            },
+            AB::F::ONE,
+        );
+
+        assert_dag_commit_unset(
             &mut builder.when_ne(local.child_verifier_pvs.recursion_flag, AB::F::TWO),
             local.child_verifier_pvs.internal_recursive_dag_commit,
         );
 
-        assert_array_eq(
+        assert_dag_commit_eq(
             &mut builder.when_ne(local.child_verifier_pvs.recursion_flag, AB::F::ONE),
             local.child_verifier_pvs.internal_recursive_dag_commit,
-            <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(
-                self.expected_internal_recursive_dag_commit,
-            )
-            .map(AB::F::from_u32),
+            DagCommit::<AB::Expr>::from(self.expected_internal_recursive_dag_commit),
         );
 
         /*
@@ -217,28 +236,21 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * constrained to be the hashed combination of the child's app, leaf, and internal-
          * for-leaf DAG commits.
          */
-        self.poseidon2_compress_bus.lookup_key(
+        let vk_commit_components: Vec<_> = vk_commit_components(&local.child_verifier_pvs)
+            .into_iter()
+            .map(|c| c.map(Into::into))
+            .collect();
+        self.hash_slice_subair.eval(
             builder,
-            Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(
-                    local.child_verifier_pvs.app_dag_commit,
-                    local.child_verifier_pvs.leaf_dag_commit,
-                ),
-                output: local.intermediate_vk_commit,
+            HashSliceCtx {
+                elements: vk_commit_components.as_slice(),
+                intermediate: local
+                    .intermediate_vk_states
+                    .map(|v| v.map(Into::into))
+                    .as_slice(),
+                result: &local.app_vk_commit.map(Into::into),
+                enabled: &AB::Expr::ONE,
             },
-            AB::F::ONE,
-        );
-
-        self.poseidon2_compress_bus.lookup_key(
-            builder,
-            Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(
-                    local.intermediate_vk_commit,
-                    local.child_verifier_pvs.internal_for_leaf_dag_commit,
-                ),
-                output: local.app_vk_commit,
-            },
-            AB::F::ONE,
         );
 
         /*
@@ -437,11 +449,10 @@ impl DeferredVerifyPvsAir {
          */
         builder
             .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
-        assert_array_eq(
+        assert_array_eq::<_, _, AB::Expr, _>(
             &mut builder.when(verifier_pvs.deferral_flag),
             verifier_pvs.def_hook_vk_commit,
-            <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(expected_def_hook_commit)
-                .map(AB::F::from_u32),
+            expected_def_hook_commit.into(),
         );
 
         /*
