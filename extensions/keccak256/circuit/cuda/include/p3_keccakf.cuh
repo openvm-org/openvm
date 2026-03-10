@@ -71,7 +71,7 @@ inline constexpr size_t NUM_KECCAK_COLS = sizeof(KeccakCols<uint8_t>);
 
 // tracegen matching plonky3
 // `row` must have first NUM_KECCAK_COLS columns matching KeccakCols
-__device__ inline void generate_trace_row_for_round(
+static __device__ __noinline__ void generate_trace_row_for_round(
     RowSlice row,
     uint32_t round,
     uint64_t current_state[5][5]
