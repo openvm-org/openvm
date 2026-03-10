@@ -102,6 +102,39 @@ template <typename V> struct Sha2TraceHelper {
         read_word_bits(inner, SHA2_COL_INDEX(V, Sha2RoundCols, message_schedule.w[j]), dst_bits);
     }
 
+    // Helpers to get bits from either local or next inner row without pre-loading arrays
+    __device__ __forceinline__ Fp
+    get_a_bit(RowSlice local_inner, RowSlice next_inner, uint32_t round_idx, uint32_t bit) const {
+        if (round_idx < V::ROUNDS_PER_ROW) {
+            return local_inner[base_a(round_idx) + bit];
+        } else {
+            return next_inner[base_a(round_idx - V::ROUNDS_PER_ROW) + bit];
+        }
+    }
+
+    __device__ __forceinline__ Fp
+    get_e_bit(RowSlice local_inner, RowSlice next_inner, uint32_t round_idx, uint32_t bit) const {
+        if (round_idx < V::ROUNDS_PER_ROW) {
+            return local_inner[base_e(round_idx) + bit];
+        } else {
+            return next_inner[base_e(round_idx - V::ROUNDS_PER_ROW) + bit];
+        }
+    }
+
+    __device__ __forceinline__ Fp
+    get_w_bit(RowSlice local_inner, RowSlice next_inner, uint32_t round_idx, uint32_t bit) const {
+        size_t base;
+        if (round_idx < V::ROUNDS_PER_ROW) {
+            base = SHA2_COL_INDEX(V, Sha2RoundCols, message_schedule.w[round_idx]);
+            return local_inner[base + bit];
+        } else {
+            base = SHA2_COL_INDEX(
+                V, Sha2RoundCols, message_schedule.w[round_idx - V::ROUNDS_PER_ROW]
+            );
+            return next_inner[base + bit];
+        }
+    }
+
     __device__ __forceinline__ Fp xor_fp(Fp a, Fp b) const { return a + b - Fp(2) * a * b; }
 
     __device__ __forceinline__ Fp xor_fp(Fp a, Fp b, Fp c) const { return xor_fp(xor_fp(a, b), c); }
@@ -223,7 +256,7 @@ template <typename V> struct Sha2TraceHelper {
         return acc;
     }
 
-    __device__ void write_flags_round(
+    __device__ __noinline__ void write_flags_round(
         RowSlice inner_row,
         uint32_t row_idx,
         uint32_t global_block_idx
@@ -242,7 +275,7 @@ template <typename V> struct Sha2TraceHelper {
         SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
     }
 
-    __device__ void write_flags_digest(
+    __device__ __noinline__ void write_flags_digest(
         RowSlice inner_row,
         uint32_t row_idx,
         uint32_t global_block_idx
@@ -256,48 +289,70 @@ template <typename V> struct Sha2TraceHelper {
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
     }
 
-    __device__ void generate_carry_ae(RowSlice local_inner, RowSlice next_inner) const {
-        Fp a_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
-        Fp e_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
-#pragma unroll
-        for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            read_word_bits(local_inner, base_a(i), a_bits[i]);
-            read_word_bits(next_inner, base_a(i), a_bits[i + V::ROUNDS_PER_ROW]);
-            read_word_bits(local_inner, base_e(i), e_bits[i]);
-            read_word_bits(next_inner, base_e(i), e_bits[i + V::ROUNDS_PER_ROW]);
-        }
-
+    __device__ __noinline__ void generate_carry_ae(RowSlice local_inner, RowSlice next_inner)
+        const {
+        // Process one round at a time instead of pre-loading all 2*ROUNDS_PER_ROW rows.
+        // This reduces per-function stack from ~2KB to ~512B for SHA-256.
         const Fp pow16_inv = inv(Fp(1u << 16));
 
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
+            // Read a[i+3] and e[i+3] bits into small temp arrays for sig functions
+            Fp a3_bits[V::WORD_BITS];
+            Fp e3_bits[V::WORD_BITS];
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                a3_bits[bit] = get_a_bit(local_inner, next_inner, i + 3, bit);
+                e3_bits[bit] = get_e_bit(local_inner, next_inner, i + 3, bit);
+            }
+
             Fp sig_a[V::WORD_BITS];
             Fp sig_e[V::WORD_BITS];
             Fp maj_abc[V::WORD_BITS];
             Fp ch_efg[V::WORD_BITS];
 
-            big_sig0_bits(a_bits[i + 3], sig_a);
-            big_sig1_bits(e_bits[i + 3], sig_e);
+            big_sig0_bits(a3_bits, sig_a);
+            big_sig1_bits(e3_bits, sig_e);
             for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
-                maj_abc[bit] = maj_fp(a_bits[i + 3][bit], a_bits[i + 2][bit], a_bits[i + 1][bit]);
-                ch_efg[bit] = ch_fp(e_bits[i + 3][bit], e_bits[i + 2][bit], e_bits[i + 1][bit]);
+                maj_abc[bit] = maj_fp(
+                    a3_bits[bit],
+                    get_a_bit(local_inner, next_inner, i + 2, bit),
+                    get_a_bit(local_inner, next_inner, i + 1, bit)
+                );
+                ch_efg[bit] = ch_fp(
+                    e3_bits[bit],
+                    get_e_bit(local_inner, next_inner, i + 2, bit),
+                    get_e_bit(local_inner, next_inner, i + 1, bit)
+                );
             }
 
             Fp prev_carry_a = Fp::zero();
             Fp prev_carry_e = Fp::zero();
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                Fp t1_sum = compose_u16_limb(e_bits[i], limb) + compose_u16_limb(sig_e, limb) +
-                            compose_u16_limb(ch_efg, limb);
-                Fp t2_sum = compose_u16_limb(sig_a, limb) + compose_u16_limb(maj_abc, limb);
-                Fp d_limb = compose_u16_limb(a_bits[i], limb);
-                Fp cur_a_limb = compose_u16_limb(a_bits[i + 4], limb);
-                Fp cur_e_limb = compose_u16_limb(e_bits[i + 4], limb);
+                // Compute e[i], a[i], a[i+4], e[i+4] limbs on-the-fly
+                Fp e_i_limb = Fp::zero();
+                Fp a_i_limb = Fp::zero();
+                Fp a_i4_limb = Fp::zero();
+                Fp e_i4_limb = Fp::zero();
+#pragma unroll 1
+                for (uint32_t bit = 0; bit < 16; bit++) {
+                    Fp scale(1u << bit);
+                    e_i_limb += get_e_bit(local_inner, next_inner, i, limb * 16 + bit) * scale;
+                    a_i_limb += get_a_bit(local_inner, next_inner, i, limb * 16 + bit) * scale;
+                    a_i4_limb +=
+                        get_a_bit(local_inner, next_inner, i + 4, limb * 16 + bit) * scale;
+                    e_i4_limb +=
+                        get_e_bit(local_inner, next_inner, i + 4, limb * 16 + bit) * scale;
+                }
 
-                Fp e_sum = d_limb + t1_sum +
+                Fp t1_sum =
+                    e_i_limb + compose_u16_limb(sig_e, limb) + compose_u16_limb(ch_efg, limb);
+                Fp t2_sum = compose_u16_limb(sig_a, limb) + compose_u16_limb(maj_abc, limb);
+
+                Fp e_sum = a_i_limb + t1_sum +
                            (limb == 0 ? Fp::zero() : next_inner[base_carry_e(i) + limb - 1]);
                 Fp a_sum = t1_sum + t2_sum +
                            (limb == 0 ? Fp::zero() : next_inner[base_carry_a(i) + limb - 1]);
-                Fp carry_e = (e_sum - cur_e_limb) * pow16_inv;
-                Fp carry_a = (a_sum - cur_a_limb) * pow16_inv;
+                Fp carry_e = (e_sum - e_i4_limb) * pow16_inv;
+                Fp carry_a = (a_sum - a_i4_limb) * pow16_inv;
 
                 SHA2INNER_WRITE_ROUND(V, next_inner, work_vars.carry_e[i][limb], Fp(carry_e));
                 SHA2INNER_WRITE_ROUND(V, next_inner, work_vars.carry_a[i][limb], Fp(carry_a));
@@ -308,68 +363,80 @@ template <typename V> struct Sha2TraceHelper {
         }
     }
 
-    __device__ void generate_intermed_4(RowSlice local_inner, RowSlice next_inner) const {
-        Fp w_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
-        Fp w_limbs[2 * V::ROUNDS_PER_ROW][V::WORD_U16S];
-#pragma unroll
-        for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
-            read_w_bits(local_inner, j, w_bits[j]);
-            read_w_bits(next_inner, j, w_bits[j + V::ROUNDS_PER_ROW]);
-            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                w_limbs[j][limb] = compose_u16_limb(w_bits[j], limb);
-                w_limbs[j + V::ROUNDS_PER_ROW][limb] =
-                    compose_u16_limb(w_bits[j + V::ROUNDS_PER_ROW], limb);
-            }
-        }
-
+    __device__ __noinline__ void generate_intermed_4(RowSlice local_inner, RowSlice next_inner)
+        const {
+        // Process one round at a time instead of pre-loading all 2*ROUNDS_PER_ROW rows.
+        // This reduces per-function stack from ~1.2KB to ~256B for SHA-256.
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            Fp sig_bits[V::WORD_BITS];
-            Fp sig_limbs[V::WORD_U16S];
-
-            small_sig0_bits(w_bits[i + 1], sig_bits);
-            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                sig_limbs[limb] = compose_u16_limb(sig_bits, limb);
+            // Read w[i+1] bits on-the-fly for small_sig0_bits
+            Fp w_i1_bits[V::WORD_BITS];
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                w_i1_bits[bit] = get_w_bit(local_inner, next_inner, i + 1, bit);
             }
-#pragma unroll
+
+            Fp sig_bits[V::WORD_BITS];
+            small_sig0_bits(w_i1_bits, sig_bits);
+
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                Fp val = w_limbs[i][limb] + sig_limbs[limb];
+                // Compute w[i] limb on-the-fly
+                Fp w_i_limb = Fp::zero();
+#pragma unroll 1
+                for (uint32_t bit = 0; bit < 16; bit++) {
+                    w_i_limb += get_w_bit(local_inner, next_inner, i, limb * 16 + bit) *
+                                Fp(1u << bit);
+                }
+                Fp val = w_i_limb + compose_u16_limb(sig_bits, limb);
                 SHA2INNER_WRITE_ROUND(V, next_inner, schedule_helper.intermed_4[i][limb], val);
             }
         }
     }
 
-    __device__ void generate_intermed_12(RowSlice local_inner, RowSlice next_inner) const {
-        Fp w_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
-        Fp w_limbs[2 * V::ROUNDS_PER_ROW][V::WORD_U16S];
-#pragma unroll
-        for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
-            read_w_bits(local_inner, j, w_bits[j]);
-            read_w_bits(next_inner, j, w_bits[j + V::ROUNDS_PER_ROW]);
-            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                w_limbs[j][limb] = compose_u16_limb(w_bits[j], limb);
-                w_limbs[j + V::ROUNDS_PER_ROW][limb] =
-                    compose_u16_limb(w_bits[j + V::ROUNDS_PER_ROW], limb);
-            }
-        }
-
+    __device__ __noinline__ void generate_intermed_12(RowSlice local_inner, RowSlice next_inner)
+        const {
+        // Process one round at a time instead of pre-loading all 2*ROUNDS_PER_ROW rows.
+        // This reduces per-function stack from ~1.2KB to ~256B for SHA-256.
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            Fp sig_bits[V::WORD_BITS];
-            Fp sig_limbs[V::WORD_U16S];
-
-            small_sig1_bits(w_bits[i + 2], sig_bits);
-            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                sig_limbs[limb] = compose_u16_limb(sig_bits, limb);
+            // Read w[i+2] bits on-the-fly for small_sig1_bits
+            Fp w_i2_bits[V::WORD_BITS];
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                w_i2_bits[bit] = get_w_bit(local_inner, next_inner, i + 2, bit);
             }
+
+            Fp sig_bits[V::WORD_BITS];
+            small_sig1_bits(w_i2_bits, sig_bits);
+
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 Fp carry = read_carry_fp(next_inner, i, limb);
                 Fp prev_carry = (limb > 0) ? read_carry_fp(next_inner, i, limb - 1) : Fp::zero();
-                Fp w7_limb = (i < 3)
-                                 ? local_inner[SHA2_COL_INDEX(
-                                       V, Sha2RoundCols, schedule_helper.w_3[i][limb]
-                                   )]
-                                 : w_limbs[i - 3][limb];
-                Fp w_cur = w_limbs[i + 4][limb];
-                Fp sum = sig_limbs[limb] + w7_limb - carry * Fp(1u << 16) - w_cur + prev_carry;
+
+                // w7_limb: use pre-stored w_3 helper for i<3, else compute w[i-3] on-the-fly
+                Fp w7_limb;
+                if (i < 3) {
+                    w7_limb = local_inner[SHA2_COL_INDEX(
+                        V, Sha2RoundCols, schedule_helper.w_3[i][limb]
+                    )];
+                } else {
+                    // i-3 is in local_inner (i-3 < ROUNDS_PER_ROW since i<ROUNDS_PER_ROW)
+                    w7_limb = Fp::zero();
+#pragma unroll 1
+                    for (uint32_t bit = 0; bit < 16; bit++) {
+                        w7_limb +=
+                            get_w_bit(local_inner, next_inner, i - 3, limb * 16 + bit) *
+                            Fp(1u << bit);
+                    }
+                }
+
+                // w_cur = w[i+4] limb on-the-fly (i+4 >= ROUNDS_PER_ROW, so from next_inner)
+                Fp w_cur = Fp::zero();
+#pragma unroll 1
+                for (uint32_t bit = 0; bit < 16; bit++) {
+                    w_cur +=
+                        get_w_bit(local_inner, next_inner, i + 4, limb * 16 + bit) * Fp(1u << bit);
+                }
+
+                Fp sum =
+                    compose_u16_limb(sig_bits, limb) + w7_limb - carry * Fp(1u << 16) - w_cur +
+                    prev_carry;
                 Fp intermed = -sum;
                 SHA2INNER_WRITE_ROUND(
                     V, local_inner, schedule_helper.intermed_12[i][limb], intermed
@@ -378,7 +445,7 @@ template <typename V> struct Sha2TraceHelper {
         }
     }
 
-    __device__ void generate_default_row(
+    __device__ __noinline__ void generate_default_row(
         RowSlice inner_row,
         const typename V::Word *first_block_prev_hash,
         Fp *carry_a,
@@ -512,10 +579,14 @@ __global__ void sha2_first_pass_tracegen(
 
     BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, bitwise_num_bits);
 
-    typename V::Word w_schedule[V::ROUNDS_PER_BLOCK] = {};
+    // Use a 16-entry circular buffer instead of w_schedule[ROUNDS_PER_BLOCK].
+    // Each schedule word w[t] is stored at w_buf[t & (BLOCK_WORDS - 1)].
+    // This reduces stack from ROUNDS_PER_BLOCK*sizeof(Word) to BLOCK_WORDS*sizeof(Word).
+    // Correctness: the maximum lookback is 16 entries (w[t-16]), so 16 slots suffice.
+    typename V::Word w_buf[V::BLOCK_WORDS] = {};
 #pragma unroll
     for (int i = 0; i < static_cast<int>(V::BLOCK_WORDS); i++) {
-        w_schedule[i] = word_from_bytes_be<V>(record.message_bytes + i * V::WORD_U8S);
+        w_buf[i] = word_from_bytes_be<V>(record.message_bytes + i * V::WORD_U8S);
     }
 
     typename V::Word a = prev_hash[0];
@@ -545,16 +616,16 @@ __global__ void sha2_first_pass_tracegen(
                 uint32_t t = row_in_block * V::ROUNDS_PER_ROW + j;
                 typename V::Word w_val;
                 if (t < V::BLOCK_WORDS) {
-                    w_val = w_schedule[t];
+                    w_val = w_buf[t & (V::BLOCK_WORDS - 1)];
                 } else {
                     typename V::Word nums[4] = {
-                        sha2::small_sig1<V>(w_schedule[t - 2]),
-                        w_schedule[t - 7],
-                        sha2::small_sig0<V>(w_schedule[t - 15]),
-                        w_schedule[t - 16],
+                        sha2::small_sig1<V>(w_buf[(t - 2) & (V::BLOCK_WORDS - 1)]),
+                        w_buf[(t - 7) & (V::BLOCK_WORDS - 1)],
+                        sha2::small_sig0<V>(w_buf[(t - 15) & (V::BLOCK_WORDS - 1)]),
+                        w_buf[(t - 16) & (V::BLOCK_WORDS - 1)],
                     };
                     w_val = nums[0] + nums[1] + nums[2] + nums[3];
-                    w_schedule[t] = w_val;
+                    w_buf[t & (V::BLOCK_WORDS - 1)] = w_val;
 
 #pragma unroll
                     for (int limb = 0; limb < static_cast<int>(V::WORD_U16S); limb++) {
@@ -630,8 +701,9 @@ __global__ void sha2_first_pass_tracegen(
                 }
 
                 if (row_in_block > 0) {
-                    typename V::Word w_4 = w_schedule[t - 4];
-                    typename V::Word sig0_w3 = sha2::small_sig0<V>(w_schedule[t - 3]);
+                    typename V::Word w_4 = w_buf[(t - 4) & (V::BLOCK_WORDS - 1)];
+                    typename V::Word sig0_w3 =
+                        sha2::small_sig0<V>(w_buf[(t - 3) & (V::BLOCK_WORDS - 1)]);
 #pragma unroll
                     for (int limb = 0; limb < static_cast<int>(V::WORD_U16S); limb++) {
                         uint32_t val =
@@ -641,7 +713,7 @@ __global__ void sha2_first_pass_tracegen(
                         );
                     }
                     if (j < V::ROUNDS_PER_ROW - 1) {
-                        typename V::Word w3 = w_schedule[t - 3];
+                        typename V::Word w3 = w_buf[(t - 3) & (V::BLOCK_WORDS - 1)];
 #pragma unroll
                         for (int limb = 0; limb < static_cast<int>(V::WORD_U16S); limb++) {
                             SHA2INNER_WRITE_ROUND(
@@ -671,7 +743,8 @@ __global__ void sha2_first_pass_tracegen(
             helper.write_flags_digest(inner_row, digest_row_idx, global_block_idx + 1);
 
             for (uint32_t j = 0; j < V::ROUNDS_PER_ROW - 1; j++) {
-                typename V::Word val = w_schedule[row_in_block * V::ROUNDS_PER_ROW + j - 3];
+                typename V::Word val =
+                    w_buf[(row_in_block * V::ROUNDS_PER_ROW + j - 3) & (V::BLOCK_WORDS - 1)];
                 for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                     SHA2INNER_WRITE_DIGEST(
                         V,
@@ -682,7 +755,9 @@ __global__ void sha2_first_pass_tracegen(
                 }
             }
 
-            typename V::Word final_hash[V::HASH_WORDS];
+            // Use a per-iteration scalar instead of final_hash[HASH_WORDS] array to
+            // avoid stack allocation. The column index in the macro uses struct field
+            // addressing (not the local variable), so this rename is correct.
             for (int i = 0; i < static_cast<int>(V::HASH_WORDS); i++) {
                 typename V::Word work_val =
                     (i == 0)
@@ -693,13 +768,13 @@ __global__ void sha2_first_pass_tracegen(
                                       ? c
                                       : (i == 3 ? d
                                                 : (i == 4 ? e : (i == 5 ? f : (i == 6 ? g : h))))));
-                final_hash[i] = prev_hash[i] + work_val;
+                typename V::Word fh_val = prev_hash[i] + work_val;
                 for (uint32_t limb = 0; limb < V::WORD_U8S; limb++) {
                     SHA2INNER_WRITE_DIGEST(
                         V,
                         inner_row,
                         final_hash[i][limb],
-                        Fp(word_to_u8_limb<V>(final_hash[i], limb))
+                        Fp(word_to_u8_limb<V>(fh_val, limb))
                     );
                 }
                 for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
@@ -712,8 +787,8 @@ __global__ void sha2_first_pass_tracegen(
                 }
 
                 for (uint32_t limb = 0; limb < V::WORD_U8S; limb += 2) {
-                    uint32_t b0 = word_to_u8_limb<V>(final_hash[i], limb);
-                    uint32_t b1 = word_to_u8_limb<V>(final_hash[i], limb + 1);
+                    uint32_t b0 = word_to_u8_limb<V>(fh_val, limb);
+                    uint32_t b1 = word_to_u8_limb<V>(fh_val, limb + 1);
                     bitwise_lookup.add_range(b0, b1);
                 }
             }
