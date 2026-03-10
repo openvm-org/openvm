@@ -7,6 +7,91 @@ use eyre::{Report, Result};
 use openvm_stark_backend::codec::{Decode, Encode};
 use serde::{de::DeserializeOwned, Serialize};
 
+#[cfg(feature = "evm-prove")]
+use crate::{types::EvmHalo2Verifier, OPENVM_VERSION};
+
+pub const EVM_HALO2_VERIFIER_INTERFACE_NAME: &str = "IOpenVmHalo2Verifier.sol";
+pub const EVM_HALO2_VERIFIER_PARENT_NAME: &str = "Halo2Verifier.sol";
+pub const EVM_HALO2_VERIFIER_BASE_NAME: &str = "OpenVmHalo2Verifier.sol";
+pub const EVM_VERIFIER_ARTIFACT_FILENAME: &str = "verifier.bytecode.json";
+
+#[cfg(feature = "evm-prove")]
+pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
+    use std::fs::read_to_string;
+
+    let folder = folder
+        .as_ref()
+        .join("src")
+        .join(format!("v{OPENVM_VERSION}"));
+    let halo2_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_PARENT_NAME);
+    let openvm_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_BASE_NAME);
+    let interface_path = folder
+        .join("interfaces")
+        .join(EVM_HALO2_VERIFIER_INTERFACE_NAME);
+    let halo2_verifier_code = read_to_string(halo2_verifier_code_path)?;
+    let openvm_verifier_code = read_to_string(openvm_verifier_code_path)?;
+    let interface = read_to_string(interface_path)?;
+
+    let artifact_path = folder.join(EVM_VERIFIER_ARTIFACT_FILENAME);
+    let artifact: EvmVerifierByteCode = serde_json::from_reader(File::open(artifact_path)?)?;
+
+    Ok(EvmHalo2Verifier {
+        halo2_verifier_code,
+        openvm_verifier_code,
+        openvm_verifier_interface: interface,
+        artifact,
+    })
+}
+
+/// Writes three Solidity contracts into the following folder structure:
+///
+/// ```text
+/// halo2/
+/// └── src/
+///     └── v[OPENVM_VERSION]/
+///         ├── interfaces/
+///         │   └── IOpenVmHalo2Verifier.sol
+///         ├── OpenVmHalo2Verifier.sol
+///         └── Halo2Verifier.sol
+/// ```
+///
+/// If the relevant directories do not exist, they will be created.
+#[cfg(feature = "evm-prove")]
+pub fn write_evm_halo2_verifier_to_folder<P: AsRef<Path>>(
+    verifier: EvmHalo2Verifier,
+    folder: P,
+) -> Result<()> {
+    let folder = folder
+        .as_ref()
+        .join("src")
+        .join(format!("v{OPENVM_VERSION}"));
+    if !folder.exists() {
+        create_dir_all(&folder)?; // Make sure directories exist
+    }
+
+    let halo2_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_PARENT_NAME);
+    let openvm_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_BASE_NAME);
+    let interface_path = folder
+        .join("interfaces")
+        .join(EVM_HALO2_VERIFIER_INTERFACE_NAME);
+
+    if let Some(parent) = interface_path.parent() {
+        create_dir_all(parent)?;
+    }
+
+    write(halo2_verifier_code_path, verifier.halo2_verifier_code)
+        .expect("Failed to write halo2 verifier code");
+    write(openvm_verifier_code_path, verifier.openvm_verifier_code)
+        .expect("Failed to write openvm halo2 verifier code");
+    write(interface_path, verifier.openvm_verifier_interface)
+        .expect("Failed to write openvm halo2 verifier interface");
+
+    let artifact_path = folder.join(EVM_VERIFIER_ARTIFACT_FILENAME);
+    serde_json::to_writer(File::create(artifact_path)?, &verifier.artifact)?;
+
+    Ok(())
+}
+
 pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
     read_from_file_bitcode(path)
 }
