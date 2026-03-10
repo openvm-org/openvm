@@ -57,7 +57,7 @@ struct CachedRecord {
 };
 
 template <typename T> struct SymbolicExpressionCols {
-    T is_present;
+    T slot_state;
     T args[2 * D_EF];
     T sort_idx;
     T n_abs;
@@ -166,7 +166,12 @@ __global__ void symbolic_expression_tracegen(
         row.slice_from((cached_records ? COMMIT_WIDTH : 0) + proof_idx * SINGLE_WIDTH);
     proof_row.fill_zero(0, SINGLE_WIDTH);
 
-    if (proof_idx >= num_proofs || row_idx >= num_records_per_proof) {
+    if (proof_idx >= num_proofs) {
+        return;
+    }
+
+    if (row_idx >= num_records_per_proof) {
+        COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, slot_state, Fp::one());
         return;
     }
 
@@ -183,6 +188,7 @@ __global__ void symbolic_expression_tracegen(
     uint32_t expr_start = expr_eval_bounds_1[expr_bounds_base];
     uint32_t expr_end = expr_eval_bounds_1[expr_bounds_base + 1];
     if (expr_start >= expr_end) {
+        COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, slot_state, Fp::one());
         return;
     }
     const FpExt *expr_per_air = expr_evals + expr_start;
@@ -213,7 +219,7 @@ __global__ void symbolic_expression_tracegen(
     Fp n_abs_fp = Fp(static_cast<uint32_t>(n_abs));
     Fp is_n_neg_fp = log_height < l_skip ? Fp::one() : Fp::zero();
 
-    COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, is_present, Fp::one());
+    COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, slot_state, Fp(2));
     COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, sort_idx, sort_idx_fp);
     COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, n_abs, n_abs_fp);
     COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, is_n_neg, is_n_neg_fp);
