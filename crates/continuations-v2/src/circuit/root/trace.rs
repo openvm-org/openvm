@@ -6,7 +6,10 @@ use openvm_circuit::{
     system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
 };
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_cuda_backend::{
+    data_transporter::transport_air_proving_ctx_to_device, BabyBearBn254Poseidon2HashScheme,
+    GenericGpuBackend,
+};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
@@ -110,7 +113,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceG
 }
 
 #[cfg(feature = "cuda")]
-impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
+impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -121,14 +124,14 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
     ) -> (
-        Vec<AirProvingContext<GpuBackend>>,
+        Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (cpu_ctxs, inputs) =
             self.generate_pre_verifier_subcircuit_ctx(proof, user_pvs_proof, memory_dimensions);
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(transport_air_proving_ctx_to_device::<BabyBearBn254Poseidon2HashScheme>)
             .collect_vec();
         (gpu_ctxs, inputs)
     }
@@ -139,14 +142,14 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> (
-        Vec<AirProvingContext<GpuBackend>>,
+        Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (cpu_ctxs, inputs) =
             self.generate_other_proving_ctxs(proof, memory_dimensions, deferral_merkle_proofs);
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(transport_air_proving_ctx_to_device::<BabyBearBn254Poseidon2HashScheme>)
             .collect_vec();
         (gpu_ctxs, inputs)
     }

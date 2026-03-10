@@ -10,7 +10,7 @@ license.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
-openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
 
 openvm-build = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -77,4 +77,5 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-sdk-config/cuda",
     "continuations-v2/cuda",
+    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
