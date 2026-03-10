@@ -6,7 +6,7 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
+use openvm_instructions::{riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS}, DEFERRAL_AS};
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     p3_field::Field, p3_util::log2_strict_usize, StarkEngine, StarkProtocolConfig, Val,
