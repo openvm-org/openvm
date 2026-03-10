@@ -22,8 +22,8 @@ use crate::{
         expr_eval::CachedTraceRecord, BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX,
     },
     bus::{
-        AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
+        AirPresenceBus, AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus,
+        CommitmentsBus, ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
         EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
         FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         InteractionsFoldingInputBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus,
@@ -228,6 +228,7 @@ pub struct BusInventory {
 
     // Data buses
     pub air_shape_bus: AirShapeBus,
+    pub air_presence_bus: AirPresenceBus,
     pub hyperdim_bus: HyperdimBus,
     pub lifted_heights_bus: LiftedHeightsBus,
     pub stacking_indices_bus: StackingIndicesBus,
@@ -361,6 +362,7 @@ impl BusInventory {
 
             // Data buses
             air_shape_bus: AirShapeBus::new(b.new_bus_idx()),
+            air_presence_bus: AirPresenceBus::new(b.new_bus_idx()),
             hyperdim_bus: HyperdimBus::new(b.new_bus_idx()),
             lifted_heights_bus: LiftedHeightsBus::new(b.new_bus_idx()),
             stacking_indices_bus: StackingIndicesBus::new(b.new_bus_idx()),
