@@ -370,25 +370,31 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                     dag_commit_width
                 };
 
-                if row_idx >= num_valid_rows {
-                    return;
-                }
-
                 for proof_idx in 0..max_num_proofs {
                     if proof_idx >= preflights.len() {
                         continue;
                     }
 
-                    let record_idx = proof_idx * num_valid_rows + row_idx;
-                    let Some(record) = records[record_idx].as_ref() else {
-                        continue;
-                    };
-
                     let start = main_offset + proof_idx * single_main_width;
                     let end = start + single_main_width;
                     let cols: &mut SingleMainSymbolicExpressionColumns<_> =
                         row[start..end].borrow_mut();
-                    cols.is_present = F::ONE;
+
+                    if row_idx >= num_valid_rows {
+                        // The proof is present in this slot, but this row is beyond the valid
+                        // symbolic rows.
+                        cols.slot_state = F::ONE;
+                        continue;
+                    }
+
+                    let record_idx = proof_idx * num_valid_rows + row_idx;
+                    let Some(record) = records[record_idx].as_ref() else {
+                        // The proof is present in this slot, but this AIR is absent.
+                        cols.slot_state = F::ONE;
+                        continue;
+                    };
+
+                    cols.slot_state = F::TWO;
                     cols.args = record.args;
                     cols.sort_idx = F::from_usize(record.sort_idx);
                     cols.n_abs = F::from_usize(record.n_abs);

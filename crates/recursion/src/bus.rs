@@ -450,6 +450,15 @@ define_typed_per_proof_lookup_bus!(AirShapeBus, AirShapeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct AirPresenceBusMessage<T> {
+    pub air_idx: T,
+    pub is_present: T,
+}
+
+define_typed_per_proof_lookup_bus!(AirPresenceBus, AirPresenceBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct HyperdimBusMessage<T> {
     pub sort_idx: T,
     /// Sender constrains this is `abs(log_height - l_skip)`.

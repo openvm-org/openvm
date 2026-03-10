@@ -143,7 +143,10 @@ impl PreflightGpu {
                                     air_idx,
                                     ..Default::default()
                                 },
-                                TraceMetadata::default(),
+                                TraceMetadata {
+                                    num_air_id_lookups: bc_air_shape_lookups[air_idx],
+                                    ..Default::default()
+                                },
                             ))
                         } else {
                             None

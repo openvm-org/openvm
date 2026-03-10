@@ -246,6 +246,7 @@ impl AirModule for ProofShapeModule {
             expression_claim_n_max_bus: self.bus_inventory.expression_claim_n_max_bus,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
+            air_presence_bus: self.bus_inventory.air_presence_bus,
             hyperdim_bus: self.bus_inventory.hyperdim_bus,
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
