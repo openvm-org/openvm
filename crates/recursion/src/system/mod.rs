@@ -72,11 +72,11 @@ impl Default for VerifierConfig {
 }
 
 #[derive(Debug)]
-pub struct VerifierExternalData<'a, PB: ProverBackend> {
-    pub poseidon2_compress_inputs: &'a Vec<[PB::Val; POSEIDON2_WIDTH]>,
+pub struct VerifierExternalData<'a> {
+    pub poseidon2_compress_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
     pub range_check_inputs: &'a Vec<usize>,
     pub required_heights: Option<&'a [usize]>,
-    pub final_transcript_state: Option<&'a mut [PB::Val; POSEIDON2_WIDTH]>,
+    pub final_transcript_state: Option<&'a mut [F; POSEIDON2_WIDTH]>,
 }
 
 // Trait to make tracegen functions generic on ProverBackend
@@ -108,7 +108,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<PB>,
+        external_data: &mut VerifierExternalData,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 
@@ -463,7 +463,7 @@ impl<'a> TraceModuleRef<'a> {
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         cached_trace_record: &Option<&CachedTraceRecord>,
-        external_data: &VerifierExternalData<CpuBackend<SC>>,
+        external_data: &VerifierExternalData,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         match self {
@@ -1010,7 +1010,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<CpuBackend<SC>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<CpuBackend<SC>>,
+        external_data: &mut VerifierExternalData,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1157,7 +1157,7 @@ pub mod cuda_tracegen {
             pow_checker_gen: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
             cached_trace_record: &Option<&CachedTraceRecord>,
-            external_data: &VerifierExternalData<GpuBackend>,
+            external_data: &VerifierExternalData,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             match self {
@@ -1259,7 +1259,7 @@ pub mod cuda_tracegen {
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
             cached_trace_ctx: CachedTraceCtx<GenericGpuBackend<HS>>,
             proofs: &[Proof<BabyBearPoseidon2Config>],
-            external_data: &mut VerifierExternalData<GenericGpuBackend<HS>>,
+            external_data: &mut VerifierExternalData,
             initial_transcript: TS,
         ) -> Option<Vec<AirProvingContext<GenericGpuBackend<HS>>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1326,13 +1326,6 @@ pub mod cuda_tracegen {
                 _ => None,
             };
 
-            let external_data_gpu = VerifierExternalData::<GpuBackend> {
-                poseidon2_compress_inputs: external_data.poseidon2_compress_inputs,
-                range_check_inputs: external_data.range_check_inputs,
-                required_heights: external_data.required_heights,
-                final_transcript_state: None,
-            };
-
             // PERF[jpw]: we avoid par_iter so that kernel launches occur on the same stream.
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
             // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
@@ -1346,7 +1339,7 @@ pub mod cuda_tracegen {
                     &power_checker_gen,
                     &exp_bits_len_gen,
                     &cached_trace_record,
-                    &external_data_gpu,
+                    external_data,
                     required_heights,
                 )?);
             }
