@@ -73,7 +73,7 @@ impl ProgramChipGPU {
         trace: DeviceMatrix<F>,
         device: &GpuDevice,
     ) -> CommittedTraceData<GpuBackend> {
-        let (commitment, data) = device.commit(&[&trace]).unwrap();
+        let (commitment, data) = TraceCommitter::<GpuBackend>::commit(device, &[&trace]).unwrap();
         CommittedTraceData {
             commitment,
             data: Arc::new(data),
