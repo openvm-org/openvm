@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
     VmExecutionConfig,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
+use openvm_stark_backend::{codec::Encode, p3_field::PrimeField32, StarkEngine, Val};
 use verify_stark::{vk::VerificationBaseline, NonRootStarkProof};
 
 use crate::{
@@ -51,6 +51,17 @@ where
     {
         let continuation_proof = self.app_prover.prove(input)?;
         let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
+        let log_proof_size = |proof: &NonRootStarkProof| {
+            let encoded = proof.encode_to_vec().unwrap();
+            let compressed = zstd::encode_all(&encoded[..], 19).unwrap();
+            tracing::info!(
+                "Proof Size (bytes): {}, Compressed Size: {}",
+                encoded.len(),
+                compressed.len()
+            );
+        };
+        tracing::info!("Proof size before wrap");
+        log_proof_size(&stark_proof);
         if let Some(compression_prover) = self.compression_prover.as_ref() {
             // We add two additional internal_recursive layers before the compression layer to
             // minimize the input size. The first internal_recursive layer will have a single
@@ -58,10 +69,12 @@ where
             // The second will also only have a single child, and it may require 2-3x fewer
             // hashes (and thus Poseidon2 trace rows) than the first.
             const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
-            for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+            for _layer in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
                 stark_proof = self
                     .agg_prover
                     .wrap_proof(stark_proof, &mut internal_metadata)?;
+                tracing::info!("Proof size after wrap layer {_layer}");
+                log_proof_size(&stark_proof);
             }
             stark_proof = compression_prover.prove(stark_proof)?;
         }
