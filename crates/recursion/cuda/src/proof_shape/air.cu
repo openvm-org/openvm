@@ -189,6 +189,7 @@ __device__ __forceinline__ void fill_present_row(
 template <size_t MAX_CACHED>
 __device__ __forceinline__ void fill_non_present_row(
     RowSlice row,
+    TraceMetadata &trace_data,
     size_t final_cidx,
     size_t final_total_interactions,
     size_t cached_commits_idx,
@@ -199,7 +200,12 @@ __device__ __forceinline__ void fill_non_present_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, final_cidx);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, Fp::zero());
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
+    COL_WRITE_VALUE(
+        row,
+        typename Cols<MAX_CACHED>::template Type,
+        num_air_id_lookups,
+        trace_data.num_air_id_lookups
+    );
     row.fill_zero(
         COL_INDEX(typename Cols<MAX_CACHED>::template Type, lifted_height_limbs), NUM_LIMBS
     );
@@ -431,6 +437,7 @@ __global__ void proof_shape_tracegen(
                 );
                 fill_non_present_row<MAX_CACHED>(
                     row,
+                    trace_data,
                     proof_data.final_cidx,
                     proof_data.final_total_interactions,
                     cached_commits_idx,

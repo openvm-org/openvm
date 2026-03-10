@@ -220,6 +220,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
+                cols.num_air_id_lookups = F::from_usize(bc_air_shape_lookups[idx]);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],

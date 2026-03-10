@@ -17,12 +17,12 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirShapeBus, AirShapeBusMessage, AirShapeProperty, CachedCommitBus, CachedCommitBusMessage,
-        CommitmentsBus, CommitmentsBusMessage, EqNsNLogupMaxBus, EqNsNLogupMaxMessage,
-        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, FractionFolderInputBus,
-        FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
-        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus, NLiftMessage,
-        TranscriptBus, TranscriptBusMessage,
+        AirPresenceBus, AirPresenceBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
+        CachedCommitBus, CachedCommitBusMessage, CommitmentsBus, CommitmentsBusMessage,
+        EqNsNLogupMaxBus, EqNsNLogupMaxMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
+        FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
+        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus,
+        NLiftMessage, TranscriptBus, TranscriptBusMessage,
     },
     primitives::bus::{
         PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
@@ -154,6 +154,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // Inter-module buses
     pub gkr_module_bus: GkrModuleBus,
     pub air_shape_bus: AirShapeBus,
+    pub air_presence_bus: AirPresenceBus,
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
     pub hyperdim_bus: HyperdimBus,
@@ -499,6 +500,16 @@ where
                 value: air_idx.clone(),
             },
             local.is_present * (local.num_air_id_lookups + AB::Expr::TWO),
+        );
+
+        self.air_presence_bus.add_key_with_lookups(
+            builder,
+            local.proof_idx,
+            AirPresenceBusMessage {
+                air_idx: air_idx.clone(),
+                is_present: local.is_present.into(),
+            },
+            local.is_valid * local.num_air_id_lookups,
         );
 
         self.air_shape_bus.add_key_with_lookups(
