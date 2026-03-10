@@ -46,8 +46,6 @@ cuda = [
     "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
-    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
-    "openvm-stark-sdk/baby-bear-bn254-poseidon2",
 ]
 touchemall = [
     "cuda",
