@@ -73,11 +73,11 @@ impl Default for VerifierConfig {
 }
 
 #[derive(Debug)]
-pub struct VerifierExternalData<'a, PB: ProverBackend> {
-    pub poseidon2_compress_inputs: &'a Vec<[PB::Val; POSEIDON2_WIDTH]>,
+pub struct VerifierExternalData<'a> {
+    pub poseidon2_compress_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
     pub range_check_inputs: &'a Vec<usize>,
     pub required_heights: Option<&'a [usize]>,
-    pub final_transcript_state: Option<&'a mut [PB::Val; POSEIDON2_WIDTH]>,
+    pub final_transcript_state: Option<&'a mut [F; POSEIDON2_WIDTH]>,
 }
 
 // Trait to make tracegen functions generic on ProverBackend
@@ -109,7 +109,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<PB>,
+        external_data: &mut VerifierExternalData,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 
@@ -468,7 +468,7 @@ impl<'a> TraceModuleRef<'a> {
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         cached_trace_record: &Option<&CachedTraceRecord>,
-        external_data: &VerifierExternalData<CpuBackend<SC>>,
+        external_data: &VerifierExternalData,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         match self {
@@ -1015,7 +1015,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<CpuBackend<SC>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<CpuBackend<SC>>,
+        external_data: &mut VerifierExternalData,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1138,7 +1138,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 pub mod cuda_tracegen {
     use std::iter::zip;
 
-    use openvm_cuda_backend::{prelude::SC, GpuBackend};
+    use openvm_cuda_backend::{hash_scheme::GpuHashScheme, GenericGpuBackend, GpuBackend};
 
     use super::*;
     use crate::{
@@ -1162,7 +1162,7 @@ pub mod cuda_tracegen {
             pow_checker_gen: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
             cached_trace_record: &Option<&CachedTraceRecord>,
-            external_data: &VerifierExternalData<GpuBackend>,
+            external_data: &VerifierExternalData,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             match self {
@@ -1215,8 +1215,23 @@ pub mod cuda_tracegen {
         }
     }
 
-    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackend, SC>
-        for VerifierSubCircuit<MAX_NUM_PROOFS>
+    /// Coerces an `AirProvingContext<GpuBackend>` to `AirProvingContext<GenericGpuBackend<HS>>`.
+    ///
+    /// Safe because all GPU backends share `Val = BabyBear` and `Matrix = DeviceMatrix<F>`.
+    /// Panics in debug builds if `cached_mains` is non-empty (commitments differ by hash scheme).
+    fn coerce_gpu_ctx<HS: GpuHashScheme>(
+        ctx: AirProvingContext<GpuBackend>,
+    ) -> AirProvingContext<GenericGpuBackend<HS>> {
+        debug_assert!(ctx.cached_mains.is_empty());
+        AirProvingContext {
+            cached_mains: vec![],
+            common_main: ctx.common_main,
+            public_values: ctx.public_values,
+        }
+    }
+
+    impl<HS: GpuHashScheme, const MAX_NUM_PROOFS: usize>
+        VerifierTraceGen<GenericGpuBackend<HS>, HS::SC> for VerifierSubCircuit<MAX_NUM_PROOFS>
     {
         fn new(
             child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
@@ -1225,11 +1240,11 @@ pub mod cuda_tracegen {
             Self::new_with_options(child_mvk, config)
         }
 
-        fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = GpuBackend>>(
+        fn commit_child_vk<E: StarkEngine<SC = HS::SC, PB = GenericGpuBackend<HS>>>(
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        ) -> CommittedTraceData<GpuBackend> {
+        ) -> CommittedTraceData<GenericGpuBackend<HS>> {
             self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
@@ -1247,11 +1262,11 @@ pub mod cuda_tracegen {
         >(
             &self,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-            cached_trace_ctx: CachedTraceCtx<GpuBackend>,
+            cached_trace_ctx: CachedTraceCtx<GenericGpuBackend<HS>>,
             proofs: &[Proof<BabyBearPoseidon2Config>],
-            external_data: &mut VerifierExternalData<GpuBackend>,
+            external_data: &mut VerifierExternalData,
             initial_transcript: TS,
-        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
+        ) -> Option<Vec<AirProvingContext<GenericGpuBackend<HS>>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
             let proofs_gpu = proofs
@@ -1311,8 +1326,8 @@ pub mod cuda_tracegen {
                 TraceModuleRef::Whir(&self.whir),
             ];
 
-            let cached_trace_record = match &cached_trace_ctx {
-                CachedTraceCtx::Records(cached_trace_record) => Some(cached_trace_record),
+            let cached_trace_record: Option<&CachedTraceRecord> = match &cached_trace_ctx {
+                CachedTraceCtx::Records(ref cached_trace_record) => Some(cached_trace_record),
                 _ => None,
             };
 
@@ -1320,9 +1335,9 @@ pub mod cuda_tracegen {
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
             // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
             // launches
-            let mut ctxs_by_module = Vec::with_capacity(modules.len());
+            let mut ctxs_by_module_gpu = Vec::with_capacity(modules.len());
             for (module, required_heights) in modules.into_iter().zip(module_required) {
-                ctxs_by_module.push(module.generate_gpu_ctxs(
+                ctxs_by_module_gpu.push(module.generate_gpu_ctxs(
                     &child_vk_gpu,
                     &proofs_gpu,
                     &preflights_gpu,
@@ -1333,6 +1348,11 @@ pub mod cuda_tracegen {
                     required_heights,
                 )?);
             }
+            let mut ctxs_by_module: Vec<Vec<AirProvingContext<GenericGpuBackend<HS>>>> =
+                ctxs_by_module_gpu
+                    .into_iter()
+                    .map(|module_ctxs| module_ctxs.into_iter().map(coerce_gpu_ctx::<HS>).collect())
+                    .collect();
             match cached_trace_ctx {
                 CachedTraceCtx::PcsData(child_vk_pcs_data) => {
                     assert!(self.batch_constraint.has_cached);
