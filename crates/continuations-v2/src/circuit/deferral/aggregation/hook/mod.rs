@@ -5,9 +5,9 @@ use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 
 use crate::{
-    bn254::CommitBytes,
+    bn254::DagCommitBytes,
     circuit::{
-        subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
+        subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
         Circuit,
     },
 };
@@ -23,7 +23,7 @@ pub use trace::*;
 #[derive(derive_new::new, Clone)]
 pub struct DeferralHookCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub(crate) internal_recursive_dag_commit: CommitBytes,
+    pub(crate) internal_recursive_dag_commit: DagCommitBytes,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
@@ -41,7 +41,12 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let verifier_pvs_air = verifier::DeferralHookPvsAir::new(
             bus_inventory.public_values_bus,
             bus_inventory.cached_commit_bus,
+            bus_inventory.pre_hash_bus,
             bus_inventory.poseidon2_compress_bus,
+            HashSliceSubAir {
+                compress_bus: bus_inventory.poseidon2_compress_bus,
+                permute_bus: bus_inventory.poseidon2_permute_bus,
+            },
             def_vk_commit_bus,
             merkle_root_bus,
             onion_res_bus,

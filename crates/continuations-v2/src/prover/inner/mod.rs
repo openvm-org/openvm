@@ -12,7 +12,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
-use verify_stark::pvs::DeferralPvs;
+use verify_stark::pvs::{DagCommit, DeferralPvs};
 
 use crate::{
     circuit::{
@@ -193,11 +193,17 @@ impl<
         self.circuit.def_hook_commit.is_some()
     }
 
-    pub fn get_cached_commit(&self, is_self_recursive: bool) -> PB::Commitment {
+    pub fn get_dag_commit(&self, is_self_recursive: bool) -> DagCommit<PB::Val> {
         if is_self_recursive {
-            self.self_vk_pcs_data.as_ref().unwrap().commitment
+            DagCommit {
+                cached_commit: self.self_vk_pcs_data.as_ref().unwrap().commitment,
+                vk_pre_hash: self.vk.pre_hash,
+            }
         } else {
-            self.child_vk_pcs_data.commitment
+            DagCommit {
+                cached_commit: self.child_vk_pcs_data.commitment,
+                vk_pre_hash: self.child_vk.pre_hash,
+            }
         }
     }
 

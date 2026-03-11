@@ -26,7 +26,8 @@ use crate::circuit::{
 pub struct PreVerifierData<PB: ProverBackend> {
     pub pre_verifier_ctxs: [AirProvingContext<PB>; 2],
     pub post_verifier_ctxs: Vec<AirProvingContext<PB>>,
-    pub poseidon2_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub range_inputs: Vec<usize>,
     pub verifier_pvs_record: DeferredVerifyPvsRecord<PB::Val>,
     pub output_commit: [PB::Val; DIGEST_SIZE],
@@ -76,7 +77,8 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> PreVerifierData<CpuBackend<SC>> {
-        let (verifier_pvs_record, verifier_p2_inputs) = generate_record(proof);
+        let (verifier_pvs_record, verifier_p2_compress_inputs, verifier_p2_permute_inputs) =
+            generate_record(proof);
         let (commit_ctx, commit_p2_inputs) =
             super::commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
         let (memory_ctx, memory_p2_inputs) = memory::generate_proving_input(
@@ -121,13 +123,14 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         PreVerifierData {
             pre_verifier_ctxs: [commit_ctx, memory_ctx],
             post_verifier_ctxs: once(output_ctx).chain(paths_ctx).collect_vec(),
-            poseidon2_inputs: verifier_p2_inputs
+            poseidon2_compress_inputs: verifier_p2_compress_inputs
                 .into_iter()
                 .chain(commit_p2_inputs)
                 .chain(memory_p2_inputs)
                 .chain(output_p2_inputs)
                 .chain(paths_p2_inputs)
                 .collect_vec(),
+            poseidon2_permute_inputs: verifier_p2_permute_inputs,
             range_inputs,
             verifier_pvs_record,
             output_commit,
@@ -167,7 +170,8 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
         let PreVerifierData {
             pre_verifier_ctxs,
             post_verifier_ctxs: post_verifier_ctx,
-            poseidon2_inputs,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
             range_inputs,
             verifier_pvs_record,
             output_commit,
@@ -185,7 +189,8 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
                 .into_iter()
                 .map(transport_air_proving_ctx_to_device)
                 .collect_vec(),
-            poseidon2_inputs,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
             range_inputs,
             verifier_pvs_record,
             output_commit,

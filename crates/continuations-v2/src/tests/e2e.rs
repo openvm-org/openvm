@@ -43,7 +43,7 @@ use openvm_transpiler::{
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use recursion_circuit::prelude::DIGEST_SIZE;
+use recursion_circuit::{prelude::DIGEST_SIZE, utils::poseidon2_hash_slice_with_states};
 use tracing::{warn, Level};
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
@@ -309,12 +309,25 @@ fn test_deferral_e2e() -> Result<()> {
         DeferralHookProver::new::<GpuEngine>(def_i1_prover.get_vk(), root_system_params());
     let def_hook_commit = hook_prover_for_commit.get_cached_commit();
 
-    // Compute def_vk_commit = H(H(app_dag, leaf_dag), i4l_dag)
-    let app_dag_commit = def_leaf_prover.get_cached_commit(false);
-    let leaf_dag_commit = def_i0_prover.get_cached_commit(false);
-    let i4l_dag_commit = def_i1_prover.get_cached_commit(false);
-    let intermediate_vk = poseidon2_compress_with_capacity(app_dag_commit, leaf_dag_commit).0;
-    let def_vk_commit = poseidon2_compress_with_capacity(intermediate_vk, i4l_dag_commit).0;
+    // Compute vk commit using [cached_commit, vk_pre_hash] for def/leaf/i4l.
+    let def_circuit_dag_commit = def_leaf_prover.get_dag_commit(false);
+    let def_leaf_dag_commit = def_i0_prover.get_dag_commit(false);
+    let def_i4l_dag_commit = def_i1_prover.get_dag_commit(false);
+
+    let def_vk_commit = poseidon2_hash_slice_with_states(
+        &[
+            def_circuit_dag_commit.cached_commit,
+            def_circuit_dag_commit.vk_pre_hash,
+            def_leaf_dag_commit.cached_commit,
+            def_leaf_dag_commit.vk_pre_hash,
+            def_i4l_dag_commit.cached_commit,
+            def_i4l_dag_commit.vk_pre_hash,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>(),
+    )
+    .0;
 
     let def_vk_commit_bytes = def_vk_commit
         .iter()
@@ -703,19 +716,30 @@ fn test_deferral_e2e() -> Result<()> {
     // =========================================================================
     // SECTION 9: Root prover (CPU) and final verification.
     //
-    // The root verifier checks def_hook_vk_commit = H(H(app_dag, leaf_dag), i4l_dag)
-    // where the dag commits come from the deferral-path InnerProver chain.
+    // The root verifier checks def_hook_vk_commit from the deferral path's
+    // [cached_commit, vk_pre_hash] tuples for app/leaf/i4l.
     // =========================================================================
     let vm_ir_vk = ir_prover.get_vk();
     let vm_ir_pcs_data = ir_prover.get_self_vk_pcs_data().unwrap();
 
-    let def_hook_vk_commit = {
-        let app_dag = deferral_leaf_prover.get_cached_commit(false);
-        let leaf_dag = def_i4l_prover.get_cached_commit(false);
-        let i4l_dag = def_ir_prover.get_cached_commit(false);
-        let intermediate = poseidon2_compress_with_capacity(app_dag, leaf_dag).0;
-        poseidon2_compress_with_capacity(intermediate, i4l_dag).0
-    };
+    let def_hook_dag_commit = deferral_leaf_prover.get_dag_commit(false);
+    let def_leaf_dag_commit = def_i4l_prover.get_dag_commit(false);
+    let def_i4l_dag_commit = def_ir_prover.get_dag_commit(false);
+
+    let def_hook_vk_commit = poseidon2_hash_slice_with_states(
+        &[
+            def_hook_dag_commit.cached_commit,
+            def_hook_dag_commit.vk_pre_hash,
+            def_leaf_dag_commit.cached_commit,
+            def_leaf_dag_commit.vk_pre_hash,
+            def_i4l_dag_commit.cached_commit,
+            def_i4l_dag_commit.vk_pre_hash,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>(),
+    )
+    .0;
 
     let root_prover = RootProver::new::<RootEngine>(
         vm_ir_vk.clone(),

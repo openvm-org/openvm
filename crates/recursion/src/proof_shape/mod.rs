@@ -254,6 +254,7 @@ impl AirModule for ProofShapeModule {
             n_lift_bus: self.bus_inventory.n_lift_bus,
             eq_n_logup_n_max_bus: self.bus_inventory.eq_n_logup_n_max_bus,
             cached_commit_bus: self.bus_inventory.cached_commit_bus,
+            pre_hash_bus: self.bus_inventory.pre_hash_bus,
             continuations_enabled: self.continuations_enabled,
         };
         let pvs_air = PublicValuesAir {

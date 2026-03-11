@@ -537,6 +537,14 @@ define_typed_per_proof_permutation_bus!(FinalTranscriptStateBus, FinalTranscript
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct PreHashMessage<T> {
+    pub vk_pre_hash: [T; DIGEST_SIZE],
+}
+
+define_typed_per_proof_permutation_bus!(PreHashBus, PreHashMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct XiRandomnessMessage<T> {
     pub idx: T,
     pub xi: [T; D_EF],

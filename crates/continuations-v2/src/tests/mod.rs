@@ -58,6 +58,7 @@ cfg_if::cfg_if! {
             },
             root::RootVerifierPvs,
         };
+        use recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
         use openvm_stark_sdk::config::{
@@ -260,8 +261,8 @@ fn test_internal_recursive_vk_stabilization(def_hook_commit_set: bool) -> Result
         def_hook_commit,
     );
     assert_eq!(
-        test_prover.get_cached_commit(false),
-        test_prover.get_cached_commit(true)
+        test_prover.get_dag_commit(false),
+        test_prover.get_dag_commit(true)
     );
     Ok(())
 }
@@ -707,30 +708,27 @@ fn test_deferral_internal_recursive_vk_stabilization() -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (deferral_vk, _) = generate_single_def_proof(0)?;
 
-    let leaf_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
-        deferral_vk,
-        leaf_system_params(),
-        false,
-    );
-    let internal_0_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let leaf_prover =
+        DeferralInnerProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
+    let internal_0_prover = DeferralInnerProver::<2>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let internal_1_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let internal_1_prover = DeferralInnerProver::<2>::new::<Engine>(
         internal_0_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let test_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let test_prover = DeferralInnerProver::<2>::new::<Engine>(
         internal_1_prover.get_vk(),
         internal_system_params(),
         true,
     );
 
     assert_eq!(
-        test_prover.get_cached_commit(false),
-        test_prover.get_cached_commit(true)
+        test_prover.get_dag_commit(false),
+        test_prover.get_dag_commit(true)
     );
     Ok(())
 }
@@ -740,6 +738,8 @@ fn test_deferral_internal_recursive_vk_stabilization() -> Result<()> {
 #[test_case(4 ; "full aggregation tree")]
 #[test_case(5 ; "partially empty aggregation tree")]
 fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
+    use crate::circuit::utils::vk_commit_components;
+
     setup_tracing_with_log_level(Level::INFO);
     let (deferral_vk, def_proof) = generate_single_def_proof(0)?;
     let (deferral_internal_recursive_vk, final_inner_proof) =
@@ -764,15 +764,13 @@ fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
 
     let child_verifier_pvs: &VerifierBasePvs<F> =
         final_inner_proof.public_values[0].as_slice().borrow();
+
     // app_dag_commit is def_dag_commit here
-    let intermediate_vk = poseidon2_compress_with_capacity(
-        child_verifier_pvs.app_dag_commit,
-        child_verifier_pvs.leaf_dag_commit,
-    )
-    .0;
-    let def_vk = poseidon2_compress_with_capacity(
-        intermediate_vk,
-        child_verifier_pvs.internal_for_leaf_dag_commit,
+    let def_vk = poseidon2_hash_slice_with_states(
+        &vk_commit_components(child_verifier_pvs)
+            .into_iter()
+            .flatten()
+            .collect_vec(),
     )
     .0;
 

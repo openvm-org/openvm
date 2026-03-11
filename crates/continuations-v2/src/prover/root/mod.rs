@@ -15,7 +15,7 @@ use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierT
 use tracing::instrument;
 
 use crate::{
-    bn254::CommitBytes,
+    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
@@ -77,7 +77,7 @@ impl<
 {
     pub fn new<E: StarkEngine<SC = RootSC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_dag_commit: CommitBytes,
+        internal_recursive_cached_commit: CommitBytes,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -100,6 +100,10 @@ impl<
         );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let internal_recursive_dag_commit = DagCommitBytes {
+            cached_commit: internal_recursive_cached_commit,
+            pre_hash: child_vk.pre_hash.into(),
+        };
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
@@ -121,7 +125,7 @@ impl<
 
     pub fn from_pk<E: StarkEngine<SC = RootSC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_dag_commit: CommitBytes,
+        internal_recursive_cached_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -143,6 +147,10 @@ impl<
         );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let internal_recursive_dag_commit = DagCommitBytes {
+            cached_commit: internal_recursive_cached_commit,
+            pre_hash: child_vk.pre_hash.into(),
+        };
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,

@@ -11,14 +11,22 @@ pub enum VerifyStarkError {
     UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
     AppExeCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid app DAG commit: expected {expected:?}, actual {actual:?}")]
-    AppDagCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid leaf DAG commit: expected {expected:?}, actual {actual:?}")]
-    LeafDagCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid internal for leaf DAG commit: expected {expected:?}, actual {actual:?}")]
-    InternalForLeafDagCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid internal recursive DAG commit: expected {expected:?}, actual {actual:?}")]
-    InternalRecursiveDagCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid app cached commit: expected {expected:?}, actual {actual:?}")]
+    AppDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid app vk pre-hash: expected {expected:?}, actual {actual:?}")]
+    AppDagPreHashMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid leaf cached commit: expected {expected:?}, actual {actual:?}")]
+    LeafDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid leaf vk pre-hash: expected {expected:?}, actual {actual:?}")]
+    LeafDagPreHashMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid internal for leaf cached commit: expected {expected:?}, actual {actual:?}")]
+    InternalForLeafDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid internal for leaf vk pre-hash: expected {expected:?}, actual {actual:?}")]
+    InternalForLeafDagPreHashMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid internal recursive cached commit: expected {expected:?}, actual {actual:?}")]
+    InternalRecursiveDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid internal recursive vk pre-hash: expected {expected:?}, actual {actual:?}")]
+    InternalRecursiveDagPreHashMismatch { expected: Digest, actual: Digest },
     #[error("Invalid compression commit: expected {expected:?}, actual {actual:?}")]
     CompressionCommitMismatch { expected: Vec<F>, actual: Vec<F> },
     #[error("Compression commit should not be defined if not enabled, actual {actual:?}")]
