@@ -15,7 +15,7 @@ use crate::{
         CommitmentsBus, CommitmentsBusMessage, MerkleVerifyBus, MerkleVerifyBusMessage,
         Poseidon2CompressBus, Poseidon2CompressMessage,
     },
-    primitives::bus::{BitShiftBus, BitShiftMessage},
+    primitives::bus::{RightShiftBus, RightShiftMessage},
 };
 
 /// There are two parts in the merkle proof: hashing leaves and the (standard) merkle proof.
@@ -55,9 +55,9 @@ pub struct MerkleVerifyCols<T> {
     pub leaf_sub_idx: T,
 
     /// The merkle idx of the leaf hash root
-    pub idx: T,
+    pub merkle_idx_bit_src: T,
     /// Merkle idx suffix after shifting right max(0, height - k) bits
-    pub current_idx: T,
+    pub current_idx_bit_src: T,
     /// Total depth of the merkle proof including the leaves part = merkle_proof.len() + 1 + k
     pub total_depth: T,
     /// 0 -> total_depth - 1, where leaves are at height 0, combined leaf hash is at height k
@@ -90,7 +90,7 @@ pub struct MerkleVerifyAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub commitments_bus: CommitmentsBus,
-    pub bit_shift_bus: BitShiftBus,
+    pub right_shift_bus: RightShiftBus,
     pub k: usize,
 }
 
@@ -160,7 +160,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
         // Constrain current_idx == idx on leaf rows
         builder
             .when(local.is_combining_leaves)
-            .assert_eq(local.idx, local.current_idx);
+            .assert_eq(local.merkle_idx_bit_src, local.current_idx_bit_src);
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
@@ -176,7 +176,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             local.recv_flag * (AB::Expr::from_u8(3) - local.recv_flag) * AB::F::TWO.inverse();
 
         let left_child_current_idx =
-            local.current_idx * (AB::Expr::TWO - local.is_combining_leaves);
+            local.current_idx_bit_src * (AB::Expr::TWO - local.is_combining_leaves);
         let right_child_current_idx =
             left_child_current_idx.clone() + AB::Expr::ONE - local.is_combining_leaves;
 
@@ -185,8 +185,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             local.proof_idx,
             MerkleVerifyBusMessage {
                 value: local.left.map(Into::into),
-                merkle_idx: local.idx.into(),
-                current_idx: left_child_current_idx,
+                merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                current_idx_bit_src: left_child_current_idx,
                 total_depth: local.total_depth.into(),
                 height: local.height.into(),
                 is_leaf: local.is_combining_leaves.into(),
@@ -201,8 +201,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             local.proof_idx,
             MerkleVerifyBusMessage {
                 value: local.right.map(Into::into),
-                merkle_idx: local.idx.into(),
-                current_idx: right_child_current_idx,
+                merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                current_idx_bit_src: right_child_current_idx,
                 total_depth: local.total_depth.into(),
                 height: local.height.into(),
                 is_leaf: local.is_combining_leaves.into(),
@@ -218,8 +218,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             local.proof_idx,
             MerkleVerifyBusMessage {
                 value: local.compression_output.map(Into::into),
-                merkle_idx: local.idx.into(),
-                current_idx: local.current_idx.into(),
+                merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                current_idx_bit_src: local.current_idx_bit_src.into(),
                 total_depth: local.total_depth.into(),
                 height: local.height + AB::Expr::ONE,
                 is_leaf: local.is_combining_leaves - local.is_last_leaf,
@@ -241,12 +241,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             local.is_valid * local.is_last_merkle,
         );
 
-        self.bit_shift_bus.lookup_key(
+        self.right_shift_bus.lookup_key(
             builder,
-            BitShiftMessage {
-                base: local.idx.into(),
-                num_bits: local.total_depth - AB::Expr::from_usize(self.k),
-                result: local.current_idx.into(),
+            RightShiftMessage {
+                input: local.merkle_idx_bit_src.into(),
+                shift_bits: local.total_depth - AB::Expr::from_usize(self.k),
+                result: local.current_idx_bit_src.into(),
             },
             local.is_valid * local.is_last_merkle,
         );

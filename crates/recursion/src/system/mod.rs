@@ -33,7 +33,7 @@ use crate::{
     },
     gkr::GkrModule,
     primitives::{
-        bus::{BitShiftBus, ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus},
+        bus::{ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus, RightShiftBus},
         exp_bits_len::{ExpBitsLenAir, ExpBitsLenTraceGenerator},
         pow::{PowerCheckerAir, PowerCheckerCpuTraceGenerator},
     },
@@ -252,7 +252,7 @@ pub struct BusInventory {
 
     // Compute buses
     pub exp_bits_len_bus: ExpBitsLenBus,
-    pub bit_shift_bus: BitShiftBus,
+    pub right_shift_bus: RightShiftBus,
     pub sel_uni_bus: SelUniBus,
     pub eq_neg_result_bus: EqNegResultBus,
     pub eq_neg_base_rand_bus: EqNegBaseRandBus,
@@ -389,7 +389,7 @@ impl BusInventory {
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
 
             exp_bits_len_bus: ExpBitsLenBus::new(b.new_bus_idx()),
-            bit_shift_bus: BitShiftBus::new(b.new_bus_idx()),
+            right_shift_bus: RightShiftBus::new(b.new_bus_idx()),
             eq_neg_base_rand_bus: EqNegBaseRandBus::new(b.new_bus_idx()),
             eq_neg_result_bus: EqNegResultBus::new(b.new_bus_idx()),
 
@@ -953,7 +953,7 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
     fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let exp_bits_len_air = ExpBitsLenAir::new(
             self.bus_inventory.exp_bits_len_bus,
-            self.bus_inventory.bit_shift_bus,
+            self.bus_inventory.right_shift_bus,
         );
         let power_checker_air = PowerCheckerAir::<2, POW_CHECKER_HEIGHT> {
             pow_bus: self.bus_inventory.power_checker_bus,

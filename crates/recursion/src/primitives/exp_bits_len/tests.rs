@@ -29,7 +29,7 @@ use super::{
     },
 };
 use crate::{
-    primitives::bus::{BitShiftBus, ExpBitsLenBus, ExpBitsLenMessage},
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage, RightShiftBus},
     tests::test_engine_small,
 };
 
@@ -154,10 +154,10 @@ fn prove_and_verify_exp_bits(
     disable_debug_builder();
 
     let exp_bits_len_bus = ExpBitsLenBus::new(0);
-    let bit_shift_bus = BitShiftBus::new(1);
+    let right_shift_bus = RightShiftBus::new(1);
     let airs = any_air_arc_vec![
         ExpBitsLenLookupAir { exp_bits_len_bus },
-        ExpBitsLenAir::new(exp_bits_len_bus, bit_shift_bus)
+        ExpBitsLenAir::new(exp_bits_len_bus, right_shift_bus)
     ];
 
     let engine = test_engine_small();

@@ -10,7 +10,7 @@ use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::primitives::{
-    bus::{BitShiftBus, BitShiftMessage, ExpBitsLenBus, ExpBitsLenMessage},
+    bus::{ExpBitsLenBus, ExpBitsLenMessage, RightShiftBus, RightShiftMessage},
     exp_bits_len::trace::{LOW_BITS_COUNT, NUM_BITS_MAX_PLUS_ONE},
 };
 
@@ -55,7 +55,7 @@ pub struct ExpBitsLenCols<T> {
 #[derive(Debug, derive_new::new)]
 pub struct ExpBitsLenAir {
     pub exp_bits_len_bus: ExpBitsLenBus,
-    pub bit_shift_bus: BitShiftBus,
+    pub right_shift_bus: RightShiftBus,
 }
 
 fn assert_babybear_field<F: PrimeField32>() {
@@ -223,11 +223,11 @@ where
             .when(is_transition)
             .assert_eq(local.bit_src_original, next.bit_src_original);
 
-        self.bit_shift_bus.add_key_with_lookups(
+        self.right_shift_bus.add_key_with_lookups(
             builder,
-            BitShiftMessage {
-                base: local.bit_src_original,
-                num_bits: local.bit_idx,
+            RightShiftMessage {
+                input: local.bit_src_original,
+                shift_bits: local.bit_idx,
                 result: local.bit_src,
             },
             local.shift_mult,

@@ -18,8 +18,8 @@ template <typename T> struct MerkleVerifyCols {
     T is_last_leaf;
     T leaf_sub_idx;
 
-    T idx;
-    T current_idx;
+    T merkle_idx_bit_src;
+    T current_idx_bit_src;
     T total_depth;
     T height;
 
@@ -161,10 +161,16 @@ __global__ void cukernel_merkle_verify_tracegen(
                 row, MerkleVerifyCols, leaf_sub_idx, Fp(static_cast<uint32_t>(indices.result_index))
             );
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, idx, Fp(static_cast<uint32_t>(record.merkle_idx))
+                row,
+                MerkleVerifyCols,
+                merkle_idx_bit_src,
+                Fp(static_cast<uint32_t>(record.merkle_idx))
             );
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, current_idx, Fp(static_cast<uint32_t>(record.merkle_idx))
+                row,
+                MerkleVerifyCols,
+                current_idx_bit_src,
+                Fp(static_cast<uint32_t>(record.merkle_idx))
             );
             COL_WRITE_VALUE(
                 row, MerkleVerifyCols, height, Fp(static_cast<uint32_t>(indices.source_layer))
@@ -202,13 +208,16 @@ __global__ void cukernel_merkle_verify_tracegen(
             COL_WRITE_VALUE(row, MerkleVerifyCols, is_combining_leaves, Fp::zero());
             COL_WRITE_VALUE(row, MerkleVerifyCols, leaf_sub_idx, Fp::zero());
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, idx, Fp(static_cast<uint32_t>(record.merkle_idx))
+                row,
+                MerkleVerifyCols,
+                merkle_idx_bit_src,
+                Fp(static_cast<uint32_t>(record.merkle_idx))
             );
 
             current_idx >>= 1;
 
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, current_idx, Fp(static_cast<uint32_t>(current_idx))
+                row, MerkleVerifyCols, current_idx_bit_src, Fp(static_cast<uint32_t>(current_idx))
             );
             COL_WRITE_VALUE(row, MerkleVerifyCols, height, Fp(static_cast<uint32_t>(pos + k)));
             COL_WRITE_VALUE(row, MerkleVerifyCols, is_last_leaf, Fp::zero());
