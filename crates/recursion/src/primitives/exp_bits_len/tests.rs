@@ -1,6 +1,7 @@
 use core::borrow::Borrow;
 use std::borrow::BorrowMut;
 
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     any_air_arc_vec,
     interaction::InteractionBuilder,
@@ -18,7 +19,6 @@ use openvm_stark_sdk::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use stark_recursion_circuit_derive::AlignedBorrow;
 use tracing::Level;
 
 use super::{

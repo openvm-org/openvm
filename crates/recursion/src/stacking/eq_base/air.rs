@@ -4,6 +4,7 @@ use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not, or},
     SubAir,
 };
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -13,7 +14,6 @@ use p3_field::{
     extension::BinomiallyExtendable, Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
 };
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{

@@ -4,6 +4,7 @@ use std::{array::from_fn, sync::Arc};
 use openvm_poseidon2_air::{
     Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
 };
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
     PartitionedBaseAir,
@@ -11,7 +12,6 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::bus::{
     Poseidon2CompressBus, Poseidon2CompressMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
