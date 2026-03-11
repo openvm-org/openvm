@@ -195,7 +195,8 @@ impl TranscriptModule {
                     idx += 1;
                     if idx == CHUNK {
                         // If it's sample -> observe, we don't need to permute. otherwise permute
-                        permuted = !is_sample || preflight.transcript.samples()[tidx];
+                        permuted = tidx < preflight.transcript.len()
+                            && (!is_sample || preflight.transcript.samples()[tidx]);
                         break;
                     }
                 }
