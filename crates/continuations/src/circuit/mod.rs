@@ -41,8 +41,8 @@ pub(crate) mod utils {
     use openvm_circuit_primitives::utils::assert_array_eq;
     use openvm_recursion_circuit::utils::assert_zeros;
     use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+    use openvm_verify_stark_host::pvs::{DagCommit, VerifierBasePvs};
     use p3_air::AirBuilder;
-    use verify_stark::pvs::{DagCommit, VerifierBasePvs};
 
     pub fn assert_dag_commit_eq<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
         builder: &mut AB,

@@ -8,8 +8,8 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_verify_stark_host::pvs::VerifierBasePvs;
 use p3_field::PrimeCharacteristicRing;
-use verify_stark::pvs::VerifierBasePvs;
 
 use crate::{circuit::SingleAirTraceData, SC};
 

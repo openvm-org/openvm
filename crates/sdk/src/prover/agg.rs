@@ -4,8 +4,8 @@ use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::prover::ChildVkKind;
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
+use openvm_verify_stark_host::NonRootStarkProof;
 use tracing::info_span;
-use verify_stark::NonRootStarkProof;
 
 use crate::{
     config::{

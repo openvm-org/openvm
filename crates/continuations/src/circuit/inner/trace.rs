@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
-use verify_stark::pvs::{DagCommit, DeferralPvs};
+use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
 
 use crate::circuit::{SingleAirTraceData, SubCircuitTraceData};
 

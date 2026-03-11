@@ -34,7 +34,7 @@ use openvm_stark_sdk::config::{
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
-use verify_stark::{
+use openvm_verify_stark_host::{
     verify_vm_stark_proof_decoded,
     vk::{NonRootStarkVerifyingKey, VerificationBaseline},
     NonRootStarkProof,

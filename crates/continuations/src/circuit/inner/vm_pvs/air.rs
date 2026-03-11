@@ -10,10 +10,10 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+use openvm_verify_stark_host::pvs::{VmPvs, VM_PVS_AIR_ID};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
-use verify_stark::pvs::{VmPvs, VM_PVS_AIR_ID};
 
 use crate::circuit::inner::{
     app::*,

@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VirtualMachineError, VmVerificationError};
 use openvm_transpiler::transpiler::TranspilerError;
+use openvm_verify_stark_host::error::VerifyStarkError;
 use thiserror::Error;
-use verify_stark::error::VerifyStarkError;
 
 use crate::SC;
 

@@ -12,8 +12,8 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
+use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::PrimeField32;
-use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use crate::circuit::{
     deferral::verify::{

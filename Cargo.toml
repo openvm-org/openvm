@@ -30,7 +30,7 @@ members = [
     "crates/toolchain/tests",
     "crates/continuations",
     "crates/recursion",
-    "crates/verify-stark",
+    "crates/verify",
     "crates/vm",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
@@ -142,7 +142,7 @@ openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-recursion-circuit = { path = "crates/recursion", default-features = false }
 openvm-recursion-circuit-derive = { path = "crates/recursion/derive", default-features = false }
 openvm-continuations = { path = "crates/continuations", default-features = false }
-verify-stark = { path = "crates/verify-stark", default-features = false }
+openvm-verify-stark-host = { path = "crates/verify", default-features = false }
 openvm-sdk = { path = "crates/sdk", default-features = false }
 openvm-sdk-config = { path = "crates/sdk-config", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }

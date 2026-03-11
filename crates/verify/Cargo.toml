@@ -1,5 +1,5 @@
 [package]
-name = "verify-stark"
+name = "openvm-verify-stark-host"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

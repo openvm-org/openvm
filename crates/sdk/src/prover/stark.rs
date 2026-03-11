@@ -6,7 +6,7 @@ use openvm_circuit::arch::{
     VmExecutionConfig,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
-use verify_stark::{vk::VerificationBaseline, NonRootStarkProof};
+use openvm_verify_stark_host::{vk::VerificationBaseline, NonRootStarkProof};
 
 use crate::{
     prover::{vm::types::VmProvingKey, AggProver, AppProver},

@@ -11,9 +11,9 @@ use openvm_stark_backend::{
     proof::Proof,
 };
 use openvm_transpiler::elf::Elf;
+use openvm_verify_stark_host::NonRootStarkProof;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use verify_stark::NonRootStarkProof;
 
 use crate::OPENVM_VERSION;
 

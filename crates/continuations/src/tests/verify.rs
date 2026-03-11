@@ -26,10 +26,10 @@ use openvm_stark_sdk::{
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
+use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues};
 use p3_field::PrimeCharacteristicRing;
 use tracing::{warn, Level};
-use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use super::{
     app_system_params, expected_deferral_leaf_io_commit,

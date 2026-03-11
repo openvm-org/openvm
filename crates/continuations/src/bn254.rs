@@ -2,9 +2,9 @@ use std::array::from_fn;
 
 use num_bigint::BigUint;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
+use openvm_verify_stark_host::pvs::DagCommit;
 use p3_bn254::Bn254;
 use p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField32};
-use verify_stark::pvs::DagCommit;
 
 pub const BN254_BYTES: usize = 32;
 

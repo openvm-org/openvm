@@ -21,8 +21,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::{
     app_params_with_100_bits_security, baby_bear_poseidon2::F, MAX_APP_LOG_STACKED_HEIGHT,
 };
+use openvm_verify_stark_host::NonRootStarkProof;
 use tracing::info_span;
-use verify_stark::NonRootStarkProof;
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},

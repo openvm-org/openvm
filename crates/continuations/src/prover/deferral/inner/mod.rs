@@ -11,8 +11,8 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
+use openvm_verify_stark_host::pvs::DagCommit;
 use tracing::instrument;
-use verify_stark::pvs::DagCommit;
 
 use crate::{
     circuit::{

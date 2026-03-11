@@ -3,7 +3,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
-use verify_stark::pvs::{DeferralPvs, VmPvs, DEF_PVS_AIR_ID, VM_PVS_AIR_ID};
+use openvm_verify_stark_host::pvs::{DeferralPvs, VmPvs, DEF_PVS_AIR_ID, VM_PVS_AIR_ID};
 
 use crate::{
     bn254::CommitBytes,

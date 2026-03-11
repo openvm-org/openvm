@@ -9,10 +9,10 @@ use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_verify_stark_host::pvs::{VerifierBasePvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use verify_stark::pvs::{VerifierBasePvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 
 use crate::circuit::{
     deferral::aggregation::inner::bus::{DefPvsConsistencyBus, DefPvsConsistencyMessage},

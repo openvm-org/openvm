@@ -21,7 +21,7 @@ openvm = { workspace = true }
 
 openvm-sdk-config = { workspace = true }
 openvm-continuations = { workspace = true }
-verify-stark = { workspace = true }
+openvm-verify-stark-host = { workspace = true }
 
 bitcode = { workspace = true }
 bon = { workspace = true }

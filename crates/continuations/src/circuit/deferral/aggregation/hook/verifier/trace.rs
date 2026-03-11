@@ -7,9 +7,9 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
+use openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{DeferralPvs, VerifierBasePvs};
 
 use crate::{
     circuit::{

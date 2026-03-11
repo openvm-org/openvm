@@ -16,8 +16,8 @@ use openvm_stark_backend::{
     StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::PrimeField32;
-use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use crate::circuit::{
     deferral::verify::DeferralMerkleProofs,

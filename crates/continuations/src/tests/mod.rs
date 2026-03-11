@@ -64,7 +64,7 @@ cfg_if::cfg_if! {
             baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder},
             baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
         };
-        use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
+        use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
         use crate::prover::DeferralChildVkKind;
         use crate::utils::{poseidon2_input_to_digests, zero_hash};
         type RootEngine = BabyBearBn254Poseidon2CpuEngine;

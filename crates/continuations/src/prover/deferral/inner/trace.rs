@@ -11,8 +11,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
+use openvm_verify_stark_host::pvs::DagCommit;
 use tracing::instrument;
-use verify_stark::pvs::DagCommit;
 
 use super::{DeferralChildVkKind, DeferralInnerProver};
 use crate::{

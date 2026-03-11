@@ -5,9 +5,9 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
+use openvm_verify_stark_host::pvs::{DagCommit, VerifierBasePvs, VERIFIER_PVS_AIR_ID};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{DagCommit, VerifierBasePvs, VERIFIER_PVS_AIR_ID};
 
 use crate::circuit::deferral::aggregation::inner::verifier::air::{
     DeferralChildLevel, DeferralVerifierPvsCols,

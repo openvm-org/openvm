@@ -3189,13 +3189,13 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "openvm-verify-stark-host",
  "p3-air",
  "p3-bn254",
  "p3-field",
  "p3-matrix",
  "test-case",
  "tracing",
- "verify-stark",
 ]
 
 [[package]]
@@ -3883,6 +3883,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "openvm-verify-stark-host",
  "serde",
  "serde_json",
  "serde_with",
@@ -3890,7 +3891,6 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
- "verify-stark",
 ]
 
 [[package]]
@@ -4100,6 +4100,22 @@ dependencies = [
  "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "openvm-verify-stark-host"
+version = "2.0.0-alpha"
+dependencies = [
+ "bitcode",
+ "eyre",
+ "openvm-circuit",
+ "openvm-recursion-circuit-derive",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-field",
+ "serde",
+ "thiserror 1.0.69",
+ "zstd",
 ]
 
 [[package]]
@@ -6301,22 +6317,6 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
-
-[[package]]
-name = "verify-stark"
-version = "2.0.0-alpha"
-dependencies = [
- "bitcode",
- "eyre",
- "openvm-circuit",
- "openvm-recursion-circuit-derive",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "p3-field",
- "serde",
- "thiserror 1.0.69",
- "zstd",
-]
 
 [[package]]
 name = "version_check"

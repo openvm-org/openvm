@@ -6,9 +6,9 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_verify_stark_host::pvs::{VmPvs, VM_PVS_AIR_ID};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::VM_PVS_AIR_ID;
 
 use crate::circuit::inner::{app::*, vm_pvs::air::VmPvsCols, ProofsType};
 
@@ -79,14 +79,13 @@ pub fn generate_proving_ctx(
             cols.child_pvs.final_root = final_root;
         } else {
             cols.has_verifier_pvs = F::ONE;
-            let child_pvs: &verify_stark::pvs::VmPvs<F> =
-                proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
+            let child_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
             cols.child_pvs = *child_pvs;
         }
     }
 
-    let mut public_values = vec![F::ZERO; verify_stark::pvs::VmPvs::<u8>::width()];
-    let pvs: &mut verify_stark::pvs::VmPvs<F> = public_values.as_mut_slice().borrow_mut();
+    let mut public_values = vec![F::ZERO; VmPvs::<u8>::width()];
+    let pvs: &mut VmPvs<F> = public_values.as_mut_slice().borrow_mut();
 
     if num_vm_proofs > 0 {
         let first_row: &VmPvsCols<F> = trace[..base_width].borrow();

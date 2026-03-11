@@ -41,11 +41,11 @@ use openvm_stark_sdk::{
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
+use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use tracing::{warn, Level};
-use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use super::{app_system_params, internal_system_params, leaf_system_params, root_system_params};
 use crate::{

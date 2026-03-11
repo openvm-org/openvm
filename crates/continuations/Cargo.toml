@@ -12,7 +12,7 @@ p3-field = { workspace = true }
 p3-matrix = { workspace = true }
 openvm-recursion-circuit = { workspace = true }
 openvm-recursion-circuit-derive = { workspace = true }
-verify-stark = { workspace = true }
+openvm-verify-stark-host = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
 openvm-circuit-primitives = { workspace = true }

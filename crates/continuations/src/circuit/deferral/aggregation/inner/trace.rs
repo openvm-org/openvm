@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
-use verify_stark::pvs::DagCommit;
+use openvm_verify_stark_host::pvs::DagCommit;
 
 use crate::{
     circuit::deferral::{
