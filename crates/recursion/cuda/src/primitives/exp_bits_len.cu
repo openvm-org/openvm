@@ -1,48 +1,15 @@
 #include "fp.h"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
+#include "util.cuh"
 
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 
 constexpr uint8_t kExpBitsLenNumBitsMax = 31;
-
-// Lookup table for inverses of all num_bits in [0, kExpBitsLenNumBitsMax]
-__device__ __constant__ Fp kExpBitsLenNumBitsInv[kExpBitsLenNumBitsMax + 1] = {
-    Fp(0x00000000),
-    Fp(0x00000001),
-    Fp(0x3c000001),
-    Fp(0x50000001),
-    Fp(0x5a000001),
-    Fp(0x60000001),
-    Fp(0x64000001),
-    Fp(0x336db6dc),
-    Fp(0x69000001),
-    Fp(0x1aaaaaab),
-    Fp(0x6c000001),
-    Fp(0x20ba2e8c),
-    Fp(0x6e000001),
-    Fp(0x1bb13b14),
-    Fp(0x19b6db6e),
-    Fp(0x70000001),
-    Fp(0x70800001),
-    Fp(0x38787879),
-    Fp(0x49555556),
-    Fp(0x5ebca1b0),
-    Fp(0x72000001),
-    Fp(0x6124924a),
-    Fp(0x105d1746),
-    Fp(0x3e9bd37b),
-    Fp(0x73000001),
-    Fp(0x5b333334),
-    Fp(0x0dd89d8a),
-    Fp(0x08e38e39),
-    Fp(0x0cdb6db7),
-    Fp(0x14b08d3e),
-    Fp(0x74000001),
-    Fp(0x03def7be),
-};
+constexpr uint8_t kExpBitsLenNumRows = kExpBitsLenNumBitsMax + 1;
+constexpr uint8_t kExpBitsLenLowBitsCount = 27;
 
 struct ExpBitsLenRecord {
     uint8_t num_bits;
@@ -54,14 +21,19 @@ struct ExpBitsLenRecord {
 template <typename T>
 struct ExpBitsLenCols {
     T is_valid;
+    T is_first;
+    T bit_idx;
     T base;
     T bit_src;
     T num_bits;
-    T num_bits_inv;
+    T apply_bit;
+    T low_bits_left;
+    T in_low_region;
     T result;
-    T sub_result;
-    T bit_src_div2;
-    T bit_src_mod2;
+    T result_multiplier;
+    T bit_src_mod_2;
+    T low_bits_are_zero;
+    T high_bits_all_one;
 };
 
 __global__ void exp_bits_len_tracegen_kernel(
@@ -79,48 +51,87 @@ __global__ void exp_bits_len_tracegen_kernel(
     if (idx >= num_requests) {
         RowSlice dummy_row(trace + num_valid_rows + (idx - num_requests), height);
         COL_WRITE_VALUE(dummy_row, ExpBitsLenCols, result, Fp::one());
+        COL_WRITE_VALUE(dummy_row, ExpBitsLenCols, result_multiplier, Fp::one());
         return;
     }
 
     const ExpBitsLenRecord record = records[idx];
     assert(record.num_bits <= kExpBitsLenNumBitsMax);
 
-    Fp base_pow = record.base;
-    for (uint8_t i = 0; i <= record.num_bits; i++) {
-        RowSlice base_row(trace + record.row_offset + (record.num_bits - i), height);
-        COL_WRITE_VALUE(base_row, ExpBitsLenCols, base, base_pow);
-        base_pow = base_pow * base_pow;
+    Fp bases[kExpBitsLenNumRows];
+    Fp results[kExpBitsLenNumRows];
+
+    bases[0] = record.base;
+    for (uint8_t step = 1; step < kExpBitsLenNumRows; ++step) {
+        bases[step] = bases[step - 1] * bases[step - 1];
     }
 
-    uint32_t bit_src_uint = record.bit_src.asUInt32();
+    for (uint8_t step = 0; step < kExpBitsLenNumRows; ++step) {
+        results[step] = Fp::one();
+    }
 
-    // First iteration j = 0
-    uint32_t shifted = bit_src_uint >> record.num_bits;
-    RowSlice row(trace + record.row_offset, height);
-    COL_WRITE_VALUE(row, ExpBitsLenCols, is_valid, Fp::one());
-    COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src, Fp(shifted));
-    COL_WRITE_VALUE(row, ExpBitsLenCols, num_bits, Fp::zero());
-    COL_WRITE_VALUE(row, ExpBitsLenCols, num_bits_inv, Fp::zero());
-    COL_WRITE_VALUE(row, ExpBitsLenCols, result, Fp::one());
-    COL_WRITE_VALUE(row, ExpBitsLenCols, sub_result, Fp::one());
-    COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_div2, Fp(shifted >> 1));
-    COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_mod2, Fp(shifted & 1));
-
+    const uint32_t bit_src_uint = record.bit_src.asUInt32();
     Fp acc = Fp::one();
-    for (uint8_t j = 1; j <= record.num_bits; j++) {
-        shifted = bit_src_uint >> (record.num_bits - j);
+    for (int step = kExpBitsLenNumBitsMax - 1; step >= 0; --step) {
+        if (step < record.num_bits && ((bit_src_uint >> step) & 1) == 1) {
+            acc = acc * bases[step];
+        }
+        results[step] = acc;
+    }
 
-        row = RowSlice(trace + record.row_offset + j, height);
+    bool low_bits_are_zero = true;
+    bool high_bits_all_one = false;
+    for (uint8_t step = 0; step < kExpBitsLenNumRows; ++step) {
+        if (step == kExpBitsLenLowBitsCount) {
+            high_bits_all_one = true;
+        }
+
+        const uint32_t shifted = bit_src_uint >> step;
+        const uint8_t num_bits = step < record.num_bits ? record.num_bits - step : 0;
+        const uint8_t low_bits_left =
+            step < kExpBitsLenLowBitsCount ? kExpBitsLenLowBitsCount - step : 0;
+        RowSlice row(trace + record.row_offset + step, height);
+
         COL_WRITE_VALUE(row, ExpBitsLenCols, is_valid, Fp::one());
+        COL_WRITE_VALUE(row, ExpBitsLenCols, is_first, bool_to_fp(step == 0));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, bit_idx, Fp(step));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, base, bases[step]);
         COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src, Fp(shifted));
-        COL_WRITE_VALUE(row, ExpBitsLenCols, num_bits, Fp(j));
-        COL_WRITE_VALUE(row, ExpBitsLenCols, num_bits_inv, kExpBitsLenNumBitsInv[j]);
-        COL_WRITE_VALUE(row, ExpBitsLenCols, sub_result, acc);
-        COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_div2, Fp(shifted >> 1));
-        COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_mod2, Fp(shifted & 1));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, num_bits, Fp(num_bits));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, apply_bit, bool_to_fp(num_bits != 0));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, low_bits_left, Fp(low_bits_left));
+        COL_WRITE_VALUE(
+            row,
+            ExpBitsLenCols,
+            in_low_region,
+            bool_to_fp(low_bits_left != 0)
+        );
+        COL_WRITE_VALUE(row, ExpBitsLenCols, result, results[step]);
+        COL_WRITE_VALUE(
+            row,
+            ExpBitsLenCols,
+            result_multiplier,
+            num_bits != 0 && (shifted & 1) == 1 ? bases[step] : Fp::one()
+        );
+        COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_mod_2, Fp(shifted & 1));
+        COL_WRITE_VALUE(
+            row,
+            ExpBitsLenCols,
+            low_bits_are_zero,
+            bool_to_fp(low_bits_are_zero)
+        );
+        COL_WRITE_VALUE(
+            row,
+            ExpBitsLenCols,
+            high_bits_all_one,
+            bool_to_fp(high_bits_all_one)
+        );
 
-        if (shifted & 1) acc = acc * row[COL_INDEX(ExpBitsLenCols, base)];
-        COL_WRITE_VALUE(row, ExpBitsLenCols, result, acc);
+        if (step < kExpBitsLenLowBitsCount) {
+            low_bits_are_zero = low_bits_are_zero && ((shifted & 1) == 0);
+        } else if (step + 1 < kExpBitsLenNumRows) {
+            high_bits_all_one = high_bits_all_one && ((shifted & 1) == 1);
+        }
     }
 }
 

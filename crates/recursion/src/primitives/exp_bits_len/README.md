@@ -1,81 +1,95 @@
-# Recursion ExpBitsLen AIR 
+# Recursion ExpBitsLen AIR
 
-## 1. Executive summary
+## Summary
 
-The job of `ExpBitsLenAir` is to provide a lookup service for messages
-`(base, bit_src, num_bits, result)` where:
+`ExpBitsLenAir` serves lookups of the form
 
-`result` equals `base` raised to the value of the lowest `num_bits` bits of `bit_src`.
+`(base, bit_src, num_bits, result)`
 
-In formula form:
+where
 
-`result = base^(bit_src mod 2^num_bits)`.
+`result = base^(bit_src mod 2^num_bits)`
 
-Why we need it: many AIRs (PoW checks and query exponent checks) can reuse this one bus lookup instead of implementing exponent logic repeatedly.
+using the canonical BabyBear representative of `bit_src`.
 
-## 2. Public values
+This primitive is shared by the recursion PoW and query AIRs so they can reuse the same low-bit exponent logic.
 
-This AIR has no public values in its trace interface.
+This AIR is BabyBear-specific. Its canonicality check is hard-coded to the BabyBear modulus
+`p = 15 * 2^27 + 1`, and the implementation will panic if instantiated over a different
+`PrimeField32`.
 
-## 3. Example
+## Trace shape
 
-### 3.1 Row count per request
+Each request always occupies exactly `32` rows:
 
-Other AIRs can make a request: `add_request(&self, base: F, bit_src: F, num_bits: usize)`
-to lookup the exp result.
+- rows `0..30` are the 31 decomposition steps
+- row `31` is the terminal state after the final shift
 
-For one request with `num_bits = n`, tracegen creates exactly `n + 1` valid rows.
+The request row is row `0`. Only that row publishes the external lookup key on `ExpBitsLenBus`.
 
-- row `0` has `num_bits = 0` (base case, `result = 1`)
-- row `n` has `num_bits = n` (the requested top key)
+Across a block:
 
-### 3.2 Relation between adjacent rows
+- `base` squares each step
+- `bit_src` shifts right by one bit each step
+- `num_bits` decrements until it reaches `0`, then stays `0`
+- `result` updates only while `num_bits > 0`
+- decomposition continues all the way to the terminal row even after `num_bits == 0`
 
-- the next row tracks one more bit than the previous row (so `num_bits` increases by one)
-- the next row uses the previous row's base before squaring (equivalently, the next base is one square-root step of the previous base)
-- the next row's `sub_result` is exactly the previous row's `result`
-- the next row computes `result` from `sub_result` and the current least-significant bit:
-  - if the current low bit is `1`, multiply by `base`
-  - if the current low bit is `0`, keep `sub_result` unchanged
+So the external meaning stays the same, but the underlying bit decomposition is fully constrained.
 
-This is exactly the recursive lookup rule encoded in AIR.
+The AIR stores `is_first`, but does not store `is_last` as a column. Instead, on a local/next row
+pair it derives:
 
-### 3.3 Concrete example
+- `is_transition = next.is_valid - next.is_first`
+- `local_is_last = local.is_valid - next.is_valid + next.is_first`
 
-Example request: `base = g`, `bit_src = 45`, `num_bits = 4`.
+This gives a fixed 32-row block structure while still handling exact-height traces and a padding
+tail with the same formula.
 
-`101101b` means binary (`b` = binary), so `101101b = 45` in decimal.
+## Canonicality check
 
-Because `num_bits = 4`, we use only the lowest 4 bits of `bit_src`:  
-`45 = 101101b`, lowest 4 bits are `1101b = 13`, so exponent is `13`.
+Decomposing all 31 bits is not enough by itself in BabyBear, because
 
+`BabyBear::ORDER_U32 = 0x78000001 < 2^31`.
 
-| base | bit_src | num_bits | bit_src_mod_2 | sub_result | result |
-| --- | --- | --- | --- | --- | --- |
-| `g^16` | 2 | 0 | 0 | 1 | 1 |
-| `g^8` | 5 | 1 | 1 | 1 | `g^8` |
-| `g^4` | 11 | 2 | 1 | `g^8` | `g^12` |
-| `g^2` | 22 | 3 | 0 | `g^12` | `g^12` |
-| `g` | 45 | 4 | 1 | `g^12` | `g^13` |
+That means some field elements also admit a second 31-bit representative as `x + p`.
 
-Top requested key is `(g, 45, 4, g^13)`, matching `g^(45 mod 16) = g^13`.
+For BabyBear we can rule that out with a low-degree check because
 
-Note: there are additional auxiliary columns not shown in the table.
+`p = 15 * 2^27 + 1`.
 
-## 4. Proof
+A 31-bit integer is `>= p` iff:
 
-The statement is: for each valid row key `(base, bit_src, num_bits, result)`, `result` is the exponent over the low `num_bits` bits of `bit_src`.
+- its top four bits `b27..b30` are all `1`
+- and at least one of the low 27 bits `b0..b26` is `1`
 
-This is guaranteed by constraints:
+The AIR therefore carries two running booleans:
 
-1. `bit_src_mod_2` is boolean, and `bit_src = 2 * bit_src_div_2 + bit_src_mod_2`
-2. `num_bits = num_bits^2 * num_bits_inv`  
-   so `num_bits * num_bits_inv` is `0` when `num_bits=0`, else `1`
-3. For nonzero `num_bits`, lookup the subproblem at
-   `(base^2, bit_src_div_2, num_bits-1, sub_result)`
-4. For nonzero `num_bits`, enforce
-   `result = sub_result * (bit_src_mod_2 * base + 1 - bit_src_mod_2)`. That is, if `bit_src_mod_2` is 1 we multiply sub_result by base. Otherwise do nothing. 
-5. For zero `num_bits`, enforce `result = 1`
+- `low_bits_are_zero`: all bits `b0..b26` seen so far are zero
+- `high_bits_all_one`: all high bits `b27..b30` seen so far are one
 
-The constraints are all "local", and the relationship between adjacent rows is guaranteed by the self lookup: Every row `add_key_with_lookups`, and every row except first row `lookup_key` for the "previous row".
+On the terminal row it enforces:
 
+`high_bits_all_one * (1 - low_bits_are_zero) = 0`
+
+which excludes the non-canonical `x + p` decomposition while still allowing `p - 1`.
+
+## Main constraints
+
+The AIR enforces:
+
+1. `bit_src_mod_2` is boolean and adjacent rows satisfy `bit_src = 2 * next.bit_src + bit_src_mod_2`
+2. `num_bits` and `low_bits_left` imply their boolean “nonzero” flags via `when(counter).assert_one(selector)`, and the fixed decrement-to-zero transitions force those selectors back to `0` once the counters reach `0`
+3. `result_multiplier` is either `1` or `base`, depending on whether the current bit is active
+4. `is_first => is_valid`, and adjacent rows enforce the fixed 32-row block transition through the derived `is_transition` / `local_is_last` selectors above
+5. the terminal row enforces `bit_src = 0`, `num_bits = 0`, and `result = 1`
+6. the terminal row also enforces the canonical `< p` condition above
+
+These constraints ensure that:
+
+- the bit decomposition is fully constrained through the terminal row
+- `result` is computed from the requested low `num_bits` bits
+- `bit_src` is interpreted using the canonical BabyBear representative
+
+Padding rows do not publish interactions. The AIR does not require a unique padding-row encoding;
+it only constrains the selector structure needed to separate valid request blocks from padding.
