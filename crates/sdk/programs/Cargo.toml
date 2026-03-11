@@ -5,7 +5,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop-v2", default-features = false }
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop-v2.0.0-beta", default-features = false }
 
 [features]
 default = []
