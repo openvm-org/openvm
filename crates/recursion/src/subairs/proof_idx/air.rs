@@ -1,7 +1,7 @@
 use openvm_circuit_primitives::SubAir;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use p3_air::AirBuilder;
 use p3_field::PrimeCharacteristicRing;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 #[derive(Default)]
 pub struct ProofIdxSubAir;
