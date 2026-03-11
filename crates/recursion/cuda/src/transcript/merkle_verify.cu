@@ -3,6 +3,7 @@
 #include "poseidon2.cuh"
 #include "primitives/trace_access.h"
 #include "types.h"
+#include "util.cuh"
 
 #include <cstddef>
 #include <cstdint>
@@ -39,8 +40,6 @@ struct CombinationIndices {
     size_t result_layer;
     size_t result_index;
 };
-
-__device__ __forceinline__ Fp bool_to_fp(bool value) { return value ? Fp::one() : Fp::zero(); }
 
 __device__ bool compute_combination_indices(size_t k, size_t idx, CombinationIndices &out) {
     if (k == 0) {
