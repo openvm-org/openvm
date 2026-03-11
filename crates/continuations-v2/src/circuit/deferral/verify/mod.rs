@@ -5,7 +5,7 @@ use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 
 use crate::{
-    bn254::CommitBytes,
+    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         deferral::verify::{
             bus::{OutputCommitBus, OutputValBus},
@@ -21,6 +21,7 @@ use crate::{
             def_paths::DeferralAccMerklePathsAir,
             memory::UserPvsInMemoryAir,
         },
+        subair::HashSliceSubAir,
         Circuit,
     },
 };
@@ -36,7 +37,7 @@ pub use trace::*;
 #[derive(derive_new::new, Clone)]
 pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    internal_recursive_dag_commit: CommitBytes,
+    internal_recursive_dag_commit: DagCommitBytes,
     def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
@@ -60,7 +61,12 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let verifier_pvs_air = DeferredVerifyPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
+            pre_hash_bus: bus_inventory.pre_hash_bus,
             poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
+            hash_slice_subair: HashSliceSubAir {
+                compress_bus: bus_inventory.poseidon2_compress_bus,
+                permute_bus: bus_inventory.poseidon2_permute_bus,
+            },
             memory_merkle_commit_bus,
             output_val_bus,
             output_commit_bus,

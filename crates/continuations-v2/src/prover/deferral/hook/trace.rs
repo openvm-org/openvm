@@ -39,14 +39,16 @@ where
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,
-            poseidon2_inputs,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
         } = self
             .agg_node_tracegen
             .pre_verifier_subcircuit_tracegen(&proof, leaf_children);
 
         let range_check_inputs = vec![];
         let mut external_data = VerifierExternalData {
-            poseidon2_compress_inputs: &poseidon2_inputs,
+            poseidon2_compress_inputs: &poseidon2_compress_inputs,
+            poseidon2_permute_inputs: &poseidon2_permute_inputs,
             range_check_inputs: &range_check_inputs,
             required_heights: None,
             final_transcript_state: None,

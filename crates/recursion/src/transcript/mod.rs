@@ -315,7 +315,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
     for TranscriptModule
 {
     // External Poseidon2 compress inputs
-    type ModuleSpecificCtx<'a> = Vec<[F; POSEIDON2_WIDTH]>;
+    type ModuleSpecificCtx<'a> = (&'a Vec<[F; POSEIDON2_WIDTH]>, &'a Vec<[F; POSEIDON2_WIDTH]>);
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -323,9 +323,11 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
+        ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
+        let external_poseidon2_permute_inputs = ctx.0;
+        let external_poseidon2_compress_inputs = ctx.1;
         let (required_transcript, required_poseidon2, required_merkle_verify) =
             if let Some(heights) = required_heights {
                 if heights.len() != 3 {
@@ -350,7 +352,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
             RowMajorMatrix::new(merkle_verify_trace_vec, MerkleVerifyCols::<F>::width());
         let TranscriptTraceArtifacts {
             transcript_trace,
-            poseidon2_perm_inputs,
+            mut poseidon2_perm_inputs,
             mut poseidon2_compress_inputs,
         } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript").in_scope(|| {
             self.build_trace_artifacts(
@@ -360,6 +362,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
                 required_transcript,
             )
         })?;
+        poseidon2_perm_inputs.extend_from_slice(external_poseidon2_permute_inputs);
         poseidon2_compress_inputs.extend_from_slice(external_poseidon2_compress_inputs);
 
         let poseidon2_trace =
@@ -459,11 +462,14 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
+            external_poseidon2_inputs: &(&Vec<[F; POSEIDON2_WIDTH]>, &Vec<[F; POSEIDON2_WIDTH]>),
         ) -> Self {
+            let external_poseidon2_permute_inputs = external_poseidon2_inputs.0;
+            let external_poseidon2_compress_inputs = external_poseidon2_inputs.1;
             let poseidon2_perm_inputs = preflights
                 .iter()
                 .flat_map(|preflight| preflight.cpu.poseidon2_perm_inputs.clone())
+                .chain(external_poseidon2_permute_inputs.iter().copied())
                 .collect_vec();
             let poseidon2_compress_inputs = preflights
                 .iter()
@@ -508,7 +514,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for TranscriptModule {
-        type ModuleSpecificCtx<'a> = Vec<[F; POSEIDON2_WIDTH]>;
+        type ModuleSpecificCtx<'a> = (&'a Vec<[F; POSEIDON2_WIDTH]>, &'a Vec<[F; POSEIDON2_WIDTH]>);
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -516,7 +522,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
+            ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let (required_transcript, required_poseidon2, required_merkle_verify) =
@@ -528,12 +534,7 @@ mod cuda_tracegen {
                 } else {
                     (None, None, None)
                 };
-            let blob = TranscriptBlob::new(
-                child_vk,
-                proofs,
-                preflights,
-                external_poseidon2_compress_inputs,
-            );
+            let blob = TranscriptBlob::new(child_vk, proofs, preflights, ctx);
 
             let merkle_trace = tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify")
                 .in_scope(|| merkle_verify::cuda::generate_trace(&blob, required_merkle_verify))?;
