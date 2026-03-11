@@ -1,5 +1,6 @@
 use core::borrow::Borrow;
 
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -7,7 +8,6 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::primitives::{
     bus::{ExpBitsLenBus, ExpBitsLenMessage, RightShiftBus, RightShiftMessage},

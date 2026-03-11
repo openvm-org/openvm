@@ -1,0 +1,22 @@
+[package]
+name = "openvm-verify-stark-host"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Lightweight crate to verify a STARK proof for an OpenVM virtual machine."
+
+[dependencies]
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
+openvm-circuit.workspace = true
+openvm-recursion-circuit-derive.workspace = true
+
+bitcode.workspace = true
+eyre.workspace = true
+p3-field.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+zstd.workspace = true
+
+[features]
+default = []

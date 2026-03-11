@@ -5,6 +5,7 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
     SubAir,
 };
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -12,7 +13,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     batch_constraint::bus::{
