@@ -1,5 +1,5 @@
 [package]
-name = "sdk-v2"
+name = "openvm-sdk"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

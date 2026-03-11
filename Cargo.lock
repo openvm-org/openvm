@@ -3397,11 +3397,11 @@ dependencies = [
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-sdk-config",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
- "sdk-v2",
  "serde",
  "serde_with",
  "toml",
@@ -3820,6 +3820,41 @@ dependencies = [
  "serde",
  "serde_yaml",
  "walkdir",
+]
+
+[[package]]
+name = "openvm-sdk"
+version = "2.0.0-alpha"
+dependencies = [
+ "bitcode",
+ "bon",
+ "cfg-if",
+ "clap",
+ "continuations-v2",
+ "derivative",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "eyre",
+ "getset",
+ "hex",
+ "itertools 0.14.0",
+ "num-bigint 0.4.6",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-cuda-backend",
+ "openvm-sdk-config",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml",
+ "tracing",
+ "verify-stark",
 ]
 
 [[package]]
@@ -5240,41 +5275,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "sdk-v2"
-version = "2.0.0-alpha"
-dependencies = [
- "bitcode",
- "bon",
- "cfg-if",
- "clap",
- "continuations-v2",
- "derivative",
- "derive-new 0.6.0",
- "derive_more 1.0.0",
- "eyre",
- "getset",
- "hex",
- "itertools 0.14.0",
- "num-bigint 0.4.6",
- "openvm",
- "openvm-build",
- "openvm-circuit",
- "openvm-cuda-backend",
- "openvm-sdk-config",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "openvm-transpiler",
- "serde",
- "serde_json",
- "serde_with",
- "thiserror 1.0.69",
- "tokio",
- "toml",
- "tracing",
- "verify-stark",
-]
 
 [[package]]
 name = "sec1"
