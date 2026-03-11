@@ -27,10 +27,6 @@ pub enum VerifyStarkError {
     InternalRecursiveDagCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal recursive vk pre-hash: expected {expected:?}, actual {actual:?}")]
     InternalRecursiveDagPreHashMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid compression commit: expected {expected:?}, actual {actual:?}")]
-    CompressionCommitMismatch { expected: Vec<F>, actual: Vec<F> },
-    #[error("Compression commit should not be defined if not enabled, actual {actual:?}")]
-    CompressionCommitDefined { actual: Vec<F> },
     #[error("Program execution did not terminate successfully, exit_code: {0}")]
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be 2")]

@@ -44,8 +44,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::AggProvingKey,
     prover::{
-        compute_root_proof_heights, AggProver, AppProver, CompressionProver, EvmProver, RootProver,
-        StarkProver,
+        compute_root_proof_heights, AggProver, AppProver, EvmProver, RootProver, StarkProver,
     },
     types::ExecutableFormat,
 };
@@ -126,7 +125,6 @@ where
 
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     agg_prover: OnceLock<Arc<AggProver>>,
-    compression_prover: OnceLock<Option<Arc<CompressionProver>>>,
     root_prover: OnceLock<Arc<RootProver>>,
 
     #[cfg(feature = "evm-prove")]
@@ -214,7 +212,6 @@ where
             executor,
             app_pk: OnceLock::new(),
             agg_prover: OnceLock::new(),
-            compression_prover: OnceLock::new(),
             root_prover: OnceLock::new(),
             _phantom: Default::default(),
         })
@@ -440,7 +437,6 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
-            self.compression_prover(),
         )?;
         Ok(stark_prover)
     }
@@ -473,24 +469,6 @@ where
                     self.agg_config.clone(),
                     self.agg_tree_config,
                 ))
-            })
-            .clone()
-    }
-
-    pub fn compression_prover(&self) -> Option<Arc<CompressionProver>> {
-        self.compression_prover
-            .get_or_init(|| {
-                self.agg_config.params.compression.as_ref().map(|params| {
-                    let agg_prover = self.agg_prover();
-                    Arc::new(CompressionProver::new(
-                        agg_prover.internal_recursive_prover.get_vk(),
-                        agg_prover
-                            .internal_recursive_prover
-                            .get_self_vk_pcs_data()
-                            .unwrap(),
-                        params.clone(),
-                    ))
-                })
             })
             .clone()
     }
@@ -577,21 +555,11 @@ where
             leaf_pk: agg_prover.leaf_prover.get_pk(),
             internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
             internal_recursive_pk: agg_prover.internal_recursive_prover.get_pk(),
-            compression_pk: self
-                .compression_prover()
-                .as_ref()
-                .map(|prover| prover.0.get_pk()),
         }
     }
 
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
-        let agg_prover = self.agg_prover();
-        let compression_prover = self.compression_prover();
-        if let Some(prover) = compression_prover.as_ref() {
-            prover.0.get_vk()
-        } else {
-            agg_prover.internal_recursive_prover.get_vk()
-        }
+        self.agg_prover().internal_recursive_prover.get_vk()
     }
 
     #[cfg(feature = "evm-prove")]

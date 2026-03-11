@@ -22,6 +22,7 @@ pub(crate) fn trace_heights_tracing_info<PB: ProverBackend, SC: StarkProtocolCon
     airs: &[AirRef<SC>],
 ) {
     let mut total_cells = 0usize;
+    let mut total_width = 0usize;
     for ((_, ctx), air) in ctxs.iter().zip(airs) {
         let cells = ctx.common_main.height() * ctx.common_main.width();
         tracing::info!(
@@ -32,6 +33,8 @@ pub(crate) fn trace_heights_tracing_info<PB: ProverBackend, SC: StarkProtocolCon
             cells
         );
         total_cells += cells;
+        total_width += ctx.common_main.width();
     }
     tracing::info!("Total Common Cells: {total_cells}");
+    tracing::info!("Total Width: {total_width}");
 }

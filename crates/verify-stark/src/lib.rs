@@ -19,10 +19,7 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::{
     error::VerifyStarkError,
-    pvs::{
-        VerifierBasePvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
-        VM_PVS_AIR_ID,
-    },
+    pvs::{VerifierBasePvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID},
     vk::NonRootStarkVerifyingKey,
 };
 
@@ -124,8 +121,8 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::ExecutionUnsuccessful(exit_code));
     }
 
-    // Check that the final proof is computed by the internal recursive (or compression)
-    // prover, i.e. that internal_flag is 2.
+    // Check that the final proof is computed by the internal recursive prover, i.e.
+    // that internal_flag is 2.
     if internal_flag != F::TWO {
         return Err(VerifyStarkError::InvalidInternalFlag(internal_flag));
     }
@@ -197,24 +194,6 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::InternalRecursiveDagPreHashMismatch {
             expected: vk.baseline.internal_recursive_dag_commit.vk_pre_hash,
             actual: internal_recursive_dag_commit.vk_pre_hash,
-        });
-    }
-
-    // Check that the public values of the last AIR matches up with the expected
-    // compression_commit if compression is enabled, else ensure the last AIR has
-    // no public values.
-    let compression_commit_pvs = proof.inner.public_values[CONSTRAINT_EVAL_AIR_ID].clone();
-    if let Some(expected_compression_commit) = vk.baseline.compression_commit.as_ref() {
-        let expected_expression_commit = expected_compression_commit.to_vec();
-        if compression_commit_pvs != expected_expression_commit {
-            return Err(VerifyStarkError::CompressionCommitMismatch {
-                expected: expected_expression_commit,
-                actual: compression_commit_pvs,
-            });
-        }
-    } else if !compression_commit_pvs.is_empty() {
-        return Err(VerifyStarkError::CompressionCommitDefined {
-            actual: compression_commit_pvs,
         });
     }
 
