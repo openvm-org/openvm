@@ -24,6 +24,7 @@ use crate::{
         },
         root::NUM_DIGESTS_IN_VK_COMMIT,
         subair::hash_slice_trace,
+        utils::vk_commit_components,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, poseidon2_input_to_digests},
 };
@@ -83,18 +84,8 @@ pub fn generate_record(
         initial_root_hash,
     ));
 
-    let vk_elements = [
-        child_verifier_pvs.app_dag_commit.cached_commit,
-        child_verifier_pvs.app_dag_commit.vk_pre_hash,
-        child_verifier_pvs.leaf_dag_commit.cached_commit,
-        child_verifier_pvs.leaf_dag_commit.vk_pre_hash,
-        child_verifier_pvs
-            .internal_for_leaf_dag_commit
-            .cached_commit,
-        child_verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
-    ];
     let (intermediate_vk_states_vec, app_vk_commit) = hash_slice_trace(
-        &vk_elements,
+        &vk_commit_components(child_verifier_pvs),
         Some(&mut poseidon2_permute_inputs),
         Some(&mut poseidon2_compress_inputs),
     );

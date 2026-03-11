@@ -17,6 +17,7 @@ use crate::{
             aggregation::hook::verifier::air::DeferralHookPvsCols, DeferralAggregationPvs,
             DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
         },
+        root::NUM_DIGESTS_IN_VK_COMMIT,
         subair::hash_slice_trace,
         SingleAirTraceData,
     },
@@ -70,7 +71,7 @@ pub fn generate_proving_ctx(
     cols.output_onion = output_onion;
 
     let mut poseidon2_compress_inputs = Vec::with_capacity(6);
-    let mut poseidon2_permute_inputs = Vec::new();
+    let mut poseidon2_permute_inputs = Vec::with_capacity(NUM_DIGESTS_IN_VK_COMMIT - 1);
     let (intermediate_vk_states, def_vk_commit) = hash_slice_trace(
         &hash_elements,
         Some(&mut poseidon2_permute_inputs),
