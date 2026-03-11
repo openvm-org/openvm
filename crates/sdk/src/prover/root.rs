@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use continuations_v2::{bn254::CommitBytes, RootSC, SC};
 use eyre::Result;
 use openvm_circuit::{
     arch::{
@@ -11,6 +10,7 @@ use openvm_circuit::{
     },
     system::memory::dimensions::MemoryDimensions,
 };
+use openvm_continuations::{bn254::CommitBytes, RootSC, SC};
 use openvm_sdk_config::SdkVmBuilder;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
@@ -33,11 +33,11 @@ use crate::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use continuations_v2::prover::RootGpuProver as RootInnerProver;
+        use openvm_continuations::prover::RootGpuProver as RootInnerProver;
         type E = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
         type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
-        use continuations_v2::prover::RootCpuProver as RootInnerProver;
+        use openvm_continuations::prover::RootCpuProver as RootInnerProver;
         type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
         type ChildE = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }

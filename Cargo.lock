@@ -1041,41 +1041,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
-name = "continuations-v2"
-version = "2.0.0-alpha"
-dependencies = [
- "cfg-if",
- "derive-new 0.6.0",
- "eyre",
- "itertools 0.14.0",
- "num-bigint 0.4.6",
- "openvm-circuit",
- "openvm-circuit-primitives",
- "openvm-cuda-backend",
- "openvm-cuda-builder",
- "openvm-cuda-common",
- "openvm-deferral-circuit",
- "openvm-deferral-transpiler",
- "openvm-instructions",
- "openvm-poseidon2-air",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "p3-air",
- "p3-bn254",
- "p3-field",
- "p3-matrix",
- "recursion-circuit",
- "stark-recursion-circuit-derive",
- "test-case",
- "tracing",
- "verify-stark",
-]
-
-[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3199,6 +3164,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-continuations"
+version = "2.0.0-alpha"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "eyre",
+ "itertools 0.14.0",
+ "num-bigint 0.4.6",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
+ "openvm-instructions",
+ "openvm-poseidon2-air",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "p3-air",
+ "p3-bn254",
+ "p3-field",
+ "p3-matrix",
+ "recursion-circuit",
+ "stark-recursion-circuit-derive",
+ "test-case",
+ "tracing",
+ "verify-stark",
+]
+
+[[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
 source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#a24a1492ef413b56522980a04aae0f075cc25576"
@@ -3830,7 +3830,6 @@ dependencies = [
  "bon",
  "cfg-if",
  "clap",
- "continuations-v2",
  "derivative",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -3842,6 +3841,7 @@ dependencies = [
  "openvm",
  "openvm-build",
  "openvm-circuit",
+ "openvm-continuations",
  "openvm-cuda-backend",
  "openvm-sdk-config",
  "openvm-stark-backend",

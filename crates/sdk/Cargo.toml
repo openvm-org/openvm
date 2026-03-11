@@ -20,7 +20,7 @@ openvm-transpiler = { workspace = true }
 openvm = { workspace = true }
 
 openvm-sdk-config = { workspace = true }
-continuations-v2 = { workspace = true }
+openvm-continuations = { workspace = true }
 verify-stark = { workspace = true }
 
 bitcode = { workspace = true }
@@ -57,7 +57,7 @@ evm-verify = []
 #     "dep:alloy-sol-types",
 #     "dep:forge-fmt",
 # ]
-metrics = ["continuations-v2/metrics", "openvm-sdk-config/metrics"]
+metrics = ["openvm-continuations/metrics", "openvm-sdk-config/metrics"]
 aot = [
     "openvm-circuit/aot",
     "openvm-sdk-config/aot",
@@ -80,7 +80,7 @@ stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
 
 async = ["tokio"]
-parallel = ["continuations-v2/parallel", "openvm-sdk-config/parallel"]
+parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
@@ -89,7 +89,7 @@ cuda = [
     "dep:openvm-cuda-backend",
     "openvm-circuit/cuda",
     "openvm-sdk-config/cuda",
-    "continuations-v2/cuda",
+    "openvm-continuations/cuda",
     "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
 

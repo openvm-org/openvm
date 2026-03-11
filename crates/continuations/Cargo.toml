@@ -1,5 +1,5 @@
 [package]
-name = "continuations-v2"
+name = "openvm-continuations"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

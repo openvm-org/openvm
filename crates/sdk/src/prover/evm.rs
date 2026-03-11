@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use continuations_v2::RootSC;
 use eyre::Result;
 use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
     VmExecutionConfig,
 };
+use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
 use crate::{

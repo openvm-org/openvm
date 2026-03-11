@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use continuations_v2::prover::ChildVkKind;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
+use openvm_continuations::prover::ChildVkKind;
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use tracing::info_span;
 use verify_stark::NonRootStarkProof;
@@ -17,10 +17,10 @@ use crate::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use continuations_v2::prover::InnerGpuProver as InnerAggregationProver;
+        use openvm_continuations::prover::InnerGpuProver as InnerAggregationProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
-        use continuations_v2::prover::InnerCpuProver as InnerAggregationProver;
+        use openvm_continuations::prover::InnerCpuProver as InnerAggregationProver;
         type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
