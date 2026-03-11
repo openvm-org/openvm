@@ -8,9 +8,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use recursion_circuit::system::{
-    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
-};
+use recursion_circuit::system::{AggregationSubCircuit, VerifierExternalData, VerifierTraceGen};
 use tracing::instrument;
 use verify_stark::pvs::DagCommit;
 
@@ -42,7 +40,7 @@ where
             "child_merkle_depth=None is only valid for single-proof wrappers"
         );
 
-        let (child_vk, child_pcs_data, child_is_def) = match child_vk_kind {
+        let (child_vk, child_vk_pcs_data, child_is_def) = match child_vk_kind {
             DeferralChildVkKind::DeferralCircuit => {
                 (&self.child_vk, self.child_vk_pcs_data.clone(), false)
             }
@@ -54,7 +52,7 @@ where
             }
         };
         let child_dag_commit = DagCommit {
-            cached_commit: child_pcs_data.commitment,
+            cached_commit: child_vk_pcs_data.commitment,
             vk_pre_hash: child_vk.pre_hash,
         };
 
@@ -69,7 +67,6 @@ where
             child_dag_commit,
             child_merkle_depth,
         );
-        let cached_trace_ctx = CachedTraceCtx::PcsData(child_pcs_data);
 
         let range_check_inputs = vec![];
         let poseidon2_permute_inputs = vec![];
@@ -86,7 +83,7 @@ where
             .verifier_circuit
             .generate_proving_ctxs(
                 child_vk,
-                cached_trace_ctx,
+                child_vk_pcs_data,
                 proofs,
                 &mut external_data,
                 default_duplex_sponge_recorder(),

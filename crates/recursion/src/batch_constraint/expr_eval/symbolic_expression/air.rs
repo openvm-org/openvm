@@ -1,7 +1,7 @@
 use core::array;
-use std::{borrow::Borrow, sync::Arc};
+use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq};
 use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
     PartitionedBaseAir,
@@ -15,12 +15,9 @@ use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::EnumIter;
 
 use crate::{
-    batch_constraint::{
-        bus::{
-            ConstraintsFoldingBus, ConstraintsFoldingMessage, InteractionsFoldingBus,
-            InteractionsFoldingMessage, SymbolicExpressionBus, SymbolicExpressionMessage,
-        },
-        expr_eval::{dag_commit_cols_to_cached_cols, DagCommitCols, DagCommitPvs, DagCommitSubAir},
+    batch_constraint::bus::{
+        ConstraintsFoldingBus, ConstraintsFoldingMessage, InteractionsFoldingBus,
+        InteractionsFoldingMessage, SymbolicExpressionBus, SymbolicExpressionMessage,
     },
     bus::{
         AirPresenceBus, AirPresenceBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
@@ -36,7 +33,6 @@ use crate::{
 
 pub(in crate::batch_constraint) const NUM_FLAGS: usize = 4;
 pub(in crate::batch_constraint) const ENCODER_MAX_DEGREE: u32 = 2;
-pub(in crate::batch_constraint) const FLAG_MODULUS: u32 = ENCODER_MAX_DEGREE + 1;
 
 #[derive(Debug, Clone, Copy, EnumIter, EnumCount)]
 pub(crate) enum NodeKind {
@@ -103,7 +99,7 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
     pub(in crate::batch_constraint) is_n_neg: T,
 }
 
-pub struct SymbolicExpressionAir<F: Field> {
+pub struct SymbolicExpressionAir {
     pub expr_bus: SymbolicExpressionBus,
     pub hyperdim_bus: HyperdimBus,
     pub air_shape_bus: AirShapeBus,
@@ -116,61 +112,38 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub sel_uni_bus: SelUniBus,
 
     pub cnt_proofs: usize,
-    pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
 
-impl<F: Field> SymbolicExpressionAir<F> {
-    fn has_cached(&self) -> bool {
-        self.dag_commit_subair.is_none()
-    }
-}
+impl<F: Field> BaseAirWithPublicValues<F> for SymbolicExpressionAir {}
 
-impl<F: Field> BaseAirWithPublicValues<F> for SymbolicExpressionAir<F> {
-    fn num_public_values(&self) -> usize {
-        if self.has_cached() {
-            0
-        } else {
-            DagCommitPvs::<F>::width()
-        }
-    }
-}
-
-impl<F: Field> PartitionedBaseAir<F> for SymbolicExpressionAir<F> {
+impl<F: Field> PartitionedBaseAir<F> for SymbolicExpressionAir {
     fn cached_main_widths(&self) -> Vec<usize> {
-        if self.has_cached() {
-            vec![CachedSymbolicExpressionColumns::<F>::width()]
-        } else {
-            vec![]
-        }
+        vec![CachedSymbolicExpressionColumns::<F>::width()]
     }
 
     fn common_main_width(&self) -> usize {
         SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
-            + if self.has_cached() {
-                0
-            } else {
-                DagCommitCols::<F>::width()
-            }
     }
 }
 
-impl<F: Field> BaseAir<F> for SymbolicExpressionAir<F> {
+impl<F: Field> BaseAir<F> for SymbolicExpressionAir {
     fn width(&self) -> usize {
+        let cached_width = CachedSymbolicExpressionColumns::<F>::width();
         let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
-        if self.has_cached() {
-            CachedSymbolicExpressionColumns::<F>::width() + single_main_width * self.cnt_proofs
-        } else {
-            DagCommitCols::<F>::width() + single_main_width * self.cnt_proofs
-        }
+        cached_width + single_main_width * self.cnt_proofs
     }
 }
 
 impl<AB: PartitionedAirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for SymbolicExpressionAir<AB::F>
+    for SymbolicExpressionAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
+        let cached_local = builder.cached_mains()[0]
+            .row_slice(0)
+            .expect("window should have at least one row")
+            .to_vec();
         let main_local = builder
             .common_main()
             .row_slice(0)
@@ -182,37 +155,13 @@ where
             .expect("window should have at least two rows")
             .to_vec();
 
-        let (cached_local_vec, main_local_slice, main_next_slice) =
-            if let Some(subair) = self.dag_commit_subair.as_ref() {
-                // No cached trace: DagCommitCols come before the regular columns
-                debug_assert!(!self.has_cached());
-                let commit_width = DagCommitCols::<AB::Var>::width();
-                let (commit_local, rest_local) = main_local.as_slice().split_at(commit_width);
-                let (commit_next, rest_next) = main_next.as_slice().split_at(commit_width);
-                subair.eval(builder, (commit_local, commit_next));
-
-                let cached_local_vec = dag_commit_cols_to_cached_cols(commit_local).to_vec();
-                (cached_local_vec, rest_local, rest_next)
-            } else {
-                debug_assert!(self.has_cached());
-                let cached_local_vec = builder.cached_mains()[0]
-                    .row_slice(0)
-                    .expect("window should have at least one row")
-                    .to_vec();
-                (
-                    cached_local_vec,
-                    main_local.as_slice(),
-                    main_next.as_slice(),
-                )
-            };
-
         let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> =
-            cached_local_vec.as_slice().borrow();
-        let main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_local_slice
+            cached_local.as_slice().borrow();
+        let main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_local
             .chunks(SingleMainSymbolicExpressionColumns::<AB::Var>::width())
             .map(|chunk| chunk.borrow())
             .collect();
-        let next_main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_next_slice
+        let next_main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_next
             .chunks(SingleMainSymbolicExpressionColumns::<AB::Var>::width())
             .map(|chunk| chunk.borrow())
             .collect();

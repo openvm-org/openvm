@@ -38,10 +38,6 @@ pub struct VerificationBaseline {
     /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
     /// index > 0) internal-recursive layer verifiers.
     pub internal_recursive_dag_commit: DagCommit,
-    /// In-circuit generated commit of the internal-recursive layer's DAG if the compression
-    /// layer is enabled. If so, it should be match the public values of DagCommitAir, which
-    /// should be the last AIR in the compression layer circuit.
-    pub compression_commit: Option<Digest>,
 }
 
 pub fn read_vk_from_file<P: AsRef<Path>>(path: P) -> Result<NonRootStarkVerifyingKey> {

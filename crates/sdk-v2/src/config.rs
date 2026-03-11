@@ -2,12 +2,11 @@ use clap::Args;
 use openvm_sdk_config::SdkVmConfig;
 use openvm_stark_backend::SystemParams;
 use openvm_stark_sdk::config::{
-    compression_params_with_100_bits_security, internal_params_with_100_bits_security,
-    leaf_params_with_100_bits_security,
+    internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
 };
 pub use openvm_stark_sdk::config::{
-    DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP, DEFAULT_COMPRESSION_LOG_BLOWUP,
-    DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
+    DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP, DEFAULT_INTERNAL_LOG_BLOWUP,
+    DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,7 +43,6 @@ pub struct AggregationConfig {
 pub struct AggregationSystemParams {
     pub leaf: SystemParams,
     pub internal: SystemParams,
-    pub compression: Option<SystemParams>,
 }
 
 impl Default for AggregationSystemParams {
@@ -52,7 +50,6 @@ impl Default for AggregationSystemParams {
         Self {
             leaf: leaf_params_with_100_bits_security(),
             internal: internal_params_with_100_bits_security(),
-            compression: Some(compression_params_with_100_bits_security()),
         }
     }
 }
