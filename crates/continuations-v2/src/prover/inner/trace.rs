@@ -6,9 +6,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use recursion_circuit::system::{
-    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
-};
+use recursion_circuit::system::{AggregationSubCircuit, VerifierExternalData, VerifierTraceGen};
 use tracing::instrument;
 use verify_stark::pvs::{DagCommit, DeferralPvs};
 
@@ -36,13 +34,13 @@ where
     ) -> ProvingContext<PB> {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
 
-        let (child_vk, child_pcs_data) = match child_vk_kind {
+        let (child_vk, child_vk_pcs_data) = match child_vk_kind {
             ChildVkKind::RecursiveSelf => (&self.vk, self.self_vk_pcs_data.clone().unwrap()),
             _ => (&self.child_vk, self.child_vk_pcs_data.clone()),
         };
         let child_is_app = matches!(child_vk_kind, ChildVkKind::App);
         let child_dag_commit = DagCommit {
-            cached_commit: child_pcs_data.commitment,
+            cached_commit: child_vk_pcs_data.commitment,
             vk_pre_hash: child_vk.pre_hash,
         };
 
@@ -65,13 +63,12 @@ where
             final_transcript_state: None,
         };
 
-        let cached_trace_ctx = CachedTraceCtx::PcsData(child_pcs_data);
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
             .generate_proving_ctxs(
                 child_vk,
-                cached_trace_ctx,
+                child_vk_pcs_data,
                 proofs,
                 &mut external_data,
                 default_duplex_sponge_recorder(),

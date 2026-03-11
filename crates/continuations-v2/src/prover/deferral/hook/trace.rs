@@ -8,9 +8,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use recursion_circuit::system::{
-    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
-};
+use recursion_circuit::system::{AggregationSubCircuit, VerifierExternalData, VerifierTraceGen};
 use tracing::instrument;
 
 use super::DeferralHookProver;
@@ -54,14 +52,13 @@ where
             final_transcript_state: None,
         };
 
-        let cached_trace_ctx = CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone());
         let proof_slice = &[proof];
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
             .generate_proving_ctxs(
                 &self.child_vk,
-                cached_trace_ctx,
+                self.child_vk_pcs_data.clone(),
                 proof_slice,
                 &mut external_data,
                 default_duplex_sponge_recorder(),
