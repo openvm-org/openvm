@@ -29,7 +29,7 @@ use super::{
     },
 };
 use crate::{
-    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage, RightShiftBus},
     tests::test_engine_small,
 };
 
@@ -154,9 +154,10 @@ fn prove_and_verify_exp_bits(
     disable_debug_builder();
 
     let exp_bits_len_bus = ExpBitsLenBus::new(0);
+    let right_shift_bus = RightShiftBus::new(1);
     let airs = any_air_arc_vec![
         ExpBitsLenLookupAir { exp_bits_len_bus },
-        ExpBitsLenAir::new(exp_bits_len_bus)
+        ExpBitsLenAir::new(exp_bits_len_bus, right_shift_bus)
     ];
 
     let engine = test_engine_small();
@@ -232,6 +233,8 @@ fn test_exp_bits_len_cpu_trace_generation(num_requests: usize) {
             F::from_u32(req.base),
             req.bit_src,
             req.num_bits,
+            0,
+            0,
             &mut expected,
             width,
         );
@@ -283,6 +286,8 @@ fn test_exp_bits_len_rejects_noncanonical_31_bit_decomposition() {
         base,
         forged_decomp_src,
         num_bits as u8,
+        0,
+        0,
         &mut exp_bits_values,
         width,
     );

@@ -151,7 +151,8 @@ pub fn generate_trace(
             leaf_tree[combination_indices.result_layer][combination_indices.result_index] = output;
             cols.compression_output = output;
 
-            cols.idx = F::from_usize(merkle_idx); // const idx for leaves part
+            cols.merkle_idx_bit_src = F::from_usize(merkle_idx); // const idx for leaves part
+            cols.current_idx_bit_src = F::from_usize(merkle_idx);
             cols.height = F::from_usize(combination_indices.source_layer);
             cols.is_last_leaf = F::from_bool(combination_indices.source_layer + 1 == k);
             cols.recv_flag = F::TWO;
@@ -198,12 +199,13 @@ pub fn generate_trace(
             input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
             poseidon2_compress_inputs.push(input_state);
 
-            cols.idx = F::from_usize(merkle_idx);
-            cols.height = F::from_usize(i + 1 - num_leaves + k);
-            cols.is_combining_leaves = F::ZERO;
-
             cur_hash = output;
             cur_idx /= 2;
+
+            cols.merkle_idx_bit_src = F::from_usize(merkle_idx);
+            cols.current_idx_bit_src = F::from_usize(cur_idx);
+            cols.height = F::from_usize(i + 1 - num_leaves + k);
+            cols.is_combining_leaves = F::ZERO;
         }
     }
 
