@@ -121,8 +121,8 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::ExecutionUnsuccessful(exit_code));
     }
 
-    // Check that the final proof is computed by the internal recursive (or compression)
-    // prover, i.e. that internal_flag is 2.
+    // Check that the final proof is computed by the internal recursive prover, i.e.
+    // that internal_flag is 2.
     if internal_flag != F::TWO {
         return Err(VerifyStarkError::InvalidInternalFlag(internal_flag));
     }
