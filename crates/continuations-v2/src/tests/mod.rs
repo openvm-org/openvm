@@ -42,7 +42,6 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use std::borrow::Borrow;
         use crate::prover::InnerGpuProver as InnerProver;
-        use crate::prover::CompressionGpuProver as CompressionProver;
         use crate::prover::RootCpuProver as RootProver;
         use crate::prover::{
             DeferralInnerGpuProver as DeferralInnerProver,
@@ -94,16 +93,8 @@ pub(in crate::tests) fn internal_system_params() -> SystemParams {
 }
 
 #[cfg(feature = "cuda")]
-pub(in crate::tests) fn compression_system_params() -> SystemParams {
-    use openvm_stark_sdk::config::compression_params_with_100_bits_security;
-
-    compression_params_with_100_bits_security()
-}
-
-#[cfg(feature = "cuda")]
 pub(in crate::tests) fn root_system_params() -> SystemParams {
     use openvm_stark_sdk::config::root_params_with_100_bits_security;
-
     root_params_with_100_bits_security()
 }
 
@@ -275,29 +266,6 @@ fn test_internal_recursive_deep_layers() -> Result<()> {
     let (internal_recursive_vk, _, internal_recursive_proof, _) = run_full_aggregation(10, 3)?;
     let engine = Engine::new(internal_recursive_vk.inner.params.clone());
     engine.verify(&internal_recursive_vk, &internal_recursive_proof)?;
-    Ok(())
-}
-
-#[cfg(feature = "cuda")]
-#[test_case(0 ; "internal_recursive_dag_commit not set")]
-#[test_case(1 ; "internal_recursive_dag_commit set")]
-fn test_compression_prover(extra_recursive_layers: usize) -> Result<()> {
-    setup_tracing_with_log_level(Level::INFO);
-    let (internal_recursive_vk, internal_recursive_pcs_data, internal_recursive_proof, _) =
-        run_full_aggregation(10, extra_recursive_layers)?;
-
-    let compression_prover = CompressionProver::new::<Engine>(
-        internal_recursive_vk,
-        internal_recursive_pcs_data,
-        compression_system_params(),
-        None,
-    );
-    let compression_proof =
-        compression_prover.compress_prove_no_def::<Engine>(internal_recursive_proof)?;
-
-    let vk = compression_prover.get_vk();
-    let engine = Engine::new(vk.inner.params.clone());
-    engine.verify(&vk, &compression_proof)?;
     Ok(())
 }
 

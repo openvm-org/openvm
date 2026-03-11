@@ -1,7 +1,6 @@
 use core::{cmp::min, iter::zip};
 use std::borrow::BorrowMut;
 
-use itertools::Itertools;
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::{
     air_builders::symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
@@ -10,18 +9,14 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use strum::EnumCount;
 
 use crate::{
-    batch_constraint::expr_eval::{
-        default_poseidon2_sub_chip, generate_dag_commit_info,
-        symbolic_expression::air::{
-            CachedSymbolicExpressionColumns, NodeKind, SingleMainSymbolicExpressionColumns,
-            ENCODER_MAX_DEGREE, NUM_FLAGS,
-        },
-        DagCommitCols, DagCommitInfo,
+    batch_constraint::expr_eval::symbolic_expression::air::{
+        CachedSymbolicExpressionColumns, NodeKind, SingleMainSymbolicExpressionColumns,
+        ENCODER_MAX_DEGREE, NUM_FLAGS,
     },
     system::Preflight,
     tracegen::RowMajorChip,
@@ -30,14 +25,12 @@ use crate::{
 
 pub struct SymbolicExpressionTraceGenerator {
     pub max_num_proofs: usize,
-    pub has_cached: bool,
 }
 
 pub(crate) struct SymbolicExpressionCtx<'a> {
     pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub preflights: &'a [&'a Preflight],
     pub expr_evals: &'a MultiVecWithBounds<EF, 2>,
-    pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
 }
 
 impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
@@ -52,15 +45,12 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
         let child_vk = ctx.vk;
         let preflights = ctx.preflights;
         let max_num_proofs = self.max_num_proofs;
-        let has_cached = self.has_cached;
         let expr_evals = ctx.expr_evals;
         let trace_height = required_height;
         let l_skip = child_vk.inner.params.l_skip;
 
         let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
-        let dag_commit_width = DagCommitCols::<F>::width();
-        let main_width =
-            single_main_width * max_num_proofs + if has_cached { 0 } else { dag_commit_width };
+        let main_width = single_main_width * max_num_proofs;
 
         struct Record {
             args: [F; 2 * D_EF],
@@ -311,71 +301,16 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
         };
         let mut main_trace = F::zero_vec(main_width * height);
 
-        let (encoder, cached_records, poseidon2_rows) = if has_cached {
-            (None, None, None)
-        } else {
-            let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
-            assert_eq!(encoder.width(), NUM_FLAGS);
-
-            let cached_trace_record = ctx.cached_trace_record.unwrap();
-            debug_assert_eq!(cached_trace_record.records.len(), num_valid_rows);
-
-            let poseidon2_subchip = default_poseidon2_sub_chip();
-            let poseidon2_trace = poseidon2_subchip.generate_trace(
-                cached_trace_record
-                    .dag_commit_info
-                    .as_ref()
-                    .unwrap()
-                    .poseidon2_inputs
-                    .clone(),
-            );
-            let poseidon2_rows = poseidon2_trace
-                .rows()
-                .map(|row| row.collect_vec())
-                .collect_vec();
-
-            (
-                Some(encoder),
-                Some(&cached_trace_record.records),
-                Some(poseidon2_rows),
-            )
-        };
-
         main_trace
             .par_chunks_exact_mut(main_width)
             .enumerate()
             .for_each(|(row_idx, row)| {
-                let main_offset = if has_cached {
-                    0
-                } else {
-                    // Poseidon2 data must be written for ALL rows (including padding) to
-                    // keep the onion hash chain valid.
-                    let poseidon2_row = &poseidon2_rows.as_ref().unwrap()[row_idx];
-                    row[..poseidon2_row.len()].copy_from_slice(poseidon2_row);
-
-                    if row_idx < num_valid_rows {
-                        let record = &cached_records.as_ref().unwrap()[row_idx];
-                        let encoder = encoder.as_ref().unwrap();
-                        let cols: &mut DagCommitCols<_> = row[..dag_commit_width].borrow_mut();
-                        for (i, x) in encoder
-                            .get_flag_pt(record.kind as usize)
-                            .into_iter()
-                            .enumerate()
-                        {
-                            cols.flags[i] = F::from_u32(x);
-                        }
-                        cols.is_constraint = F::from_bool(record.is_constraint);
-                    }
-
-                    dag_commit_width
-                };
-
                 for proof_idx in 0..max_num_proofs {
                     if proof_idx >= preflights.len() {
                         continue;
                     }
 
-                    let start = main_offset + proof_idx * single_main_width;
+                    let start = proof_idx * single_main_width;
                     let end = start + single_main_width;
                     let cols: &mut SingleMainSymbolicExpressionColumns<_> =
                         row[start..end].borrow_mut();
@@ -420,12 +355,10 @@ pub(crate) struct CachedRecord {
 #[derive(Debug, Clone)]
 pub struct CachedTraceRecord {
     pub(crate) records: Vec<CachedRecord>,
-    pub dag_commit_info: Option<DagCommitInfo<F>>,
 }
 
 pub(crate) fn build_cached_trace_record(
     child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    has_cached: bool,
 ) -> CachedTraceRecord {
     let mut fanout_per_air = Vec::with_capacity(child_vk.inner.per_air.len());
     for vk in &child_vk.inner.per_air {
@@ -639,15 +572,7 @@ pub(crate) fn build_cached_trace_record(
         }
     }
 
-    let dag_commit_info = (!has_cached).then(|| {
-        let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
-        generate_dag_commit_info(&records, encoder)
-    });
-
-    CachedTraceRecord {
-        records,
-        dag_commit_info,
-    }
+    CachedTraceRecord { records }
 }
 
 /// Returns the cached trace
@@ -714,7 +639,6 @@ pub(in crate::batch_constraint) mod cuda {
         pub proofs: &'a [ProofGpu],
         pub preflights: &'a [PreflightGpu],
         pub expr_evals: &'a MultiVecWithBounds<openvm_cuda_backend::prelude::EF, 2>,
-        pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
     }
 
     impl ModuleChip<GpuBackend> for SymbolicExpressionTraceGenerator {
@@ -730,7 +654,6 @@ pub(in crate::batch_constraint) mod cuda {
             let proofs = ctx.proofs;
             let preflights = ctx.preflights;
             let max_num_proofs = self.max_num_proofs;
-            let has_cached = self.has_cached;
             let expr_evals = ctx.expr_evals;
 
             debug_assert_eq!(proofs.len(), preflights.len());
@@ -803,9 +726,7 @@ pub(in crate::batch_constraint) mod cuda {
             } else {
                 total_rows.max(1).next_power_of_two()
             };
-            let commit_width = DagCommitCols::<F>::width();
-            let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
-                + if has_cached { 0 } else { commit_width };
+            let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs;
             let trace = DeviceMatrix::with_capacity(height, width);
 
             let d_log_heights = proofs
@@ -866,10 +787,6 @@ pub(in crate::batch_constraint) mod cuda {
             };
             let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
 
-            let d_cached_records = ctx
-                .cached_trace_record
-                .map(|data| build_cached_gpu_records(data).unwrap().to_device().unwrap());
-
             unsafe {
                 sym_expr_common_tracegen(
                     trace.buffer(),
@@ -895,7 +812,6 @@ pub(in crate::batch_constraint) mod cuda {
                     total_rows,
                     &d_sumcheck_rnds,
                     &d_sumcheck_bounds,
-                    d_cached_records.as_ref(),
                 )
                 .unwrap();
             }

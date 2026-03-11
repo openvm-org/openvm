@@ -1,6 +1,5 @@
 mod agg;
 mod app;
-mod compression;
 // TODO[jpw]: feature gate
 // #[cfg(feature = "evm-prove")]
 mod evm;
@@ -11,7 +10,6 @@ pub mod vm;
 
 pub use agg::*;
 pub use app::*;
-pub use compression::*;
 // TODO[jpw]: feature gate
 // #[cfg(feature = "evm-prove")]
 pub use evm::*;

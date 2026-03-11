@@ -56,7 +56,6 @@ extern "C" {
         num_records_per_proof: usize,
         d_sumcheck_rnds: *const EF,
         d_sumcheck_bounds: *const usize,
-        d_cached_records: *const CachedGpuRecord,
     ) -> i32;
 
     fn _eq_3b_tracegen(
@@ -160,9 +159,7 @@ pub unsafe fn sym_expr_common_tracegen(
     num_records_per_proof: usize,
     d_sumcheck_rnds: &DeviceBuffer<EF>,
     d_sumcheck_bounds: &DeviceBuffer<usize>,
-    d_cached_records: Option<&DeviceBuffer<CachedGpuRecord>>,
 ) -> Result<(), CudaError> {
-    let cached_records_ptr = d_cached_records.map_or(::core::ptr::null(), |b| b.as_ptr());
     CudaError::from_result(_sym_expr_common_tracegen(
         d_trace.as_mut_ptr(),
         height,
@@ -187,7 +184,6 @@ pub unsafe fn sym_expr_common_tracegen(
         num_records_per_proof,
         d_sumcheck_rnds.as_ptr(),
         d_sumcheck_bounds.as_ptr(),
-        cached_records_ptr,
     ))
 }
 

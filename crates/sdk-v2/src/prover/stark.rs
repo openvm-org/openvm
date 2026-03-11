@@ -9,7 +9,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
 use verify_stark::{vk::VerificationBaseline, NonRootStarkProof};
 
 use crate::{
-    prover::{vm::types::VmProvingKey, AggProver, AppProver, CompressionProver},
+    prover::{vm::types::VmProvingKey, AggProver, AppProver},
     StdIn, SC,
 };
 
@@ -20,7 +20,6 @@ where
 {
     pub app_prover: AppProver<E, VB>,
     pub agg_prover: Arc<AggProver>,
-    pub compression_prover: Option<Arc<CompressionProver>>,
 }
 
 impl<E, VB> StarkProver<E, VB>
@@ -34,12 +33,10 @@ where
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
         app_exe: Arc<VmExe<Val<SC>>>,
         agg_prover: Arc<AggProver>,
-        compression_prover: Option<Arc<CompressionProver>>,
     ) -> Result<Self> {
         Ok(Self {
             app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
             agg_prover,
-            compression_prover,
         })
     }
 
@@ -78,10 +75,6 @@ where
                 .agg_prover
                 .internal_recursive_prover
                 .get_dag_commit(true),
-            compression_commit: self
-                .compression_prover
-                .as_ref()
-                .map(|prover| prover.0.get_dag_commit()),
         }
     }
 }
