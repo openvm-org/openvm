@@ -42,7 +42,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 toml = { workspace = true }
-zstd = { version = "0.13", default-features = false }
 
 [features]
 default = ["parallel", "jemalloc"]
