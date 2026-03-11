@@ -19,10 +19,19 @@ pub struct ExpBitsLenRecord {
     pub base: F,
     pub bit_src: F,
     pub row_offset: u32,
+    pub shift_bits: u8,
+    pub shift_mult: u32,
 }
 
 impl ExpBitsLenRecord {
-    pub(crate) fn new(base: F, bit_src: F, num_bits: usize, row_offset: u32) -> Self {
+    pub(crate) fn new(
+        base: F,
+        bit_src: F,
+        num_bits: usize,
+        row_offset: u32,
+        shift_bits: usize,
+        shift_mult: u32,
+    ) -> Self {
         debug_assert!(num_bits < NUM_BITS_MAX_PLUS_ONE);
         Self {
             base,
@@ -30,6 +39,9 @@ impl ExpBitsLenRecord {
             num_bits: u8::try_from(num_bits)
                 .expect("num_bits fits in NUM_BITS_MAX_PLUS_ONE (< 256)"),
             row_offset,
+            shift_bits: u8::try_from(shift_bits)
+                .expect("shift_bits fits in NUM_BITS_MAX_PLUS_ONE (< 256)"),
+            shift_mult,
         }
     }
 
@@ -56,11 +68,19 @@ impl ExpBitsLenCpuTraceGenerator {
     where
         I: IntoIterator<Item = (F, F, usize)>,
     {
+        self.add_requests_with_shift(batch.into_iter().map(|(x, y, z)| (x, y, z, 0, 0)));
+    }
+
+    pub fn add_requests_with_shift<I>(&self, batch: I)
+    where
+        I: IntoIterator<Item = (F, F, usize, usize, u32)>,
+    {
         let mut records = self.requests.lock().unwrap();
         let mut next_row_offset = records.last().map(|record| record.end_row()).unwrap_or(0);
-        for (base, bit_src, num_bits) in batch {
+        for (base, bit_src, num_bits, shift_bits, shift_mult) in batch {
             let row_offset = u32::try_from(next_row_offset).expect("row offset should fit in u32");
-            let record = ExpBitsLenRecord::new(base, bit_src, num_bits, row_offset);
+            let record =
+                ExpBitsLenRecord::new(base, bit_src, num_bits, row_offset, shift_bits, shift_mult);
             next_row_offset += record.num_rows();
             records.push(record);
         }
@@ -105,6 +125,8 @@ impl ExpBitsLenCpuTraceGenerator {
                         request.base,
                         request.bit_src.as_canonical_u32(),
                         request.num_bits,
+                        request.shift_bits,
+                        request.shift_mult,
                         trace_slice,
                         width,
                     );
@@ -123,14 +145,24 @@ impl ExpBitsLenCpuTraceGenerator {
     }
 }
 
-pub(crate) fn fill_valid_rows(base: F, bit_src: u32, n: u8, trace_slice: &mut [F], width: usize) {
-    fill_valid_rows_with_decomp_src(base, bit_src, n, trace_slice, width);
+pub(crate) fn fill_valid_rows(
+    base: F,
+    bit_src: u32,
+    n: u8,
+    shift_bits: u8,
+    shift_mult: u32,
+    trace_slice: &mut [F],
+    width: usize,
+) {
+    fill_valid_rows_with_decomp_src(base, bit_src, n, shift_bits, shift_mult, trace_slice, width);
 }
 
 pub(crate) fn fill_valid_rows_with_decomp_src(
     base: F,
     decomp_src: u32,
     n: u8,
+    shift_bits: u8,
+    shift_mult: u32,
     trace_slice: &mut [F],
     width: usize,
 ) {
@@ -180,6 +212,12 @@ pub(crate) fn fill_valid_rows_with_decomp_src(
         cols.bit_src_mod_2 = F::from_bool((shifted & 1) == 1);
         cols.low_bits_are_zero = F::from_bool(low_bits_are_zero);
         cols.high_bits_all_one = F::from_bool(high_bits_all_one);
+        cols.bit_src_original = F::from_u32(decomp_src);
+        cols.shift_mult = if shift_bits as usize == step {
+            F::from_u32(shift_mult)
+        } else {
+            F::ZERO
+        };
 
         if step < LOW_BITS_COUNT {
             low_bits_are_zero &= (shifted & 1) == 0;

@@ -16,10 +16,11 @@ struct ExpBitsLenRecord {
     Fp base;
     Fp bit_src;
     uint32_t row_offset;
+    uint8_t shift_bits;
+    uint32_t shift_mult;
 };
 
-template <typename T>
-struct ExpBitsLenCols {
+template <typename T> struct ExpBitsLenCols {
     T is_valid;
     T is_first;
     T bit_idx;
@@ -34,6 +35,8 @@ struct ExpBitsLenCols {
     T bit_src_mod_2;
     T low_bits_are_zero;
     T high_bits_all_one;
+    T bit_src_original;
+    T shift_mult;
 };
 
 __global__ void exp_bits_len_tracegen_kernel(
@@ -100,12 +103,7 @@ __global__ void exp_bits_len_tracegen_kernel(
         COL_WRITE_VALUE(row, ExpBitsLenCols, num_bits, Fp(num_bits));
         COL_WRITE_VALUE(row, ExpBitsLenCols, apply_bit, bool_to_fp(num_bits != 0));
         COL_WRITE_VALUE(row, ExpBitsLenCols, low_bits_left, Fp(low_bits_left));
-        COL_WRITE_VALUE(
-            row,
-            ExpBitsLenCols,
-            in_low_region,
-            bool_to_fp(low_bits_left != 0)
-        );
+        COL_WRITE_VALUE(row, ExpBitsLenCols, in_low_region, bool_to_fp(low_bits_left != 0));
         COL_WRITE_VALUE(row, ExpBitsLenCols, result, results[step]);
         COL_WRITE_VALUE(
             row,
@@ -114,17 +112,14 @@ __global__ void exp_bits_len_tracegen_kernel(
             num_bits != 0 && (shifted & 1) == 1 ? bases[step] : Fp::one()
         );
         COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_mod_2, Fp(shifted & 1));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, low_bits_are_zero, bool_to_fp(low_bits_are_zero));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, high_bits_all_one, bool_to_fp(high_bits_all_one));
+        COL_WRITE_VALUE(row, ExpBitsLenCols, bit_src_original, Fp(bit_src_uint));
         COL_WRITE_VALUE(
             row,
             ExpBitsLenCols,
-            low_bits_are_zero,
-            bool_to_fp(low_bits_are_zero)
-        );
-        COL_WRITE_VALUE(
-            row,
-            ExpBitsLenCols,
-            high_bits_all_one,
-            bool_to_fp(high_bits_all_one)
+            shift_mult,
+            step == record.shift_bits ? Fp(record.shift_mult) : Fp::zero()
         );
 
         if (step < kExpBitsLenLowBitsCount) {
@@ -146,11 +141,7 @@ extern "C" int _exp_bits_len_tracegen(
     if (total_jobs > 0) {
         auto [grid, block] = kernel_launch_params(total_jobs);
         exp_bits_len_tracegen_kernel<<<grid, block>>>(
-            d_requests,
-            num_requests,
-            d_trace,
-            height,
-            num_valid_rows
+            d_requests, num_requests, d_trace, height, num_valid_rows
         );
         int err = CHECK_KERNEL();
         if (err != 0) {
