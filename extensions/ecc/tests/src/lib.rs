@@ -20,6 +20,7 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
+    use openvm_sdk::StdIn;
     use openvm_sdk_config::{SdkVmBuilder, SdkVmConfig, TranspilerConfig};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
@@ -27,7 +28,6 @@ mod tests {
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-    use sdk_v2::StdIn;
 
     use crate::test_vectors::{
         k256_sec1_decoding_test_vectors, K256_RECOVERY_TEST_VECTORS, P256_RECOVERY_TEST_VECTORS,

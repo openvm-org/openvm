@@ -95,7 +95,7 @@ let counter_diff = next_io.counter[level] - local_io.counter[level];
 #### `counter[level]` increments by 0 or 1 while enabled
 
 $$
-\text{is\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
+\text{is\\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
 $$
 ```rust
 // Level 0
@@ -116,7 +116,7 @@ builder
 Disabled rows can only appear once all enabled rows have finished.
 
 $$
-\neg \text{is\_enabled}\_{\text{local}} \Rightarrow \neg \text{is\_enabled}\_{\text{next}} \qquad (2)
+\neg \text{is\\_enabled}\_{\text{local}} \Rightarrow \neg \text{is\\_enabled}\_{\text{next}} \qquad (2)
 $$
 ```rust
 builder
@@ -130,7 +130,7 @@ builder
 #### First row enabled sets `is_first`
 
 $$
-\text{is\_enabled} \Rightarrow \text{is\_first} = 1\quad \text{(first row of level)} \qquad (3)
+\text{is\\_enabled} \Rightarrow \text{is\\_first} = 1\quad \text{(first row of level)} \qquad (3)
 $$
 ```rust
 // Level 0 (outermost parent loop)
@@ -146,7 +146,7 @@ For the outermost tracked counter this happens on the first row of the trace. Fo
 counters it happens when the enclosing scope starts.
 
 $$
-\text{is\_enabled} \Rightarrow \text{counter[level]} = 0\quad \text{(first row of scope)} \qquad (3a)
+\text{is\\_enabled} \Rightarrow \text{counter[level]} = 0\quad \text{(first row of scope)} \qquad (3a)
 $$
 ```rust
 // Level 0 (outermost tracked counter)
@@ -169,7 +169,7 @@ At transition rows within a level, $\Delta\text{counter} \neq 1 \iff \Delta\text
 ##### `is_first` not set within iteration
 
 $$
-\text{is\_enabled}\_{\text{local}} \Rightarrow \text{is\_first}\_{\text{next}} = 0\quad (\Delta\text{counter} \neq 1,\ \text{transition within level}) \qquad (4)
+\text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_first}\_{\text{next}} = 0\quad (\Delta\text{counter} \neq 1,\ \text{transition within level}) \qquad (4)
 $$
 ```rust
 builder
@@ -186,7 +186,7 @@ When $\Delta\text{counter} \neq 0$, we are at a loop iteration boundary.
 ##### Enabled next row sets `is_first`
 
 $$
-\text{is\_enabled}\_{\text{next}} \Rightarrow \text{is\_first}\_{\text{next}} = 1\quad (\Delta\text{counter} \neq 0) \qquad (5)
+\text{is\\_enabled}\_{\text{next}} \Rightarrow \text{is\\_first}\_{\text{next}} = 1\quad (\Delta\text{counter} \neq 0) \qquad (5)
 $$
 ```rust
 builder
@@ -199,32 +199,32 @@ builder
 
 These cases apply at each loop level independently.
 
-### 1. Single Row ($\text{is\_enabled} = 1$)
+### 1. Single Row ($\text{is\\_enabled} = 1$)
 
-- By (3): $\text{is\_first} = 1$
+- By (3): $\text{is\\_first} = 1$
 - By (3a): the tracked counter for that scope starts at `0`
 
 Single enabled row has `is_first` set.
 
-### 2. Single Loop Iteration ($\Delta\text{counter} \neq 1$ for all transition rows, $\text{is\_enabled} = 1$)
+### 2. Single Loop Iteration ($\Delta\text{counter} \neq 1$ for all transition rows, $\text{is\\_enabled} = 1$)
 
-- By (3): $\text{is\_first} = 1$ on first row
-- By (4): $\text{is\_first} = 0$ on all interior rows
+- By (3): $\text{is\\_first} = 1$ on first row
+- By (4): $\text{is\\_first} = 0$ on all interior rows
 
 Loop iteration has `is_first` set on first row only.
 
 ### 3. Multiple Loop Iterations
 
-#### 3.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$, $\text{is\_enabled}\_{\text{local}} = 1$)
+#### 3.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$, $\text{is\\_enabled}\_{\text{local}} = 1$)
 
-- By (4): $\text{is\_first}\_{\text{next}} = 0$
+- By (4): $\text{is\\_first}\_{\text{next}} = 0$
 - By (2): once a row disables the loop, later rows stay disabled
 
 Interior enabled rows keep `is_first` unset, and once disabled the loop cannot resume.
 
-#### 3.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$, $\text{is\_enabled}\_{\text{next}} = 1$)
+#### 3.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$, $\text{is\\_enabled}\_{\text{next}} = 1$)
 
-- By (5): $\text{is\_first}\_{\text{next}} = 1$
+- By (5): $\text{is\\_first}\_{\text{next}} = 1$
 
 Any transition to a new iteration has `is_first` set.
 
@@ -238,3 +238,66 @@ The `is_transition` for a parent level is computed inline as `next_is_enabled - 
 let parent_is_transition = Self::local_is_transition(next_io.is_enabled, next_io.is_first[parent_level]);
 builder.when(parent_is_transition)
 ```
+
+## Example Traces
+
+### DEPTH=2: Two nested loops
+
+```rust
+for i in 0..2 {       // level 0 (outermost), tracked by counter[0]
+    for j in 0..M {    // level 1 (innermost), not tracked by this SubAir
+        // ...
+    }
+}
+```
+
+Columns: `[is_enabled, counter[0], is_first[0]]`
+
+| is\_enabled | counter[0] (i) | is\_first[0] (j\_first) | Description |
+|:-----------:|:---------------:|:-----------------------:|-------------|
+| 1           | 0               | 1                       | i=0; j start |
+| 1           | 0               | 0                       | i=0; j continue |
+| 1           | 1               | 1                       | i=1; j restart |
+| 1           | 1               | 0                       | i=1; j continue |
+
+### DEPTH=3: Three nested loops
+
+```rust
+for i in 0..2 {          // level 0 (outermost), tracked by counter[0]
+    for j in 0..2 {       // level 1 (middle), tracked by counter[1]
+        for k in 0..M {   // level 2 (innermost), not tracked by this SubAir
+            // ...
+        }
+    }
+}
+```
+
+Columns: `[is_enabled, counter[0], counter[1], is_first[0], is_first[1]]`
+
+| is\_enabled | counter[0] (i) | counter[1] (j) | is\_first[0] (j\_first) | is\_first[1] (k\_first) | Description |
+|:-----------:|:---------------:|:---------------:|:-----------------------:|:-----------------------:|-------------|
+| 1           | 0               | 0               | 1                       | 1                       | i=0, j=0; start |
+| 1           | 0               | 0               | 0                       | 0                       | i=0, j=0; continue |
+| 1           | 0               | 1               | 0                       | 1                       | i=0, j=1; k restart |
+| 1           | 0               | 1               | 0                       | 0                       | i=0, j=1; continue |
+| 1           | 1               | 0               | 1                       | 1                       | i=1, j=0; j+k restart |
+| 1           | 1               | 0               | 0                       | 0                       | i=1, j=0; continue |
+| 1           | 1               | 1               | 0                       | 1                       | i=1, j=1; k restart |
+
+### With disabled padding
+
+Enabled rows are contiguous. Once `is_enabled` becomes 0, all subsequent rows must remain disabled. Counter values on disabled rows are unconstrained (except `counter[0]` must be 0 on the first row). The `is_first` flags are also unconstrained on disabled rows.
+
+| is\_enabled | counter[0] (i) | is\_first[0] (j\_first) | Description |
+|:-----------:|:---------------:|:-----------------------:|-------------|
+| 1           | 0               | 1                       | i=0; j start |
+| 1           | 0               | 0                       | i=0; j continue |
+| 0           | 1               | 0                       | disabled padding |
+| 0           | 1               | 0                       | disabled padding |
+
+All rows disabled (first row forces `counter[0] = 0` by constraint 3a):
+
+| is\_enabled | counter[0] (i) | is\_first[0] (j\_first) |
+|:-----------:|:---------------:|:-----------------------:|
+| 0           | 0               | 0                       |
+| 0           | 0               | 0                       |

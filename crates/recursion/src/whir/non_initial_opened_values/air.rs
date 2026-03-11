@@ -3,6 +3,7 @@ use std::array::from_fn;
 
 use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -10,7 +11,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{CHUNK, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
@@ -192,11 +192,13 @@ where
             local.proof_idx,
             MerkleVerifyBusMessage {
                 value: local.value_hash.map(Into::into),
-                merkle_idx: local.merkle_idx_bit_src.into(),
+                merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                current_idx_bit_src: local.merkle_idx_bit_src.into(),
                 // There are two parts: hashing leaves (depth k) and merkle proof
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1)
                     - local.whir_round,
                 height: AB::Expr::ZERO,
+                is_leaf: AB::Expr::ONE,
                 leaf_sub_idx: local.coset_idx.into(),
                 commit_major: local.whir_round.into(),
                 commit_minor: AB::Expr::ZERO,

@@ -5,6 +5,7 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not, or},
     SubAir,
 };
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -12,7 +13,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
@@ -97,6 +97,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         );
         let local: &GkrInputCols<AB::Var> = (*local).borrow();
         let next: &GkrInputCols<AB::Var> = (*next).borrow();
+
+        ///////////////////////////////////////////////////////////////////////
+        // Boolean Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        builder.assert_bool(local.is_n_max_greater_than_n_logup);
 
         ///////////////////////////////////////////////////////////////////////
         // Proof Index Constraints

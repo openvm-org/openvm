@@ -1,35 +1,21 @@
-use std::{io::Cursor, sync::Arc};
+use std::sync::Arc;
 
 use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_continuations::{verifier::internal::types::VmStarkProof, SC};
-use openvm_stark_backend::proof::Proof;
+use openvm_circuit::{
+    arch::instructions::exe::VmExe, system::memory::merkle::public_values::UserPublicValuesProof,
+};
+use openvm_stark_backend::{
+    codec::{Decode, Encode},
+    proof::Proof,
+};
 use openvm_transpiler::elf::Elf;
+use openvm_verify_stark_host::NonRootStarkProof;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-#[cfg(feature = "evm-prove")]
-use {
-    crate::commit::{AppExecutionCommit, CommitBytes},
-    itertools::Itertools,
-    openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof},
-    std::iter::{once, repeat_n},
-    thiserror::Error,
-};
 
-use crate::{
-    codec::{decode_vec, encode_slice, Decode, Encode},
-    OPENVM_VERSION,
-};
-
-/// Number of bytes in a Bn254.
-pub(crate) const BN254_BYTES: usize = 32;
-/// Number of Bn254 in `accumulator` field.
-pub const NUM_BN254_ACCUMULATOR: usize = 12;
-/// Number of Bn254 in `proof` field for a circuit with only 1 advice column.
-#[cfg(feature = "evm-prove")]
-const NUM_BN254_PROOF: usize = 43;
+use crate::OPENVM_VERSION;
 
 #[derive(From)]
 pub enum ExecutableFormat {
@@ -50,21 +36,13 @@ impl From<Vec<u8>> for ExecutableFormat {
     }
 }
 
-#[cfg(feature = "evm-prove")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EvmHalo2Verifier {
-    pub halo2_verifier_code: String,
-    pub openvm_verifier_code: String,
-    pub openvm_verifier_interface: String,
-    pub artifact: EvmVerifierByteCode,
-}
-
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProofData {
-    #[serde_as(as = "serde_with::hex::Hex")]
-    /// KZG accumulator.
-    pub accumulator: Vec<u8>,
+    // TODO[jpw]: halo2 proof will NOT need accumulator
+    // #[serde_as(as = "serde_with::hex::Hex")]
+    // /// KZG accumulator.
+    // pub accumulator: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
     /// Bn254 proof in little-endian bytes. The circuit only has 1 advice column, so the proof is
     /// of length `NUM_BN254_PROOF * BN254_BYTES`.
@@ -84,7 +62,7 @@ pub struct EvmProof {
     #[serde_as(as = "serde_with::hex::Hex")]
     /// User public values packed into bytes.
     pub user_public_values: Vec<u8>,
-    /// The concatenation of `accumulator` and `proof`.
+    /// Byte encoding of the `proof`.
     pub proof_data: ProofData,
 }
 
@@ -244,44 +222,46 @@ impl TryFrom<EvmProof> for RawEvmProof {
     }
 }
 
-/// Struct purely for encoding and decoding of [VmStarkProof].
+/// Struct purely for encoding and decoding of [NonRootStarkProof].
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct VersionedVmStarkProof {
+pub struct VersionedNonRootStarkProof {
     /// The openvm major and minor version v{}.{}. The proof format will not change on patch
     /// versions.
     pub version: String,
     #[serde_as(as = "serde_with::hex::Hex")]
-    pub user_public_values: Vec<u8>,
-    #[serde_as(as = "serde_with::hex::Hex")]
     pub proof: Vec<u8>,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub user_pvs_proof: Vec<u8>,
 }
 
-impl VersionedVmStarkProof {
-    pub fn new(proof: VmStarkProof<SC>) -> Result<Self> {
-        let mut user_public_values = Vec::new();
-        encode_slice(&proof.user_public_values, &mut user_public_values)?;
+impl VersionedNonRootStarkProof {
+    pub fn new(proof: NonRootStarkProof) -> Result<Self> {
         Ok(Self {
-            version: format!("v{OPENVM_VERSION}"),
-            user_public_values,
+            version: format!("v{}", OPENVM_VERSION),
             proof: proof.inner.encode_to_vec()?,
+            user_pvs_proof: {
+                let mut buf = Vec::new();
+                proof.user_pvs_proof.encode::<crate::SC, _>(&mut buf)?;
+                buf
+            },
         })
     }
 }
 
-impl TryFrom<VersionedVmStarkProof> for VmStarkProof<SC> {
+impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
     type Error = std::io::Error;
-    fn try_from(proof: VersionedVmStarkProof) -> Result<Self, std::io::Error> {
-        let VersionedVmStarkProof {
+    fn try_from(proof: VersionedNonRootStarkProof) -> Result<Self, std::io::Error> {
+        let VersionedNonRootStarkProof {
             proof,
-            user_public_values,
+            user_pvs_proof,
             ..
         } = proof;
-        let mut reader = Cursor::new(user_public_values);
-        let user_public_values = decode_vec(&mut reader)?;
         Ok(Self {
-            user_public_values,
-            inner: Proof::decode_from_bytes(&proof)?,
+            inner: Proof::<crate::SC>::decode_from_bytes(&proof)?,
+            user_pvs_proof: UserPublicValuesProof::decode::<crate::SC, _>(
+                &mut std::io::Cursor::new(&user_pvs_proof),
+            )?,
         })
     }
 }

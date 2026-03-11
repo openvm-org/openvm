@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fp.h"
 #include <cstddef>
 
 // Returns the first index i in [0, len] such that arr[i] > value.
@@ -23,3 +24,7 @@ __device__ __forceinline__ size_t partition_point_leq(
     return lo;
 }
 
+/// Convert a boolean to Fp(1) or Fp(0).
+static __device__ __forceinline__ Fp bool_to_fp(bool value) {
+    return value ? Fp::one() : Fp::zero();
+}

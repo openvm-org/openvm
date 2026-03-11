@@ -1,19 +1,18 @@
 mod agg;
 mod app;
-#[cfg(feature = "evm-prove")]
-mod halo2;
-#[cfg(feature = "evm-prove")]
+// TODO[jpw]: feature gate
+// #[cfg(feature = "evm-prove")]
+mod evm;
+// TODO[jpw]: feature gate behind evm-prove
 mod root;
 mod stark;
 pub mod vm;
 
 pub use agg::*;
 pub use app::*;
-#[cfg(feature = "evm-prove")]
+// TODO[jpw]: feature gate
+// #[cfg(feature = "evm-prove")]
 pub use evm::*;
-#[cfg(feature = "evm-prove")]
-pub use halo2::*;
-#[cfg(feature = "evm-prove")]
 pub use root::*;
 pub use stark::*;
 

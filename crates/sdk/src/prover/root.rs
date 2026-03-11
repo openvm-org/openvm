@@ -1,196 +1,169 @@
-use getset::Getters;
-use itertools::zip_eq;
-use openvm_circuit::arch::{
-    GenerationError, PreflightExecutionOutput, SingleSegmentVmProver, Streams, VirtualMachine,
-    VirtualMachineError, VmInstance,
+use std::sync::Arc;
+
+use eyre::Result;
+use openvm_circuit::{
+    arch::{
+        instructions::{
+            exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
+        },
+        SystemConfig,
+    },
+    system::memory::dimensions::MemoryDimensions,
 };
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
-use openvm_native_recursion::hints::Hintable;
-use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters},
-    engine::StarkEngine,
-    openvm_stark_backend::proof::Proof,
+use openvm_continuations::{bn254::CommitBytes, RootSC, SC};
+use openvm_sdk_config::SdkVmBuilder;
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    proof::Proof,
+    prover::ProvingContext,
+    StarkEngine, SystemParams,
 };
+use openvm_stark_sdk::config::{
+    app_params_with_100_bits_security, baby_bear_poseidon2::F, MAX_APP_LOG_STACKED_HEIGHT,
+};
+use openvm_verify_stark_host::NonRootStarkProof;
+use tracing::info_span;
 
 use crate::{
-    keygen::{perm::AirIdPermutation, RootVerifierProvingKey},
-    prover::vm::new_local_prover,
-    RootSC, F, SC,
+    config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
+    keygen::AppProvingKey,
+    prover::{AggProver, AppProver},
+    StdIn,
 };
 
-/// Local prover for a root verifier.
-#[derive(Getters)]
-pub struct RootVerifierLocalProver {
-    /// The proving key in `inner` should always have ordering of AIRs in the sorted order by fixed
-    /// trace heights outside of the `prove` function.
-    // This is CPU-only for now because it uses RootSC
-    inner: VmInstance<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
-    /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
-    #[getset(get = "pub")]
-    fixed_air_heights: Vec<u32>,
-    air_id_perm: AirIdPermutation,
-    air_id_inv_perm: AirIdPermutation,
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_continuations::prover::RootGpuProver as RootInnerProver;
+        type E = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
+        type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+    } else {
+        use openvm_continuations::prover::RootCpuProver as RootInnerProver;
+        type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+        type ChildE = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
+    }
 }
 
-impl RootVerifierLocalProver {
-    pub fn new(root_verifier_pk: &RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
-        let inner = new_local_prover(
-            NativeCpuBuilder,
-            &root_verifier_pk.vm_pk,
-            root_verifier_pk.root_committed_exe.exe.clone(),
-        )?;
-        let fixed_air_heights = root_verifier_pk.air_heights.clone();
-        let air_id_perm = AirIdPermutation::compute(&fixed_air_heights);
-        let mut inverse_perm = vec![0usize; air_id_perm.perm.len()];
-        for (i, &perm_i) in air_id_perm.perm.iter().enumerate() {
-            inverse_perm[perm_i] = i;
-        }
-        let air_id_inv_perm = AirIdPermutation { perm: inverse_perm };
+pub struct RootProver(pub RootInnerProver);
 
-        Ok(Self {
-            inner,
-            fixed_air_heights,
-            air_id_perm,
-            air_id_inv_perm,
-        })
-    }
-
-    pub fn vm_config(&self) -> &NativeConfig {
-        self.inner.vm.config()
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn fri_params(&self) -> &FriParameters {
-        &self.inner.vm.engine.fri_params
-    }
-
-    pub fn execute_for_air_heights(
-        &mut self,
-        input: RootVmVerifierInput<SC>,
-    ) -> Result<Vec<u32>, VirtualMachineError> {
-        let exe = self.inner.exe().clone();
-        // See `SingleSegmentVmProver::prove` for explanation
-        let vm = &mut self.inner.vm;
-        Self::permute_pk(vm, &self.air_id_inv_perm);
-        assert!(!vm.config().as_ref().continuation_enabled);
-        let input = input.write();
-        let state = vm.create_initial_state(&exe, input);
-        vm.transport_init_memory_to_device(&state.memory);
-        let PreflightExecutionOutput {
-            system_records,
-            record_arenas,
-            ..
-        } = vm.execute_preflight(
-            &mut self.inner.interpreter,
-            state,
+impl RootProver {
+    pub fn new(
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_dag_commit: CommitBytes,
+        system_params: SystemParams,
+        memory_dimensions: MemoryDimensions,
+        num_user_pvs: usize,
+        trace_heights: Option<Vec<usize>>,
+    ) -> Self {
+        let inner = RootInnerProver::new::<E>(
+            internal_recursive_vk,
+            internal_recursive_dag_commit,
+            system_params,
+            memory_dimensions,
+            num_user_pvs,
             None,
-            NATIVE_MAX_TRACE_HEIGHTS,
-        )?;
-        // Note[jpw]: we could in theory extract trace heights from just preflight execution, but
-        // that requires special logic in the chips so we will just generate the traces for now
-        let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
-        let air_heights = ctx
-            .per_air
-            .iter()
-            .map(|(_, air_ctx)| air_ctx.main_trace_height() as u32)
-            .collect();
-        Self::permute_pk(vm, &self.air_id_perm);
-        Ok(air_heights)
+            trace_heights,
+        );
+        Self(inner)
     }
 
-    // ATTENTION: this must exactly match the permutation done in
-    // `AggStarkProvingKey::dummy_proof_and_keygen` except on DeviceMultiStarkProvingKey.
-    fn permute_pk(
-        vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
-        perm: &AirIdPermutation,
-    ) {
-        perm.permute(&mut vm.pk_mut().per_air);
-        for thc in &mut vm.pk_mut().trace_height_constraints {
-            perm.permute(&mut thc.coefficients);
-        }
+    pub fn from_pk(
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_dag_commit: CommitBytes,
+        pk: Arc<MultiStarkProvingKey<RootSC>>,
+        memory_dimensions: MemoryDimensions,
+        num_user_pvs: usize,
+        trace_heights: Option<Vec<usize>>,
+    ) -> Self {
+        let inner = RootInnerProver::from_pk::<E>(
+            internal_recursive_vk,
+            internal_recursive_dag_commit,
+            pk,
+            memory_dimensions,
+            num_user_pvs,
+            None,
+            trace_heights,
+        );
+        Self(inner)
     }
-}
 
-impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
-    // @dev: If this implementation is generalized to prover backends not using MatrixRecordArena,
-    // then it must be ensured that:
-    // - the Native extension chips can ensure that, if the record arenas have
-    //   `force_matrix_dimensions()` set, then the record arena capacity heights must equal the
-    //   trace matrix heights.
-    // - any chips that do not use record arenas (currently system memory chips) have a way to force
-    //   trace heights as well. We currently use the fact that all non-system periphery chips have
-    //   fixed height (in particular, there is no Poseidon2PeripheryChip).
-    fn prove(
-        &mut self,
-        input: impl Into<Streams<F>>,
-        _: &[u32],
-    ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        assert!(!self.vm_config().as_ref().continuation_enabled);
-        // The following is unrolled from SingleSegmentVmProver for VmLocalProver and
-        // VirtualMachine::prove to add special logic around ensuring trace heights are fixed and
-        // then reordering the trace matrices so the heights are sorted.
-        self.inner.reset_state(input);
-        let state = self
-            .inner
-            .state_mut()
-            .take()
-            .expect("State should always be present");
-        let vm = &mut self.inner.vm;
-        // The root_verifier_pk has the AIRs ordered by the fixed AIR height sorted ordering, but
-        // execute_preflight and generate_proving_ctx still expect the original AIR ID ordering from
-        // VmConfig, so we apply the inverse permutation here, and then undo it after tracegen. This
-        // could maybe be replaced by only changing `executor_idx_to_air_idx`, but applying the
-        // permutation is conceptually simpler to track.
-        Self::permute_pk(vm, &self.air_id_inv_perm);
-        assert!(!vm.config().as_ref().continuation_enabled);
-        vm.transport_init_memory_to_device(&state.memory);
+    pub fn generate_proving_ctx(
+        &self,
+        input: NonRootStarkProof,
+    ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
+        let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
+            self.0
+                .generate_proving_ctx(input.inner, &input.user_pvs_proof)
+        });
+        ctx
+    }
 
-        let trace_heights = &self.fixed_air_heights;
-        let PreflightExecutionOutput {
-            system_records,
-            mut record_arenas,
-            to_state,
-        } = vm.execute_preflight(&mut self.inner.interpreter, state, None, trace_heights)?;
-        // record_arenas are created with capacity specified by trace_heights. we must ensure
-        // `generate_proving_ctx` does not resize the trace matrices to make them smaller:
-        for ra in &mut record_arenas {
-            ra.force_matrix_dimensions();
-        }
-        vm.override_system_trace_heights(trace_heights);
-
-        let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
-        // Sanity check: ensure all generated trace matrices actually match the fixed heights.
-        for (air_idx, (fixed_height, (idx, air_ctx))) in
-            zip_eq(trace_heights, &ctx.per_air).enumerate()
-        {
-            let fixed_height = *fixed_height as usize;
-            if air_idx != *idx {
-                return Err(GenerationError::ForceTraceHeightIncorrect {
-                    air_idx,
-                    actual: 0,
-                    expected: fixed_height,
-                }
-                .into());
-            }
-            if fixed_height != air_ctx.main_trace_height() {
-                return Err(GenerationError::ForceTraceHeightIncorrect {
-                    air_idx,
-                    actual: air_ctx.main_trace_height(),
-                    expected: fixed_height,
-                }
-                .into());
-            }
-        }
-        // Reorder the AIRs by heights.
-        self.air_id_perm.permute(&mut ctx.per_air);
-        for (i, (air_idx, _)) in ctx.per_air.iter_mut().enumerate() {
-            *air_idx = i;
-        }
-        // We also undo the permutation on pk because `prove` needs pk and ctx ordering to match.
-        Self::permute_pk(vm, &self.air_id_perm);
-        let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
-        *self.inner.state_mut() = Some(to_state);
+    pub fn prove_from_ctx(
+        &self,
+        ctx: ProvingContext<<E as StarkEngine>::PB>,
+    ) -> Result<Proof<RootSC>> {
+        let proof = info_span!("agg_layer", group = format!("root"))
+            .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
         Ok(proof)
     }
+}
+
+pub fn compute_root_proof_heights(
+    system_config: SystemConfig,
+    agg_params: AggregationSystemParams,
+    agg_tree_config: AggregationTreeConfig,
+    root_params: SystemParams,
+) -> Result<Vec<usize>> {
+    let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
+        SystemOpcode::TERMINATE.global_opcode(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    )]);
+    let dummy_exe = Arc::new(VmExe::new(dummy_program));
+
+    let memory_dimensions = system_config.memory_config.memory_dimensions();
+    let num_user_pvs = system_config.num_public_values;
+
+    let mut app_config = AppConfig::riscv32(app_params_with_100_bits_security(
+        MAX_APP_LOG_STACKED_HEIGHT,
+    ));
+    app_config.app_vm_config.system.config = system_config;
+
+    let app_pk = AppProvingKey::keygen(app_config)?;
+    let mut app_prover =
+        AppProver::<ChildE, SdkVmBuilder>::new(Default::default(), &app_pk.app_vm_pk, dummy_exe)?;
+    let app_proof = app_prover.prove(StdIn::default())?;
+
+    let agg_prover = AggProver::new(
+        Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
+        AggregationConfig { params: agg_params },
+        agg_tree_config,
+    );
+    let (agg_proof, _) = agg_prover.prove(app_proof)?;
+
+    let root_prover = RootInnerProver::new::<E>(
+        agg_prover.internal_recursive_prover.get_vk(),
+        agg_prover
+            .internal_recursive_prover
+            .get_self_vk_pcs_data()
+            .unwrap()
+            .commitment
+            .into(),
+        root_params,
+        memory_dimensions,
+        num_user_pvs,
+        None,
+        None,
+    );
+    let root_proving_ctx = root_prover
+        .generate_proving_ctx(agg_proof.inner, &agg_proof.user_pvs_proof)
+        .unwrap();
+
+    let ret = root_proving_ctx
+        .into_iter()
+        .map(|(_, air_ctx)| air_ctx.height())
+        .collect();
+    Ok(ret)
 }

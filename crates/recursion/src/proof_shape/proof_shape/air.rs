@@ -6,6 +6,7 @@ use openvm_circuit_primitives::{
     utils::{and, not, or, select},
     SubAir,
 };
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -13,16 +14,15 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirShapeBus, AirShapeBusMessage, AirShapeProperty, CachedCommitBus, CachedCommitBusMessage,
-        CommitmentsBus, CommitmentsBusMessage, EqNsNLogupMaxBus, EqNsNLogupMaxMessage,
-        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, FractionFolderInputBus,
-        FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
-        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus, NLiftMessage,
-        TranscriptBus, TranscriptBusMessage,
+        AirPresenceBus, AirPresenceBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
+        CachedCommitBus, CachedCommitBusMessage, CommitmentsBus, CommitmentsBusMessage,
+        EqNsNLogupMaxBus, EqNsNLogupMaxMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
+        FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
+        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus,
+        NLiftMessage, PreHashBus, PreHashMessage, TranscriptBus, TranscriptBusMessage,
     },
     primitives::bus::{
         PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
@@ -90,6 +90,8 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     /// Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.
     pub n_max: F,
     pub is_n_max_greater: F,
+
+    pub num_air_id_lookups: F,
 }
 
 // Variable-length columns are stored at the end
@@ -152,6 +154,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // Inter-module buses
     pub gkr_module_bus: GkrModuleBus,
     pub air_shape_bus: AirShapeBus,
+    pub air_presence_bus: AirPresenceBus,
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
     pub hyperdim_bus: HyperdimBus,
@@ -163,6 +166,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // For continuations
     pub cached_commit_bus: CachedCommitBus,
+    pub pre_hash_bus: PreHashBus,
     pub continuations_enabled: bool,
 }
 
@@ -261,7 +265,6 @@ where
         let mut main_common_width = AB::Expr::ZERO;
         let mut preprocessed_stacked_width = AB::Expr::ZERO;
         let mut cached_widths = vec![AB::Expr::ZERO; self.max_cached];
-        let mut num_dag_nodes = AB::Expr::ZERO;
 
         // Select values for CommitmentsBus
         let mut preprocessed_commit = [AB::Expr::ZERO; DIGEST_SIZE];
@@ -279,7 +282,6 @@ where
             air_idx += is_current_air.clone() * AB::F::from_usize(i);
             need_rot += is_current_air.clone() * AB::F::from_bool(air_data.need_rot);
             main_common_width += is_current_air.clone() * AB::F::from_usize(air_data.main_width);
-            num_dag_nodes += is_current_air.clone() * AB::F::from_usize(air_data.num_dag_nodes);
 
             if air_data.num_public_values != 0 {
                 has_pvs += is_current_air.clone();
@@ -498,7 +500,17 @@ where
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: air_idx.clone(),
             },
-            local.is_present * (num_dag_nodes.clone() + AB::Expr::TWO),
+            local.is_present * (local.num_air_id_lookups + AB::Expr::TWO),
+        );
+
+        self.air_presence_bus.add_key_with_lookups(
+            builder,
+            local.proof_idx,
+            AirPresenceBusMessage {
+                air_idx: air_idx.clone(),
+                is_present: local.is_present.into(),
+            },
+            local.is_valid * local.num_air_id_lookups,
         );
 
         self.air_shape_bus.add_key_with_lookups(
@@ -555,7 +567,7 @@ where
                 n_abs: n_abs.clone(),
                 n_sign_bit: local.n_sign_bit.into(),
             },
-            local.is_present * (num_dag_nodes + AB::F::ONE),
+            local.is_present * (local.num_air_id_lookups + AB::F::ONE),
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -681,6 +693,17 @@ where
             },
             is_min_cached.clone() * local.is_valid * AB::Expr::from_usize(self.commit_mult),
         );
+
+        if self.continuations_enabled {
+            self.pre_hash_bus.send(
+                builder,
+                local.proof_idx,
+                PreHashMessage {
+                    vk_pre_hash: localv.cached_commits[self.max_cached - 1],
+                },
+                local.is_last,
+            );
+        }
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // NUM PUBLIC VALUES

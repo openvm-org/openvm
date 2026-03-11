@@ -61,6 +61,8 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T n_max;
     T is_n_max_greater;
 
+    T num_air_id_lookups;
+
     // T idx_flags[IDX_FLAGS];
     T cached_commits[MAX_CACHED][DIGEST_SIZE];
 };
@@ -103,6 +105,12 @@ __device__ __forceinline__ void fill_present_row(
     size_t lifted_height = max(height, (size_t)(1 << l_skip));
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, height);
+    COL_WRITE_VALUE(
+        row,
+        typename Cols<MAX_CACHED>::template Type,
+        num_air_id_lookups,
+        trace_data.num_air_id_lookups
+    );
 
     Decomp lifted_height_decomp, num_interactions_decomp, total_interactions_decomp;
     decompose(lifted_height_decomp, lifted_height);
@@ -181,6 +189,7 @@ __device__ __forceinline__ void fill_present_row(
 template <size_t MAX_CACHED>
 __device__ __forceinline__ void fill_non_present_row(
     RowSlice row,
+    TraceMetadata &trace_data,
     size_t final_cidx,
     size_t final_total_interactions,
     size_t cached_commits_idx,
@@ -191,6 +200,12 @@ __device__ __forceinline__ void fill_non_present_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, final_cidx);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, Fp::zero());
+    COL_WRITE_VALUE(
+        row,
+        typename Cols<MAX_CACHED>::template Type,
+        num_air_id_lookups,
+        trace_data.num_air_id_lookups
+    );
     row.fill_zero(
         COL_INDEX(typename Cols<MAX_CACHED>::template Type, lifted_height_limbs), NUM_LIMBS
     );
@@ -232,6 +247,7 @@ __device__ __forceinline__ void fill_summary_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
     row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
 
     Decomp interaction_decomp, max_interaction_decomp;
@@ -421,6 +437,7 @@ __global__ void proof_shape_tracegen(
                 );
                 fill_non_present_row<MAX_CACHED>(
                     row,
+                    trace_data,
                     proof_data.final_cidx,
                     proof_data.final_total_interactions,
                     cached_commits_idx,

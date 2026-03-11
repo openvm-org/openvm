@@ -1,30 +1,16 @@
 use core::borrow::BorrowMut;
-use std::sync::{LazyLock, Mutex};
+use std::sync::Mutex;
 
 use openvm_stark_backend::poly_common::Squarable;
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
-use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 
 use super::air::ExpBitsLenCols;
 
 pub(crate) const NUM_BITS_MAX_PLUS_ONE: usize = 32;
-
-/// Lookup table for inverses of all num_bits in [0, NUM_BITS_MAX_PLUS_ONE]
-/// Note: 0^(-1) is stored as 0
-static NUM_BITS_INV_TABLE: LazyLock<[F; NUM_BITS_MAX_PLUS_ONE]> = LazyLock::new(|| {
-    std::array::from_fn(|idx| {
-        if idx == 0 {
-            F::ZERO
-        } else {
-            let value = F::from_u32(idx as u32);
-            value
-                .try_inverse()
-                .expect("non-zero num_bits value should always be invertible")
-        }
-    })
-});
+pub(crate) const LOW_BITS_COUNT: usize = 27;
 
 #[repr(C)]
 #[derive(Clone, Debug)]
@@ -33,10 +19,19 @@ pub struct ExpBitsLenRecord {
     pub base: F,
     pub bit_src: F,
     pub row_offset: u32,
+    pub shift_bits: u8,
+    pub shift_mult: u32,
 }
 
 impl ExpBitsLenRecord {
-    pub(crate) fn new(base: F, bit_src: F, num_bits: usize, row_offset: u32) -> Self {
+    pub(crate) fn new(
+        base: F,
+        bit_src: F,
+        num_bits: usize,
+        row_offset: u32,
+        shift_bits: usize,
+        shift_mult: u32,
+    ) -> Self {
         debug_assert!(num_bits < NUM_BITS_MAX_PLUS_ONE);
         Self {
             base,
@@ -44,11 +39,14 @@ impl ExpBitsLenRecord {
             num_bits: u8::try_from(num_bits)
                 .expect("num_bits fits in NUM_BITS_MAX_PLUS_ONE (< 256)"),
             row_offset,
+            shift_bits: u8::try_from(shift_bits)
+                .expect("shift_bits fits in NUM_BITS_MAX_PLUS_ONE (< 256)"),
+            shift_mult,
         }
     }
 
     pub(crate) fn num_rows(&self) -> usize {
-        self.num_bits as usize + 1
+        NUM_BITS_MAX_PLUS_ONE
     }
 
     pub(crate) fn end_row(&self) -> usize {
@@ -70,11 +68,19 @@ impl ExpBitsLenCpuTraceGenerator {
     where
         I: IntoIterator<Item = (F, F, usize)>,
     {
+        self.add_requests_with_shift(batch.into_iter().map(|(x, y, z)| (x, y, z, 0, 0)));
+    }
+
+    pub fn add_requests_with_shift<I>(&self, batch: I)
+    where
+        I: IntoIterator<Item = (F, F, usize, usize, u32)>,
+    {
         let mut records = self.requests.lock().unwrap();
         let mut next_row_offset = records.last().map(|record| record.end_row()).unwrap_or(0);
-        for (base, bit_src, num_bits) in batch {
+        for (base, bit_src, num_bits, shift_bits, shift_mult) in batch {
             let row_offset = u32::try_from(next_row_offset).expect("row offset should fit in u32");
-            let record = ExpBitsLenRecord::new(base, bit_src, num_bits, row_offset);
+            let record =
+                ExpBitsLenRecord::new(base, bit_src, num_bits, row_offset, shift_bits, shift_mult);
             next_row_offset += record.num_rows();
             records.push(record);
         }
@@ -99,7 +105,6 @@ impl ExpBitsLenCpuTraceGenerator {
         };
         let mut trace = vec![F::ZERO; padded_rows * width];
 
-        // Split trace into chunks for each request
         let (data_slice, padding_slice) = trace.split_at_mut(num_valid_rows * width);
         let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(records.len());
         let mut remaining = data_slice;
@@ -111,7 +116,6 @@ impl ExpBitsLenCpuTraceGenerator {
             remaining = rest;
         }
 
-        // Fill valid rows in parallel across requests (serial within each request)
         tracing::info_span!("fill_valid_rows").in_scope(|| {
             trace_slices
                 .par_iter_mut()
@@ -121,17 +125,19 @@ impl ExpBitsLenCpuTraceGenerator {
                         request.base,
                         request.bit_src.as_canonical_u32(),
                         request.num_bits,
+                        request.shift_bits,
+                        request.shift_mult,
                         trace_slice,
                         width,
                     );
                 });
         });
 
-        // Fill padding rows: 0^0 = 1
         tracing::info_span!("fill_padding_rows").in_scope(|| {
             padding_slice.par_chunks_exact_mut(width).for_each(|row| {
                 let cols: &mut ExpBitsLenCols<F> = row.borrow_mut();
                 cols.result = F::ONE;
+                cols.result_multiplier = F::ONE;
             });
         });
 
@@ -139,35 +145,84 @@ impl ExpBitsLenCpuTraceGenerator {
     }
 }
 
-pub(crate) fn fill_valid_rows(base: F, bit_src: u32, n: u8, trace_slice: &mut [F], width: usize) {
-    let bases: Vec<_> = base.exp_powers_of_2().take(n as usize + 1).collect();
+pub(crate) fn fill_valid_rows(
+    base: F,
+    bit_src: u32,
+    n: u8,
+    shift_bits: u8,
+    shift_mult: u32,
+    trace_slice: &mut [F],
+    width: usize,
+) {
+    fill_valid_rows_with_decomp_src(base, bit_src, n, shift_bits, shift_mult, trace_slice, width);
+}
+
+pub(crate) fn fill_valid_rows_with_decomp_src(
+    base: F,
+    decomp_src: u32,
+    n: u8,
+    shift_bits: u8,
+    shift_mult: u32,
+    trace_slice: &mut [F],
+    width: usize,
+) {
+    debug_assert!(n < NUM_BITS_MAX_PLUS_ONE as u8);
+    debug_assert_eq!(trace_slice.len(), NUM_BITS_MAX_PLUS_ONE * width);
+    debug_assert!(decomp_src < (1u32 << (NUM_BITS_MAX_PLUS_ONE - 1)));
+
+    let bases: Vec<_> = base.exp_powers_of_2().take(NUM_BITS_MAX_PLUS_ONE).collect();
+    let mut results = [F::ONE; NUM_BITS_MAX_PLUS_ONE];
     let mut acc = F::ONE;
+    for step in (0..NUM_BITS_MAX_PLUS_ONE - 1).rev() {
+        if step < n as usize && ((decomp_src >> step) & 1) == 1 {
+            acc *= bases[step];
+        }
+        results[step] = acc;
+    }
 
-    for i in (0..=n).rev() {
-        let remaining = n - i;
-        let shifted = bit_src >> i;
+    let mut low_bits_are_zero = true;
+    let mut high_bits_all_one = false;
+    for step in 0..NUM_BITS_MAX_PLUS_ONE {
+        if step == LOW_BITS_COUNT {
+            high_bits_all_one = true;
+        }
 
-        let (result, sub_result) = if i == n {
-            (F::ONE, F::ONE)
-        } else {
-            let sub = acc;
-            if (bit_src >> i) & 1 == 1 {
-                acc *= bases[i as usize];
-            }
-            (acc, sub)
-        };
+        let shifted = decomp_src >> step;
+        let num_bits = (n as usize).saturating_sub(step);
+        let low_bits_left = LOW_BITS_COUNT.saturating_sub(step);
 
-        let row_offset = remaining as usize * width;
+        let row_offset = step * width;
         let row = &mut trace_slice[row_offset..row_offset + width];
         let cols: &mut ExpBitsLenCols<F> = row.borrow_mut();
-        cols.base = bases[i as usize];
-        cols.bit_src = F::from_u32(shifted);
-        cols.result = result;
-        cols.sub_result = sub_result;
-        cols.num_bits = F::from_u8(remaining);
         cols.is_valid = F::ONE;
-        cols.bit_src_div_2 = F::from_u32(shifted / 2);
-        cols.bit_src_mod_2 = F::from_u32(shifted % 2);
-        cols.num_bits_inv = NUM_BITS_INV_TABLE[remaining as usize];
+        cols.is_first = F::from_bool(step == 0);
+        cols.bit_idx = F::from_usize(step);
+        cols.base = bases[step];
+        cols.bit_src = F::from_u32(shifted);
+        cols.num_bits = F::from_usize(num_bits);
+        cols.apply_bit = F::from_bool(num_bits != 0);
+        cols.low_bits_left = F::from_usize(low_bits_left);
+        cols.in_low_region = F::from_bool(low_bits_left != 0);
+        cols.result = results[step];
+        cols.result_multiplier = if num_bits != 0 && (shifted & 1) == 1 {
+            bases[step]
+        } else {
+            F::ONE
+        };
+        cols.bit_src_mod_2 = F::from_bool((shifted & 1) == 1);
+        cols.low_bits_are_zero = F::from_bool(low_bits_are_zero);
+        cols.high_bits_all_one = F::from_bool(high_bits_all_one);
+        cols.bit_src_original = F::from_u32(decomp_src);
+        cols.shift_mult = if shift_bits as usize == step {
+            F::from_u32(shift_mult)
+        } else {
+            F::ZERO
+        };
+
+        if step < LOW_BITS_COUNT {
+            low_bits_are_zero &= (shifted & 1) == 0;
+        } else if step + 1 < NUM_BITS_MAX_PLUS_ONE {
+            high_bits_all_one &= (shifted & 1) == 1;
+        }
     }
 }

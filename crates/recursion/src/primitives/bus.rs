@@ -1,4 +1,4 @@
-use stark_recursion_circuit_derive::AlignedBorrow;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 
 use crate::define_typed_lookup_bus;
 
@@ -30,3 +30,13 @@ pub struct ExpBitsLenMessage<T> {
 }
 
 define_typed_lookup_bus!(ExpBitsLenBus, ExpBitsLenMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct RightShiftMessage<T> {
+    pub input: T,
+    pub shift_bits: T,
+    pub result: T,
+}
+
+define_typed_lookup_bus!(RightShiftBus, RightShiftMessage);

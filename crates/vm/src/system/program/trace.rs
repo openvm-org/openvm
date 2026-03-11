@@ -13,7 +13,10 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{stacked_pcs::StackedPcsData, AirProvingContext, CommittedTraceData, TraceCommitter},
+    prover::{
+        stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
+        CpuColMajorBackend, ReferenceDevice, TraceCommitter,
+    },
     Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
@@ -50,12 +53,12 @@ pub struct VmCommittedExe<SC: StarkProtocolConfig> {
 impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.
-    pub fn commit<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
-        exe: VmExe<Val<SC>>,
-        e: &E,
-    ) -> Self {
+    pub fn commit<E: StarkEngine<SC = SC>>(exe: VmExe<Val<SC>>, e: &E) -> Self {
         let trace = generate_cached_trace(&exe.program);
-        let (commit, prover_data) = e.device().commit(&[&trace]).unwrap();
+        let ref_device = ReferenceDevice::new(e.config().clone());
+        let (commit, prover_data) = ref_device
+            .commit(&[&ColMajorMatrix::from_row_major(&trace)])
+            .unwrap();
         Self {
             exe: Arc::new(exe),
             program_commitment: commit,
@@ -67,10 +70,25 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
         self.program_commitment
     }
 
-    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
+    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuColMajorBackend<SC>> {
         CommittedTraceData {
             commitment: self.prover_data.commit().unwrap(),
             data: self.prover_data.clone(),
+            trace: ColMajorMatrix::from_row_major(&self.trace),
+        }
+    }
+
+    /// Get committed trace data for the optimized CPU backend (RowMajor).
+    /// This re-commits the trace using the CpuDevice to produce CpuStackedPcsData.
+    pub fn get_committed_trace_cpu<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
+        &self,
+        e: &E,
+    ) -> CommittedTraceData<CpuBackend<SC>> {
+        let (commitment, pcs_data) =
+            TraceCommitter::<CpuBackend<SC>>::commit(e.device(), &[&self.trace]).unwrap();
+        CommittedTraceData {
+            commitment,
+            data: Arc::new(pcs_data),
             trace: (*self.trace).clone(),
         }
     }

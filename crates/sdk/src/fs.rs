@@ -4,11 +4,9 @@ use std::{
 };
 
 use eyre::{Report, Result};
-#[cfg(feature = "evm-prove")]
-use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
+use openvm_stark_backend::codec::{Decode, Encode};
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::codec::{Decode, Encode};
 #[cfg(feature = "evm-prove")]
 use crate::{types::EvmHalo2Verifier, OPENVM_VERSION};
 

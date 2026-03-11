@@ -58,7 +58,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let engine = test_cpu_engine();
     let exe = VmExe::new(program);
     let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
-    let cached = committed_exe.get_committed_trace();
+    let cached = committed_exe.get_committed_trace_cpu(&engine);
     let chip = ProgramChip {
         filtered_exec_frequencies,
         cached: Some(cached),
@@ -166,7 +166,7 @@ fn test_program_negative() {
     let engine = test_cpu_engine();
     let exe = VmExe::new(program);
     let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
-    let cached = committed_exe.get_committed_trace();
+    let cached = committed_exe.get_committed_trace_cpu(&engine);
     let chip = ProgramChip {
         filtered_exec_frequencies: execution_frequencies.clone(),
         cached: Some(cached),

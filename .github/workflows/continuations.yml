@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "crates/continuations-v2/**"
+      - "crates/continuations/**"
       - "crates/recursion/**"
       - ".github/workflows/continuations.yml"
 
@@ -35,7 +35,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        working-directory: crates/continuations-v2
+        working-directory: crates/continuations
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
           cargo nextest run

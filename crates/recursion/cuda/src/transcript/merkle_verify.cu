@@ -3,6 +3,7 @@
 #include "poseidon2.cuh"
 #include "primitives/trace_access.h"
 #include "types.h"
+#include "util.cuh"
 
 #include <cstddef>
 #include <cstdint>
@@ -10,25 +11,22 @@
 
 template <typename T> struct MerkleVerifyCols {
     T proof_idx;
-    T is_proof_start;
-    T merkle_proof_idx;
     T is_valid;
-    T is_first_merkle;
     T is_last_merkle;
 
     T is_combining_leaves;
+    T is_last_leaf;
     T leaf_sub_idx;
 
-    T idx;
-    T idx_parity;
+    T merkle_idx_bit_src;
+    T current_idx_bit_src;
     T total_depth;
     T height;
 
     T left[DIGEST_SIZE];
     T right[DIGEST_SIZE];
 
-    T recv_left;
-    T recv_right;
+    T recv_flag;
 
     T commit_major;
     T commit_minor;
@@ -43,8 +41,6 @@ struct CombinationIndices {
     size_t result_layer;
     size_t result_index;
 };
-
-__device__ __forceinline__ Fp bool_to_fp(bool value) { return value ? Fp::one() : Fp::zero(); }
 
 __device__ bool compute_combination_indices(size_t k, size_t idx, CombinationIndices &out) {
     if (k == 0) {
@@ -123,17 +119,7 @@ __global__ void cukernel_merkle_verify_tracegen(
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, proof_idx, Fp(static_cast<uint32_t>(record.proof_idx))
         );
-        bool proof_start =
-            record.proof_idx < num_proofs && global_row == proof_row_starts[record.proof_idx];
-        COL_WRITE_VALUE(row, MerkleVerifyCols, is_proof_start, bool_to_fp(proof_start));
-        COL_WRITE_VALUE(
-            row,
-            MerkleVerifyCols,
-            merkle_proof_idx,
-            Fp(static_cast<uint32_t>(record.merkle_proof_idx))
-        );
         COL_WRITE_VALUE(row, MerkleVerifyCols, is_valid, Fp::one());
-        COL_WRITE_VALUE(row, MerkleVerifyCols, is_first_merkle, bool_to_fp(local_row == 0));
         COL_WRITE_VALUE(
             row, MerkleVerifyCols, is_last_merkle, bool_to_fp(local_row + 1 == record.num_rows)
         );
@@ -173,16 +159,24 @@ __global__ void cukernel_merkle_verify_tracegen(
                 row, MerkleVerifyCols, leaf_sub_idx, Fp(static_cast<uint32_t>(indices.result_index))
             );
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, idx, Fp(static_cast<uint32_t>(record.merkle_idx))
+                row,
+                MerkleVerifyCols,
+                merkle_idx_bit_src,
+                Fp(static_cast<uint32_t>(record.merkle_idx))
             );
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, idx_parity, Fp(static_cast<uint32_t>(record.merkle_idx & 1))
+                row,
+                MerkleVerifyCols,
+                current_idx_bit_src,
+                Fp(static_cast<uint32_t>(record.merkle_idx))
             );
             COL_WRITE_VALUE(
                 row, MerkleVerifyCols, height, Fp(static_cast<uint32_t>(indices.source_layer))
             );
-            COL_WRITE_VALUE(row, MerkleVerifyCols, recv_left, Fp::one());
-            COL_WRITE_VALUE(row, MerkleVerifyCols, recv_right, Fp::one());
+            COL_WRITE_VALUE(
+                row, MerkleVerifyCols, is_last_leaf, bool_to_fp(indices.source_layer + 1 == k)
+            );
+            COL_WRITE_VALUE(row, MerkleVerifyCols, recv_flag, Fp(2));
         } else {
             size_t pos = local_row + 1 - num_leaves;
             const Fp *sibling = siblings + record.siblings_offset + pos * DIGEST_SIZE;
@@ -211,14 +205,21 @@ __global__ void cukernel_merkle_verify_tracegen(
             copy_digest(current_hash, poseidon_state);
             COL_WRITE_VALUE(row, MerkleVerifyCols, is_combining_leaves, Fp::zero());
             COL_WRITE_VALUE(row, MerkleVerifyCols, leaf_sub_idx, Fp::zero());
-            COL_WRITE_VALUE(row, MerkleVerifyCols, idx, Fp(static_cast<uint32_t>(current_idx)));
             COL_WRITE_VALUE(
-                row, MerkleVerifyCols, idx_parity, Fp(static_cast<uint32_t>(current_idx & 1))
+                row,
+                MerkleVerifyCols,
+                merkle_idx_bit_src,
+                Fp(static_cast<uint32_t>(record.merkle_idx))
+            );
+
+            current_idx >>= 1;
+
+            COL_WRITE_VALUE(
+                row, MerkleVerifyCols, current_idx_bit_src, Fp(static_cast<uint32_t>(current_idx))
             );
             COL_WRITE_VALUE(row, MerkleVerifyCols, height, Fp(static_cast<uint32_t>(pos + k)));
-            COL_WRITE_VALUE(row, MerkleVerifyCols, recv_left, bool_to_fp(left_is_cur));
-            COL_WRITE_VALUE(row, MerkleVerifyCols, recv_right, bool_to_fp(!left_is_cur));
-            current_idx >>= 1;
+            COL_WRITE_VALUE(row, MerkleVerifyCols, is_last_leaf, Fp::zero());
+            COL_WRITE_VALUE(row, MerkleVerifyCols, recv_flag, bool_to_fp(!left_is_cur));
         }
         COL_WRITE_ARRAY(row, MerkleVerifyCols, output, poseidon_state);
     }

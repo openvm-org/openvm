@@ -1,20 +1,18 @@
+use std::sync::Arc;
+
 use derivative::Derivative;
-use openvm_stark_backend::{
-    config::{Com, StarkProtocolConfig},
-    keygen::types::MultiStarkProvingKey,
-};
-use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_backend::{keygen::types::MultiStarkProvingKey, SystemParams};
 use serde::{Deserialize, Serialize};
 
 /// Proving key for a specific VM.
 #[derive(Serialize, Deserialize, Derivative)]
-#[serde(bound(
-    serialize = "MultiStarkProvingKey<SC>: Serialize, VC: Serialize",
-    deserialize = "MultiStarkProvingKey<SC>: Deserialize<'de>, VC: Deserialize<'de>"
-))]
-#[derivative(Clone(bound = "Com<SC>: Clone, VC: Clone"))]
-pub struct VmProvingKey<SC: StarkProtocolConfig, VC> {
-    pub fri_params: FriParameters,
+pub struct VmProvingKey<VC> {
     pub vm_config: VC,
-    pub vm_pk: MultiStarkProvingKey<SC>,
+    pub vm_pk: Arc<MultiStarkProvingKey<crate::SC>>,
+}
+
+impl<VC> VmProvingKey<VC> {
+    pub fn get_params(&self) -> SystemParams {
+        self.vm_pk.params.clone()
+    }
 }

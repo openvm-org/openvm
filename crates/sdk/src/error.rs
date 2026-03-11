@@ -1,8 +1,9 @@
 use openvm_circuit::arch::{VirtualMachineError, VmVerificationError};
 use openvm_transpiler::transpiler::TranspilerError;
+use openvm_verify_stark_host::error::VerifyStarkError;
 use thiserror::Error;
 
-use crate::commit::CommitBytes;
+use crate::SC;
 
 #[derive(Error, Debug)]
 pub enum SdkError {
@@ -18,22 +19,14 @@ pub enum SdkError {
     Transpiler(#[from] TranspilerError),
     #[error("VM error: {0}")]
     Vm(#[from] VirtualMachineError),
-    #[error("Invalid app exe commit: expected {expected}, actual {actual}")]
-    InvalidAppExeCommit {
-        expected: CommitBytes,
-        actual: CommitBytes,
-    },
-    #[error("Invalid app vm commit: expected {expected}, actual {actual}")]
-    InvalidAppVmCommit {
-        expected: CommitBytes,
-        actual: CommitBytes,
-    },
+    #[error("STARK verification failed with error: {0}")]
+    VerifyStark(#[from] VerifyStarkError),
     #[error("Other error: {0}")]
-    Other(eyre::Error),
+    Other(#[from] eyre::Error),
 }
 
-impl From<VmVerificationError> for SdkError {
-    fn from(error: VmVerificationError) -> Self {
-        SdkError::Vm(error.into())
+impl From<VmVerificationError<SC>> for SdkError {
+    fn from(error: VmVerificationError<SC>) -> Self {
+        SdkError::Other(error.into())
     }
 }

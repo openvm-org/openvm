@@ -1,123 +1,80 @@
 use std::sync::Arc;
 
+use eyre::Result;
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VirtualMachineError,
-    VmBuilder, VmExecutionConfig,
+    instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
+    VmExecutionConfig,
 };
-use openvm_continuations::verifier::internal::types::VmStarkProof;
-#[cfg(feature = "evm-prove")]
-use openvm_continuations::{verifier::root::types::RootVmVerifierInput, RootSC};
-use openvm_native_circuit::NativeConfig;
-#[cfg(feature = "evm-prove")]
-use openvm_stark_backend::proof::Proof;
-use openvm_stark_sdk::engine::StarkFriEngine;
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
+use openvm_verify_stark_host::{vk::VerificationBaseline, NonRootStarkProof};
 
 use crate::{
-    commit::AppExecutionCommit,
-    config::AggregationTreeConfig,
-    keygen::{AggProvingKey, AppProvingKey},
-    prover::{agg::AggStarkProver, app::AppProver},
-    StdIn, F, SC,
+    prover::{vm::types::VmProvingKey, AggProver, AppProver},
+    StdIn, SC,
 };
 
-/// This prover contains an [`app_prover`](StarkProver::app_prover) internally.
-pub struct StarkProver<E, VB, NativeBuilder>
+pub struct StarkProver<E, VB>
 where
-    E: StarkFriEngine<SC = SC>,
+    E: StarkEngine,
     VB: VmBuilder<E>,
-    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
 {
     pub app_prover: AppProver<E, VB>,
-    pub agg_prover: AggStarkProver<E, NativeBuilder>,
+    pub agg_prover: Arc<AggProver>,
 }
-impl<E, VB, NativeBuilder> StarkProver<E, VB, NativeBuilder>
+
+impl<E, VB> StarkProver<E, VB>
 where
-    E: StarkFriEngine<SC = SC>,
+    E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
-    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
-    <NativeConfig as VmExecutionConfig<F>>::Executor:
-        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+    Val<SC>: PrimeField32,
 {
     pub fn new(
-        app_vm_builder: VB,
-        native_builder: NativeBuilder,
-        app_pk: &AppProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmExe<F>>,
-        agg_pk: &AggProvingKey,
-        agg_tree_config: AggregationTreeConfig,
-    ) -> Result<Self, VirtualMachineError> {
-        assert_eq!(
-            app_pk.leaf_fri_params, agg_pk.leaf_vm_pk.fri_params,
-            "App VM is incompatible with Agg VM because of leaf FRI parameters"
-        );
-        assert_eq!(
-            app_pk.app_vm_pk.vm_config.as_ref().num_public_values,
-            agg_pk.num_user_public_values(),
-            "App VM is incompatible with Agg VM  because of the number of public values"
-        );
-
+        vm_builder: VB,
+        app_vm_pk: &VmProvingKey<VB::VmConfig>,
+        app_exe: Arc<VmExe<Val<SC>>>,
+        agg_prover: Arc<AggProver>,
+    ) -> Result<Self> {
         Ok(Self {
-            app_prover: AppProver::new(
-                app_vm_builder,
-                &app_pk.app_vm_pk,
-                app_exe,
-                app_pk.leaf_committed_exe.get_program_commit(),
-            )?,
-            agg_prover: AggStarkProver::new(
-                native_builder,
-                agg_pk,
-                app_pk.leaf_committed_exe.exe.clone(),
-                agg_tree_config,
-            )?,
-        })
-    }
-
-    pub fn from_parts(
-        app_prover: AppProver<E, VB>,
-        agg_prover: AggStarkProver<E, NativeBuilder>,
-    ) -> Result<Self, VirtualMachineError> {
-        Ok(Self {
-            app_prover,
+            app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
             agg_prover,
         })
     }
 
-    pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
-        self.set_program_name(program_name);
-        self
-    }
-    pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
-        self.app_prover.set_program_name(program_name);
-        self
-    }
-
-    pub fn app_commit(&self) -> AppExecutionCommit {
-        self.app_prover.app_commit()
-    }
-
-    pub fn prove(&mut self, input: StdIn) -> Result<VmStarkProof<SC>, VirtualMachineError> {
-        let app_proof = self.app_prover.prove(input)?;
-        let leaf_proofs = self.agg_prover.generate_leaf_proofs(&app_proof)?;
-        self.agg_prover
-            .aggregate_leaf_proofs(leaf_proofs, app_proof.user_public_values.public_values)
+    pub fn prove(&mut self, input: StdIn<Val<SC>>) -> Result<NonRootStarkProof>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
+            + MeteredExecutor<Val<SC>>
+            + PreflightExecutor<Val<SC>, VB::RecordArena>,
+    {
+        let continuation_proof = self.app_prover.prove(input)?;
+        let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
+        // We add one additional internal_recursive layer to reduce the proof size.
+        const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
+        for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+            stark_proof = self
+                .agg_prover
+                .wrap_proof(stark_proof, &mut internal_metadata)?;
+        }
+        Ok(stark_proof)
     }
 
-    #[cfg(feature = "evm-prove")]
-    pub fn generate_proof_for_outer_recursion(
-        &mut self,
-        input: StdIn,
-    ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        let app_proof = self.app_prover.prove(input)?;
-        self.agg_prover.generate_root_proof(app_proof)
-    }
-    #[cfg(feature = "evm-prove")]
-    pub fn generate_root_verifier_input(
-        &mut self,
-        input: StdIn,
-    ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
-        let app_proof = self.app_prover.prove(input)?;
-        self.agg_prover.generate_root_verifier_input(app_proof)
+    pub fn generate_baseline(&self) -> VerificationBaseline {
+        VerificationBaseline {
+            app_exe_commit: self.app_prover.app_exe_commit(),
+            memory_dimensions: self.app_prover.memory_dimensions(),
+            app_dag_commit: self.agg_prover.leaf_prover.get_dag_commit(false),
+            leaf_dag_commit: self
+                .agg_prover
+                .internal_for_leaf_prover
+                .get_dag_commit(false),
+            internal_for_leaf_dag_commit: self
+                .agg_prover
+                .internal_recursive_prover
+                .get_dag_commit(false),
+            internal_recursive_dag_commit: self
+                .agg_prover
+                .internal_recursive_prover
+                .get_dag_commit(true),
+        }
     }
 }

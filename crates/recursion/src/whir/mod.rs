@@ -1025,12 +1025,21 @@ impl WhirModule {
             let round_queries = &preflight.whir.queries[query_range];
             let log_rs_domain_size = initial_log_rs_domain_size - i;
             let omega = F::two_adic_generator(log_rs_domain_size);
-            exp_bits_len_gen.add_requests(
-                round_queries
-                    .iter()
-                    .copied()
-                    .map(|sample| (omega, sample, log_rs_domain_size - k_whir)),
-            );
+            let shift_bits = initial_log_rs_domain_size - k_whir + 1 - i;
+            let per_query_lookups = if i == 0 {
+                preflight.initial_row_states.len() as u32
+            } else {
+                1
+            };
+            exp_bits_len_gen.add_requests_with_shift(round_queries.iter().copied().map(|sample| {
+                (
+                    omega,
+                    sample,
+                    log_rs_domain_size - k_whir,
+                    shift_bits,
+                    per_query_lookups,
+                )
+            }));
         }
     }
 

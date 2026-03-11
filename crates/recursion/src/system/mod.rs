@@ -23,18 +23,18 @@ use crate::{
         expr_eval::CachedTraceRecord, BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX,
     },
     bus::{
-        AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
+        AirPresenceBus, AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus,
+        CommitmentsBus, ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
         EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
         FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         InteractionsFoldingInputBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus,
-        Poseidon2CompressBus, Poseidon2PermuteBus, PublicValuesBus, SelUniBus, StackingIndicesBus,
-        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirMuBus, WhirOpeningPointBus,
-        WhirOpeningPointLookupBus, XiRandomnessBus,
+        Poseidon2CompressBus, Poseidon2PermuteBus, PreHashBus, PublicValuesBus, SelUniBus,
+        StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus, WhirMuBus,
+        WhirOpeningPointBus, WhirOpeningPointLookupBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
-        bus::{ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus},
+        bus::{ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus, RightShiftBus},
         exp_bits_len::{ExpBitsLenAir, ExpBitsLenTraceGenerator},
         pow::{PowerCheckerAir, PowerCheckerCpuTraceGenerator},
     },
@@ -51,34 +51,19 @@ pub(crate) mod frame;
 const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
 pub(crate) const POW_CHECKER_HEIGHT: usize = 32;
 
-pub enum CachedTraceCtx<PB: ProverBackend> {
-    PcsData(CommittedTraceData<PB>),
-    Records(CachedTraceRecord),
-}
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct VerifierConfig {
     pub continuations_enabled: bool,
     pub final_state_bus_enabled: bool,
-    pub has_cached: bool,
-}
-
-impl Default for VerifierConfig {
-    fn default() -> Self {
-        Self {
-            continuations_enabled: false,
-            final_state_bus_enabled: false,
-            has_cached: true,
-        }
-    }
 }
 
 #[derive(Debug)]
-pub struct VerifierExternalData<'a, PB: ProverBackend> {
-    pub poseidon2_compress_inputs: &'a Vec<[PB::Val; POSEIDON2_WIDTH]>,
+pub struct VerifierExternalData<'a> {
+    pub poseidon2_compress_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
+    pub poseidon2_permute_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
     pub range_check_inputs: &'a Vec<usize>,
     pub required_heights: Option<&'a [usize]>,
-    pub final_transcript_state: Option<&'a mut [PB::Val; POSEIDON2_WIDTH]>,
+    pub final_transcript_state: Option<&'a mut [F; POSEIDON2_WIDTH]>,
 }
 
 // Trait to make tracegen functions generic on ProverBackend
@@ -108,9 +93,9 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        cached_trace_ctx: CachedTraceCtx<PB>,
+        child_vk_pcs_data: CommittedTraceData<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<PB>,
+        external_data: &mut VerifierExternalData,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 
@@ -120,7 +105,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        cached_trace_ctx: CachedTraceCtx<PB>,
+        child_vk_pcs_data: CommittedTraceData<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         initial_transcript: TS,
     ) -> Vec<AirProvingContext<PB>> {
@@ -129,6 +114,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
 
         let mut external_data = VerifierExternalData {
             poseidon2_compress_inputs: &poseidon2_compress_inputs,
+            poseidon2_permute_inputs: &poseidon2_compress_inputs,
             range_check_inputs: &range_check_inputs,
             required_heights: None,
             final_transcript_state: None,
@@ -136,7 +122,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
 
         self.generate_proving_ctxs::<TS>(
             child_vk,
-            cached_trace_ctx,
+            child_vk_pcs_data,
             proofs,
             &mut external_data,
             initial_transcript,
@@ -229,6 +215,7 @@ pub struct BusInventory {
 
     // Data buses
     pub air_shape_bus: AirShapeBus,
+    pub air_presence_bus: AirPresenceBus,
     pub hyperdim_bus: HyperdimBus,
     pub lifted_heights_bus: LiftedHeightsBus,
     pub stacking_indices_bus: StackingIndicesBus,
@@ -252,12 +239,14 @@ pub struct BusInventory {
 
     // Compute buses
     pub exp_bits_len_bus: ExpBitsLenBus,
+    pub right_shift_bus: RightShiftBus,
     pub sel_uni_bus: SelUniBus,
     pub eq_neg_result_bus: EqNegResultBus,
     pub eq_neg_base_rand_bus: EqNegBaseRandBus,
 
     // Continuations buses
     pub cached_commit_bus: CachedCommitBus,
+    pub pre_hash_bus: PreHashBus,
     pub dag_commit_bus: DagCommitBus,
     pub final_state_bus: FinalTranscriptStateBus,
 }
@@ -362,6 +351,7 @@ impl BusInventory {
 
             // Data buses
             air_shape_bus: AirShapeBus::new(b.new_bus_idx()),
+            air_presence_bus: AirPresenceBus::new(b.new_bus_idx()),
             hyperdim_bus: HyperdimBus::new(b.new_bus_idx()),
             lifted_heights_bus: LiftedHeightsBus::new(b.new_bus_idx()),
             stacking_indices_bus: StackingIndicesBus::new(b.new_bus_idx()),
@@ -387,11 +377,13 @@ impl BusInventory {
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
 
             exp_bits_len_bus: ExpBitsLenBus::new(b.new_bus_idx()),
+            right_shift_bus: RightShiftBus::new(b.new_bus_idx()),
             eq_neg_base_rand_bus: EqNegBaseRandBus::new(b.new_bus_idx()),
             eq_neg_result_bus: EqNegResultBus::new(b.new_bus_idx()),
 
             // Continuation buses
             cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
+            pre_hash_bus: PreHashBus::new(b.new_bus_idx()),
             dag_commit_bus: DagCommitBus::new(b.new_bus_idx()),
             final_state_bus: FinalTranscriptStateBus::new(b.new_bus_idx()),
         }
@@ -468,8 +460,7 @@ impl<'a> TraceModuleRef<'a> {
         preflights: &[Preflight],
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-        cached_trace_record: &Option<&CachedTraceRecord>,
-        external_data: &VerifierExternalData<CpuBackend<SC>>,
+        external_data: &VerifierExternalData,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         match self {
@@ -477,7 +468,10 @@ impl<'a> TraceModuleRef<'a> {
                 child_vk,
                 proofs,
                 preflights,
-                external_data.poseidon2_compress_inputs,
+                &(
+                    external_data.poseidon2_permute_inputs,
+                    external_data.poseidon2_compress_inputs,
+                ),
                 required_heights,
             ),
             TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(
@@ -501,7 +495,7 @@ impl<'a> TraceModuleRef<'a> {
                 child_vk,
                 proofs,
                 preflights,
-                &(cached_trace_record, pow_checker_gen),
+                pow_checker_gen,
                 required_heights,
             ),
             TraceModuleRef::Stacking(module) => {
@@ -591,7 +585,6 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             &mut bus_idx_manager,
             bus_inventory.clone(),
             MAX_NUM_PROOFS,
-            config.has_cached,
         );
         let stacking = StackingModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
         let whir = WhirModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
@@ -948,7 +941,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
 impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<MAX_NUM_PROOFS> {
     fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
-        let exp_bits_len_air = ExpBitsLenAir::new(self.bus_inventory.exp_bits_len_bus);
+        let exp_bits_len_air = ExpBitsLenAir::new(
+            self.bus_inventory.exp_bits_len_bus,
+            self.bus_inventory.right_shift_bus,
+        );
         let power_checker_air = PowerCheckerAir::<2, POW_CHECKER_HEIGHT> {
             pow_bus: self.bus_inventory.power_checker_bus,
             range_bus: self.bus_inventory.range_checker_bus,
@@ -1014,9 +1010,9 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        cached_trace_ctx: CachedTraceCtx<CpuBackend<SC>>,
+        child_vk_pcs_data: CommittedTraceData<CpuBackend<SC>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<CpuBackend<SC>>,
+        external_data: &mut VerifierExternalData,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1070,11 +1066,6 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
             TraceModuleRef::Whir(&self.whir),
         ];
 
-        let cached_trace_record = match &cached_trace_ctx {
-            CachedTraceCtx::Records(cached_trace_record) => Some(cached_trace_record),
-            _ => None,
-        };
-
         let span = tracing::Span::current();
         let ctxs_by_module = modules
             .into_par_iter()
@@ -1087,7 +1078,6 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
                     &preflights,
                     &power_checker_gen,
                     &exp_bits_len_gen,
-                    &cached_trace_record,
                     external_data,
                     required_heights,
                 )
@@ -1096,18 +1086,9 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 
         let mut ctxs_by_module: Vec<Vec<AirProvingContext<CpuBackend<SC>>>> =
             ctxs_by_module.into_iter().collect::<Option<Vec<_>>>()?;
-        match cached_trace_ctx {
-            CachedTraceCtx::PcsData(child_vk_pcs_data) => {
-                assert!(self.batch_constraint.has_cached);
-                ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                    .cached_mains = vec![child_vk_pcs_data];
-            }
-            CachedTraceCtx::Records(cached_trace_record) => {
-                assert!(!self.batch_constraint.has_cached);
-                ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                    .public_values = cached_trace_record.dag_commit_info.unwrap().commit.to_vec();
-            }
-        };
+        ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX].cached_mains =
+            vec![child_vk_pcs_data];
+
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
         if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
             return None;
@@ -1135,7 +1116,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 pub mod cuda_tracegen {
     use std::iter::zip;
 
-    use openvm_cuda_backend::{prelude::SC, GpuBackend};
+    use openvm_cuda_backend::{hash_scheme::GpuHashScheme, GenericGpuBackend, GpuBackend};
 
     use super::*;
     use crate::{
@@ -1158,8 +1139,7 @@ pub mod cuda_tracegen {
             preflights: &[PreflightGpu],
             pow_checker_gen: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-            cached_trace_record: &Option<&CachedTraceRecord>,
-            external_data: &VerifierExternalData<GpuBackend>,
+            external_data: &VerifierExternalData,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             match self {
@@ -1167,7 +1147,10 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    external_data.poseidon2_compress_inputs,
+                    &(
+                        external_data.poseidon2_permute_inputs,
+                        external_data.poseidon2_compress_inputs,
+                    ),
                     required_heights,
                 ),
                 TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(
@@ -1191,7 +1174,7 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    &(cached_trace_record, &pow_checker_gen.cpu_checker().unwrap()),
+                    &pow_checker_gen.cpu_checker().unwrap(),
                     required_heights,
                 ),
                 TraceModuleRef::Stacking(module) => module.generate_proving_ctxs(
@@ -1212,8 +1195,23 @@ pub mod cuda_tracegen {
         }
     }
 
-    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackend, SC>
-        for VerifierSubCircuit<MAX_NUM_PROOFS>
+    /// Coerces an `AirProvingContext<GpuBackend>` to `AirProvingContext<GenericGpuBackend<HS>>`.
+    ///
+    /// Safe because all GPU backends share `Val = BabyBear` and `Matrix = DeviceMatrix<F>`.
+    /// Panics in debug builds if `cached_mains` is non-empty (commitments differ by hash scheme).
+    fn coerce_gpu_ctx<HS: GpuHashScheme>(
+        ctx: AirProvingContext<GpuBackend>,
+    ) -> AirProvingContext<GenericGpuBackend<HS>> {
+        debug_assert!(ctx.cached_mains.is_empty());
+        AirProvingContext {
+            cached_mains: vec![],
+            common_main: ctx.common_main,
+            public_values: ctx.public_values,
+        }
+    }
+
+    impl<HS: GpuHashScheme, const MAX_NUM_PROOFS: usize>
+        VerifierTraceGen<GenericGpuBackend<HS>, HS::SC> for VerifierSubCircuit<MAX_NUM_PROOFS>
     {
         fn new(
             child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
@@ -1222,11 +1220,11 @@ pub mod cuda_tracegen {
             Self::new_with_options(child_mvk, config)
         }
 
-        fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = GpuBackend>>(
+        fn commit_child_vk<E: StarkEngine<SC = HS::SC, PB = GenericGpuBackend<HS>>>(
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        ) -> CommittedTraceData<GpuBackend> {
+        ) -> CommittedTraceData<GenericGpuBackend<HS>> {
             self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
@@ -1244,11 +1242,11 @@ pub mod cuda_tracegen {
         >(
             &self,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-            cached_trace_ctx: CachedTraceCtx<GpuBackend>,
+            child_vk_pcs_data: CommittedTraceData<GenericGpuBackend<HS>>,
             proofs: &[Proof<BabyBearPoseidon2Config>],
-            external_data: &mut VerifierExternalData<GpuBackend>,
+            external_data: &mut VerifierExternalData,
             initial_transcript: TS,
-        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
+        ) -> Option<Vec<AirProvingContext<GenericGpuBackend<HS>>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
             let proofs_gpu = proofs
@@ -1308,41 +1306,30 @@ pub mod cuda_tracegen {
                 TraceModuleRef::Whir(&self.whir),
             ];
 
-            let cached_trace_record = match &cached_trace_ctx {
-                CachedTraceCtx::Records(cached_trace_record) => Some(cached_trace_record),
-                _ => None,
-            };
-
             // PERF[jpw]: we avoid par_iter so that kernel launches occur on the same stream.
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
             // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
             // launches
-            let mut ctxs_by_module = Vec::with_capacity(modules.len());
+            let mut ctxs_by_module_gpu = Vec::with_capacity(modules.len());
             for (module, required_heights) in modules.into_iter().zip(module_required) {
-                ctxs_by_module.push(module.generate_gpu_ctxs(
+                ctxs_by_module_gpu.push(module.generate_gpu_ctxs(
                     &child_vk_gpu,
                     &proofs_gpu,
                     &preflights_gpu,
                     &power_checker_gen,
                     &exp_bits_len_gen,
-                    &cached_trace_record,
                     external_data,
                     required_heights,
                 )?);
             }
-            match cached_trace_ctx {
-                CachedTraceCtx::PcsData(child_vk_pcs_data) => {
-                    assert!(self.batch_constraint.has_cached);
-                    ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                        .cached_mains = vec![child_vk_pcs_data];
-                }
-                CachedTraceCtx::Records(cached_trace_record) => {
-                    assert!(!self.batch_constraint.has_cached);
-                    ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                        .public_values =
-                        cached_trace_record.dag_commit_info.unwrap().commit.to_vec();
-                }
-            };
+            let mut ctxs_by_module: Vec<Vec<AirProvingContext<GenericGpuBackend<HS>>>> =
+                ctxs_by_module_gpu
+                    .into_iter()
+                    .map(|module_ctxs| module_ctxs.into_iter().map(coerce_gpu_ctx::<HS>).collect())
+                    .collect();
+            ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                .cached_mains = vec![child_vk_pcs_data];
+
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
             if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
                 return None;

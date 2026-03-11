@@ -2,6 +2,7 @@ use core::{array, borrow::Borrow};
 
 use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -9,7 +10,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{CHUNK, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
@@ -245,6 +245,9 @@ where
             builder
                 .when(is_same_commit.clone())
                 .assert_eq(next.pre_state[CHUNK + i], local.post_state[CHUNK + i]);
+            builder
+                .when(is_same_commit.clone())
+                .assert_one(local.flags[i]);
 
             let col_idx =
                 local.col_chunk_idx * AB::Expr::from_usize(CHUNK) + AB::Expr::from_usize(i);
@@ -299,9 +302,11 @@ where
             builder,
             local.proof_idx,
             MerkleVerifyBusMessage {
-                merkle_idx: local.merkle_idx_bit_src.into(),
+                merkle_idx_bit_src: local.merkle_idx_bit_src.into(),
+                current_idx_bit_src: local.merkle_idx_bit_src.into(),
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1),
                 height: AB::Expr::ZERO,
+                is_leaf: AB::Expr::ONE,
                 leaf_sub_idx: local.coset_idx.into(),
                 value: array::from_fn(|i| local.post_state[i].into()),
                 commit_major: AB::Expr::ZERO,

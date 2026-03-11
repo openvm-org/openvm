@@ -6,149 +6,97 @@ edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
+# TODO[jpw]: fix examples for v2
+autoexamples = false
 
 [dependencies]
-p3-fri = { workspace = true }
-openvm-algebra-circuit = { workspace = true }
-openvm-algebra-transpiler = { workspace = true }
-openvm-bigint-circuit = { workspace = true }
-openvm-bigint-transpiler = { workspace = true }
-openvm-build = { workspace = true }
-openvm-ecc-circuit = { workspace = true }
-openvm-ecc-transpiler = { workspace = true }
-openvm-keccak256-circuit = { workspace = true }
-openvm-keccak256-transpiler = { workspace = true }
-openvm-sha256-circuit = { workspace = true }
-openvm-sha256-transpiler = { workspace = true }
-openvm-pairing-circuit = { workspace = true }
-openvm-pairing-transpiler = { workspace = true }
-openvm-native-circuit = { workspace = true }
-openvm-native-compiler = { workspace = true }
-openvm-native-recursion = { workspace = true }
-openvm-native-transpiler = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
-openvm-rv32im-transpiler = { workspace = true }
-openvm-transpiler = { workspace = true }
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
-openvm-cuda-backend = { workspace = true, optional = true }
-openvm-circuit = { workspace = true }
-openvm-continuations = { workspace = true }
-openvm = { workspace = true }
-p3-bn254 = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
 
-alloy-sol-types = { workspace = true, optional = true, features = ["json"] }
+openvm-build = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-transpiler = { workspace = true }
+openvm = { workspace = true }
+
+openvm-sdk-config = { workspace = true }
+openvm-continuations = { workspace = true }
+openvm-verify-stark-host = { workspace = true }
+
 bitcode = { workspace = true }
 bon = { workspace = true }
+cfg-if = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 derivative = { workspace = true }
 derive_more = { workspace = true }
+derive-new = { workspace = true }
+eyre = { workspace = true }
+getset = { workspace = true }
+hex = { workspace = true }
+itertools = { workspace = true }
+num-bigint = { workspace = true }
 serde = { workspace = true }
-eyre.workspace = true
-metrics.workspace = true
-tracing.workspace = true
-itertools.workspace = true
-getset.workspace = true
-clap = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["hex"] }
-serde_json.workspace = true
-toml.workspace = true
-thiserror.workspace = true
-rand.workspace = true
-snark-verifier = { workspace = true, optional = true }
-snark-verifier-sdk = { workspace = true, optional = true }
-tempfile.workspace = true
-hex.workspace = true
-forge-fmt = { workspace = true, optional = true }
-rrs-lib.workspace = true
-num-bigint.workspace = true
-cfg-if.workspace = true
+thiserror = { workspace = true }
+tracing = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
+toml = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
-evm-prove = [
-    "openvm-continuations/static-verifier",
-    "openvm-native-recursion/evm-prove",
-    "dep:snark-verifier",
-    "dep:snark-verifier-sdk",
-]
-evm-verify = [
-    "evm-prove",
-    "openvm-native-recursion/evm-verify",
-    "dep:alloy-sol-types",
-    "dep:forge-fmt",
-]
-metrics = [
-    "openvm-circuit/metrics",
-    "openvm-native-recursion/metrics",
-    "openvm-native-compiler/metrics",
+evm-prove = []
+# evm-prove = [
+#     "openvm-continuations/static-verifier",
+#     "dep:snark-verifier",
+#     "dep:snark-verifier-sdk",
+# ]
+evm-verify = []
+# evm-verify = [
+#     "evm-prove",
+#     "dep:alloy-sol-types",
+#     "dep:forge-fmt",
+# ]
+metrics = ["openvm-continuations/metrics", "openvm-sdk-config/metrics"]
+aot = [
+    "openvm-circuit/aot",
+    "openvm-sdk-config/aot",
 ]
 tco = [
     "openvm-circuit/tco",
-    "openvm-rv32im-circuit/tco",
-    "openvm-native-circuit/tco",
-    "openvm-sha256-circuit/tco",
-    "openvm-keccak256-circuit/tco",
-    "openvm-bigint-circuit/tco",
-    "openvm-algebra-circuit/tco",
-    "openvm-ecc-circuit/tco",
-    "openvm-pairing-circuit/tco",
-]
-aot = [
-    "openvm-circuit/aot",
-    "openvm-rv32im-circuit/aot",
-    "openvm-native-circuit/aot",
-    "openvm-sha256-circuit/aot",
-    "openvm-keccak256-circuit/aot",
-    "openvm-bigint-circuit/aot",
-    "openvm-algebra-circuit/aot",
-    "openvm-ecc-circuit/aot",
-    "openvm-pairing-circuit/aot",
+    "openvm-sdk-config/tco",
 ]
 unprotected = ["openvm-circuit/unprotected"]
+
 # for guest profiling:
 perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
+    "openvm-sdk-config/perf-metrics"
 ]
+
 # turns on stark-backend debugger in all proofs
 stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
+
 async = ["tokio"]
-# performance features:
-# (rayon is always imported because of halo2, so "parallel" feature is redundant)
-parallel = ["openvm-circuit/parallel"]
-mimalloc = ["openvm-circuit/mimalloc"]
-jemalloc = ["openvm-circuit/jemalloc"]
+parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
+mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 
 cuda = [
     "dep:openvm-cuda-backend",
     "openvm-circuit/cuda",
-    "openvm-algebra-circuit/cuda",
-    "openvm-bigint-circuit/cuda",
-    "openvm-ecc-circuit/cuda",
-    "openvm-keccak256-circuit/cuda",
-    "openvm-sha256-circuit/cuda",
-    "openvm-pairing-circuit/cuda",
-    "openvm-native-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-sdk-config/cuda",
+    "openvm-continuations/cuda",
+    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
 
-# Legacy compatibility features for backwards compatibility with v1.2/v1.3
-legacy-v1-3 = ["legacy-v1-3-evm-verifier", "legacy-v1-3-mem-align"]
-# Generate EVM verifier compatible with v1.2/v1.3 format
-legacy-v1-3-evm-verifier = []
-# Enable unaligned memory access for RISC-V 32-bit instructions (v1.2/v1.3 behavior)
-legacy-v1-3-mem-align = [
-    "openvm-rv32im-circuit/legacy-v1-3-mem-align",
-    "openvm-circuit/legacy-v1-3-mem-align"
-]
+# [[example]]
+# name = "sdk_evm"
+# path = "examples/sdk_evm.rs"
+# required-features = ["evm-verify"]
 
-[[example]]
-name = "sdk_evm"
-path = "examples/sdk_evm.rs"
-required-features = ["evm-verify"]
-
-[package.metadata.cargo-shear]
-ignored = ["derive_more", "rand"]
+# [package.metadata.cargo-shear]
+# ignored = ["derive_more", "rand"]

@@ -1,4 +1,4 @@
-use stark_recursion_circuit_derive::AlignedBorrow;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 
 use crate::define_typed_per_proof_permutation_bus;
 

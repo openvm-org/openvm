@@ -2,6 +2,7 @@ use core::borrow::Borrow;
 use std::convert::Into;
 
 use openvm_circuit_primitives::SubAir;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -9,7 +10,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{TranscriptBus, XiRandomnessBus, XiRandomnessMessage},
@@ -107,6 +107,27 @@ where
         builder
             .when(is_transition_challenge.clone())
             .assert_eq(next.idx, local.idx + AB::Expr::ONE);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Dummy Row Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        // A proof can't contribute both dummy and non-dummy rows
+        builder
+            .when(is_transition_challenge.clone())
+            .assert_eq(next.is_dummy, local.is_dummy);
+        // Any proof segment with more than one challenge row must be non-dummy
+        builder
+            .when(is_transition_challenge.clone())
+            .assert_zero(local.is_dummy);
+
+        // Dummy rows are only allowed as a singleton placeholder row
+        builder
+            .when(local.is_dummy)
+            .assert_one(local.is_first_challenge);
+        builder
+            .when(local.is_dummy)
+            .assert_one(is_last_challenge.clone());
 
         ///////////////////////////////////////////////////////////////////////
         // Transition Constraints

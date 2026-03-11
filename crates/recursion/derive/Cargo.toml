@@ -1,5 +1,5 @@
 [package]
-name = "stark-recursion-circuit-derive"
+name = "openvm-recursion-circuit-derive"
 description = "Procedural macros for writing circuits as AIRs."
 version.workspace = true
 authors.workspace = true

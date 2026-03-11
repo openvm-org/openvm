@@ -47,7 +47,6 @@ pub struct AirMetadata {
     need_rot: bool,
     num_public_values: usize,
     num_interactions: usize,
-    num_dag_nodes: usize,
     main_width: usize,
     cached_widths: Vec<usize>,
     preprocessed_width: Option<usize>,
@@ -116,7 +115,6 @@ impl ProofShapeModule {
                 need_rot: avk.params.need_rot,
                 num_public_values: avk.params.num_public_values,
                 num_interactions: avk.num_interactions,
-                num_dag_nodes: avk.num_dag_nodes,
                 main_width: avk.params.width.common_main,
                 cached_widths: avk.params.width.cached_mains.clone(),
                 preprocessed_width: avk.params.width.preprocessed,
@@ -249,6 +247,7 @@ impl AirModule for ProofShapeModule {
             expression_claim_n_max_bus: self.bus_inventory.expression_claim_n_max_bus,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
+            air_presence_bus: self.bus_inventory.air_presence_bus,
             hyperdim_bus: self.bus_inventory.hyperdim_bus,
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
@@ -256,6 +255,7 @@ impl AirModule for ProofShapeModule {
             n_lift_bus: self.bus_inventory.n_lift_bus,
             eq_n_logup_n_max_bus: self.bus_inventory.eq_n_logup_n_max_bus,
             cached_commit_bus: self.bus_inventory.cached_commit_bus,
+            pre_hash_bus: self.bus_inventory.pre_hash_bus,
             continuations_enabled: self.continuations_enabled,
         };
         let pvs_air = PublicValuesAir {

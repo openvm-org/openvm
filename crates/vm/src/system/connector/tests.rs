@@ -81,7 +81,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     let max_trace_heights = vec![0; vk.inner.per_air.len()];
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
-    vm.load_program(committed_exe.get_committed_trace());
+    vm.load_program(committed_exe.get_committed_trace_cpu(&vm.engine));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
     let mut interpreter = vm.preflight_interpreter(&committed_exe.exe).unwrap();
     let PreflightExecutionOutput {

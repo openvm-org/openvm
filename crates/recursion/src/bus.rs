@@ -1,8 +1,8 @@
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::interaction::InteractionBuilder;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, D_EF};
 use p3_field::PrimeCharacteristicRing;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 #[macro_export]
 macro_rules! define_typed_lookup_bus {
@@ -414,13 +414,17 @@ impl AirShapeProperty {
 pub struct MerkleVerifyBusMessage<T> {
     /// The idx of the merkle proof in the proof, might have additional bits (so not 0 at the root)
     /// It will be the same for all the rows in the hashing leaves part.
-    pub merkle_idx: T,
+    pub merkle_idx_bit_src: T,
+    /// Merkle idx suffix after shifting right max(0, height - k) bits
+    pub current_idx_bit_src: T,
     /// The total depth of the merkle proof including the leaves part, equal to merkle_proof.len()
     /// + 1 + k
     pub total_depth: T,
     /// The height of this value, [0, k) are for the hashing leaves part, [k, total_depth) are for
     /// the merkle proof part.
     pub height: T,
+    /// Boolean value that indicates if this message is for the hashing leaves or Merkle proof part
+    pub is_leaf: T,
     /// For the leaves, it will be 0 ~ 2^k - 1, for the next intermediate values, it will be 0 ~
     /// 2^{k-1} - 1 0 for merkle proof part.
     pub leaf_sub_idx: T,
@@ -445,6 +449,15 @@ pub struct AirShapeBusMessage<T> {
 }
 
 define_typed_per_proof_lookup_bus!(AirShapeBus, AirShapeBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct AirPresenceBusMessage<T> {
+    pub air_idx: T,
+    pub is_present: T,
+}
+
+define_typed_per_proof_lookup_bus!(AirPresenceBus, AirPresenceBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -523,6 +536,14 @@ pub struct FinalTranscriptStateMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(FinalTranscriptStateBus, FinalTranscriptStateMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct PreHashMessage<T> {
+    pub vk_pre_hash: [T; DIGEST_SIZE],
+}
+
+define_typed_per_proof_permutation_bus!(PreHashBus, PreHashMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
