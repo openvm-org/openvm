@@ -245,6 +245,9 @@ where
             builder
                 .when(is_same_commit.clone())
                 .assert_eq(next.pre_state[CHUNK + i], local.post_state[CHUNK + i]);
+            builder
+                .when(is_same_commit.clone())
+                .assert_one(local.flags[i]);
 
             let col_idx =
                 local.col_chunk_idx * AB::Expr::from_usize(CHUNK) + AB::Expr::from_usize(i);
