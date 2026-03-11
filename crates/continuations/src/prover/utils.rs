@@ -1,8 +1,8 @@
+use openvm_recursion_circuit::prelude::F;
 use openvm_stark_backend::{
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
     AirRef, StarkEngine, StarkProtocolConfig,
 };
-use recursion_circuit::prelude::F;
 
 use crate::circuit::Circuit;
 

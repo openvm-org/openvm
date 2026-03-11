@@ -1,6 +1,6 @@
 use openvm_circuit::arch::POSEIDON2_WIDTH;
+use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
-use recursion_circuit::utils::poseidon2_hash_slice_with_states;
 
 /// Given N element digests, compute the N−1 intermediate full permutation states
 /// and the final digest, matching the layout of [`HashSliceCtx`].

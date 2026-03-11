@@ -4,6 +4,9 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::POSEIDON2_WIDTH, system::memory::merkle::public_values::UserPublicValuesProof,
 };
+use openvm_recursion_circuit::system::{
+    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{ProverBackend, ProvingContext},
@@ -12,7 +15,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, DIGEST_SIZE, EF, F,
 };
 use p3_field::PrimeCharacteristicRing;
-use recursion_circuit::system::{AggregationSubCircuit, VerifierExternalData, VerifierTraceGen};
 use tracing::instrument;
 
 use super::DeferredVerifyProver;

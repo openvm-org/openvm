@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
+use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
-use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 
 use crate::{
     bn254::{CommitBytes, DagCommitBytes},

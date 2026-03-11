@@ -1,5 +1,5 @@
-use recursion_circuit::define_typed_per_proof_lookup_bus;
-use stark_recursion_circuit_derive::AlignedBorrow;
+use openvm_recursion_circuit::define_typed_per_proof_lookup_bus;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

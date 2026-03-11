@@ -1,6 +1,7 @@
 use core::{array, borrow::Borrow};
 
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -8,7 +9,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{CHUNK, DIGEST_SIZE};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{

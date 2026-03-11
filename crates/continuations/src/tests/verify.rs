@@ -13,6 +13,7 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{prelude::SC, BabyBearPoseidon2GpuEngine};
+use openvm_recursion_circuit::prelude::DIGEST_SIZE;
 use openvm_rv32im_circuit::Rv32ImBuilder;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -27,7 +28,6 @@ use openvm_transpiler::{
 };
 use p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues};
 use p3_field::PrimeCharacteristicRing;
-use recursion_circuit::prelude::DIGEST_SIZE;
 use tracing::{warn, Level};
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 

@@ -1,7 +1,7 @@
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, GpuBackend};
+use openvm_recursion_circuit::system::VerifierSubCircuit;
 use openvm_stark_backend::prover::CpuBackend;
-use recursion_circuit::system::VerifierSubCircuit;
 
 use crate::{
     circuit::{

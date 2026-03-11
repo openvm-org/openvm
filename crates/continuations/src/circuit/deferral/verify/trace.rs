@@ -7,12 +7,12 @@ use openvm_circuit::system::memory::{
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_recursion_circuit::prelude::{DIGEST_SIZE, F, SC};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
 use p3_field::PrimeField32;
-use recursion_circuit::prelude::{DIGEST_SIZE, F, SC};
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use crate::circuit::{

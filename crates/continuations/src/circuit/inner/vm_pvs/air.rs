@@ -2,6 +2,10 @@ use std::borrow::Borrow;
 
 use openvm_circuit::system::connector::DEFAULT_SUSPEND_EXIT_CODE;
 use openvm_circuit_primitives::utils::{and, assert_array_eq, not};
+use openvm_recursion_circuit::bus::{
+    CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage,
+};
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -9,10 +13,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
-use recursion_circuit::bus::{
-    CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage,
-};
-use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{VmPvs, VM_PVS_AIR_ID};
 
 use crate::circuit::inner::{

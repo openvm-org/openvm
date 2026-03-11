@@ -1,10 +1,10 @@
 use openvm_circuit_primitives::SubAir;
+use openvm_recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::interaction::InteractionBuilder;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::AirBuilder;
 use p3_field::{Field, PrimeCharacteristicRing};
-use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     circuit::subair::merkle_tree::bus::{

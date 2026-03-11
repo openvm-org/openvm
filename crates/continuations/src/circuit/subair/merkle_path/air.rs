@@ -3,11 +3,11 @@ use std::array::from_fn;
 use itertools::Itertools;
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::{utils::not, SubAir};
+use openvm_recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 use openvm_stark_backend::interaction::InteractionBuilder;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::AirBuilder;
 use p3_field::PrimeCharacteristicRing;
-use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 
 #[derive(Copy, Clone, Debug)]
 pub struct MerklePathRowView<'a, T> {

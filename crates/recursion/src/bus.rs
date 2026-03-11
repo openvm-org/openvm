@@ -1,8 +1,8 @@
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::interaction::InteractionBuilder;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, D_EF};
 use p3_field::PrimeCharacteristicRing;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 #[macro_export]
 macro_rules! define_typed_lookup_bus {

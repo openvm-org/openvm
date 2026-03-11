@@ -5,15 +5,15 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
     AlignedBorrow,
 };
-use openvm_stark_backend::{interaction::InteractionBuilder, PartitionedBaseAir};
-use p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues};
-use p3_field::PrimeCharacteristicRing;
-use p3_matrix::Matrix;
-use recursion_circuit::{
+use openvm_recursion_circuit::{
     bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
     prelude::DIGEST_SIZE,
     primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage},
 };
+use openvm_stark_backend::{interaction::InteractionBuilder, PartitionedBaseAir};
+use p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues};
+use p3_field::PrimeCharacteristicRing;
+use p3_matrix::Matrix;
 
 use crate::{
     circuit::deferral::verify::bus::{

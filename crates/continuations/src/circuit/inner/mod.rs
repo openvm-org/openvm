@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
+use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
-use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use verify_stark::pvs::{DeferralPvs, VmPvs, DEF_PVS_AIR_ID, VM_PVS_AIR_ID};
 
 use crate::{

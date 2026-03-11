@@ -1,6 +1,6 @@
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use serde::{Deserialize, Serialize};
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 pub const VERIFIER_PVS_AIR_ID: usize = 0;
 pub const VM_PVS_AIR_ID: usize = 1;

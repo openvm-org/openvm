@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
+use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bn254::{CommitBytes, DagCommitBytes},

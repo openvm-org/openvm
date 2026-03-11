@@ -3181,6 +3181,8 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-poseidon2-air",
+ "openvm-recursion-circuit",
+ "openvm-recursion-circuit-derive",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
@@ -3191,8 +3193,6 @@ dependencies = [
  "p3-bn254",
  "p3-field",
  "p3-matrix",
- "recursion-circuit",
- "stark-recursion-circuit-derive",
  "test-case",
  "tracing",
  "verify-stark",
@@ -3722,6 +3722,42 @@ dependencies = [
  "num-format",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "openvm-recursion-circuit"
+version = "2.0.0-alpha"
+dependencies = [
+ "derive-new 0.6.0",
+ "eyre",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-poseidon2-air",
+ "openvm-recursion-circuit-derive",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-symmetric",
+ "strum",
+ "strum_macros",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-recursion-circuit-derive"
+version = "2.0.0-alpha"
+dependencies = [
+ "quote",
+ "syn 2.0.116",
 ]
 
 [[package]]
@@ -4929,34 +4965,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "recursion-circuit"
-version = "2.0.0-alpha"
-dependencies = [
- "derive-new 0.6.0",
- "eyre",
- "itertools 0.14.0",
- "openvm-circuit",
- "openvm-circuit-primitives",
- "openvm-cuda-backend",
- "openvm-cuda-builder",
- "openvm-cuda-common",
- "openvm-poseidon2-air",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "p3-air",
- "p3-baby-bear",
- "p3-field",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-symmetric",
- "stark-recursion-circuit-derive",
- "strum",
- "strum_macros",
- "test-case",
- "tracing",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5609,14 +5617,6 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
-
-[[package]]
-name = "stark-recursion-circuit-derive"
-version = "2.0.0-alpha"
-dependencies = [
- "quote",
- "syn 2.0.116",
-]
 
 [[package]]
 name = "static_assertions"
@@ -6309,11 +6309,11 @@ dependencies = [
  "bitcode",
  "eyre",
  "openvm-circuit",
+ "openvm-recursion-circuit-derive",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-field",
  "serde",
- "stark-recursion-circuit-derive",
  "thiserror 1.0.69",
  "zstd",
 ]

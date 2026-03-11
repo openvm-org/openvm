@@ -19,6 +19,7 @@ use openvm_deferral_circuit::{
     DeferralCpuBuilder, DeferralExtension, DeferralFn, Rv32DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
+use openvm_recursion_circuit::{prelude::DIGEST_SIZE, utils::poseidon2_hash_slice_with_states};
 use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -43,7 +44,6 @@ use openvm_transpiler::{
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use recursion_circuit::{prelude::DIGEST_SIZE, utils::poseidon2_hash_slice_with_states};
 use tracing::{warn, Level};
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 

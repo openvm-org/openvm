@@ -1,17 +1,17 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit_primitives::utils::{assert_array_eq, not};
+use openvm_recursion_circuit::bus::{
+    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+    PublicValuesBus, PublicValuesBusMessage,
+};
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use recursion_circuit::bus::{
-    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-    PublicValuesBus, PublicValuesBusMessage,
-};
-use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{DeferralPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID};
 
 use crate::{

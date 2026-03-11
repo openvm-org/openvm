@@ -2,6 +2,11 @@ use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::SubAir;
+use openvm_recursion_circuit::bus::{
+    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+    PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
+};
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -9,11 +14,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use recursion_circuit::bus::{
-    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-    PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
-};
-use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{
     DagCommit, DeferralPvs, VerifierBasePvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID,
 };

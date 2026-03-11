@@ -1,5 +1,5 @@
-use recursion_circuit::prelude::DIGEST_SIZE;
-use stark_recursion_circuit_derive::AlignedBorrow;
+use openvm_recursion_circuit::prelude::DIGEST_SIZE;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 
 pub mod aggregation;
 pub mod verify;

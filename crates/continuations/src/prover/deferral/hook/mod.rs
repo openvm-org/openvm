@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use eyre::Result;
+use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
@@ -11,7 +12,6 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use p3_field::{Field, PrimeField32};
-use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{

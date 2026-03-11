@@ -1,17 +1,17 @@
 use std::borrow::Borrow;
 
 use openvm_circuit_primitives::utils::not;
+use openvm_recursion_circuit::{
+    bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
+    prelude::DIGEST_SIZE,
+    utils::assert_zeros,
+};
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_matrix::Matrix;
-use recursion_circuit::{
-    bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
-    prelude::DIGEST_SIZE,
-    utils::assert_zeros,
-};
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     circuit::deferral::aggregation::hook::bus::{

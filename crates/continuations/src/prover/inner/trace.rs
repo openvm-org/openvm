@@ -1,4 +1,7 @@
 use itertools::Itertools;
+use openvm_recursion_circuit::system::{
+    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{ProverBackend, ProvingContext},
@@ -6,7 +9,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use recursion_circuit::system::{AggregationSubCircuit, VerifierExternalData, VerifierTraceGen};
 use tracing::instrument;
 use verify_stark::pvs::{DagCommit, DeferralPvs};
 

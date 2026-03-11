@@ -1,20 +1,20 @@
 use std::borrow::Borrow;
 
 use openvm_circuit_primitives::utils::not;
-use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
-};
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing};
-use p3_matrix::Matrix;
-use recursion_circuit::{
+use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
         PublicValuesBus, PublicValuesBusMessage,
     },
     prelude::DIGEST_SIZE,
 };
-use stark_recursion_circuit_derive::AlignedBorrow;
+use openvm_recursion_circuit_derive::AlignedBorrow;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_field::{Field, PrimeCharacteristicRing};
+use p3_matrix::Matrix;
 
 use crate::{
     circuit::deferral::{

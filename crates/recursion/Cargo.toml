@@ -1,5 +1,5 @@
 [package]
-name = "recursion-circuit"
+name = "openvm-recursion-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
 p3-symmetric = { workspace = true }
-stark-recursion-circuit-derive = { workspace = true }
+openvm-recursion-circuit-derive = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }

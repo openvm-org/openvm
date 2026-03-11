@@ -4,6 +4,8 @@ use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_circuit_primitives::SubAir;
+use openvm_recursion_circuit::bus::Poseidon2CompressBus;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, p3_util::log2_strict_usize, BaseAirWithPublicValues,
     PartitionedBaseAir,
@@ -12,8 +14,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use recursion_circuit::bus::Poseidon2CompressBus;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::circuit::{
     root::bus::{

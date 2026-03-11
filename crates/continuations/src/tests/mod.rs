@@ -57,7 +57,7 @@ cfg_if::cfg_if! {
             },
             root::RootVerifierPvs,
         };
-        use recursion_circuit::utils::poseidon2_hash_slice_with_states;
+        use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
         use openvm_stark_sdk::config::{

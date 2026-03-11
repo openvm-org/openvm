@@ -1,6 +1,6 @@
+use openvm_recursion_circuit::define_typed_permutation_bus;
+use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-use recursion_circuit::define_typed_permutation_bus;
-use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::circuit::deferral::verify::output::VALS_IN_DIGEST;
 

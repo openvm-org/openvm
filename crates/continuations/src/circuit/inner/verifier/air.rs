@@ -5,20 +5,20 @@ use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
     SubAir,
 };
-use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
-};
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing};
-use p3_matrix::Matrix;
-use recursion_circuit::{
+use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, PreHashBus, PreHashMessage, PublicValuesBus,
         PublicValuesBusMessage,
     },
     utils::assert_zeros,
 };
-use stark_recursion_circuit_derive::AlignedBorrow;
+use openvm_recursion_circuit_derive::AlignedBorrow;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_field::{Field, PrimeCharacteristicRing};
+use p3_matrix::Matrix;
 use verify_stark::pvs::{
     VerifierBasePvs, VerifierDefPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID,
 };

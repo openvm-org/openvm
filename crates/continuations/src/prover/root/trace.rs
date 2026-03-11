@@ -1,5 +1,8 @@
 use itertools::Itertools;
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
+use openvm_recursion_circuit::system::{
+    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{ProverBackend, ProvingContext},
@@ -7,7 +10,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, DIGEST_SIZE, EF, F,
 };
-use recursion_circuit::system::{AggregationSubCircuit, VerifierExternalData, VerifierTraceGen};
 use tracing::instrument;
 
 use super::RootProver;
