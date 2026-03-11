@@ -1,10 +1,21 @@
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+use serde::{Deserialize, Serialize};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 pub const VERIFIER_PVS_AIR_ID: usize = 0;
 pub const VM_PVS_AIR_ID: usize = 1;
 pub const DEF_PVS_AIR_ID: usize = 2;
 pub const CONSTRAINT_EVAL_AIR_ID: usize = 3;
+
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub struct DagCommit<F> {
+    /// Cached trace commit of this verifier circuit's SymbolicExpressionAir, which is derived
+    /// from its child_vk.
+    pub cached_commit: [F; DIGEST_SIZE],
+    /// Field pre_hash of the child MultiStarkVerifyingKey.
+    pub vk_pre_hash: [F; DIGEST_SIZE],
+}
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy)]
@@ -16,15 +27,14 @@ pub struct VerifierBasePvs<F> {
     /// the leaf verifier, 1 for the internal-for-leaf verifier, and 2 for the internal-
     /// recursive verifier.
     pub internal_flag: F,
-    /// Cached trace commit of the leaf verifier circuit's SymbolicExpressionAir, which is
-    /// derived from the app_vk
-    pub app_dag_commit: [F; DIGEST_SIZE],
-    /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpressionAir,
-    /// which is derived from the leaf_vk
-    pub leaf_dag_commit: [F; DIGEST_SIZE],
-    /// Cached trace commit of the first (i.e. index 0) internal-recursive layer verifier
-    /// circuit's SymbolicExpressionAir, which is derived from the internal_for_leaf_vk
-    pub internal_for_leaf_dag_commit: [F; DIGEST_SIZE],
+    /// Commit to the app_vk's DAG and its pre-hash, first exposed by the leaf verifier.
+    pub app_dag_commit: DagCommit<F>,
+    /// Commit to the leaf_vk's DAG and its pre-hash, first exposed by the internal-for-leaf
+    /// verifier.
+    pub leaf_dag_commit: DagCommit<F>,
+    /// Commit to the internal_for_leaf_vk's DAG and its pre-hash, first exposed by the first
+    /// (i.e. index 0) internal-recursive layer verifier.
+    pub internal_for_leaf_dag_commit: DagCommit<F>,
 
     //////////////////////////////////////////////////////////////////////
     /// VERIFIER-SPECIFIC RECURSION PVS
@@ -33,9 +43,9 @@ pub struct VerifierBasePvs<F> {
     /// 1 for the first (i.e. index 0) internal-recursive layer, 2 for subsequent layers, and
     /// 0 everywhere else.
     pub recursion_flag: F,
-    /// Cached trace commit of each subsequent (i.e. index > 0) internal-recursive layer
-    /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
-    pub internal_recursive_dag_commit: [F; DIGEST_SIZE],
+    /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
+    /// index > 0) internal-recursive layer verifiers.
+    pub internal_recursive_dag_commit: DagCommit<F>,
 }
 
 #[repr(C)]
@@ -47,9 +57,9 @@ pub struct VerifierDefPvs<F> {
     /// Ternary flag to indicate which public values this Proof contains. Should be 0 if it
     /// has only VM public values defined, 1 if only deferral public values, and 2 if both.
     pub deferral_flag: F,
-    /// Commit to the deferral hook verifying key, computed by compressing together the app,
-    /// leaf, and internal-for-leaf DAG commits when deferral_flag == 1. Is set exactly when
-    /// internal_for_leaf_dag_commit is set.
+    /// Commit to the deferral hook verifying key, computed by hashing the cached_commit and
+    /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits when
+    /// deferral_flag == 1. Is set exactly when internal_for_leaf_dag_commit is set.
     pub def_hook_vk_commit: [F; DIGEST_SIZE],
 }
 

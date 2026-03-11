@@ -134,16 +134,25 @@ Because of the dependency on `child_vk`, different layers have different verifie
 
 A verifier subcircuit must verify that a child proof satisfies the constraints defined by `child_vk`. These constraints are encoded as a **constraint DAG**, where each node represents a symbolic expression over trace values. This DAG includes interaction constraints.
 
-To avoid recomputing the DAG in-circuit, most verifier subcircuits use a **cached trace**: before proving, the DAG is serialized per-node into a cached trace, committed via SWIRL's stacked PCS, and the commitment is exposed as a public value. This commitment is called a `*_dag_commit`:
+To avoid recomputing the DAG in-circuit, most verifier subcircuits use a **cached trace**: before proving, the DAG is serialized per-node into a cached trace, committed via SWIRL's stacked PCS, and the commitment is exposed as a public value. Each such commitment is paired with the child VK's **field pre-hash** (`vk_pre_hash`) to form a **DAG commit** (`DagCommit`):
+
+```
+DagCommit {
+    cached_commit: [F; DIGEST_SIZE],  // PCS commitment of the cached trace
+    vk_pre_hash:   [F; DIGEST_SIZE],  // field pre-hash of the child MultiStarkVerifyingKey
+}
+```
+
+The four DAG commits are:
 
 | Public Value | Commits to |
 |--------------|------------|
-| `app_dag_commit` | `app_vk` constraint DAG |
-| `leaf_dag_commit` | `leaf_vk` constraint DAG |
-| `internal_for_leaf_dag_commit` | `internal_for_leaf_vk` constraint DAG |
-| `internal_recursive_dag_commit` | `internal_recursive_vk` constraint DAG |
+| `app_dag_commit` | `app_vk` constraint DAG + VK pre-hash |
+| `leaf_dag_commit` | `leaf_vk` constraint DAG + VK pre-hash |
+| `internal_for_leaf_dag_commit` | `internal_for_leaf_vk` constraint DAG + VK pre-hash |
+| `internal_recursive_dag_commit` | `internal_recursive_vk` constraint DAG + VK pre-hash |
 
-Each `*_dag_commit` is checked for consistency by the aggregation subcircuit and/or the final client-facing verifier.
+Each `*_dag_commit` is checked for consistency by the aggregation subcircuit and/or the final client-facing verifier. The `cached_commit` component is verified against the PCS commitment received from `ProofShapeModule` via the `CachedCommitBus`, while the `vk_pre_hash` component is verified via a separate `PreHashBus`.
 
 :::note
 System parameters and per-AIR `is_required` flags are not included in `*_dag_commit`; they are fixed by the parent circuit.
@@ -208,15 +217,15 @@ Public values are processed by `VerifierPvsAir`. The inner subcircuit re-exposes
       - `0` for leaf
       - `1` for internal-for-leaf
       - `2` for internal-recursive (or compression)
-    - `app_dag_commit: Digest` — cached trace commit of the leaf verifier subcircuit's `SymbolicExpressionAir`, derived from `app_vk`
-    - `leaf_dag_commit: Digest` — cached trace commit of the internal-for-leaf verifier subcircuit's `SymbolicExpressionAir`, derived from `leaf_vk`
-    - `internal_for_leaf_dag_commit: Digest` — cached trace commit of the first (index 0) internal-recursive layer verifier subcircuit's `SymbolicExpressionAir`, derived from `internal_for_leaf_vk`
+    - `app_dag_commit: DagCommit` — DAG commit (cached trace commit + VK pre-hash) for the leaf verifier subcircuit, derived from `app_vk`
+    - `leaf_dag_commit: DagCommit` — DAG commit for the internal-for-leaf verifier subcircuit, derived from `leaf_vk`
+    - `internal_for_leaf_dag_commit: DagCommit` — DAG commit for the first (index 0) internal-recursive layer verifier subcircuit, derived from `internal_for_leaf_vk`
 - **Internal Recursion-Related Public Values**
     - `recursion_flag: F` — ternary flag indicating which internal-recursive layer this proof is for:
       - `0` for non-internal-recursive layers
       - `1` for the first (index 0) internal-recursive layer
       - `2` for subsequent internal-recursive layers
-    - `internal_recursive_dag_commit: Digest` — cached trace commit of each subsequent (index > 0) internal-recursive layer verifier subcircuit's `SymbolicExpressionAir`, derived from `internal_recursive_vk`
+    - `internal_recursive_dag_commit: DagCommit` — DAG commit for each subsequent (index > 0) internal-recursive layer verifier subcircuit, derived from `internal_recursive_vk`
 
 The `program_commit` should be set at every layer, but the flags and `*_dag_commits` should be set according to which layer we are currently proving for. Unset `*_dag_commits` are filled with 0s.
 
@@ -266,9 +275,7 @@ The root subcircuit exposes a new set of public values for the static verifier. 
   - The app-level `ProgramAir` cached trace commit
   - The Merkle root of the starting app memory state (`initial_root`)
   - The initial app program counter (`initial_pc`)
-- `app_vk_commit: Digest` — commitment to the app VM verifier key, computed from child proof DAG commits as:
-  - `intermediate_vk_commit = H(app_dag_commit, leaf_dag_commit)`
-  - `app_vk_commit = H(intermediate_vk_commit, internal_for_leaf_dag_commit)`
+- `app_vk_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf DAG commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
 
 #### Constraints
 
@@ -276,8 +283,8 @@ The root subcircuit constrains the child proof's public values:
 
 - `is_terminate == 1` and `exit_code == ExitCode::Success` (successful app termination)
 - `internal_flag == 2` and `recursion_flag` is `1` or `2` (child is internal-recursive)
-- `SymbolicExpressionAir`'s cached commit equals `internal_recursive_dag_commit`
-- `internal_recursive_dag_commit` matches a pre-generated constant commit
+- `SymbolicExpressionAir`'s cached commit equals `internal_recursive_dag_commit.cached_commit`
+- `internal_recursive_dag_commit` (both `cached_commit` and `vk_pre_hash`) matches a pre-generated constant
 
 The root subcircuit also constrains its own public values:
 
@@ -285,4 +292,4 @@ The root subcircuit also constrains its own public values:
     - Computing the Merkle root of `user_public_values`, denoted `user_pvs_commit`
     - Constraining that a Merkle proof (where the path to the root depends on the `MemoryDimensions`) exists between `user_pvs_commit` and `final_root`
 - `app_exe_commit` is computed as specified above
-- `app_vk_commit` is computed from the child proof's `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` as specified above
+- `app_vk_commit` is computed from the child proof's `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` (using all 6 `cached_commit` and `vk_pre_hash` components) as specified above

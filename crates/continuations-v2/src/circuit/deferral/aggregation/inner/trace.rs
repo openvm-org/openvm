@@ -10,6 +10,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
+use verify_stark::pvs::DagCommit;
 
 use crate::{
     circuit::deferral::{
@@ -111,7 +112,7 @@ pub trait DeferralInnerTraceGen<PB: ProverBackend> {
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_def: bool,
-        child_dag_commit: PB::Commitment,
+        child_dag_commit: DagCommit<F>,
         child_merkle_depth: Option<usize>,
     ) -> DeferralInnerPreCtx<PB>;
 }
@@ -127,7 +128,7 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInne
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_def: bool,
-        child_dag_commit: [F; DIGEST_SIZE],
+        child_dag_commit: DagCommit<F>,
         child_merkle_depth: Option<usize>,
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         DeferralInnerPreCtx {
@@ -157,7 +158,7 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_def: bool,
-        child_dag_commit: [F; DIGEST_SIZE],
+        child_dag_commit: DagCommit<F>,
         child_merkle_depth: Option<usize>,
     ) -> DeferralInnerPreCtx<GpuBackend> {
         let DeferralInnerPreCtx {
