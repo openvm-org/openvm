@@ -18,15 +18,14 @@ use openvm_stark_backend::{
     prover::ProvingContext,
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_stark_sdk::config::{
+    app_params_with_100_bits_security, baby_bear_poseidon2::F, MAX_APP_LOG_STACKED_HEIGHT,
+};
 use tracing::info_span;
 use verify_stark::NonRootStarkProof;
 
 use crate::{
-    config::{
-        default_app_params, AggregationConfig, AggregationSystemParams, AggregationTreeConfig,
-        AppConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP,
-    },
+    config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::AppProvingKey,
     prover::{AggProver, AppProver},
     StdIn,
@@ -127,10 +126,8 @@ pub fn compute_root_proof_heights(
     let memory_dimensions = system_config.memory_config.memory_dimensions();
     let num_user_pvs = system_config.num_public_values;
 
-    let mut app_config = AppConfig::riscv32(default_app_params(
-        DEFAULT_APP_LOG_BLOWUP,
-        DEFAULT_APP_L_SKIP,
-        21 - DEFAULT_APP_L_SKIP,
+    let mut app_config = AppConfig::riscv32(app_params_with_100_bits_security(
+        MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;
 

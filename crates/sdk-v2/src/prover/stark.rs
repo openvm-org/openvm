@@ -51,19 +51,12 @@ where
     {
         let continuation_proof = self.app_prover.prove(input)?;
         let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
-        if let Some(compression_prover) = self.compression_prover.as_ref() {
-            // We add two additional internal_recursive layers before the compression layer to
-            // minimize the input size. The first internal_recursive layer will have a single
-            // child proof, and thus may have 2-3x fewer trace cells than the previous layer.
-            // The second will also only have a single child, and it may require 2-3x fewer
-            // hashes (and thus Poseidon2 trace rows) than the first.
-            const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
-            for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-                stark_proof = self
-                    .agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata)?;
-            }
-            stark_proof = compression_prover.prove(stark_proof)?;
+        // We add one additional internal_recursive layer to reduce the proof size.
+        const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
+        for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+            stark_proof = self
+                .agg_prover
+                .wrap_proof(stark_proof, &mut internal_metadata)?;
         }
         Ok(stark_proof)
     }
