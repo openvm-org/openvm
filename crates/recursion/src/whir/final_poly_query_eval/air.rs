@@ -90,9 +90,10 @@ where
         let round_base = (local.whir_round + AB::Expr::ONE) * k_whir_f;
 
         let proof_idx = local.proof_idx;
-        let local_is_eq_phase = local.is_enabled - local.phase_idx;
 
         builder.assert_bool(local.phase_idx);
+        builder.when(local.phase_idx).assert_one(local.is_enabled);
+        let local_is_eq_phase = local.is_enabled - local.phase_idx;
 
         let is_same_proof = next.is_enabled - next.is_first_in_proof;
         let is_same_round = next.is_enabled - next.is_first_in_round;
@@ -118,7 +119,9 @@ where
                         local.proof_idx.into(),
                         local.whir_round.into(),
                         local.query_idx.into(),
-                        // Phase idx starts at 1 on the last round.
+                        // Adjust the phase counter so every enabled query still starts at 0:
+                        // non-final rounds must begin in eq-phase (phase_idx = 0), while the
+                        // last round may start at phase_idx = 1 because its eq-phase is empty.
                         local.phase_idx - local.is_last_round,
                         local.eval_idx.into(),
                     ],
@@ -208,6 +211,9 @@ where
             local.final_value_acc,
         );
         builder
+            .when(local.is_first_in_proof)
+            .assert_zeros(local.final_value_acc);
+        builder
             .when(local.is_first_in_round)
             .assert_one(local.is_query_zero);
         builder
@@ -235,11 +241,15 @@ where
 
         let gamma_eq_post = ext_field_multiply(local.gamma_eq_acc, post_horner_acc.clone());
 
-        assert_array_eq(
-            &mut builder.when(local_is_eq_phase.clone()),
-            local.horner_acc,
-            [AB::F::ZERO; 4],
-        );
+        builder
+            .when(local_is_eq_phase.clone())
+            .assert_zeros(local.horner_acc);
+        builder
+            .when(local.is_first_in_query)
+            .assert_zeros(local.horner_acc);
+        builder
+            .when(local_is_eq_phase.clone())
+            .assert_zeros(local.final_poly_coeff);
         assert_array_eq(
             &mut builder.when(is_same_query.clone()),
             next.horner_acc,
