@@ -7,12 +7,9 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use recursion_circuit::{
-    bus::{
-        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-        PublicValuesBus, PublicValuesBusMessage,
-    },
-    prelude::DIGEST_SIZE,
+use recursion_circuit::bus::{
+    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+    PublicValuesBus, PublicValuesBusMessage,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{DeferralPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID};
@@ -193,15 +190,13 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * has_verifier_pvs == 0), receive the child's cached trace commit and
          * constrain it to an expected constant.
          */
-        let expected_def_hook_commit =
-            <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(self.expected_def_hook_commit);
         self.cached_commit_bus.receive(
             builder,
             local.proof_idx,
             CachedCommitBusMessage {
                 air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
                 cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
-                cached_commit: expected_def_hook_commit.map(AB::Expr::from_u32),
+                cached_commit: self.expected_def_hook_commit.into(),
             },
             local.is_present * not(local.has_verifier_pvs),
         );

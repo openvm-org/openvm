@@ -10,6 +10,7 @@ use recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use tracing::instrument;
+use verify_stark::pvs::DagCommit;
 
 use super::CompressionProver;
 use crate::{
@@ -32,19 +33,24 @@ where
         proofs_type: ProofsType,
     ) -> ProvingContext<PB> {
         let proof_slice = &[proof];
-        let (pre_ctxs, poseidon2_inputs) = self
+        let child_dag_commit = DagCommit {
+            cached_commit: self.child_vk_pcs_data.commitment,
+            vk_pre_hash: self.child_vk.pre_hash,
+        };
+        let pre_data = self
             .agg_node_tracegen
             .generate_pre_verifier_subcircuit_ctxs(
                 proof_slice,
                 proofs_type,
                 None,
                 false,
-                self.child_vk_pcs_data.commitment,
+                child_dag_commit,
             );
 
         let range_check_inputs = vec![];
         let mut external_data = VerifierExternalData {
-            poseidon2_compress_inputs: &poseidon2_inputs,
+            poseidon2_compress_inputs: &pre_data.poseidon2_compress_inputs,
+            poseidon2_permute_inputs: &pre_data.poseidon2_permute_inputs,
             range_check_inputs: &range_check_inputs,
             required_heights: None,
             final_transcript_state: None,
@@ -67,7 +73,8 @@ where
             .generate_post_verifier_subcircuit_ctxs(proof_slice, proofs_type, false);
 
         ProvingContext {
-            per_trace: pre_ctxs
+            per_trace: pre_data
+                .air_proving_ctxs
                 .into_iter()
                 .chain(subcircuit_ctxs)
                 .chain(post_ctxs)

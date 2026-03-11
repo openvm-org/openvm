@@ -9,6 +9,8 @@ use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 use serde::{Deserialize, Serialize};
 
+use crate::DagCommit;
+
 /// Verifying key and artifacts used to verify a STARK proof for a fixed VM and executable
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NonRootStarkVerifyingKey {
@@ -25,18 +27,17 @@ pub struct VerificationBaseline {
     pub app_exe_commit: Digest,
     /// VM memory metadata used to verify the user public values merkle proof
     pub memory_dimensions: MemoryDimensions,
-    /// Cached trace commit of the leaf verifier circuit's SymbolicExpressionAir, which is
-    /// derived from the app_vk
-    pub app_dag_commit: Digest,
-    /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpressionAir,
-    /// which is derived from the leaf_vk
-    pub leaf_dag_commit: Digest,
-    /// Cached trace commit of the first (i.e. index 0) internal-recursive layer verifier
-    /// circuit's SymbolicExpressionAir, which is derived from the internal_for_leaf_vk
-    pub internal_for_leaf_dag_commit: Digest,
-    /// Cached trace commit of each subsequent (i.e. index > 0) internal-recursive layer
-    /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
-    pub internal_recursive_dag_commit: Digest,
+    /// Commit to the app_vk's DAG and its pre-hash, first exposed by the leaf verifier.
+    pub app_dag_commit: DagCommit,
+    /// Commit to the leaf_vk's DAG and its pre-hash, first exposed by the internal-for-leaf
+    /// verifier.
+    pub leaf_dag_commit: DagCommit,
+    /// Commit to the internal_for_leaf_vk's DAG and its pre-hash, first exposed by the first
+    /// (i.e. index 0) internal-recursive layer verifier.
+    pub internal_for_leaf_dag_commit: DagCommit,
+    /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
+    /// index > 0) internal-recursive layer verifiers.
+    pub internal_recursive_dag_commit: DagCommit,
     /// In-circuit generated commit of the internal-recursive layer's DAG if the compression
     /// layer is enabled. If so, it should be match the public values of DagCommitAir, which
     /// should be the last AIR in the compression layer circuit.

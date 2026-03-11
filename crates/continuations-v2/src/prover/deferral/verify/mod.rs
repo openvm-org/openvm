@@ -16,7 +16,7 @@ use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierT
 use tracing::instrument;
 
 use crate::{
-    bn254::CommitBytes,
+    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         deferral::verify::{DeferralMerkleProofs, DeferredVerifyCircuit, DeferredVerifyTraceGen},
         Circuit,
@@ -110,7 +110,10 @@ impl<
             },
         );
         let engine = E::new(system_params);
-        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let internal_recursive_dag_commit = DagCommitBytes {
+            cached_commit: child_vk_pcs_data.commitment.into(),
+            pre_hash: child_vk.pre_hash.into(),
+        };
         let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
@@ -133,6 +136,7 @@ impl<
     pub fn from_pk(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         child_vk_pcs_data: CommittedTraceData<PB>,
+        internal_recursive_cached_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<SC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -151,8 +155,11 @@ impl<
                 has_cached: true,
             },
         );
-        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
         let def_hook_commit = def_hook_commit.map(Into::into);
+        let internal_recursive_dag_commit = DagCommitBytes {
+            cached_commit: internal_recursive_cached_commit,
+            pre_hash: child_vk.pre_hash.into(),
+        };
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,

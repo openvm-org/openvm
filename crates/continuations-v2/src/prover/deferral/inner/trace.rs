@@ -12,6 +12,7 @@ use recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use tracing::instrument;
+use verify_stark::pvs::DagCommit;
 
 use super::{DeferralChildVkKind, DeferralInnerProver};
 use crate::{
@@ -41,7 +42,7 @@ where
             "child_merkle_depth=None is only valid for single-proof wrappers"
         );
 
-        let (child_vk, child_dag_commit, child_is_def) = match child_vk_kind {
+        let (child_vk, child_pcs_data, child_is_def) = match child_vk_kind {
             DeferralChildVkKind::DeferralCircuit => {
                 (&self.child_vk, self.child_vk_pcs_data.clone(), false)
             }
@@ -52,6 +53,10 @@ where
                 (&self.vk, self.self_vk_pcs_data.clone().unwrap(), true)
             }
         };
+        let child_dag_commit = DagCommit {
+            cached_commit: child_pcs_data.commitment,
+            vk_pre_hash: child_vk.pre_hash,
+        };
 
         let DeferralInnerPreCtx {
             verifier_pvs_ctx,
@@ -61,14 +66,16 @@ where
         } = self.agg_node_tracegen.pre_verifier_subcircuit_tracegen(
             proofs,
             child_is_def,
-            child_dag_commit.commitment,
+            child_dag_commit,
             child_merkle_depth,
         );
-        let cached_trace_ctx = CachedTraceCtx::PcsData(child_dag_commit);
+        let cached_trace_ctx = CachedTraceCtx::PcsData(child_pcs_data);
 
         let range_check_inputs = vec![];
+        let poseidon2_permute_inputs = vec![];
         let mut external_data = VerifierExternalData {
             poseidon2_compress_inputs: &poseidon2_inputs,
+            poseidon2_permute_inputs: &poseidon2_permute_inputs,
             range_check_inputs: &range_check_inputs,
             required_heights: None,
             final_transcript_state: None,

@@ -4,10 +4,10 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{VerifierBasePvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{DagCommit, VerifierBasePvs, VERIFIER_PVS_AIR_ID};
 
 use crate::circuit::deferral::aggregation::inner::verifier::air::{
     DeferralChildLevel, DeferralVerifierPvsCols,
@@ -16,7 +16,7 @@ use crate::circuit::deferral::aggregation::inner::verifier::air::{
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
     child_is_def: bool,
-    child_dag_commit: [F; DIGEST_SIZE],
+    child_dag_commit: DagCommit<F>,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();

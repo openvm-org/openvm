@@ -46,7 +46,8 @@ where
         let PreVerifierData {
             pre_verifier_ctxs,
             post_verifier_ctxs,
-            poseidon2_inputs,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
             range_inputs,
             verifier_pvs_record,
             output_commit,
@@ -59,7 +60,8 @@ where
 
         let mut final_transcript_state = [F::ZERO; POSEIDON2_WIDTH];
         let mut external_data = VerifierExternalData {
-            poseidon2_compress_inputs: &poseidon2_inputs,
+            poseidon2_compress_inputs: &poseidon2_compress_inputs,
+            poseidon2_permute_inputs: &poseidon2_permute_inputs,
             range_check_inputs: &range_inputs,
             required_heights: None,
             final_transcript_state: Some(&mut final_transcript_state),

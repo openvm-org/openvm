@@ -22,7 +22,7 @@ use crate::{
         EqNsNLogupMaxBus, EqNsNLogupMaxMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
         FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
         HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus,
-        NLiftMessage, TranscriptBus, TranscriptBusMessage,
+        NLiftMessage, PreHashBus, PreHashMessage, TranscriptBus, TranscriptBusMessage,
     },
     primitives::bus::{
         PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
@@ -166,6 +166,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // For continuations
     pub cached_commit_bus: CachedCommitBus,
+    pub pre_hash_bus: PreHashBus,
     pub continuations_enabled: bool,
 }
 
@@ -692,6 +693,17 @@ where
             },
             is_min_cached.clone() * local.is_valid * AB::Expr::from_usize(self.commit_mult),
         );
+
+        if self.continuations_enabled {
+            self.pre_hash_bus.send(
+                builder,
+                local.proof_idx,
+                PreHashMessage {
+                    vk_pre_hash: localv.cached_commits[self.max_cached - 1],
+                },
+                local.is_last,
+            );
+        }
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // NUM PUBLIC VALUES

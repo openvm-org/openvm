@@ -131,13 +131,13 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
                     * AB::F::TWO.inverse(),
         );
 
-        assert_array_eq(
+        assert_array_eq::<_, _, AB::Expr, _>(
             &mut builder
                 .when(local.is_untouched)
                 .when(local.is_valid)
                 .when_ne(local.is_valid, AB::F::ONE),
             local.initial_node_commit,
-            <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(self.zero_hash).map(AB::F::from_u32),
+            self.zero_hash.into(),
         );
 
         /*

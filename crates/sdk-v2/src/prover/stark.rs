@@ -65,19 +65,19 @@ where
         VerificationBaseline {
             app_exe_commit: self.app_prover.app_exe_commit(),
             memory_dimensions: self.app_prover.memory_dimensions(),
-            app_dag_commit: self.agg_prover.leaf_prover.get_cached_commit(false),
+            app_dag_commit: self.agg_prover.leaf_prover.get_dag_commit(false),
             leaf_dag_commit: self
                 .agg_prover
                 .internal_for_leaf_prover
-                .get_cached_commit(false),
+                .get_dag_commit(false),
             internal_for_leaf_dag_commit: self
                 .agg_prover
                 .internal_recursive_prover
-                .get_cached_commit(false),
+                .get_dag_commit(false),
             internal_recursive_dag_commit: self
                 .agg_prover
                 .internal_recursive_prover
-                .get_cached_commit(true),
+                .get_dag_commit(true),
             compression_commit: self
                 .compression_prover
                 .as_ref()

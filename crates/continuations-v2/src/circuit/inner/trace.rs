@@ -1,13 +1,14 @@
 use itertools::Itertools;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
-use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
-use verify_stark::pvs::DeferralPvs;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
+use verify_stark::pvs::{DagCommit, DeferralPvs};
+
+use crate::circuit::{SingleAirTraceData, SubCircuitTraceData};
 
 #[derive(Copy, Clone)]
 pub enum ProofsType {
@@ -26,8 +27,8 @@ pub trait InnerTraceGen<PB: ProverBackend> {
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
-        child_dag_commit: PB::Commitment,
-    ) -> (Vec<AirProvingContext<PB>>, Vec<[F; POSEIDON2_WIDTH]>);
+        child_dag_commit: DagCommit<F>,
+    ) -> SubCircuitTraceData<PB>;
     fn generate_post_verifier_subcircuit_ctxs(
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
@@ -51,12 +52,13 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
-        child_dag_commit: [F; DIGEST_SIZE],
-    ) -> (
-        Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>,
-        Vec<[F; POSEIDON2_WIDTH]>,
-    ) {
-        let (verifier_pvs_ctx, mut poseidon2_inputs) = super::verifier::generate_proving_ctx(
+        child_dag_commit: DagCommit<F>,
+    ) -> SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> {
+        let SingleAirTraceData {
+            air_proving_ctx: verifier_pvs_ctx,
+            mut poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
+        } = super::verifier::generate_proving_ctx(
             proofs,
             proofs_type,
             child_is_app,
@@ -77,16 +79,17 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
                 child_is_app,
                 absent_trace_pvs,
             );
-            poseidon2_inputs.extend_from_slice(&def_poseidon2_inputs);
+            poseidon2_compress_inputs.extend_from_slice(&def_poseidon2_inputs);
             def_pvs_ctx
         } else {
             super::unset::generate_proving_ctx(&[], child_is_app)
         };
 
-        (
-            vec![verifier_pvs_ctx, vm_pvs_ctx, idx2_ctx],
-            poseidon2_inputs,
-        )
+        SubCircuitTraceData {
+            air_proving_ctxs: vec![verifier_pvs_ctx, vm_pvs_ctx, idx2_ctx],
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
+        }
     }
 
     fn generate_post_verifier_subcircuit_ctxs(
@@ -130,23 +133,24 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
-        child_dag_commit: [F; DIGEST_SIZE],
-    ) -> (
-        Vec<AirProvingContext<GpuBackend>>,
-        Vec<[F; POSEIDON2_WIDTH]>,
-    ) {
-        let (cpu_ctxs, poseidon2_inputs) = self.generate_pre_verifier_subcircuit_ctxs(
+        child_dag_commit: DagCommit<F>,
+    ) -> SubCircuitTraceData<GpuBackend> {
+        let data = self.generate_pre_verifier_subcircuit_ctxs(
             proofs,
             proofs_type,
             absent_trace_pvs,
             child_is_app,
             child_dag_commit,
         );
-        let gpu_ctxs = cpu_ctxs
-            .into_iter()
-            .map(transport_air_proving_ctx_to_device)
-            .collect_vec();
-        (gpu_ctxs, poseidon2_inputs)
+        SubCircuitTraceData {
+            air_proving_ctxs: data
+                .air_proving_ctxs
+                .into_iter()
+                .map(transport_air_proving_ctx_to_device)
+                .collect_vec(),
+            poseidon2_compress_inputs: data.poseidon2_compress_inputs,
+            poseidon2_permute_inputs: data.poseidon2_permute_inputs,
+        }
     }
 
     fn generate_post_verifier_subcircuit_ctxs(

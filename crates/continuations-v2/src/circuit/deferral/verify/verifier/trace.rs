@@ -17,9 +17,14 @@ use verify_stark::pvs::{
 };
 
 use crate::{
-    circuit::deferral::{
-        verify::verifier::{DeferredVerifyPvsCols, RecursiveDeferredVerifyCols},
-        DeferralCircuitPvs,
+    circuit::{
+        deferral::{
+            verify::verifier::{DeferredVerifyPvsCols, RecursiveDeferredVerifyCols},
+            DeferralCircuitPvs,
+        },
+        root::NUM_DIGESTS_IN_VK_COMMIT,
+        subair::hash_slice_trace,
+        utils::vk_commit_components,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, poseidon2_input_to_digests},
 };
@@ -31,14 +36,18 @@ pub struct DeferredVerifyPvsRecord<F> {
     pub initial_root_hash: [F; DIGEST_SIZE],
     pub initial_pc_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
-    pub intermediate_vk_commit: [F; DIGEST_SIZE],
+    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
     pub app_exe_commit: [F; DIGEST_SIZE],
     pub app_vk_commit: [F; DIGEST_SIZE],
 }
 
 pub fn generate_record(
     proof: &Proof<BabyBearPoseidon2Config>,
-) -> (DeferredVerifyPvsRecord<F>, Vec<[F; POSEIDON2_WIDTH]>) {
+) -> (
+    DeferredVerifyPvsRecord<F>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let (base_pvs_slice, _) = proof.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
         .split_at(VerifierBasePvs::<u8>::width());
@@ -61,6 +70,7 @@ pub fn generate_record(
         .unwrap();
 
     let mut poseidon2_compress_inputs = Vec::with_capacity(5);
+    let mut poseidon2_permute_inputs = Vec::new();
     poseidon2_compress_inputs.extend_from_slice(&[
         padded_program_commit,
         padded_initial_root,
@@ -74,15 +84,12 @@ pub fn generate_record(
         initial_root_hash,
     ));
 
-    let intermediate_vk_commit = poseidon2_compress_with_capacity(
-        child_verifier_pvs.app_dag_commit,
-        child_verifier_pvs.leaf_dag_commit,
-    )
-    .0;
-    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
-        child_verifier_pvs.app_dag_commit,
-        child_verifier_pvs.leaf_dag_commit,
-    ));
+    let (intermediate_vk_states_vec, app_vk_commit) = hash_slice_trace(
+        &vk_commit_components(child_verifier_pvs),
+        Some(&mut poseidon2_permute_inputs),
+        Some(&mut poseidon2_compress_inputs),
+    );
+    let intermediate_vk_states = intermediate_vk_states_vec.try_into().unwrap();
 
     let app_exe_commit =
         poseidon2_compress_with_capacity(intermediate_exe_commit, initial_pc_hash).0;
@@ -91,27 +98,18 @@ pub fn generate_record(
         initial_pc_hash,
     ));
 
-    let app_vk_commit = poseidon2_compress_with_capacity(
-        intermediate_vk_commit,
-        child_verifier_pvs.internal_for_leaf_dag_commit,
-    )
-    .0;
-    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
-        intermediate_vk_commit,
-        child_verifier_pvs.internal_for_leaf_dag_commit,
-    ));
-
     (
         DeferredVerifyPvsRecord {
             program_commit_hash,
             initial_root_hash,
             initial_pc_hash,
             intermediate_exe_commit,
-            intermediate_vk_commit,
+            intermediate_vk_states,
             app_exe_commit,
             app_vk_commit,
         },
         poseidon2_compress_inputs,
+        poseidon2_permute_inputs,
     )
 }
 
@@ -142,7 +140,7 @@ pub fn generate_proving_ctx(
     cols.initial_root_hash = record.initial_root_hash;
     cols.initial_pc_hash = record.initial_pc_hash;
     cols.intermediate_exe_commit = record.intermediate_exe_commit;
-    cols.intermediate_vk_commit = record.intermediate_vk_commit;
+    cols.intermediate_vk_states = record.intermediate_vk_states;
     cols.app_exe_commit = record.app_exe_commit;
     cols.app_vk_commit = record.app_vk_commit;
     cols.final_transcript_state = final_transcript_state;

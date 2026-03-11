@@ -1,6 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
@@ -13,55 +12,73 @@ use p3_matrix::dense::RowMajorMatrix;
 use verify_stark::pvs::{DeferralPvs, VerifierBasePvs};
 
 use crate::{
-    circuit::deferral::{
-        aggregation::hook::verifier::air::DeferralHookPvsCols, DeferralAggregationPvs,
-        DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
+    circuit::{
+        deferral::{
+            aggregation::hook::verifier::air::DeferralHookPvsCols, DeferralAggregationPvs,
+            DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
+        },
+        root::NUM_DIGESTS_IN_VK_COMMIT,
+        subair::hash_slice_trace,
+        SingleAirTraceData,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
     SC,
 };
 
-pub fn def_vk_commit_from_verifier_pvs(
-    verifier_pvs: &VerifierBasePvs<F>,
-) -> ([F; DIGEST_SIZE], [F; DIGEST_SIZE]) {
-    // Here app_dag_commit is the def_dag_commit
-    let intermediate_vk_commit =
-        poseidon2_compress_with_capacity(verifier_pvs.app_dag_commit, verifier_pvs.leaf_dag_commit)
-            .0;
-    let def_vk_commit = poseidon2_compress_with_capacity(
-        intermediate_vk_commit,
-        verifier_pvs.internal_for_leaf_dag_commit,
-    )
-    .0;
-    (intermediate_vk_commit, def_vk_commit)
+pub struct DeferralHookVerifierTraceCtx {
+    pub trace_data: SingleAirTraceData<CpuBackend<BabyBearPoseidon2Config>>,
+    pub def_vk_commit: [F; DIGEST_SIZE],
+}
+
+pub fn def_vk_commit_from_verifier_pvs(verifier_pvs: &VerifierBasePvs<F>) -> [F; DIGEST_SIZE] {
+    let hash_elements = [
+        verifier_pvs.app_dag_commit.cached_commit,
+        verifier_pvs.app_dag_commit.vk_pre_hash,
+        verifier_pvs.leaf_dag_commit.cached_commit,
+        verifier_pvs.leaf_dag_commit.vk_pre_hash,
+        verifier_pvs.internal_for_leaf_dag_commit.cached_commit,
+        verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+    ];
+    hash_slice_trace(&hash_elements, None, None).1
 }
 
 pub fn generate_proving_ctx(
     proof: &Proof<SC>,
     input_onion: [F; DIGEST_SIZE],
     output_onion: [F; DIGEST_SIZE],
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-    [F; DIGEST_SIZE],
-) {
+) -> DeferralHookVerifierTraceCtx {
     let verifier_pvs: &VerifierBasePvs<F> = proof.public_values[DEF_AGG_VERIFIER_AIR_ID]
         .as_slice()
         .borrow();
     let def_pvs: &DeferralAggregationPvs<F> =
         proof.public_values[DEF_AGG_PVS_AIR_ID].as_slice().borrow();
 
-    let (intermediate_vk_commit, def_vk_commit) = def_vk_commit_from_verifier_pvs(verifier_pvs);
+    let hash_elements = [
+        verifier_pvs.app_dag_commit.cached_commit,
+        verifier_pvs.app_dag_commit.vk_pre_hash,
+        verifier_pvs.leaf_dag_commit.cached_commit,
+        verifier_pvs.leaf_dag_commit.vk_pre_hash,
+        verifier_pvs.internal_for_leaf_dag_commit.cached_commit,
+        verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+    ];
 
     let width = DeferralHookPvsCols::<u8>::width();
     let mut trace = vec![F::ZERO; width];
     let cols: &mut DeferralHookPvsCols<F> = trace.as_mut_slice().borrow_mut();
     cols.verifier_pvs = *verifier_pvs;
     cols.def_pvs = *def_pvs;
-    cols.intermediate_vk_commit = intermediate_vk_commit;
-    cols.def_vk_commit = def_vk_commit;
     cols.input_onion = input_onion;
     cols.output_onion = output_onion;
+
+    let mut poseidon2_compress_inputs = Vec::with_capacity(6);
+    let mut poseidon2_permute_inputs = Vec::with_capacity(NUM_DIGESTS_IN_VK_COMMIT - 1);
+    let (intermediate_vk_states, def_vk_commit) = hash_slice_trace(
+        &hash_elements,
+        Some(&mut poseidon2_permute_inputs),
+        Some(&mut poseidon2_compress_inputs),
+    );
+    cols.intermediate_vk_states = intermediate_vk_states.try_into().unwrap();
+    cols.def_vk_commit = def_vk_commit;
 
     const ZERO_DIGEST: [F; DIGEST_SIZE] = [F::ZERO; DIGEST_SIZE];
     let def_vk_commit_padded = poseidon2_compress_with_capacity(def_vk_commit, ZERO_DIGEST).0;
@@ -82,26 +99,24 @@ pub fn generate_proving_ctx(
     root_pvs.final_acc_hash = final_acc_hash;
     root_pvs.depth = F::ONE;
 
-    let poseidon2_inputs = vec![
-        digests_to_poseidon2_input(verifier_pvs.app_dag_commit, verifier_pvs.leaf_dag_commit),
-        digests_to_poseidon2_input(
-            intermediate_vk_commit,
-            verifier_pvs.internal_for_leaf_dag_commit,
-        ),
+    poseidon2_compress_inputs.extend_from_slice(&[
         pad_slice_to_poseidon2_input(&def_vk_commit, F::ZERO),
         pad_slice_to_poseidon2_input(&input_onion, F::ZERO),
         pad_slice_to_poseidon2_input(&output_onion, F::ZERO),
         digests_to_poseidon2_input(def_vk_commit_padded, zero_hash),
         digests_to_poseidon2_input(input_onion_padded, output_onion_padded),
-    ];
+    ]);
 
-    (
-        AirProvingContext {
-            cached_mains: vec![],
-            common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
-            public_values,
+    DeferralHookVerifierTraceCtx {
+        trace_data: SingleAirTraceData {
+            air_proving_ctx: AirProvingContext {
+                cached_mains: vec![],
+                common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+                public_values,
+            },
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
         },
-        poseidon2_inputs,
         def_vk_commit,
-    )
+    }
 }

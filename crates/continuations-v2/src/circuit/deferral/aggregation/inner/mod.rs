@@ -31,6 +31,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let verifier_pvs_air = verifier::DeferralVerifierPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
+            pre_hash_bus: bus_inventory.pre_hash_bus,
             def_pvs_consistency_bus,
         };
 
