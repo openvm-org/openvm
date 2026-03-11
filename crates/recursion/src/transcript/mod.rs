@@ -288,6 +288,7 @@ impl AirModule for TranscriptModule {
             poseidon2_compress_bus: self.bus_inventory.poseidon2_compress_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
+            right_shift_bus: self.bus_inventory.right_shift_bus,
             k: self.params.k_whir(),
         };
         vec![
