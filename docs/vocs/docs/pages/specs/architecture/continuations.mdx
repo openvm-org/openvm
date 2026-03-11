@@ -10,7 +10,7 @@ An app execution may require arbitrarily many steps, but each proof covers a bou
 2. Verifying public value consistency between adjacent child proofs
 3. Outputting a proof attesting to 1 and 2
 
-This forms an **aggregation tree** with multiple **layers**, where each layer aggregates child proofs from the layer below. There are seven **layer types**:
+This forms an **aggregation tree** with multiple **layers**, where each layer aggregates child proofs from the layer below. There are six **layer types**:
 
 | Layer | Description |
 |-------|-------------|
@@ -18,11 +18,10 @@ This forms an **aggregation tree** with multiple **layers**, where each layer ag
 | leaf | Aggregates up to $N_\mathsf{leaf}$ app segment `Proof`s into a single `Proof` |
 | internal-for-leaf | Aggregates up to $N_\mathsf{internal}$ leaf `Proof`s into a single `Proof` |
 | internal-recursive | Aggregates up to $N_\mathsf{internal}$ internal-for-leaf `Proof`s, or up to $N_\mathsf{internal}$ internal-recursive `Proof`s. Note $N_\mathsf{internal}$ is the same at all internal layers. |
-| compression | Wraps a single internal-recursive `Proof`, computing the [DAG commit in-circuit](#constraint-dag-and-cached-traces) to reduce final `Proof` size (no cached trace) |
 | root | Wraps a single internal-recursive `Proof` and verifies user public values exist in final memory |
 | static | Re-encodes root `Proof` into a fixed, constant-sized format for on-chain verification |
 
-The first six types each correspond to a unique STARK-based circuit. The **static** layer is handled separately — it re-encodes a root `Proof` for on-chain verification. Because this encoding must be constant-sized, the root `Proof` size must also be fixed.
+The first five types each correspond to a unique STARK-based circuit. The **static** layer is handled separately — it re-encodes a root `Proof` for on-chain verification. Because this encoding must be constant-sized, the root `Proof` size must also be fixed.
 
 ### Circuit and Prover Definitions
 
@@ -50,12 +49,12 @@ Each client-facing proof type requires a specific aggregation pipeline:
 | Proof Type | Pipeline |
 |------------|----------|
 | App | app (no aggregation) |
-| STARK | app → leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) → compression (optional) |
+| STARK | app → leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) |
 | EVM | app → leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) → root → static |
 
 ![STARK Proof Diagram](/stark-proof-diagram.png)
 
-*Diagram of a potential STARK proof aggregation tree with 2:1 max leaf aggregation and 3:1 max internal aggregation. In practice, there often should be several 1:1 internal-recursive layers before the compression layer if proof size is a concern.*
+*Diagram of a potential STARK proof aggregation tree with 2:1 max leaf aggregation and 3:1 max internal aggregation.*
 
 :::note
 Wrapping an internal-recursive `Proof` 1:1 in another internal-recursive layer will typically reduce its size. We use this in:
@@ -71,16 +70,15 @@ For convenience the SDK provides several **SDK provers**, which orchestrate basi
 |-------|-----------------|------------------|-------|
 | `AppProver` | app | Executable and `StdIn` input | `ContinuationVmProof` (i.e. app proof) |
 | `AggProver` | leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) | `ContinuationVmProof` | `NonRootStarkProof` (i.e. STARK proof) |
-| `CompressionSdkProver` | compression | `NonRootStarkProof` | `NonRootStarkProof` |
-| `RootSdkProver` | root | `NonRootStarkProof` | `Proof` (EVM input) |
+| `RootProver` | root | `NonRootStarkProof` | `Proof` (EVM input) |
 | `StaticProver` | static | `Proof` | `EvmProof` (EVM proof) |
 
 `StarkProver` and `EvmProver` use these component SDK provers to encapsulate end-to-end STARK and EVM proving.
 
 | E2E SDK Prover | Component Prover Pipeline | Input | Output |
 |-------|-----------------|-------|-------|
-| `StarkProver` | `AppProver` → `AggProver` → `CompressionSdkProver` (optionally) | Executable and `StdIn` input | `NonRootStarkProof` |
-| `EvmProver` | `AppProver` → `AggProver` → `RootSdkProver` → `StaticProver` | Executable and `StdIn` input | `EvmProof` |
+| `StarkProver` | `AppProver` → `AggProver` | Executable and `StdIn` input | `NonRootStarkProof` |
+| `EvmProver` | `AppProver` → `AggProver` → `RootProver` → `StaticProver` | Executable and `StdIn` input | `EvmProof` |
 
 ## Layer Architecture
 
@@ -97,7 +95,6 @@ Different layers may share the same verifier subcircuit or the same aggregation 
 | leaf | [leaf](#constraint-dag-and-cached-traces) | [inner](#inner-aggregation-subcircuit) |
 | internal-for-leaf | [internal-for-leaf](#constraint-dag-and-cached-traces) | [inner](#inner-aggregation-subcircuit) |
 | internal-recursive | [internal-recursive](#constraint-dag-and-cached-traces) | [inner](#inner-aggregation-subcircuit) |
-| compression | [compression](#constraint-dag-and-cached-traces) | [compression](#compression-aggregation-subcircuit) |
 | root | [internal-recursive](#constraint-dag-and-cached-traces) | [root](#root-aggregation-subcircuit) |
 
 Note that leaf, internal-for-leaf, and internal-recursive all share the inner aggregation subcircuit and therefore have the same public value layout. Root reuses the internal-recursive verifier subcircuit but pairs it with a different aggregation subcircuit.
@@ -125,8 +122,7 @@ This convergence property enables unbounded recursive aggregation.
 All verifier subcircuits are semantically equivalent — each contains the same subset of AIRs that individually verify child proofs. However, the actual circuit constraints and parameters are derived from:
 
 1. The child proof's verifying key (`child_vk`)
-2. The maximum number of child `Proof`s this subcircuit can verify ($N_\mathsf{leaf}$ for leaf, $N_\mathsf{internal}$ for internal, and 1 for other layers)
-3. A boolean `has_cached` flag indicating whether a cached trace is present
+2. The maximum number of child `Proof`s this subcircuit can verify ($N_\mathsf{leaf}$ for leaf, $N_\mathsf{internal}$ for internal, and 1 for root)
 
 Because of the dependency on `child_vk`, different layers have different verifier subcircuits until [convergence at internal-recursive](#verifying-key-convergence).
 
@@ -134,7 +130,7 @@ Because of the dependency on `child_vk`, different layers have different verifie
 
 A verifier subcircuit must verify that a child proof satisfies the constraints defined by `child_vk`. These constraints are encoded as a **constraint DAG**, where each node represents a symbolic expression over trace values. This DAG includes interaction constraints.
 
-To avoid recomputing the DAG in-circuit, most verifier subcircuits use a **cached trace**: before proving, the DAG is serialized per-node into a cached trace, committed via SWIRL's stacked PCS, and the commitment is exposed as a public value. Each such commitment is paired with the child VK's **field pre-hash** (`vk_pre_hash`) to form a **DAG commit** (`DagCommit`):
+To avoid recomputing the DAG in-circuit, verifier subcircuits use a **cached trace**: before proving, the DAG is serialized per-node into a cached trace, committed via SWIRL's stacked PCS, and the commitment is exposed as a public value. Each such commitment is paired with the child VK's **field pre-hash** (`vk_pre_hash`) to form a **DAG commit** (`DagCommit`):
 
 ```
 DagCommit {
@@ -158,26 +154,17 @@ Each `*_dag_commit` is checked for consistency by the aggregation subcircuit and
 System parameters and per-AIR `is_required` flags are not included in `*_dag_commit`; they are fixed by the parent circuit.
 :::
 
-| Subcircuit Layer | `child_vk` | Max child proofs | Cached trace |
-|------------|------------|------------------|--------------|
-| leaf | `app_vk` | $N_\mathsf{leaf}$ | yes |
-| internal-for-leaf | `leaf_vk` | $N_\mathsf{internal}$ | yes |
-| internal-recursive | `internal_for_leaf_vk` | $N_\mathsf{internal}$ | yes |
-| compression | `internal_recursive_vk` | 1 | no |
+| Subcircuit Layer | `child_vk` | Max child proofs |
+|------------|------------|------------------|
+| leaf | `app_vk` | $N_\mathsf{leaf}$ |
+| internal-for-leaf | `leaf_vk` | $N_\mathsf{internal}$ |
+| internal-recursive | `internal_for_leaf_vk` | $N_\mathsf{internal}$ |
 
 As described in [Verifying Key Convergence](#verifying-key-convergence), the verifier subcircuit derived from `internal_recursive_vk` is identical to internal-recursive, enabling unbounded recursion. The internal-recursive verifier subcircuit can thus verify its own `Proof`s.
 
-The compression verifier subcircuit does **not** use a cached trace. Instead, the constraint DAG columns are included in the main trace of `SymbolicExpressionAir` and hashed in-circuit by its DAG commit sub-AIR (`DagCommitSubAir`). This computes a running hash over the DAG columns and exposes the result as `compression_commit`, which is checked for consistency by the STARK verifier.
-
-:::note
-`compression_commit` is an alternative commitment to the internal-recursive constraint DAG, computed in-circuit rather than from a cached trace.
-:::
-
-Because compression lacks a cached trace, it is only used as the final layer before outputting a STARK proof.
-
 ## Aggregation Subcircuits
 
-There are 3 aggregation subcircuit types: **inner**, **compression**, and **root**. Each type has an associated basic prover.
+There are 2 aggregation subcircuit types: **inner** and **root**. Each type has an associated basic prover.
 
 ### App Public Values and Shared Constraints
 
@@ -216,7 +203,7 @@ Public values are processed by `VerifierPvsAir`. The inner subcircuit re-exposes
     - `internal_flag: F` — ternary flag indicating which verifier subcircuit this proof is for:
       - `0` for leaf
       - `1` for internal-for-leaf
-      - `2` for internal-recursive (or compression)
+      - `2` for internal-recursive
     - `app_dag_commit: DagCommit` — DAG commit (cached trace commit + VK pre-hash) for the leaf verifier subcircuit, derived from `app_vk`
     - `leaf_dag_commit: DagCommit` — DAG commit for the internal-for-leaf verifier subcircuit, derived from `leaf_vk`
     - `internal_for_leaf_dag_commit: DagCommit` — DAG commit for the first (index 0) internal-recursive layer verifier subcircuit, derived from `internal_for_leaf_vk`
@@ -247,20 +234,6 @@ The `program_commit` should be set at every layer, but the flags and `*_dag_comm
   - Flags are incremented properly
   - The next unset `*_dag_commit` is set (if any remain unset)
   - Previously defined `*_dag_commit`s match between child and output
-
-### Compression Aggregation Subcircuit
-
-The compression subcircuit takes a single internal-recursive child `Proof` and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to be used as the `Proof` component in a `NonRootStarkProof`.
-
-The compression subcircuit has the same AIR set as inner, but with `SymbolicExpressionAir` configured without a cached trace and with its DAG commit sub-AIR enabled. This computes and exposes `compression_commit` — an [alternative commitment to the `internal_recursive_vk` constraint DAG](#constraint-dag-and-cached-traces).
-
-#### Public Values
-
-Same as inner, with the addition of:
-
-- `compression_commit: Digest` — in-circuit generated commit of the internal-recursive constraint DAG
-
-Flags and `*_dag_commit`s should be set as they are beyond the 0th internal-recursive layer.
 
 ### Root Aggregation Subcircuit
 
