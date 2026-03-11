@@ -10,7 +10,7 @@ use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::primitives::{
-    bus::{ExpBitsLenBus, ExpBitsLenMessage},
+    bus::{BitShiftBus, BitShiftMessage, ExpBitsLenBus, ExpBitsLenMessage},
     exp_bits_len::trace::{LOW_BITS_COUNT, NUM_BITS_MAX_PLUS_ONE},
 };
 
@@ -45,17 +45,17 @@ pub struct ExpBitsLenCols<T> {
     pub low_bits_are_zero: T,
     /// Running flag: all high bits `b27..b30` seen so far are one.
     pub high_bits_all_one: T,
+
+    /// Original bit_src value
+    pub bit_src_original: T,
+    /// Indicator for if this show should send a shift message
+    pub shift_mult: T,
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_new::new)]
 pub struct ExpBitsLenAir {
     pub exp_bits_len_bus: ExpBitsLenBus,
-}
-
-impl ExpBitsLenAir {
-    pub fn new(exp_bits_len_bus: ExpBitsLenBus) -> Self {
-        Self { exp_bits_len_bus }
-    }
+    pub bit_shift_bus: BitShiftBus,
 }
 
 fn assert_babybear_field<F: PrimeField32>() {
@@ -212,6 +212,25 @@ where
                 result: local.result,
             },
             local.is_first,
+        );
+
+        builder.when(local.shift_mult).assert_one(local.is_valid);
+
+        builder
+            .when(local.is_first)
+            .assert_eq(local.bit_src, local.bit_src_original);
+        builder
+            .when(is_transition)
+            .assert_eq(local.bit_src_original, next.bit_src_original);
+
+        self.bit_shift_bus.add_key_with_lookups(
+            builder,
+            BitShiftMessage {
+                base: local.bit_src_original,
+                num_bits: local.bit_idx,
+                result: local.bit_src,
+            },
+            local.shift_mult,
         );
     }
 }

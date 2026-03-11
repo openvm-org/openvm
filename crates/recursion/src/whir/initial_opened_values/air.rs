@@ -303,6 +303,7 @@ where
             local.proof_idx,
             MerkleVerifyBusMessage {
                 merkle_idx: local.merkle_idx_bit_src.into(),
+                current_idx: local.merkle_idx_bit_src.into(),
                 total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1),
                 height: AB::Expr::ZERO,
                 is_leaf: AB::Expr::ONE,

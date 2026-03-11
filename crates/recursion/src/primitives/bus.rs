@@ -30,3 +30,13 @@ pub struct ExpBitsLenMessage<T> {
 }
 
 define_typed_lookup_bus!(ExpBitsLenBus, ExpBitsLenMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct BitShiftMessage<T> {
+    pub base: T,
+    pub num_bits: T,
+    pub result: T,
+}
+
+define_typed_lookup_bus!(BitShiftBus, BitShiftMessage);
