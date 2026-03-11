@@ -1041,41 +1041,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
-name = "continuations-v2"
-version = "2.0.0-alpha"
-dependencies = [
- "cfg-if",
- "derive-new 0.6.0",
- "eyre",
- "itertools 0.14.0",
- "num-bigint 0.4.6",
- "openvm-circuit",
- "openvm-circuit-primitives",
- "openvm-cuda-backend",
- "openvm-cuda-builder",
- "openvm-cuda-common",
- "openvm-deferral-circuit",
- "openvm-deferral-transpiler",
- "openvm-instructions",
- "openvm-poseidon2-air",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "p3-air",
- "p3-bn254",
- "p3-field",
- "p3-matrix",
- "recursion-circuit",
- "stark-recursion-circuit-derive",
- "test-case",
- "tracing",
- "verify-stark",
-]
-
-[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3199,6 +3164,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-continuations"
+version = "2.0.0-alpha"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "eyre",
+ "itertools 0.14.0",
+ "num-bigint 0.4.6",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
+ "openvm-instructions",
+ "openvm-poseidon2-air",
+ "openvm-recursion-circuit",
+ "openvm-recursion-circuit-derive",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "openvm-verify-stark-host",
+ "p3-air",
+ "p3-bn254",
+ "p3-field",
+ "p3-matrix",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
 source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#a24a1492ef413b56522980a04aae0f075cc25576"
@@ -3397,11 +3397,11 @@ dependencies = [
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-sdk-config",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
- "sdk-v2",
  "serde",
  "serde_with",
  "toml",
@@ -3725,6 +3725,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-recursion-circuit"
+version = "2.0.0-alpha"
+dependencies = [
+ "derive-new 0.6.0",
+ "eyre",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-poseidon2-air",
+ "openvm-recursion-circuit-derive",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-symmetric",
+ "strum",
+ "strum_macros",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-recursion-circuit-derive"
+version = "2.0.0-alpha"
+dependencies = [
+ "quote",
+ "syn 2.0.116",
+]
+
+[[package]]
 name = "openvm-rv32-adapters"
 version = "2.0.0-alpha"
 dependencies = [
@@ -3820,6 +3856,41 @@ dependencies = [
  "serde",
  "serde_yaml",
  "walkdir",
+]
+
+[[package]]
+name = "openvm-sdk"
+version = "2.0.0-alpha"
+dependencies = [
+ "bitcode",
+ "bon",
+ "cfg-if",
+ "clap",
+ "derivative",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "eyre",
+ "getset",
+ "hex",
+ "itertools 0.14.0",
+ "num-bigint 0.4.6",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-continuations",
+ "openvm-cuda-backend",
+ "openvm-sdk-config",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "openvm-verify-stark-host",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -4029,6 +4100,22 @@ dependencies = [
  "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "openvm-verify-stark-host"
+version = "2.0.0-alpha"
+dependencies = [
+ "bitcode",
+ "eyre",
+ "openvm-circuit",
+ "openvm-recursion-circuit-derive",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-field",
+ "serde",
+ "thiserror 1.0.69",
+ "zstd",
 ]
 
 [[package]]
@@ -4894,34 +4981,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "recursion-circuit"
-version = "2.0.0-alpha"
-dependencies = [
- "derive-new 0.6.0",
- "eyre",
- "itertools 0.14.0",
- "openvm-circuit",
- "openvm-circuit-primitives",
- "openvm-cuda-backend",
- "openvm-cuda-builder",
- "openvm-cuda-common",
- "openvm-poseidon2-air",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "p3-air",
- "p3-baby-bear",
- "p3-field",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-symmetric",
- "stark-recursion-circuit-derive",
- "strum",
- "strum_macros",
- "test-case",
- "tracing",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5240,41 +5299,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "sdk-v2"
-version = "2.0.0-alpha"
-dependencies = [
- "bitcode",
- "bon",
- "cfg-if",
- "clap",
- "continuations-v2",
- "derivative",
- "derive-new 0.6.0",
- "derive_more 1.0.0",
- "eyre",
- "getset",
- "hex",
- "itertools 0.14.0",
- "num-bigint 0.4.6",
- "openvm",
- "openvm-build",
- "openvm-circuit",
- "openvm-cuda-backend",
- "openvm-sdk-config",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "openvm-transpiler",
- "serde",
- "serde_json",
- "serde_with",
- "thiserror 1.0.69",
- "tokio",
- "toml",
- "tracing",
- "verify-stark",
-]
 
 [[package]]
 name = "sec1"
@@ -5609,14 +5633,6 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
-
-[[package]]
-name = "stark-recursion-circuit-derive"
-version = "2.0.0-alpha"
-dependencies = [
- "quote",
- "syn 2.0.116",
-]
 
 [[package]]
 name = "static_assertions"
@@ -6301,22 +6317,6 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
-
-[[package]]
-name = "verify-stark"
-version = "2.0.0-alpha"
-dependencies = [
- "bitcode",
- "eyre",
- "openvm-circuit",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "p3-field",
- "serde",
- "stark-recursion-circuit-derive",
- "thiserror 1.0.69",
- "zstd",
-]
 
 [[package]]
 name = "version_check"

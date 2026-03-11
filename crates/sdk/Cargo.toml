@@ -1,0 +1,102 @@
+[package]
+name = "openvm-sdk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+# TODO[jpw]: fix examples for v2
+autoexamples = false
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
+
+openvm-build = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-transpiler = { workspace = true }
+openvm = { workspace = true }
+
+openvm-sdk-config = { workspace = true }
+openvm-continuations = { workspace = true }
+openvm-verify-stark-host = { workspace = true }
+
+bitcode = { workspace = true }
+bon = { workspace = true }
+cfg-if = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+derivative = { workspace = true }
+derive_more = { workspace = true }
+derive-new = { workspace = true }
+eyre = { workspace = true }
+getset = { workspace = true }
+hex = { workspace = true }
+itertools = { workspace = true }
+num-bigint = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true, features = ["hex"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync"], optional = true }
+toml = { workspace = true }
+
+[features]
+default = ["parallel", "jemalloc"]
+evm-prove = []
+# evm-prove = [
+#     "openvm-continuations/static-verifier",
+#     "dep:snark-verifier",
+#     "dep:snark-verifier-sdk",
+# ]
+evm-verify = []
+# evm-verify = [
+#     "evm-prove",
+#     "dep:alloy-sol-types",
+#     "dep:forge-fmt",
+# ]
+metrics = ["openvm-continuations/metrics", "openvm-sdk-config/metrics"]
+aot = [
+    "openvm-circuit/aot",
+    "openvm-sdk-config/aot",
+]
+tco = [
+    "openvm-circuit/tco",
+    "openvm-sdk-config/tco",
+]
+unprotected = ["openvm-circuit/unprotected"]
+
+# for guest profiling:
+perf-metrics = [
+    "openvm-circuit/perf-metrics",
+    "openvm-transpiler/function-span",
+    "openvm-sdk-config/perf-metrics"
+]
+
+# turns on stark-backend debugger in all proofs
+stark-debug = ["openvm-circuit/stark-debug"]
+test-utils = ["openvm-circuit/test-utils"]
+
+async = ["tokio"]
+parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
+mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+
+cuda = [
+    "dep:openvm-cuda-backend",
+    "openvm-circuit/cuda",
+    "openvm-sdk-config/cuda",
+    "openvm-continuations/cuda",
+    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
+]
+
+# [[example]]
+# name = "sdk_evm"
+# path = "examples/sdk_evm.rs"
+# required-features = ["evm-verify"]
+
+# [package.metadata.cargo-shear]
+# ignored = ["derive_more", "rand"]
