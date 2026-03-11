@@ -1,4 +1,3 @@
-#include "dag_commit.cuh"
 #include "fp.h"
 #include "fpext.h"
 #include "launcher.cuh"
@@ -52,7 +51,6 @@ struct FlatSymbolicVariable {
 };
 
 struct CachedRecord {
-    Fp poseidon2_input[WIDTH];
     bool is_constraint;
 };
 
@@ -137,8 +135,7 @@ __global__ void symbolic_expression_tracegen(
     const uint32_t *air_ids_per_record,
     size_t num_records_per_proof,
     const FpExt *sumcheck_rnds,
-    const size_t *sumcheck_bounds,
-    const CachedRecord *cached_records
+    const size_t *sumcheck_bounds
 ) {
     // Unused because expr_evals[i].len() is aleways the number of all airs,
     // plus 1 for unused variables
@@ -153,17 +150,10 @@ __global__ void symbolic_expression_tracegen(
     uint32_t row_idx = thread_idx / max_num_proofs;
     uint32_t proof_idx = thread_idx % max_num_proofs;
 
-    RowSlice row(trace + row_idx, height);
     constexpr uint32_t SINGLE_WIDTH = sizeof(SymbolicExpressionCols<uint8_t>);
-    constexpr uint32_t COMMIT_WIDTH = sizeof(DagCommitCols<uint8_t>);
 
-    if (cached_records && proof_idx == 0) {
-        CachedRecord record = cached_records[row_idx];
-        write_dag_commit_poseidon2(row, record.poseidon2_input, record.is_constraint);
-    }
-
-    RowSlice proof_row =
-        row.slice_from((cached_records ? COMMIT_WIDTH : 0) + proof_idx * SINGLE_WIDTH);
+    RowSlice row(trace + row_idx, height);
+    RowSlice proof_row = row.slice_from(proof_idx * SINGLE_WIDTH);
     proof_row.fill_zero(0, SINGLE_WIDTH);
 
     if (proof_idx >= num_proofs) {
@@ -212,7 +202,6 @@ __global__ void symbolic_expression_tracegen(
 
     uint32_t unused_start = unused_variables_bounds[air_idx];
     uint32_t unused_len = unused_variables_bounds[air_idx + 1] - unused_start;
-    const FlatSymbolicVariable *unused_variables_per_air = unused_variables + unused_start;
 
     Fp sort_idx_fp = Fp(static_cast<uint32_t>(sort_idx));
     uint32_t n_abs = log_height < l_skip ? l_skip - log_height : log_height - l_skip;
@@ -279,9 +268,6 @@ __global__ void symbolic_expression_tracegen(
         default:
             break;
         }
-        if (cached_records && proof_idx == 0) {
-            write_dag_commit_flags(row, encoder, node.kind);
-        }
         return;
     }
 
@@ -300,17 +286,6 @@ __global__ void symbolic_expression_tracegen(
                 uint32_t node_idx = interaction_messages[interaction.message_start + msg_offset];
                 write_arg_first(proof_row, expr_per_air[node_idx]);
             }
-            if (cached_records && proof_idx == 0) {
-                write_dag_commit_flags(
-                    row,
-                    encoder,
-                    local_idx == 0
-                        ? NODE_KIND_INTERACTION_MULT
-                        : (local_idx == interaction.message_len + 1
-                               ? NODE_KIND_INTERACTION_BUS_INDEX
-                               : NODE_KIND_INTERACTION_MSG_COMP)
-                );
-            }
             return;
         }
         local_idx -= block;
@@ -321,10 +296,6 @@ __global__ void symbolic_expression_tracegen(
         uint32_t eval_idx = nodes_len + local_idx;
         if (expr_start + eval_idx < expr_end) {
             write_arg_first(proof_row, expr_per_air[eval_idx]);
-            if (cached_records && proof_idx == 0) {
-                FlatSymbolicVariable unused = unused_variables_per_air[local_idx];
-                write_dag_commit_flags(row, encoder, unused.entry_kind);
-            }
         }
     }
 }
@@ -352,8 +323,7 @@ extern "C" int _sym_expr_common_tracegen(
     const uint32_t *d_air_ids_per_record,
     size_t num_records_per_proof,
     const FpExt *d_sumcheck_rnds,
-    const size_t *d_sumcheck_bounds,
-    const CachedRecord *d_cached_records
+    const size_t *d_sumcheck_bounds
 ) {
     // Unused because expr_evals[i].len() is always the number of all airs,
     // plus 1 for unused variables.
@@ -386,8 +356,7 @@ extern "C" int _sym_expr_common_tracegen(
         d_air_ids_per_record,
         num_records_per_proof,
         d_sumcheck_rnds,
-        d_sumcheck_bounds,
-        d_cached_records
+        d_sumcheck_bounds
     );
     return CHECK_KERNEL();
 }

@@ -106,7 +106,6 @@ impl<
             VerifierConfig {
                 continuations_enabled: true,
                 final_state_bus_enabled: true,
-                has_cached: true,
             },
         );
         let engine = E::new(system_params);
@@ -152,7 +151,6 @@ impl<
             VerifierConfig {
                 continuations_enabled: true,
                 final_state_bus_enabled: true,
-                has_cached: true,
             },
         );
         let def_hook_commit = def_hook_commit.map(Into::into);

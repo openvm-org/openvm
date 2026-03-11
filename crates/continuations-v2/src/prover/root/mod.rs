@@ -94,7 +94,6 @@ impl<
             child_vk.clone(),
             VerifierConfig {
                 continuations_enabled: true,
-                has_cached: true,
                 ..Default::default()
             },
         );
@@ -141,7 +140,6 @@ impl<
             child_vk.clone(),
             VerifierConfig {
                 continuations_enabled: true,
-                has_cached: true,
                 ..Default::default()
             },
         );

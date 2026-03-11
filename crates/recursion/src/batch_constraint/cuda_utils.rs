@@ -1,5 +1,4 @@
 use openvm_cuda_backend::prelude::{Digest, F};
-use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     air_builders::symbolic::{
         symbolic_variable::{Entry, SymbolicVariable},
@@ -9,7 +8,7 @@ use openvm_stark_backend::{
 };
 use p3_field::PrimeCharacteristicRing;
 
-use crate::batch_constraint::expr_eval::{CachedTraceRecord, NodeKind};
+use crate::batch_constraint::expr_eval::NodeKind;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -38,40 +37,6 @@ pub struct FlatSymbolicVariable {
     pub index: u32,
     pub part_index: u32,
     pub offset: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct CachedGpuRecord {
-    pub poseidon2_start: [F; POSEIDON2_WIDTH],
-    pub is_constraint: bool,
-}
-
-pub(crate) fn build_cached_gpu_records(
-    cached_trace_record: &CachedTraceRecord,
-) -> Option<Vec<CachedGpuRecord>> {
-    cached_trace_record
-        .dag_commit_info
-        .as_ref()
-        .map(|dag_commit_info| {
-            // We need one Poseidon2 start-state per row of the (power-of-two) trace height,
-            // including padding rows. Padding rows have `is_constraint = false`.
-            let height = dag_commit_info.poseidon2_inputs.len();
-            debug_assert_eq!(
-                height,
-                cached_trace_record.records.len().next_power_of_two()
-            );
-
-            (0..height)
-                .map(|row_idx| CachedGpuRecord {
-                    poseidon2_start: *dag_commit_info.poseidon2_inputs.get(row_idx).unwrap(),
-                    is_constraint: cached_trace_record
-                        .records
-                        .get(row_idx)
-                        .is_some_and(|r| r.is_constraint),
-                })
-                .collect()
-        })
 }
 
 pub(super) fn flatten_constraint_node(
