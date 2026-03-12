@@ -2,7 +2,7 @@ use core::borrow::BorrowMut;
 
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 
@@ -54,6 +54,7 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
     let params = &ctx.0.vk.inner.params;
     let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
+    let initial_log_domain_size = params.n_stack + params.l_skip + params.log_blowup;
     let num_queries_per_round = num_queries_per_round(params);
 
     let rows_per_proof = num_whir_rounds;
@@ -93,6 +94,7 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
             cols.is_first_in_proof = F::from_bool(i == 0);
             cols.tidx = F::from_usize(tidx_per_round[(proof_idx, i)]);
             cols.num_queries = F::from_usize(num_queries_per_round[i]);
+            cols.omega = F::two_adic_generator(initial_log_domain_size - i);
             cols.claim.copy_from_slice(
                 initial_claim_per_round[(proof_idx, i)].as_basis_coefficients_slice(),
             );
