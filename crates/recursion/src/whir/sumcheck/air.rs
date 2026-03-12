@@ -157,9 +157,9 @@ where
             next.tidx,
             local.tidx + AB::Expr::from_usize(3 * D_EF + folding_pow_offset),
         );
-        // Use Möbius-adjusted equality kernel instead of eq_1 for eval-to-coeff RS encoding
+        // Use Möbius-adjusted equality kernel instead of eq_1 for eval-to-coeff RS encoding.
         assert_array_eq(
-            &mut when_sumcheck_transition,
+            &mut builder.when(is_same_proof.clone()),
             next.eq_partial,
             ext_field_multiply::<AB::Expr>(
                 local.eq_partial,
