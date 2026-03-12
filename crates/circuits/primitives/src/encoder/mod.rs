@@ -134,6 +134,7 @@ impl Encoder {
     /// Returns an expression that is 1 if the variables encode a valid flag and 0 if they encode
     /// the invalid point
     pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
+        debug_assert!(self.reserve_invalid);
         AB::Expr::ONE - self.expression_for_point::<AB>(&self.pts[0], vars)
     }
 
