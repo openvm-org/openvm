@@ -324,8 +324,13 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 // n_logup
                 cols.starting_cidx = F::from_usize(n_logup);
 
-                range_checker
-                    .add_count(msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits));
+                let shifted_msb_limb =
+                    msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits);
+                range_checker.add_count(shifted_msb_limb);
+                if shifted_msb_limb != 0 {
+                    range_checker.add_count(shifted_msb_limb - (1 << (LIMB_BITS - 1)));
+                }
+
                 range_checker.add_count(
                     (max_interactions[diff_idx] - total_interactions_f[diff_idx]).as_canonical_u32()
                         as usize

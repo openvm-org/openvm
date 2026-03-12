@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
-    utils::{and, assert_array_eq, not},
+    utils::{and, assert_array_eq, not, or},
     SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
@@ -339,6 +339,19 @@ where
         builder
             .when(next.commit_idx - local.commit_idx)
             .assert_zero(next.stacked_col_idx);
+
+        builder
+            .when(and::<AB::Expr>(
+                not(local.is_last),
+                not::<AB::Expr>(next.commit_idx - local.commit_idx),
+            ))
+            .assert_bool(next.stacked_col_idx - local.stacked_col_idx);
+        builder
+            .when(and(local.is_last_for_claim, not(local.is_last)))
+            .assert_one(or::<AB::Expr>(
+                next.commit_idx - local.commit_idx,
+                next.stacked_col_idx - local.stacked_col_idx,
+            ));
 
         builder.assert_bool(local.is_last_for_claim);
         builder
