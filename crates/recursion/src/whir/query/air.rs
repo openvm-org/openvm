@@ -122,6 +122,7 @@ where
                 tidx: local.tidx,
                 whir_round: local.whir_round,
                 num_queries: local.num_queries,
+                omega: local.omega,
                 gamma: local.gamma,
                 pre_claim: local.pre_claim,
                 post_claim: local.post_claim,
@@ -131,6 +132,9 @@ where
         builder
             .when(is_same_round.clone())
             .assert_one(next.tidx - local.tidx);
+        builder
+            .when(is_same_round.clone())
+            .assert_eq(next.omega, local.omega);
         assert_array_eq(
             &mut builder.when(is_same_round.clone()),
             next.gamma,

@@ -6,7 +6,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{extension::BinomiallyExtendable, PrimeCharacteristicRing};
+use p3_field::{extension::BinomiallyExtendable, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -32,6 +32,7 @@ pub struct WhirRoundCols<T, const ENC_WIDTH: usize> {
     pub is_first_in_proof: T,
     pub tidx: T,
     pub num_queries: T,
+    pub omega: T,
     pub z0: [T; D_EF],
     pub y0: [T; D_EF],
     pub commit: [T; DIGEST_SIZE],
@@ -62,6 +63,7 @@ pub struct WhirRoundAir {
 
     pub k: usize,
     pub num_rounds: usize,
+    pub initial_log_domain_size: usize,
     pub final_poly_len: usize,
     pub pow_bits: usize,
     pub folding_pow_bits: usize,
@@ -87,7 +89,8 @@ impl<F> BaseAir<F> for WhirRoundAir {
 
 impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield:
+        BinomiallyExtendable<{ D_EF }> + TwoAdicField,
 {
     fn eval(&self, builder: &mut AB) {
         match self.whir_round_encoder.width() {
@@ -104,7 +107,8 @@ impl WhirRoundAir {
         &self,
         builder: &mut AB,
     ) where
-        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
+        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield:
+            BinomiallyExtendable<{ D_EF }> + TwoAdicField,
     {
         let main = builder.main();
 
@@ -143,9 +147,21 @@ impl WhirRoundAir {
             .when(is_enabled)
             .assert_eq(local.num_queries, expected_num_queries);
 
+        let initial_omega = AB::Expr::from_prime_subfield(
+            <<AB::Expr as PrimeCharacteristicRing>::PrimeSubfield as TwoAdicField>::two_adic_generator(
+                self.initial_log_domain_size,
+            ),
+        );
+        builder
+            .when(is_proof_start)
+            .assert_eq(local.omega, initial_omega);
+
         // Use the column (degree 1) instead of decoded expression (high degree) for constraints
         let whir_round: AB::Expr = local.whir_round.into();
         let is_same_proof = next.is_enabled - next.is_first_in_proof;
+        builder
+            .when(is_same_proof.clone())
+            .assert_eq(next.omega, local.omega * local.omega);
 
         NestedForLoopSubAir.eval(
             builder,
@@ -305,6 +321,7 @@ impl WhirRoundAir {
                 tidx: verify_query_tidx,
                 whir_round: whir_round.clone(),
                 num_queries: local.num_queries.into(),
+                omega: local.omega.into(),
                 gamma: local.gamma.map(Into::into),
                 pre_claim: ext_field_add(
                     local.post_sumcheck_claim,

@@ -767,6 +767,7 @@ impl AirModule for WhirModule {
             gamma_bus: self.gamma_bus,
             k: params.k_whir(),
             num_rounds,
+            initial_log_domain_size,
             final_poly_len: 1 << params.log_final_poly_len(),
             pow_bits: params.whir.query_phase_pow_bits,
             folding_pow_bits: params.whir.folding_pow_bits,
