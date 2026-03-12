@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{encoder::Encoder, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -185,6 +185,12 @@ impl WhirRoundAir {
             .when(local.is_enabled - is_same_proof.clone())
             .assert_eq(local.whir_round, AB::Expr::from_usize(self.num_rounds - 1));
 
+        assert_array_eq(
+            &mut builder.when(is_same_proof.clone()),
+            next.claim,
+            local.next_claim,
+        );
+
         self.whir_module_bus.receive(
             builder,
             proof_idx,
@@ -247,14 +253,13 @@ impl WhirRoundAir {
             is_same_proof.clone(),
         );
         non_final_round_offset += D_EF;
-        let is_same_proof_for_query = is_same_proof.clone();
         self.query_bus.send(
             builder,
             proof_idx,
             WhirQueryBusMessage {
                 whir_round: whir_round.clone(),
                 query_idx: AB::Expr::ZERO,
-                value: local.z0.map(|z0_i| z0_i * is_same_proof_for_query.clone()),
+                value: local.z0.map(|z0_i| z0_i * is_same_proof.clone()),
             },
             is_enabled,
         );
@@ -313,6 +318,7 @@ impl WhirRoundAir {
         }
 
         let verify_query_tidx = pow_tidx.clone() + AB::Expr::from_usize(query_pow_offset);
+        let y0_gated: [AB::Expr; D_EF] = local.y0.map(|y| y * is_same_proof.clone());
 
         self.verify_queries_bus.send(
             builder,
@@ -325,7 +331,7 @@ impl WhirRoundAir {
                 gamma: local.gamma.map(Into::into),
                 pre_claim: ext_field_add(
                     local.post_sumcheck_claim,
-                    ext_field_multiply(local.gamma, local.y0),
+                    ext_field_multiply(local.gamma, y0_gated),
                 ),
                 post_claim: local.next_claim.map(Into::into),
             },
