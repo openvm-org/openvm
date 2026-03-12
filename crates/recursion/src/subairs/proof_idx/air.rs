@@ -48,7 +48,11 @@ impl<AB: AirBuilder> SubAir<AB> for ProofIdxSubAir {
             .when_transition()
             .when_ne(local.is_enabled.clone(), AB::Expr::ONE)
             .assert_zero(next.is_enabled.clone());
-        // 3. Proof index increments by exactly one between valid rows
+        // 3. Proof index starts at 0
+        builder
+            .when_first_row()
+            .assert_zero(local.proof_idx.clone());
+        // 4. Proof index increments by exactly one between valid rows
         builder
             .when_transition()
             .when(next.is_enabled.clone())
