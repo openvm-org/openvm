@@ -1,10 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs};
-use openvm_stark_backend::{
-    proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-};
+use openvm_cpu_backend::CpuBackend;
+use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use openvm_verify_stark_host::pvs::{VmPvs, VM_PVS_AIR_ID};
 use p3_field::PrimeCharacteristicRing;
@@ -104,7 +102,7 @@ pub fn generate_proving_ctx(
 
     AirProvingContext {
         cached_mains: vec![],
-        common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+        common_main: RowMajorMatrix::new(trace, width),
         public_values,
     }
 }

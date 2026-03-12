@@ -15,7 +15,7 @@ p3-poseidon2-air = { workspace = true }
 zkhash = { workspace = true }
 
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
@@ -32,6 +32,6 @@ openvm-cuda-builder.workspace = true
 
 [features]
 default = ["parallel"]
-parallel = ["openvm-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel", "openvm-stark-sdk/parallel"]
 cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend"]
 touchemall = ["openvm-cuda-backend/touchemall"]

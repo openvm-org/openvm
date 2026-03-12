@@ -1,13 +1,14 @@
 use std::{array::from_fn, borrow::Borrow, marker::PhantomData};
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
@@ -161,10 +162,7 @@ where
         let mem_helper = self.mem_helper.as_borrowed();
         self.inner.fill_trace(&mem_helper, &mut trace, rows_used);
 
-        AirProvingContext::simple(
-            ColMajorMatrix::from_row_major(&trace),
-            self.inner.generate_public_values(),
-        )
+        AirProvingContext::simple(trace, self.inner.generate_public_values())
     }
 }
 

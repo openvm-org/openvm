@@ -9,13 +9,11 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::VmConfig;
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::{
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 
 mod modular;

@@ -1,13 +1,10 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    StarkProtocolConfig, Val,
+    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, prover::AirProvingContext, StarkProtocolConfig, Val,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
@@ -63,6 +60,6 @@ where
         self.records.clear();
 
         let trace = RowMajorMatrix::new(values, width);
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+        AirProvingContext::simple_no_pis(trace)
     }
 }
