@@ -1,8 +1,6 @@
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{
-    prover::{CommittedTraceData, CpuBackend},
-    StarkProtocolConfig,
-};
+use openvm_stark_backend::{prover::CommittedTraceData, StarkProtocolConfig};
 
 #[cfg(test)]
 pub mod tests;

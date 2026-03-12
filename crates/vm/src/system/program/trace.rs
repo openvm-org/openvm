@@ -3,6 +3,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 use derivative::Derivative;
 use itertools::Itertools;
 use openvm_circuit::{arch::hasher::poseidon2::Poseidon2Hasher, primitives::Chip};
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
@@ -14,7 +15,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{
         stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
-        CpuBackend, TraceCommitter,
+        CpuColMajorBackend, ReferenceDevice, TraceCommitter,
     },
     Com, StarkEngine, StarkProtocolConfig, Val,
 };
@@ -52,13 +53,10 @@ pub struct VmCommittedExe<SC: StarkProtocolConfig> {
 impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.
-    pub fn commit<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
-        exe: VmExe<Val<SC>>,
-        e: &E,
-    ) -> Self {
+    pub fn commit<E: StarkEngine<SC = SC>>(exe: VmExe<Val<SC>>, e: &E) -> Self {
         let trace = generate_cached_trace(&exe.program);
-        let (commit, prover_data) = e
-            .device()
+        let ref_device = ReferenceDevice::new(e.config().clone());
+        let (commit, prover_data) = ref_device
             .commit(&[&ColMajorMatrix::from_row_major(&trace)])
             .unwrap();
         Self {
@@ -72,7 +70,7 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
         self.program_commitment
     }
 
-    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
+    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuColMajorBackend<SC>> {
         CommittedTraceData {
             commitment: self.prover_data.commit().unwrap(),
             data: self.prover_data.clone(),
@@ -130,7 +128,7 @@ impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
             .par_iter_mut()
             .zip(self.filtered_exec_frequencies.par_iter())
             .for_each(|(f, x)| *f = Val::<SC>::from_u32(*x));
-        let common_trace = ColMajorMatrix::new(freqs, 1);
+        let common_trace = RowMajorMatrix::new(freqs, 1);
         AirProvingContext {
             cached_mains: vec![cached],
             common_main: common_trace,

@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix, StridedColMajorMatrixView},
+    prover::AirProvingContext,
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine,
 };
@@ -159,8 +159,7 @@ fn test(
         dummy_interaction_trace_rows,
         dummy_interaction_air.field_width() + 1,
     );
-    let dummy_interaction_api =
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&dummy_interaction_trace));
+    let dummy_interaction_api = AirProvingContext::simple_no_pis(dummy_interaction_trace);
 
     test_cpu_engine()
         .run_test(
@@ -366,16 +365,13 @@ fn expand_test_negative() {
     chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
     let mut chip_ctx = chip.generate_proving_ctx();
     {
-        let mut trace =
-            StridedColMajorMatrixView::from(chip_ctx.common_main.as_view()).to_row_major_matrix();
-        for row in trace.rows_mut() {
+        for row in chip_ctx.common_main.rows_mut() {
             let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {
                 row.left_direction_different = BabyBear::ZERO;
                 row.right_direction_different = BabyBear::ZERO;
             }
         }
-        chip_ctx.common_main = ColMajorMatrix::from_row_major(&trace);
     }
 
     assert!(test_cpu_engine()

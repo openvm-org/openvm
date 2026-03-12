@@ -9,7 +9,8 @@ repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true, optional = true }
+openvm-cpu-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-circuit-primitives = { workspace = true }
@@ -31,7 +32,7 @@ num-integer.workspace = true
 serde = { workspace = true, features = ["derive", "std"] }
 
 [dev-dependencies]
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 test-case.workspace = true
 

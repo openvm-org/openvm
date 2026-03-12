@@ -14,7 +14,8 @@ openvm-recursion-circuit = { workspace = true }
 openvm-recursion-circuit-derive = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2", "cpu-backend"] }
+openvm-cpu-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-poseidon2-air = { workspace = true }

@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
@@ -117,8 +117,7 @@ fn test_is_eq_array_single_row(x: [u32; 3], y: [u32; 3], is_equal: u32) {
     assert_eq!(row.out, PrimeCharacteristicRing::from_u32(is_equal));
 
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     test_engine_small()
@@ -149,8 +148,7 @@ fn test_is_eq_array_multi_rows() {
     let trace = chip.generate_trace();
 
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     test_engine_small()
@@ -176,8 +174,7 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
     let row: &mut IsEqArrayCols<F, 3> = trace.values.as_mut_slice().borrow_mut();
     row.out = F::ONE - row.out;
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
@@ -203,8 +200,7 @@ fn test_is_eq_array_fail_rand() {
     // Corrupt the first element to trigger a constraint failure
     trace.row_mut(0)[0] += F::from_u32(rng.random::<u32>() + 1);
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     let result = test_engine_small().run_test(any_air_arc_vec![air], traces);

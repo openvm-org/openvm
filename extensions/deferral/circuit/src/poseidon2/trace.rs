@@ -6,11 +6,9 @@ use openvm_circuit::{
     system::poseidon2::{Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_CHUNK_SIZE},
 };
 use openvm_circuit_primitives::Chip;
+use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{
-    prover::{AirProvingContext, CpuBackend},
-    StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{prover::AirProvingContext, StarkProtocolConfig, Val};
 
 use super::SBOX_REGISTERS;
 

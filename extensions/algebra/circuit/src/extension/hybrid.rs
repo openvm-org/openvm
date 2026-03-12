@@ -16,6 +16,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu, Chip,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
     base::DeviceMatrix,
     prelude::{F, SC},
@@ -28,10 +29,7 @@ use openvm_rv32_adapters::{
     Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
 };
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-use openvm_stark_backend::{
-    p3_air::BaseAir,
-    prover::{AirProvingContext, CpuBackend},
-};
+use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 use strum::EnumCount;
 
 use crate::{

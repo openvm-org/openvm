@@ -2,10 +2,8 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::encoder::Encoder;
-use openvm_stark_backend::{
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    StarkProtocolConfig,
-};
+use openvm_cpu_backend::CpuBackend;
+use openvm_stark_backend::{prover::AirProvingContext, StarkProtocolConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -54,7 +52,7 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         }
     }
 
-    let common_main = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width));
+    let common_main = RowMajorMatrix::new(trace, width);
     let ctx = AirProvingContext::simple(common_main, user_pvs);
     (ctx, poseidon2_compress_inputs)
 }

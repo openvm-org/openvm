@@ -6,13 +6,13 @@ use openvm_circuit::{
     system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
 };
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{
-    data_transporter::transport_air_proving_ctx_to_device, BabyBearBn254Poseidon2HashScheme,
-    GenericGpuBackend,
-};
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
+use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::{BabyBearBn254Poseidon2HashScheme, GenericGpuBackend};
 use openvm_stark_backend::{
     proof::Proof,
-    prover::{AirProvingContext, CpuBackend, ProverBackend},
+    prover::{AirProvingContext, ProverBackend},
     StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
@@ -132,7 +132,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(transport_air_proving_ctx_to_device::<BabyBearBn254Poseidon2HashScheme>)
+                .map(cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>)
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
@@ -152,7 +152,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
             self.generate_other_proving_ctxs(proof, memory_dimensions, deferral_merkle_proofs);
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device::<BabyBearBn254Poseidon2HashScheme>)
+            .map(cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>)
             .collect_vec();
         (gpu_ctxs, inputs)
     }

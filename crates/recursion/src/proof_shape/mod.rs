@@ -3,10 +3,11 @@ use std::sync::Arc;
 
 use itertools::{izip, Itertools};
 use openvm_circuit_primitives::encoder::Encoder;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkVerifyingKey, VerifierSinglePreprocessedData},
     proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     AirRef, FiatShamirTranscript, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
@@ -325,7 +326,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         }
         tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
             ctxs.push(AirProvingContext::simple_no_pis(
-                ColMajorMatrix::from_row_major(&range_checker.generate_trace_row_major()),
+                range_checker.generate_trace_row_major(),
             ));
         });
         Some(ctxs)

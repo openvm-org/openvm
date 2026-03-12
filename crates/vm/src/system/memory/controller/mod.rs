@@ -9,12 +9,13 @@ use openvm_circuit_primitives::{
     },
     Chip, TraceSubRowGenerator,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     interaction::PermutationCheckBus,
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    prover::{AirProvingContext, CpuBackend},
+    prover::AirProvingContext,
     StarkProtocolConfig,
 };
 use serde::{Deserialize, Serialize};

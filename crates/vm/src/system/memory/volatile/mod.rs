@@ -13,13 +13,14 @@ use openvm_circuit_primitives::{
     Chip, SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use static_assertions::const_assert;
@@ -305,6 +306,6 @@ where
         }
 
         let trace = RowMajorMatrix::new(rows, width);
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+        AirProvingContext::simple_no_pis(trace)
     }
 }

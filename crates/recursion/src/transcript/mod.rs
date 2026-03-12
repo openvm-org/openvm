@@ -2,13 +2,11 @@ use core::borrow::BorrowMut;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, POSEIDON2_WIDTH};
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey,
-    p3_maybe_rayon::prelude::*,
-    proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    AirRef, StarkProtocolConfig, SystemParams,
+    keygen::types::MultiStarkVerifyingKey, p3_maybe_rayon::prelude::*, proof::Proof,
+    prover::AirProvingContext, AirRef, StarkProtocolConfig, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_perm, BabyBearPoseidon2Config, F};
 use p3_air::BaseAir;
@@ -412,9 +410,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         // Finally, make the RawInput structs
         Some(
             [transcript_trace, poseidon2_trace, merkle_verify_trace]
-                .map(|trace| {
-                    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
-                })
+                .map(AirProvingContext::simple_no_pis)
                 .into_iter()
                 .collect(),
         )

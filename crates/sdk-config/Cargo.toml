@@ -6,7 +6,8 @@ edition.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
+openvm-cpu-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cuda-backend = { workspace = true, optional = true }
 
 openvm-algebra-circuit = { workspace = true }

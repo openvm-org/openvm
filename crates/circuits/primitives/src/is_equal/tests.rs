@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
@@ -105,8 +105,7 @@ fn test_single_is_equal(x: u32, y: u32) {
     let trace = chip.generate_trace();
 
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -136,8 +135,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
 
     disable_debug_builder();
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     let result = test_engine_small().run_test(any_air_arc_vec![IsEqTestAir(IsEqSubAir)], traces);

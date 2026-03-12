@@ -12,6 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu, Chip};
+use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
     base::DeviceMatrix,
     prelude::{F, SC},
@@ -19,10 +20,7 @@ use openvm_cuda_backend::{
 };
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
-use openvm_stark_backend::{
-    p3_air::BaseAir,
-    prover::{AirProvingContext, CpuBackend},
-};
+use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use crate::{
     get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv32WeierstrassConfig, WeierstrassAir,

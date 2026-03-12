@@ -7,13 +7,14 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
@@ -308,6 +309,6 @@ where
             exit_code: final_state.exit_code,
             is_terminate: final_state.is_terminate,
         };
-        AirProvingContext::simple(ColMajorMatrix::from_row_major(&trace), public_values)
+        AirProvingContext::simple(trace, public_values)
     }
 }

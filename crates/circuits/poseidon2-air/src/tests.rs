@@ -1,12 +1,9 @@
 use std::{array::from_fn, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix},
-    utils::disable_debug_builder,
-    StarkEngine, StarkTestError, SystemParams,
+    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    prover::AirProvingContext, utils::disable_debug_builder, StarkEngine, StarkTestError,
+    SystemParams,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::create_seeded_rng,
@@ -59,9 +56,7 @@ fn run_poseidon2_subchip_positive_test(
     engine
         .run_test(
             vec![subchip.air.clone()],
-            vec![AirProvingContext::simple_no_pis(
-                ColMajorMatrix::from_row_major(&poseidon2_trace),
-            )],
+            vec![AirProvingContext::simple_no_pis(poseidon2_trace)],
         )
         .expect("Verification failed");
 }
@@ -78,9 +73,7 @@ fn run_poseidon2_subchip_negative_test(
     poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] += rand_inc;
     let result = engine.run_test(
         vec![subchip.air.clone()],
-        vec![AirProvingContext::simple_no_pis(
-            ColMajorMatrix::from_row_major(&poseidon2_trace),
-        )],
+        vec![AirProvingContext::simple_no_pis(poseidon2_trace)],
     );
     assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }

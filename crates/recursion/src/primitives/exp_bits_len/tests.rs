@@ -1,13 +1,12 @@
 use core::borrow::Borrow;
 use std::borrow::BorrowMut;
 
+use openvm_cpu_backend::CpuBackend;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     any_air_arc_vec,
     interaction::InteractionBuilder,
-    prover::{
-        AirProvingContext, ColMajorMatrix, CpuBackend, DeviceDataTransporter, ProvingContext,
-    },
+    prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
     utils::disable_debug_builder,
     verifier::VerifierError,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkProtocolConfig,
@@ -169,9 +168,7 @@ fn prove_and_verify_exp_bits(
             .map(|(air_idx, trace)| {
                 (
                     air_idx,
-                    AirProvingContext::<CpuBackend<BabyBearPoseidon2Config>>::simple_no_pis(
-                        ColMajorMatrix::from_row_major(&trace),
-                    ),
+                    AirProvingContext::<CpuBackend<BabyBearPoseidon2Config>>::simple_no_pis(trace),
                 )
             })
             .collect(),
@@ -179,22 +176,8 @@ fn prove_and_verify_exp_bits(
 
     let device = engine.device();
     let d_pk = device.transport_pk_to_device(&pk);
-    let d_ctx: ProvingContext<CpuBackend<BabyBearPoseidon2Config>> = ProvingContext::new(
-        ctx.into_iter()
-            .map(|(air_idx, air_ctx)| {
-                (
-                    air_idx,
-                    AirProvingContext::<CpuBackend<BabyBearPoseidon2Config>> {
-                        cached_mains: vec![],
-                        common_main: device.transport_matrix_to_device(&air_ctx.common_main),
-                        public_values: air_ctx.public_values,
-                    },
-                )
-            })
-            .collect(),
-    );
 
-    let proof = engine.prove(&d_pk, d_ctx).unwrap();
+    let proof = engine.prove(&d_pk, ctx).unwrap();
     engine.verify(&vk, &proof)
 }
 
