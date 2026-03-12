@@ -33,6 +33,6 @@ openvm-cuda-builder.workspace = true
 
 [features]
 default = ["parallel"]
-parallel = ["openvm-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel", "openvm-cpu-backend/parallel"]
 cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend"]
 touchemall = ["openvm-cuda-backend/touchemall"]
