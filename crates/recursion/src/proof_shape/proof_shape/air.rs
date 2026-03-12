@@ -867,7 +867,7 @@ where
 
         when_last.assert_bool(prefix.clone());
         when_last
-            .when(not::<AB::Expr>(limb_times_inv))
+            .when(not::<AB::Expr>(limb_times_inv.clone()))
             .assert_zero(n_logup);
         when_last.assert_eq(limb_to_range_check, expected_limb_to_range_check);
         msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);
@@ -881,13 +881,25 @@ where
             local.is_last,
         );
 
+        // When limb_to_range_check is non-zero we range check x and x - 128 to be in [0, 256).
+        // This ensures x in [128, 256), which implies that n_logup is exact.
+        let shifted_msb_limb = limb_to_range_check * msb_limb_zero_bits_exp;
         self.range_bus.lookup_key(
             builder,
             RangeCheckerBusMessage {
-                value: limb_to_range_check * msb_limb_zero_bits_exp,
+                value: shifted_msb_limb.clone(),
                 max_bits: AB::Expr::from_usize(LIMB_BITS),
             },
             local.is_last,
+        );
+
+        self.range_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: shifted_msb_limb - AB::Expr::from_usize(1 << (LIMB_BITS - 1)),
+                max_bits: AB::Expr::from_usize(LIMB_BITS),
+            },
+            local.is_last * limb_times_inv,
         );
 
         // Constrain n_max on each row. Also constrain that local.is_n_max_greater is one when
