@@ -243,6 +243,10 @@ where
                 .when(local.is_first_in_commit)
                 .assert_zero(local.pre_state[CHUNK + i]);
             builder
+                .when(local.is_first_in_commit)
+                .when(AB::Expr::ONE - local.flags[i])
+                .assert_zero(local.pre_state[i]);
+            builder
                 .when(is_same_commit.clone())
                 .assert_eq(next.pre_state[CHUNK + i], local.post_state[CHUNK + i]);
             builder
