@@ -4,12 +4,8 @@ use num_bigint::BigUint;
 use num_traits::One;
 use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use openvm_stark_backend::{
-    any_air_arc_vec,
-    p3_air::BaseAir,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix},
-    StarkEngine, SystemParams,
+    any_air_arc_vec, p3_air::BaseAir, p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix, prover::AirProvingContext, StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
 
@@ -96,8 +92,8 @@ fn verify_stark_with_traces(
     let engine: BabyBearPoseidon2CpuEngine =
         BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20));
     let ctxs = vec![
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace_matrix)),
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&range_trace)),
+        AirProvingContext::simple_no_pis(trace_matrix),
+        AirProvingContext::simple_no_pis(range_trace),
     ];
     engine
         .run_test(any_air_arc_vec![expr, range_checker.air], ctxs)

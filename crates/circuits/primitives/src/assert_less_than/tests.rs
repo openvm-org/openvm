@@ -14,7 +14,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
@@ -144,8 +144,7 @@ fn test_assert_less_than_chip_lt() {
     let range_trace: DenseMatrix<F> = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -169,8 +168,7 @@ fn test_lt_chip_decomp_does_not_divide() {
     let range_trace: DenseMatrix<F> = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -197,8 +195,7 @@ fn test_assert_less_than_negative_1() {
     trace.values.swap(0, 1);
 
     let traces = [trace, range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -225,8 +222,7 @@ fn test_assert_less_than_negative_2() {
     trace.values[3] = PrimeCharacteristicRing::from_u64(1 << decomp as u64);
 
     let traces = [trace, range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -250,8 +246,7 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
     let range_trace: DenseMatrix<F> = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 

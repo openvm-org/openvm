@@ -1,14 +1,10 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    any_air_arc_vec,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    any_air_arc_vec, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, prover::AirProvingContext,
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    utils::disable_debug_builder,
-    AirRef, StarkEngine,
+    utils::disable_debug_builder, AirRef, StarkEngine,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -100,11 +96,6 @@ fn test_range_tuple_chip() {
         let all_traces = lists_traces
             .into_iter()
             .chain(iter::once(range_trace))
-            .collect::<Vec<RowMajorMatrix<F>>>();
-
-        let all_traces = all_traces
-            .iter()
-            .map(ColMajorMatrix::from_row_major)
             .map(AirProvingContext::simple_no_pis)
             .collect::<Vec<_>>();
         test_engine_small()
@@ -149,9 +140,8 @@ fn negative_test_range_tuple_chip() {
     all_chips.push(Arc::new(range_checker.air));
 
     {
-        let traces = [&dummy_trace, &range_trace]
+        let traces = [dummy_trace, range_trace.clone()]
             .into_iter()
-            .map(ColMajorMatrix::from_row_major)
             .map(AirProvingContext::simple_no_pis)
             .collect::<Vec<_>>();
         test_engine_small()
@@ -167,8 +157,7 @@ fn negative_test_range_tuple_chip() {
         .run_test(
             any_air_arc_vec![range_checker.air],
             [range_trace]
-                .iter()
-                .map(ColMajorMatrix::from_row_major)
+                .into_iter()
                 .map(AirProvingContext::simple_no_pis)
                 .collect::<Vec<_>>(),
         )

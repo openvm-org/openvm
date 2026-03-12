@@ -12,13 +12,10 @@ use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
     var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::PrimeField32,
-    p3_matrix::dense::RowMajorMatrix,
-    p3_util::log2_strict_usize,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    StarkProtocolConfig,
+    p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
+    p3_util::log2_strict_usize, prover::AirProvingContext, StarkProtocolConfig,
 };
 
 use crate::{
@@ -254,7 +251,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
         traces
             .into_iter()
-            .map(|trace| AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
+            .map(AirProvingContext::simple_no_pis)
             .collect()
     }
 

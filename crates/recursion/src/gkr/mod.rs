@@ -62,12 +62,13 @@ use core::iter::zip;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     p3_maybe_rayon::prelude::*,
     poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
     proof::{GkrProof, Proof},
-    prover::{AirProvingContext, CpuBackend},
+    prover::AirProvingContext,
     AirRef, FiatShamirTranscript, ReadOnlyTranscript, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};

@@ -170,7 +170,10 @@ mod tests {
     use openvm_cuda_backend::{
         data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::SC,
     };
-    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::MatrixDimensions};
+    use openvm_stark_backend::{
+        p3_field::PrimeCharacteristicRing,
+        prover::{ColMajorMatrix, MatrixDimensions},
+    };
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;
@@ -265,7 +268,8 @@ mod tests {
                 "Exactly one of CPU and GPU traces is empty"
             );
             if cpu_trace.height() != 0 {
-                assert_eq_host_and_device_matrix_col_maj(&cpu_trace, gpu_trace);
+                let cpu_trace_cm = ColMajorMatrix::from_row_major(&cpu_trace);
+                assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, gpu_trace);
             }
         }
     }

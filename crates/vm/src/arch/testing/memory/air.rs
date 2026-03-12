@@ -1,12 +1,13 @@
 use std::mem::size_of;
 
 use openvm_circuit_primitives::Chip;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
@@ -134,8 +135,7 @@ where
         let mut trace = self.trace.clone();
         trace.resize(height * width, Val::<SC>::ZERO);
 
-        let trace_row_maj = RowMajorMatrix::new(trace, width);
-        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
+        let trace = RowMajorMatrix::new(trace, width);
         AirProvingContext::simple_no_pis(trace)
     }
 }

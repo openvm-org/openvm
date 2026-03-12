@@ -1,7 +1,8 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix, CpuBackend};
+use openvm_cpu_backend::CpuBackend;
+use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -71,9 +72,7 @@ pub fn generate_proving_ctx(
     let merkle_root = merkle_rows[height - 2].parent;
 
     MerkleDecommitTraceCtx {
-        proving_ctx: AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(
-            &RowMajorMatrix::new(trace, width),
-        )),
+        proving_ctx: AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width)),
         poseidon2_inputs,
         io_commits,
         merkle_root,

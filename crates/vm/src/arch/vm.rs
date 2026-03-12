@@ -881,11 +881,9 @@ where
         &self,
         program: &Program<Val<E::SC>>,
     ) -> CommittedTraceData<E::PB> {
-        let trace = ColMajorMatrix::from_row_major(&generate_cached_trace(program));
-        let d_trace = self
-            .engine
-            .device()
-            .transport_matrix_to_device(&Arc::new(trace));
+        let rm_trace = generate_cached_trace(program);
+        let cm_trace = ColMajorMatrix::from_row_major(&rm_trace);
+        let d_trace = self.engine.device().transport_matrix_to_device(&cm_trace);
         let (commitment, pcs) = self
             .engine
             .device()

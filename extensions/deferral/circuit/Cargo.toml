@@ -9,7 +9,8 @@ repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
+openvm-cpu-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-poseidon2-air = { workspace = true }
@@ -39,7 +40,7 @@ cfg-if.workspace = true
 openvm-cuda-builder = { workspace = true, optional = true }
 
 [dev-dependencies]
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 p3-symmetric = { workspace = true }
 test-case = { workspace = true }

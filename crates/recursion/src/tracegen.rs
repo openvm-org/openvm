@@ -1,7 +1,8 @@
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     proof::Proof,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, ProverBackend},
+    prover::{AirProvingContext, ProverBackend},
     StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
@@ -54,7 +55,7 @@ impl<SC: StarkProtocolConfig<F = F>, T: RowMajorChip<F>> ModuleChip<CpuBackend<S
         required_height: Option<usize>,
     ) -> Option<AirProvingContext<CpuBackend<SC>>> {
         let common_main_rm = self.generate_trace(ctx, required_height);
-        common_main_rm.map(|m| AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&m)))
+        common_main_rm.map(AirProvingContext::simple_no_pis)
     }
 }
 

@@ -1,9 +1,12 @@
 use itertools::Itertools;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
+use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::GpuBackend;
 use openvm_stark_backend::{
     proof::Proof,
-    prover::{AirProvingContext, CpuBackend, ProverBackend},
+    prover::{AirProvingContext, ProverBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
@@ -146,7 +149,7 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(transport_air_proving_ctx_to_device)
+                .map(cpu_proving_ctx_to_gpu)
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
@@ -163,7 +166,7 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
             self.generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app);
         cpu_ctxs
             .into_iter()
-            .map(transport_air_proving_ctx_to_device)
+            .map(cpu_proving_ctx_to_gpu)
             .collect_vec()
     }
 }
