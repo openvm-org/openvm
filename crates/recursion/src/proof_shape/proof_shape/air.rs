@@ -674,7 +674,7 @@ where
                     cached_commit: localv.cached_commits[cached_idx].map(Into::into),
                 },
                 cached_present[cached_idx].clone()
-                    * local.is_valid
+                    * local.is_present
                     * AB::Expr::from_bool(self.continuations_enabled),
             );
         });
