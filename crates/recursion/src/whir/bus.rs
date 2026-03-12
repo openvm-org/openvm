@@ -110,6 +110,7 @@ pub struct FinalPolyFoldingMessage<T> {
     pub depth: T,
     pub node_idx: T,
     pub num_nodes_in_layer: T,
+    pub tidx_final_poly_start: T,
     pub value: [T; D_EF],
 }
 
