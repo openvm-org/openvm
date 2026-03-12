@@ -78,21 +78,6 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
         }
     }
 
-    /// Get committed trace data for the optimized CPU backend (RowMajor).
-    /// This re-commits the trace using the CpuDevice to produce CpuStackedPcsData.
-    pub fn get_committed_trace_cpu<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
-        &self,
-        e: &E,
-    ) -> CommittedTraceData<CpuBackend<SC>> {
-        let (commitment, pcs_data) =
-            TraceCommitter::<CpuBackend<SC>>::commit(e.device(), &[&self.trace]).unwrap();
-        CommittedTraceData {
-            commitment,
-            data: Arc::new(pcs_data),
-            trace: (*self.trace).clone(),
-        }
-    }
-
     /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:
     /// - Program code commitment (commitment of the cached trace)
     /// - Merkle root of the initial memory

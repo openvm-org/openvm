@@ -1,4 +1,4 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use openvm_circuit_primitives::Chip;
 use openvm_instructions::{
@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::AirProvingContext,
+    prover::{AirProvingContext, CommittedTraceData, TraceCommitter},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine, StarkTestError,
 };
@@ -58,7 +58,13 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let engine = test_cpu_engine();
     let exe = VmExe::new(program);
     let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
-    let cached = committed_exe.get_committed_trace_cpu(&engine);
+    let (commitment, pcs_data) =
+        TraceCommitter::commit(engine.device(), &[committed_exe.trace.as_ref()]).unwrap();
+    let cached = CommittedTraceData {
+        commitment,
+        data: Arc::new(pcs_data),
+        trace: committed_exe.trace.as_ref().clone(),
+    };
     let chip = ProgramChip {
         filtered_exec_frequencies,
         cached: Some(cached),
@@ -166,7 +172,13 @@ fn test_program_negative() {
     let engine = test_cpu_engine();
     let exe = VmExe::new(program);
     let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
-    let cached = committed_exe.get_committed_trace_cpu(&engine);
+    let (commitment, pcs_data) =
+        TraceCommitter::commit(engine.device(), &[committed_exe.trace.as_ref()]).unwrap();
+    let cached = CommittedTraceData {
+        commitment,
+        data: Arc::new(pcs_data),
+        trace: committed_exe.trace.as_ref().clone(),
+    };
     let chip = ProgramChip {
         filtered_exec_frequencies: execution_frequencies.clone(),
         cached: Some(cached),
