@@ -154,6 +154,12 @@ where
             next.s_0_sum_over_d,
         );
 
+        assert_array_eq(
+            &mut builder.when(and::<AB::Expr>(not(next.coeff_is_d), not(local.is_last))),
+            local.s_0_sum_over_d,
+            next.s_0_sum_over_d,
+        );
+
         self.sumcheck_claims_bus.receive(
             builder,
             next.proof_idx,
