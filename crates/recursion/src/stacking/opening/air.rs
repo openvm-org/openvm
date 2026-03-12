@@ -341,8 +341,10 @@ where
             .assert_zero(next.stacked_col_idx);
 
         builder
-            .when(not(local.is_last))
-            .when_ne(local.commit_idx, next.commit_idx)
+            .when(and::<AB::Expr>(
+                not(local.is_last),
+                not::<AB::Expr>(next.commit_idx - local.commit_idx),
+            ))
             .assert_bool(next.stacked_col_idx - local.stacked_col_idx);
         builder
             .when(and(local.is_last_for_claim, not(local.is_last)))
