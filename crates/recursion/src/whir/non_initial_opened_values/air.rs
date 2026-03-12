@@ -152,6 +152,9 @@ where
         builder
             .when(is_same_query.clone())
             .assert_eq(local.zi_root, next.zi_root);
+        builder
+            .when(is_same_query.clone())
+            .assert_eq(local.merkle_idx_bit_src, next.merkle_idx_bit_src);
 
         self.folding_bus.send(
             builder,

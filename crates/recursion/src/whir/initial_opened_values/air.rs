@@ -330,6 +330,9 @@ where
         builder
             .when(is_same_query.clone())
             .assert_eq(next.zi, local.zi);
+        builder
+            .when(is_same_query.clone())
+            .assert_eq(next.merkle_idx_bit_src, local.merkle_idx_bit_src);
         assert_array_eq(&mut builder.when(is_same_query.clone()), next.yi, local.yi);
         self.folding_bus.send(
             builder,
