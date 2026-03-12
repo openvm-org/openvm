@@ -310,7 +310,11 @@ __device__ __forceinline__ void fill_summary_row(
     // n_logup
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, n_logup);
 
-    range_checker.add_count(interaction_decomp[nonzero_idx] * (1 << msb_limb_zero_bits));
+    size_t shifted_msb_limb = interaction_decomp[nonzero_idx] * (1 << msb_limb_zero_bits);
+    range_checker.add_count(shifted_msb_limb);
+    if (shifted_msb_limb != 0) {
+        range_checker.add_count(shifted_msb_limb - (1 << (LIMB_BITS - 1)));
+    }
     range_checker.add_count(max_interaction_decomp[diff_idx] - interaction_decomp[diff_idx] - 1);
     pow_checker.add_pow_count(msb_limb_zero_bits);
     pow_checker.add_range_count(n_max > n_logup ? n_max - n_logup : n_logup - n_max);
