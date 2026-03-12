@@ -37,6 +37,7 @@ pub struct VerifyQueriesBusMessage<T> {
     pub tidx: T,
     pub whir_round: T,
     pub num_queries: T,
+    pub omega: T,
     pub gamma: [T; D_EF],
     pub pre_claim: [T; D_EF],
     pub post_claim: [T; D_EF],
