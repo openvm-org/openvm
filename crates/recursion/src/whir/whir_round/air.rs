@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{encoder::Encoder, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -184,6 +184,12 @@ impl WhirRoundAir {
         builder
             .when(local.is_enabled - is_same_proof.clone())
             .assert_eq(local.whir_round, AB::Expr::from_usize(self.num_rounds - 1));
+
+        assert_array_eq(
+            &mut builder.when(is_same_proof.clone()),
+            next.claim,
+            local.next_claim,
+        );
 
         self.whir_module_bus.receive(
             builder,
