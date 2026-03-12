@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
@@ -170,8 +170,7 @@ fn test_is_less_than_tuple_chip() {
     let range_checker_trace = range_checker.generate_trace();
 
     let traces = [trace, range_checker_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -192,8 +191,7 @@ fn test_is_less_than_tuple_chip_negative() {
     trace.values[2] = PrimeCharacteristicRing::from_u64(0);
 
     let traces = [trace, range_checker_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 
@@ -213,8 +211,7 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
     let range_checker_trace = range_checker.generate_trace();
 
     let traces = [trace, range_checker_trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
 

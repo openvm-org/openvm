@@ -4,12 +4,13 @@
 //! circuit itself.
 use std::{iter, sync::Arc};
 
+use openvm_cpu_backend::CpuBackend;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     interaction::BusIndex,
     keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
     proof::{Proof, TraceVData},
-    prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, ProverBackend},
+    prover::{AirProvingContext, CommittedTraceData, ProverBackend},
     AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
     TranscriptLog,
 };
@@ -1098,9 +1099,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
                 tracing::trace_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
                     || {
                         ctx_per_trace.push(AirProvingContext::simple_no_pis(
-                            ColMajorMatrix::from_row_major(
-                                &power_checker_gen.generate_trace_row_major(),
-                            ),
+                            power_checker_gen.generate_trace_row_major(),
                         ));
                     },
                 );
@@ -1108,9 +1107,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         );
         let exp_bits_trace_rm = tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen")
             .in_scope(|| exp_bits_len_gen.generate_trace_row_major(exp_bits_len_required))?;
-        ctx_per_trace.push(AirProvingContext::simple_no_pis(
-            ColMajorMatrix::from_row_major(&exp_bits_trace_rm),
-        ));
+        ctx_per_trace.push(AirProvingContext::simple_no_pis(exp_bits_trace_rm));
         Some(ctx_per_trace)
     }
 }

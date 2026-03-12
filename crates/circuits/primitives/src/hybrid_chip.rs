@@ -1,13 +1,15 @@
 use std::marker::PhantomData;
 
+use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
-    base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major, prelude::SC, GpuBackend,
+    base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major,
+    hash_scheme::GpuHashScheme, prelude::SC, GenericGpuBackend, GpuBackend,
 };
-use openvm_stark_backend::prover::{AirProvingContext, CpuBackend};
+use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix};
 
 use crate::Chip;
 
-pub fn get_empty_air_proving_ctx() -> AirProvingContext<GpuBackend> {
+pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<GenericGpuBackend<HS>> {
     AirProvingContext {
         cached_mains: vec![],
         common_main: DeviceMatrix::dummy(),
@@ -37,14 +39,15 @@ impl<RA, C: Chip<RA, CpuBackend<SC>>> Chip<RA, GpuBackend> for HybridChip<RA, C>
     }
 }
 
-pub fn cpu_proving_ctx_to_gpu(
+pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
     cpu_ctx: AirProvingContext<CpuBackend<SC>>,
-) -> AirProvingContext<GpuBackend> {
+) -> AirProvingContext<GenericGpuBackend<HS>> {
     assert!(
         cpu_ctx.cached_mains.is_empty(),
         "CPU to GPU transfer of cached traces not supported"
     );
-    let trace = transport_matrix_h2d_col_major(&cpu_ctx.common_main).unwrap();
+    let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
+    let trace = transport_matrix_h2d_col_major(&cm).unwrap();
     AirProvingContext {
         cached_mains: vec![],
         common_main: trace,

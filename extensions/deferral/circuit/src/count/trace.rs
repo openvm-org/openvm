@@ -5,10 +5,9 @@ use std::{
 
 use openvm_circuit::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives::Chip;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix, prover::AirProvingContext,
     StarkProtocolConfig, Val,
 };
 
@@ -63,6 +62,6 @@ where
         }
 
         let trace = RowMajorMatrix::new(trace, width);
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+        AirProvingContext::simple_no_pis(trace)
     }
 }

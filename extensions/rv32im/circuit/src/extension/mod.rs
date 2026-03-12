@@ -20,17 +20,14 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
-use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 

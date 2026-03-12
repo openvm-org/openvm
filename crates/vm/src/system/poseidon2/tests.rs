@@ -4,6 +4,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::LookupBus,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
+    prover::AirProvingContext,
     test_utils::dummy_airs::interaction::dummy_interaction_air::{
         DummyInteractionChip, DummyInteractionData,
     },
@@ -52,11 +53,12 @@ fn poseidon2_periphery_direct_test() {
     let outs: [[BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE]; NUM_OPS] =
         std::array::from_fn(|i| chip.compress_and_record(&hashes[i].0, &hashes[i].1));
 
-    let mut dummy_interaction_chip = DummyInteractionChip::new_without_partition(
-        PERIPHERY_POSEIDON2_WIDTH + PERIPHERY_POSEIDON2_WIDTH / 2,
-        true,
-        POSEIDON2_DIRECT_BUS,
-    );
+    let mut dummy_interaction_chip: DummyInteractionChip<TestSC> =
+        DummyInteractionChip::new_without_partition(
+            PERIPHERY_POSEIDON2_WIDTH + PERIPHERY_POSEIDON2_WIDTH / 2,
+            true,
+            POSEIDON2_DIRECT_BUS,
+        );
     let count = vec![1; NUM_OPS];
     let fields = hashes
         .iter()
@@ -74,7 +76,16 @@ fn poseidon2_periphery_direct_test() {
 
     // engine generation
     let tester = VmChipTestBuilder::default();
-    let dummy_ctx = dummy_interaction_chip.generate_proving_ctx();
+    let dummy_ref_ctx = dummy_interaction_chip.generate_proving_ctx();
+    let dummy_ctx = AirProvingContext {
+        cached_mains: vec![],
+        common_main: {
+            let view: openvm_stark_backend::prover::StridedColMajorMatrixView<'_, _> =
+                dummy_ref_ctx.common_main.as_view().into();
+            view.to_row_major_matrix()
+        },
+        public_values: dummy_ref_ctx.public_values,
+    };
     let dummy_air = Arc::new(dummy_interaction_chip.air) as AirRef<TestSC>;
     let mut tester = tester.build().load_periphery_ref((air, chip)).finalize();
     tester.air_ctxs.push((dummy_air, dummy_ctx));
@@ -105,11 +116,12 @@ fn poseidon2_periphery_duplicate_hashes_test() {
         chip.compress(&hashes[i].0, &hashes[i].1)
     });
 
-    let mut dummy_interaction_chip = DummyInteractionChip::new_without_partition(
-        PERIPHERY_POSEIDON2_WIDTH + PERIPHERY_POSEIDON2_WIDTH / 2,
-        true,
-        POSEIDON2_DIRECT_BUS,
-    );
+    let mut dummy_interaction_chip: DummyInteractionChip<TestSC> =
+        DummyInteractionChip::new_without_partition(
+            PERIPHERY_POSEIDON2_WIDTH + PERIPHERY_POSEIDON2_WIDTH / 2,
+            true,
+            POSEIDON2_DIRECT_BUS,
+        );
     let count = counts.to_vec();
     let fields = hashes
         .iter()
@@ -127,7 +139,16 @@ fn poseidon2_periphery_duplicate_hashes_test() {
 
     // engine generation
     let tester = VmChipTestBuilder::default();
-    let dummy_ctx = dummy_interaction_chip.generate_proving_ctx();
+    let dummy_ref_ctx = dummy_interaction_chip.generate_proving_ctx();
+    let dummy_ctx = AirProvingContext {
+        cached_mains: vec![],
+        common_main: {
+            let view: openvm_stark_backend::prover::StridedColMajorMatrixView<'_, _> =
+                dummy_ref_ctx.common_main.as_view().into();
+            view.to_row_major_matrix()
+        },
+        public_values: dummy_ref_ctx.public_values,
+    };
     let dummy_air = Arc::new(dummy_interaction_chip.air) as AirRef<TestSC>;
     let mut tester = tester.build().load_periphery_ref((air, chip)).finalize();
     tester.air_ctxs.push((dummy_air, dummy_ctx));

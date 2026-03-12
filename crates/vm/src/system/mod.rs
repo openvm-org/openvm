@@ -11,11 +11,12 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    prover::{AirProvingContext, CommittedTraceData, CpuBackend, CpuDevice, ProverBackend},
+    prover::{AirProvingContext, CommittedTraceData, ProverBackend},
     AirRef, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;

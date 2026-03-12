@@ -4,13 +4,12 @@ use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     Chip,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    interaction::BusIndex,
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    AirRef, StarkEngine,
+    interaction::BusIndex, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    prover::AirProvingContext,
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, AirRef,
+    StarkEngine,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
@@ -75,7 +74,7 @@ fn boundary_air_test() {
     let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
     let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
 
-    let init_memory_trace = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
+    let init_memory_trace = RowMajorMatrix::new(
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
@@ -90,9 +89,9 @@ fn boundary_air_test() {
             .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))
             .collect(),
         5,
-    ));
+    );
 
-    let final_memory_trace = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
+    let final_memory_trace = RowMajorMatrix::new(
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
@@ -112,7 +111,7 @@ fn boundary_air_test() {
             .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))
             .collect(),
         5,
-    ));
+    );
 
     boundary_chip.finalize(final_memory.clone());
     let boundary_air = Arc::new(boundary_chip.air.clone()) as AirRef<_>;

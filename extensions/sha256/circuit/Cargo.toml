@@ -7,7 +7,8 @@ description = "OpenVM circuit extension for sha256"
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
+openvm-cpu-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-circuit-primitives = { workspace = true }
@@ -28,7 +29,7 @@ cfg-if.workspace = true
 
 [dev-dependencies]
 hex = { workspace = true }
-openvm-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [build-dependencies]

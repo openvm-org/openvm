@@ -8,6 +8,7 @@ use openvm_circuit::{
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_ecc_circuit::*;
 use openvm_ecc_transpiler::*;
 use openvm_keccak256_circuit::*;
@@ -18,11 +19,7 @@ use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::*;
 use openvm_sha256_circuit::*;
 use openvm_sha256_transpiler::*;
-use openvm_stark_backend::{
-    p3_field::Field,
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};

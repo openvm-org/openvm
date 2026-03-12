@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
@@ -105,8 +105,7 @@ fn test_single_is_zero(x: u32) {
     );
 
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     test_engine_small()
@@ -133,8 +132,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
     }
 
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     test_engine_small()
@@ -153,8 +151,7 @@ fn test_single_is_zero_fail(x: u32) {
 
     disable_debug_builder();
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
@@ -173,8 +170,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
     // Corrupt the first row's output to trigger a constraint failure
     trace.row_mut(0)[1] = F::ONE - trace.row_mut(0)[1];
     let traces = [trace]
-        .iter()
-        .map(ColMajorMatrix::from_row_major)
+        .into_iter()
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
     let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
