@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 
 use openvm_circuit_primitives::{
-    utils::{and, not, or},
+    utils::{and, assert_array_eq, not, or},
     SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
@@ -181,7 +181,13 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
                 input: local.prev_state,
                 output: local.post_state,
             },
-            permuted,
+            permuted.clone(),
+        );
+
+        assert_array_eq(
+            &mut builder.when(not::<AB::Expr>(permuted)),
+            local.prev_state,
+            local.post_state,
         );
 
         if let Some(final_state_bus) = self.final_state_bus {
