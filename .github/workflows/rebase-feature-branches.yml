@@ -1,13 +1,14 @@
 name: Auto Rebase Feature Branches
 # Long-running feature branches should be added to the corresponding repository ruleset:
 # - PRs should be squash merged into the feature branch
-# - This workflow will keep the feature branch rebased against main
+# - This workflow will keep the feature branch rebased against the target branch
 # - It will only ever do auto rebase when there are no conflicts. It will trigger a slack notification if there is a conflict that requires manual resolution.
 
 on:
   push:
     branches:
       - main
+      - develop-v2.0.0-beta
 
 permissions:
   contents: write
@@ -39,7 +40,7 @@ jobs:
       - name: Rebase Feature Branches
         run: |
           # List of feature branches to maintain
-          FEATURE_BRANCHES=("develop-v2.0.0-beta")
+          FEATURE_BRANCHES=("develop-v2.0.0-rc.1")
 
           FAILED_BRANCHES=()
           SUCCEEDED_BRANCHES=()
@@ -70,7 +71,7 @@ jobs:
             # Checkout and rebase
             git checkout "$branch"
 
-            if git rebase origin/main; then
+            if git rebase origin/${{ github.ref_name }}; then
               echo "✓ Rebase successful for $branch"
 
               # Get the new commit hash after rebase
@@ -116,7 +117,7 @@ jobs:
             fi
 
             # Clean up for next iteration
-            git checkout main
+            git checkout ${{ github.ref_name }}
           done
 
           # Save results for Slack notification (using | as delimiter to preserve spaces in branch names)
@@ -182,7 +183,7 @@ jobs:
                   type: "section",
                   text: {
                     type: "mrkdwn",
-                    text: ("*Repository:* <" + $repo_url + "|" + $repo + ">\n*Trigger:* Push to `main` by " + $commit_author)
+                    text: ("*Repository:* <" + $repo_url + "|" + $repo + ">\n*Trigger:* Push to `${{ github.ref_name }}` by " + $commit_author)
                   }
                 },
                 {
@@ -217,7 +218,7 @@ jobs:
                   elements: [
                     {
                       type: "mrkdwn",
-                      text: "Run manual rebase: `git checkout <branch> && git rebase origin/main && git push --force-with-lease`"
+                      text: "Run manual rebase: `git checkout <branch> && git rebase origin/${{ github.ref_name }} && git push --force-with-lease`"
                     }
                   ]
                 }
