@@ -4,7 +4,7 @@ use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
-    common::{update_adapter_heights_asm, update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W},
+    common::{update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W},
     BranchLessThanExecutor,
 };
 
@@ -95,10 +95,6 @@ where
         let mut asm_str = String::from("");
 
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // read [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // read [c:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
 
         asm_str += &self.generate_x86_asm(inst, pc)?;
         Ok(asm_str)
