@@ -20,6 +20,7 @@ openvm-transpiler = { workspace = true }
 openvm = { workspace = true }
 
 openvm-sdk-config = { workspace = true }
+openvm-recursion-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 

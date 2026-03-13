@@ -141,7 +141,7 @@ pub fn compute_root_proof_heights(
         AggregationConfig { params: agg_params },
         agg_tree_config,
     );
-    let (agg_proof, _) = agg_prover.prove(app_proof)?;
+    let (agg_proof, _) = agg_prover.prove_vm(app_proof)?;
 
     let root_prover = RootInnerProver::new::<E>(
         agg_prover.internal_recursive_prover.get_vk(),

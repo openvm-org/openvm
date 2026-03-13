@@ -47,7 +47,8 @@ where
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
         let continuation_proof = self.app_prover.prove(input)?;
-        let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
+        let (mut stark_proof, mut internal_metadata) =
+            self.agg_prover.prove_vm(continuation_proof)?;
         // We add one additional internal_recursive layer to reduce the proof size.
         const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
         for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {

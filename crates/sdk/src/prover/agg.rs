@@ -93,7 +93,7 @@ impl AggProver {
         }
     }
 
-    pub fn prove(
+    pub fn prove_vm(
         &self,
         continuation_proof: ContinuationVmProof<SC>,
     ) -> Result<(NonRootStarkProof, InternalLayerMetadata)> {
