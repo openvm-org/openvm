@@ -197,13 +197,8 @@ where
         chip_idx: usize,
         config: &SystemConfig,
     ) -> Result<String, AotError> {
-        use crate::common::{update_adapter_heights_asm, update_height_change_asm};
-        let enabled = !inst.f.is_zero();
+        use crate::common::update_height_change_asm;
         let mut asm_str = update_height_change_asm(chip_idx, 1)?;
-        if enabled {
-            // write [a:4]_1
-            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        }
         asm_str += &self.generate_x86_asm(inst, pc)?;
         Ok(asm_str)
     }
