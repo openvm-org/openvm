@@ -289,4 +289,4 @@ For complete per-AIR bus connectivity and the full cross-group bus connection ta
 
 ## Source Code Location
 
-The recursion circuit source code is at `openvm/crates/recursion/src/` within the v2-proof-system repository. The stark-backend verifier it constrains is at `stark-backend/crates/stark-backend/src/verifier/`.
+The recursion circuit source code is at `crates/recursion/src/`. The stark-backend verifier it constrains is in the [stark-backend](https://github.com/openvm-org/stark-backend) repository at `crates/stark-backend/src/verifier/`.
