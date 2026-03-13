@@ -4,25 +4,25 @@ use std::{
     mem::size_of,
 };
 
+use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use openvm_circuit::{
     arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
+use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use derive_more::derive::{Deref, DerefMut};
-use openvm_circuit_derive::PreflightExecutor;
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, FieldExpr, FieldExpressionExecutor,
 };
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output
@@ -30,7 +30,7 @@ use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 /// per input ProjectivePoint, BLOCKS = 9. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 3.
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
 pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub(crate) FieldExpressionExecutor<
+    pub(crate)  FieldExpressionExecutor<
         Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >,
 );

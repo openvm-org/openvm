@@ -10,6 +10,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
@@ -18,7 +19,6 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -76,32 +76,32 @@ fn ec_add_proj_a0_expr(
     //   3. Degree-2 outputs: two muls combined into a single save_output()
 
     // Spec steps 1-3
-    let mut t0 = (&mut x1).mul(&mut x2);
+    let mut t0 = x1.mul(&mut x2);
     t0.save();
-    let mut t1 = (&mut y1).mul(&mut y2);
+    let mut t1 = y1.mul(&mut y2);
     t1.save();
-    let mut t2 = (&mut z1).mul(&mut z2);
+    let mut t2 = z1.mul(&mut z2);
     t2.save();
 
     // Spec steps 4-8: t3 = (X1+Y1)·(X2+Y2) - t0 - t1 = X1·Y2 + X2·Y1
     // [combined mul-sub]
     let mut t3_lhs = x1.clone() + y1.clone();
     let mut t3_rhs = x2.clone() + y2.clone();
-    let mut t3 = (&mut t3_lhs).mul(&mut t3_rhs) - t0.clone() - t1.clone();
+    let mut t3 = t3_lhs.mul(&mut t3_rhs) - t0.clone() - t1.clone();
     t3.save();
 
     // Spec steps 9-13: t4 = (Y1+Z1)·(Y2+Z2) - t1 - t2 = Y1·Z2 + Y2·Z1
     // [combined mul-sub]
     let mut t4_lhs = y1.clone() + z1.clone();
     let mut t4_rhs = y2.clone() + z2.clone();
-    let mut t4 = (&mut t4_lhs).mul(&mut t4_rhs) - t1.clone() - t2.clone();
+    let mut t4 = t4_lhs.mul(&mut t4_rhs) - t1.clone() - t2.clone();
     t4.save();
 
     // Spec steps 14-18: y3 = (X1+Z1)·(X2+Z2) - t0 - t2 = X1·Z2 + X2·Z1
     // [combined mul-sub]
     let mut y3_lhs = x1 + z1;
     let mut y3_rhs = x2 + z2;
-    let mut y3 = (&mut y3_lhs).mul(&mut y3_rhs) - t0.clone() - t2.clone();
+    let mut y3 = y3_lhs.mul(&mut y3_rhs) - t0.clone() - t2.clone();
     y3.save();
 
     // Spec steps 19-20: t0 = 3·t0
@@ -125,20 +125,20 @@ fn ec_add_proj_a0_expr(
     // save_output(), saving 3 variables vs the spec's approach.
 
     // Spec steps 25-27: X3 = t3·t1 - t4·y3
-    let t3_mul_t1 = (&mut t3).mul(&mut t1);
-    let t4_mul_y3 = (&mut t4).mul(&mut y3);
+    let t3_mul_t1 = t3.mul(&mut t1);
+    let t4_mul_y3 = t4.mul(&mut y3);
     let mut x3_out = t3_mul_t1 - t4_mul_y3;
     x3_out.save_output();
 
     // Spec steps 28-30: Y3 = t1·z3 + y3·t0
-    let t1_mul_z3 = (&mut t1).mul(&mut z3);
-    let y3_mul_t0 = (&mut y3).mul(&mut t0);
+    let t1_mul_z3 = t1.mul(&mut z3);
+    let y3_mul_t0 = y3.mul(&mut t0);
     let mut y3_out = t1_mul_z3 + y3_mul_t0;
     y3_out.save_output();
 
     // Spec steps 31-33: Z3 = z3·t4 + t0·t3
-    let z3_mul_t4 = (&mut z3).mul(&mut t4);
-    let t0_mul_t3 = (&mut t0).mul(&mut t3);
+    let z3_mul_t4 = z3.mul(&mut t4);
+    let t0_mul_t3 = t0.mul(&mut t3);
     let mut z3_out = z3_mul_t4 + t0_mul_t3;
     z3_out.save_output();
 
@@ -181,32 +181,32 @@ fn ec_add_proj_general_expr(
     //   3. Degree-2 outputs: two muls combined into a single save_output()
 
     // Spec steps 1-3
-    let mut t0 = (&mut x1).mul(&mut x2);
+    let mut t0 = x1.mul(&mut x2);
     t0.save();
-    let mut t1 = (&mut y1).mul(&mut y2);
+    let mut t1 = y1.mul(&mut y2);
     t1.save();
-    let mut t2 = (&mut z1).mul(&mut z2);
+    let mut t2 = z1.mul(&mut z2);
     t2.save();
 
     // Spec steps 4-8: t3 = (X1+Y1)·(X2+Y2) - t0 - t1 = X1·Y2 + X2·Y1
     // [combined mul-sub]
     let mut t3_lhs = x1.clone() + y1.clone();
     let mut t3_rhs = x2.clone() + y2.clone();
-    let mut t3 = (&mut t3_lhs).mul(&mut t3_rhs) - t0.clone() - t1.clone();
+    let mut t3 = t3_lhs.mul(&mut t3_rhs) - t0.clone() - t1.clone();
     t3.save();
 
     // Spec steps 9-13: t4 = (X1+Z1)·(X2+Z2) - t0 - t2 = X1·Z2 + X2·Z1
     // [combined mul-sub]
     let mut t4_lhs = x1.clone() + z1.clone();
     let mut t4_rhs = x2.clone() + z2.clone();
-    let mut t4 = (&mut t4_lhs).mul(&mut t4_rhs) - t0.clone() - t2.clone();
+    let mut t4 = t4_lhs.mul(&mut t4_rhs) - t0.clone() - t2.clone();
     t4.save();
 
     // Spec steps 14-18: t5 = (Y1+Z1)·(Y2+Z2) - t1 - t2 = Y1·Z2 + Y2·Z1
     // [combined mul-sub]
     let mut t5_lhs = y1 + z1;
     let mut t5_rhs = y2 + z2;
-    let mut t5 = (&mut t5_lhs).mul(&mut t5_rhs) - t1.clone() - t2.clone();
+    let mut t5 = t5_lhs.mul(&mut t5_rhs) - t1.clone() - t2.clone();
     t5.save();
 
     // Spec steps 19-21 give Z3 = 3b·t2 + a·t4. We absorb step 23 (Z3 = t1+Z3)
@@ -235,20 +235,20 @@ fn ec_add_proj_general_expr(
     // save_output(), saving 3 variables vs the spec's approach.
 
     // Spec steps 35-37: X3 = t3·x3 - t5·t4
-    let t3_mul_x3 = (&mut t3).mul(&mut x3);
-    let t5_mul_t4 = (&mut t5).mul(&mut t4);
+    let t3_mul_x3 = t3.mul(&mut x3);
+    let t5_mul_t4 = t5.mul(&mut t4);
     let mut x3_out = t3_mul_x3 - t5_mul_t4;
     x3_out.save_output();
 
     // Spec steps 24, 33-34: Y3 = x3·z3 + t1·t4
-    let x3_mul_z3 = (&mut x3).mul(&mut z3);
-    let t1_mul_t4 = (&mut t1).mul(&mut t4);
+    let x3_mul_z3 = x3.mul(&mut z3);
+    let t1_mul_t4 = t1.mul(&mut t4);
     let mut y3_out = x3_mul_z3 + t1_mul_t4;
     y3_out.save_output();
 
     // Spec steps 38-40: Z3 = t5·z3 + t3·t1
-    let t5_mul_z3 = (&mut t5).mul(&mut z3);
-    let t3_mul_t1 = (&mut t3).mul(&mut t1);
+    let t5_mul_z3 = t5.mul(&mut z3);
+    let t3_mul_t1 = t3.mul(&mut t1);
     let mut z3_out = t5_mul_z3 + t3_mul_t1;
     z3_out.save_output();
 

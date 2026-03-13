@@ -10,6 +10,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
@@ -18,7 +19,6 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -80,7 +80,7 @@ fn ec_double_proj_a0_expr(
     z3.save();
 
     // Spec step 5
-    let mut t1 = (&mut y1).mul(&mut z1);
+    let mut t1 = y1.mul(&mut z1);
     t1.save();
 
     // Spec step 6. Must save before const mul to prevent limb overflow.
@@ -97,9 +97,9 @@ fn ec_double_proj_a0_expr(
 
     // Spec steps 16-18: t1 = X1·Y1, X3 = t0·t1, X3 = X3+X3
     // X3 = 2·t0·(X1·Y1)
-    let mut t1_xy = (&mut x1).mul(&mut y1);
+    let mut t1_xy = x1.mul(&mut y1);
     t1_xy.save();
-    let mut x3_out = (&mut t0).mul(&mut t1_xy).int_mul(2);
+    let mut x3_out = t0.mul(&mut t1_xy).int_mul(2);
     x3_out.save_output();
 
     // Spec steps 8-9, 14-15: Y3 = X3_step8 + t0·Y3_step9
@@ -112,11 +112,11 @@ fn ec_double_proj_a0_expr(
     //      = t0² + t2·(4·t0 + z3)
     // This avoids saving (t0 + 4·t2) as a separate variable.
     let mut z3_plus_4t0 = z3.clone() + t0.clone().int_mul(4);
-    let mut y3_out = t0.square() + (&mut t2).mul(&mut z3_plus_4t0);
+    let mut y3_out = t0.square() + t2.mul(&mut z3_plus_4t0);
     y3_out.save_output();
 
     // Spec step 10
-    let mut z3_out = (&mut t1).mul(&mut z3);
+    let mut z3_out = t1.mul(&mut z3);
     z3_out.save_output();
 
     let builder = (*builder).borrow().clone();
@@ -163,11 +163,11 @@ fn ec_double_proj_general_expr(
     t2.save();
 
     // Spec steps 4-5: t3 = 2·X1·Y1
-    let mut t3 = (&mut x1).mul(&mut y1).int_mul(2);
+    let mut t3 = x1.mul(&mut y1).int_mul(2);
     t3.save();
 
     // Spec steps 6-7: z3 = 2·X1·Z1
-    let mut z3 = (&mut x1).mul(&mut z1).int_mul(2);
+    let mut z3 = x1.mul(&mut z1).int_mul(2);
     z3.save();
 
     // Spec steps 8-10: y3 = a·z3 + 3b·t2
@@ -177,7 +177,7 @@ fn ec_double_proj_general_expr(
     // Spec steps 11, 14: x3 = t3·(t1 - y3)
     // (t1-y3) is NOT saved separately — inlined into the mul with t3.
     let mut x3_diff = t1.clone() - y3.clone();
-    let mut x3 = (&mut t3).mul(&mut x3_diff);
+    let mut x3 = t3.mul(&mut x3_diff);
     x3.save();
 
     // Spec steps 12-13: Y3 = (t1+y3)·(t1-y3)
@@ -195,21 +195,21 @@ fn ec_double_proj_general_expr(
     t3.save();
 
     // Spec steps 25-26: t2_yz = 2·Y1·Z1
-    let mut t2_yz = (&mut y1).mul(&mut z1).int_mul(2);
+    let mut t2_yz = y1.mul(&mut z1).int_mul(2);
     t2_yz.save();
 
     // Spec steps 27-28: X3 = x3 - t2_yz·t3
-    let mut x3_out = x3 - (&mut t2_yz).mul(&mut t3);
+    let mut x3_out = x3 - t2_yz.mul(&mut t3);
     x3_out.save_output();
 
     // Spec steps 20-24: Y3 = y3 + (3·t0 + t2)·t3
     // 3·t0 + t2 = 3·X1² + a·Z1²
     let mut t0_sum = t0.int_mul(3) + t2;
-    let mut y3_out = y3 + (&mut t0_sum).mul(&mut t3);
+    let mut y3_out = y3 + t0_sum.mul(&mut t3);
     y3_out.save_output();
 
     // Spec steps 29-31: Z3 = 4·t2_yz·t1
-    let mut z3_out = (&mut t2_yz).mul(&mut t1).int_mul(4);
+    let mut z3_out = t2_yz.mul(&mut t1).int_mul(4);
     z3_out.save_output();
 
     let builder = (*builder).borrow().clone();
