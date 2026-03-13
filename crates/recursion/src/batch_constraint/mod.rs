@@ -47,10 +47,11 @@ use crate::{
     },
     bus::{
         AirPresenceBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, EqNegBaseRandBus,
-        EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus, FractionFolderInputBus,
-        HyperdimBus, InteractionsFoldingInputBus, NLiftBus, PublicValuesBus, SelHypercubeBus,
-        SelUniBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, Eq3bShapeBus,
+        EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
+        FractionFolderInputBus, HyperdimBus, InteractionsFoldingInputBus, NLiftBus,
+        PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
+        XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerCpuTraceGenerator},
     system::{
@@ -99,6 +100,7 @@ pub struct BatchConstraintModule {
     expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     n_lift_bus: NLiftBus,
     eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
+    eq_3b_shape_bus: Eq3bShapeBus,
 
     zero_n_bus: EqZeroNBus,
     eq_sharp_uni_bus: EqSharpUniBus,
@@ -149,6 +151,7 @@ impl BatchConstraintModule {
             expression_claim_n_max_bus: bus_inventory.expression_claim_n_max_bus,
             n_lift_bus: bus_inventory.n_lift_bus,
             eq_n_logup_n_max_bus: bus_inventory.eq_n_logup_n_max_bus,
+            eq_3b_shape_bus: bus_inventory.eq_3b_shape_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             univariate_sumcheck_input_bus: UnivariateSumcheckInputBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
@@ -359,6 +362,7 @@ impl AirModule for BatchConstraintModule {
         };
         let eq_3b_air = Eq3bAir {
             eq_3b_bus: self.eq_3b_bus,
+            eq_3b_shape_bus: self.eq_3b_shape_bus,
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
             l_skip,
         };

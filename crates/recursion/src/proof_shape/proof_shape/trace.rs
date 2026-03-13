@@ -114,6 +114,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.starting_cidx = F::from_usize(cidx);
                 let has_preprocessed = child_vk.inner.per_air[*idx].preprocessed_data.is_some();
                 cidx += has_preprocessed as usize;
+                cols.n_logup = F::from_usize(preflight.proof_shape.n_logup);
 
                 cols.is_present = F::ONE;
                 cols.height = F::from_usize(height);
@@ -217,6 +218,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.starting_tidx = F::from_usize(preflight.proof_shape.starting_tidx[idx]);
                 cols.starting_cidx = F::from_usize(cidx);
+                cols.n_logup = F::from_usize(preflight.proof_shape.n_logup);
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
@@ -320,6 +322,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
                 cols.is_n_max_greater = F::from_bool(preflight.proof_shape.n_max > n_logup);
+                cols.n_logup = F::from_usize(n_logup);
 
                 // n_logup
                 cols.starting_cidx = F::from_usize(n_logup);

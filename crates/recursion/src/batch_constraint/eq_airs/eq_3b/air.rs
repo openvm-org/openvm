@@ -18,6 +18,7 @@ use crate::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, Eq3bBus, Eq3bMessage,
     },
+    bus::{Eq3bShapeBus, Eq3bShapeMessage},
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
         base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
@@ -36,6 +37,7 @@ pub struct Eq3bColumns<T> {
     pub interaction_idx: T,
 
     pub n_lift: T,
+    pub n_logup: T,
     pub two_to_the_n_lift: T,
     pub n: T,
     pub hypercube_volume: T, // 2^n
@@ -56,6 +58,7 @@ pub struct Eq3bColumns<T> {
 
 pub struct Eq3bAir {
     pub eq_3b_bus: Eq3bBus,
+    pub eq_3b_shape_bus: Eq3bShapeBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
 
     pub l_skip: usize,
@@ -137,6 +140,12 @@ where
             .when(within_one_interaction.clone())
             .assert_eq(next.n_lift, local.n_lift);
         builder
+            .when(within_one_air.clone())
+            .assert_eq(next.n_lift, local.n_lift);
+        builder
+            .when(within_one_air.clone())
+            .assert_eq(next.n_logup, local.n_logup);
+        builder
             .when(within_one_interaction.clone())
             .assert_eq(next.two_to_the_n_lift, local.two_to_the_n_lift);
         builder
@@ -176,6 +185,10 @@ where
             .when(local.is_first_in_interaction)
             .when(local.n_at_least_n_lift)
             .assert_one(local.two_to_the_n_lift);
+        builder
+            .when(is_last_in_interaction.clone())
+            .when(not(local.has_no_interactions))
+            .assert_eq(local.n + AB::Expr::ONE, local.n_logup);
 
         builder.when(next.is_valid - next.is_first).assert_eq(
             next.running_idx,
@@ -258,10 +271,16 @@ where
             local.n_at_least_n_lift * within_one_interaction,
         );
 
-        // The air with this sort_idx has that n_lift, because it's constrained by some
-        // HyperdimBusMessages between some other AIRs
-
-        // This pidx has that n_logup because of some GkrModuleMessage between some other AIRs
+        self.eq_3b_shape_bus.lookup_key(
+            builder,
+            local.proof_idx,
+            Eq3bShapeMessage {
+                sort_idx: local.sort_idx,
+                n_lift: local.n_lift,
+                n_logup: local.n_logup,
+            },
+            local.is_first_in_air,
+        );
 
         self.eq_3b_bus.send(
             builder,

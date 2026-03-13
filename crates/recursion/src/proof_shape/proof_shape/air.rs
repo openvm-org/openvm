@@ -19,10 +19,11 @@ use crate::{
     bus::{
         AirPresenceBus, AirPresenceBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
         CachedCommitBus, CachedCommitBusMessage, CommitmentsBus, CommitmentsBusMessage,
-        EqNsNLogupMaxBus, EqNsNLogupMaxMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
-        FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
-        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus,
-        NLiftMessage, PreHashBus, PreHashMessage, TranscriptBus, TranscriptBusMessage,
+        Eq3bShapeBus, Eq3bShapeMessage, EqNsNLogupMaxBus, EqNsNLogupMaxMessage,
+        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, FractionFolderInputBus,
+        FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
+        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus, NLiftMessage,
+        PreHashBus, PreHashMessage, TranscriptBus, TranscriptBusMessage,
     },
     primitives::bus::{
         PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
@@ -90,6 +91,7 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     /// Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.
     pub n_max: F,
     pub is_n_max_greater: F,
+    pub n_logup: F,
 
     pub num_air_id_lookups: F,
 }
@@ -163,6 +165,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub transcript_bus: TranscriptBus,
     pub n_lift_bus: NLiftBus,
     pub eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
+    pub eq_3b_shape_bus: Eq3bShapeBus,
 
     // For continuations
     pub cached_commit_bus: CachedCommitBus,
@@ -236,6 +239,9 @@ where
 
         builder.assert_bool(local.is_present);
         builder.when(local.is_present).assert_one(local.is_valid);
+        builder
+            .when(local.is_valid)
+            .assert_eq(local.n_logup, next.n_logup);
 
         builder
             .when(local.is_first)
@@ -844,7 +850,7 @@ where
         let limb_to_range_check_inv = local.n_sign_bit;
         let limb_times_inv = limb_to_range_check * limb_to_range_check_inv;
         let msb_limb_zero_bits_exp = local.log_height;
-        let n_logup = local.starting_cidx;
+        let n_logup = local.n_logup;
 
         let mut prefix = AB::Expr::ZERO;
         let mut expected_limb_to_range_check = AB::Expr::ZERO;
@@ -870,6 +876,7 @@ where
             .when(not::<AB::Expr>(limb_times_inv.clone()))
             .assert_zero(n_logup);
         when_last.assert_eq(limb_to_range_check, expected_limb_to_range_check);
+        when_last.assert_eq(local.starting_cidx, n_logup.clone());
         msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);
 
         self.pow_bus.lookup_key(
@@ -941,7 +948,7 @@ where
             builder,
             local.proof_idx,
             EqNsNLogupMaxMessage {
-                n_logup,
+                n_logup: n_logup.clone(),
                 n_max: local.n_max,
             },
             local.is_last,
@@ -965,6 +972,17 @@ where
                 air_idx,
                 n_lift: (local.log_height - AB::Expr::from_usize(self.l_skip))
                     * (AB::Expr::ONE - local.n_sign_bit),
+            },
+            local.is_present,
+        );
+        self.eq_3b_shape_bus.add_key_with_lookups(
+            builder,
+            local.proof_idx,
+            Eq3bShapeMessage {
+                sort_idx: local.sorted_idx.into(),
+                n_lift: (local.log_height - AB::Expr::from_usize(self.l_skip))
+                    * (AB::Expr::ONE - local.n_sign_bit),
+                n_logup: local.n_logup.into(),
             },
             local.is_present,
         );

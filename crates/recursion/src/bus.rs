@@ -660,6 +660,16 @@ define_typed_per_proof_lookup_bus!(EqNsNLogupMaxBus, EqNsNLogupMaxMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct Eq3bShapeMessage<T> {
+    pub sort_idx: T,
+    pub n_lift: T,
+    pub n_logup: T,
+}
+
+define_typed_per_proof_lookup_bus!(Eq3bShapeBus, Eq3bShapeMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ConstraintsFoldingInputMessage<T> {
     pub tidx: T,
 }
