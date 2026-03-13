@@ -256,7 +256,10 @@ fn test_bls12381_g2_affine() {
             (expected_neg, r_neg),
             (expected_double, r_double),
         ] {
-            assert_eq!(convert_g2_affine_halo2_to_openvm(expected), actual);
+            assert_eq!(
+                convert_g2_affine_halo2_to_openvm(expected),
+                actual.normalize()
+            );
         }
     }
 }

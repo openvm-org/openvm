@@ -105,19 +105,22 @@ mod guest_tests {
         use {
             openvm_circuit::{
                 arch::DenseRecordArena,
-                openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend},
+                openvm_cuda_backend::{
+                    engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend,
+                },
                 system::cuda::SystemChipInventoryGPU,
             },
             openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
         };
         #[cfg(not(feature = "cuda"))]
         use {
-            openvm_circuit::{
-                arch::{MatrixRecordArena, VmField},
-                system::SystemChipInventory,
+            openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
+            openvm_stark_backend::{
+                config::{StarkGenericConfig, Val},
+                engine::StarkEngine,
+                p3_field::PrimeField32,
+                prover::cpu::{CpuBackend, CpuDevice},
             },
-            openvm_cpu_backend::{CpuBackend, CpuDevice},
-            openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val},
         };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -153,10 +156,9 @@ mod guest_tests {
         #[cfg(not(feature = "cuda"))]
         impl<E, SC> VmBuilder<E> for EcdsaBuilder
         where
-            SC: StarkProtocolConfig,
+            SC: StarkGenericConfig,
             E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-            Val<SC>: VmField,
-            SC::EF: Ord,
+            Val<SC>: PrimeField32,
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;
@@ -186,7 +188,7 @@ mod guest_tests {
         }
 
         #[cfg(feature = "cuda")]
-        impl VmBuilder<BabyBearPoseidon2GpuEngine> for EcdsaBuilder {
+        impl VmBuilder<GpuBabyBearPoseidon2Engine> for EcdsaBuilder {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventoryGPU;
             type RecordArena = DenseRecordArena;
@@ -205,13 +207,13 @@ mod guest_tests {
                 ChipInventoryError,
             > {
                 let mut chip_complex =
-                    VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
+                    VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
                         &Rv32WeierstrassBuilder,
                         &config.weierstrass,
                         circuit,
                     )?;
                 let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
+                VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
                     &Sha2ProverExt,
                     &config.sha2,
                     inventory,
@@ -285,18 +287,20 @@ mod host_tests {
 
         // Generic add can handle equal or unequal points.
         #[allow(clippy::op_ref)]
-        let p3 = &p1 + &p2;
+        let p3 = (&p1 + &p2).normalize();
         #[allow(clippy::op_ref)]
-        let p4 = &p2 + &p2;
+        let p4 = (&p2 + &p2).normalize();
 
         // Add assign and double assign
         let mut sum = P256Point::from_xy(x1, y1).unwrap();
         sum += &p2;
+        let sum = sum.normalize();
         if sum.x() != p3.x() || sum.y() != p3.y() {
             panic!();
         }
         let mut double = P256Point::from_xy(x2, y2).unwrap();
         double.double_assign();
+        let double = double.normalize();
         if double.x() != p4.x() || double.y() != p4.y() {
             panic!();
         }
@@ -305,8 +309,8 @@ mod host_tests {
         let p1 = P256Point::from_xy(x1, y1).unwrap();
         let scalar = P256Scalar::from_u32(3);
         #[allow(clippy::op_ref)]
-        let p2 = &p1.double() + &p1;
-        let result = msm(&[scalar], &[p1]);
+        let p2 = (&p1.double() + &p1).normalize();
+        let result = msm(&[scalar], &[p1]).normalize();
         if result.x() != p2.x() || result.y() != p2.y() {
             panic!();
         }

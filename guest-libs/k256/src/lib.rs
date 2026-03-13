@@ -2,6 +2,8 @@
 // that uses zkvm instructions
 
 #![no_std]
+// elliptic_curve re-exports generic_array 0.x which is deprecated in favor of 1.x
+#![allow(deprecated)]
 extern crate alloc;
 
 use elliptic_curve::{consts::U32, point::PointCompression, Curve, CurveArithmetic, PrimeCurve};
