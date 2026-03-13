@@ -45,6 +45,10 @@ tracing = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 toml = { workspace = true }
 
+[dev-dependencies]
+openvm-verify-stark-circuit = { workspace = true }
+openvm-toolchain-tests = { workspace = true }
+
 [features]
 default = ["parallel", "jemalloc"]
 evm-prove = []

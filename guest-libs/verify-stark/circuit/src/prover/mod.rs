@@ -1,30 +1,37 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use eyre::Result;
 use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
 };
-use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
+use openvm_continuations::{
+    bn254::{CommitBytes, DagCommitBytes},
+    circuit::{deferral::DeferralMerkleProofs, Circuit},
+    prover::{debug_constraints, DeferralCircuitProver},
+    SC,
+};
+use openvm_cpu_backend::CpuBackend;
+use openvm_recursion_circuit::system::{
+    AggregationSubCircuit, VerifierConfig, VerifierSubCircuit, VerifierTraceGen,
+};
 use openvm_stark_backend::{
+    codec::Decode,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::{CommittedTraceData, DeviceDataTransporter, ProverBackend},
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, DIGEST_SIZE, EF, F};
+use openvm_verify_stark_host::NonRootStarkProof;
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
 
-use openvm_continuations::{
-    bn254::{CommitBytes, DagCommitBytes},
-    circuit::{deferral::DeferralMerkleProofs, Circuit},
-    prover::debug_constraints,
-    SC,
-};
-
-use crate::{DeferredVerifyCircuit, DeferredVerifyTraceGen};
+use crate::{DeferredVerifyCircuit, DeferredVerifyTraceGen, DeferredVerifyTraceGenImpl};
 
 mod trace;
+
+pub type DeferredVerifyCpuProver =
+    DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 
 pub struct DeferredVerifyProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
@@ -186,5 +193,49 @@ impl<
 
     pub fn get_cached_commit(&self) -> <PB as ProverBackend>::Commitment {
         self.child_vk_pcs_data.commitment
+    }
+}
+
+pub struct DeferredVerifyCircuitProver<
+    E: StarkEngine<SC = SC>,
+    S: AggregationSubCircuit + VerifierTraceGen<E::PB, SC>,
+    T: DeferredVerifyTraceGen<E::PB>,
+> {
+    prover: DeferredVerifyProver<E::PB, S, T>,
+    phantom: PhantomData<E>,
+}
+
+impl<E, S, T> DeferredVerifyCircuitProver<E, S, T>
+where
+    E: StarkEngine<SC = SC>,
+    E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit + VerifierTraceGen<E::PB, SC>,
+    T: DeferredVerifyTraceGen<E::PB>,
+{
+    pub fn new(prover: DeferredVerifyProver<E::PB, S, T>) -> Self {
+        Self {
+            prover,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<PB, S, T, E> DeferralCircuitProver<SC> for DeferredVerifyCircuitProver<E, S, T>
+where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
+    T: DeferredVerifyTraceGen<PB>,
+    E: StarkEngine<PB = PB, SC = SC>,
+    PB::Matrix: Clone,
+{
+    fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
+        self.prover.get_vk()
+    }
+
+    fn prove(&self, input_bytes: &[u8]) -> Proof<SC> {
+        let non_root_proof = NonRootStarkProof::decode_from_bytes(input_bytes).unwrap();
+        self.prover
+            .prove_no_def::<E>(non_root_proof.inner, &non_root_proof.user_pvs_proof)
+            .expect("DeferredVerifyProver::prove_no_def failed")
     }
 }

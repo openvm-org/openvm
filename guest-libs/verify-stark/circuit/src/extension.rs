@@ -71,14 +71,13 @@ fn f_slice_to_bytes(slice: &[F]) -> Vec<u8> {
 ///////////////////////////////////////////////////////////////////////////////
 /// DEFERRAL STATE GENERATION
 ///////////////////////////////////////////////////////////////////////////////
-pub fn get_deferral_state(
+pub fn get_raw_deferral_results(
     vk: &NonRootStarkVerifyingKey,
     proofs: &[NonRootStarkProof],
-    deferral_idx: u32,
-) -> Result<DeferralState> {
+) -> Result<Vec<RawDeferralResult>> {
     let config = SC::default_from_params(vk.mvk.inner.params.clone());
 
-    let raw_results = proofs
+    proofs
         .iter()
         .map(|proof| {
             let mut ts = default_duplex_sponge_recorder();
@@ -88,18 +87,27 @@ pub fn get_deferral_state(
             let (left_ts, right_ts) = poseidon2_input_to_digests(final_ts_state);
             let ts_commit = poseidon2_compress_with_capacity(left_ts, right_ts).0;
             let cached_commit = vk.baseline.internal_recursive_dag_commit.cached_commit;
-            let input_commit =
-                poseidon2_hash_slice(&vec![ts_commit, cached_commit].into_flattened()).0;
+            // let input_commit =
+            //     poseidon2_hash_slice(&vec![ts_commit, cached_commit].into_flattened()).0;
+
+            // TODO[INT-6415]: hash slice, not compress
+            let input_commit = poseidon2_compress_with_capacity(ts_commit, cached_commit).0;
 
             Ok(RawDeferralResult {
                 input: f_slice_to_bytes(&input_commit),
                 output_raw: output_raw_from_proof(proof),
             })
         })
-        .collect::<Result<_>>()?;
+        .collect()
+}
 
+pub fn get_deferral_state(
+    vk: &NonRootStarkVerifyingKey,
+    proofs: &[NonRootStarkProof],
+    deferral_idx: u32,
+) -> Result<DeferralState> {
+    let raw_results = get_raw_deferral_results(vk, proofs)?;
     let results =
         generate_deferral_results(raw_results, deferral_idx, &deferral_poseidon2_chip::<F>());
-
     Ok(DeferralState::new(results))
 }

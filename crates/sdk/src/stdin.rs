@@ -4,7 +4,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use openvm_circuit::arch::Streams;
+use openvm_circuit::arch::{deferral::DeferralState, Streams};
 use openvm_stark_backend::{
     codec::{Decode, Encode},
     p3_field::Field,
@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 pub struct StdIn<F = crate::F> {
     pub buffer: VecDeque<Vec<F>>,
     pub kv_store: HashMap<Vec<u8>, Vec<u8>>,
+    pub deferrals: Vec<DeferralState>,
 }
 
 impl<F: Field> StdIn<F> {
@@ -55,6 +56,7 @@ impl<F: Field> From<StdIn<F>> for Streams<F> {
         }
         let mut ret = Streams::new(data);
         ret.kv_store = Arc::new(std_in.kv_store);
+        ret.deferrals = std_in.deferrals;
         ret
     }
 }
