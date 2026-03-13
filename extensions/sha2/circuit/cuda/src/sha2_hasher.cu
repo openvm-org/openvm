@@ -880,7 +880,12 @@ __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t
     }
 
     RowSlice row(trace + row_idx, trace_height);
-    row.fill_zero(0, Sha2Layout<V>::WIDTH);
+    uint32_t intermed_4_offset =
+        SHA2_COL_INDEX(V, Sha2BlockHasherRoundCols, inner.schedule_helper.intermed_4);
+    uint32_t intermed_8_offset =
+        SHA2_COL_INDEX(V, Sha2BlockHasherRoundCols, inner.schedule_helper.intermed_8);
+    row.fill_zero(0, intermed_4_offset);
+    row.fill_zero(intermed_8_offset, Sha2Layout<V>::WIDTH - intermed_8_offset);
     SHA2_WRITE_ROUND(V, row, request_id, Fp::zero());
     RowSlice inner_row = row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
 

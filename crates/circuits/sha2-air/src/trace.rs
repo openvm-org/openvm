@@ -662,5 +662,4 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
             }
         }
     }
-
 }

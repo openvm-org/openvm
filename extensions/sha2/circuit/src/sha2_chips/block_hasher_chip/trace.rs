@@ -209,8 +209,7 @@ where
             let next = Sha2RoundColsRef::from::<C>(
                 &first_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
             );
-            let last_row =
-                &mut rest[last_row_start - C::BLOCK_HASHER_WIDTH..last_row_start];
+            let last_row = &mut rest[last_row_start - C::BLOCK_HASHER_WIDTH..last_row_start];
             let mut local = Sha2RoundColsRefMut::from::<C>(
                 &mut last_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
             );
