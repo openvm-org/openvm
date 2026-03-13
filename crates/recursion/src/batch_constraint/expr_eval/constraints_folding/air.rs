@@ -146,7 +146,7 @@ where
         // If we don't have constraints then `value` is zero
         assert_zeros(
             &mut builder
-                .when(local.is_first)
+                .when(local.is_first_in_air)
                 .when(not::<AB::Expr>(is_same_air.clone())),
             local.value,
         );
