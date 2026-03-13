@@ -13,8 +13,9 @@ use p3_matrix::Matrix;
 use crate::{
     batch_constraint::bus::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
-        BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
-        UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage,
+        BatchConstraintInnerMessageType, FractionsCanonicalBus, FractionsCanonicalMessage,
+        SumcheckClaimBus, SumcheckClaimMessage, UnivariateSumcheckInputBus,
+        UnivariateSumcheckInputMessage,
     },
     bus::{
         BatchConstraintModuleBus, BatchConstraintModuleMessage, FractionFolderInputBus,
@@ -32,6 +33,7 @@ pub struct FractionsFolderCols<T> {
     pub is_first: T,
 
     pub air_idx: T,
+    pub sort_idx: T,
 
     pub tidx: T,
 
@@ -46,6 +48,7 @@ pub struct FractionsFolderCols<T> {
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
+    pub fractions_canonical_bus: FractionsCanonicalBus,
     pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub sumcheck_bus: SumcheckClaimBus,
     pub mu_bus: BatchConstraintConductorBus,
@@ -108,6 +111,11 @@ where
             .assert_eq(next.air_idx, local.air_idx - AB::Expr::ONE);
         // Air index ends at 0
         builder.when(is_last.clone()).assert_zero(local.air_idx);
+        // Canonical sort index grows from 0..num_present_airs-1.
+        builder.when(local.is_first).assert_zero(local.sort_idx);
+        builder
+            .when(is_transition.clone())
+            .assert_eq(next.sort_idx, local.sort_idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
         // Transition Constraints
@@ -191,6 +199,26 @@ where
                 num_present_airs: local.air_idx + AB::Expr::ONE,
             },
             local.is_first,
+        );
+        self.fractions_canonical_bus.send(
+            builder,
+            local.proof_idx,
+            FractionsCanonicalMessage {
+                sort_idx: local.sort_idx.into(),
+                p: local.sum_claim_p.map(Into::into),
+                q: local.sum_claim_q.map(Into::into),
+            },
+            local.is_valid,
+        );
+        self.fractions_canonical_bus.receive(
+            builder,
+            local.proof_idx,
+            FractionsCanonicalMessage {
+                sort_idx: local.sort_idx.into(),
+                p: local.sum_claim_p.map(Into::into),
+                q: local.sum_claim_q.map(Into::into),
+            },
+            local.is_valid,
         );
 
         // Sample mu

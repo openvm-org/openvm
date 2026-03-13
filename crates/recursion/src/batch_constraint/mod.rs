@@ -22,7 +22,7 @@ use crate::{
     batch_constraint::{
         bus::{
             BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqNOuterBus,
-            EqNegInternalBus, EqSharpUniBus, EqZeroNBus, ExpressionClaimBus,
+            EqNegInternalBus, EqSharpUniBus, EqZeroNBus, ExpressionClaimBus, FractionsCanonicalBus,
             InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
             UnivariateSumcheckInputBus,
         },
@@ -113,6 +113,7 @@ pub struct BatchConstraintModule {
     symbolic_expression_bus: SymbolicExpressionBus,
     expression_claim_bus: ExpressionClaimBus,
     interactions_folding_bus: InteractionsFoldingBus,
+    fractions_canonical_bus: FractionsCanonicalBus,
     constraints_folding_bus: ConstraintsFoldingBus,
     power_checker_bus: PowerCheckerBus,
 
@@ -166,6 +167,7 @@ impl BatchConstraintModule {
             symbolic_expression_bus: SymbolicExpressionBus::new(b.new_bus_idx()),
             expression_claim_bus: ExpressionClaimBus::new(b.new_bus_idx()),
             interactions_folding_bus: InteractionsFoldingBus::new(b.new_bus_idx()),
+            fractions_canonical_bus: FractionsCanonicalBus::new(b.new_bus_idx()),
             constraints_folding_bus: ConstraintsFoldingBus::new(b.new_bus_idx()),
             power_checker_bus: bus_inventory.power_checker_bus,
             l_skip,
@@ -329,6 +331,7 @@ impl AirModule for BatchConstraintModule {
             transcript_bus: self.transcript_bus,
             univariate_sumcheck_input_bus: self.univariate_sumcheck_input_bus,
             fraction_folder_input_bus: self.fraction_folder_input_bus,
+            fractions_canonical_bus: self.fractions_canonical_bus,
             sumcheck_bus: self.sumcheck_bus,
             mu_bus: self.batch_constraint_conductor_bus,
             gkr_claim_bus: self.gkr_claim_bus,

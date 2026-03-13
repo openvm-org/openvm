@@ -81,6 +81,7 @@ impl RowMajorChip<F> for FractionsFolderTraceGenerator {
                         cols.is_first = F::from_bool(i == 0);
                         cols.proof_idx = F::from_usize(pidx);
                         cols.air_idx = F::from_usize(air_idx);
+                        cols.sort_idx = F::from_usize(i);
                         cols.sum_claim_p
                             .copy_from_slice(npa[air_idx].as_basis_coefficients_slice());
                         cols.sum_claim_q

@@ -110,6 +110,16 @@ define_typed_per_proof_permutation_bus!(InteractionsFoldingBus, InteractionsFold
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct FractionsCanonicalMessage<T> {
+    pub sort_idx: T,
+    pub p: [T; D_EF],
+    pub q: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(FractionsCanonicalBus, FractionsCanonicalMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ConstraintsFoldingMessage<T> {
     pub air_idx: T,
     pub constraint_idx: T,
