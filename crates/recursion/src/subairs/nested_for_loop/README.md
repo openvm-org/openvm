@@ -2,7 +2,7 @@
 
 ## Overview
 
-This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by a const generic `DEPTH_MINUS_ONE` (e.g., `NestedForLoopSubAir<1>` for a single nested loop, `NestedForLoopSubAir<2>` for two nested loops). It also enforces that `is_enabled` is boolean, that disabled rows only appear after all enabled rows, and that each tracked loop counter starts at `0` when its scope begins.
+This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by a const generic `DEPTH_MINUS_ONE` (e.g., `NestedForLoopSubAir<1>` for a single nested loop, `NestedForLoopSubAir<2>` for two nested loops). It also enforces that `is_enabled` is boolean, that disabled rows only appear after all enabled rows, and that each tracked loop counter starts at `0` on the first row of its scope at the corresponding level.
 
 ## Columns
 
@@ -15,25 +15,40 @@ For a nested loop with `DEPTH` levels (numbered 0 to `DEPTH-1`), where level 0 i
 
 **Note:** The current (innermost) level (level `DEPTH-1`) does not have `counter` columns. The caller should add these columns if needed.
 
+**Scope at level `level` (for a trace satisfying this SubAir):**
+- A scope at level `level` starts on row 0 if `level = 0`.
+- For `level > 0`, a scope at level `level` starts on any enabled row with
+  `is_first[level - 1] = 1`.
+- A scope at level `level` consists of the rows from one such start row up to, but not including, the
+  next start row for the same level; if there is no later start row, it continues until the first
+  disabled row or the end of the trace.
+
 ### Behavior
 
-- Whenever the next row stays enabled, each `counter[level]` either stays the same or increases by 1.
-- Each tracked `counter[level]` is forced to start at `0` on the first enabled row of its scope.
+- Within a scope at level `level`, each `counter[level]` either stays the same or increases by 1 from
+  one enabled row to the next.
+- Each tracked `counter[level]` is forced to start at `0` on the first row of each scope at level
+  `level`.
 - Enabled rows must be contiguous and once `is_enabled = 0`, all later rows must also be disabled.
-- Padding rows are unconstrained except that they must keep `is_enabled = 0` (by definition).
+- Disabled rows must have all tracked `is_first[level]` flags equal to `0`.
+- Padding-row counters are otherwise unconstrained except for any first-row constraints that also apply.
 
 ## Usage
 
 **What this SubAir constrains:**
 - `is_enabled` is boolean and once it becomes `0`, it stays `0` for all subsequent rows
-- `counter[level]` is `0` on the first enabled row of each tracked loop scope
-- `counter[level]` increments by 0 or 1 for all parent loops (excludes innermost loop, levels 0 to `DEPTH-2`)
+- `counter[level]` is `0` on the first row of each scope at level `level`
+- `counter[level]` increments by 0 or 1 for all parent loops (excludes innermost loop, levels
+  0 to `DEPTH-2`) within the corresponding scope at level `level`
 - `is_first[level]` flags for all loops (excludes outermost loop, levels 1 to `DEPTH-1`) are set correctly at loop iteration boundaries (on enabled rows only)
+- `!is_enabled => is_first[level] = 0` for every tracked `is_first` flag
+  (equivalently, in callers that name the flag `is_valid`, `!is_valid => all is_first` flags are `0`)
 
 **What the caller must constrain:**
 - Final values of `counter[level]` (for all parent loops, excludes innermost loop)
 - Any non-zero-based interpretation of a tracked loop index
-- `is_first[level]` flags on disabled rows (if required; this SubAir does NOT constrain them when `is_enabled = 0`)
+- Any additional semantics on disabled rows beyond the enforced invariant
+  `!is_enabled => is_first[level] = 0`
 - Innermost loop counter and its behavior (see example below)
 
 **Example:**
@@ -59,20 +74,24 @@ Example constraint code:
 
 // loop starts at START
 builder
-    .when(local_io.loop_io.is_first)
+    .when(local_io.loop_io.is_first[1])
     .assert_eq(local_io.counter, AB::Expr::from_canonical_u32(START));
 
 // loop increments by STEP
 let is_inner_transition = NestedForLoopSubAir::local_is_transition(
     next_io.loop_io.is_enabled,
-    next_io.loop_io.is_first,
+    next_io.loop_io.is_first[1],
 );
 builder
     .when(is_inner_transition.clone())
     .assert_eq(next_io.counter, local_io.counter + AB::Expr::from_canonical_u32(STEP));
 
 // loop ends at END
-let is_inner_last = AB::Expr::ONE - is_inner_transition;
+let is_inner_last = NestedForLoopSubAir::local_is_last(
+    local_io.loop_io.is_enabled,
+    next_io.loop_io.is_enabled,
+    next_io.loop_io.is_first[1],
+);
 builder
     .when(is_inner_last)
     .assert_eq(local_io.counter, AB::Expr::from_canonical_u32(END));
@@ -92,10 +111,26 @@ let counter_diff = next_io.counter[level] - local_io.counter[level];
 
 ### 1. Base Constraints
 
-#### `counter[level]` increments by 0 or 1 while enabled
+#### `counter[level]` increments by 0 or 1 within a scope at level `level`
+
+For `level > 0`, staying in the same scope at level `level` is equivalent to staying in the same
+parent-loop iteration. Let `parent_level = level - 1` and define
+
+```rust
+let parent_is_transition =
+    next_io.is_enabled.clone() - next_io.is_first[parent_level].clone();
+```
+
+This equals `1` exactly when the next row is enabled and does not begin a new iteration of the
+parent loop.
 
 $$
-\text{is\\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
+\text{level 0: } \text{is\\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}
+$$
+
+$$
+\text{level > 0: } \text{parent\\_is\\_transition} \land \text{is\\_enabled}\_{\text{next}}
+\Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
 $$
 ```rust
 // Level 0
@@ -110,6 +145,9 @@ builder
     .when(next_io.is_enabled.clone())
     .assert_bool(counter_diff.clone());
 ```
+
+When the next row leaves the current scope at level `level`, a nested counter is not constrained by
+this transition rule; instead, the corresponding scope-start constraint resets it to `0`.
 
 ### 2. Contiguous Enabled Rows
 
@@ -140,13 +178,32 @@ builder.when_first_row().when(local_io.is_enabled).assert_one(local_io.is_first[
 builder.when(parent_is_first).when(local_io.is_enabled).assert_one(local_io.is_first[level]);
 ```
 
-#### First enabled row resets `counter[level]` to `0`
+#### Disabled rows clear all `is_first` flags
 
-For the outermost tracked counter this happens on the first row of the trace. For deeper tracked
-counters it happens when the enclosing scope starts.
+For every tracked boundary flag, the AIR enforces `is_first[level] => is_enabled` together with
+booleanity of `is_first[level]`. Therefore every row satisfies:
 
 $$
-\text{is\\_enabled} \Rightarrow \text{counter[level]} = 0\quad \text{(first row of scope)} \qquad (3a)
+\neg \text{is\\_enabled} \Rightarrow \text{is\\_first[level]} = 0
+$$
+
+Equivalently, in AIRs that name the row-enable flag `is_valid`,
+`!is_valid => all is_first` flags are `0`.
+
+```rust
+builder.assert_bool(local_io.is_first[level].clone());
+builder
+    .when(local_io.is_first[level].clone())
+    .assert_one(local_io.is_enabled.clone());
+```
+
+#### First enabled row resets `counter[level]` to `0`
+
+For `level = 0`, this happens on the first row of the trace. For deeper tracked counters, it
+happens on the first row of a scope at level `level`.
+
+$$
+\text{is\\_enabled} \Rightarrow \text{counter[level]} = 0\quad \text{(first row of a scope at level `level`)} \qquad (3a)
 $$
 ```rust
 // Level 0 (outermost tracked counter)
@@ -154,7 +211,7 @@ builder
     .when_first_row()
     .assert_zero(local_io.counter[0]);
 
-// Level > 0 (tracked counter inside an enclosing scope)
+// Level > 0 (tracked counter on the first row of its scope)
 builder
     .when(parent_is_first)
     .assert_zero(local_io.counter[level]);
@@ -172,9 +229,8 @@ $$
 \text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_first}\_{\text{next}} = 0\quad (\Delta\text{counter} \neq 1,\ \text{transition within level}) \qquad (4)
 $$
 ```rust
-builder
-    .when(level_transition)
-    .when(local_io.is_enabled)
+builder_transition
+    .when(local_io.is_enabled.clone())
     .when_ne(counter_diff.clone(), AB::Expr::ONE)
     .assert_zero(next_io.is_first[level]);
 ```
@@ -202,7 +258,7 @@ These cases apply at each loop level independently.
 ### 1. Single Row ($\text{is\\_enabled} = 1$)
 
 - By (3): $\text{is\\_first} = 1$
-- By (3a): the tracked counter for that scope starts at `0`
+- By (3a): the tracked counter starts at `0` on the first row of its scope at level `level`
 
 Single enabled row has `is_first` set.
 
@@ -230,9 +286,12 @@ Any transition to a new iteration has `is_first` set.
 
 ## Parent Loop Context
 
-For loops nested within parent loops (level > 0), constraints use the parent loop's (`level - 1`) `is_first` and `is_transition` values.
+For loops nested within parent loops (`level > 0`), the constraints use the parent loop's
+(`level - 1`) `is_first` flag and a derived transition predicate.
 
-The `is_transition` for a parent level is computed inline as `next_is_enabled - parent_next_is_first`, which is a linear expression. This ensures child loop constraints are only enforced when transitioning within the parent loop iteration.
+That predicate is computed inline as `next_is_enabled - parent_next_is_first`, which is a linear
+expression. This ensures child-loop constraints are only enforced when transitioning within the
+same parent-loop iteration.
 
 ```rust
 let parent_is_transition = Self::local_is_transition(next_io.is_enabled, next_io.is_first[parent_level]);
@@ -286,7 +345,9 @@ Columns: `[is_enabled, counter[0], counter[1], is_first[0], is_first[1]]`
 
 ### With disabled padding
 
-Enabled rows are contiguous. Once `is_enabled` becomes 0, all subsequent rows must remain disabled. Counter values on disabled rows are unconstrained (except `counter[0]` must be 0 on the first row). The `is_first` flags are also unconstrained on disabled rows.
+Enabled rows are contiguous. Once `is_enabled` becomes 0, all subsequent rows must remain disabled.
+On those disabled rows, all tracked `is_first` flags must be `0`. Counter values on disabled rows
+are otherwise unconstrained, except that first-row counter constraints still apply on row 0.
 
 | is\_enabled | counter[0] (i) | is\_first[0] (j\_first) | Description |
 |:-----------:|:---------------:|:-----------------------:|-------------|
