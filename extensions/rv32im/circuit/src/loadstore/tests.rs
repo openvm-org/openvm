@@ -216,8 +216,7 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    // Use custom memory config so initial block size matches the 4-byte alignment and
-    // avoids access-adapter split/merge paths when adapters are disabled.
+    // Use custom memory config so initial block size matches the 4-byte alignment.
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
@@ -544,7 +543,7 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usiz
         ..Default::default()
     };
     // Reduce pointer_max_bits and num_cells to avoid ~4GB Merkle tree GPU allocations.
-    // Merkle trees are now always built (volatile path was removed with access adapters).
+    // Merkle trees are now always built.
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 20;
     mem_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
