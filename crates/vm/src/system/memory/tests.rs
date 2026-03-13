@@ -26,7 +26,7 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
         let align: usize = aligns[addr_sp - 1];
         let value_bound: u32 = value_bounds[addr_sp - 1];
         let ptr = rng.random_range(0..max_ptr / align) * align;
-        // Access adapters are removed, so accesses use the address space minimum block size.
+        // Accesses use the address space minimum block size.
         let log_len = align.trailing_zeros();
         match log_len {
             0 => tester.write::<1>(

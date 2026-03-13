@@ -7,7 +7,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{INT256_NUM_BLOCKS, INT256_NUM_LIMBS, RV32_CELL_BITS};
 
 /// Read a 256-bit integer as 8 separate 4-byte block reads.
-/// This ensures correct access adapter cost accounting.
 #[inline(always)]
 pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -24,7 +23,6 @@ pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
 }
 
 /// Write a 256-bit integer as 8 separate 4-byte block writes.
-/// This ensures correct access adapter cost accounting.
 #[inline(always)]
 pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
