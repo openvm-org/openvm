@@ -11,14 +11,14 @@ use openvm_stark_sdk::config::{
 use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_circuit::{
     extension::{get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn},
-    prover::{DeferredVerifyCircuitProver, DeferredVerifyCpuProver},
+    prover::{DefaultEngine, DeferredVerifyDefaultCircuitProver, DeferredVerifyDefaultProver},
 };
 use openvm_verify_stark_host::vk::NonRootStarkVerifyingKey;
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
     prover::DeferralProver,
-    DeferralInput, Sdk, StdIn,
+    CpuSdk, DeferralInput, Sdk, StdIn,
 };
 
 type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
@@ -71,7 +71,7 @@ fn test_verify_stark_deferral() -> Result<()> {
 
     let (fib_proof, fib_baseline) = fib_sdk.prove(fib_exe, fib_stdin, &[])?;
 
-    // ---- Step 2: Build the VerifyStarkCircuitProver ----
+    // ---- Step 2: Build the DeferredVerifyCircuitProver ----
     let fib_agg_prover = fib_sdk.agg_prover();
     let ir_vk = fib_agg_prover.internal_recursive_prover.get_vk();
     let ir_pcs_data = fib_agg_prover
@@ -84,8 +84,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let num_user_pvs = fib_system_config.num_public_values;
 
     let def_circuit_params = internal_params_with_100_bits_security();
-    type CpuEngine = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
-    let deferred_verify_prover = DeferredVerifyCpuProver::new::<CpuEngine>(
+    let deferred_verify_prover = DeferredVerifyDefaultProver::new::<DefaultEngine>(
         ir_vk,
         ir_pcs_data,
         def_circuit_params,
@@ -93,8 +92,7 @@ fn test_verify_stark_deferral() -> Result<()> {
         num_user_pvs,
         None,
     );
-    let verify_stark_prover =
-        DeferredVerifyCircuitProver::<CpuEngine, _, _>::new(deferred_verify_prover);
+    let verify_stark_prover = DeferredVerifyDefaultCircuitProver::new(deferred_verify_prover);
 
     // ---- Step 3: Create DeferralProver ----
     let hook_params = root_params_with_100_bits_security();
@@ -129,8 +127,9 @@ fn test_verify_stark_deferral() -> Result<()> {
     let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
     vs_config.deferral = Some(deferral_ext);
 
+    // Use CpuSdk because the deferral extension does not have CUDA tracegen implemented.
     let vs_app_config = AppConfig::new(vs_config, app_params);
-    let vs_sdk = Sdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
+    let vs_sdk = CpuSdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
 
     // ---- Step 7: Build the verify-stark ELF ----
     let programs_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("programs");

@@ -4153,6 +4153,7 @@ dependencies = [
 name = "openvm-verify-stark-circuit"
 version = "2.0.0-alpha"
 dependencies = [
+ "cfg-if",
  "derive-new 0.6.0",
  "eyre",
  "itertools 0.14.0",

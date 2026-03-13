@@ -96,6 +96,7 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-sdk-config/cuda",
     "openvm-continuations/cuda",
+    "openvm-verify-stark-circuit/cuda",
     "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
 

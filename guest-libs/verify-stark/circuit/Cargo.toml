@@ -30,6 +30,7 @@ p3-bn254 = { workspace = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
 
+cfg-if = { workspace = true }
 eyre = { workspace = true }
 derive-new = { workspace = true }
 itertools = { workspace = true }
