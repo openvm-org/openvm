@@ -78,9 +78,6 @@ pub trait TestBuilder<F> {
         initial_pc: u32,
     );
 
-    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F);
-    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F;
-
     fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]);
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N];
 

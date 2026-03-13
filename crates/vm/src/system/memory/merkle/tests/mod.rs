@@ -192,17 +192,17 @@ fn random_test(
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
+
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
+
                 layout: MemoryCellType::Native { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
+
                 layout: MemoryCellType::Native { size: 4 },
             },
         ],
@@ -284,17 +284,17 @@ fn expand_test_no_accesses() {
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
+
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
+
                 layout: MemoryCellType::Native { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
+
                 layout: MemoryCellType::Native { size: 4 },
             },
         ],
@@ -332,17 +332,17 @@ fn expand_test_negative() {
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
+
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
+
                 layout: MemoryCellType::Native { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
+
                 layout: MemoryCellType::Native { size: 4 },
             },
         ],

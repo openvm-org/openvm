@@ -71,9 +71,7 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
             || address_space == PUBLIC_VALUES_AS,
     );
 
-    // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    // SAFETY: address spaces 1-3 have cell type `u8`
     unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
@@ -90,9 +88,7 @@ pub fn memory_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    // SAFETY: address spaces 1-3 have cell type `u8`
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
@@ -111,10 +107,8 @@ pub fn timed_read<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+    // SAFETY: address spaces 1-3 have cell type `u8`
+    unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -130,10 +124,8 @@ pub fn timed_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+    // SAFETY: address spaces 1-3 have cell type `u8`
+    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.

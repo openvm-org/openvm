@@ -147,14 +147,6 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.execution.execute(initial_state, final_state);
     }
 
-    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.read::<1>(address_space, pointer)[0]
-    }
-
-    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.write(address_space, pointer, [value]);
-    }
-
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
         self.memory.read(address_space, pointer)
     }
@@ -262,7 +254,7 @@ impl GpuChipTestBuilder {
         )));
         Self {
             memory: DeviceMemoryTester::new(
-                default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
+                default_tracing_memory(&mem_config),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
@@ -567,9 +559,7 @@ impl GpuChipTester {
             let touched_memory = memory_tester.memory.finalize::<F>();
             let memory_bridge = memory_tester.memory_bridge();
 
-            for chip in memory_tester.chip_for_block.into_values() {
-                self = self.load_periphery(chip.0.air, chip);
-            }
+            self = self.load_periphery(memory_tester.chip.0.air, memory_tester.chip);
 
             let airs = MemoryAirInventory::new(
                 memory_bridge,

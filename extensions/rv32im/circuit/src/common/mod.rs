@@ -181,12 +181,6 @@ mod aot {
         //
         // Therefore the loop only iterates once for `page_id = start_page_id`.
 
-        let initial_block_size: usize = config.initial_block_size();
-        if initial_block_size != CONST_BLOCK_SIZE {
-            return Err(AotError::Other(format!(
-                "initial_block_size must be {CONST_BLOCK_SIZE}, got {initial_block_size}"
-            )));
-        }
         let chunk_bits = CONST_BLOCK_SIZE.ilog2();
         let as_offset = ((address_space - ADDR_SPACE_OFFSET) as u64)
             << (config.memory_config.memory_dimensions().address_height);

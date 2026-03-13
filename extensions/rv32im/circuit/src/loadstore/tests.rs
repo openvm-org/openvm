@@ -216,7 +216,7 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    // Use custom memory config so initial block size matches the 4-byte alignment.
+    // Use custom memory config with larger address spaces.
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
@@ -268,7 +268,7 @@ fn run_negative_loadstore_test(
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    // Use custom memory config so the min block size matches alignment without needing adapters.
+    // Use custom memory config with larger address spaces.
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
 
