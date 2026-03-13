@@ -54,7 +54,7 @@ graph LR
 
 ## GkrInputAir
 
-**Source:** `openvm/crates/recursion/src/gkr/input/air.rs`
+**Source:** `crates/recursion/src/gkr/input/air.rs`
 
 ### Executive Summary
 
@@ -89,7 +89,7 @@ Row | is_enabled | proof_idx | n_logup | n_max | tidx | q0_claim     | alpha_log
 
 ## GkrLayerAir
 
-**Source:** `openvm/crates/recursion/src/gkr/layer/air.rs`
+**Source:** `crates/recursion/src/gkr/layer/air.rs`
 
 ### Executive Summary
 
@@ -127,7 +127,7 @@ Row | layer_idx | is_first | tidx  | lambda       | p_xi_0    | q_xi_0    | p_xi
 
 ## GkrLayerSumcheckAir
 
-**Source:** `openvm/crates/recursion/src/gkr/sumcheck/air.rs`
+**Source:** `crates/recursion/src/gkr/sumcheck/air.rs`
 
 ### Executive Summary
 
@@ -162,7 +162,7 @@ Row | layer_idx | round | claim_in      | ev1      | ev2      | ev3      | chall
 
 ## GkrXiSamplerAir
 
-**Source:** `openvm/crates/recursion/src/gkr/xi_sampler/air.rs`
+**Source:** `crates/recursion/src/gkr/xi_sampler/air.rs`
 
 ### Executive Summary
 

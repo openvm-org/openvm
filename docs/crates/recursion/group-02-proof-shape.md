@@ -56,7 +56,7 @@ graph LR
 
 ## ProofShapeAir
 
-**Source:** `openvm/crates/recursion/src/proof_shape/proof_shape/air.rs`
+**Source:** `crates/recursion/src/proof_shape/proof_shape/air.rs`
 
 ### Executive Summary
 
@@ -105,7 +105,7 @@ AIR selection uses an `idx_flags` encoder (flag columns that decode to the AIR i
 
 ## PublicValuesAir
 
-**Source:** `openvm/crates/recursion/src/proof_shape/pvs/air.rs`
+**Source:** `crates/recursion/src/proof_shape/pvs/air.rs`
 
 ### Executive Summary
 
@@ -141,7 +141,7 @@ Row | is_valid | proof_idx | air_idx | pv_idx | is_first_proof | is_first_air | 
 
 ## RangeCheckerAir
 
-**Source:** `openvm/crates/recursion/src/primitives/range/air.rs`
+**Source:** `crates/recursion/src/primitives/range/air.rs`
 
 ### Executive Summary
 

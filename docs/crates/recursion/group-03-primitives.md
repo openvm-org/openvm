@@ -27,7 +27,7 @@ graph LR
 
 ## PowerCheckerAir
 
-**Source:** `openvm/crates/recursion/src/primitives/pow/air.rs`
+**Source:** `crates/recursion/src/primitives/pow/air.rs`
 
 ### Executive Summary
 
@@ -99,7 +99,7 @@ The CPU trace generator uses `AtomicU32` counters for both `count_pow` and `coun
 
 ## ExpBitsLenAir
 
-**Source:** `openvm/crates/recursion/src/primitives/exp_bits_len/air.rs`
+**Source:** `crates/recursion/src/primitives/exp_bits_len/air.rs`
 
 ### Executive Summary
 

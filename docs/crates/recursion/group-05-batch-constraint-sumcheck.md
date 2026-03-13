@@ -58,7 +58,7 @@ graph LR
 
 ## FractionsFolderAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/fractions_folder/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/fractions_folder/air.rs`
 
 ### Executive Summary
 
@@ -97,7 +97,7 @@ Row | proof_idx | is_first | air_idx | tidx | sum_claim_p | sum_claim_q | cur_ha
 
 ## UnivariateSumcheckAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs`
 
 ### Executive Summary
 
@@ -137,7 +137,7 @@ Row | coeff_idx | omega_power | eq_to_1 | coeff    | sum_at_roots | value_at_r
 
 ## MultilinearSumcheckAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs`
 
 ### Executive Summary
 
@@ -174,7 +174,7 @@ Row | round_idx | eval_idx | eval     | denom_inv | prefix | suffix | lagrange |
 
 ## ExpressionClaimAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/expression_claim/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/expression_claim/air.rs`
 
 ### Executive Summary
 

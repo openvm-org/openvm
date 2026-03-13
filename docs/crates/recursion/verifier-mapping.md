@@ -4,7 +4,7 @@ This document maps every step of the stark-backend's `verify()` function to the 
 
 ## Verifier Protocol Overview
 
-The stark-backend verifier (`stark-backend/crates/stark-backend/src/verifier/mod.rs`) performs verification in four sequential phases:
+The stark-backend verifier ([`crates/stark-backend/src/verifier/mod.rs`](https://github.com/openvm-org/stark-backend/blob/main/crates/stark-backend/src/verifier/mod.rs)) performs verification in four sequential phases:
 
 1. **Preamble** -- Observe VK prehash, common main commitment, per-AIR metadata (presence, log heights, cached commitments, public values) into the Fiat-Shamir transcript. Validate proof shape and trace height constraints.
 2. **GKR + Batch Constraint Evaluation** (`verify_zerocheck_and_logup`) -- PoW check, sample alpha/beta, run GKR layer-by-layer reduction with sumcheck, verify numerator/denominator terms match, fold with mu, univariate sumcheck, multilinear sumcheck rounds, evaluate constraints and interactions at the final point.
