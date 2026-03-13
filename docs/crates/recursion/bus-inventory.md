@@ -521,6 +521,26 @@ Lookup table for partial exponentiation: `result = base^(bit_src & ((1 << num_bi
 
 ---
 
+### 5.1.1 RightShiftBus
+
+| Property | Value |
+|---|---|
+| **Type** | Lookup, global |
+| **Source** | `primitives/bus.rs` |
+| **Message** | `{input: F, shift_bits: F, result: F}` |
+
+Lookup table for right-shifting: `result = input >> shift_bits` (i.e., `result = floor(input / 2^shift_bits)`). This is a secondary table provided by ExpBitsLenAir alongside its exponentiation table.
+
+**Table:** For each active exponentiation chain row, `{(bit_src_original, bit_idx, bit_src)}` where `bit_src = bit_src_original >> bit_idx`. The table entries are derived from the recursive binary exponentiation structure in ExpBitsLenAir.
+
+**Provider:** ExpBitsLenAir.
+**Consumers:** MerkleVerifyAir (computes `current_idx_bit_src = merkle_idx_bit_src >> (total_depth - k)` to separate the leaf tree index from the authentication path index).
+
+**Invariants:**
+- `result = floor(input / 2^shift_bits)`.
+
+---
+
 ### 5.2 RangeCheckerBus
 
 | Property | Value |
@@ -701,9 +721,11 @@ Lookup table of AIR presence flags. For each possible AIR in the child proof, re
 |---|---|
 | **Type** | Lookup, per-proof |
 | **Source** | `bus.rs` |
-| **Message** | `{sort_idx: F, n_lift: F, n_logup: F}` |
+| **Message** | `{sort_idx: F, n_lift: F, n_logup: F, num_interactions: F}` |
 
-Passes the shape parameters `n_lift` and `n_logup` for each AIR to the Eq3bAir, which needs these to determine the range of hypercube dimensions over which to compute equality polynomial evaluations.
+Passes the shape parameters `n_lift`, `n_logup`, and `num_interactions` for each AIR to
+Eq3bAir, which needs them to determine the hypercube range and the number of interaction
+rows over which to compute equality polynomial evaluations.
 
 **Send set:** One message per present AIR.
 
@@ -741,7 +763,7 @@ Passes the transcript index for the lambda challenge to ConstraintsFoldingAir. T
 
 **Send set:** One message per proof.
 
-**Producers:** ProofShapeAir (send).
+**Producers:** GkrInputAir (send).
 **Consumers:** ConstraintsFoldingAir (receive).
 
 ---
@@ -758,7 +780,7 @@ Passes the transcript index for the beta challenge to InteractionsFoldingAir. Th
 
 **Send set:** One message per proof.
 
-**Producers:** ProofShapeAir (send).
+**Producers:** GkrInputAir (send).
 **Consumers:** InteractionsFoldingAir (receive).
 
 ---
@@ -1635,16 +1657,17 @@ These buses support the proof continuations feature, where verification state is
 | **Source** | `bus.rs` |
 | **Message** | `{air_idx: F, cached_idx: F, cached_commit: [F; DIGEST_SIZE]}` |
 
-Defined for the continuations protocol to carry cached trace commitments. When AIRs have cached (pre-committed) trace partitions, this bus is intended to verify that the cached commitment matches the expected value from the verifying key. Currently only partially wired: ProofShapeAir sends on this bus, but there is no corresponding receive in any AIR.
+Carries cached trace commitments from the verifier subcircuit to enclosing circuits. When AIRs have cached (pre-committed) trace partitions, ProofShapeAir sends one message per cached partition, and the enclosing circuit's verifier AIR receives them to verify each cached commitment matches the expected value from the verifying key.
 
-**Send set:** One message per cached trace partition per AIR.
+**Send set:** One message per cached trace partition per present AIR (sent by ProofShapeAir when the AIR has cached traces).
 
-**Producers:** ProofShapeAir (send).
-**Consumers:** None currently wired (send-only from ProofShapeAir).
+**Sender:** ProofShapeAir (in the recursion crate).
+**Receivers:** Enclosing circuit verifier AIRs in the continuations crate -- inner verifier (`inner/verifier/air.rs`), root verifier (`root/verifier/air.rs`), inner VM PVs AIR (`inner/vm_pvs/air.rs`), inner deferral PVs AIR (`inner/def_pvs/air.rs`), and deferral hook verifier (`deferral/hook/verifier/air.rs`).
 
 **Invariants:**
 - `cached_commit` is a Poseidon2 digest of the cached trace.
 - `cached_idx` identifies which cached partition within the AIR.
+- The bus is active when `continuations_enabled = true` in `VerifierConfig`.
 
 ---
 
@@ -1678,51 +1701,52 @@ Defined for the continuations protocol to carry cached trace commitments. When A
 | 22 | RangeCheckerBus | Lookup | Global | Primitives |
 | 23 | PowerCheckerBus | Lookup | Global | Primitives |
 | 24 | ExpBitsLenBus | Lookup | Global | Primitives |
-| 25 | SelUniBus | Lookup | Per-proof | Computation |
-| 26 | SelHypercubeBus | Lookup | Per-proof | Computation |
-| 27 | EqNegResultBus | Permutation | Per-proof | Computation |
-| 28 | ExpressionClaimNMaxBus | Permutation | Per-proof | Computation |
-| 29 | FractionFolderInputBus | Permutation | Per-proof | Computation |
-| 30 | NLiftBus | Permutation | Per-proof | Computation |
-| 31 | ProofShapePermutationBus | Permutation | Per-proof | ProofShape Internal |
-| 32 | StartingTidxBus | Permutation | Per-proof | ProofShape Internal |
-| 33 | NumPublicValuesBus | Permutation | Per-proof | ProofShape Internal |
-| 34 | GkrXiSamplerBus | Permutation | Per-proof | GKR Internal |
-| 35 | GkrLayerInputBus | Permutation | Per-proof | GKR Internal |
-| 36 | GkrLayerOutputBus | Permutation | Per-proof | GKR Internal |
-| 37 | GkrSumcheckInputBus | Permutation | Per-proof | GKR Internal |
-| 38 | GkrSumcheckOutputBus | Permutation | Per-proof | GKR Internal |
-| 39 | GkrSumcheckChallengeBus | Permutation | Per-proof | GKR Internal |
-| 40 | BatchConstraintConductorBus | Lookup | Per-proof | BatchConstraint Internal |
-| 41 | SumcheckClaimBus | Permutation | Per-proof | BatchConstraint Internal |
-| 42 | SymbolicExpressionBus | Lookup | Per-proof | BatchConstraint Internal |
-| 43 | ExpressionClaimBus | Permutation | Per-proof | BatchConstraint Internal |
-| 44 | InteractionsFoldingBus | Permutation | Per-proof | BatchConstraint Internal |
-| 45 | ConstraintsFoldingBus | Permutation | Per-proof | BatchConstraint Internal |
-| 46 | Eq3bBus | Permutation | Per-proof | BatchConstraint Internal |
-| 47 | EqSharpUniBus | Permutation | Per-proof | BatchConstraint Internal |
-| 48 | EqZeroNBus | Permutation | Per-proof | BatchConstraint Internal |
-| 49 | EqNOuterBus | Lookup | Per-proof | BatchConstraint Internal |
-| 50 | EqNegInternalBus | Permutation | Per-proof | BatchConstraint Internal |
-| 51 | UnivariateSumcheckInputBus | Permutation | Per-proof | BatchConstraint Internal |
-| 52 | StackingModuleTidxBus | Permutation | Per-proof | Stacking Internal |
-| 53 | ClaimCoefficientsBus | Permutation | Per-proof | Stacking Internal |
-| 54 | SumcheckClaimsBus | Permutation | Per-proof | Stacking Internal |
-| 55 | EqRandValuesLookupBus | Lookup | Per-proof | Stacking Internal |
-| 56 | EqBaseBus | Permutation | Per-proof | Stacking Internal |
-| 57 | EqBitsInternalBus | Permutation | Per-proof | Stacking Internal |
-| 58 | EqKernelLookupBus | Lookup | Per-proof | Stacking Internal |
-| 59 | EqBitsLookupBus | Lookup | Per-proof | Stacking Internal |
-| 60 | WhirSumcheckBus | Permutation | Per-proof | WHIR Internal |
-| 61 | WhirAlphaBus | Lookup | Per-proof | WHIR Internal |
-| 62 | WhirEqAlphaUBus | Permutation | Per-proof | WHIR Internal |
-| 63 | VerifyQueriesBus | Permutation | Per-proof | WHIR Internal |
-| 64 | VerifyQueryBus | Permutation | Per-proof | WHIR Internal |
-| 65 | WhirQueryBus | Permutation | Per-proof | WHIR Internal |
-| 66 | WhirGammaBus | Permutation | Per-proof | WHIR Internal |
-| 67 | WhirFoldingBus | Permutation | Per-proof | WHIR Internal |
-| 68 | FinalPolyMleEvalBus | Permutation | Per-proof | WHIR Internal |
-| 69 | FinalPolyFoldingBus | Permutation | Per-proof | WHIR Internal |
-| 70 | FinalPolyQueryEvalBus | Permutation | Per-proof | WHIR Internal |
-| 71 | WhirFinalPolyBus | Lookup | Per-proof | WHIR Internal |
+| 25 | RightShiftBus | Lookup | Global | Primitives |
+| 26 | SelUniBus | Lookup | Per-proof | Computation |
+| 27 | SelHypercubeBus | Lookup | Per-proof | Computation |
+| 28 | EqNegResultBus | Permutation | Per-proof | Computation |
+| 29 | ExpressionClaimNMaxBus | Permutation | Per-proof | Computation |
+| 30 | FractionFolderInputBus | Permutation | Per-proof | Computation |
+| 31 | NLiftBus | Permutation | Per-proof | Computation |
+| 32 | ProofShapePermutationBus | Permutation | Per-proof | ProofShape Internal |
+| 33 | StartingTidxBus | Permutation | Per-proof | ProofShape Internal |
+| 34 | NumPublicValuesBus | Permutation | Per-proof | ProofShape Internal |
+| 35 | GkrXiSamplerBus | Permutation | Per-proof | GKR Internal |
+| 36 | GkrLayerInputBus | Permutation | Per-proof | GKR Internal |
+| 37 | GkrLayerOutputBus | Permutation | Per-proof | GKR Internal |
+| 38 | GkrSumcheckInputBus | Permutation | Per-proof | GKR Internal |
+| 39 | GkrSumcheckOutputBus | Permutation | Per-proof | GKR Internal |
+| 40 | GkrSumcheckChallengeBus | Permutation | Per-proof | GKR Internal |
+| 41 | BatchConstraintConductorBus | Lookup | Per-proof | BatchConstraint Internal |
+| 42 | SumcheckClaimBus | Permutation | Per-proof | BatchConstraint Internal |
+| 43 | SymbolicExpressionBus | Lookup | Per-proof | BatchConstraint Internal |
+| 44 | ExpressionClaimBus | Permutation | Per-proof | BatchConstraint Internal |
+| 45 | InteractionsFoldingBus | Permutation | Per-proof | BatchConstraint Internal |
+| 46 | ConstraintsFoldingBus | Permutation | Per-proof | BatchConstraint Internal |
+| 47 | Eq3bBus | Permutation | Per-proof | BatchConstraint Internal |
+| 48 | EqSharpUniBus | Permutation | Per-proof | BatchConstraint Internal |
+| 49 | EqZeroNBus | Permutation | Per-proof | BatchConstraint Internal |
+| 50 | EqNOuterBus | Lookup | Per-proof | BatchConstraint Internal |
+| 51 | EqNegInternalBus | Permutation | Per-proof | BatchConstraint Internal |
+| 52 | UnivariateSumcheckInputBus | Permutation | Per-proof | BatchConstraint Internal |
+| 53 | StackingModuleTidxBus | Permutation | Per-proof | Stacking Internal |
+| 54 | ClaimCoefficientsBus | Permutation | Per-proof | Stacking Internal |
+| 55 | SumcheckClaimsBus | Permutation | Per-proof | Stacking Internal |
+| 56 | EqRandValuesLookupBus | Lookup | Per-proof | Stacking Internal |
+| 57 | EqBaseBus | Permutation | Per-proof | Stacking Internal |
+| 58 | EqBitsInternalBus | Permutation | Per-proof | Stacking Internal |
+| 59 | EqKernelLookupBus | Lookup | Per-proof | Stacking Internal |
+| 60 | EqBitsLookupBus | Lookup | Per-proof | Stacking Internal |
+| 61 | WhirSumcheckBus | Permutation | Per-proof | WHIR Internal |
+| 62 | WhirAlphaBus | Lookup | Per-proof | WHIR Internal |
+| 63 | WhirEqAlphaUBus | Permutation | Per-proof | WHIR Internal |
+| 64 | VerifyQueriesBus | Permutation | Per-proof | WHIR Internal |
+| 65 | VerifyQueryBus | Permutation | Per-proof | WHIR Internal |
+| 66 | WhirQueryBus | Permutation | Per-proof | WHIR Internal |
+| 67 | WhirGammaBus | Permutation | Per-proof | WHIR Internal |
+| 68 | WhirFoldingBus | Permutation | Per-proof | WHIR Internal |
+| 69 | FinalPolyMleEvalBus | Permutation | Per-proof | WHIR Internal |
+| 70 | FinalPolyFoldingBus | Permutation | Per-proof | WHIR Internal |
+| 71 | FinalPolyQueryEvalBus | Permutation | Per-proof | WHIR Internal |
+| 72 | WhirFinalPolyBus | Lookup | Per-proof | WHIR Internal |
 | 72 | CachedCommitBus | Permutation | Per-proof | Continuations |
