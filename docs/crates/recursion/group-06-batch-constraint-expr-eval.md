@@ -60,7 +60,7 @@ graph LR
 
 ## SymbolicExpressionAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs`
 
 ### Executive Summary
 
@@ -127,7 +127,7 @@ Row | kind     | air_idx | node_idx | attrs      | fanout | args[0..3]   | args[
 
 ## InteractionsFoldingAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs`
 
 ### Executive Summary
 
@@ -172,7 +172,7 @@ After processing AIR 0, sends `final_acc_num` (claim idx=0, is_interaction=1) an
 
 ## ConstraintsFoldingAir
 
-**Source:** `openvm/crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs`
+**Source:** `crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs`
 
 ### Executive Summary
 
