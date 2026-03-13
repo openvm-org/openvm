@@ -25,6 +25,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     utils::disable_debug_builder,
+    SystemParams,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -47,6 +48,12 @@ const SHA2_BUS_IDX: BusIndex = 28;
 const SUBAIR_BUS_IDX: BusIndex = 29;
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
+
+fn sha2_test_params() -> SystemParams {
+    let mut params = SystemParams::new_for_testing(21);
+    params.max_constraint_degree = 3;
+    params
+}
 type Harness<RA, C> = TestChipHarness<F, Sha2VmExecutor<C>, Sha2MainAir<C>, Sha2MainChip<F, C>, RA>;
 
 fn create_harness_fields<C: Sha2Config>(
@@ -200,7 +207,9 @@ fn rand_sha2_single_block_test<C: Sha2Config + 'static>() {
         .load_periphery(block_hasher)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test().expect("Verification failed");
+    tester
+        .simple_test_with_params(sha2_test_params())
+        .expect("Verification failed");
 }
 
 #[test]
@@ -319,7 +328,9 @@ fn rand_sha2_multi_block_test<C: Sha2Config + 'static>() {
         .load_periphery(block_hasher)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test().expect("Verification failed");
+    tester
+        .simple_test_with_params(sha2_test_params())
+        .expect("Verification failed");
 }
 
 #[test]
@@ -394,7 +405,9 @@ fn sha2_edge_test_lengths<C: Sha2Config + 'static>() {
         .load_periphery(block_hasher)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test().expect("Verification failed");
+    tester
+        .simple_test_with_params(sha2_test_params())
+        .expect("Verification failed");
 }
 
 #[test]
@@ -542,7 +555,7 @@ fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
         .load_periphery(bitwise)
         .finalize();
     tester
-        .simple_test()
+        .simple_test_with_params(sha2_test_params())
         .expect_err("Expected verification to fail, but it passed");
 }
 
@@ -682,7 +695,7 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
         (),
     );
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
-    tester.finalize().simple_test().unwrap();
+    tester.finalize().simple_test_with_params(sha2_test_params()).unwrap();
 }
 
 #[cfg(feature = "cuda")]
@@ -743,7 +756,7 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
         (),
     );
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
-    tester.finalize().simple_test().unwrap();
+    tester.finalize().simple_test_with_params(sha2_test_params()).unwrap();
 }
 
 #[cfg(feature = "cuda")]
@@ -839,7 +852,7 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
         (),
     );
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
-    tester.finalize().simple_test().unwrap();
+    tester.finalize().simple_test_with_params(sha2_test_params()).unwrap();
 }
 
 #[cfg(feature = "cuda")]
