@@ -177,6 +177,21 @@ fn negative_test_range_tuple_chip_size_overflow() {
     );
 }
 
+#[test]
+fn negative_test_range_tuple_chip_size_one() {
+    let bus_index = 0;
+    let sizes = [2, 1, 2];
+
+    let result = std::panic::catch_unwind(|| {
+        let bus = RangeTupleCheckerBus::new(bus_index, sizes);
+        RangeTupleCheckerChip::new(bus)
+    });
+    assert!(
+        result.is_err(),
+        "Expected RangeTupleCheckerChip::new to panic when a size is 1"
+    );
+}
+
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_range_tuple() {

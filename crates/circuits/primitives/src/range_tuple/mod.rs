@@ -164,6 +164,12 @@ pub type SharedRangeTupleCheckerChip<const N: usize> = Arc<RangeTupleCheckerChip
 impl<const N: usize> RangeTupleCheckerChip<N> {
     pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
         assert!(N > 1, "RangeTupleChecker requires at least 2 dimensions");
+        // size = 1 is not useful, and breaks the completeness guarantee of this chip
+        assert!(
+            bus.sizes.iter().all(|&s| s > 1),
+            "RangeTupleChecker requires all sizes to be > 1 (size=1 dimensions break \
+             the carry coupling constraint)"
+        );
         let range_max = bus.sizes.iter().product();
         assert!(
             range_max > 0 && (range_max & (range_max - 1)) == 0,
