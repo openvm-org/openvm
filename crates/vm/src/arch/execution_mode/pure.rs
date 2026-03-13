@@ -11,11 +11,7 @@ pub struct ExecutionCtx {
 impl ExecutionCtx {
     pub fn new(instret_left: Option<u64>) -> Self {
         ExecutionCtx {
-            instret_left: if let Some(end) = instret_left {
-                end
-            } else {
-                u64::MAX
-            },
+            instret_left: instret_left.unwrap_or(u64::MAX),
         }
     }
 }
