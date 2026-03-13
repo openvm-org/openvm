@@ -3,7 +3,7 @@ use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2C
 pub mod bn254;
 pub mod circuit;
 pub mod prover;
-pub(crate) mod utils;
+pub mod utils;
 
 #[cfg(test)]
 mod tests;

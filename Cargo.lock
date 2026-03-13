@@ -4144,6 +4144,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-verify-stark-circuit"
+version = "2.0.0-alpha"
+dependencies = [
+ "derive-new 0.6.0",
+ "eyre",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-continuations",
+ "openvm-cpu-backend",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-deferral-circuit",
+ "openvm-poseidon2-air",
+ "openvm-recursion-circuit",
+ "openvm-recursion-circuit-derive",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-verify-stark-host",
+ "p3-air",
+ "p3-bn254",
+ "p3-field",
+ "p3-matrix",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-verify-stark-guest"
+version = "2.0.0-alpha"
+dependencies = [
+ "openvm-deferral-guest",
+]
+
+[[package]]
 name = "openvm-verify-stark-host"
 version = "2.0.0-alpha"
 dependencies = [

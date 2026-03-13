@@ -18,7 +18,7 @@ pub struct DeferralResult {
     pub output_raw: OutputRaw,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DeferralState {
     input_map: HashMap<InputCommit, InputMapVal>,
     output_map: HashMap<OutputCommit, OutputRaw>,

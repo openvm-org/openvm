@@ -5,10 +5,7 @@ use openvm_recursion_circuit::system::VerifierSubCircuit;
 
 use crate::{
     circuit::{
-        deferral::{
-            aggregation::{hook::DeferralHookTraceGenImpl, inner::DeferralInnerTraceGenImpl},
-            verify::DeferredVerifyTraceGenImpl,
-        },
+        deferral::{hook::DeferralHookTraceGenImpl, inner::DeferralInnerTraceGenImpl},
         inner::InnerTraceGenImpl,
         root::RootTraceGenImpl,
     },
@@ -28,8 +25,6 @@ pub use utils::*;
 pub type InnerCpuProver<const MAX_NUM_PROOFS: usize> =
     InnerAggregationProver<CpuBackend<SC>, VerifierSubCircuit<MAX_NUM_PROOFS>, InnerTraceGenImpl>;
 pub type RootCpuProver = RootProver<CpuBackend<RootSC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
-pub type DeferralVerifyCpuProver =
-    DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 pub type DeferralInnerCpuProver<const MAX_NUM_PROOFS: usize> = DeferralInnerProver<
     CpuBackend<SC>,
     VerifierSubCircuit<MAX_NUM_PROOFS>,
@@ -47,9 +42,6 @@ pub type RootGpuProver = RootProver<
     VerifierSubCircuit<1>,
     RootTraceGenImpl,
 >;
-#[cfg(feature = "cuda")]
-pub type DeferralVerifyGpuProver =
-    DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 #[cfg(feature = "cuda")]
 pub type DeferralInnerGpuProver<const MAX_NUM_PROOFS: usize> =
     DeferralInnerProver<GpuBackend, VerifierSubCircuit<MAX_NUM_PROOFS>, DeferralInnerTraceGenImpl>;

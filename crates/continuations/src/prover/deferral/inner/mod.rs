@@ -16,7 +16,7 @@ use tracing::instrument;
 
 use crate::{
     circuit::{
-        deferral::aggregation::inner::{DeferralInnerCircuit, DeferralInnerTraceGen},
+        deferral::inner::{DeferralInnerCircuit, DeferralInnerTraceGen},
         Circuit,
     },
     prover::trace_heights_tracing_info,
