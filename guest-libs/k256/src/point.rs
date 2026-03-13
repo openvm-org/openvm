@@ -78,6 +78,8 @@ impl ConditionallySelectable for Secp256k1Point {
 impl ConstantTimeEq for Secp256k1Point {
     fn ct_eq(&self, other: &Secp256k1Point) -> Choice {
         // Projective equivalence: (X1*Z2 == X2*Z1) && (Y1*Z2 == Y2*Z1)
+        // Note: this also treats non-canonical encodings of the identity/infinity point
+        // (z = 0 with arbitrary x, y) as equal.
         let x1z2 = <Self as WeierstrassPoint>::x(self) * other.z();
         let x2z1 = <Self as WeierstrassPoint>::x(other) * self.z();
         let y1z2 = self.y() * other.z();

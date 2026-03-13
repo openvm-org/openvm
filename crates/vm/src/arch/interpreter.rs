@@ -398,6 +398,8 @@ where
             if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
                 break;
             }
+            // `ExecutionError` doesn't implement Clone, so we can't use `?` or `if let Err(e)`
+            // without moving out of `exec_state` which is reused in the loop.
             #[allow(clippy::unnecessary_unwrap)]
             if exec_state.exit_code.is_err() {
                 return Err(exec_state.exit_code.unwrap_err());

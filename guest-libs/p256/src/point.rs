@@ -74,6 +74,8 @@ impl ConditionallySelectable for P256Point {
 impl ConstantTimeEq for P256Point {
     fn ct_eq(&self, other: &P256Point) -> Choice {
         // Projective equivalence: (X1*Z2 == X2*Z1) && (Y1*Z2 == Y2*Z1)
+        // Note: this also treats non-canonical encodings of the identity/infinity point
+        // (z = 0 with arbitrary x, y) as equal.
         let x1z2 = <Self as WeierstrassPoint>::x(self) * other.z();
         let x2z1 = <Self as WeierstrassPoint>::x(other) * self.z();
         let y1z2 = self.y() * other.z();
