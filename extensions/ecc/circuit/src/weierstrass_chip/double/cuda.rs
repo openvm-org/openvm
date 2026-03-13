@@ -19,6 +19,7 @@ use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use crate::{ec_double_proj_expr, EccRecord};
 
 #[derive(new)]
+#[allow(clippy::too_many_arguments)]
 pub struct WeierstrassDoubleChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
