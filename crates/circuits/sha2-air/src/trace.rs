@@ -449,11 +449,11 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
             // constraints
             set_arrayview_from_u32_slice(
                 &mut cols.work_vars.a.row_mut(i),
-                word_into_bits::<C>(first_block_prev_hash[C::ROUNDS_PER_ROW - i - 1]).into_iter(),
+                word_into_bits::<C>(first_block_prev_hash[C::ROUNDS_PER_ROW - i - 1]),
             );
             set_arrayview_from_u32_slice(
                 &mut cols.work_vars.e.row_mut(i),
-                word_into_bits::<C>(first_block_prev_hash[C::ROUNDS_PER_ROW - i + 3]).into_iter(),
+                word_into_bits::<C>(first_block_prev_hash[C::ROUNDS_PER_ROW - i + 3]),
             );
 
             // The invalid carries are not constants anymore, so we need to fill them in here

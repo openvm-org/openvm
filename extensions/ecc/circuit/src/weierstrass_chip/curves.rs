@@ -116,6 +116,7 @@ pub fn ec_double_proj_impl_a0<F: Field>(x1: F, y1: F, z1: F, b3: F) -> (F, F, F)
 }
 
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 pub fn ec_add_proj_impl_general<F: Field>(
     x1: F,
     y1: F,
@@ -588,7 +589,7 @@ fn get_p256_b3<F: PrimeField<Repr = [u8; 32]>>() -> F {
         hex_literal::hex!("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
     let mut le_bytes = b_bytes;
     le_bytes.reverse();
-    let b = F::from_repr(le_bytes.into()).unwrap();
+    let b = F::from_repr(le_bytes).unwrap();
     b + b + b
 }
 
@@ -818,7 +819,7 @@ mod tests {
             hex_literal::hex!("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
         let mut le_bytes = b_bytes;
         le_bytes.reverse();
-        let b = Fp::from_repr(le_bytes.into()).unwrap();
+        let b = Fp::from_repr(le_bytes).unwrap();
 
         // Compute 2G using projective doubling
         let (x2_proj, y2_proj, z2_proj) = ec_double_proj_impl_general(x, y, Fp::ONE, a, b3);

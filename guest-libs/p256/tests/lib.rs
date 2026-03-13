@@ -287,18 +287,20 @@ mod host_tests {
 
         // Generic add can handle equal or unequal points.
         #[allow(clippy::op_ref)]
-        let p3 = &p1 + &p2;
+        let p3 = (&p1 + &p2).normalize();
         #[allow(clippy::op_ref)]
-        let p4 = &p2 + &p2;
+        let p4 = (&p2 + &p2).normalize();
 
         // Add assign and double assign
         let mut sum = P256Point::from_xy(x1, y1).unwrap();
         sum += &p2;
+        let sum = sum.normalize();
         if sum.x() != p3.x() || sum.y() != p3.y() {
             panic!();
         }
         let mut double = P256Point::from_xy(x2, y2).unwrap();
         double.double_assign();
+        let double = double.normalize();
         if double.x() != p4.x() || double.y() != p4.y() {
             panic!();
         }
@@ -307,8 +309,8 @@ mod host_tests {
         let p1 = P256Point::from_xy(x1, y1).unwrap();
         let scalar = P256Scalar::from_u32(3);
         #[allow(clippy::op_ref)]
-        let p2 = &p1.double() + &p1;
-        let result = msm(&[scalar], &[p1]);
+        let p2 = (&p1.double() + &p1).normalize();
+        let result = msm(&[scalar], &[p1]).normalize();
         if result.x() != p2.x() || result.y() != p2.y() {
             panic!();
         }

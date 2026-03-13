@@ -1,3 +1,5 @@
+// sha2 re-exports generic_array 0.x which is deprecated in favor of 1.x
+#![allow(deprecated)]
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]

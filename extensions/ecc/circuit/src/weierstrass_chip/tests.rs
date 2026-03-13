@@ -16,6 +16,7 @@ use openvm_circuit_primitives::{
         SharedBitwiseOperationLookupChip,
     },
 };
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
@@ -27,7 +28,6 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
@@ -601,11 +601,11 @@ mod ec_add_tests {
         );
     }
 
-    ///////////////////////////////////////////////////////////////////////////////////////
-    /// SANITY TESTS
-    ///
-    /// Ensure that execute functions produce the correct results.
-    ///////////////////////////////////////////////////////////////////////////////////////
+    // /////////////////////////////////////////////////////////////////////////////////////
+    // SANITY TESTS
+    //
+    // Ensure that execute functions produce the correct results.
+    // /////////////////////////////////////////////////////////////////////////////////////
 
     /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z
     fn proj_to_affine(
@@ -657,10 +657,9 @@ mod ec_add_tests {
 
         let (p1_x, p1_y) = SampleEcPoints[2].clone();
         let (p2_x, p2_y) = SampleEcPoints[3].clone();
-        let r = executor.expr.execute_with_output(
-            vec![p1_x, p1_y, z.clone(), p2_x, p2_y, z],
-            vec![true],
-        );
+        let r = executor
+            .expr
+            .execute_with_output(vec![p1_x, p1_y, z.clone(), p2_x, p2_y, z], vec![true]);
 
         assert_eq!(r.len(), 3); // X3, Y3, Z3
         let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
@@ -1232,11 +1231,11 @@ mod ec_double_tests {
         );
     }
 
-    ///////////////////////////////////////////////////////////////////////////////////////
-    /// SANITY TESTS
-    ///
-    /// Ensure that execute functions produce the correct results.
-    ///////////////////////////////////////////////////////////////////////////////////////
+    // /////////////////////////////////////////////////////////////////////////////////////
+    // SANITY TESTS
+    //
+    // Ensure that execute functions produce the correct results.
+    // /////////////////////////////////////////////////////////////////////////////////////
 
     /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z
     fn proj_to_affine(
