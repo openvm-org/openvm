@@ -450,11 +450,13 @@ template <typename V> struct Sha2TraceHelper {
         const typename V::Word *first_block_prev_hash,
         Fp *carry_a,
         Fp *carry_e,
+        uint32_t global_block_idx,
         size_t trace_height
     ) const {
         RowSlice row_idx_flags =
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2RoundCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, V::ROWS_PER_BLOCK);
+        SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
 
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
             uint32_t a_idx = V::ROUNDS_PER_ROW - i - 1;
@@ -855,6 +857,8 @@ __global__ void sha2_first_pass_tracegen(
 template <typename V>
 __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t rows_used) {
     uint32_t row_idx = rows_used;
+    uint32_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
+    uint32_t padding_global_block_idx = total_blocks + 1;
 
     uint32_t digest_row = V::ROUND_ROWS;
     if (digest_row >= trace_height) {
@@ -886,7 +890,14 @@ __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t
     RowSlice inner_row = row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
 
     Sha2TraceHelper<V> helper;
-    helper.generate_default_row(inner_row, prev_hash, nullptr, nullptr, trace_height);
+    helper.generate_default_row(
+        inner_row,
+        prev_hash,
+        nullptr,
+        nullptr,
+        padding_global_block_idx,
+        trace_height
+    );
 
     helper.generate_carry_ae(inner_row, inner_row);
 }
@@ -911,6 +922,8 @@ __global__ void sha2_fill_invalid_rows(
 ) {
     uint32_t thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t first_dummy_row_idx = rows_used;
+    uint32_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
+    uint32_t padding_global_block_idx = total_blocks + 1;
     // skip the first dummy row, since it is already filled
     uint32_t row_idx = first_dummy_row_idx + thread_idx + 1;
     if (row_idx >= trace_height) {
@@ -931,8 +944,29 @@ __global__ void sha2_fill_invalid_rows(
 
     Sha2TraceHelper<V> helper;
     helper.generate_default_row(
-        dst_inner, &d_prev_hashes[0], first_dummy_row_carry_a, first_dummy_row_carry_e, trace_height
+        dst_inner,
+        &d_prev_hashes[0],
+        first_dummy_row_carry_a,
+        first_dummy_row_carry_e,
+        padding_global_block_idx,
+        trace_height
     );
+}
+
+template <typename V>
+__global__ void sha2_fill_wraparound(Fp *trace, size_t trace_height) {
+    if (trace_height < 2) {
+        return;
+    }
+
+    Sha2TraceHelper<V> helper;
+    RowSlice first_row(trace, trace_height);
+    RowSlice first_inner = first_row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
+    RowSlice last_row(trace + (trace_height - 1), trace_height);
+    RowSlice last_inner = last_row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
+
+    helper.generate_intermed_4(last_inner, first_inner);
+    helper.generate_intermed_12(last_inner, first_inner);
 }
 
 // ===== HOST LAUNCHER FUNCTIONS =====
@@ -997,6 +1031,11 @@ int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_
     auto [grid_size, block_size] = kernel_launch_params(total_blocks, 256);
     sha2_second_pass_dependencies<V>
         <<<grid_size, block_size>>>(d_trace, trace_height, total_blocks);
+    if (CHECK_KERNEL() != 0) {
+        return -1;
+    }
+
+    sha2_fill_wraparound<V><<<1, 1>>>(d_trace, trace_height);
     return CHECK_KERNEL();
 }
 
