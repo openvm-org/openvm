@@ -334,8 +334,7 @@ impl GpuChipTestBuilder {
             register,
             (pointer as u32).to_le_bytes().map(F::from_u8),
         );
-        // Always write in CONST_BLOCK_SIZE-byte chunks to avoid generating
-        // access adapter records when access adapters are disabled.
+        // Always write in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
             for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
