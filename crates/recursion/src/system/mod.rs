@@ -24,8 +24,8 @@ use crate::{
     },
     bus::{
         AirPresenceBus, AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus,
-        CommitmentsBus, ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
-        Eq3bShapeBus, EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
+        CommitmentsBus, ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, Eq3bShapeBus,
+        EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
         FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         InteractionsFoldingInputBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus,
         Poseidon2CompressBus, Poseidon2PermuteBus, PreHashBus, PublicValuesBus, SelUniBus,
@@ -248,7 +248,6 @@ pub struct BusInventory {
     // Continuations buses
     pub cached_commit_bus: CachedCommitBus,
     pub pre_hash_bus: PreHashBus,
-    pub dag_commit_bus: DagCommitBus,
     pub final_state_bus: FinalTranscriptStateBus,
 }
 
@@ -386,7 +385,6 @@ impl BusInventory {
             // Continuation buses
             cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
             pre_hash_bus: PreHashBus::new(b.new_bus_idx()),
-            dag_commit_bus: DagCommitBus::new(b.new_bus_idx()),
             final_state_bus: FinalTranscriptStateBus::new(b.new_bus_idx()),
         }
     }
