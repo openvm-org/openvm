@@ -25,7 +25,7 @@ use crate::{
     bus::{
         AirPresenceBus, AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus,
         CommitmentsBus, ConstraintSumcheckRandomnessBus, ConstraintsFoldingInputBus, DagCommitBus,
-        EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
+        Eq3bShapeBus, EqNegBaseRandBus, EqNegResultBus, EqNsNLogupMaxBus, ExpressionClaimNMaxBus,
         FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         InteractionsFoldingInputBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus,
         Poseidon2CompressBus, Poseidon2PermuteBus, PreHashBus, PublicValuesBus, SelUniBus,
@@ -230,6 +230,7 @@ pub struct BusInventory {
     pub fraction_folder_input_bus: FractionFolderInputBus,
     pub n_lift_bus: NLiftBus,
     pub eq_n_logup_n_max_bus: EqNsNLogupMaxBus,
+    pub eq_3b_shape_bus: Eq3bShapeBus,
 
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
@@ -366,6 +367,7 @@ impl BusInventory {
             fraction_folder_input_bus: FractionFolderInputBus::new(b.new_bus_idx()),
             n_lift_bus: NLiftBus::new(b.new_bus_idx()),
             eq_n_logup_n_max_bus: EqNsNLogupMaxBus::new(b.new_bus_idx()),
+            eq_3b_shape_bus: Eq3bShapeBus::new(b.new_bus_idx()),
 
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
