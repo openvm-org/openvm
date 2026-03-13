@@ -308,9 +308,6 @@ __device__ __forceinline__ void fill_summary_row(
         row, typename Cols<MAX_CACHED>::template Type, is_n_max_greater, n_max > n_logup
     );
 
-    // n_logup
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, n_logup);
-
     size_t shifted_msb_limb = interaction_decomp[nonzero_idx] * (1 << msb_limb_zero_bits);
     range_checker.add_count(shifted_msb_limb);
     if (shifted_msb_limb != 0) {
