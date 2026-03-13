@@ -137,9 +137,6 @@ where
             .when(local.is_valid)
             .assert_one(local.hypercube_volume);
         builder
-            .when(within_one_interaction.clone())
-            .assert_eq(next.n_lift, local.n_lift);
-        builder
             .when(within_one_air.clone())
             .assert_eq(next.n_lift, local.n_lift);
         builder
@@ -188,7 +185,7 @@ where
         builder
             .when(is_last_in_interaction.clone())
             .when(not(local.has_no_interactions))
-            .assert_eq(local.n + AB::Expr::ONE, local.n_logup);
+            .assert_eq(local.n, local.n_logup);
 
         builder.when(next.is_valid - next.is_first).assert_eq(
             next.running_idx,

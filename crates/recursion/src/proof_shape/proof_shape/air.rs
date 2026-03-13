@@ -876,7 +876,7 @@ where
             .when(not::<AB::Expr>(limb_times_inv.clone()))
             .assert_zero(n_logup);
         when_last.assert_eq(limb_to_range_check, expected_limb_to_range_check);
-        when_last.assert_eq(local.starting_cidx, n_logup.clone());
+        when_last.assert_eq(local.starting_cidx, n_logup);
         msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);
 
         self.pow_bus.lookup_key(
@@ -948,7 +948,7 @@ where
             builder,
             local.proof_idx,
             EqNsNLogupMaxMessage {
-                n_logup: n_logup.clone(),
+                n_logup,
                 n_max: local.n_max,
             },
             local.is_last,

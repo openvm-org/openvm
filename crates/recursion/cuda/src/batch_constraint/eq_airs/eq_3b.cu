@@ -18,6 +18,7 @@ template <typename T> struct Eq3bColumns {
     T interaction_idx;
 
     T n_lift;
+    T n_logup;
     T two_to_the_n_lift;
     T n;
     T hypercube_volume;
@@ -140,6 +141,7 @@ __global__ void eq_3b_tracegen(
     COL_WRITE_VALUE(row, Eq3bColumns, sort_idx, record.sort_idx);
     COL_WRITE_VALUE(row, Eq3bColumns, interaction_idx, record.interaction_idx);
     COL_WRITE_VALUE(row, Eq3bColumns, n_lift, record.n_lift);
+    COL_WRITE_VALUE(row, Eq3bColumns, n_logup, n_logup);
     COL_WRITE_VALUE(row, Eq3bColumns, two_to_the_n_lift, 1u << record.n_lift);
     COL_WRITE_VALUE(row, Eq3bColumns, n, local_n);
     COL_WRITE_VALUE(row, Eq3bColumns, hypercube_volume, 1u << local_n);
