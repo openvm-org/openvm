@@ -398,6 +398,7 @@ where
             if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
                 break;
             }
+            #[allow(clippy::unnecessary_unwrap)]
             if exec_state.exit_code.is_err() {
                 return Err(exec_state.exit_code.unwrap_err());
             }

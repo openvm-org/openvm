@@ -62,10 +62,9 @@ impl CyclicGroup for G1Affine {
 // but not special E(Fp2) intrinsics.
 mod g2 {
     use hex_literal::hex;
+    #[allow(unused_imports)]
     use openvm_algebra_guest::Field;
-    use openvm_ecc_guest::{
-        impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group,
-    };
+    use openvm_ecc_guest::{impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group};
 
     use super::{Fp, Fp2};
 

@@ -78,10 +78,9 @@ impl IntrinsicCurve for Bls12_381 {
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
 // but not special E(Fp2) intrinsics.
 mod g2 {
+    #[allow(unused_imports)]
     use openvm_algebra_guest::Field;
-    use openvm_ecc_guest::{
-        impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group,
-    };
+    use openvm_ecc_guest::{impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group};
 
     use super::{Fp, Fp2};
 
