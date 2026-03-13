@@ -876,7 +876,6 @@ where
             .when(not::<AB::Expr>(limb_times_inv.clone()))
             .assert_zero(n_logup);
         when_last.assert_eq(limb_to_range_check, expected_limb_to_range_check);
-        when_last.assert_eq(local.starting_cidx, n_logup);
         msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);
 
         self.pow_bus.lookup_key(
@@ -965,13 +964,14 @@ where
         );
 
         // Send n_lift to constraint folding air
+        let n_lift = (local.log_height - AB::Expr::from_usize(self.l_skip))
+            * (AB::Expr::ONE - local.n_sign_bit);
         self.n_lift_bus.send(
             builder,
             local.proof_idx,
             NLiftMessage {
                 air_idx,
-                n_lift: (local.log_height - AB::Expr::from_usize(self.l_skip))
-                    * (AB::Expr::ONE - local.n_sign_bit),
+                n_lift: n_lift.clone(),
             },
             local.is_present,
         );
@@ -980,8 +980,7 @@ where
             local.proof_idx,
             Eq3bShapeMessage {
                 sort_idx: local.sorted_idx.into(),
-                n_lift: (local.log_height - AB::Expr::from_usize(self.l_skip))
-                    * (AB::Expr::ONE - local.n_sign_bit),
+                n_lift,
                 n_logup: local.n_logup.into(),
             },
             local.is_present,

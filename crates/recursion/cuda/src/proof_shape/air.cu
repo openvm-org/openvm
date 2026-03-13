@@ -60,6 +60,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
 
     T n_max;
     T is_n_max_greater;
+    T n_logup;
 
     T num_air_id_lookups;
 
@@ -345,6 +346,7 @@ __global__ void proof_shape_tracegen(
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, proof_idx, proof_idx);
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_first, record_idx == 0);
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_max, proof_data.n_max);
+        COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_logup, proof_data.n_logup);
 
         Encoder encoder(inputs.num_airs, 2, true);
         size_t encoder_flags_idx =

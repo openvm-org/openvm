@@ -324,9 +324,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.is_n_max_greater = F::from_bool(preflight.proof_shape.n_max > n_logup);
                 cols.n_logup = F::from_usize(n_logup);
 
-                // n_logup
-                cols.starting_cidx = F::from_usize(n_logup);
-
                 let shifted_msb_limb =
                     msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits);
                 range_checker.add_count(shifted_msb_limb);

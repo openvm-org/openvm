@@ -140,7 +140,10 @@ where
             .when(within_one_air.clone())
             .assert_eq(next.n_lift, local.n_lift);
         builder
-            .when(within_one_air.clone())
+            .when(LoopSubAir::local_is_transition(
+                next.is_valid,
+                next.is_first,
+            ))
             .assert_eq(next.n_logup, local.n_logup);
         builder
             .when(within_one_interaction.clone())
