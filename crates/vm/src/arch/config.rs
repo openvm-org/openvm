@@ -115,8 +115,7 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 const DEFAULT_U8_BLOCK_SIZE: usize = 4;
 const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
 
-/// The constant block size used for memory accesses when access adapters are disabled.
-/// All memory accesses for address spaces 1-3 must use this block size.
+/// The constant block size used for all memory accesses.
 /// This is also the block size used by the Boundary AIR for memory bus interactions.
 pub const CONST_BLOCK_SIZE: usize = DEFAULT_U8_BLOCK_SIZE;
 

@@ -181,9 +181,8 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
-        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address
-        // space). The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
         let ptr_bytes = (pointer as u32).to_le_bytes();
         for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
             let chunk: [u8; CONST_BLOCK_SIZE] =
@@ -239,17 +238,15 @@ impl<F: VmField> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
-        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address
-        // space). The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
         let ptr_bytes = (pointer as u32).to_le_bytes();
         for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
             let chunk: [u8; CONST_BLOCK_SIZE] =
                 ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
             self.write::<CONST_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_u8));
         }
-        // Always write in CONST_BLOCK_SIZE-byte chunks to avoid generating
-        // access adapter records when access adapters are disabled.
+        // Always write in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
             for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {

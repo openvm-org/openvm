@@ -564,7 +564,7 @@ impl TracingMemory {
         address_space: usize,
         pointer: usize,
     ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
-        // Skip adapters if this is a repeated access to the same location with same size
+        // Skip metadata update if this is a repeated access to the same location with same size
         let (start_ptr, block_meta) = self.get_block_metadata::<ALIGN>(address_space, pointer);
         if block_meta.block_size() == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
             return None;
@@ -736,10 +736,6 @@ impl TracingMemory {
     /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})` where `t_prev` is the
     /// timestamp of the last memory access.
     ///
-    /// The previous memory access is treated as atomic even if previous accesses were for
-    /// a smaller block size. This is made possible by internal memory access adapters
-    /// that split/merge memory blocks. More specifically, the last memory access corresponding
-    /// to `t_prev` may refer to an atomic access inserted by the memory access adapters.
     ///
     /// # Assumptions
     /// The `BLOCK_SIZE` is a multiple of `ALIGN`, which must equal the minimum block size
@@ -775,10 +771,6 @@ impl TracingMemory {
     /// then increments the timestamp by 1. Returns `(t_prev, values_prev)` which equal the
     /// timestamp and value `[pointer:BLOCK_SIZE]_{address_space}` of the last memory access.
     ///
-    /// The previous memory access is treated as atomic even if previous accesses were for
-    /// a smaller block size. This is made possible by internal memory access adapters
-    /// that split/merge memory blocks. More specifically, the last memory access corresponding
-    /// to `t_prev` may refer to an atomic access inserted by the memory access adapters.
     ///
     /// # Assumptions
     /// The `BLOCK_SIZE` is a multiple of `ALIGN`, which must equal the minimum block size

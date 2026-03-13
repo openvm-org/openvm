@@ -52,36 +52,7 @@ where
                 )
             })?;
 
-        let enabled = !inst.f.is_zero();
-        let e_u32 = inst.e.as_canonical_u32();
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            inst.opcode
-                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        let is_load = matches!(
-            local_opcode,
-            Rv32LoadStoreOpcode::LOADW | Rv32LoadStoreOpcode::LOADBU | Rv32LoadStoreOpcode::LOADHU
-        );
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // read or write [a:4]_1
-        if is_load {
-            // read [[b:4]_1]_e
-            asm_str += &update_adapter_heights_asm(config, e_u32)?;
-        } else {
-            // read [a:4]_1
-            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        }
-        if enabled {
-            if is_load {
-                // write [a:4]_1
-                asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-            } else {
-                // write [[b:4]_1]_e
-                asm_str += &update_adapter_heights_asm(config, e_u32)?;
-            }
-        }
         Ok(asm_str)
     }
 }
