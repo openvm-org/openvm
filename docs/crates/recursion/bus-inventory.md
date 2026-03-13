@@ -1,6 +1,6 @@
 # Bus Inventory: Recursion Circuit
 
-This document catalogs the buses used in the recursion circuit's 39 AIRs. Buses are the typed message-passing channels over which AIRs communicate. All bus definitions live in `openvm/crates/recursion/src/bus.rs` (global buses) and in module-local `bus.rs` files within each module directory.
+This document catalogs the buses used in the recursion circuit's 39 AIRs. Buses are the typed message-passing channels over which AIRs communicate. All bus definitions live in `crates/recursion/src/bus.rs` (global buses) and in module-local `bus.rs` files within each module directory.
 
 ## Bus Types
 

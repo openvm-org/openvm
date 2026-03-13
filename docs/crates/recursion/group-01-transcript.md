@@ -31,7 +31,7 @@ graph LR
 
 ## TranscriptAir
 
-**Source:** `openvm/crates/recursion/src/transcript/transcript/air.rs`
+**Source:** `crates/recursion/src/transcript/transcript/air.rs`
 
 ### Executive Summary
 
@@ -106,7 +106,7 @@ When no permutation is needed (determined by the constraint logic), `prev_state 
 
 ## Poseidon2Air
 
-**Source:** `openvm/crates/recursion/src/transcript/poseidon2.rs`
+**Source:** `crates/recursion/src/transcript/poseidon2.rs`
 
 ### Executive Summary
 
@@ -153,7 +153,7 @@ The transcript module (`mod.rs`) deduplicates identical Poseidon2 inputs before 
 
 ## MerkleVerifyAir
 
-**Source:** `openvm/crates/recursion/src/transcript/merkle_verify/air.rs`
+**Source:** `crates/recursion/src/transcript/merkle_verify/air.rs`
 
 ### Executive Summary
 
