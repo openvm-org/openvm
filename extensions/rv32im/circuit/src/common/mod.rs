@@ -11,14 +11,8 @@ mod aot {
             execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
             AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE,
         },
-        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
+        system::memory::online::GuestMemory,
     };
-    use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
-
-    /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only
-    /// requires alignment of 2 because the instructions are implemented by doing an access of
-    /// block size 4.
-    const DEFAULT_U8_BLOCK_SIZE_BITS: u8 = 2;
     /// This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
     const DEFAULT_PAGE_BITS: usize = 6;
 
@@ -98,69 +92,6 @@ mod aot {
         } else {
             format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")
         }
-    }
-    pub(crate) fn update_adapter_heights_asm(
-        config: &SystemConfig,
-        _address_space: u32,
-    ) -> Result<String, AotError> {
-        let min_block_size_bits = config.memory_config.min_block_size_bits();
-        if min_block_size_bits[RV32_REGISTER_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("RV32_REGISTER_AS must have a minimum block size of 4");
-            return Err(AotError::Other(String::from(
-                "RV32_REGISTER_AS must have a minimum block size of 4",
-            )));
-        }
-        if min_block_size_bits[RV32_MEMORY_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("RV32_MEMORY_AS must have a minimum block size of 4");
-            return Err(AotError::Other(String::from(
-                "RV32_MEMORY_AS must have a minimum block size of 4",
-            )));
-        }
-        if min_block_size_bits[PUBLIC_VALUES_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("PUBLIC_VALUES_AS must have a minimum block size of 4");
-            return Err(AotError::Other(String::from(
-                "PUBLIC_VALUES_AS must have a minimum block size of 4",
-            )));
-        }
-
-        // `update_adapter_heights_asm` rewrites the following code in ASM for
-        // `on_memory_operation`: ```
-        // pub fn update_adapter_heights_batch(
-        //     &self,
-        //     trace_heights: &mut [u32],
-        //     address_space: u32,
-        //     size_bits: u32,
-        //     num: u32,
-        // ) {
-        //     let align_bits = unsafe {
-        //         *self
-        //             .min_block_size_bits
-        //             .get_unchecked(address_space as usize)
-        //     };
-        //
-        //     for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
-        //         let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
-        //         debug_assert!(adapter_idx < trace_heights.len());
-        //         unsafe {
-        //             *trace_heights.get_unchecked_mut(adapter_idx) +=
-        //                 num << (size_bits - adapter_bits + 1);
-        //         }
-        //     }
-        // }
-        // ```
-        // 
-        // For a specific RV32 instruction, the variables can be treated as constants at AOT
-        // compilation time:
-        // - `address_space`: always a constant because it is derived from an Instruction
-        // - `num`: always 1 in `on_memory_operation`
-        // - `align_bits`: always a constant because `address_space` is a constant
-        // - `size_bits`: RV32 instruction always read 4 bytes(in the AIR level). So `size` is
-        //   always 4 bytes. So `size_bits` is always 2.
-        //
-        // If we ignore the Native address space, `min_block_size_bits`` is always
-        // `DEFAULT_U8_BLOCK_SIZE=4`. Therefore, `align_bits` is always 2. So the loop will
-        // never be executed and we can leave the function empty.
-        Ok("".to_string())
     }
 
     /// Generate ASM code for updating the boundary merkle heights.
