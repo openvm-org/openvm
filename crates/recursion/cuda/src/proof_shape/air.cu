@@ -60,6 +60,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
 
     T n_max;
     T is_n_max_greater;
+    T n_logup;
 
     T num_air_id_lookups;
 
@@ -247,6 +248,7 @@ __device__ __forceinline__ void fill_summary_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
     row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
 
@@ -307,9 +309,6 @@ __device__ __forceinline__ void fill_summary_row(
         row, typename Cols<MAX_CACHED>::template Type, is_n_max_greater, n_max > n_logup
     );
 
-    // n_logup
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, n_logup);
-
     size_t shifted_msb_limb = interaction_decomp[nonzero_idx] * (1 << msb_limb_zero_bits);
     range_checker.add_count(shifted_msb_limb);
     if (shifted_msb_limb != 0) {
@@ -345,6 +344,7 @@ __global__ void proof_shape_tracegen(
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, proof_idx, proof_idx);
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_first, record_idx == 0);
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_max, proof_data.n_max);
+        COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_logup, proof_data.n_logup);
 
         Encoder encoder(inputs.num_airs, 2, true);
         size_t encoder_flags_idx =

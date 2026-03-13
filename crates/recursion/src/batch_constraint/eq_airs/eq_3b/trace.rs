@@ -197,6 +197,7 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
                         cols.sort_idx = F::from_u32(record.sort_idx);
                         cols.interaction_idx = F::from_u32(record.interaction_idx);
                         cols.n_lift = F::from_u32(record.n_lift);
+                        cols.n_logup = F::from_usize(n_logup);
                         cols.two_to_the_n_lift = F::from_usize(1 << record.n_lift);
                         cols.n = F::from_usize(n);
                         cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
