@@ -44,7 +44,8 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::AggProvingKey,
     prover::{
-        compute_root_proof_heights, AggProver, AppProver, EvmProver, RootProver, StarkProver,
+        compute_root_proof_heights, AggProver, AppProver, DeferralPathProver, DeferralProver,
+        EvmProver, RootProver, StarkProver,
     },
     types::ExecutableFormat,
 };
@@ -126,6 +127,8 @@ where
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     agg_prover: OnceLock<Arc<AggProver>>,
     root_prover: OnceLock<Arc<RootProver>>,
+
+    def_path_prover: Option<Arc<DeferralPathProver>>,
 
     #[cfg(feature = "evm-prove")]
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
@@ -213,8 +216,36 @@ where
             app_pk: OnceLock::new(),
             agg_prover: OnceLock::new(),
             root_prover: OnceLock::new(),
+            def_path_prover: None,
             _phantom: Default::default(),
         })
+    }
+
+    /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
+    /// because the DeferralExtension should be created using DeferralProver::make_extension, as
+    /// it has the capability to generate def_vk_commits.
+    pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
+        assert!(
+            self.def_path_prover.is_none(),
+            "Deferral prover already defined"
+        );
+
+        let deferral_tree_config = AggregationTreeConfig {
+            num_children_leaf: 2,
+            num_children_internal: 2,
+        };
+        let agg_prover = AggProver::new(
+            deferral_prover.def_hook_prover.get_vk(),
+            self.agg_config.clone(),
+            deferral_tree_config,
+        );
+        let def_path_prover = DeferralPathProver {
+            deferral_prover: Arc::new(deferral_prover),
+            agg_prover: Arc::new(agg_prover),
+        };
+
+        self.def_path_prover = Some(Arc::new(def_path_prover));
+        self
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target
@@ -385,9 +416,10 @@ where
         &self,
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
+        def_inputs: &[DeferralInput],
     ) -> Result<(NonRootStarkProof, VerificationBaseline), SdkError> {
         let mut prover = self.prover(app_exe)?;
-        let proof = prover.prove(inputs)?;
+        let proof = prover.prove(inputs, def_inputs)?;
         let baseline = prover.generate_baseline();
         Ok((proof, baseline))
     }
@@ -437,6 +469,7 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
+            self.def_path_prover.clone(),
         )?;
         Ok(stark_prover)
     }

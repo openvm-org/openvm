@@ -13,6 +13,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::pvs::DagCommit;
 use tracing::info_span;
 
+use crate::DeferralInput;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_continuations::prover::DeferralInnerGpuProver as DeferralInnerProver;
@@ -23,14 +25,14 @@ cfg_if::cfg_if! {
     }
 }
 
-pub struct SingleDefCircuitProver<'a> {
-    pub def_circuit_prover: Box<dyn DeferralCircuitProver<SC> + 'a>,
+pub struct SingleDefCircuitProver {
+    pub def_circuit_prover: Box<dyn DeferralCircuitProver<SC>>,
     pub leaf_prover: DeferralInnerProver,
     pub internal_for_leaf_prover: DeferralInnerProver,
 }
 
-impl<'a> SingleDefCircuitProver<'a> {
-    pub fn new<DP: DeferralCircuitProver<SC> + 'a>(
+impl SingleDefCircuitProver {
+    pub fn new<DP: DeferralCircuitProver<SC> + 'static>(
         def_circuit_prover: DP,
         leaf_params: SystemParams,
         internal_params: SystemParams,
@@ -46,7 +48,7 @@ impl<'a> SingleDefCircuitProver<'a> {
         }
     }
 
-    pub fn from_pks<DP: DeferralCircuitProver<SC> + 'a>(
+    pub fn from_pks<DP: DeferralCircuitProver<SC> + 'static>(
         def_circuit_prover: DP,
         leaf_pk: Arc<MultiStarkProvingKey<SC>>,
         internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,
@@ -62,11 +64,15 @@ impl<'a> SingleDefCircuitProver<'a> {
         }
     }
 
-    pub fn prove(&self, inputs: &[&[u8]]) -> Result<(Vec<Proof<SC>>, Vec<DeferralIoCommit<F>>)> {
+    pub fn prove(
+        &self,
+        inputs: &DeferralInput,
+    ) -> Result<(Vec<Proof<SC>>, Vec<DeferralIoCommit<F>>)> {
         // Generate deferral circuit proofs
         let def_proofs = inputs
-            .into_iter()
-            .map(|input| self.def_circuit_prover.prove(input))
+            .byte_vec
+            .iter()
+            .map(|input| self.def_circuit_prover.prove(&input))
             .collect_vec();
 
         // Extract leaf IO commits from the deferral circuit proofs

@@ -5,12 +5,13 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
     VmExecutionConfig,
 };
+use openvm_continuations::circuit::inner::ProofsType;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
 use openvm_verify_stark_host::{vk::VerificationBaseline, NonRootStarkProof};
 
 use crate::{
-    prover::{vm::types::VmProvingKey, AggProver, AppProver},
-    StdIn, SC,
+    prover::{vm::types::VmProvingKey, AggProver, AppProver, DeferralProver},
+    DeferralInput, StdIn, SC,
 };
 
 pub struct StarkProver<E, VB>
@@ -19,6 +20,13 @@ where
     VB: VmBuilder<E>,
 {
     pub app_prover: AppProver<E, VB>,
+    pub agg_prover: Arc<AggProver>,
+    pub def_prover: Option<Arc<DeferralPathProver>>,
+}
+
+#[derive(derive_new::new)]
+pub struct DeferralPathProver {
+    pub deferral_prover: Arc<DeferralProver>,
     pub agg_prover: Arc<AggProver>,
 }
 
@@ -33,28 +41,45 @@ where
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
         app_exe: Arc<VmExe<Val<SC>>>,
         agg_prover: Arc<AggProver>,
+        def_prover: Option<Arc<DeferralPathProver>>,
     ) -> Result<Self> {
         Ok(Self {
             app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
             agg_prover,
+            def_prover,
         })
     }
 
-    pub fn prove(&mut self, input: StdIn<Val<SC>>) -> Result<NonRootStarkProof>
+    pub fn prove(
+        &mut self,
+        vm_input: StdIn<Val<SC>>,
+        def_inputs: &[DeferralInput],
+    ) -> Result<NonRootStarkProof>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let continuation_proof = self.app_prover.prove(input)?;
+        let continuation_proof = self.app_prover.prove(vm_input)?;
         let (mut stark_proof, mut internal_metadata) =
             self.agg_prover.prove_vm(continuation_proof)?;
+
+        if let Some(def_prover) = self.def_prover.as_ref() {
+            let def_hook_proofs = def_prover.deferral_prover.prove(def_inputs)?;
+            let def_proof = def_prover.agg_prover.prove_def(def_hook_proofs)?;
+            stark_proof =
+                self.agg_prover
+                    .prove_mixed(stark_proof, def_proof, &mut internal_metadata)?;
+        } else {
+            assert_eq!(def_inputs.len(), 0);
+        }
+
         // We add one additional internal_recursive layer to reduce the proof size.
         const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
         for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-            stark_proof = self
-                .agg_prover
-                .wrap_proof(stark_proof, &mut internal_metadata)?;
+            stark_proof =
+                self.agg_prover
+                    .wrap_proof(stark_proof, &mut internal_metadata, ProofsType::Vm)?;
         }
         Ok(stark_proof)
     }

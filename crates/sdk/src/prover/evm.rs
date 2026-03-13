@@ -8,6 +8,8 @@ use openvm_circuit::arch::{
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
+use openvm_continuations::circuit::inner::ProofsType;
+
 use crate::{
     prover::{vm::types::VmProvingKey, AggProver, AppProver, RootProver},
     StdIn, SC,
@@ -56,9 +58,9 @@ where
 
         const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
         for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-            stark_proof = self
-                .agg_prover
-                .wrap_proof(stark_proof, &mut internal_metadata)?;
+            stark_proof =
+                self.agg_prover
+                    .wrap_proof(stark_proof, &mut internal_metadata, ProofsType::Vm)?;
         }
 
         let root_ctx = {
@@ -73,9 +75,11 @@ where
                         "root tracegen returned None after {MAX_ROOT_TRACEGEN_RETRIES} retries"
                     ));
                 }
-                stark_proof = self
-                    .agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata)?;
+                stark_proof = self.agg_prover.wrap_proof(
+                    stark_proof,
+                    &mut internal_metadata,
+                    ProofsType::Vm,
+                )?;
                 attempt += 1;
             }
         };

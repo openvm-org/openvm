@@ -7,16 +7,19 @@ use openvm_continuations::{
     prover::{DeferralChildVkKind, DeferralCircuitProver},
     SC,
 };
+use openvm_deferral_circuit::{DeferralExtension, DeferralFn};
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkProvingKey, p3_field::PrimeCharacteristicRing, proof::Proof,
+    keygen::types::MultiStarkProvingKey,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    proof::Proof,
     SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
 use openvm_verify_stark_host::pvs::DeferralPvs;
 use tracing::info_span;
 
-use crate::{config::AggregationConfig, keygen::AggProvingKey};
+use crate::{config::AggregationConfig, keygen::AggProvingKey, DeferralInput};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -34,19 +37,19 @@ pub use circuit::*;
 
 pub type DefAggProvingKey = AggProvingKey;
 
-pub enum DefHookProof {
+pub enum DeferralProof {
     Present(Proof<SC>),
     Absent(DeferralPvs<F>),
 }
 
-pub struct DeferralProver<'a> {
-    pub single_circuit_provers: Vec<SingleDefCircuitProver<'a>>,
+pub struct DeferralProver {
+    pub single_circuit_provers: Vec<SingleDefCircuitProver>,
     pub internal_recursive_prover: DeferralInnerProver,
     pub def_hook_prover: DeferralHookProver,
 }
 
-impl<'a> DeferralProver<'a> {
-    pub fn new<DP: DeferralCircuitProver<SC> + 'a>(
+impl DeferralProver {
+    pub fn new<DP: DeferralCircuitProver<SC> + 'static>(
         def_circuit_prover: DP,
         agg_config: AggregationConfig,
         hook_params: SystemParams,
@@ -70,7 +73,7 @@ impl<'a> DeferralProver<'a> {
         }
     }
 
-    pub fn from_pks<DP: DeferralCircuitProver<SC> + 'a>(
+    pub fn from_pks<DP: DeferralCircuitProver<SC> + 'static>(
         def_circuit_prover: DP,
         def_agg_pk: DefAggProvingKey,
         def_hook_pk: Arc<MultiStarkProvingKey<SC>>,
@@ -98,7 +101,7 @@ impl<'a> DeferralProver<'a> {
         }
     }
 
-    pub fn with_prover<DP: DeferralCircuitProver<SC> + 'a>(
+    pub fn with_prover<DP: DeferralCircuitProver<SC> + 'static>(
         mut self,
         def_circuit_prover: DP,
     ) -> Self {
@@ -115,7 +118,7 @@ impl<'a> DeferralProver<'a> {
         self
     }
 
-    pub fn prove(&self, inputs: &[&[&[u8]]]) -> Result<Vec<DefHookProof>> {
+    pub fn prove(&self, inputs: &[DeferralInput]) -> Result<Vec<DeferralProof>> {
         // Generate internal-for-leaf proofs and leaf IO commits per circuit
         let per_circuit: Vec<(Vec<Proof<SC>>, Vec<DeferralIoCommit<F>>)> = self
             .single_circuit_provers
@@ -136,7 +139,7 @@ impl<'a> DeferralProver<'a> {
                     let output_acc_hash = poseidon2_hash_slice(&[F::ZERO]).0;
                     let combined_hash =
                         poseidon2_compress_with_capacity(input_acc_hash, output_acc_hash).0;
-                    Ok(DefHookProof::Absent(DeferralPvs {
+                    Ok(DeferralProof::Absent(DeferralPvs {
                         initial_acc_hash: combined_hash,
                         final_acc_hash: combined_hash,
                         depth: F::ONE,
@@ -191,12 +194,32 @@ impl<'a> DeferralProver<'a> {
                     }
 
                     // Generate the deferral hook proof
-                    Ok(DefHookProof::Present(
+                    Ok(DeferralProof::Present(
                         self.def_hook_prover
                             .prove::<E>(proofs.pop().unwrap(), leaf_children)?,
                     ))
                 }
             })
             .collect::<Result<Vec<_>>>()
+    }
+
+    pub fn make_extension(&self, fns: Vec<Arc<DeferralFn>>) -> DeferralExtension {
+        let dag_commit = self.internal_recursive_prover.get_dag_commit(false);
+        let def_vk_commits = self
+            .single_circuit_provers
+            .iter()
+            .map(|p| {
+                p.vk_commit(dag_commit)
+                    .iter()
+                    .flat_map(|f| f.to_unique_u32().to_le_bytes())
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect();
+        DeferralExtension {
+            fns,
+            def_vk_commits,
+        }
     }
 }

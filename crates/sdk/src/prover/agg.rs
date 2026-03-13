@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
-use openvm_continuations::prover::ChildVkKind;
+use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
-use openvm_verify_stark_host::NonRootStarkProof;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
+use openvm_verify_stark_host::{pvs::DeferralPvs, NonRootStarkProof};
 use tracing::info_span;
 
 use crate::{
@@ -12,6 +14,7 @@ use crate::{
         AggregationConfig, AggregationTreeConfig, MAX_NUM_CHILDREN_INTERNAL, MAX_NUM_CHILDREN_LEAF,
     },
     keygen::AggProvingKey,
+    prover::deferral::DeferralProof,
     SC,
 };
 
@@ -39,14 +42,18 @@ pub struct InternalLayerMetadata {
 
 impl AggProver {
     pub fn new(
-        app_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_config: AggregationConfig,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
         assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
         assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
-        let leaf_prover =
-            InnerAggregationProver::new::<E>(app_vk, agg_config.params.leaf.clone(), false, None);
+        let leaf_prover = InnerAggregationProver::new::<E>(
+            app_or_def_vk,
+            agg_config.params.leaf.clone(),
+            false,
+            None,
+        );
         let internal_for_leaf_prover = InnerAggregationProver::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
@@ -68,11 +75,12 @@ impl AggProver {
     }
 
     pub fn from_pk(
-        app_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
-        let leaf_prover = InnerAggregationProver::from_pk::<E>(app_vk, agg_pk.leaf_pk, false, None);
+        let leaf_prover =
+            InnerAggregationProver::from_pk::<E>(app_or_def_vk, agg_pk.leaf_pk, false, None);
         let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
             agg_pk.internal_for_leaf_pk,
@@ -177,10 +185,86 @@ impl AggProver {
         ))
     }
 
+    pub fn prove_def(&self, input: Vec<DeferralProof>) -> Result<DeferralProof> {
+        assert!(!input.is_empty());
+
+        // Leaf round: hook-level → leaf-level
+        let mut proofs = info_span!("agg_layer", group = "def_leaf")
+            .in_scope(|| reduce_def_round(input, ChildVkKind::App, &self.leaf_prover))?;
+
+        // Internal-for-leaf round: leaf-level → i4l-level
+        proofs = info_span!("agg_layer", group = "def_internal_for_leaf").in_scope(|| {
+            reduce_def_round(
+                proofs,
+                ChildVkKind::Standard,
+                &self.internal_for_leaf_prover,
+            )
+        })?;
+
+        // Internal-recursive round 0: i4l-level → ir-level
+        proofs = info_span!("agg_layer", group = "def_internal_recursive.0").in_scope(|| {
+            reduce_def_round(
+                proofs,
+                ChildVkKind::Standard,
+                &self.internal_recursive_prover,
+            )
+        })?;
+
+        // Internal-recursive rounds: ir-level → ir-level until single proof remains
+        let mut layer = 1;
+        while proofs.len() > 1 {
+            proofs = info_span!(
+                "agg_layer",
+                group = format!("def_internal_recursive.{layer}")
+            )
+            .in_scope(|| {
+                reduce_def_round(
+                    proofs,
+                    ChildVkKind::RecursiveSelf,
+                    &self.internal_recursive_prover,
+                )
+            })?;
+            layer += 1;
+        }
+
+        Ok(proofs.pop().unwrap())
+    }
+
+    pub fn prove_mixed(
+        &self,
+        mut vm_proof: NonRootStarkProof,
+        def_proof: DeferralProof,
+        metadata: &mut InternalLayerMetadata,
+    ) -> Result<NonRootStarkProof> {
+        let DeferralProof::Present(def_inner) = def_proof else {
+            return Ok(vm_proof);
+        };
+
+        vm_proof.inner = info_span!(
+            "agg_layer",
+            group = format!("internal_recursive.{}", metadata.internal_recursive_layer)
+        )
+        .in_scope(|| {
+            metadata.internal_recursive_layer += 1;
+            info_span!("single_internal_agg", idx = metadata.internal_node_idx).in_scope(|| {
+                metadata.internal_node_idx += 1;
+                self.internal_recursive_prover.agg_prove::<E>(
+                    &[vm_proof.inner, def_inner],
+                    ChildVkKind::RecursiveSelf,
+                    ProofsType::Mix,
+                    None,
+                )
+            })
+        })?;
+
+        Ok(vm_proof)
+    }
+
     pub fn wrap_proof(
         &self,
         mut proof: NonRootStarkProof,
         metadata: &mut InternalLayerMetadata,
+        proofs_type: ProofsType,
     ) -> Result<NonRootStarkProof> {
         proof.inner = info_span!(
             "agg_layer",
@@ -190,10 +274,85 @@ impl AggProver {
             metadata.internal_recursive_layer += 1;
             info_span!("single_internal_agg", idx = metadata.internal_node_idx).in_scope(|| {
                 metadata.internal_node_idx += 1;
-                self.internal_recursive_prover
-                    .agg_prove_no_def::<E>(&[proof.inner], ChildVkKind::RecursiveSelf)
+                self.internal_recursive_prover.agg_prove::<E>(
+                    &[proof.inner],
+                    ChildVkKind::RecursiveSelf,
+                    proofs_type,
+                    None,
+                )
             })
         })?;
         Ok(proof)
     }
+}
+
+fn reduce_def_round<const N: usize>(
+    proofs: Vec<DeferralProof>,
+    kind: ChildVkKind,
+    prover: &InnerAggregationProver<N>,
+) -> Result<Vec<DeferralProof>> {
+    let mut next = Vec::with_capacity(proofs.len().div_ceil(2));
+    let mut iter = proofs.into_iter();
+    while let Some(a) = iter.next() {
+        match iter.next() {
+            Some(b) => {
+                let combined = match (a, b) {
+                    (DeferralProof::Present(p0), DeferralProof::Present(p1)) => {
+                        DeferralProof::Present(prover.agg_prove::<E>(
+                            &[p0, p1],
+                            kind,
+                            ProofsType::Deferral,
+                            None,
+                        )?)
+                    }
+                    (DeferralProof::Present(p), DeferralProof::Absent(pvs)) => {
+                        // Absent is the right child (present is left, is_right = false)
+                        DeferralProof::Present(prover.agg_prove::<E>(
+                            &[p],
+                            kind,
+                            ProofsType::Deferral,
+                            Some((pvs, false)),
+                        )?)
+                    }
+                    (DeferralProof::Absent(pvs), DeferralProof::Present(p)) => {
+                        // Absent is the left child (present is right, is_right = true)
+                        DeferralProof::Present(prover.agg_prove::<E>(
+                            &[p],
+                            kind,
+                            ProofsType::Deferral,
+                            Some((pvs, true)),
+                        )?)
+                    }
+                    (DeferralProof::Absent(pvs0), DeferralProof::Absent(pvs1)) => {
+                        DeferralProof::Absent(DeferralPvs {
+                            initial_acc_hash: poseidon2_compress_with_capacity(
+                                pvs0.initial_acc_hash,
+                                pvs1.initial_acc_hash,
+                            )
+                            .0,
+                            final_acc_hash: poseidon2_compress_with_capacity(
+                                pvs0.final_acc_hash,
+                                pvs1.final_acc_hash,
+                            )
+                            .0,
+                            depth: pvs0.depth + F::ONE,
+                        })
+                    }
+                };
+                next.push(combined);
+            }
+            None => {
+                // Trailing singleton: wrap Present, pass Absent unchanged
+                let out =
+                    match a {
+                        DeferralProof::Present(p) => DeferralProof::Present(
+                            prover.agg_prove::<E>(&[p], kind, ProofsType::Deferral, None)?,
+                        ),
+                        absent => absent,
+                    };
+                next.push(out);
+            }
+        }
+    }
+    Ok(next)
 }
