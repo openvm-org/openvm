@@ -54,13 +54,9 @@ pub fn generate_proving_ctx(
         cols.next_bytes = next_f_to_digest(next_f);
         range_inputs.extend_from_slice(&cols.next_bytes.map(|b| b.as_canonical_u32() as usize));
 
-        if row_idx == 0 {
-            state = cols.next_bytes;
-        } else {
-            cols.state = state;
-            poseidon2_compress_inputs.push(digests_to_poseidon2_input(state, cols.next_bytes));
-            state = poseidon2_compress_with_capacity(state, cols.next_bytes).0;
-        }
+        cols.state = state;
+        poseidon2_compress_inputs.push(digests_to_poseidon2_input(state, cols.next_bytes));
+        state = poseidon2_compress_with_capacity(state, cols.next_bytes).0;
     }
 
     for row_idx in next_f_rows.len()..height {
@@ -94,27 +90,4 @@ fn next_f_to_digest(next_f: [F; VALS_IN_DIGEST]) -> [F; DIGEST_SIZE] {
         let f_u32 = next_f[f_idx].as_canonical_u32();
         F::from_u8(f_u32.to_le_bytes()[byte_in_f])
     })
-}
-
-pub fn expected_output_commit(
-    app_exe_commit: [F; DIGEST_SIZE],
-    app_vk_commit: [F; DIGEST_SIZE],
-    user_pvs: Vec<F>,
-) -> [F; DIGEST_SIZE] {
-    let mut next_f_rows = values_to_rows(&app_exe_commit);
-    next_f_rows.extend(values_to_rows(&app_vk_commit));
-    next_f_rows.extend(values_to_rows(&user_pvs));
-
-    let mut state = [F::ZERO; DIGEST_SIZE];
-
-    for (row_idx, next_f) in next_f_rows.iter().copied().enumerate() {
-        let next_bytes = next_f_to_digest(next_f);
-        if row_idx == 0 {
-            state = next_bytes;
-        } else {
-            state = poseidon2_compress_with_capacity(state, next_bytes).0;
-        }
-    }
-
-    state
 }

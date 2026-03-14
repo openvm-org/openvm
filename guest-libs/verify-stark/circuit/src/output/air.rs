@@ -119,10 +119,14 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
         );
 
         /*
-         * Compute the output commit and send it on the first invalid row. Note
-         * that we do not do a hash on the first row.
+         * Compute the output commit and send it on the first invalid row. The first
+         * row starts from zero state, and a compression is done on each row.
          */
-        assert_array_eq(&mut builder.when_first_row(), local.next_bytes, next.state);
+        assert_array_eq(
+            &mut builder.when_first_row(),
+            local.state,
+            [AB::Expr::ZERO; DIGEST_SIZE],
+        );
 
         self.poseidon2_bus.lookup_key(
             builder,
@@ -130,7 +134,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
                 input: digests_to_poseidon2_input(local.state, local.next_bytes),
                 output: next.state,
             },
-            local.is_valid * not(local.is_first),
+            local.is_valid,
         );
 
         self.output_commit_bus.send(
