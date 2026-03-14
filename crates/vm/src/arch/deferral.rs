@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 pub type InputRaw = Vec<u8>;
 pub type OutputRaw = Vec<u8>;
 pub type InputCommit = Vec<u8>;
 pub type OutputCommit = Vec<u8>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum InputMapVal {
     Raw(InputRaw),
     Output(OutputCommit),
@@ -18,7 +20,7 @@ pub struct DeferralResult {
     pub output_raw: OutputRaw,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DeferralState {
     input_map: HashMap<InputCommit, InputMapVal>,
     output_map: HashMap<OutputCommit, OutputRaw>,

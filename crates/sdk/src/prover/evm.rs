@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
     VmExecutionConfig,
 };
-use openvm_continuations::RootSC;
+use openvm_continuations::{circuit::inner::ProofsType, RootSC};
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
 use crate::{
@@ -51,13 +51,14 @@ where
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
         let continuation_proof = self.app_prover.prove(input)?;
-        let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
+        let (mut stark_proof, mut internal_metadata) =
+            self.agg_prover.prove_vm(continuation_proof)?;
 
         const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
         for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-            stark_proof = self
-                .agg_prover
-                .wrap_proof(stark_proof, &mut internal_metadata)?;
+            stark_proof =
+                self.agg_prover
+                    .wrap_proof(stark_proof, &mut internal_metadata, ProofsType::Vm)?;
         }
 
         let root_ctx = {
@@ -72,9 +73,11 @@ where
                         "root tracegen returned None after {MAX_ROOT_TRACEGEN_RETRIES} retries"
                     ));
                 }
-                stark_proof = self
-                    .agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata)?;
+                stark_proof = self.agg_prover.wrap_proof(
+                    stark_proof,
+                    &mut internal_metadata,
+                    ProofsType::Vm,
+                )?;
                 attempt += 1;
             }
         };

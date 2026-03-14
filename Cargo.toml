@@ -70,7 +70,8 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
-    # "guest-libs/verify_stark/",
+    "guest-libs/verify-stark/circuit",
+    "guest-libs/verify-stark/guest",
     "scripts",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
@@ -174,7 +175,8 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
-openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = false }
+openvm-verify-stark-circuit = { path = "guest-libs/verify-stark/circuit", default-features = false }
+openvm-verify-stark-guest = { path = "guest-libs/verify-stark/guest", default-features = false }
 openvm-deferral-circuit = { path = "extensions/deferral/circuit", default-features = false }
 openvm-deferral-guest = { path = "extensions/deferral/guest", default-features = false }
 openvm-deferral-transpiler = { path = "extensions/deferral/transpiler", default-features = false }

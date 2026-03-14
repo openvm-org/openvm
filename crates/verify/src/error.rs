@@ -37,6 +37,20 @@ pub enum VerifyStarkError {
     Io(#[from] std::io::Error),
     #[error("Other error: {0}")]
     Other(#[from] eyre::Error),
-    #[error("Deferrals are not enabled in verify-stark yet")]
-    DeferralNotEnabled,
+    #[error("Deferral Merkle proof length mismatch: expected {expected}, actual {actual}")]
+    DeferralMerkleProofLengthMismatch { expected: usize, actual: usize },
+    #[error("Deferral initial root mismatch: expected {expected:?}, actual {actual:?}")]
+    DeferralInitialRootMismatch { expected: Digest, actual: Digest },
+    #[error("Deferral final root mismatch: expected {expected:?}, actual {actual:?}")]
+    DeferralFinalRootMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid deferral flag {0}, should be 0 or 2")]
+    InvalidDeferralFlag(F),
+    #[error("Deferral hook VK commit mismatch: expected {expected:?}, actual {actual:?}")]
+    DefHookVkCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Proof has deferrals but baseline has no expected_def_hook_vk_commit")]
+    UnexpectedDeferral,
+    #[error("Baseline expects deferrals but proof has no deferral Merkle proofs")]
+    MissingDeferralMerkleProofs,
+    #[error("Proof has deferral_flag=0 but baseline expects deferrals")]
+    DeferralFlagNotSet,
 }
