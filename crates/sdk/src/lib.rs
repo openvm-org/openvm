@@ -238,6 +238,7 @@ where
             deferral_prover.def_hook_prover.get_vk(),
             self.agg_config.clone(),
             deferral_tree_config,
+            Some(deferral_prover.def_hook_prover.get_cached_commit()),
         );
         let def_path_prover = DeferralPathProver {
             deferral_prover: Arc::new(deferral_prover),
@@ -497,10 +498,15 @@ where
         let app_pk = self.app_pk();
         self.agg_prover
             .get_or_init(|| {
+                let def_hook_commit = self
+                    .def_path_prover
+                    .as_ref()
+                    .map(|p| p.deferral_prover.def_hook_prover.get_cached_commit());
                 Arc::new(AggProver::new(
                     Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
                     self.agg_config.clone(),
                     self.agg_tree_config,
+                    def_hook_commit,
                 ))
             })
             .clone()

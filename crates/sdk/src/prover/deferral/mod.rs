@@ -24,6 +24,7 @@ use crate::{config::AggregationConfig, keygen::AggProvingKey, DeferralInput};
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_continuations::prover::DeferralInnerGpuProver as DeferralInnerProver;
+        use openvm_continuations::prover::DeferralHookGpuProver as DeferralHookProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
         use openvm_continuations::prover::DeferralInnerCpuProver as DeferralInnerProver;

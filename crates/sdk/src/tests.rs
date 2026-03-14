@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
+use openvm_circuit::arch::instructions::DEFERRAL_AS;
 use openvm_deferral_circuit::DeferralFn;
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::config::{
@@ -126,8 +127,9 @@ fn test_verify_stark_deferral() -> Result<()> {
     // ---- Step 6: Create verify-stark SDK with deferral ----
     let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
     vs_config.deferral = Some(deferral_ext);
+    vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
-    // Use CpuSdk because the deferral extension does not have CUDA tracegen implemented.
+    // TODO[INT-6241]: Switch this to SDK once CUDA is implemented for deferrals
     let vs_app_config = AppConfig::new(vs_config, app_params);
     let vs_sdk = CpuSdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
 

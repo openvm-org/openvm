@@ -64,22 +64,24 @@ where
         let (mut stark_proof, mut internal_metadata) =
             self.agg_prover.prove_vm(continuation_proof)?;
 
-        if let Some(def_prover) = self.def_prover.as_ref() {
+        let wrap_proof_type = if let Some(def_prover) = self.def_prover.as_ref() {
             let def_hook_proofs = def_prover.deferral_prover.prove(def_inputs)?;
             let def_proof = def_prover.agg_prover.prove_def(def_hook_proofs)?;
             stark_proof =
                 self.agg_prover
                     .prove_mixed(stark_proof, def_proof, &mut internal_metadata)?;
+            ProofsType::Combined
         } else {
             assert_eq!(def_inputs.len(), 0);
-        }
+            ProofsType::Vm
+        };
 
         // We add one additional internal_recursive layer to reduce the proof size.
         const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
         for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
             stark_proof =
                 self.agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata, ProofsType::Vm)?;
+                    .wrap_proof(stark_proof, &mut internal_metadata, wrap_proof_type)?;
         }
         Ok(stark_proof)
     }

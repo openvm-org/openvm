@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use alloc::vec;
 use alloc::vec::Vec;
 
 use openvm_deferral_guest::{deferred_compute, get_deferred_output, Commit, COMMIT_NUM_BYTES};

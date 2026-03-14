@@ -3,6 +3,7 @@ use std::sync::Arc;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
+use openvm_cuda_backend::prelude::Digest;
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
@@ -45,6 +46,7 @@ impl AggProver {
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_config: AggregationConfig,
         agg_tree_config: AggregationTreeConfig,
+        def_hook_commit: Option<Digest>,
     ) -> Self {
         assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
         assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
@@ -52,19 +54,19 @@ impl AggProver {
             app_or_def_vk,
             agg_config.params.leaf.clone(),
             false,
-            None,
+            def_hook_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             false,
-            None,
+            def_hook_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             true,
-            None,
+            def_hook_commit,
         );
         Self {
             leaf_prover,
@@ -78,6 +80,7 @@ impl AggProver {
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
+        def_hook_commit: Option<Digest>,
     ) -> Self {
         let leaf_prover =
             InnerAggregationProver::from_pk::<E>(app_or_def_vk, agg_pk.leaf_pk, false, None);
@@ -85,13 +88,13 @@ impl AggProver {
             leaf_prover.get_vk(),
             agg_pk.internal_for_leaf_pk,
             false,
-            None,
+            def_hook_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_pk.internal_recursive_pk,
             true,
-            None,
+            def_hook_commit,
         );
         Self {
             leaf_prover,

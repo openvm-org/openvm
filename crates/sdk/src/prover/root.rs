@@ -140,6 +140,7 @@ pub fn compute_root_proof_heights(
         Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
         AggregationConfig { params: agg_params },
         agg_tree_config,
+        None,
     );
     let (agg_proof, _) = agg_prover.prove_vm(app_proof)?;
 
