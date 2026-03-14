@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
@@ -124,7 +124,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     };
 
     // Get the raw results to extract input_commit and output for the guest stdin
-    let raw_results = get_raw_deferral_results(&fib_vk, &[fib_proof.clone()])?;
+    let raw_results = get_raw_deferral_results(&fib_vk, from_ref(&fib_proof))?;
     assert_eq!(raw_results.len(), 1);
     let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
     let output_raw = &raw_results[0].output_raw;
@@ -133,7 +133,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let user_public_values = output_raw[64..].to_vec();
 
     // Build the deferral state for execution
-    let deferral_state = get_deferral_state(&fib_vk, &[fib_proof.clone()], 0)?;
+    let deferral_state = get_deferral_state(&fib_vk, from_ref(&fib_proof), 0)?;
 
     // ---- Step 6: Create verify-stark SDK with deferral ----
     let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
