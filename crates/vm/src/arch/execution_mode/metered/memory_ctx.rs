@@ -1,7 +1,10 @@
 use abi_stable::std_types::RVec;
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
-use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
+use crate::{
+    arch::{SystemConfig, CONST_BLOCK_SIZE},
+    system::memory::dimensions::MemoryDimensions,
+};
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
@@ -115,7 +118,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     pub fn new(config: &SystemConfig, segment_check_insns: u64) -> Self {
-        let chunk = config.initial_block_size() as u32;
+        let chunk = CONST_BLOCK_SIZE as u32;
         let chunk_bits = chunk.ilog2();
 
         let memory_dimensions = config.memory_config.memory_dimensions();

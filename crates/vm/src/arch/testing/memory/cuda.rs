@@ -1,9 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
         testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-        MemoryConfig,
+        MemoryConfig, CONST_BLOCK_SIZE,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryBus},
@@ -28,7 +28,7 @@ use crate::{
 };
 
 pub struct DeviceMemoryTester {
-    pub chip_for_block: HashMap<usize, FixedSizeMemoryTester>,
+    pub chip: FixedSizeMemoryTester,
     pub memory: TracingMemory,
     pub inventory: MemoryInventoryGPU,
     pub hasher_chip: Option<Arc<Poseidon2PeripheryChipGPU>>,
@@ -46,11 +46,7 @@ impl DeviceMemoryTester {
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
-        let mut chip_for_block = HashMap::new();
-        for log_block_size in 0..6 {
-            let block_size = 1 << log_block_size;
-            chip_for_block.insert(block_size, FixedSizeMemoryTester::new(mem_bus, block_size));
-        }
+        let chip = FixedSizeMemoryTester::new(mem_bus, CONST_BLOCK_SIZE);
         let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         let sbox_regs = 1;
         let poseidon2_periphery = Arc::new(Poseidon2PeripheryChipGPU::new(
@@ -61,7 +57,7 @@ impl DeviceMemoryTester {
             MemoryInventoryGPU::new(mem_config.clone(), poseidon2_periphery.clone());
         inventory.set_initial_memory(&memory.data.memory);
         Self {
-            chip_for_block,
+            chip,
             memory,
             inventory,
             hasher_chip: Some(poseidon2_periphery),
@@ -76,42 +72,36 @@ impl DeviceMemoryTester {
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
-        let t = self.memory.timestamp();
-        let (t_prev, data) = unsafe { self.memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
-        let data = data.map(F::from_u8);
-        self.chip_for_block.get_mut(&N).unwrap().receive(
-            addr_space as u32,
-            ptr as u32,
-            &data,
-            t_prev,
+        assert_eq!(
+            N, CONST_BLOCK_SIZE,
+            "All memory accesses must use CONST_BLOCK_SIZE"
         );
-        self.chip_for_block
-            .get_mut(&N)
-            .unwrap()
-            .send(addr_space as u32, ptr as u32, &data, t);
+        let t = self.memory.timestamp();
+        let (t_prev, data) = unsafe { self.memory.read::<u8, N>(addr_space as u32, ptr as u32) };
+        let data = data.map(F::from_u8);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
         data
     }
 
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+        assert_eq!(
+            N, CONST_BLOCK_SIZE,
+            "All memory accesses must use CONST_BLOCK_SIZE"
+        );
         let t = self.memory.timestamp();
         let (t_prev, data_prev) = unsafe {
-            self.memory.write::<u8, N, 4>(
+            self.memory.write::<u8, N>(
                 addr_space as u32,
                 ptr as u32,
                 data.map(|x| x.as_canonical_u32() as u8),
             )
         };
         let data_prev = data_prev.map(F::from_u8);
-        self.chip_for_block.get_mut(&N).unwrap().receive(
-            addr_space as u32,
-            ptr as u32,
-            &data_prev,
-            t_prev,
-        );
-        self.chip_for_block
-            .get_mut(&N)
-            .unwrap()
-            .send(addr_space as u32, ptr as u32, &data, t);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data_prev, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
     }
 }
 

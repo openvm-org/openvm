@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug, num::NonZero};
+use std::{array::from_fn, fmt::Debug};
 
 use getset::Getters;
 use itertools::zip_eq;
@@ -6,7 +6,6 @@ use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
-    p3_util::log2_strict_usize,
 };
 use tracing::instrument;
 
@@ -40,11 +39,6 @@ pub type MemoryBackend = basic::BasicMemory;
 pub const INITIAL_TIMESTAMP: u32 = 0;
 /// Default mmap page size. Change this if using THB.
 pub const PAGE_SIZE: usize = 4096;
-
-// Memory access constraints
-const MAX_BLOCK_SIZE: usize = 32;
-const MIN_ALIGN: usize = 1;
-const MAX_SEGMENTS: usize = MAX_BLOCK_SIZE / MIN_ALIGN;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);
@@ -379,270 +373,60 @@ impl GuestMemory {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct AccessMetadata {
-    /// Packed timestamp (29 bits) and log2(block_size) (3 bits)
-    pub timestamp_and_log_block_size: u32,
-    /// Offset to block start (in ALIGN units).
-    pub offset_to_start: u8,
-}
-
-impl AccessMetadata {
-    const TIMESTAMP_MASK: u32 = (1 << 29) - 1;
-    const LOG_BLOCK_SIZE_SHIFT: u32 = 29;
-
-    pub fn new(timestamp: u32, block_size: u8, offset_to_start: u8) -> Self {
-        debug_assert!(timestamp < (1 << 29), "Timestamp must be less than 2^29");
-        debug_assert!(
-            block_size == 0 || (block_size.is_power_of_two() && block_size <= MAX_BLOCK_SIZE as u8),
-            "Block size must be 0 or power of 2 and <= {MAX_BLOCK_SIZE}"
-        );
-
-        let encoded_block_size = if block_size == 0 {
-            0
-        } else {
-            // SAFETY: We already asserted that block_size is non-zero in this branch
-            unsafe { NonZero::new_unchecked(block_size) }.ilog2() + 1
-        };
-        let packed = timestamp | (encoded_block_size << Self::LOG_BLOCK_SIZE_SHIFT);
-
-        Self {
-            timestamp_and_log_block_size: packed,
-            offset_to_start,
-        }
-    }
-
-    pub fn timestamp(&self) -> u32 {
-        self.timestamp_and_log_block_size & Self::TIMESTAMP_MASK
-    }
-
-    pub fn block_size(&self) -> u8 {
-        let encoded = self.timestamp_and_log_block_size >> Self::LOG_BLOCK_SIZE_SHIFT;
-        if encoded == 0 {
-            0
-        } else {
-            1 << (encoded - 1)
-        }
-    }
-}
-
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
 #[derive(Getters)]
 pub struct TracingMemory {
     pub timestamp: u32,
-    /// The initial block size -- this depends on the type of boundary chip.
-    initial_block_size: usize,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
-    /// Maps addr_space to (ptr / min_block_size[addr_space] -> AccessMetadata) for latest access
-    /// metadata. Uses paged storage for memory efficiency. AccessMetadata stores offset_to_start
-    /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start ==
-    /// 0).
-    pub(super) meta: Vec<PagedVec<AccessMetadata, PAGE_SIZE>>,
-    /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
-    /// all memory accesses in `addr_space` must be aligned to this block size.
-    pub min_block_size: Vec<u32>,
+    /// Maps (addr_space, ptr / CONST_BLOCK_SIZE) → timestamp of last access.
+    /// A value of 0 means the slot has never been accessed.
+    pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
 }
 
 impl TracingMemory {
-    pub fn new(mem_config: &MemoryConfig, initial_block_size: usize) -> Self {
+    pub fn new(mem_config: &MemoryConfig) -> Self {
         let image = GuestMemory::new(AddressMap::from_mem_config(mem_config));
-        Self::from_image(image, initial_block_size)
+        Self::from_image(image)
     }
 
     /// Constructor from pre-existing memory image.
-    pub fn from_image(image: GuestMemory, initial_block_size: usize) -> Self {
-        let (meta, min_block_size): (Vec<_>, Vec<_>) =
-            zip_eq(image.memory.get_memory(), &image.memory.config)
-                .map(|(mem, addr_sp)| {
-                    let num_cells = mem.size() / addr_sp.layout.size();
-                    let min_block_size = addr_sp.min_block_size;
-                    let total_metadata_len = num_cells.div_ceil(min_block_size);
-                    (PagedVec::new(total_metadata_len), min_block_size as u32)
-                })
-                .unzip();
+    pub fn from_image(image: GuestMemory) -> Self {
+        let meta: Vec<_> = zip_eq(image.memory.get_memory(), &image.memory.config)
+            .map(|(mem, addr_sp)| {
+                let num_cells = mem.size() / addr_sp.layout.size();
+                let total_metadata_len = num_cells.div_ceil(CONST_BLOCK_SIZE);
+                PagedVec::new(total_metadata_len)
+            })
+            .collect();
         Self {
             data: image,
             meta,
-            min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
-            initial_block_size,
         }
     }
 
     #[inline(always)]
-    fn assert_alignment(&self, block_size: usize, align: usize, addr_space: u32, ptr: u32) {
+    fn assert_alignment(block_size: usize, addr_space: u32, ptr: u32) {
         debug_assert!(block_size.is_power_of_two());
-        debug_assert_eq!(block_size % align, 0);
+        debug_assert_eq!(block_size % CONST_BLOCK_SIZE, 0);
         debug_assert_ne!(addr_space, 0);
-        debug_assert_eq!(align as u32, self.min_block_size[addr_space as usize]);
         assert_eq!(
-            ptr % (align as u32),
+            ptr % (CONST_BLOCK_SIZE as u32),
             0,
-            "pointer={ptr} not aligned to {align}"
+            "pointer={ptr} not aligned to {CONST_BLOCK_SIZE}"
         );
     }
 
-    /// Get block metadata by jumping to the start of the block.
-    /// Returns (block_start_pointer, block_metadata).
+    /// Returns the previous access timestamp and updates metadata for this access.
     #[inline(always)]
-    fn get_block_metadata<const ALIGN: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-    ) -> (u32, AccessMetadata) {
-        let ptr_index = pointer / ALIGN;
-        // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within
-        //   bounds
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-        let current_meta = meta_page.get(ptr_index);
-
-        let (block_start_index, block_metadata) = if current_meta.offset_to_start == 0 {
-            (ptr_index, current_meta)
-        } else {
-            let offset = current_meta.offset_to_start;
-            let start_idx = ptr_index - offset as usize;
-            let start_meta = meta_page.get(start_idx);
-            (start_idx, start_meta)
-        };
-
-        let block_start_pointer = (block_start_index * ALIGN) as u32;
-
-        (block_start_pointer, block_metadata)
-    }
-
-    #[inline(always)]
-    fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
-        let ptr_index = pointer / ALIGN;
-        // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within
-        //   bounds
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-        let current_meta = meta_page.get(ptr_index);
-
-        if current_meta.offset_to_start == 0 {
-            current_meta.timestamp()
-        } else {
-            let offset = current_meta.offset_to_start;
-            let block_start_index = ptr_index - offset as usize;
-            meta_page.get(block_start_index).timestamp()
-        }
-    }
-
-    /// Updates the metadata with the given block.
-    /// Stores timestamp and block_size only at block start, offsets elsewhere.
-    #[inline(always)]
-    fn set_meta_block<const BLOCK_SIZE: usize, const ALIGN: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-        timestamp: u32,
-    ) {
-        let ptr = pointer / ALIGN;
-        // SAFETY: address_space is assumed to be valid and within bounds
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-
-        // Store full metadata at the block start
-        meta_page.set(ptr, AccessMetadata::new(timestamp, BLOCK_SIZE as u8, 0));
-
-        // Store offsets for other positions in the block
-        for i in 1..(BLOCK_SIZE / ALIGN) {
-            meta_page.set(ptr + i, AccessMetadata::new(0, 0, i as u8));
-        }
-    }
-
-    /// Calculate splits and merges needed for a memory access.
-    /// Returns Some((splits, merge)) or None if no operations needed.
-    #[inline(always)]
-    #[allow(clippy::type_complexity)]
-    fn calculate_splits_and_merges<const BLOCK_SIZE: usize, const ALIGN: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-    ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
-        // Skip metadata update if this is a repeated access to the same location with same size
-        let (start_ptr, block_meta) = self.get_block_metadata::<ALIGN>(address_space, pointer);
-        if block_meta.block_size() == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
-            return None;
-        }
-
-        // Split intersecting blocks to align bytes
-        let mut splits_buf = [(0usize, 0usize); MAX_SEGMENTS];
-        let mut splits_count = 0;
-        let mut current_ptr = pointer;
-        let end_ptr = pointer + BLOCK_SIZE;
-
-        while current_ptr < end_ptr {
-            let (start_ptr, block_metadata) =
-                self.get_block_metadata::<ALIGN>(address_space, current_ptr);
-
-            if block_metadata.block_size() == 0 {
-                current_ptr += ALIGN;
-                continue;
-            }
-
-            if block_metadata.block_size() > ALIGN as u8 {
-                // SAFETY: splits_count < MAX_SEGMENTS by construction since we iterate over
-                // at most BLOCK_SIZE/ALIGN segments and BLOCK_SIZE <= MAX_BLOCK_SIZE
-                unsafe {
-                    *splits_buf.get_unchecked_mut(splits_count) =
-                        (start_ptr as usize, block_metadata.block_size() as usize);
-                }
-                splits_count += 1;
-            }
-
-            // Skip to the next segment after this block ends
-            current_ptr = start_ptr as usize + block_metadata.block_size() as usize;
-        }
-
-        let merge = (pointer, BLOCK_SIZE);
-
-        Some((splits_buf[..splits_count].to_vec(), merge))
-    }
-
-    #[inline(always)]
-    fn split_by_meta<const MIN_BLOCK_SIZE: usize>(
-        &mut self,
-        start_ptr: u32,
-        timestamp: u32,
-        block_size: u8,
-        address_space: usize,
-    ) {
-        if block_size == MIN_BLOCK_SIZE as u8 {
-            return;
-        }
-        let begin = start_ptr as usize / MIN_BLOCK_SIZE;
-        // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within
-        //   bounds
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-
-        for i in 0..(block_size as usize / MIN_BLOCK_SIZE) {
-            // Each split piece becomes its own block start
-            meta_page.set(
-                begin + i,
-                AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
-            );
-        }
-    }
-
-    /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
-    ///
-    /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    #[inline(always)]
-    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
     ) -> u32 {
-        debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
-        // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within
-        //   bounds
         debug_assert_eq!(
             unsafe {
                 self.data
@@ -654,103 +438,29 @@ impl TracingMemory {
             },
             size_of::<T>()
         );
-        // Calculate what splits and merges are needed for this memory access
-        let result = if let Some((splits, (merge_ptr, merge_size))) =
-            self.calculate_splits_and_merges::<BLOCK_SIZE, ALIGN>(address_space, pointer)
-        {
-            // Process all splits first
-            for (split_ptr, split_size) in splits {
-                let (_, block_metadata) =
-                    self.get_block_metadata::<ALIGN>(address_space, split_ptr);
-                let timestamp = block_metadata.timestamp();
-                self.split_by_meta::<ALIGN>(
-                    split_ptr as u32,
-                    timestamp,
-                    split_size as u8,
-                    address_space,
-                );
-            }
 
-            // Process merge
-            let mut prev_ts_buf = [0u32; MAX_SEGMENTS];
+        let base_idx = pointer / CONST_BLOCK_SIZE;
+        let num_slots = BLOCK_SIZE / CONST_BLOCK_SIZE;
+        // SAFETY: address_space is validated during instruction decoding
+        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
-            let mut max_timestamp = INITIAL_TIMESTAMP;
-
-            let mut ptr = merge_ptr;
-            let end_ptr = merge_ptr + merge_size;
-            let mut seg_idx = 0;
-            while ptr < end_ptr {
-                let (_, block_metadata) = self.get_block_metadata::<ALIGN>(address_space, ptr);
-
-                let timestamp = if block_metadata.block_size() > 0 {
-                    block_metadata.timestamp()
-                } else {
-                    self.handle_uninitialized_memory::<ALIGN>(address_space, ptr);
-                    INITIAL_TIMESTAMP
-                };
-
-                // SAFETY: seg_idx < MAX_SEGMENTS since we iterate at most merge_size/ALIGN times
-                // and merge_size <= BLOCK_SIZE <= MAX_BLOCK_SIZE
-                unsafe {
-                    *prev_ts_buf.get_unchecked_mut(seg_idx) = timestamp;
-                }
-                max_timestamp = max_timestamp.max(timestamp);
-                ptr += ALIGN;
-                seg_idx += 1;
-            }
-
-            max_timestamp
-        } else {
-            self.get_timestamp::<ALIGN>(address_space, pointer)
-        };
-
-        // Update the metadata for this access
-        self.set_meta_block::<BLOCK_SIZE, ALIGN>(address_space, pointer, self.timestamp);
-        result
-    }
-
-    /// Handle uninitialized memory by creating appropriate split or merge records.
-    #[inline(always)]
-    fn handle_uninitialized_memory<const ALIGN: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-    ) {
-        if self.initial_block_size >= ALIGN {
-            // Split the initial block into chunks
-            let segment_index = pointer / ALIGN;
-            let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
-            let start_ptr = (block_start * ALIGN) as u32;
-            self.split_by_meta::<ALIGN>(
-                start_ptr,
-                INITIAL_TIMESTAMP,
-                self.initial_block_size as u8,
-                address_space,
-            );
-        } else {
-            debug_assert_eq!(self.initial_block_size, 1);
+        let mut max_timestamp = INITIAL_TIMESTAMP;
+        for i in 0..num_slots {
+            max_timestamp = max_timestamp.max(meta_page.get(base_idx + i));
+            meta_page.set(base_idx + i, self.timestamp);
         }
+        max_timestamp
     }
 
     /// Atomic read operation which increments the timestamp by 1.
-    /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})` where `t_prev` is the
-    /// timestamp of the last memory access.
-    ///
-    ///
-    /// # Assumptions
-    /// The `BLOCK_SIZE` is a multiple of `ALIGN`, which must equal the minimum block size
-    /// of `address_space`.
+    /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})`.
     ///
     /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
-    /// plain old data, and it must be the exact type used to represent a single memory cell in
-    /// address space `address_space`. For standard usage,
-    /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    ///
-    /// In addition:
+    /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
     /// - `address_space` must be valid.
+    /// - `BLOCK_SIZE` must be a multiple of `CONST_BLOCK_SIZE`.
     #[inline(always)]
-    pub unsafe fn read<T, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
@@ -758,34 +468,23 @@ impl TracingMemory {
     where
         T: Copy + Debug,
     {
-        self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
+        Self::assert_alignment(BLOCK_SIZE, address_space, pointer);
         let values = self.data.read(address_space, pointer);
         let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
+            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize);
         self.timestamp += 1;
 
         (t_prev, values)
     }
 
-    /// Atomic write operation that writes `values` into `[pointer:BLOCK_SIZE]_{address_space}` and
-    /// then increments the timestamp by 1. Returns `(t_prev, values_prev)` which equal the
-    /// timestamp and value `[pointer:BLOCK_SIZE]_{address_space}` of the last memory access.
-    ///
-    ///
-    /// # Assumptions
-    /// The `BLOCK_SIZE` is a multiple of `ALIGN`, which must equal the minimum block size
-    /// of `address_space`.
+    /// Atomic write operation. Returns `(t_prev, values_prev)`.
     ///
     /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
-    /// and it must be the exact type used to represent a single memory cell in
-    /// address space `address_space`. For standard usage,
-    /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    ///
-    /// In addition:
+    /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
     /// - `address_space` must be valid.
+    /// - `BLOCK_SIZE` must be a multiple of `CONST_BLOCK_SIZE`.
     #[inline(always)]
-    pub unsafe fn write<T, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
@@ -794,10 +493,10 @@ impl TracingMemory {
     where
         T: Copy + Debug,
     {
-        self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
+        Self::assert_alignment(BLOCK_SIZE, address_space, pointer);
         let values_prev = self.data.read(address_space, pointer);
         let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
+            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize);
         self.data.write(address_space, pointer, values);
         self.timestamp += 1;
 
@@ -823,20 +522,18 @@ impl TracingMemory {
         self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks)
     }
 
-    /// Returns the list of all touched blocks. The list is sorted by address.
-    fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
-        assert_eq!(self.meta.len(), self.min_block_size.len());
+    /// Returns the list of all touched blocks (address, timestamp). Sorted by address.
+    fn touched_blocks(&self) -> Vec<(Address, u32)> {
         self.meta
             .par_iter()
-            .zip(self.min_block_size.par_iter())
             .enumerate()
-            .flat_map(|(addr_space, (meta_page, &align))| {
+            .flat_map(|(addr_space, meta_page)| {
                 meta_page
                     .par_iter()
-                    .filter_map(move |(idx, metadata)| {
-                        let ptr = idx as u32 * align;
-                        if metadata.offset_to_start == 0 && metadata.block_size() != 0 {
-                            Some(((addr_space as u32, ptr), metadata))
+                    .filter_map(move |(idx, timestamp)| {
+                        if timestamp > INITIAL_TIMESTAMP {
+                            let ptr = idx as u32 * CONST_BLOCK_SIZE as u32;
+                            Some(((addr_space as u32, ptr), timestamp))
                         } else {
                             None
                         }
@@ -847,12 +544,10 @@ impl TracingMemory {
     }
 
     /// Returns the equipartition of the touched blocks.
-    /// Modifies records and adds new to account for the initial/final segments.
     fn touched_blocks_to_equipartition<F: Field, const CHUNK: usize>(
         &mut self,
-        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+        touched_blocks: Vec<((u32, u32), u32)>,
     ) -> TimestampedEquipartition<F, CHUNK> {
-        // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
         let mut final_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
@@ -865,28 +560,25 @@ impl TracingMemory {
     fn handle_touched_blocks<F: Field, const CHUNK: usize>(
         &mut self,
         final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
-        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+        touched_blocks: Vec<((u32, u32), u32)>,
     ) {
         let mut current_values = vec![0u8; MAX_CELL_BYTE_SIZE * CHUNK];
         let mut current_cnt = 0;
         let mut current_address = MemoryAddress::new(0, 0);
-        let mut current_timestamps = vec![0; CHUNK];
-        for ((addr_space, ptr), access_metadata) in touched_blocks {
+        let mut current_timestamps = vec![0u32; CHUNK / CONST_BLOCK_SIZE];
+        for ((addr_space, ptr), timestamp) in touched_blocks {
             // SAFETY: addr_space of touched blocks are all in bounds
             let addr_space_config =
                 unsafe { *self.data.memory.config.get_unchecked(addr_space as usize) };
-            let min_block_size = addr_space_config.min_block_size;
             let cell_size = addr_space_config.layout.size();
-            let timestamp = access_metadata.timestamp();
-            let block_size = access_metadata.block_size();
+            debug_assert!(ptr % CONST_BLOCK_SIZE as u32 == 0);
+
             assert!(
                 current_cnt == 0
                     || (current_address.address_space == addr_space
                         && current_address.pointer + current_cnt as u32 == ptr),
                 "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
-            debug_assert!(block_size >= min_block_size as u8);
-            debug_assert!(ptr % min_block_size as u32 == 0);
 
             if current_cnt == 0 {
                 assert_eq!(
@@ -897,84 +589,40 @@ impl TracingMemory {
                 current_address = MemoryAddress::new(addr_space, ptr);
             }
 
-            if min_block_size > CHUNK {
-                assert_eq!(current_cnt, 0);
-                // SAFETY: touched blocks are in bounds
-                let values = unsafe {
+            // SAFETY: current_cnt / CONST_BLOCK_SIZE < CHUNK / CONST_BLOCK_SIZE
+            unsafe {
+                *current_timestamps.get_unchecked_mut(current_cnt / CONST_BLOCK_SIZE) = timestamp;
+            }
+
+            for i in 0..CONST_BLOCK_SIZE as u32 {
+                let cell_data = unsafe {
                     self.data.memory.get_u8_slice(
                         addr_space,
-                        ptr as usize * cell_size,
-                        block_size as usize * cell_size,
+                        (ptr + i) as usize * cell_size,
+                        cell_size,
                     )
                 };
-                for i in (0..block_size as u32).step_by(CHUNK) {
+                current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
+                    .copy_from_slice(cell_data);
+                current_cnt += 1;
+                if current_cnt == CHUNK {
+                    let timestamp = *current_timestamps.iter().max().unwrap();
                     final_memory.push((
-                        (addr_space, ptr + i),
+                        (current_address.address_space, current_address.pointer),
                         TimestampedValues {
                             timestamp,
-                            values: from_fn(|j| {
-                                let byte_idx = (i as usize + j) * cell_size;
-                                // SAFETY: block_size is multiple of CHUNK and we are reading chunks
-                                // of cells within bounds
-                                unsafe {
-                                    addr_space_config
-                                        .layout
-                                        .to_field(&values[byte_idx..byte_idx + cell_size])
-                                }
+                            values: from_fn(|i| unsafe {
+                                addr_space_config.layout.to_field(
+                                    &current_values[i * cell_size..i * cell_size + cell_size],
+                                )
                             }),
                         },
                     ));
-                }
-            } else {
-                for i in 0..block_size as u32 {
-                    // SAFETY: getting cell data
-                    let cell_data = unsafe {
-                        self.data.memory.get_u8_slice(
-                            addr_space,
-                            (ptr + i) as usize * cell_size,
-                            cell_size,
-                        )
-                    };
-                    current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
-                        .copy_from_slice(cell_data);
-                    if current_cnt & (min_block_size - 1) == 0 {
-                        // SAFETY: current_cnt / min_block_size < CHUNK / min_block_size <= CHUNK
-                        unsafe {
-                            *current_timestamps.get_unchecked_mut(current_cnt / min_block_size) =
-                                timestamp;
-                        }
-                    }
-                    current_cnt += 1;
-                    if current_cnt == CHUNK {
-                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
-                            .iter()
-                            .max()
-                            .unwrap();
-                        final_memory.push((
-                            (current_address.address_space, current_address.pointer),
-                            TimestampedValues {
-                                timestamp,
-                                values: from_fn(|i| unsafe {
-                                    // SAFETY: cell_size is correct, and alignment is guaranteed
-                                    addr_space_config.layout.to_field(
-                                        &current_values[i * cell_size..i * cell_size + cell_size],
-                                    )
-                                }),
-                            },
-                        ));
-                        current_address.pointer += current_cnt as u32;
-                        current_cnt = 0;
-                    }
+                    current_address.pointer += current_cnt as u32;
+                    current_cnt = 0;
                 }
             }
         }
         assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
-    }
-
-    pub fn address_space_alignment(&self) -> Vec<u8> {
-        self.min_block_size
-            .iter()
-            .map(|&x| log2_strict_usize(x as usize) as u8)
-            .collect()
     }
 }

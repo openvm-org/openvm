@@ -160,7 +160,7 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
-    // Use CONST_BLOCK_SIZE-aligned accesses matching the minimum block size
+    // Read back the values we just wrote
     let sm1 = tester.read(2, 1024);
     let sm2 = tester.read(2, 1028);
     assert_eq!(sm1, [F::ONE; 4]);

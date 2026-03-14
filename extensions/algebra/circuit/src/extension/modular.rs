@@ -428,7 +428,9 @@ where
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>>()?;
+                inventory
+                    .next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>>(
+                    )?;
                 let is_eq = ModularIsEqualChip::<
                     Val<SC>,
                     MODULAR_BLOCKS_32,
@@ -478,7 +480,9 @@ where
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>>()?;
+                inventory
+                    .next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>>(
+                    )?;
                 let is_eq = ModularIsEqualChip::<
                     Val<SC>,
                     MODULAR_BLOCKS_48,

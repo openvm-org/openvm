@@ -8,9 +8,7 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{
-    p3_field::Field, p3_util::log2_strict_usize, StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -110,14 +108,9 @@ where
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
-/// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
-/// alignment of 2 because the instructions are implemented by doing an access of block size 4.
-const DEFAULT_U8_BLOCK_SIZE: usize = 4;
-const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
-
-/// The constant block size used for all memory accesses.
+/// The block size used for all memory accesses.
 /// This is also the block size used by the Boundary AIR for memory bus interactions.
-pub const CONST_BLOCK_SIZE: usize = DEFAULT_U8_BLOCK_SIZE;
+pub const CONST_BLOCK_SIZE: usize = 4;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
@@ -195,23 +188,13 @@ impl MemoryConfig {
     pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
         // All except address spaces 0..4 default to native 32-bit field.
         // By default only address spaces 1..=4 have non-empty cell counts.
-        let mut addr_spaces = vec![
-            AddressSpaceHostConfig::new(
-                0,
-                DEFAULT_NATIVE_BLOCK_SIZE,
-                MemoryCellType::native32()
-            );
-            num_addr_spaces
-        ];
-        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
-        addr_spaces[RV32_REGISTER_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
-
-        addr_spaces[RV32_MEMORY_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
-
-        addr_spaces[PUBLIC_VALUES_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        debug_assert!(num_addr_spaces > PUBLIC_VALUES_AS as usize);
+        let mut addr_spaces =
+            vec![AddressSpaceHostConfig::new(0, MemoryCellType::native32()); num_addr_spaces];
+        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        addr_spaces[RV32_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV32_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
         addr_spaces
     }
@@ -222,13 +205,6 @@ impl MemoryConfig {
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
-    }
-
-    pub fn min_block_size_bits(&self) -> Vec<u8> {
-        self.addr_spaces
-            .iter()
-            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
-            .collect()
     }
 }
 
@@ -329,10 +305,6 @@ impl SystemConfig {
     pub fn num_airs(&self) -> usize {
         self.memory_boundary_air_id() + num_memory_airs()
     }
-
-    pub fn initial_block_size(&self) -> usize {
-        CONST_BLOCK_SIZE
-    }
 }
 
 impl Default for SystemConfig {
@@ -361,11 +333,6 @@ pub struct AddressSpaceHostConfig {
     /// The number of memory cells in each address space, where a memory cell refers to a single
     /// addressable unit of memory as defined by the ISA.
     pub num_cells: usize,
-    /// Minimum block size for memory accesses supported. This is a property of the address space
-    /// that is determined by the ISA.
-    ///
-    /// **Note**: Block size is in terms of memory cells.
-    pub min_block_size: usize,
     pub layout: MemoryCellType,
 }
 

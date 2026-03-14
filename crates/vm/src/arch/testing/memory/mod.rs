@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use air::{MemoryDummyAir, MemoryDummyChip};
 use rand::Rng;
 
 use crate::{
-    arch::VmField,
+    arch::{VmField, CONST_BLOCK_SIZE},
     system::memory::{online::TracingMemory, MemoryController},
 };
 
@@ -20,8 +18,7 @@ pub use cuda::*;
 ///
 /// It will create a [air::MemoryDummyAir] to add messages to MemoryBus.
 pub struct MemoryTester<F: VmField> {
-    /// Map from `block_size` to [MemoryDummyChip] of that block size
-    pub chip_for_block: HashMap<usize, MemoryDummyChip<F>>,
+    pub chip: MemoryDummyChip<F>,
     pub memory: TracingMemory,
     pub(super) controller: MemoryController<F>,
 }
@@ -29,61 +26,48 @@ pub struct MemoryTester<F: VmField> {
 impl<F: VmField> MemoryTester<F> {
     pub fn new(controller: MemoryController<F>, memory: TracingMemory) -> Self {
         let bus = controller.memory_bus;
-        let mut chip_for_block = HashMap::new();
-        for log_block_size in 0..6 {
-            let block_size = 1 << log_block_size;
-            let chip = MemoryDummyChip::new(MemoryDummyAir::new(bus, block_size));
-            chip_for_block.insert(block_size, chip);
-        }
+        let chip = MemoryDummyChip::new(MemoryDummyAir::new(bus, CONST_BLOCK_SIZE));
         Self {
-            chip_for_block,
+            chip,
             memory,
             controller,
         }
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
+        assert_eq!(
+            N, CONST_BLOCK_SIZE,
+            "All memory accesses must use CONST_BLOCK_SIZE"
+        );
         let memory = &mut self.memory;
         let t = memory.timestamp();
-        // TODO: this could be improved if we added a TracingMemory::get_f function
-        let (t_prev, data) = unsafe { memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
+        let (t_prev, data) = unsafe { memory.read::<u8, N>(addr_space as u32, ptr as u32) };
         let data = data.map(F::from_u8);
-        self.chip_for_block.get_mut(&N).unwrap().receive(
-            addr_space as u32,
-            ptr as u32,
-            &data,
-            t_prev,
-        );
-        self.chip_for_block
-            .get_mut(&N)
-            .unwrap()
-            .send(addr_space as u32, ptr as u32, &data, t);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
 
         data
     }
 
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+        assert_eq!(
+            N, CONST_BLOCK_SIZE,
+            "All memory accesses must use CONST_BLOCK_SIZE"
+        );
         let memory = &mut self.memory;
         let t = memory.timestamp();
-        // TODO: this could be improved if we added a TracingMemory::write_f function
         let (t_prev, data_prev) = unsafe {
-            memory.write::<u8, N, 4>(
+            memory.write::<u8, N>(
                 addr_space as u32,
                 ptr as u32,
                 data.map(|x| x.as_canonical_u32() as u8),
             )
         };
         let data_prev = data_prev.map(F::from_u8);
-        self.chip_for_block.get_mut(&N).unwrap().receive(
-            addr_space as u32,
-            ptr as u32,
-            &data_prev,
-            t_prev,
-        );
-        self.chip_for_block
-            .get_mut(&N)
-            .unwrap()
-            .send(addr_space as u32, ptr as u32, &data, t);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data_prev, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
     }
 }
 

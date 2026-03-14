@@ -136,14 +136,6 @@ where
             .write(address_space, pointer, value.map(F::from_usize));
     }
 
-    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.write(address_space, pointer, [value]);
-    }
-
-    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.read::<1>(address_space, pointer)[0]
-    }
-
     fn address_bits(&self) -> usize {
         self.memory.controller.memory_config().pointer_max_bits
     }
@@ -322,20 +314,19 @@ impl VmChipTestBuilder<BabyBear> {
 impl<F: VmField> VmChipTestBuilder<F> {
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
-        init_block_size: usize,
     ) -> (SharedVariableRangeCheckerChip, TracingMemory) {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory = TracingMemory::new(mem_config, init_block_size);
+        let memory = TracingMemory::new(mem_config);
 
         (range_checker, memory)
     }
 
     pub fn from_config(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
         let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
@@ -442,9 +433,7 @@ where
             let touched_memory = memory.finalize::<Val<SC>>();
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
-            for mem_chip in memory_tester.chip_for_block.into_values() {
-                self = self.load_periphery((mem_chip.air, mem_chip));
-            }
+            self = self.load_periphery((memory_tester.chip.air, memory_tester.chip));
             let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),

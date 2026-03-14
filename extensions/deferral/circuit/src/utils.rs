@@ -1,6 +1,7 @@
 use std::array::from_fn;
 
 use itertools::Itertools;
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
@@ -10,8 +11,7 @@ pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
 pub const OUTPUT_LEN_NUM_BYTES: usize = 8;
 pub const OUTPUT_TOTAL_BYTES: usize = OUTPUT_LEN_NUM_BYTES + COMMIT_NUM_BYTES;
 
-// TODO: replace MEMORY_OP_SIZE with CONST_BLOCK_SIZE
-pub const MEMORY_OP_SIZE: usize = 4;
+pub const MEMORY_OP_SIZE: usize = CONST_BLOCK_SIZE;
 pub const DIGEST_MEMORY_OPS: usize = num_memory_ops(DIGEST_SIZE);
 pub const COMMIT_MEMORY_OPS: usize = num_memory_ops(COMMIT_NUM_BYTES);
 pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_memory_ops(OUTPUT_TOTAL_BYTES);

@@ -45,6 +45,6 @@ pub fn dummy_memory_helper<F: Field>(
     SharedMemoryHelper::new(dummy_range_checker(bus), timestamp_max_bits)
 }
 
-pub fn default_tracing_memory(mem_config: &MemoryConfig, init_block_size: usize) -> TracingMemory {
-    TracingMemory::new(mem_config, init_block_size)
+pub fn default_tracing_memory(mem_config: &MemoryConfig) -> TracingMemory {
+    TracingMemory::new(mem_config)
 }
