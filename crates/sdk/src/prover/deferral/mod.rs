@@ -34,7 +34,9 @@ cfg_if::cfg_if! {
 }
 
 mod circuit;
+mod merkle;
 pub use circuit::*;
+pub use merkle::*;
 
 pub type DefAggProvingKey = AggProvingKey;
 

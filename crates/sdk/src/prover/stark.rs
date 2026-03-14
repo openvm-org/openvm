@@ -1,16 +1,27 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 
 use eyre::Result;
-use openvm_circuit::arch::{
-    instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
-    VmExecutionConfig,
+use openvm_circuit::{
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, Executor,
+        MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
+    },
+    system::memory::merkle::MerkleTree,
 };
 use openvm_continuations::circuit::inner::ProofsType;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
-use openvm_verify_stark_host::{vk::VerificationBaseline, NonRootStarkProof};
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_verify_stark_host::{
+    pvs::{DeferralPvs, DEF_PVS_AIR_ID},
+    vk::VerificationBaseline,
+    NonRootStarkProof,
+};
 
 use crate::{
-    prover::{vm::types::VmProvingKey, AggProver, AppProver, DeferralProver},
+    prover::{
+        deferral::compute_deferral_merkle_proofs, vm::types::VmProvingKey, AggProver, AppProver,
+        DeferralProver,
+    },
     DeferralInput, StdIn, SC,
 };
 
@@ -60,6 +71,29 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
+        let has_deferrals = self.def_prover.is_some();
+        let memory_dimensions = self.app_prover.memory_dimensions();
+
+        // Build the initial memory merkle tree before proving (needed for deferral proofs).
+        let initial_merkle_tree = if has_deferrals {
+            let hasher = vm_poseidon2_hasher();
+            let initial_memory = &self
+                .app_prover
+                .instance()
+                .state()
+                .as_ref()
+                .expect("initial state should exist before proving")
+                .memory
+                .memory;
+            Some(MerkleTree::from_memory(
+                initial_memory,
+                &memory_dimensions,
+                &hasher,
+            ))
+        } else {
+            None
+        };
+
         let continuation_proof = self.app_prover.prove(vm_input)?;
         let (mut stark_proof, mut internal_metadata) =
             self.agg_prover.prove_vm(continuation_proof)?;
@@ -83,6 +117,34 @@ where
                 self.agg_prover
                     .wrap_proof(stark_proof, &mut internal_metadata, wrap_proof_type)?;
         }
+
+        // Generate deferral merkle proofs if deferrals are enabled.
+        if has_deferrals {
+            let hasher = vm_poseidon2_hasher();
+            let final_memory = &self
+                .app_prover
+                .instance()
+                .state()
+                .as_ref()
+                .expect("final state should exist after proving")
+                .memory
+                .memory;
+            let final_merkle_tree =
+                MerkleTree::from_memory(final_memory, &memory_dimensions, &hasher);
+
+            let def_pvs: &DeferralPvs<F> = stark_proof.inner.public_values[DEF_PVS_AIR_ID]
+                .as_slice()
+                .borrow();
+            let depth = def_pvs.depth.as_canonical_u32() as usize;
+
+            stark_proof.deferral_merkle_proofs = Some(compute_deferral_merkle_proofs(
+                memory_dimensions,
+                initial_merkle_tree.as_ref().unwrap(),
+                &final_merkle_tree,
+                depth,
+            ));
+        }
+
         Ok(stark_proof)
     }
 
@@ -103,6 +165,13 @@ where
                 .agg_prover
                 .internal_recursive_prover
                 .get_dag_commit(true),
+            expected_def_vk_commit: self.def_prover.as_ref().map(|dp| {
+                let ir_dag_commit = dp
+                    .deferral_prover
+                    .internal_recursive_prover
+                    .get_dag_commit(false);
+                dp.deferral_prover.single_circuit_provers[0].vk_commit(ir_dag_commit)
+            }),
         }
     }
 }

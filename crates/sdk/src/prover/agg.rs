@@ -3,7 +3,7 @@ use std::sync::Arc;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
-use openvm_cuda_backend::prelude::Digest;
+use openvm_recursion_circuit::prelude::Digest;
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
@@ -180,6 +180,7 @@ impl AggProver {
             NonRootStarkProof {
                 inner: internal_proofs.pop().unwrap(),
                 user_pvs_proof: continuation_proof.user_public_values,
+                deferral_merkle_proofs: None,
             },
             InternalLayerMetadata {
                 internal_recursive_layer: internal_recursive_layer as u32,

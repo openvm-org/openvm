@@ -1,5 +1,6 @@
 use openvm_recursion_circuit::prelude::DIGEST_SIZE;
 use openvm_recursion_circuit_derive::AlignedBorrow;
+pub use openvm_verify_stark_host::deferral::DeferralMerkleProofs;
 
 pub mod hook;
 pub mod inner;
@@ -27,10 +28,4 @@ pub struct DeferralAggregationPvs<F> {
     /// the Merkle root of the aggregation subtree this proof is the root of
     /// at internal layers
     pub merkle_commit: [F; DIGEST_SIZE],
-}
-
-#[derive(Clone)]
-pub struct DeferralMerkleProofs<T> {
-    pub initial_merkle_proof: Vec<[T; DIGEST_SIZE]>,
-    pub final_merkle_proof: Vec<[T; DIGEST_SIZE]>,
 }
