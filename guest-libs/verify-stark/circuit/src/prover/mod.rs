@@ -56,11 +56,8 @@ pub type DeferredVerifyDefaultProver =
     DeferredVerifyProver<DefaultBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 
 /// Default (CPU or GPU) type alias for the circuit prover wrapper.
-pub type DeferredVerifyDefaultCircuitProver = DeferredVerifyCircuitProver<
-    DefaultEngine,
-    VerifierSubCircuit<1>,
-    DeferredVerifyTraceGenImpl,
->;
+pub type DeferredVerifyDefaultCircuitProver =
+    DeferredVerifyCircuitProver<DefaultEngine, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 
 pub struct DeferredVerifyProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,

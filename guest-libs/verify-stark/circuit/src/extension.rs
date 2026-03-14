@@ -3,7 +3,10 @@ use std::borrow::Borrow;
 use eyre::Result;
 use itertools::Itertools;
 use openvm_circuit::{
-    arch::{deferral::DeferralState, deferral::OutputRaw, hasher::poseidon2::vm_poseidon2_hasher},
+    arch::{
+        deferral::{DeferralState, OutputRaw},
+        hasher::poseidon2::vm_poseidon2_hasher,
+    },
     system::program::trace::compute_exe_commit,
 };
 use openvm_continuations::{

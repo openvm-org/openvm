@@ -2,9 +2,8 @@ use openvm_circuit::{
     arch::instructions::DEFERRAL_AS,
     system::memory::{dimensions::MemoryDimensions, merkle::MerkleTree},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-
+use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use openvm_verify_stark_host::deferral::DeferralMerkleProofs;
 
 /// Compute deferral merkle proofs from the initial and final memory merkle trees.

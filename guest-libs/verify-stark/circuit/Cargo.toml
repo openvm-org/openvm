@@ -37,10 +37,15 @@ itertools = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+openvm-continuations = { workspace = true }
 openvm-circuit = { workspace = true, features = ["parallel"] }
+openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32im-transpiler = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+openvm-transpiler = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 eyre.workspace = true
+test-case.workspace = true
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
@@ -54,6 +59,8 @@ cuda = [
     "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
+    "openvm-continuations/cuda",
+    "openvm-rv32im-circuit/cuda",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-recursion-circuit/cuda",

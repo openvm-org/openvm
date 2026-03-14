@@ -384,7 +384,11 @@ where
             VmProverExtension::<E, _, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;
         }
         if let Some(deferral) = &config.deferral {
-            VmProverExtension::<E, _, _>::extend_prover(&DeferralCpuProverExt, deferral, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(
+                &DeferralCpuProverExt,
+                deferral,
+                inventory,
+            )?;
         }
         Ok(chip_complex)
     }

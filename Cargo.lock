@@ -4168,13 +4168,17 @@ dependencies = [
  "openvm-poseidon2-air",
  "openvm-recursion-circuit",
  "openvm-recursion-circuit-derive",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "openvm-transpiler",
  "openvm-verify-stark-host",
  "p3-air",
  "p3-bn254",
  "p3-field",
  "p3-matrix",
+ "test-case",
  "tracing",
 ]
 

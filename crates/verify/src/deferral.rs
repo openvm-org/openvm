@@ -1,6 +1,5 @@
 use openvm_circuit::{
-    arch::instructions::DEFERRAL_AS,
-    system::memory::dimensions::MemoryDimensions,
+    arch::instructions::DEFERRAL_AS, system::memory::dimensions::MemoryDimensions,
 };
 use openvm_stark_backend::codec::{DecodableConfig, EncodableConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
@@ -95,12 +94,8 @@ impl DeferralMerkleProofs<F> {
             });
         }
 
-        let computed_final_root = merkle_path_root(
-            final_leaf,
-            &self.final_merkle_proof,
-            idx_prefix,
-            skip_depth,
-        );
+        let computed_final_root =
+            merkle_path_root(final_leaf, &self.final_merkle_proof, idx_prefix, skip_depth);
         if computed_final_root != final_root {
             return Err(VerifyStarkError::DeferralFinalRootMismatch {
                 expected: final_root,

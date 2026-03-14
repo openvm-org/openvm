@@ -5,10 +5,8 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
     VmExecutionConfig,
 };
-use openvm_continuations::RootSC;
+use openvm_continuations::{circuit::inner::ProofsType, RootSC};
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
-
-use openvm_continuations::circuit::inner::ProofsType;
 
 use crate::{
     prover::{vm::types::VmProvingKey, AggProver, AppProver, RootProver},

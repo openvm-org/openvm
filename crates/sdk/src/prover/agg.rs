@@ -4,8 +4,9 @@ use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
 use openvm_recursion_circuit::prelude::Digest;
-use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
 use openvm_verify_stark_host::{pvs::DeferralPvs, NonRootStarkProof};
 use tracing::info_span;

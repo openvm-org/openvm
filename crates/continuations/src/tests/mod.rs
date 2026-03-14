@@ -34,9 +34,9 @@ use tracing::Level;
 use crate::{prover::ChildVkKind, SC};
 
 #[cfg(feature = "cuda")]
-mod e2e;
+mod dummy;
 #[cfg(feature = "cuda")]
-mod verify;
+mod e2e;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -46,27 +46,24 @@ cfg_if::cfg_if! {
         use crate::prover::{
             DeferralInnerGpuProver as DeferralInnerProver,
             DeferralHookGpuProver as DeferralHookProver,
-            DeferralVerifyGpuProver as DeferredVerifyProver,
         };
         use crate::circuit::{
             deferral::{
-                verify::output::expected_output_commit,
                 DeferralAggregationPvs,
                 DeferralCircuitPvs,
                 DEF_AGG_PVS_AIR_ID,
             },
-            root::RootVerifierPvs,
         };
         use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-        use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
+        use openvm_stark_backend::{prover::CommittedTraceData};
         use openvm_stark_sdk::config::{
-            baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder},
+            baby_bear_poseidon2::{poseidon2_compress_with_capacity},
             baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
         };
         use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
         use crate::prover::DeferralChildVkKind;
-        use crate::utils::{poseidon2_input_to_digests, zero_hash};
+        use crate::utils::zero_hash;
         type RootEngine = BabyBearBn254Poseidon2CpuEngine;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
@@ -365,26 +362,9 @@ fn test_root_prover_trace_heights() -> Result<()> {
 
 #[cfg(feature = "cuda")]
 fn generate_single_def_proof(
-    child_extra_recursive_layers: usize,
+    _child_extra_recursive_layers: usize,
 ) -> Result<(Arc<MultiStarkVerifyingKey<SC>>, Proof<SC>)> {
-    let (
-        internal_recursive_vk,
-        internal_recursive_pcs_data,
-        internal_recursive_proof,
-        user_pvs_proof,
-    ) = run_full_aggregation(10, child_extra_recursive_layers)?;
-    let system_config = test_rv32im_config().rv32i.system;
-    let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
-        internal_recursive_vk,
-        internal_recursive_pcs_data,
-        root_system_params(),
-        system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
-        None,
-    );
-    let def_proof =
-        deferred_verify_prover.prove_no_def::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
-    Ok((deferred_verify_prover.get_vk(), def_proof))
+    dummy::generate_single_dummy_def_proof()
 }
 
 #[cfg(feature = "cuda")]
@@ -523,85 +503,6 @@ fn expected_deferral_inner_merkle_commit_from_copies(
         child_merkle_depth += 1;
     }
     commits[0]
-}
-
-#[cfg(feature = "cuda")]
-#[test_case(0 ; "internal_recursive_dag_commit not set")]
-#[test_case(1 ; "internal_recursive_dag_commit set")]
-fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()> {
-    setup_tracing_with_log_level(Level::INFO);
-    let (
-        internal_recursive_vk,
-        internal_recursive_pcs_data,
-        internal_recursive_proof,
-        user_pvs_proof,
-    ) = run_full_aggregation(10, child_extra_recursive_layers)?;
-
-    let system_config = test_rv32im_config().rv32i.system;
-
-    // Compute def_proof
-    let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
-        internal_recursive_vk.clone(),
-        internal_recursive_pcs_data.clone(),
-        root_system_params(),
-        system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
-        None,
-    );
-    let def_proof = deferred_verify_prover
-        .prove_no_def::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
-
-    // Verify that def_proof is valid
-    let vk = deferred_verify_prover.get_vk();
-    let engine = Engine::new(vk.inner.params.clone());
-    engine.verify(&vk, &def_proof)?;
-
-    // Get the final transcript state of internal_recursive_proof
-    let mut ts = default_duplex_sponge_recorder();
-    let config = SC::default_from_params(internal_recursive_vk.inner.params.clone());
-    verify(
-        &config,
-        internal_recursive_vk.as_ref(),
-        &internal_recursive_proof,
-        &mut ts,
-    )?;
-    let ts_log = ts.into_log();
-    let expected_final_ts_state = ts_log.perm_results().last().unwrap();
-
-    // Generate a root_proof to compare the pvs of def_proof against
-    let root_prover = RootProver::new::<RootEngine>(
-        internal_recursive_vk,
-        internal_recursive_pcs_data.commitment.into(),
-        root_system_params(),
-        system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values,
-        None,
-        None,
-    );
-    let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
-    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
-
-    // Assert the correctness of the def_proof public values
-    let root_pvs: &RootVerifierPvs<F> = root_proof.public_values[VERIFIER_PVS_AIR_ID]
-        .as_slice()
-        .borrow();
-    // RootCircuit AIR layout is:
-    // 0: RootVerifierPvsAir, 1: UserPvsCommitAir, 2: UserPvsInMemoryAir, 3..: verifier subcircuit.
-    const ROOT_USER_PVS_COMMIT_AIR_ID: usize = 1;
-    let user_pvs = root_proof.public_values[ROOT_USER_PVS_COMMIT_AIR_ID].clone();
-
-    let (left, right) = poseidon2_input_to_digests(*expected_final_ts_state);
-    let expected_input_commit = poseidon2_compress_with_capacity(left, right).0;
-    let expected_output_commit =
-        expected_output_commit(root_pvs.app_exe_commit, root_pvs.app_vk_commit, user_pvs);
-
-    let def_pvs: &DeferralCircuitPvs<F> = def_proof.public_values[VERIFIER_PVS_AIR_ID]
-        .as_slice()
-        .borrow();
-    assert_eq!(expected_input_commit, def_pvs.input_commit);
-    assert_eq!(expected_output_commit, def_pvs.output_commit);
-
-    Ok(())
 }
 
 #[cfg(feature = "cuda")]

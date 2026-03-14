@@ -39,6 +39,9 @@ pub mod prover;
 mod trace;
 pub use trace::*;
 
+#[cfg(all(test, feature = "cuda"))]
+mod tests;
+
 #[derive(derive_new::new, Clone)]
 pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
