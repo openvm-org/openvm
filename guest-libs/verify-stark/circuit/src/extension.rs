@@ -56,14 +56,14 @@ fn output_raw_from_proof(proof: &NonRootStarkProof) -> OutputRaw {
 
     let output_f = app_exe_commit
         .into_iter()
-        .chain(app_vk_commit.into_iter())
+        .chain(app_vk_commit)
         .chain(proof.user_pvs_proof.public_values.iter().copied())
         .collect_vec();
     f_slice_to_bytes(&output_f)
 }
 
 fn f_slice_to_bytes(slice: &[F]) -> Vec<u8> {
-    let mut output = Vec::with_capacity(slice.len() * size_of::<F>());
+    let mut output = Vec::with_capacity(size_of_val(slice));
     for value in slice {
         let bytes = value.as_canonical_u32().to_le_bytes();
         output.extend_from_slice(&bytes);

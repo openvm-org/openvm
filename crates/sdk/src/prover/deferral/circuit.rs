@@ -31,6 +31,11 @@ pub struct SingleDefCircuitProver {
     pub internal_for_leaf_prover: DeferralInnerProver,
 }
 
+pub struct SingleDefCircuitResult {
+    pub internal_for_leaf_proofs: Vec<Proof<SC>>,
+    pub leaf_io_commits: Vec<DeferralIoCommit<F>>,
+}
+
 impl SingleDefCircuitProver {
     pub fn new<DP: DeferralCircuitProver<SC> + 'static>(
         def_circuit_prover: DP,
@@ -64,19 +69,16 @@ impl SingleDefCircuitProver {
         }
     }
 
-    pub fn prove(
-        &self,
-        inputs: &DeferralInput,
-    ) -> Result<(Vec<Proof<SC>>, Vec<DeferralIoCommit<F>>)> {
+    pub fn prove(&self, inputs: &DeferralInput) -> Result<SingleDefCircuitResult> {
         // Generate deferral circuit proofs
         let def_proofs = inputs
             .byte_vec
             .iter()
-            .map(|input| self.def_circuit_prover.prove(&input))
+            .map(|input| self.def_circuit_prover.prove(input))
             .collect_vec();
 
         // Extract leaf IO commits from the deferral circuit proofs
-        let leaf_children = def_proofs
+        let leaf_io_commits = def_proofs
             .iter()
             .map(|proof| {
                 let pvs: &DeferralCircuitPvs<F> = proof.public_values[DEF_CIRCUIT_PVS_AIR_ID]
@@ -116,8 +118,8 @@ impl SingleDefCircuitProver {
         // Verify leaf-layer proofs and generate internal-for-leaf-layer proofs
         let mut internal_node_idx = 0u32;
         let child_merkle_depth = (leaf_proofs.len() != 1).then_some(1);
-        let internal_proofs =
-            info_span!("agg_layer", group = "internal_for_leaf").in_scope(|| {
+        let internal_for_leaf_proofs = info_span!("agg_layer", group = "internal_for_leaf")
+            .in_scope(|| {
                 leaf_proofs
                     .chunks(2)
                     .map(|proofs| {
@@ -135,7 +137,10 @@ impl SingleDefCircuitProver {
                     .collect::<Result<Vec<_>>>()
             })?;
 
-        Ok((internal_proofs, leaf_children))
+        Ok(SingleDefCircuitResult {
+            internal_for_leaf_proofs,
+            leaf_io_commits,
+        })
     }
 
     pub fn vk_commit(&self, internal_for_leaf_dag_commit: DagCommit<F>) -> Digest {

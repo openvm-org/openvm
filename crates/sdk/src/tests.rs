@@ -10,9 +10,8 @@ use openvm_stark_sdk::config::{
     root_params_with_100_bits_security,
 };
 use openvm_transpiler::elf::Elf;
-use openvm_verify_stark_circuit::{
-    extension::{get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn},
-    prover::{DefaultEngine, DeferredVerifyDefaultCircuitProver, DeferredVerifyDefaultProver},
+use openvm_verify_stark_circuit::extension::{
+    get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
 };
 use openvm_verify_stark_host::vk::NonRootStarkVerifyingKey;
 
@@ -22,7 +21,19 @@ use crate::{
     CpuSdk, DeferralInput, Sdk, StdIn,
 };
 
-type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_verify_stark_circuit::prover::DeferredVerifyGpuProver as VerifyProver;
+        use openvm_verify_stark_circuit::prover::DeferredVerifyGpuCircuitProver as VerifyCircuitProver;
+        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+        type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+    } else {
+        use openvm_verify_stark_circuit::prover::DeferredVerifyCpuProver as VerifyProver;
+        use openvm_verify_stark_circuit::prover::DeferredVerifyCpuCircuitProver as VerifyCircuitProver;
+        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
+        type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+    }
+}
 
 #[test]
 fn test_root_prover_trace_heights() -> Result<()> {
@@ -45,7 +56,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
 
     let proof = evm_prover.prove(stdin)?;
     let vk = evm_prover.root_prover.0.get_vk();
-    let engine = E::new(vk.inner.params.clone());
+    let engine = RootE::new(vk.inner.params.clone());
     engine.verify(&vk, &proof)?;
 
     Ok(())
@@ -85,7 +96,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let num_user_pvs = fib_system_config.num_public_values;
 
     let def_circuit_params = internal_params_with_100_bits_security();
-    let deferred_verify_prover = DeferredVerifyDefaultProver::new::<DefaultEngine>(
+    let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
         ir_pcs_data,
         def_circuit_params,
@@ -93,7 +104,7 @@ fn test_verify_stark_deferral() -> Result<()> {
         num_user_pvs,
         None,
     );
-    let verify_stark_prover = DeferredVerifyDefaultCircuitProver::new(deferred_verify_prover);
+    let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
 
     // ---- Step 3: Create DeferralProver ----
     let hook_params = root_params_with_100_bits_security();

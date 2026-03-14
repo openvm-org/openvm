@@ -48,7 +48,7 @@ use super::{
 };
 use crate::{
     circuit::{
-        deferral::{verify::DeferralMerkleProofs, DeferralCircuitPvs, DEF_HOOK_PVS_AIR_ID},
+        deferral::{DeferralCircuitPvs, DeferralMerkleProofs, DEF_HOOK_PVS_AIR_ID},
         inner::ProofsType,
     },
     prover::{
@@ -74,7 +74,7 @@ const INPUT_RAW_0: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
 const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
-fn make_deferral_extension() -> DeferralExtension {
+fn make_deferral_extension(commits: Vec<[u8; 32]>) -> DeferralExtension {
     let fns: Vec<_> = (0..NUM_DEF_CIRCUITS)
         .map(|idx| {
             Arc::new(DeferralFn::new(move |input_raw| {
@@ -89,7 +89,7 @@ fn make_deferral_extension() -> DeferralExtension {
             }))
         })
         .collect();
-    DeferralExtension::new(fns)
+    DeferralExtension::new(fns, commits)
 }
 
 fn deferral_fn_output(idx: u16, input_raw: &[u8]) -> Vec<u8> {
@@ -230,17 +230,14 @@ fn test_deferral_e2e() -> Result<()> {
     let (_, def_circuit_vk) = gpu_engine.keygen(&[empty_air]);
     let def_circuit_vk = Arc::new(def_circuit_vk);
 
-    let def_leaf_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
-        def_circuit_vk.clone(),
-        leaf_system_params(),
-        false,
-    );
-    let def_i0_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+    let def_leaf_prover =
+        DeferralInnerProver::new::<GpuEngine>(def_circuit_vk.clone(), leaf_system_params(), false);
+    let def_i0_prover = DeferralInnerProver::new::<GpuEngine>(
         def_leaf_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let def_i1_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+    let def_i1_prover = DeferralInnerProver::new::<GpuEngine>(
         def_i0_prover.get_vk(),
         internal_system_params(),
         true,
@@ -288,7 +285,7 @@ fn test_deferral_e2e() -> Result<()> {
         rv32i: Rv32I,
         rv32m: Rv32M::default(),
         io: Rv32Io,
-        deferral: make_deferral_extension(),
+        deferral: make_deferral_extension(transpiler_commits.clone()),
     };
 
     let elf = Elf::decode(
@@ -408,7 +405,7 @@ fn test_deferral_e2e() -> Result<()> {
         proofs: Vec<Proof<SC>>,
         leaf_children: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE])>,
     ) -> Result<Proof<SC>> {
-        let leaf_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+        let leaf_prover = DeferralInnerProver::new::<GpuEngine>(
             def_circuit_vk.clone(),
             leaf_system_params(),
             false,
@@ -431,7 +428,7 @@ fn test_deferral_e2e() -> Result<()> {
         current_proofs = next;
         child_merkle_depth += 1;
 
-        let i4l_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+        let i4l_prover = DeferralInnerProver::new::<GpuEngine>(
             leaf_prover.get_vk(),
             internal_system_params(),
             false,
@@ -453,7 +450,7 @@ fn test_deferral_e2e() -> Result<()> {
         current_proofs = next;
         child_merkle_depth += 1;
 
-        let ir_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+        let ir_prover = DeferralInnerProver::new::<GpuEngine>(
             i4l_prover.get_vk(),
             internal_system_params(),
             true,

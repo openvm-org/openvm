@@ -3,7 +3,6 @@ use std::sync::Arc;
 use eyre::Result;
 use openvm_continuations::{
     bn254::CommitBytes,
-    circuit::deferral::hook::DeferralIoCommit,
     prover::{DeferralChildVkKind, DeferralCircuitProver},
     SC,
 };
@@ -40,6 +39,7 @@ pub use merkle::*;
 
 pub type DefAggProvingKey = AggProvingKey;
 
+#[allow(clippy::large_enum_variant)]
 pub enum DeferralProof {
     Present(Proof<SC>),
     Absent(DeferralPvs<F>),
@@ -50,6 +50,9 @@ pub struct DeferralProver {
     pub internal_recursive_prover: DeferralInnerProver,
     pub def_hook_prover: DeferralHookProver,
 }
+
+unsafe impl Send for DeferralProver {}
+unsafe impl Sync for DeferralProver {}
 
 impl DeferralProver {
     pub fn new<DP: DeferralCircuitProver<SC> + 'static>(
@@ -123,7 +126,7 @@ impl DeferralProver {
 
     pub fn prove(&self, inputs: &[DeferralInput]) -> Result<Vec<DeferralProof>> {
         // Generate internal-for-leaf proofs and leaf IO commits per circuit
-        let per_circuit: Vec<(Vec<Proof<SC>>, Vec<DeferralIoCommit<F>>)> = self
+        let per_circuit = self
             .single_circuit_provers
             .iter()
             .zip(inputs)
@@ -134,7 +137,8 @@ impl DeferralProver {
         per_circuit
             .into_iter()
             .enumerate()
-            .map(|(circuit_idx, (mut proofs, leaf_children))| {
+            .map(|(circuit_idx, res)| {
+                let mut proofs = res.internal_for_leaf_proofs;
                 if proofs.is_empty() {
                     let def_vk_commit = self.single_circuit_provers[circuit_idx]
                         .vk_commit(self.internal_recursive_prover.get_dag_commit(false));
@@ -199,7 +203,7 @@ impl DeferralProver {
                     // Generate the deferral hook proof
                     Ok(DeferralProof::Present(
                         self.def_hook_prover
-                            .prove::<E>(proofs.pop().unwrap(), leaf_children)?,
+                            .prove::<E>(proofs.pop().unwrap(), res.leaf_io_commits)?,
                     ))
                 }
             })

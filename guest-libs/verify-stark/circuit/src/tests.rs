@@ -46,6 +46,8 @@ use p3_field::PrimeCharacteristicRing;
 use test_case::test_case;
 use tracing::Level;
 
+use crate::prover::DeferredVerifyGpuProver;
+
 type Engine = BabyBearPoseidon2GpuEngine;
 type PB = GpuBackend;
 
@@ -179,7 +181,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
     ) = run_full_aggregation(10, child_extra_recursive_layers)?;
 
     let system_config = test_rv32im_config().rv32i.system;
-    let deferred_verify_prover = crate::prover::DeferredVerifyDefaultProver::new::<Engine>(
+    let deferred_verify_prover = DeferredVerifyGpuProver::new::<Engine>(
         internal_recursive_vk.clone(),
         internal_recursive_pcs_data,
         root_system_params(),

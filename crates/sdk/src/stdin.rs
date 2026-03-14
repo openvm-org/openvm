@@ -80,7 +80,7 @@ impl DeferralInput {
     pub fn into_inputs<I: Decode>(self) -> Vec<I> {
         self.byte_vec
             .iter()
-            .map(|input| I::decode_from_bytes(&input).unwrap())
+            .map(|input| I::decode_from_bytes(input).unwrap())
             .collect_vec()
     }
 

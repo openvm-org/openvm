@@ -11,6 +11,8 @@ use openvm_continuations::{
     SC,
 };
 use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, VerifierConfig, VerifierSubCircuit, VerifierTraceGen,
 };
@@ -21,7 +23,9 @@ use openvm_stark_backend::{
     prover::{CommittedTraceData, DeviceDataTransporter, ProverBackend},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, DIGEST_SIZE, EF, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    BabyBearPoseidon2CpuEngine, Digest, DIGEST_SIZE, EF, F,
+};
 use openvm_verify_stark_host::NonRootStarkProof;
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
@@ -32,32 +36,21 @@ mod trace;
 
 pub type DeferredVerifyCpuProver =
     DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
+pub type DeferredVerifyCpuCircuitProver = DeferredVerifyCircuitProver<
+    BabyBearPoseidon2CpuEngine,
+    VerifierSubCircuit<1>,
+    DeferredVerifyTraceGenImpl,
+>;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "cuda")] {
-        use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-
-        /// Default engine: GPU when cuda is enabled, CPU otherwise.
-        pub type DefaultEngine = BabyBearPoseidon2GpuEngine;
-        /// Default prover backend.
-        pub type DefaultBackend = GpuBackend;
-    } else {
-        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
-
-        /// Default engine: GPU when cuda is enabled, CPU otherwise.
-        pub type DefaultEngine = BabyBearPoseidon2CpuEngine;
-        /// Default prover backend.
-        pub type DefaultBackend = CpuBackend<SC>;
-    }
-}
-
-/// Default (CPU or GPU) type alias for the verify-stark deferred verify prover.
-pub type DeferredVerifyDefaultProver =
-    DeferredVerifyProver<DefaultBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
-
-/// Default (CPU or GPU) type alias for the circuit prover wrapper.
-pub type DeferredVerifyDefaultCircuitProver =
-    DeferredVerifyCircuitProver<DefaultEngine, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
+#[cfg(feature = "cuda")]
+pub type DeferredVerifyGpuProver =
+    DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
+#[cfg(feature = "cuda")]
+pub type DeferredVerifyGpuCircuitProver = DeferredVerifyCircuitProver<
+    BabyBearPoseidon2GpuEngine,
+    VerifierSubCircuit<1>,
+    DeferredVerifyTraceGenImpl,
+>;
 
 pub struct DeferredVerifyProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
