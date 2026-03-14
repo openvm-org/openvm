@@ -9,6 +9,7 @@ use openvm_circuit::{
     system::memory::merkle::MerkleTree,
 };
 use openvm_continuations::circuit::inner::ProofsType;
+use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_verify_stark_host::{
@@ -166,11 +167,24 @@ where
                 .internal_recursive_prover
                 .get_dag_commit(true),
             expected_def_vk_commit: self.def_prover.as_ref().map(|dp| {
-                let ir_dag_commit = dp
-                    .deferral_prover
+                let hook_dag = dp.agg_prover.leaf_prover.get_dag_commit(false);
+                let leaf_dag = dp.agg_prover.internal_for_leaf_prover.get_dag_commit(false);
+                let i4l_dag = dp
+                    .agg_prover
                     .internal_recursive_prover
                     .get_dag_commit(false);
-                dp.deferral_prover.single_circuit_provers[0].vk_commit(ir_dag_commit)
+                poseidon2_hash_slice(
+                    &vec![
+                        hook_dag.cached_commit,
+                        hook_dag.vk_pre_hash,
+                        leaf_dag.cached_commit,
+                        leaf_dag.vk_pre_hash,
+                        i4l_dag.cached_commit,
+                        i4l_dag.vk_pre_hash,
+                    ]
+                    .into_flattened(),
+                )
+                .0
             }),
         }
     }
