@@ -188,17 +188,13 @@ impl MemoryConfig {
     pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
         // All except address spaces 0..4 default to native 32-bit field.
         // By default only address spaces 1..=4 have non-empty cell counts.
+        debug_assert!(num_addr_spaces > PUBLIC_VALUES_AS as usize);
         let mut addr_spaces =
             vec![AddressSpaceHostConfig::new(0, MemoryCellType::native32()); num_addr_spaces];
         addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
         addr_spaces[RV32_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
-
         addr_spaces[RV32_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
-
         addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
-
-        addr_spaces[openvm_instructions::DEFERRAL_AS as usize] =
-            AddressSpaceHostConfig::new(0, MemoryCellType::native32());
 
         addr_spaces
     }
