@@ -16,10 +16,11 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 
 use crate::circuit::{
-    root::bus::{
-        MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus, UserPvsCommitMessage,
+    root::bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
+    subair::{
+        MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext, MerkleRootBus,
+        MerkleRootMessage,
     },
-    subair::{MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext},
 };
 
 #[repr(C)]
@@ -39,14 +40,14 @@ pub struct UserPvsInMemoryCols<F> {
 
 pub struct UserPvsInMemoryAir {
     pub merkle_path_subair: MerklePathSubAir,
-    pub user_pvs_commit_bus: UserPvsCommitBus,
+    pub merkle_root_bus: MerkleRootBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
 }
 
 impl UserPvsInMemoryAir {
     pub fn new(
         poseidon2_compress_bus: Poseidon2CompressBus,
-        user_pvs_commit_bus: UserPvsCommitBus,
+        merkle_root_bus: MerkleRootBus,
         memory_merkle_commit_bus: MemoryMerkleCommitBus,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -63,7 +64,7 @@ impl UserPvsInMemoryAir {
                 expected_proof_len,
                 merkle_path_branch_bits,
             ),
-            user_pvs_commit_bus,
+            merkle_root_bus,
             memory_merkle_commit_bus,
         }
     }
@@ -91,10 +92,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
          * Receive the user public values commit on the first row. The first DIGEST_SIZE
          * elements of perm state are this merkle tree node's commit.
          */
-        self.user_pvs_commit_bus.receive(
+        self.merkle_root_bus.receive(
             builder,
-            UserPvsCommitMessage {
-                user_pvs_commit: local.node_commit,
+            MerkleRootMessage {
+                merkle_root: local.node_commit.map(Into::into),
+                idx: AB::Expr::ZERO,
             },
             local.is_valid * (local.is_valid - AB::F::ONE) * AB::F::TWO.inverse(),
         );
