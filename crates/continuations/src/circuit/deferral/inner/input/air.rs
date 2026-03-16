@@ -170,8 +170,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             InputOrMerkleCommitMessage {
                 has_verifier_pvs: local.has_verifier_pvs.into(),
                 commit: from_fn(|i| {
-                    is_internal.clone() * local.current_commit[i]
-                        + is_leaf.clone() * local.res_left[i]
+                    is_internal * local.current_commit[i] + is_leaf.clone() * local.res_left[i]
                 }),
             },
             local.is_valid * not::<AB::Expr>(is_transition),

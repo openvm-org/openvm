@@ -38,7 +38,9 @@ use openvm_stark_sdk::{
     },
     utils::setup_tracing_with_log_level,
 };
-use openvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_transpiler::{
+    elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
+};
 use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use tracing::{warn, Level};
@@ -306,14 +308,9 @@ fn test_deferral_e2e() -> Result<()> {
         deferral: make_deferral_extension(transpiler_commits.clone()),
     };
 
-    // let elf = Elf::decode(
-    //     include_bytes!("../../programs/examples/multiple.elf"),
-    //     MEM_SIZE as u32,
-    // )?;
-    let elf = openvm_toolchain_tests::build_example_program_at_path(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("programs"),
-        "multiple",
-        &config,
+    let elf = Elf::decode(
+        include_bytes!("../../programs/examples/multiple.elf"),
+        MEM_SIZE as u32,
     )?;
     let exe = VmExe::from_elf(
         elf,

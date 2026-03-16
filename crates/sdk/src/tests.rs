@@ -145,11 +145,9 @@ fn test_verify_stark_deferral() -> Result<()> {
     let vs_sdk = CpuSdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
 
     // ---- Step 7: Build the verify-stark ELF ----
-    let programs_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("programs");
-    let vs_elf = openvm_toolchain_tests::build_example_program_at_path(
-        programs_dir,
-        "verify-stark",
-        &vs_sdk.app_config().app_vm_config,
+    let vs_elf = Elf::decode(
+        include_bytes!("../programs/examples/verify-stark.elf"),
+        MEM_SIZE as u32,
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
