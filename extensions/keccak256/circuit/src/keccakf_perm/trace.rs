@@ -5,11 +5,12 @@ use std::{
 };
 
 use openvm_circuit_primitives::Chip;
+use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     StarkProtocolConfig, Val,
 };
 use p3_keccak_air::{generate_trace_rows, NUM_KECCAK_COLS, NUM_ROUNDS};
@@ -69,6 +70,6 @@ where
                 }
             });
         let matrix = RowMajorMatrix::new(values, NUM_KECCAKF_PERM_COLS);
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&matrix))
+        AirProvingContext::simple_no_pis(matrix)
     }
 }
