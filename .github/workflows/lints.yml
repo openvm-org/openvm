@@ -26,6 +26,7 @@ jobs:
               - '**/cuda/**'
               - '**/cuda*.rs'
               - '**/cuda_abi.rs'
+              - '**/build.rs'
               - '.github/workflows/lints.yml'
               - '.github/actions/rust-cache-cuda/**'
   lint:
