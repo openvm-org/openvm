@@ -21,7 +21,7 @@ use crate::{
             DefPvsConsistencyBus, DefPvsConsistencyMessage, InputOrMerkleCommitBus,
             InputOrMerkleCommitMessage,
         },
-        DeferralAggregationPvs, DeferralCircuitPvs, DEF_CIRCUIT_PVS_AIR_ID,
+        DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
     },
     utils::digests_to_poseidon2_input,
 };
@@ -137,7 +137,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 ),
                 output: local.merkle_commit,
             },
-            is_leaf * local.is_present,
+            is_leaf.clone() * local.is_present,
         );
 
         /*
@@ -154,20 +154,53 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
+         * On internal layers we receive num_def_circuit_proofs from PublicValuesBus. To save
+         * columns, we repurpose the unused local.child_pvs.input_commit[0].
+         */
+        let local_num_def_circuit_proofs = local.child_pvs.input_commit[0];
+
+        builder
+            .when(not(local.is_present))
+            .when(is_internal)
+            .assert_zero(local_num_def_circuit_proofs);
+
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: AB::Expr::from_usize(DEF_AGG_PVS_AIR_ID),
+                pv_idx: AB::Expr::from_usize(DIGEST_SIZE),
+                value: local_num_def_circuit_proofs.into(),
+            },
+            is_internal * local.is_present,
+        );
+
+        /*
          * If there is only one row, then this proof is a wrapper and its public values should
          * match those of its child's. Otherwise, constrain that merkle_commit is the hash of
-         * the child proofs'.
+         * the child proofs'. We also constrain that num_def_circuit_proofs is the sum of the
+         * present children's.
          */
-        let &DeferralAggregationPvs::<_> { merkle_commit } = builder.public_values().borrow();
+        let &DeferralAggregationPvs::<_> {
+            merkle_commit,
+            num_def_circuit_proofs,
+        } = builder.public_values().borrow();
 
         let is_first = not(local.proof_idx);
         let is_first_of_two_rows = is_first.clone() * next.proof_idx;
 
-        assert_array_eq(
-            &mut builder.when(is_first * not(next.proof_idx)),
-            local.merkle_commit,
-            merkle_commit,
-        );
+        let local_num_proofs =
+            local.is_present * is_leaf.clone() + is_internal * local_num_def_circuit_proofs;
+        let next_num_proofs =
+            next.is_present * is_leaf + is_internal * next.child_pvs.input_commit[0];
+
+        let mut when_one_row = builder.when(is_first * not(next.proof_idx));
+        when_one_row.assert_eq(local_num_proofs.clone(), num_def_circuit_proofs);
+        assert_array_eq(&mut when_one_row, local.merkle_commit, merkle_commit);
+
+        builder
+            .when_transition()
+            .assert_eq(local_num_proofs + next_num_proofs, num_def_circuit_proofs);
 
         self.poseidon2_bus.lookup_key(
             builder,

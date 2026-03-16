@@ -62,6 +62,7 @@ cfg_if::cfg_if! {
             baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
         };
         use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
+        use p3_field::PrimeField32;
         use crate::prover::DeferralChildVkKind;
         use crate::utils::zero_hash;
         type RootEngine = BabyBearBn254Poseidon2CpuEngine;
@@ -523,6 +524,10 @@ fn test_deferral_leaf_prover(num_children: usize) -> Result<()> {
         .as_slice()
         .borrow();
     assert_eq!(expected_merkle_commit, wrapped_pvs.merkle_commit);
+    assert_eq!(
+        num_children as u32,
+        wrapped_pvs.num_def_circuit_proofs.as_canonical_u32()
+    );
 
     Ok(())
 }
@@ -551,6 +556,10 @@ fn test_deferral_aggregation(num_children: usize) -> Result<()> {
         .as_slice()
         .borrow();
     assert_eq!(expected_root_merkle, wrapped_pvs.merkle_commit);
+    assert_eq!(
+        num_children as u32,
+        wrapped_pvs.num_def_circuit_proofs.as_canonical_u32()
+    );
 
     Ok(())
 }
