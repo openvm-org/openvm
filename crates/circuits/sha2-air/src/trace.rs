@@ -429,6 +429,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
         first_block_prev_hash: &[C::Word],
         carry_a: Option<&[F]>,
         carry_e: Option<&[F]>,
+        global_block_idx: u32,
     ) {
         debug_assert!(first_block_prev_hash.len() == C::HASH_WORDS);
         debug_assert!(carry_a.is_some() == carry_e.is_some());
@@ -443,6 +444,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
             &mut cols.flags.row_idx,
             get_flag_pt_array(&self.row_idx_encoder, C::ROWS_PER_BLOCK),
         );
+        *cols.flags.global_block_idx = F::from_u32(global_block_idx);
 
         for i in 0..C::ROUNDS_PER_ROW {
             // The padding rows need to have the first block's prev_hash here, to satisfy the air
