@@ -506,6 +506,10 @@ impl Sha256VmFiller {
                             (record.dst_ptr >> msl_rshift) << msl_lshift,
                             (record.src_ptr >> msl_rshift) << msl_lshift,
                         );
+                        // Range-check len_data MSB to prevent field overflow.
+                        debug_assert!(record.len < (1 << self.pointer_max_bits));
+                        self.bitwise_lookup_chip
+                            .request_range((record.len >> msl_rshift) << msl_lshift, 0);
                     } else {
                         // Filling in zeros to make sure the accidental garbage data doesn't
                         // overflow the prime

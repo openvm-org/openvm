@@ -233,6 +233,9 @@ __global__ __noinline__ void sha256_first_pass_tracegen(
                     (vm_record.dst_ptr >> msl_rshift) << msl_lshift,
                     (vm_record.src_ptr >> msl_rshift) << msl_lshift
                 );
+
+                // Match the AIR/CPU filler's len_data MSB range check:
+                bitwise_lookup.add_range((len >> msl_rshift) << msl_lshift, 0);
             } else {
                 for (int i = 0; i < SHA256_REGISTER_READS; i++) {
                     mem_helper.fill_zero(SHA256_SLICE_DIGEST(row, register_reads_aux[i]));

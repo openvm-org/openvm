@@ -545,8 +545,6 @@ impl Sha256VmAir {
             .eval(builder, is_last_row.clone());
 
         // range check that the memory pointers don't overflow
-        // Note: no need to range check the length since we read from memory step by step and
-        //       the memory bus will catch any memory accesses beyond ptr_max_bits
         let shift = AB::Expr::from_usize(
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.ptr_max_bits),
         );
@@ -557,6 +555,20 @@ impl Sha256VmAir {
                 // have [RV32_CELL_BITS] bits
                 local_cols.dst_ptr[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
                 local_cols.src_ptr[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
+            )
+            .eval(builder, is_last_row.clone());
+
+        // Range-check len_data to prevent field overflow.
+        // Without this, a prover can set len_data to len + p (where p is the base field
+        // modulus); compose(len_data) would equal len in-field, passing the equality
+        // constraint while the VM-visible length is actually huge.
+        // Constraining len_data[3] * shift < 256 ensures compose(len_data) < 2^ptr_max_bits,
+        // assuming that len_data[3] has [RV32_CELL_BITS]. The assumption is satisfied due to the
+        // invariant on address space 2.
+        self.bitwise_lookup_bus
+            .send_range(
+                local_cols.len_data[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
+                AB::Expr::ZERO,
             )
             .eval(builder, is_last_row.clone());
 
