@@ -133,12 +133,15 @@ where
         // we need to do this first, so we can compute the carries that make the
         // constraint_word_addition constraints hold on dummy rows (or more precisely, on rows such
         // that the next row is a dummy row).
+        let num_blocks = rows_used / C::ROWS_PER_BLOCK;
         let first_dummy_row_cols_const = self.fill_first_dummy_row(
             &mut trace[rows_used * C::BLOCK_HASHER_WIDTH..(rows_used + 1) * C::BLOCK_HASHER_WIDTH],
             &prev_hashes[0],
+            num_blocks,
         );
 
         // fill in the rest of the dummy rows
+        let padding_global_block_idx = (num_blocks + 1) as u32;
         trace[(rows_used + 1) * C::BLOCK_HASHER_WIDTH..]
             .par_chunks_exact_mut(C::BLOCK_HASHER_WIDTH)
             .for_each(|row| {
@@ -162,6 +165,7 @@ where
                             .as_slice()
                             .unwrap(),
                     ),
+                    padding_global_block_idx,
                 );
             });
 
@@ -174,12 +178,50 @@ where
                 self.inner
                     .generate_missing_cells(chunk, C::BLOCK_HASHER_WIDTH, INNER_OFFSET);
             });
+
+        self.fill_wraparound(trace);
+    }
+
+    /// Fill in dummy values for the wrap-around (last row → first row) so that
+    /// unconditional constraints hold:
+    /// - `intermed_4` on row 0 for the message schedule sigma constraint
+    /// - `intermed_12` on the last row for the message schedule addition constraint
+    fn fill_wraparound(&self, trace: &mut [F]) {
+        let height = trace.len() / C::BLOCK_HASHER_WIDTH;
+        let last_row_start = (height - 1) * C::BLOCK_HASHER_WIDTH;
+
+        // Fill intermed_4 on the first row (needs first_row mut, last_row immut)
+        {
+            let (first_row, rest) = trace.split_at_mut(C::BLOCK_HASHER_WIDTH);
+            let last_row = &rest[(height - 2) * C::BLOCK_HASHER_WIDTH..];
+            let local = Sha2RoundColsRef::from::<C>(
+                &last_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
+            );
+            let mut next = Sha2RoundColsRefMut::from::<C>(
+                &mut first_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
+            );
+            Sha2BlockHasherFillerHelper::<C>::generate_intermed_4(local, &mut next);
+        }
+
+        // Fill intermed_12 on the last row (needs last_row mut, first_row immut)
+        {
+            let (first_row, rest) = trace.split_at_mut(C::BLOCK_HASHER_WIDTH);
+            let next = Sha2RoundColsRef::from::<C>(
+                &first_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
+            );
+            let last_row = &mut rest[last_row_start - C::BLOCK_HASHER_WIDTH..last_row_start];
+            let mut local = Sha2RoundColsRefMut::from::<C>(
+                &mut last_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
+            );
+            Sha2BlockHasherFillerHelper::<C>::generate_intermed_12(&mut local, next);
+        }
     }
 
     fn fill_first_dummy_row(
         &self,
         first_dummy_row_mut: &mut [F],
         first_block_prev_hash: &[C::Word],
+        num_blocks: usize,
     ) -> Sha2RoundColsRef<'_, F> {
         let first_dummy_row_const =
             unsafe { slice::from_raw_parts(first_dummy_row_mut.as_ptr(), C::BLOCK_HASHER_WIDTH) };
@@ -195,12 +237,13 @@ where
         );
 
         // first, fill in everything but the carries into the first dummy row (i.e. fill in the
-        // work vars and row_idx)
+        // work vars, row_idx, and global_block_idx)
         self.inner.generate_default_row(
             &mut first_dummy_row_cols_mut,
             first_block_prev_hash,
             None,
             None,
+            (num_blocks + 1) as u32,
         );
 
         // Now, this will fill in the first dummy row with the correct carries.
