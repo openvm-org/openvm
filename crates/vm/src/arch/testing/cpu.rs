@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
-use openvm_cpu_backend::{CpuBackend, CpuProverError};
+use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
@@ -17,7 +17,6 @@ use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
-    p3_util::log2_strict_usize,
     prover::AirProvingContext,
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, StarkTestError, SystemParams, Val,
     VerificationData,
@@ -516,10 +515,7 @@ where
         P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {
         let mut ctx = chip.generate_proving_ctx(());
-        let mut trace =
-            StridedColMajorMatrixView::from(ctx.common_main.as_view()).to_row_major_matrix();
-        modify_trace(&mut trace);
-        ctx.common_main = ColMajorMatrix::from_row_major(&trace);
+        modify_trace(&mut ctx.common_main);
         self.air_ctxs.push((Arc::new(air), ctx));
         self
     }
