@@ -48,10 +48,15 @@ where
 
         // Base constraints to ensure all valid rows are at the beginning of the trace,
         // that row_idx increments properly, and that mult is 0 on invalid rows.
-        builder.assert_bool(local.is_valid);
-        builder
-            .when_transition()
-            .assert_bool(local.is_valid - next.is_valid);
+        if self.num_deferral_circuits > 0 {
+            builder.when_first_row().assert_one(local.is_valid);
+            builder.assert_bool(local.is_valid);
+            builder
+                .when_transition()
+                .assert_bool(local.is_valid - next.is_valid);
+        } else {
+            builder.assert_zero(local.is_valid);
+        }
 
         builder.when_first_row().assert_zero(local.row_idx);
         builder
