@@ -83,8 +83,12 @@ impl AggProver {
         agg_tree_config: AggregationTreeConfig,
         def_hook_commit: Option<Digest>,
     ) -> Self {
-        let leaf_prover =
-            InnerAggregationProver::from_pk::<E>(app_or_def_vk, agg_pk.leaf_pk, false, None);
+        let leaf_prover = InnerAggregationProver::from_pk::<E>(
+            app_or_def_vk,
+            agg_pk.leaf_pk,
+            false,
+            def_hook_commit,
+        );
         let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
             agg_pk.internal_for_leaf_pk,
@@ -329,6 +333,7 @@ fn reduce_def_round<const N: usize>(
                         )?)
                     }
                     (DeferralProof::Absent(pvs0), DeferralProof::Absent(pvs1)) => {
+                        debug_assert_eq!(pvs0.depth, pvs1.depth);
                         DeferralProof::Absent(DeferralPvs {
                             initial_acc_hash: poseidon2_compress_with_capacity(
                                 pvs0.initial_acc_hash,

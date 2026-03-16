@@ -51,11 +51,8 @@ pub struct DeferralProver {
     pub def_hook_prover: DeferralHookProver,
 }
 
-unsafe impl Send for DeferralProver {}
-unsafe impl Sync for DeferralProver {}
-
 impl DeferralProver {
-    pub fn new<DP: DeferralCircuitProver<SC> + 'static>(
+    pub fn new<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         def_circuit_prover: DP,
         agg_config: AggregationConfig,
         hook_params: SystemParams,
@@ -79,7 +76,7 @@ impl DeferralProver {
         }
     }
 
-    pub fn from_pks<DP: DeferralCircuitProver<SC> + 'static>(
+    pub fn from_pks<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         def_circuit_prover: DP,
         def_agg_pk: DefAggProvingKey,
         def_hook_pk: Arc<MultiStarkProvingKey<SC>>,
@@ -107,7 +104,7 @@ impl DeferralProver {
         }
     }
 
-    pub fn with_prover<DP: DeferralCircuitProver<SC> + 'static>(
+    pub fn with_prover<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         mut self,
         def_circuit_prover: DP,
     ) -> Self {

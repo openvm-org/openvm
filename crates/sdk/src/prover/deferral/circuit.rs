@@ -26,7 +26,7 @@ cfg_if::cfg_if! {
 }
 
 pub struct SingleDefCircuitProver {
-    pub def_circuit_prover: Box<dyn DeferralCircuitProver<SC>>,
+    pub def_circuit_prover: Box<dyn DeferralCircuitProver<SC> + Send + Sync>,
     pub leaf_prover: DeferralInnerProver,
     pub internal_for_leaf_prover: DeferralInnerProver,
 }
@@ -37,7 +37,7 @@ pub struct SingleDefCircuitResult {
 }
 
 impl SingleDefCircuitProver {
-    pub fn new<DP: DeferralCircuitProver<SC> + 'static>(
+    pub fn new<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         def_circuit_prover: DP,
         leaf_params: SystemParams,
         internal_params: SystemParams,
@@ -53,7 +53,7 @@ impl SingleDefCircuitProver {
         }
     }
 
-    pub fn from_pks<DP: DeferralCircuitProver<SC> + 'static>(
+    pub fn from_pks<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         def_circuit_prover: DP,
         leaf_pk: Arc<MultiStarkProvingKey<SC>>,
         internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,

@@ -82,7 +82,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
         /*
          * On valid rows we want to receive the next VALS_IN_DIGEST output values
          * and constrain that next_bytes is their byte decomposition. To this end
-         * we also constrain that next_f_idx increments by VALS_IN_DIGEST.
+         * we also constrain that next_f_idx increments.
          */
         for (byte_decomp, next_f) in izip!(local.next_bytes.chunks(F_NUM_BYTES), local.next_f) {
             let composed_f = fold(
