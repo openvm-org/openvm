@@ -10,11 +10,8 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 
-pub use crate::circuit::subair::UserPvsCommitCols;
-use crate::circuit::{
-    root::bus::{UserPvsCommitBus, UserPvsCommitTreeBus},
-    subair::UserPvsCommitSubAir,
-};
+pub use crate::circuit::subair::MerkleTreeCols;
+use crate::circuit::subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir};
 
 pub(super) const MAX_ENCODER_DEGREE: u32 = 3;
 
@@ -24,10 +21,10 @@ pub(super) const MAX_ENCODER_DEGREE: u32 = 3;
  * - leaf nodes read single digests from encoder-selected exposed public values, compress them
  *   with zeros, and compute leaf hashes
  * - internal nodes receive children from an internal permutation bus
- * - root commitment is sent to `UserPvsCommitBus`
+ * - root commitment is sent to `MerkleRootBus`
  */
 pub struct UserPvsCommitAir {
-    pub subair: UserPvsCommitSubAir,
+    pub subair: MerkleTreeSubAir,
     encoder: Encoder,
     num_user_pvs: usize,
 }
@@ -35,8 +32,8 @@ pub struct UserPvsCommitAir {
 impl UserPvsCommitAir {
     pub fn new(
         poseidon2_compress_bus: Poseidon2CompressBus,
-        user_pvs_commit_bus: UserPvsCommitBus,
-        user_pvs_commit_tree_bus: UserPvsCommitTreeBus,
+        merkle_root_bus: MerkleRootBus,
+        merkle_tree_internal_bus: MerkleTreeInternalBus,
         num_user_pvs: usize,
     ) -> Self {
         // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
@@ -47,10 +44,11 @@ impl UserPvsCommitAir {
         let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
 
         UserPvsCommitAir {
-            subair: UserPvsCommitSubAir::new(
+            subair: MerkleTreeSubAir::new(
                 poseidon2_compress_bus,
-                user_pvs_commit_bus,
-                user_pvs_commit_tree_bus,
+                merkle_root_bus,
+                merkle_tree_internal_bus,
+                0,
             ),
             encoder,
             num_user_pvs,
@@ -60,7 +58,7 @@ impl UserPvsCommitAir {
 
 impl<F> BaseAir<F> for UserPvsCommitAir {
     fn width(&self) -> usize {
-        UserPvsCommitCols::<u8>::width() + self.encoder.width()
+        MerkleTreeCols::<u8>::width() + self.encoder.width()
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsCommitAir {
@@ -80,11 +78,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             main.row_slice(1).expect("window should have two elements"),
         );
 
-        let const_width = UserPvsCommitCols::<u8>::width();
+        let const_width = MerkleTreeCols::<u8>::width();
         let row_idx_flags = &(*local)[const_width..];
 
-        let local: &UserPvsCommitCols<AB::Var> = (*local)[..const_width].borrow();
-        let next: &UserPvsCommitCols<AB::Var> = (*next)[..const_width].borrow();
+        let local: &MerkleTreeCols<AB::Var> = (*local)[..const_width].borrow();
+        let next: &MerkleTreeCols<AB::Var> = (*next)[..const_width].borrow();
 
         let num_rows = AB::F::from_usize(2 * self.num_user_pvs / DIGEST_SIZE);
         self.subair.eval(builder, (local, next, num_rows.into()));

@@ -8,9 +8,12 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::{
-    root::commit::{UserPvsCommitCols, MAX_ENCODER_DEGREE},
-    subair::generate_cols_from_user_pvs,
+use crate::{
+    circuit::{
+        root::commit::{MerkleTreeCols, MAX_ENCODER_DEGREE},
+        subair::generate_cols_from_leaf_children,
+    },
+    utils::digests_to_poseidon2_input,
 };
 
 pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
@@ -29,15 +32,29 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
 
     let num_leaves = num_user_pvs / DIGEST_SIZE;
-    let (rows, poseidon2_compress_inputs) = generate_cols_from_user_pvs(&user_pvs);
+    let leaf_children = user_pvs
+        .chunks_exact(DIGEST_SIZE)
+        .map(|digest| {
+            (
+                digest.try_into().expect("digest sized chunk"),
+                [F::ZERO; DIGEST_SIZE],
+            )
+        })
+        .collect();
+    let rows = generate_cols_from_leaf_children(leaf_children);
+    let poseidon2_compress_inputs = rows
+        .iter()
+        .take(rows.len() - 1)
+        .map(|row| digests_to_poseidon2_input(row.left_child, row.right_child))
+        .collect();
     debug_assert_eq!(rows.len(), 2 * num_leaves);
 
-    let const_width = UserPvsCommitCols::<u8>::width();
+    let const_width = MerkleTreeCols::<u8>::width();
     let width = const_width + encoder.width();
     let mut trace = vec![F::ZERO; rows.len() * width];
 
     for (row_idx, (chunk, row)) in trace.chunks_mut(width).zip(rows).enumerate() {
-        let cols: &mut UserPvsCommitCols<F> = chunk[..const_width].borrow_mut();
+        let cols: &mut MerkleTreeCols<F> = chunk[..const_width].borrow_mut();
         *cols = row;
 
         if row_idx < num_leaves {
