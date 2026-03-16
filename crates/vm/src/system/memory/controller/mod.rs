@@ -11,11 +11,8 @@ use openvm_circuit_primitives::{
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    interaction::PermutationCheckBus,
-    p3_field::PrimeField32,
-    p3_util::log2_strict_usize,
-    prover::AirProvingContext,
-    StarkProtocolConfig,
+    interaction::PermutationCheckBus, p3_field::PrimeField32, p3_util::log2_strict_usize,
+    prover::AirProvingContext, StarkProtocolConfig,
 };
 use serde::{Deserialize, Serialize};
 
