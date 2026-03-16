@@ -275,11 +275,12 @@ where
             builder,
             local.proof_idx,
             Eq3bShapeMessage {
-                sort_idx: local.sort_idx,
-                n_lift: local.n_lift,
-                n_logup: local.n_logup,
+                sort_idx: local.sort_idx.into(),
+                n_lift: local.n_lift.into(),
+                n_logup: local.n_logup.into(),
+                num_interactions: local.interaction_idx + not(local.has_no_interactions),
             },
-            local.is_first_in_air,
+            LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first_in_air),
         );
 
         self.eq_3b_bus.send(
