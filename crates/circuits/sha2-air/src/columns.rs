@@ -143,7 +143,8 @@ pub struct Sha2FlagsCols<T, const ROW_VAR_CNT: usize> {
     /// We will encode the row index [0..C::ROWS_PER_BLOCK] using ROW_VAR_CNT cells
     pub row_idx: [T; ROW_VAR_CNT],
     /// The global index of the current block, starts at 1 for the first block
-    /// and increments by 1 for each block. Set to 0 for padding rows.
+    /// and increments by 1 for each block. Padding rows use one more than the
+    /// last real block's index and remain constant across all padding rows.
     pub global_block_idx: T,
 }
 
