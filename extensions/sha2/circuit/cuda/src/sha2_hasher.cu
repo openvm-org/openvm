@@ -1031,8 +1031,8 @@ int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_
     auto [grid_size, block_size] = kernel_launch_params(total_blocks, 256);
     sha2_second_pass_dependencies<V>
         <<<grid_size, block_size>>>(d_trace, trace_height, total_blocks);
-    if (CHECK_KERNEL() != 0) {
-        return -1;
+    if (auto err = CHECK_KERNEL(); != 0) {
+        return err;
     }
 
     sha2_fill_wraparound<V><<<1, 1>>>(d_trace, trace_height);
