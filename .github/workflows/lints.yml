@@ -9,6 +9,26 @@ concurrency:
   group: ${{ github.workflow_ref }}-lints-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      cuda: ${{ steps.filter.outputs.cuda }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cuda:
+              - '**/*.cu'
+              - '**/*.cuh'
+              - '**/cuda/**'
+              - '**/cuda*.rs'
+              - '**/cuda_abi.rs'
+              - '**/build.rs'
+              - '.github/workflows/lints.yml'
+              - '.github/actions/rust-cache-cuda/**'
   lint:
     name: Lint
     runs-on:
@@ -85,8 +105,10 @@ jobs:
           cargo audit
   lint-cuda:
     name: Lint CUDA
+    needs: changes
+    if: ${{ needs.changes.outputs.cuda == 'true' }}
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia
+      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia/cpu=8
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
