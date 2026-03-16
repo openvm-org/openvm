@@ -525,7 +525,7 @@ where
             AirShapeBusMessage {
                 sort_idx: local.sorted_idx.into(),
                 property_idx: AirShapeProperty::NumInteractions.to_field(),
-                value: num_interactions,
+                value: num_interactions.clone(),
             },
             local.is_present,
         );
@@ -984,6 +984,7 @@ where
                 sort_idx: local.sorted_idx.into(),
                 n_lift,
                 n_logup: local.n_logup.into(),
+                num_interactions,
             },
             local.is_present,
         );
