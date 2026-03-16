@@ -3,14 +3,19 @@ use std::{
     sync::Arc,
 };
 
-use openvm_circuit::arch::Streams;
-use openvm_stark_backend::p3_field::Field;
+use itertools::Itertools;
+use openvm_circuit::arch::{deferral::DeferralState, Streams};
+use openvm_stark_backend::{
+    codec::{Decode, Encode},
+    p3_field::Field,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct StdIn<F = crate::F> {
     pub buffer: VecDeque<Vec<F>>,
     pub kv_store: HashMap<Vec<u8>, Vec<u8>>,
+    pub deferrals: Vec<DeferralState>,
 }
 
 impl<F: Field> StdIn<F> {
@@ -51,6 +56,7 @@ impl<F: Field> From<StdIn<F>> for Streams<F> {
         }
         let mut ret = Streams::new(data);
         ret.kv_store = Arc::new(std_in.kv_store);
+        ret.deferrals = std_in.deferrals;
         ret
     }
 }
@@ -62,5 +68,27 @@ impl<F: Field> From<Vec<Vec<F>>> for StdIn<F> {
             ret.write_field(&input);
         }
         ret
+    }
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct DeferralInput {
+    pub byte_vec: Vec<Vec<u8>>,
+}
+
+impl DeferralInput {
+    pub fn into_inputs<I: Decode>(self) -> Vec<I> {
+        self.byte_vec
+            .iter()
+            .map(|input| I::decode_from_bytes(input).unwrap())
+            .collect_vec()
+    }
+
+    pub fn from_inputs<I: Encode>(inputs: &[I]) -> Self {
+        let byte_vec = inputs
+            .iter()
+            .map(|input| input.encode_to_vec().unwrap())
+            .collect_vec();
+        Self { byte_vec }
     }
 }

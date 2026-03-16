@@ -17,9 +17,7 @@ use tracing::instrument;
 use crate::{
     bn254::{CommitBytes, DagCommitBytes},
     circuit::{
-        deferral::aggregation::hook::{
-            DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit,
-        },
+        deferral::hook::{DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit},
         Circuit,
     },
     prover::trace_heights_tracing_info,

@@ -3916,10 +3916,14 @@ dependencies = [
  "openvm-circuit",
  "openvm-continuations",
  "openvm-cuda-backend",
+ "openvm-deferral-circuit",
+ "openvm-recursion-circuit",
  "openvm-sdk-config",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "openvm-toolchain-tests",
  "openvm-transpiler",
+ "openvm-verify-stark-circuit",
  "openvm-verify-stark-host",
  "serde",
  "serde_json",
@@ -3945,6 +3949,8 @@ dependencies = [
  "openvm-circuit",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
@@ -4141,6 +4147,46 @@ dependencies = [
  "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "openvm-verify-stark-circuit"
+version = "2.0.0-alpha"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "eyre",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-continuations",
+ "openvm-cpu-backend",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-deferral-circuit",
+ "openvm-poseidon2-air",
+ "openvm-recursion-circuit",
+ "openvm-recursion-circuit-derive",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "openvm-verify-stark-host",
+ "p3-air",
+ "p3-bn254",
+ "p3-field",
+ "p3-matrix",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-verify-stark-guest"
+version = "2.0.0-alpha"
+dependencies = [
+ "openvm-deferral-guest",
 ]
 
 [[package]]

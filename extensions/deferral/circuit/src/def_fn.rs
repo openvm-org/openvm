@@ -1,4 +1,4 @@
-use std::array::from_fn;
+use std::{array::from_fn, fmt::Debug};
 
 use openvm_circuit::arch::{
     deferral::{DeferralResult, DeferralState, InputCommit, InputMapVal, OutputCommit, OutputRaw},
@@ -18,6 +18,12 @@ pub struct RawDeferralResult {
 #[allow(clippy::type_complexity)]
 pub struct DeferralFn {
     f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,
+}
+
+impl Debug for DeferralFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeferralFn").finish()
+    }
 }
 
 impl DeferralFn {

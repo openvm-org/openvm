@@ -1,8 +1,9 @@
 use openvm_recursion_circuit::prelude::DIGEST_SIZE;
 use openvm_recursion_circuit_derive::AlignedBorrow;
+pub use openvm_verify_stark_host::deferral::DeferralMerkleProofs;
 
-pub mod aggregation;
-pub mod verify;
+pub mod hook;
+pub mod inner;
 
 pub const DEF_CIRCUIT_PVS_AIR_ID: usize = 0;
 

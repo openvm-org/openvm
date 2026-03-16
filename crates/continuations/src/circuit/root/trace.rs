@@ -20,7 +20,7 @@ use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::PrimeField32;
 
 use crate::circuit::{
-    deferral::verify::DeferralMerkleProofs,
+    deferral::DeferralMerkleProofs,
     root::{commit, memory},
     SingleAirTraceData, SubCircuitTraceData,
 };

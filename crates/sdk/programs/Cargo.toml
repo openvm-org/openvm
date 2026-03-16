@@ -5,7 +5,9 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop-v2.0.0-beta", default-features = false }
+openvm = { path = "../../toolchain/openvm", default-features = false }
+openvm-deferral-guest = { path = "../../../extensions/deferral/guest", default-features = false }
+openvm-verify-stark-guest = { path = "../../../guest-libs/verify-stark/guest", default-features = false }
 
 [features]
 default = []
