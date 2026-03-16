@@ -5,14 +5,11 @@ use openvm_continuations::{
     bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         root::{
-            bus::{
-                DeferralAccPathBus, DeferralMerkleRootsBus, MemoryMerkleCommitBus,
-                UserPvsCommitBus, UserPvsCommitTreeBus,
-            },
+            bus::{DeferralAccPathBus, DeferralMerkleRootsBus, MemoryMerkleCommitBus},
             def_paths::DeferralAccMerklePathsAir,
             memory::UserPvsInMemoryAir,
         },
-        subair::HashSliceSubAir,
+        subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
         Circuit,
     },
 };
@@ -58,8 +55,8 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
 
-        let user_pvs_commit_bus = UserPvsCommitBus::new(next_bus_idx);
-        let user_pvs_commit_tree_bus = UserPvsCommitTreeBus::new(next_bus_idx + 1);
+        let merkle_root_bus = MerkleRootBus::new(next_bus_idx);
+        let merkle_tree_internal_bus = MerkleTreeInternalBus::new(next_bus_idx + 1);
         let memory_merkle_commit_bus = MemoryMerkleCommitBus::new(next_bus_idx + 2);
         let output_val_bus = OutputValBus::new(next_bus_idx + 3);
         let output_commit_bus = OutputCommitBus::new(next_bus_idx + 4);
@@ -86,14 +83,14 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         };
         let user_pvs_commit_air = UserPvsCommitValuesAir::new(
             bus_inventory.poseidon2_compress_bus,
-            user_pvs_commit_bus,
-            user_pvs_commit_tree_bus,
+            merkle_root_bus,
+            merkle_tree_internal_bus,
             output_val_bus,
             self.num_user_pvs,
         );
         let user_pvs_memory_air = UserPvsInMemoryAir::new(
             bus_inventory.poseidon2_compress_bus,
-            user_pvs_commit_bus,
+            merkle_root_bus,
             memory_merkle_commit_bus,
             self.memory_dimensions,
             self.num_user_pvs,

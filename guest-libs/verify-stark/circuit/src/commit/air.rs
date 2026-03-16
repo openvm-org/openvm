@@ -1,9 +1,8 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit_primitives::SubAir;
-use openvm_continuations::circuit::{
-    root::bus::{UserPvsCommitBus, UserPvsCommitTreeBus},
-    subair::{UserPvsCommitCols, UserPvsCommitSubAir},
+use openvm_continuations::circuit::subair::{
+    MerkleRootBus, MerkleTreeCols, MerkleTreeInternalBus, MerkleTreeSubAir,
 };
 use openvm_recursion_circuit::{bus::Poseidon2CompressBus, utils::assert_zeros};
 use openvm_stark_backend::{
@@ -24,11 +23,11 @@ use crate::{
  * Constrains that:
  * - leaf nodes read single digests, compress with zeros, and compute leaf hashes
  * - internal nodes receive children from an internal permutation bus
- * - root commitment is sent to `UserPvsCommitBus`
+ * - root commitment is sent to `MerkleRootBus`
  * - leaf payload is sent on `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
 pub struct UserPvsCommitValuesAir {
-    pub subair: UserPvsCommitSubAir,
+    pub subair: MerkleTreeSubAir,
     pub output_val_bus: OutputValBus,
     num_user_pvs: usize,
 }
@@ -36,8 +35,8 @@ pub struct UserPvsCommitValuesAir {
 impl UserPvsCommitValuesAir {
     pub fn new(
         poseidon2_compress_bus: Poseidon2CompressBus,
-        user_pvs_commit_bus: UserPvsCommitBus,
-        user_pvs_commit_tree_bus: UserPvsCommitTreeBus,
+        merkle_root_bus: MerkleRootBus,
+        merkle_tree_internal_bus: MerkleTreeInternalBus,
         output_val_bus: OutputValBus,
         num_user_pvs: usize,
     ) -> Self {
@@ -48,10 +47,11 @@ impl UserPvsCommitValuesAir {
         debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
         UserPvsCommitValuesAir {
-            subair: UserPvsCommitSubAir::new(
+            subair: MerkleTreeSubAir::new(
                 poseidon2_compress_bus,
-                user_pvs_commit_bus,
-                user_pvs_commit_tree_bus,
+                merkle_root_bus,
+                merkle_tree_internal_bus,
+                0,
             ),
             output_val_bus,
             num_user_pvs,
@@ -61,7 +61,7 @@ impl UserPvsCommitValuesAir {
 
 impl<F> BaseAir<F> for UserPvsCommitValuesAir {
     fn width(&self) -> usize {
-        UserPvsCommitCols::<u8>::width()
+        MerkleTreeCols::<u8>::width()
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsCommitValuesAir {}
@@ -77,11 +77,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             main.row_slice(1).expect("window should have two elements"),
         );
 
-        let const_width = UserPvsCommitCols::<u8>::width();
+        let const_width = MerkleTreeCols::<u8>::width();
         let row_idx_flags = &(*local)[const_width..];
 
-        let local: &UserPvsCommitCols<AB::Var> = (*local)[..const_width].borrow();
-        let next: &UserPvsCommitCols<AB::Var> = (*next)[..const_width].borrow();
+        let local: &MerkleTreeCols<AB::Var> = (*local)[..const_width].borrow();
+        let next: &MerkleTreeCols<AB::Var> = (*next)[..const_width].borrow();
 
         let num_rows = AB::F::from_usize(2 * self.num_user_pvs / DIGEST_SIZE);
         self.subair.eval(builder, (local, next, num_rows.into()));
