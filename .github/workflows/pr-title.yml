@@ -84,10 +84,11 @@ jobs:
         if: steps.lint_pr_title.outcome == 'failure'
         run: exit 1
 
-  execute-benchmarks:
-    name: Execute benchmarks
-    uses: ./.github/workflows/benchmarks-execute.yml
-    secrets: inherit
+  # TODO: re-enable after benchmarks are ported to v2 (native extensions removed)
+  # execute-benchmarks:
+  #   name: Execute benchmarks
+  #   uses: ./.github/workflows/benchmarks-execute.yml
+  #   secrets: inherit
 
   extension-tests:
     name: Extension tests

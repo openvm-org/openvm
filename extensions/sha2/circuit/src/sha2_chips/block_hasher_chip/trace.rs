@@ -2,6 +2,7 @@ use std::slice;
 
 use openvm_circuit::arch::get_record_from_slice;
 use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
+use openvm_cpu_backend::CpuBackend;
 use openvm_sha2_air::{
     be_limbs_into_word, le_limbs_into_word, Sha2BlockHasherFillerHelper, Sha2RoundColsRef,
     Sha2RoundColsRefMut,
@@ -10,7 +11,7 @@ use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     StarkProtocolConfig, Val,
 };
 
@@ -39,7 +40,7 @@ where
 
         self.fill_trace(&mut trace_matrix, &mut records, rows_used);
 
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace_matrix))
+        AirProvingContext::simple_no_pis(trace_matrix)
     }
 }
 
