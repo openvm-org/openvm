@@ -25,7 +25,7 @@ pub mod verifier;
 mod trace;
 pub use trace::*;
 
-pub(crate) const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
+pub const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
 
 #[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {

@@ -1,5 +1,6 @@
 mod agg;
 mod app;
+mod deferral;
 // TODO[jpw]: feature gate
 // #[cfg(feature = "evm-prove")]
 mod evm;
@@ -10,6 +11,7 @@ pub mod vm;
 
 pub use agg::*;
 pub use app::*;
+pub use deferral::*;
 // TODO[jpw]: feature gate
 // #[cfg(feature = "evm-prove")]
 pub use evm::*;
