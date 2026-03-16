@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, hasher::HasherChip, CustomBorrow, ExecutionError, MultiRowLayout,
         MultiRowMetadata, PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmField,
-        VmStateMut,
+        VmStateMut, DEFAULT_BLOCK_SIZE,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -36,7 +36,7 @@ use crate::{
     poseidon2::DeferralPoseidon2Chip,
     utils::{
         f_commit_to_bytes, join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS,
-        MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -77,7 +77,7 @@ pub struct DeferralOutputRecordHeader {
 pub struct DeferralOutputRecordMut<'a> {
     pub header: &'a mut DeferralOutputRecordHeader,
     pub write_bytes: &'a mut [u8],
-    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>],
+    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>],
 }
 
 impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for [u8] {
@@ -99,7 +99,7 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         // - Subslice operation [..layout.metadata.num_rows] validates sufficient capacity
         // - Layout calculation ensures space for alignment padding plus required aux records
         let (_, write_aux_buf, _) =
-            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>() };
+            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>>() };
 
         DeferralOutputRecordMut {
             header: header_buf.borrow_mut(),
@@ -123,10 +123,10 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
         let mut total_len = size_of::<DeferralOutputRecordHeader>();
         total_len += layout.metadata.num_rows * DIGEST_SIZE;
         total_len =
-            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>());
+            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>>());
         total_len += layout.metadata.num_rows
             * DIGEST_MEMORY_OPS
-            * size_of::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>();
+            * size_of::<MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>>();
         total_len
     }
 
@@ -168,11 +168,11 @@ where
 
         // Do a non-tracing read to get the output_len and compute num_rows
         let read_ptr = read_rv32_register(state.memory.data(), rs_ptr);
-        let output_key_chunks: [[u8; MEMORY_OP_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
+        let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
             memory_read(
                 state.memory.data(),
                 RV32_MEMORY_AS,
-                read_ptr + (i * MEMORY_OP_SIZE) as u32,
+                read_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
             )
         });
         let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
@@ -212,10 +212,10 @@ where
         let input_ptr = u32::from_le_bytes(record.header.rs_val);
         let output_ptr = u32::from_le_bytes(record.header.rd_val);
         for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-            tracing_read::<MEMORY_OP_SIZE>(
+            tracing_read::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
-                input_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                input_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.header.output_commit_and_len_aux[chunk_idx].prev_timestamp,
             );
         }
@@ -231,7 +231,7 @@ where
                 tracing_write(
                     state.memory,
                     RV32_MEMORY_AS,
-                    row_output_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                    row_output_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                     memory_op_chunk(output_chunk, chunk_idx),
                     &mut record.write_aux[aux_idx].prev_timestamp,
                     &mut record.write_aux[aux_idx].prev_data,
