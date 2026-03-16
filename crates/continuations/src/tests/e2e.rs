@@ -118,6 +118,14 @@ fn input_commit_to_f(commit: &[u8; 32]) -> [F; DIGEST_SIZE] {
     })
 }
 
+fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
+    commit
+        .iter()
+        .flat_map(|b| [*b, 0, 0, 0])
+        .map(F::from_u8)
+        .collect()
+}
+
 fn compute_output_f_commit(deferral_idx: u32, output_raw: &[u8]) -> [F; DIGEST_SIZE] {
     assert!(output_raw.len().is_multiple_of(DIGEST_SIZE));
     let mut state = [F::ZERO; DIGEST_SIZE];
@@ -331,11 +339,12 @@ fn test_deferral_e2e() -> Result<()> {
     state2.store_input(in_commit_0_bytes.as_slice().to_vec(), INPUT_RAW_0.to_vec());
 
     let streams = Streams {
-        input_stream: vec![in_commit_0_bytes, in_commit_1_bytes, in_commit_2_bytes]
-            .into_iter()
-            .map(|c| c.as_slice().iter().copied().map(F::from_u8).collect_vec())
-            .collect_vec()
-            .into(),
+        input_stream: vec![
+            commit_to_stdin_fields(&in_commit_0_bytes),
+            commit_to_stdin_fields(&in_commit_1_bytes),
+            commit_to_stdin_fields(&in_commit_2_bytes),
+        ]
+        .into(),
         deferrals: vec![state_unused, state1, state2],
         ..Default::default()
     };
