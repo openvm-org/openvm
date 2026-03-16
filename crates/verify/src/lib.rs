@@ -18,11 +18,16 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::{
+    deferral::DeferralMerkleProofs,
     error::VerifyStarkError,
-    pvs::{VerifierBasePvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID},
+    pvs::{
+        DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
+        VM_PVS_AIR_ID,
+    },
     vk::NonRootStarkVerifyingKey,
 };
 
+pub mod deferral;
 pub mod error;
 pub mod pvs;
 pub mod vk;
@@ -34,12 +39,17 @@ pub(crate) type DagCommit = pvs::DagCommit<F>;
 pub struct NonRootStarkProof {
     pub inner: Proof<SC>,
     pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
+    pub deferral_merkle_proofs: Option<DeferralMerkleProofs<F>>,
 }
 
 impl Encode for NonRootStarkProof {
     fn encode<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         self.inner.encode(writer)?;
         self.user_pvs_proof.encode::<SC, _>(writer)?;
+        (self.deferral_merkle_proofs.is_some() as u8).encode(writer)?;
+        if let Some(ref proofs) = self.deferral_merkle_proofs {
+            proofs.encode(writer)?;
+        }
         Ok(())
     }
 }
@@ -48,9 +58,15 @@ impl Decode for NonRootStarkProof {
     fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let inner = Proof::<SC>::decode(reader)?;
         let user_pvs_proof = UserPublicValuesProof::decode::<SC, _>(reader)?;
+        let deferral_merkle_proofs = if u8::decode(reader)? != 0 {
+            Some(DeferralMerkleProofs::decode(reader)?)
+        } else {
+            None
+        };
         Ok(Self {
             inner,
             user_pvs_proof,
+            deferral_merkle_proofs,
         })
     }
 }
@@ -197,10 +213,54 @@ pub fn verify_vm_stark_proof_decoded(
         });
     }
 
-    // For now, deferral-enabled proofs are **not** verifiable in this crate
-    if !(verifier_def_pvs_slice.is_empty() && proof.inner.public_values[DEF_PVS_AIR_ID].is_empty())
+    // Deferral verification
+    if let Some(expected_def_vk_commit) = vk.baseline.expected_def_vk_commit {
+        let &VerifierDefPvs {
+            deferral_flag,
+            def_hook_vk_commit,
+        } = verifier_def_pvs_slice.borrow();
+
+        let flag = deferral_flag.as_canonical_u32();
+        if flag != 0 && flag != 2 {
+            return Err(VerifyStarkError::InvalidDeferralFlag(deferral_flag));
+        }
+        if flag == 0 {
+            return Err(VerifyStarkError::DeferralFlagNotSet);
+        }
+
+        if def_hook_vk_commit != expected_def_vk_commit {
+            return Err(VerifyStarkError::DefHookVkCommitMismatch {
+                expected: expected_def_vk_commit,
+                actual: def_hook_vk_commit,
+            });
+        }
+
+        let deferral_merkle_proofs = proof
+            .deferral_merkle_proofs
+            .as_ref()
+            .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
+
+        let &DeferralPvs {
+            initial_acc_hash,
+            final_acc_hash,
+            depth,
+        } = proof.inner.public_values[DEF_PVS_AIR_ID]
+            .as_slice()
+            .borrow();
+
+        deferral_merkle_proofs.verify(
+            vk.baseline.memory_dimensions,
+            initial_root,
+            final_root,
+            initial_acc_hash,
+            final_acc_hash,
+            depth.as_canonical_u32() as usize,
+        )?;
+    } else if !verifier_def_pvs_slice.is_empty()
+        || !proof.inner.public_values[DEF_PVS_AIR_ID].is_empty()
+        || proof.deferral_merkle_proofs.is_some()
     {
-        return Err(VerifyStarkError::DeferralNotEnabled);
+        return Err(VerifyStarkError::UnexpectedDeferral);
     }
 
     Ok(())

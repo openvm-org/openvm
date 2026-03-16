@@ -15,9 +15,7 @@ use tracing::instrument;
 
 use super::DeferralHookProver;
 use crate::{
-    circuit::deferral::aggregation::hook::{
-        DeferralHookPreCtx, DeferralHookTraceGen, DeferralIoCommit,
-    },
+    circuit::deferral::hook::{DeferralHookPreCtx, DeferralHookTraceGen, DeferralIoCommit},
     SC,
 };
 

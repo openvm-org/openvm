@@ -14,7 +14,7 @@ use tracing::instrument;
 
 use super::RootProver;
 use crate::{
-    circuit::{deferral::verify::DeferralMerkleProofs, root::RootTraceGen},
+    circuit::{deferral::DeferralMerkleProofs, root::RootTraceGen},
     RootSC, SC,
 };
 

@@ -37,7 +37,7 @@ impl<SC: StarkProtocolConfig<F = F>, C: Circuit<SC>> Circuit<SC> for Arc<C> {
     }
 }
 
-pub(crate) mod utils {
+pub mod utils {
     use openvm_circuit_primitives::utils::assert_array_eq;
     use openvm_recursion_circuit::utils::assert_zeros;
     use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;

@@ -31,6 +31,7 @@ use crate::{
     poseidon2::{
         deferral_poseidon2_air, deferral_poseidon2_chip, DeferralPoseidon2Air, DeferralPoseidon2Bus,
     },
+    utils::COMMIT_NUM_BYTES,
     DeferralFn,
 };
 
@@ -50,9 +51,11 @@ pub(crate) const OUTPUT_AIR_REL_IDX: usize = 3;
 
 // =================================== VM Extension Implementation =================================
 
-#[derive(Clone, Default, derive_new::new)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, derive_new::new)]
 pub struct DeferralExtension {
+    #[serde(skip)]
     pub fns: Vec<Arc<DeferralFn>>,
+    pub def_vk_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]

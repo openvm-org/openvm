@@ -47,6 +47,7 @@ pub struct InnerAggregationProver<
 
 /// Struct to determine if InnerAggregationProver is proving a special case,
 /// i.e. if the child_vk is the app_vk or if it should use its own vk as child.
+#[derive(Clone, Copy)]
 pub enum ChildVkKind {
     Standard,
     App,
