@@ -88,12 +88,8 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         depth
     };
 
-    // If is_unset, the trace keeps initial/final paths equal for an untouched prefix.
-    let untouched_cut = if is_unset {
-        address_height.min(proof_len.saturating_sub(1))
-    } else {
-        0
-    };
+    // `is_untouched` tracks the DEFERRAL_AS prefix outside the Merkle-rooted part.
+    let untouched_cut = address_height.min(proof_len.saturating_sub(1));
 
     let mut is_right_child_bits = vec![false; num_layers];
     let mut row_branch_bits = vec![0usize; num_layers];
@@ -130,35 +126,13 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         &is_right_child_bits,
         skip_depth,
     );
-    let mut final_nodes = build_path_nodes(
+    let final_nodes = build_path_nodes(
         final_start_hash,
         final_merkle_proof,
         &is_right_child_bits,
         skip_depth,
     );
-    let mut final_siblings = final_merkle_proof.to_vec();
-
-    if is_unset {
-        final_nodes[..=untouched_cut].copy_from_slice(&initial_nodes[..=untouched_cut]);
-        final_siblings[..untouched_cut].copy_from_slice(&initial_merkle_proof[..untouched_cut]);
-        if untouched_cut < proof_len {
-            for row_idx in untouched_cut..proof_len {
-                let sibling = final_siblings[row_idx];
-                let is_right_child = is_right_child_bits[row_idx];
-                let left = if is_right_child {
-                    sibling
-                } else {
-                    final_nodes[row_idx]
-                };
-                let right = if is_right_child {
-                    final_nodes[row_idx]
-                } else {
-                    sibling
-                };
-                final_nodes[row_idx + 1] = poseidon2_compress_with_capacity(left, right).0;
-            }
-        }
-    }
+    let final_siblings = final_merkle_proof.to_vec();
 
     let mut trace = vec![F::ZERO; height * width];
     let mut poseidon2_inputs = Vec::with_capacity(proof_len * 2);
@@ -170,8 +144,8 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         cols.is_valid = if row_idx == 0 { F::TWO } else { F::ONE };
         cols.depth = F::from_usize(row_idx);
         cols.is_skip = F::from_bool(row_idx < skip_depth);
-        cols.is_untouched = F::from_bool(is_unset && row_idx <= untouched_cut);
-        cols.expected_branch_bits_offset = F::from_bool(is_unset);
+        cols.is_untouched = F::from_bool(row_idx <= untouched_cut);
+        cols.is_unset = F::from_bool(is_unset);
 
         cols.is_right_child = F::from_bool(is_right_child_bits[row_idx]);
         cols.row_idx_exp_2 = F::from_usize(1usize << row_idx);
