@@ -70,6 +70,13 @@ jobs:
         run: |
           cargo nextest run ${{ env.NEXTEST_ARGS }}
 
+      # sha2-air has no tests; skipping to avoid upstream openvm-cpu-backend parallel compilation issue
+      # - name: Run tests for sha2-air
+      #   if: ${{ !contains(matrix.platform.runner, 'gpu') }}
+      #   working-directory: crates/circuits/sha2-air
+      #   run: |
+      #     cargo nextest run ${{ env.NEXTEST_ARGS }}
+
       - name: Run tests for mod-builder
         if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/circuits/mod-builder
