@@ -49,7 +49,6 @@ use super::{
     internal_system_params, leaf_system_params, root_system_params,
 };
 use crate::{
-    bn254::CommitBytes,
     circuit::{
         deferral::{DeferralCircuitPvs, DeferralMerkleProofs, DEF_HOOK_PVS_AIR_ID},
         inner::ProofsType,
@@ -124,6 +123,14 @@ fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
         .flat_map(|b| [*b, 0, 0, 0])
         .map(F::from_u8)
         .collect()
+}
+
+fn f_digest_to_le_bytes(digest: &[F; DIGEST_SIZE]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    for (i, value) in digest.iter().enumerate() {
+        out[4 * i..4 * (i + 1)].copy_from_slice(&value.as_canonical_u32().to_le_bytes());
+    }
+    out
 }
 
 fn compute_output_f_commit(deferral_idx: u32, output_raw: &[u8]) -> [F; DIGEST_SIZE] {
@@ -325,18 +332,18 @@ fn test_deferral_e2e() -> Result<()> {
     let in_commit_1_hashed = poseidon2_hash_slice(&in_commit_1_f).0;
     let in_commit_2_hashed = poseidon2_hash_slice(&in_commit_2_f).0;
 
-    let in_commit_0_bytes: CommitBytes = in_commit_0_hashed.into();
-    let in_commit_1_bytes: CommitBytes = in_commit_1_hashed.into();
-    let in_commit_2_bytes: CommitBytes = in_commit_2_hashed.into();
+    let in_commit_0_bytes = f_digest_to_le_bytes(&in_commit_0_hashed);
+    let in_commit_1_bytes = f_digest_to_le_bytes(&in_commit_1_hashed);
+    let in_commit_2_bytes = f_digest_to_le_bytes(&in_commit_2_hashed);
 
     // idx 0: unused, idx 1: 3 calls, idx 2: 1 call
     let state_unused = DeferralState::new(Vec::<DeferralResult>::new());
     let mut state1 = DeferralState::new(Vec::<DeferralResult>::new());
-    state1.store_input(in_commit_0_bytes.as_slice().to_vec(), INPUT_RAW_0.to_vec());
-    state1.store_input(in_commit_1_bytes.as_slice().to_vec(), INPUT_RAW_1.to_vec());
-    state1.store_input(in_commit_2_bytes.as_slice().to_vec(), INPUT_RAW_2.to_vec());
+    state1.store_input(in_commit_0_bytes.to_vec(), INPUT_RAW_0.to_vec());
+    state1.store_input(in_commit_1_bytes.to_vec(), INPUT_RAW_1.to_vec());
+    state1.store_input(in_commit_2_bytes.to_vec(), INPUT_RAW_2.to_vec());
     let mut state2 = DeferralState::new(Vec::<DeferralResult>::new());
-    state2.store_input(in_commit_0_bytes.as_slice().to_vec(), INPUT_RAW_0.to_vec());
+    state2.store_input(in_commit_0_bytes.to_vec(), INPUT_RAW_0.to_vec());
 
     let streams = Streams {
         input_stream: vec![
