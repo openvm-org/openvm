@@ -16,12 +16,27 @@ clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+bitcode = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+openvm-circuit = { workspace = true, optional = true }
+openvm-continuations = { workspace = true, optional = true }
+openvm-sdk = { workspace = true, optional = true }
+openvm-stark-sdk = { workspace = true, optional = true }
 
 [dev-dependencies]
 
 [features]
 default = []
 build-elfs = []
+generate-fixtures = [
+    "dep:bitcode",
+    "dep:serde",
+    "dep:openvm-circuit",
+    "dep:openvm-continuations",
+    "dep:openvm-sdk",
+    "dep:openvm-stark-sdk",
+]
 
 [[bin]]
 name = "build-elfs"
