@@ -16,7 +16,7 @@ use tracing::instrument;
 
 use super::{DeferralChildVkKind, DeferralInnerProver};
 use crate::{
-    circuit::deferral::aggregation::inner::{DeferralInnerPreCtx, DeferralInnerTraceGen},
+    circuit::deferral::inner::{DeferralInnerPreCtx, DeferralInnerTraceGen},
     SC,
 };
 

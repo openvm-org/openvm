@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     proof::Proof,
 };
 use openvm_transpiler::elf::Elf;
-use openvm_verify_stark_host::NonRootStarkProof;
+use openvm_verify_stark_host::{deferral::DeferralMerkleProofs, NonRootStarkProof};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -233,6 +233,9 @@ pub struct VersionedNonRootStarkProof {
     pub proof: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub user_pvs_proof: Vec<u8>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::hex::Hex>")]
+    pub deferral_merkle_proofs: Option<Vec<u8>>,
 }
 
 impl VersionedNonRootStarkProof {
@@ -245,6 +248,14 @@ impl VersionedNonRootStarkProof {
                 proof.user_pvs_proof.encode::<crate::SC, _>(&mut buf)?;
                 buf
             },
+            deferral_merkle_proofs: proof
+                .deferral_merkle_proofs
+                .map(|ref dmp| {
+                    let mut buf = Vec::new();
+                    dmp.encode(&mut buf)?;
+                    Ok::<_, std::io::Error>(buf)
+                })
+                .transpose()?,
         })
     }
 }
@@ -255,6 +266,7 @@ impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
         let VersionedNonRootStarkProof {
             proof,
             user_pvs_proof,
+            deferral_merkle_proofs,
             ..
         } = proof;
         Ok(Self {
@@ -262,6 +274,9 @@ impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
             user_pvs_proof: UserPublicValuesProof::decode::<crate::SC, _>(
                 &mut std::io::Cursor::new(&user_pvs_proof),
             )?,
+            deferral_merkle_proofs: deferral_merkle_proofs
+                .map(|bytes| DeferralMerkleProofs::decode(&mut std::io::Cursor::new(&bytes)))
+                .transpose()?,
         })
     }
 }

@@ -24,11 +24,7 @@ use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::{
-    proof::Proof,
-    prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
-    AirRef, PartitionedBaseAir, StarkEngine,
-};
+use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
 use openvm_stark_sdk::{
     config::{
         baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
@@ -42,15 +38,17 @@ use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use tracing::{warn, Level};
 
-use super::{app_system_params, internal_system_params, leaf_system_params, root_system_params};
+use super::{
+    app_system_params,
+    dummy::{generate_dummy_def_proof, EmptyAirWithPvs},
+    internal_system_params, leaf_system_params, root_system_params,
+};
 use crate::{
     circuit::{
-        deferral::{verify::DeferralMerkleProofs, DeferralCircuitPvs, DEF_HOOK_PVS_AIR_ID},
+        deferral::{DeferralCircuitPvs, DeferralMerkleProofs, DEF_HOOK_PVS_AIR_ID},
         inner::ProofsType,
     },
     prover::{
@@ -76,37 +74,7 @@ const INPUT_RAW_0: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
 const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
-struct EmptyAirWithPvs(usize);
-
-impl<F> BaseAir<F> for EmptyAirWithPvs {
-    fn width(&self) -> usize {
-        1
-    }
-}
-impl<F> BaseAirWithPublicValues<F> for EmptyAirWithPvs {
-    fn num_public_values(&self) -> usize {
-        self.0
-    }
-}
-impl<F> PartitionedBaseAir<F> for EmptyAirWithPvs {}
-impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0).unwrap();
-        builder.assert_zero(local[0].clone());
-
-        let pvs: Vec<AB::Expr> = builder
-            .public_values()
-            .iter()
-            .map(|pv| (*pv).into())
-            .collect();
-        for pv in pvs {
-            builder.assert_eq(pv.clone(), pv);
-        }
-    }
-}
-
-fn make_deferral_extension() -> DeferralExtension {
+fn make_deferral_extension(commits: Vec<[u8; 32]>) -> DeferralExtension {
     let fns: Vec<_> = (0..NUM_DEF_CIRCUITS)
         .map(|idx| {
             Arc::new(DeferralFn::new(move |input_raw| {
@@ -121,7 +89,7 @@ fn make_deferral_extension() -> DeferralExtension {
             }))
         })
         .collect();
-    DeferralExtension::new(fns)
+    DeferralExtension::new(fns, commits)
 }
 
 fn deferral_fn_output(idx: u16, input_raw: &[u8]) -> Vec<u8> {
@@ -224,34 +192,6 @@ fn generate_set_merkle_proof(
     proof
 }
 
-fn generate_dummy_def_proof(
-    engine: &AppEngine,
-    pk: &openvm_stark_backend::keygen::types::MultiStarkProvingKey<SC>,
-    input_commit: [F; DIGEST_SIZE],
-    output_commit: [F; DIGEST_SIZE],
-) -> Proof<SC> {
-    use std::borrow::BorrowMut;
-
-    let mut pvs = vec![F::ZERO; DeferralCircuitPvs::<u8>::width()];
-    let pvs_ref: &mut DeferralCircuitPvs<F> = pvs.as_mut_slice().borrow_mut();
-    pvs_ref.input_commit = input_commit;
-    pvs_ref.output_commit = output_commit;
-
-    let trace = RowMajorMatrix::new(vec![F::ZERO], 1);
-    let ctx = ProvingContext {
-        per_trace: vec![(
-            0,
-            AirProvingContext {
-                cached_mains: vec![],
-                common_main: trace,
-                public_values: pvs,
-            },
-        )],
-    };
-    let d_pk = engine.device().transport_pk_to_device(pk);
-    engine.prove(&d_pk, ctx).unwrap()
-}
-
 fn read_def_pvs(proof: &Proof<SC>) -> DeferralPvs<F> {
     *proof.public_values[DEF_PVS_AIR_ID].as_slice().borrow()
 }
@@ -290,17 +230,14 @@ fn test_deferral_e2e() -> Result<()> {
     let (_, def_circuit_vk) = gpu_engine.keygen(&[empty_air]);
     let def_circuit_vk = Arc::new(def_circuit_vk);
 
-    let def_leaf_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
-        def_circuit_vk.clone(),
-        leaf_system_params(),
-        false,
-    );
-    let def_i0_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+    let def_leaf_prover =
+        DeferralInnerProver::new::<GpuEngine>(def_circuit_vk.clone(), leaf_system_params(), false);
+    let def_i0_prover = DeferralInnerProver::new::<GpuEngine>(
         def_leaf_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let def_i1_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+    let def_i1_prover = DeferralInnerProver::new::<GpuEngine>(
         def_i0_prover.get_vk(),
         internal_system_params(),
         true,
@@ -348,7 +285,7 @@ fn test_deferral_e2e() -> Result<()> {
         rv32i: Rv32I,
         rv32m: Rv32M::default(),
         io: Rv32Io,
-        deferral: make_deferral_extension(),
+        deferral: make_deferral_extension(transpiler_commits.clone()),
     };
 
     let elf = Elf::decode(
@@ -468,7 +405,7 @@ fn test_deferral_e2e() -> Result<()> {
         proofs: Vec<Proof<SC>>,
         leaf_children: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE])>,
     ) -> Result<Proof<SC>> {
-        let leaf_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+        let leaf_prover = DeferralInnerProver::new::<GpuEngine>(
             def_circuit_vk.clone(),
             leaf_system_params(),
             false,
@@ -491,7 +428,7 @@ fn test_deferral_e2e() -> Result<()> {
         current_proofs = next;
         child_merkle_depth += 1;
 
-        let i4l_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+        let i4l_prover = DeferralInnerProver::new::<GpuEngine>(
             leaf_prover.get_vk(),
             internal_system_params(),
             false,
@@ -513,7 +450,7 @@ fn test_deferral_e2e() -> Result<()> {
         current_proofs = next;
         child_merkle_depth += 1;
 
-        let ir_prover = DeferralInnerProver::<2>::new::<GpuEngine>(
+        let ir_prover = DeferralInnerProver::new::<GpuEngine>(
             i4l_prover.get_vk(),
             internal_system_params(),
             true,
