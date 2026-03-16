@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use itertools::Itertools;
 use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
 use openvm_recursion_circuit::{bus::Poseidon2CompressBus, utils::assert_zeros};
 use openvm_stark_backend::{
@@ -102,12 +103,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.encoder.eval(builder, row_idx_flags);
         builder.assert_eq(self.encoder.is_valid::<AB>(row_idx_flags), is_leaf.clone());
 
-        let pvs = builder.public_values();
+        let pvs = builder.public_values().iter().copied().collect_vec();
         let mut pvs_digest = [AB::Expr::ZERO; DIGEST_SIZE];
         for (pv_chunk_idx, pvs_chunk) in pvs.chunks(DIGEST_SIZE).enumerate() {
             let selected = self
                 .encoder
                 .get_flag_expr::<AB>(pv_chunk_idx, row_idx_flags);
+            builder
+                .when(selected.clone())
+                .assert_eq(AB::Expr::from_usize(pv_chunk_idx), local.row_idx);
             for digest_idx in 0..DIGEST_SIZE {
                 pvs_digest[digest_idx] += selected.clone() * pvs_chunk[digest_idx].into();
             }
