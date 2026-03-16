@@ -54,11 +54,12 @@ use openvm_stark_sdk::{
         self,
         keygen::types::MultiStarkProvingKey,
         proof::Proof,
-        prover::{CpuBackend, CpuDevice, DeviceDataTransporter},
+        prover::DeviceDataTransporter,
         StarkProtocolConfig, Val,
     },
     p3_baby_bear::BabyBear,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
