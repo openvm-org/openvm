@@ -15,6 +15,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow, Chip,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -26,7 +27,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     StarkProtocolConfig, Val,
 };
 
@@ -58,7 +59,7 @@ where
         let mut trace = arena.into_matrix();
         let mem_helper = self.mem_helper.as_borrowed();
         self.fill_trace(&mem_helper, &mut trace, rows_used);
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 

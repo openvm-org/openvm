@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace]
 members = [
+    # TODO: port benchmarks to v2 (native extensions removed)
     # "benchmarks/utils",
     # "benchmarks/execute",
     # "benchmarks/prove",
