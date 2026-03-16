@@ -125,9 +125,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * public values.
          */
         let mut when_flag_not_one = builder.when_ne(local.deferral_flag, AB::Expr::ONE);
-        let mut when_invalid = when_flag_not_one.when_ne(local.deferral_flag, AB::Expr::TWO);
+        when_flag_not_one.assert_one(has_one_row.clone());
 
-        when_invalid.assert_one(has_one_row.clone());
+        let mut when_invalid = when_flag_not_one.when_ne(local.deferral_flag, AB::Expr::TWO);
         when_invalid.assert_zero(local.is_present);
         for child_pv in local.child_pvs.as_slice() {
             when_invalid.assert_zero(*child_pv);
