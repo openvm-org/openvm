@@ -55,11 +55,15 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
-        crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
+        if crate::prover::debug_checks_enabled() {
+            crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
+        }
         let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
         let proof = engine.prove(&d_pk, ctx)?;
         #[cfg(debug_assertions)]
-        engine.verify(&self.vk, &proof)?;
+        if crate::prover::debug_checks_enabled() {
+            engine.verify(&self.vk, &proof)?;
+        }
         Ok(proof)
     }
 }

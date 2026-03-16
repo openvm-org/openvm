@@ -15,7 +15,7 @@ use openvm_circuit::{
     },
     utils::test_utils::test_system_config,
 };
-use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, BabyBearPoseidon2GpuEngine};
 use openvm_deferral_circuit::{
     DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
 };
@@ -58,14 +58,15 @@ use crate::{
     prover::{
         ChildVkKind, DeferralChildVkKind, DeferralHookGpuProver as DeferralHookProver,
         DeferralInnerGpuProver as DeferralInnerProver, InnerGpuProver as InnerProver,
-        RootCpuProver as RootProver,
+        RootGpuProver as RootProver,
     },
     SC,
 };
 
 type GpuEngine = BabyBearPoseidon2GpuEngine;
 type CpuEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
-type RootEngine = BabyBearBn254Poseidon2CpuEngine;
+type RootEngine = BabyBearBn254Poseidon2GpuEngine;
+type RootVerifyEngine = BabyBearBn254Poseidon2CpuEngine;
 
 const NUM_DEF_CIRCUITS: usize = 3;
 const MAX_NUM_PROOFS: usize = 4;
@@ -743,11 +744,11 @@ fn test_deferral_e2e() -> Result<()> {
         &user_pvs_proof,
         Some(&merkle_proofs),
     );
-    warn!("proving root (CPU)");
+    warn!("proving root (GPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let root_vk = root_prover.get_vk();
-    let engine = RootEngine::new(root_vk.inner.params.clone());
+    let engine = RootVerifyEngine::new(root_vk.inner.params.clone());
     engine.verify(&root_vk, &root_proof)?;
 
     Ok(())

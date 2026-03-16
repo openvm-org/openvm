@@ -3997,7 +3997,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -4044,7 +4044,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "cfg-if",
  "derive-new 0.7.0",
@@ -4069,7 +4069,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -4096,7 +4096,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "cc",
  "glob",
@@ -4105,7 +4105,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "bytesize",
  "ctor",
@@ -4887,7 +4887,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "cfg-if",
  "derivative",
@@ -4921,7 +4921,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#8f74901cae0864fcc10241c2fb925b0cc5224009"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Froot-gpu-prover#fb10d7d93f2e406d1c931e9d1b766e7379b615b1"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",

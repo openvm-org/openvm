@@ -116,13 +116,13 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-codec-derive = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
+openvm-codec-derive = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
+openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "fix/root-gpu-prover", default-features = false }
 
 # OpenVM
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
@@ -198,6 +198,7 @@ p3-merkle-tree = { version = "=0.4.1", default-features = false }
 p3-poseidon2 = { version = "=0.4.1", default-features = false }
 p3-poseidon2-air = { version = "=0.4.1", default-features = false }
 p3-symmetric = { version = "=0.4.1", default-features = false }
+p3-util = { version = "=0.4.1", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
@@ -244,6 +245,7 @@ tokio = "1" # >=1.0.0 to allow downstream flexibility
 abi_stable = "0.11.3"
 bytesize = "2.0"
 zstd = { version = "0.13", default-features = false }
+glob = "0.3.2"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
