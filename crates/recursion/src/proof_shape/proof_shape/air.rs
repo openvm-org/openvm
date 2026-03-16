@@ -829,9 +829,11 @@ where
         builder
             .when(local.sorted_idx - AB::F::from_usize(self.per_air.len() - 1))
             .assert_zero(next.is_last);
-        builder
-            .when(next.is_last)
-            .assert_zero(local.sorted_idx - AB::F::from_usize(self.per_air.len() - 1));
+
+        builder.when(local.is_last).assert_one(or(
+            next.is_first,
+            not::<AB::Expr>(next.is_valid + next.is_last),
+        ));
 
         // Constrain that n_logup is correct, i.e. that there are CELLS_LIMBS * LIMB_BITS - n_logup
         // leading zeroes in total_interactions_limbs. Because we only do this on the is_last row,
