@@ -7,13 +7,14 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::Chip;
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_sha2_air::set_arrayview_from_u8_slice;
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    prover::AirProvingContext,
     StarkProtocolConfig, Val,
 };
 
@@ -55,7 +56,7 @@ where
             matrix: records,
         });
 
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace_matrix))
+        AirProvingContext::simple_no_pis(trace_matrix)
     }
 }
 

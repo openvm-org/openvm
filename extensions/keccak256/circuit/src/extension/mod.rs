@@ -23,11 +23,13 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
-use openvm_keccak256_transpiler::{KeccakfOpcode, Rv32KeccakOpcode, XorinOpcode};
+use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{
+    interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
+};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
