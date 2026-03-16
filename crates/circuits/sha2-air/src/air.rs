@@ -255,10 +255,6 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
             .assert_eq(local_row_idx.clone() + delta, next_row_idx.clone());
         builder.when_first_row().assert_zero(local_row_idx);
 
-        // Constrain the global block index starting with 1 so it is not the same as the padding
-        // rows.
-        // We set the global block index to 0 for padding rows
-
         // Global block index is 1 on first row
         builder
             .when_first_row()
@@ -273,15 +269,18 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
         builder
             .when_transition()
             .when(*local_cols.flags.is_digest_row)
-            .when(*next_cols.flags.is_round_row)
             .assert_eq(
                 *local_cols.flags.global_block_idx + AB::Expr::ONE,
                 *next_cols.flags.global_block_idx,
             );
-        // Global block index is 0 on padding rows
+        // Global block index is constant on padding rows
         builder
+            .when_transition()
             .when(local_is_padding_row.clone())
-            .assert_zero(*local_cols.flags.global_block_idx);
+            .assert_eq(
+                *local_cols.flags.global_block_idx,
+                *next_cols.flags.global_block_idx,
+            );
 
         // Constrain that all the padding rows have the same work vars as the last block's digest
         // row. We constrain elsewhere that the last block's digest row is equal to the first
@@ -431,7 +430,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                 // check because the degree is already 3. So we must fill in `intermed_4` with dummy
                 // values on the first round row and the digest row (rows 0 and 16 for SHA-256) to
                 // ensure the constraint holds on these rows.
-                builder.when_transition().assert_eq(
+                builder.assert_eq(
                     next.schedule_helper.intermed_4[[i, j]],
                     w_idx_limb + sig_w_limb,
                 );
@@ -471,15 +470,12 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                 .collect::<Vec<_>>();
 
             // Constrain `W_{idx} = sig_1(W_{idx-2}) + W_{idx-7} + sig_0(W_{idx-15}) + W_{idx-16}`
-            // We would like to constrain this only on rows 4..C::ROUND_ROWS, but we can't do a
-            // conditional check because the degree of sum is already 3 So we must fill
-            // in `intermed_12` with dummy values on rows 0..3 and C::ROUND_ROWS-1 and C::ROUND_ROWS
-            // to ensure the constraint holds on rows 0..4 and C::ROUND_ROWS. Note that
-            // the dummy value goes in the previous row to make the current row's constraint hold.
+            // We can't do a conditional check because the degree of the sum is already 3.
+            // Instead, we fill in dummy values on non-applicable rows:
+            //   - `intermed_12` with dummy values on rows 0..3, C::ROUND_ROWS-1, and C::ROUND_ROWS
+            //   - `carry_or_buffer` with dummy values on the first block's row 0 (wrap-around)
             constraint_word_addition::<_, C>(
-                // Note: here we can't do a conditional check because the degree of sum is already
-                // 3
-                &mut builder.when_transition(),
+                builder,
                 &[&small_sig1_field::<AB::Expr, C>(
                     w.row(i + 2).as_slice().unwrap(),
                 )],
