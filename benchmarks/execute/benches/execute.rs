@@ -49,11 +49,12 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
     openvm_cpu_backend::{CpuBackend, CpuDevice},
     openvm_stark_backend::{
-        self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, StarkEngine,
-        StarkProtocolConfig, SystemParams, Val,
+        self, keygen::types::MultiStarkProvingKey, proof::Proof,
+        prover::DeviceDataTransporter, StarkEngine, StarkProtocolConfig, SystemParams, Val,
     },
     p3_baby_bear::BabyBear,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
