@@ -18,16 +18,14 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::LocalOpcode;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
-use openvm_stark_backend::{
-    prover::{CpuBackend, CpuDevice},
-    StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{Sha2BlockHasherChip, Sha2BlockHasherVmAir, Sha2MainAir, Sha2MainChip, Sha2VmExecutor};
