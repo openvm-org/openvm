@@ -655,6 +655,7 @@ pub struct Eq3bShapeMessage<T> {
     pub sort_idx: T,
     pub n_lift: T,
     pub n_logup: T,
+    pub num_interactions: T,
 }
 
 define_typed_per_proof_lookup_bus!(Eq3bShapeBus, Eq3bShapeMessage);
