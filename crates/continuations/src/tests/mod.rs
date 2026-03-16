@@ -364,7 +364,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
 fn aggregate_deferral_layer(
     prover: &DeferralInnerProver,
     proofs: &[Proof<SC>],
-    child_is_def: bool,
+    child_is_agg: bool,
     child_merkle_depth: usize,
 ) -> Result<Vec<Proof<SC>>> {
     assert!(!proofs.is_empty(), "proof layer must be non-empty");
@@ -375,7 +375,7 @@ fn aggregate_deferral_layer(
         Some(child_merkle_depth)
     };
     for chunk in proofs.chunks(2) {
-        let child_vk_kind = if child_is_def {
+        let child_vk_kind = if child_is_agg {
             DeferralChildVkKind::DeferralAggregation
         } else {
             DeferralChildVkKind::DeferralCircuit

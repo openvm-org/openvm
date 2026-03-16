@@ -23,7 +23,7 @@ use crate::{
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
-    child_is_def: bool,
+    child_is_agg: bool,
     child_merkle_depth: Option<usize>,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
@@ -41,9 +41,9 @@ pub fn generate_proving_ctx(
         let cols: &mut DeferralAggPvsCols<F> = chunk.borrow_mut();
         cols.proof_idx = F::from_usize(proof_idx);
         cols.is_present = F::ONE;
-        cols.has_verifier_pvs = F::from_bool(child_is_def);
+        cols.has_verifier_pvs = F::from_bool(child_is_agg);
 
-        if child_is_def {
+        if child_is_agg {
             let child_pvs: &DeferralAggregationPvs<F> =
                 proof.public_values[DEF_AGG_PVS_AIR_ID].as_slice().borrow();
             cols.merkle_commit = child_pvs.merkle_commit;
@@ -74,7 +74,7 @@ pub fn generate_proving_ctx(
     if num_rows == 2 && num_proofs == 1 {
         let cols: &mut DeferralAggPvsCols<F> = trace[width..2 * width].borrow_mut();
         cols.proof_idx = F::ONE;
-        cols.has_verifier_pvs = F::from_bool(child_is_def);
+        cols.has_verifier_pvs = F::from_bool(child_is_agg);
         cols.merkle_commit = zero_hash(child_merkle_depth.unwrap() + 1);
     }
 

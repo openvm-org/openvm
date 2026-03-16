@@ -42,7 +42,7 @@ where
             "child_merkle_depth=None is only valid for single-proof wrappers"
         );
 
-        let (child_vk, child_vk_pcs_data, child_is_def) = match child_vk_kind {
+        let (child_vk, child_vk_pcs_data, child_is_agg) = match child_vk_kind {
             DeferralChildVkKind::DeferralCircuit => {
                 (&self.child_vk, self.child_vk_pcs_data.clone(), false)
             }
@@ -66,7 +66,7 @@ where
             poseidon2_permute_inputs,
         } = self.agg_node_tracegen.pre_verifier_subcircuit_tracegen(
             proofs,
-            child_is_def,
+            child_is_agg,
             child_dag_commit,
             child_merkle_depth,
         );
