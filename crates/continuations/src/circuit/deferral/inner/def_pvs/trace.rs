@@ -1,6 +1,11 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    iter::once,
+};
 
+use itertools::Itertools;
 use openvm_cpu_backend::CpuBackend;
+use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, F,
@@ -46,14 +51,17 @@ pub fn generate_proving_ctx(
             let child_pvs: &DeferralCircuitPvs<F> = proof.public_values[DEF_CIRCUIT_PVS_AIR_ID]
                 .as_slice()
                 .borrow();
-            let folded_input_commit = proof
-                .trace_vdata
-                .iter()
+            let commit_values = once(child_pvs.input_commit)
+                .chain(
+                    proof
+                        .trace_vdata
+                        .iter()
+                        .flatten()
+                        .flat_map(|vdata| vdata.cached_commitments.iter().copied()),
+                )
                 .flatten()
-                .flat_map(|vdata| vdata.cached_commitments.iter().copied())
-                .fold(child_pvs.input_commit, |acc, cached_commit| {
-                    poseidon2_compress_with_capacity(acc, cached_commit).0
-                });
+                .collect_vec();
+            let folded_input_commit = poseidon2_hash_slice(&commit_values).0;
             cols.child_pvs = DeferralCircuitPvs {
                 input_commit: folded_input_commit,
                 output_commit: child_pvs.output_commit,

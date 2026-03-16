@@ -39,7 +39,7 @@ pub fn generate_proving_ctx(
     let mut row_idx = 0usize;
 
     for (proof_idx, proof) in proofs.iter().enumerate() {
-        let mut current_commit = if child_is_def {
+        let initial_commit = if child_is_def {
             let child_pvs: &DeferralAggregationPvs<F> =
                 proof.public_values[DEF_AGG_PVS_AIR_ID].as_slice().borrow();
             child_pvs.merkle_commit
@@ -55,33 +55,36 @@ pub fn generate_proving_ctx(
             collect_cached_rows(proof)
         };
 
-        for (commit_idx, (air_idx, cached_idx, cached_commit)) in
-            cached_rows.iter().copied().enumerate()
+        let mut capacity = [F::ZERO; DIGEST_SIZE];
+
+        for (row_in_proof, (air_idx, cached_idx, current_commit)) in
+            std::iter::once((0usize, 0usize, initial_commit))
+                .chain(cached_rows.into_iter())
+                .enumerate()
         {
             let cols: &mut InputCommitCols<F> =
                 trace[row_idx * width..(row_idx + 1) * width].borrow_mut();
-            cols.state = F::ONE;
-            cols.is_first = F::from_bool(commit_idx == 0);
+            cols.is_valid = F::ONE;
+            cols.is_first = F::from_bool(row_in_proof == 0);
             cols.proof_idx = F::from_usize(proof_idx);
             cols.has_verifier_pvs = F::from_bool(child_is_def);
-            cols.current_commit = current_commit;
-
             cols.air_idx = F::from_usize(air_idx);
             cols.cached_idx = F::from_usize(cached_idx);
-            cols.cached_commit = cached_commit;
+            cols.current_commit = current_commit;
+            cols.capacity = capacity;
 
-            current_commit = poseidon2_compress_with_capacity(current_commit, cached_commit).0;
+            if child_is_def {
+                cols.res_left = [F::ZERO; DIGEST_SIZE];
+                cols.res_right = [F::ZERO; DIGEST_SIZE];
+            } else {
+                let (res_left, res_right) =
+                    poseidon2_compress_with_capacity(cols.current_commit, cols.capacity);
+                cols.res_left = res_left;
+                cols.res_right = res_right;
+                capacity = res_right;
+            }
             row_idx += 1;
         }
-
-        let cols: &mut InputCommitCols<F> =
-            trace[row_idx * width..(row_idx + 1) * width].borrow_mut();
-        cols.state = F::TWO;
-        cols.is_first = F::from_bool(cached_rows.is_empty());
-        cols.proof_idx = F::from_usize(proof_idx);
-        cols.has_verifier_pvs = F::from_bool(child_is_def);
-        cols.current_commit = current_commit;
-        row_idx += 1;
     }
 
     AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width))

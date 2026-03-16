@@ -44,7 +44,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
 
         let input_commit_air = input::InputCommitAir {
             public_values_bus: bus_inventory.public_values_bus,
-            poseidon2_bus: bus_inventory.poseidon2_compress_bus,
+            poseidon2_bus: bus_inventory.poseidon2_permute_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
             input_or_merkle_commit_bus,
         };
