@@ -156,6 +156,7 @@ where
             .when(not::<AB::Expr>(is_same_air.clone()))
             .assert_zero(next.interaction_idx);
 
+        builder.assert_bool(local.is_first_in_message + local.is_second_in_message);
         builder
             .when(local.is_first_in_message + local.is_second_in_message)
             .assert_zero(local.idx_in_message);
