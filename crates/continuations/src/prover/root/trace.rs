@@ -26,7 +26,7 @@ impl<
 where
     PB::Matrix: Clone,
 {
-    fn generate_proving_ctx_internal(
+    pub fn generate_proving_ctx(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
@@ -54,7 +54,7 @@ where
             .extend(other_compress_inputs);
 
         let verifier_trace_heights = self.trace_heights.as_ref().map(|v| {
-            let num_airs = v.len();
+            let num_airs = v.len() - deferral_merkle_proofs.is_some() as usize;
             &v[3..num_airs]
         });
 
@@ -87,7 +87,7 @@ where
     }
 
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx_no_def(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
@@ -96,16 +96,6 @@ where
             self.circuit.def_hook_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
         );
-        self.generate_proving_ctx_internal(proof, user_pvs_proof, None)
-    }
-
-    #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_with_deferrals(
-        &self,
-        proof: Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-        deferral_merkle_proofs: &DeferralMerkleProofs<PB::Val>,
-    ) -> Option<ProvingContext<PB>> {
-        self.generate_proving_ctx_internal(proof, user_pvs_proof, Some(deferral_merkle_proofs))
+        self.generate_proving_ctx(proof, user_pvs_proof, None)
     }
 }

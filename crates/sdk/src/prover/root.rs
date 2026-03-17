@@ -19,7 +19,9 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security, baby_bear_poseidon2::F, MAX_APP_LOG_STACKED_HEIGHT,
+    app_params_with_100_bits_security,
+    baby_bear_poseidon2::{Digest, F},
+    MAX_APP_LOG_STACKED_HEIGHT,
 };
 use openvm_verify_stark_host::NonRootStarkProof;
 use tracing::info_span;
@@ -27,7 +29,7 @@ use tracing::info_span;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::AppProvingKey,
-    prover::{AggProver, AppProver},
+    prover::{AggProver, DeferralPathProver, StarkProver},
     StdIn,
 };
 
@@ -52,6 +54,7 @@ impl RootProver {
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        def_hook_vk_commit: Option<Digest>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
         let inner = RootInnerProver::new::<E>(
@@ -60,7 +63,7 @@ impl RootProver {
             system_params,
             memory_dimensions,
             num_user_pvs,
-            None,
+            def_hook_vk_commit.map(Into::into),
             trace_heights,
         );
         Self(inner)
@@ -72,6 +75,7 @@ impl RootProver {
         pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        def_hook_vk_commit: Option<Digest>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
         let inner = RootInnerProver::from_pk::<E>(
@@ -80,7 +84,7 @@ impl RootProver {
             pk,
             memory_dimensions,
             num_user_pvs,
-            None,
+            def_hook_vk_commit.map(Into::into),
             trace_heights,
         );
         Self(inner)
@@ -91,8 +95,11 @@ impl RootProver {
         input: NonRootStarkProof,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
-            self.0
-                .generate_proving_ctx(input.inner, &input.user_pvs_proof)
+            self.0.generate_proving_ctx(
+                input.inner,
+                &input.user_pvs_proof,
+                input.deferral_merkle_proofs.as_ref(),
+            )
         });
         ctx
     }
@@ -112,6 +119,7 @@ pub fn compute_root_proof_heights(
     agg_params: AggregationSystemParams,
     agg_tree_config: AggregationTreeConfig,
     root_params: SystemParams,
+    def_prover: Option<Arc<DeferralPathProver>>,
 ) -> Result<Vec<usize>> {
     let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
         SystemOpcode::TERMINATE.global_opcode(),
@@ -131,18 +139,25 @@ pub fn compute_root_proof_heights(
     ));
     app_config.app_vm_config.system.config = system_config;
 
-    let app_pk = AppProvingKey::keygen(app_config)?;
-    let mut app_prover =
-        AppProver::<ChildE, SdkVmBuilder>::new(Default::default(), &app_pk.app_vm_pk, dummy_exe)?;
-    let app_proof = app_prover.prove(StdIn::default())?;
+    let def_hook_cached_commit = def_prover.as_ref().map(|p| p.def_hook_cached_commit());
+    let def_hook_vk_commit = def_prover.as_ref().map(|p| p.def_hook_vk_commit().into());
 
-    let agg_prover = AggProver::new(
+    let app_pk = AppProvingKey::keygen(app_config)?;
+    let agg_prover = Arc::new(AggProver::new(
         Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
         AggregationConfig { params: agg_params },
         agg_tree_config,
-        None,
-    );
-    let (agg_proof, _) = agg_prover.prove_vm(app_proof)?;
+        def_hook_cached_commit,
+    ));
+
+    let mut stark_prover = StarkProver::<ChildE, SdkVmBuilder>::new(
+        Default::default(),
+        &app_pk.app_vm_pk,
+        dummy_exe,
+        agg_prover.clone(),
+        def_prover,
+    )?;
+    let (agg_proof, _) = stark_prover.prove(StdIn::default(), &[])?;
 
     let root_prover = RootInnerProver::new::<E>(
         agg_prover.internal_recursive_prover.get_vk(),
@@ -155,11 +170,16 @@ pub fn compute_root_proof_heights(
         root_params,
         memory_dimensions,
         num_user_pvs,
-        None,
+        def_hook_vk_commit,
         None,
     );
+
     let root_proving_ctx = root_prover
-        .generate_proving_ctx(agg_proof.inner, &agg_proof.user_pvs_proof)
+        .generate_proving_ctx(
+            agg_proof.inner,
+            &agg_proof.user_pvs_proof,
+            agg_proof.deferral_merkle_proofs.as_ref(),
+        )
         .unwrap();
 
     let ret = root_proving_ctx

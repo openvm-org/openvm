@@ -54,7 +54,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    let proof = evm_prover.prove(stdin)?;
+    let proof = evm_prover.prove(stdin, &[])?;
     let vk = evm_prover.root_prover.0.get_vk();
     let engine = RootE::new(vk.inner.params.clone());
     engine.verify(&vk, &proof)?;
@@ -163,10 +163,69 @@ fn test_verify_stark_deferral() -> Result<()> {
     let def_input = DeferralInput::from_inputs(&[fib_proof]);
 
     // ---- Step 10: Prove and verify ----
-    let (vs_proof, vs_baseline) = vs_sdk.prove(vs_exe, vs_stdin, &[def_input])?;
+    let mut evm_prover = vs_sdk.evm_prover(vs_exe)?;
+    let vs_proof = evm_prover.prove(vs_stdin, &[def_input])?;
 
-    let vs_agg_vk = vs_sdk.agg_vk();
-    Sdk::verify_proof(vs_agg_vk.as_ref().clone(), vs_baseline, &vs_proof)?;
+    let vk = evm_prover.root_prover.0.get_vk();
+    let engine = RootE::new(vk.inner.params.clone());
+    engine.verify(&vk, &vs_proof)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_deferrals_enabled_without_usage() -> Result<()> {
+    let n_stack = 19;
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let agg_params = AggregationSystemParams::default();
+
+    // ---- Step 1: Create dummy DeferralProver ----
+    let rv32_sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
+    let ir_prover = &rv32_sdk.agg_prover().internal_recursive_prover;
+    let ir_vk = ir_prover.get_vk();
+    let ir_pcs_data = ir_prover.get_self_vk_pcs_data().unwrap();
+
+    let system_config = rv32_sdk.app_config().app_vm_config.as_ref().clone();
+    let memory_dimensions = system_config.memory_config.memory_dimensions();
+    let num_user_pvs = system_config.num_public_values;
+
+    let def_circuit_params = internal_params_with_100_bits_security();
+    let deferred_verify_prover = VerifyProver::new::<E>(
+        ir_vk,
+        ir_pcs_data,
+        def_circuit_params,
+        memory_dimensions,
+        num_user_pvs,
+        None,
+    );
+    let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
+
+    let hook_params = root_params_with_100_bits_security();
+    let agg_config = AggregationConfig {
+        params: agg_params.clone(),
+    };
+    let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+
+    // ---- Step 2: Enable deferrals in SDK and prove ----
+    let sdk = Sdk::riscv32(app_params, agg_params.clone()).with_deferral_prover(deferral_prover);
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = sdk.convert_to_exe(elf)?;
+
+    let n = 1000u64;
+    let mut stdin = StdIn::default();
+    stdin.write(&n);
+
+    let mut evm_prover = sdk.evm_prover(app_exe)?;
+    let proof = evm_prover.prove(stdin, &[])?;
+
+    // ---- Step 3: Verify the final result ----
+    let vk = evm_prover.root_prover.0.get_vk();
+    let engine = RootE::new(vk.inner.params.clone());
+    engine.verify(&vk, &proof)?;
 
     Ok(())
 }
