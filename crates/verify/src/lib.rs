@@ -90,7 +90,13 @@ pub fn verify_vm_stark_proof_decoded(
     // Verify the STARK proof.
     let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(vk.mvk.inner.params.clone());
     engine.verify(&vk.mvk, &proof.inner)?;
+    verify_vm_stark_proof_pvs(vk, proof)
+}
 
+pub fn verify_vm_stark_proof_pvs(
+    vk: &NonRootStarkVerifyingKey,
+    proof: &NonRootStarkProof,
+) -> Result<(), VerifyStarkError> {
     let (verifier_base_pvs_slice, verifier_def_pvs_slice) = proof.inner.public_values
         [VERIFIER_PVS_AIR_ID]
         .as_slice()
