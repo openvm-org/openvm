@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
+    Arena, PreflightExecutor, DEFAULT_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::secp256k1_coord_prime,
@@ -273,42 +273,42 @@ struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS:
     pub num_ops: usize,
 }
 
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_48}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_48}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50,
@@ -466,53 +466,53 @@ mod cuda_tests {
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
     secp256k1_coord_prime(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BN254_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
     secp256k1_coord_prime(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BN254_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>
 )]
     fn run_cuda_test_with_config<
         const BLOCKS: usize,
