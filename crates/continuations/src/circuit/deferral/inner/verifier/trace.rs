@@ -11,7 +11,7 @@ use crate::circuit::deferral::inner::verifier::air::{DeferralChildLevel, Deferra
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
-    child_is_def: bool,
+    child_is_agg: bool,
     child_dag_commit: DagCommit<F>,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
@@ -29,7 +29,7 @@ pub fn generate_proving_ctx(
         cols.proof_idx = F::from_usize(proof_idx);
         cols.is_valid = F::ONE;
 
-        if child_is_def {
+        if child_is_agg {
             cols.has_verifier_pvs = F::ONE;
 
             let child_pvs: &VerifierBasePvs<F> =
