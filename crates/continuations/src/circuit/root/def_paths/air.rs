@@ -45,7 +45,7 @@ pub struct DeferralAccMerklePathsCols<F> {
 
     pub depth: F,
     pub is_skip: F,
-    pub is_untouched: F,
+    pub is_within_deferral_as: F,
     pub is_unset: F,
 }
 
@@ -154,29 +154,31 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
             .assert_eq(local.is_unset, next.is_unset);
 
         /*
-         * Constrain that then is_untouched is be set until address_height. We constrain
-         * the two paths to be equal as long as is_untouched is set, i.e. that the part
-         * of DEFERRAL_AS that is not included in the Merkle root is left untouched for
-         * the duration of the program execution.
+         * Constrain that then is_within_deferral_as is be set until address_height. We
+         * constrain the two paths to be equal as long as is_within_deferral_as is set,
+         * i.e. that the part of DEFERRAL_AS that is not included in the Merkle root is
+         * left untouched for the duration of the program execution.
          */
-        builder.assert_bool(local.is_untouched);
-        builder.when_first_row().assert_one(local.is_untouched);
+        builder.assert_bool(local.is_within_deferral_as);
+        builder
+            .when_first_row()
+            .assert_one(local.is_within_deferral_as);
         builder
             .when_transition()
-            .assert_bool(local.is_untouched - next.is_untouched);
+            .assert_bool(local.is_within_deferral_as - next.is_within_deferral_as);
         builder
             .when_transition()
-            .when(local.is_untouched - next.is_untouched)
+            .when(local.is_within_deferral_as - next.is_within_deferral_as)
             .assert_eq(local.depth, AB::Expr::from_usize(self.address_height));
 
         assert_array_eq(
-            &mut builder.when(local.is_untouched),
+            &mut builder.when(local.is_within_deferral_as),
             local.initial_sibling,
             local.final_sibling,
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_untouched, local.is_unset)),
+            &mut builder.when(and(local.is_within_deferral_as, local.is_unset)),
             local.initial_node_commit,
             local.final_node_commit,
         );

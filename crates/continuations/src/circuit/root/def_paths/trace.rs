@@ -88,7 +88,7 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         depth
     };
 
-    // `is_untouched` tracks the DEFERRAL_AS prefix outside the Merkle-rooted part.
+    // is_within_deferral_as tracks the DEFERRAL_AS prefix outside the Merkle-rooted part
     let untouched_cut = address_height.min(proof_len.saturating_sub(1));
 
     let mut is_right_child_bits = vec![false; num_layers];
@@ -144,7 +144,7 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         cols.is_valid = if row_idx == 0 { F::TWO } else { F::ONE };
         cols.depth = F::from_usize(row_idx);
         cols.is_skip = F::from_bool(row_idx < skip_depth);
-        cols.is_untouched = F::from_bool(row_idx <= untouched_cut);
+        cols.is_within_deferral_as = F::from_bool(row_idx <= untouched_cut);
         cols.is_unset = F::from_bool(is_unset);
 
         cols.is_right_child = F::from_bool(is_right_child_bits[row_idx]);
