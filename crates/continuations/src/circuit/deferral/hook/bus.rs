@@ -17,6 +17,7 @@ define_typed_permutation_bus!(IoCommitBus, IoCommitMessage);
 pub struct OnionResultMessage<T> {
     pub input_onion: [T; DIGEST_SIZE],
     pub output_onion: [T; DIGEST_SIZE],
+    pub num_elements: T,
 }
 
 define_typed_permutation_bus!(OnionResultBus, OnionResultMessage);

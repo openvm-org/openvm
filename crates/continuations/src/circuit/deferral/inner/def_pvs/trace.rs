@@ -31,6 +31,8 @@ pub fn generate_proving_ctx(
     debug_assert!((1..=2).contains(&num_proofs));
 
     let mut trace = vec![F::ZERO; num_rows * width];
+    let mut num_def_circuit_proofs = F::ZERO;
+
     for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
     {
         let cols: &mut DeferralAggPvsCols<F> = chunk.borrow_mut();
@@ -42,6 +44,8 @@ pub fn generate_proving_ctx(
             let child_pvs: &DeferralAggregationPvs<F> =
                 proof.public_values[DEF_AGG_PVS_AIR_ID].as_slice().borrow();
             cols.merkle_commit = child_pvs.merkle_commit;
+            cols.child_pvs.input_commit[0] = child_pvs.num_def_circuit_proofs;
+            num_def_circuit_proofs += child_pvs.num_def_circuit_proofs;
         } else {
             let child_pvs: &DeferralCircuitPvs<F> = proof.public_values[DEF_CIRCUIT_PVS_AIR_ID]
                 .as_slice()
@@ -60,6 +64,7 @@ pub fn generate_proving_ctx(
             };
             cols.merkle_commit =
                 poseidon2_compress_with_capacity(folded_input_commit, child_pvs.output_commit).0;
+            num_def_circuit_proofs += F::ONE;
         }
     }
 
@@ -81,6 +86,7 @@ pub fn generate_proving_ctx(
         pvs.merkle_commit =
             poseidon2_compress_with_capacity(first_row.merkle_commit, second_row.merkle_commit).0;
     }
+    pvs.num_def_circuit_proofs = num_def_circuit_proofs;
 
     AirProvingContext {
         cached_mains: vec![],

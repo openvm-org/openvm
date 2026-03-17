@@ -28,4 +28,6 @@ pub struct DeferralAggregationPvs<F> {
     /// the Merkle root of the aggregation subtree this proof is the root of
     /// at internal layers
     pub merkle_commit: [F; DIGEST_SIZE],
+    /// Number of present deferral circuit proofs that we've seen so far
+    pub num_def_circuit_proofs: F,
 }
