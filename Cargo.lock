@@ -3293,6 +3293,7 @@ name = "openvm-deferral-circuit"
 version = "2.0.0-alpha"
 dependencies = [
  "cfg-if",
+ "dashmap",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
@@ -3315,6 +3316,7 @@ dependencies = [
  "p3-field",
  "p3-symmetric",
  "rand 0.9.2",
+ "rustc-hash",
  "serde",
  "static_assertions",
  "strum",

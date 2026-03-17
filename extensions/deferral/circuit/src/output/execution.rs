@@ -165,7 +165,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     // Bytes are sponge-hashed and constrained against output_commit. Thhe
     // sponge rate is DIGEST_SIZE.
-    let num_rows = output_len_val / DIGEST_SIZE;
+    let num_rows = output_len_val / DIGEST_SIZE + 1;
     debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
 
     let output_raw = exec_state.streams.deferrals[pre_compute.deferral_idx as usize]

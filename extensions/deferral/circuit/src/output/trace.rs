@@ -7,9 +7,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, hasher::HasherChip, CustomBorrow, ExecutionError, MultiRowLayout,
-        MultiRowMetadata, PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmField,
-        VmStateMut,
+        get_record_from_slice, CustomBorrow, ExecutionError, MultiRowLayout, MultiRowMetadata,
+        PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmField, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -90,8 +89,9 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         // SAFETY:
         // - The layout guarantees rest has sufficient length for write data
         // - There are DIGEST_SIZE bytes written per row
+        let num_write_rows = layout.metadata.num_rows.saturating_sub(1);
         let (write_bytes, rest) =
-            unsafe { rest.split_at_mut_unchecked(layout.metadata.num_rows * DIGEST_SIZE) };
+            unsafe { rest.split_at_mut_unchecked(num_write_rows * DIGEST_SIZE) };
 
         // SAFETY:
         // - Valid mutable slice from the previous split
@@ -104,7 +104,7 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         DeferralOutputRecordMut {
             header: header_buf.borrow_mut(),
             write_bytes,
-            write_aux: &mut write_aux_buf[..layout.metadata.num_rows * DIGEST_MEMORY_OPS],
+            write_aux: &mut write_aux_buf[..num_write_rows * DIGEST_MEMORY_OPS],
         }
     }
 
@@ -121,10 +121,11 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
 impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
     fn size(layout: &DeferralOutputLayout) -> usize {
         let mut total_len = size_of::<DeferralOutputRecordHeader>();
-        total_len += layout.metadata.num_rows * DIGEST_SIZE;
+        let num_write_rows = layout.metadata.num_rows.saturating_sub(1);
+        total_len += num_write_rows * DIGEST_SIZE;
         total_len =
             total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>());
-        total_len += layout.metadata.num_rows
+        total_len += num_write_rows
             * DIGEST_MEMORY_OPS
             * size_of::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>();
         total_len
@@ -179,7 +180,7 @@ where
         let (output_commit, output_len) = split_output(output_key);
 
         let output_len_val = u64::from_le_bytes(output_len) as usize;
-        let num_rows = output_len_val / DIGEST_SIZE;
+        let num_rows = output_len_val / DIGEST_SIZE + 1;
         debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
 
         // We now have the layout and can write the record
@@ -272,6 +273,7 @@ where
             let header: &DeferralOutputRecordHeader =
                 unsafe { get_record_from_slice(&mut trace, ()) };
             let num_rows = header.num_rows as usize;
+            let output_len = (num_rows - 1) * DIGEST_SIZE;
             let (mut section_chunk, rest) = trace.split_at_mut(width * num_rows);
 
             // Copy write data out first; row filling overwrites the record bytes in-place.
@@ -292,12 +294,15 @@ where
                 )
             };
 
-            // Starting commit state should be [deferral_idx, 0, ..., 0]
-            let mut current_commit_state = [F::ZERO; DIGEST_SIZE];
-            current_commit_state[0] = F::from_u32(header.deferral_idx);
+            // Initial sponge input is [deferral_idx, output_len, 0, ...].
+            let mut initial_sponge_input = [F::ZERO; DIGEST_SIZE];
+            initial_sponge_input[0] = F::from_u32(header.deferral_idx);
+            initial_sponge_input[1] = F::from_usize(output_len);
+
+            let mut current_poseidon2_res = [F::ZERO; DIGEST_SIZE];
             self.count_chip.add_count(header.deferral_idx);
 
-            let output_len_bytes = u32::try_from(num_rows * DIGEST_SIZE)
+            let output_len_bytes = u32::try_from(output_len)
                 .expect("deferral output length should fit a u32")
                 .to_le_bytes()
                 .map(F::from_u8);
@@ -307,6 +312,7 @@ where
 
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(row_idx == 0);
+                cols.is_last = F::from_bool(row_idx + 1 == num_rows);
                 cols.section_idx = F::from_usize(row_idx);
 
                 cols.from_state.pc = F::from_u32(header.from_pc);
@@ -345,26 +351,42 @@ where
                 }
 
                 cols.output_len.copy_from_slice(&output_len_bytes);
-                cols.write_bytes = from_fn(|i| F::from_u8(write_bytes[row_idx * DIGEST_SIZE + i]));
-
-                current_commit_state = self
-                    .poseidon2_chip
-                    .compress_and_record(&current_commit_state, &cols.write_bytes);
-                cols.current_commit_state = current_commit_state;
-
-                for chunk_idx in 0..DIGEST_MEMORY_OPS {
-                    let aux_idx = row_idx * DIGEST_MEMORY_OPS + chunk_idx;
-                    cols.write_bytes_aux[chunk_idx]
-                        .set_prev_data(write_aux[aux_idx].prev_data.map(F::from_u8));
-                    mem_helper.fill(
-                        write_aux[aux_idx].prev_timestamp,
-                        header.from_timestamp + 2 + OUTPUT_TOTAL_MEMORY_OPS as u32 + aux_idx as u32,
-                        cols.write_bytes_aux[chunk_idx].as_mut(),
+                if row_idx == 0 {
+                    cols.sponge_inputs = initial_sponge_input;
+                    current_poseidon2_res = self.poseidon2_chip.perm_and_record(
+                        &cols.sponge_inputs,
+                        &[F::ZERO; DIGEST_SIZE],
+                        row_idx + 1 == num_rows,
                     );
+                    for chunk_aux in &mut cols.write_bytes_aux {
+                        mem_helper.fill_zero(chunk_aux.as_mut());
+                    }
+                } else {
+                    cols.sponge_inputs =
+                        from_fn(|i| F::from_u8(write_bytes[(row_idx - 1) * DIGEST_SIZE + i]));
+                    current_poseidon2_res = self.poseidon2_chip.perm_and_record(
+                        &cols.sponge_inputs,
+                        &current_poseidon2_res,
+                        row_idx + 1 == num_rows,
+                    );
+                    for chunk_idx in 0..DIGEST_MEMORY_OPS {
+                        let aux_idx = (row_idx - 1) * DIGEST_MEMORY_OPS + chunk_idx;
+                        cols.write_bytes_aux[chunk_idx]
+                            .set_prev_data(write_aux[aux_idx].prev_data.map(F::from_u8));
+                        mem_helper.fill(
+                            write_aux[aux_idx].prev_timestamp,
+                            header.from_timestamp
+                                + 2
+                                + OUTPUT_TOTAL_MEMORY_OPS as u32
+                                + aux_idx as u32,
+                            cols.write_bytes_aux[chunk_idx].as_mut(),
+                        );
+                    }
                 }
+                cols.poseidon2_res = current_poseidon2_res;
             }
 
-            let output_commit = f_commit_to_bytes(&current_commit_state).map(F::from_u8);
+            let output_commit = f_commit_to_bytes(&current_poseidon2_res).map(F::from_u8);
             for row in section_chunk.chunks_exact_mut(width) {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
                 cols.output_commit = output_commit;

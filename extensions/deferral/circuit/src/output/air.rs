@@ -7,7 +7,7 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::utils::{and, assert_array_eq, not, or};
+use openvm_circuit_primitives::utils::{assert_array_eq, not};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -41,6 +41,7 @@ pub struct DeferralOutputCols<T> {
     // section of rows that correspond to a single opcode invocation
     pub is_valid: T,
     pub is_first: T,
+    pub is_last: T,
     pub section_idx: T,
 
     // Initial execution state + instruction operands
@@ -63,18 +64,17 @@ pub struct DeferralOutputCols<T> {
     pub output_len: [T; F_NUM_BYTES],
     pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
-    // Bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
-    // written to memory and auxiliary columns
-    pub write_bytes: [T; DIGEST_SIZE],
+    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
+    // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
+    // written to memory and auxiliary columns.
+    pub sponge_inputs: [T; DIGEST_SIZE],
     pub write_bytes_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 
-    // Running hash of this section's write_bytes, constrained to be output_commit;
-    // note the initial state should be [deferral_idx, 0, ..., 0]
-    pub current_commit_state: [T; DIGEST_SIZE],
+    // Capacity of the permutation of write_bytes and the previous row's capacity on
+    // non-last rows, compression on the last row.
+    pub poseidon2_res: [T; DIGEST_SIZE],
 }
 
-// TODO: This should probably be split into two AIRs, one for the read + execution
-// state and one for the reads. This is quite difficult to do currently, though.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
@@ -102,6 +102,9 @@ where
         let local: &DeferralOutputCols<AB::Var> = (*local).borrow();
         let next: &DeferralOutputCols<AB::Var> = (*next).borrow();
 
+        let is_transition = next.is_valid - next.is_first;
+        let is_last = local.is_valid - is_transition.clone();
+
         // Constrain the status flags. Particularly, section_idx must (a) always
         // reset to 0 upon reaching a new section, and (b) otherwise increment by
         // one each valid row. Additionally, for convenience we constrain that
@@ -117,6 +120,8 @@ where
             .when(local.is_valid)
             .assert_one(local.is_first);
 
+        builder.assert_eq(local.is_last, is_last);
+
         builder
             .when(not(local.is_valid))
             .assert_zero(local.is_first);
@@ -126,11 +131,8 @@ where
 
         builder.when(local.is_first).assert_zero(local.section_idx);
         builder
-            .when(next.section_idx)
-            .assert_eq(next.section_idx, local.section_idx + AB::Expr::ONE);
-        builder
-            .when(and(next.is_valid, not(next.is_first)))
-            .assert_eq(next.section_idx, local.section_idx + AB::Expr::ONE);
+            .when(is_transition.clone())
+            .assert_one(next.section_idx - local.section_idx);
 
         // Constrain that the read columns and other operands stay the same within a
         // section, i.e. when section_idx is non-zero. Note that the read auxiliary
@@ -159,45 +161,45 @@ where
         );
 
         // Constrain the consistency of current_commit_state at each point in this
-        // section's rows. The initial state should be [deferral_idx, 0, ..., 0]
-        // and the final state should be output_commit. Note that output_len must
-        // be divisible by DIGEST_SIZE.
-        let is_last_or_invalid = or(next.is_first, not(next.is_valid));
-        let mut when_last_or_invalid = builder.when(is_last_or_invalid.clone());
+        // section's rows. The initial state should be [deferral_idx, output_len,
+        // ..., 0].
+        let output_len = bytes_to_f(&local.output_len);
+        let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
+        initial_state[0] = local.deferral_idx.into();
+        initial_state[1] = output_len.clone();
 
-        when_last_or_invalid.assert_eq(
-            bytes_to_f(&local.output_len),
-            (local.section_idx + local.is_valid) * AB::Expr::from_usize(DIGEST_SIZE),
-        );
         assert_array_eq(
-            &mut when_last_or_invalid,
-            byte_commit_to_f(&local.output_commit),
-            local.current_commit_state,
+            &mut builder.when(local.is_first),
+            initial_state,
+            local.sponge_inputs,
         );
 
         self.count_bus
             .send(local.deferral_idx)
             .eval(builder, local.is_first);
 
-        let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
-        initial_state[0] = local.deferral_idx.into();
+        // The final state should be output_commit, and output_len must be the final
+        // section_idx * DIGEST_SIZE.
+        let mut when_last = builder.when(local.is_last);
 
+        when_last.assert_eq(
+            output_len,
+            local.section_idx * AB::Expr::from_usize(DIGEST_SIZE),
+        );
+        assert_array_eq(
+            &mut when_last,
+            byte_commit_to_f(&local.output_commit),
+            local.poseidon2_res,
+        );
+
+        // Constrain poseidon2_res is the running permute capacity on all non-last rows,
+        // and the compression on the last row.
+        let rhs = from_fn(|i| is_transition.clone() * local.poseidon2_res[i]);
         self.poseidon2_bus
-            .compress(initial_state, local.write_bytes, local.current_commit_state)
-            .eval(builder, local.is_first);
+            .lookup(next.sponge_inputs, rhs, next.poseidon2_res, next.is_last)
+            .eval(builder, next.is_valid);
 
-        self.poseidon2_bus
-            .compress(
-                local.current_commit_state,
-                next.write_bytes,
-                next.current_commit_state,
-            )
-            .eval(
-                builder,
-                local.is_valid * and(next.is_valid, not(next.is_first)),
-            );
-
-        // Constrain the heap pointer memory reads first.
+        // Constrain the heap pointer memory reads.
         let d = AB::Expr::from_u32(RV32_REGISTER_AS);
         let e = AB::Expr::from_u32(RV32_MEMORY_AS);
 
@@ -233,7 +235,7 @@ where
         });
         let output_commit_and_len =
             combine_output(local.output_commit.map(Into::into), output_len_full);
-        let output_commit_and_len_chunks =
+        let output_commit_and_len_chunks: [[<AB as AirBuilder>::Expr; 4]; 10] =
             split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );
@@ -257,7 +259,8 @@ where
         }
 
         let write_bytes_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(local.write_bytes);
+            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(local.sponge_inputs);
+        let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
 
         for (chunk_idx, (data, aux)) in write_bytes_chunks
             .into_iter()
@@ -269,16 +272,16 @@ where
                     MemoryAddress::new(
                         e.clone(),
                         output_ptr.clone()
-                            + (local.section_idx.into() * AB::Expr::from_usize(DIGEST_SIZE))
+                            + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
                             + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
                     ),
                     data,
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
-                        + (local.section_idx.into() * AB::Expr::from_usize(DIGEST_MEMORY_OPS)),
+                        + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_MEMORY_OPS)),
                     aux,
                 )
-                .eval(builder, local.is_valid);
+                .eval(builder, local.is_valid - local.is_first);
         }
 
         // Evaluate the execution interaction. Because a single opcode spans many
@@ -294,10 +297,10 @@ where
                     e,
                 ],
                 local.from_state,
-                (local.section_idx.into() * AB::Expr::from_usize(DIGEST_MEMORY_OPS))
-                    + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + DIGEST_MEMORY_OPS + 2),
+                (local.section_idx * AB::Expr::from_usize(DIGEST_MEMORY_OPS))
+                    + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + 2),
                 (DEFAULT_PC_STEP, None),
             )
-            .eval(builder, local.is_valid * is_last_or_invalid);
+            .eval(builder, local.is_last);
     }
 }
