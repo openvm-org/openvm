@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -29,8 +29,7 @@ use crate::{
     poseidon2::DeferralPoseidon2Bus,
     utils::{
         byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_NUM_BYTES,
-        DIGEST_MEMORY_OPS, F_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -66,7 +65,7 @@ pub struct DeferralOutputCols<T> {
     // Bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns
     pub write_bytes: [T; DIGEST_SIZE],
-    pub write_bytes_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
 
     // Running hash of this section's write_bytes, constrained to be output_commit;
     // note the initial state should be [deferral_idx, 0, ..., 0]
@@ -247,7 +246,7 @@ where
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
                     ),
                     data,
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
@@ -270,7 +269,7 @@ where
                         e.clone(),
                         output_ptr.clone()
                             + (local.section_idx.into() * AB::Expr::from_usize(DIGEST_SIZE))
-                            + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
                     ),
                     data,
                     local.from_state.timestamp

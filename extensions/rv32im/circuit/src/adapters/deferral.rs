@@ -104,8 +104,8 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.read::<F, BLOCK_SIZE, 1>(DEFERRAL_AS, ptr) }
+    // - address space `DEFERRAL_AS` has cell type `F` and block_size of `DEFAULT_BLOCK_SIZE`
+    unsafe { memory.read::<F, BLOCK_SIZE>(DEFERRAL_AS, ptr) }
 }
 
 #[inline(always)]
@@ -118,8 +118,8 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.write::<F, BLOCK_SIZE, 1>(DEFERRAL_AS, ptr, vals) }
+    // - address space `DEFERRAL_AS` has cell type `F` and block_size of `DEFAULT_BLOCK_SIZE`
+    unsafe { memory.write::<F, BLOCK_SIZE>(DEFERRAL_AS, ptr, vals) }
 }
 
 /// Reads register value at `ptr` from memory and records the previous timestamp.
