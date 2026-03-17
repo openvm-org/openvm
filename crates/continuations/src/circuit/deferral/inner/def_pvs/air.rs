@@ -83,6 +83,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .assert_one(next.proof_idx - local.proof_idx);
 
         builder.assert_bool(local.has_verifier_pvs);
+        builder.assert_eq(local.has_verifier_pvs, next.has_verifier_pvs);
 
         /*
          * We need to receive public values here to ensure the values read are correct.
