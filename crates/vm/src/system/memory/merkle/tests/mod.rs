@@ -7,7 +7,7 @@ use std::{
 
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProvingContext,
 };
@@ -381,4 +381,177 @@ fn expand_test_negative() {
         vec![chip_ctx, hash_test_chip.generate_proving_ctx()],
     )
     .expect("We tinkered with the trace and now it doesn't pass");
+}
+
+#[test]
+#[should_panic]
+fn expand_test_label_rebinding_attack() {
+    let mut hash_test_chip = HashTestChip::new();
+    let height = 4;
+    let fake_label = 8u32;
+    let claimed_label = 0u32;
+
+    let mem_config = MemoryConfig::new(
+        1,
+        vec![
+            AddressSpaceHostConfig {
+                num_cells: 0,
+                min_block_size: 0,
+                layout: MemoryCellType::Null,
+            },
+            AddressSpaceHostConfig {
+                num_cells: CHUNK << height,
+                min_block_size: 1,
+                layout: MemoryCellType::Native { size: 4 },
+            },
+            AddressSpaceHostConfig {
+                num_cells: CHUNK << height,
+                min_block_size: 1,
+                layout: MemoryCellType::Native { size: 4 },
+            },
+        ],
+        height + 3,
+        20,
+        17,
+        32,
+    );
+    let md = mem_config.memory_dimensions();
+
+    let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+    unsafe {
+        memory.write(1, fake_label * CHUNK as u32, [BabyBear::from_u8(69)]);
+    }
+
+    let touched_labels_for_chip = BTreeSet::from([(1u32, fake_label)]);
+    let touched_labels_for_dummy = BTreeSet::from([(1u32, claimed_label)]);
+
+    let final_partition_for_chip: BTreeMap<_, [BabyBear; CHUNK]> =
+        memory_to_vec_partition::<BabyBear, CHUNK>(&memory.memory, &md)
+            .into_iter()
+            .map(|(idx, values)| {
+                let address_space = (idx >> md.address_height) as u32 + ADDR_SPACE_OFFSET;
+                let label = (idx & ((1 << md.address_height) - 1)) as u32;
+                ((address_space, label * (CHUNK as u32)), values)
+            })
+            .filter(|((address_space, pointer), _)| {
+                touched_labels_for_chip.contains(&(*address_space, pointer / CHUNK as u32))
+            })
+            .collect();
+
+    let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
+    let mut chip = MemoryMerkleChip::<CHUNK, _>::new(md, merkle_bus, COMPRESSION_BUS);
+    chip.finalize(&memory.memory, &final_partition_for_chip, &hash_test_chip);
+    let mut chip_ctx = chip.generate_proving_ctx();
+
+    {
+        let mut trace: RowMajorMatrix<BabyBear> = (*chip_ctx.clone().common_main.unwrap()).clone();
+        let half = BabyBear::TWO.inverse();
+        // Rebind the path of fake_label to claimed_label by solving labels bottom-up:
+        // x_{h} = (x_{h-1} - bit_{h-1}(fake_label)) / 2, x_0 = claimed_label.
+        let mut per_height = vec![BabyBear::ZERO; md.overall_height() + 1];
+        let mut curr = BabyBear::from_u32(claimed_label);
+        #[allow(clippy::needless_range_loop)]
+        for h in 1..=md.address_height {
+            let bit = (fake_label >> (h - 1)) & 1;
+            curr = (curr - BabyBear::from_u32(bit)) * half;
+            per_height[h] = curr;
+        }
+        let root_address_label = per_height[md.address_height];
+        for dst in per_height
+            .iter_mut()
+            .take(md.overall_height() + 1)
+            .skip(md.address_height + 1)
+        {
+            *dst = root_address_label;
+        }
+
+        for row in trace.rows_mut() {
+            let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
+            if row.expand_direction == BabyBear::ZERO {
+                continue;
+            }
+            let h = row.parent_height.as_canonical_u32() as usize;
+            row.parent_address_label = per_height[h];
+        }
+
+        chip_ctx.common_main.replace(Arc::new(trace));
+    }
+
+    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
+    let mut dummy_interaction_trace_rows = vec![];
+    let mut interaction = |interaction_type: PermutationInteractionType,
+                           is_compress: bool,
+                           height: usize,
+                           as_label: u32,
+                           address_label: u32,
+                           hash: [BabyBear; CHUNK]| {
+        let expand_direction = if is_compress {
+            BabyBear::NEG_ONE
+        } else {
+            BabyBear::ONE
+        };
+        dummy_interaction_trace_rows.push(match interaction_type {
+            PermutationInteractionType::Send => expand_direction,
+            PermutationInteractionType::Receive => -expand_direction,
+        });
+        dummy_interaction_trace_rows.extend([
+            expand_direction,
+            BabyBear::from_usize(height),
+            BabyBear::from_u32(as_label),
+            BabyBear::from_u32(address_label),
+        ]);
+        dummy_interaction_trace_rows.extend(hash);
+    };
+
+    for (address_space, address_label) in touched_labels_for_dummy {
+        let values = unsafe {
+            array::from_fn(|i| {
+                memory
+                    .memory
+                    .get((address_space, fake_label * CHUNK as u32 + i as u32))
+            })
+        };
+        let as_label = address_space - ADDR_SPACE_OFFSET;
+        interaction(
+            PermutationInteractionType::Send,
+            false,
+            0,
+            as_label,
+            address_label,
+            values,
+        );
+        interaction(
+            PermutationInteractionType::Send,
+            true,
+            0,
+            as_label,
+            address_label,
+            values,
+        );
+    }
+
+    while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
+        .is_power_of_two()
+    {
+        dummy_interaction_trace_rows.push(BabyBear::ZERO);
+    }
+    let dummy_interaction_trace = RowMajorMatrix::new(
+        dummy_interaction_trace_rows,
+        dummy_interaction_air.field_width() + 1,
+    );
+    let dummy_interaction_api = AirProvingContext::simple_no_pis(Arc::new(dummy_interaction_trace));
+
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![
+            Arc::new(chip.air),
+            Arc::new(dummy_interaction_air),
+            Arc::new(hash_test_chip.air()),
+        ],
+        vec![
+            chip_ctx,
+            dummy_interaction_api,
+            hash_test_chip.generate_proving_ctx(),
+        ],
+    )
+    .expect("Label-rebinding attack unexpectedly failed");
 }

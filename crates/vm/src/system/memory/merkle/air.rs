@@ -75,6 +75,14 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         // two rows with greatest height should have `is_root` = 1
         builder.when_first_row().assert_one(local.is_root);
         builder.when_first_row().assert_one(next.is_root);
+        // the root rows have `as_label` and `address_label` set to zero,
+        // so that we can't use another tree representation
+        builder
+            .when(local.is_root)
+            .assert_zero(local.parent_address_label);
+        builder
+            .when(local.is_root)
+            .assert_zero(local.parent_as_label);
         // row with least height should have `height_section` = 0, `is_root` = 0
         builder.when_last_row().assert_zero(local.height_section);
         builder.when_last_row().assert_zero(local.is_root);
