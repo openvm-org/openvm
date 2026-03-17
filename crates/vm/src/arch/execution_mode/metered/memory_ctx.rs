@@ -1,7 +1,13 @@
 use abi_stable::std_types::RVec;
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
-use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
+use crate::{
+    arch::{SystemConfig, BOUNDARY_AIR_ID, DEFAULT_BLOCK_SIZE, MERKLE_AIR_ID},
+    system::memory::dimensions::MemoryDimensions,
+};
+
+const CHUNK: u32 = DEFAULT_BLOCK_SIZE as u32;
+const CHUNK_BITS: u32 = CHUNK.ilog2();
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
@@ -103,10 +109,6 @@ impl BitSet {
 #[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     memory_dimensions: MemoryDimensions,
-    pub boundary_idx: usize,
-    pub merkle_tree_index: usize,
-    chunk: u32,
-    chunk_bits: u32,
     pub page_indices: BitSet,
     pub addr_space_access_count: RVec<u32>,
     pub page_indices_since_checkpoint: Box<[u32]>,
@@ -115,9 +117,6 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     pub fn new(config: &SystemConfig, segment_check_insns: u64) -> Self {
-        let chunk = config.initial_block_size() as u32;
-        let chunk_bits = chunk.ilog2();
-
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
@@ -127,10 +126,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             Self::calculate_checkpoint_capacity(segment_check_insns);
 
         Self {
-            boundary_idx: config.memory_boundary_air_id(),
-            merkle_tree_index: config.memory_merkle_air_id(),
-            chunk,
-            chunk_bits,
             memory_dimensions,
             page_indices: BitSet::new(bitset_size),
             addr_space_access_count: vec![0; addr_space_size].into(),
@@ -166,15 +161,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     ) {
         debug_assert!((address_space as usize) < self.addr_space_access_count.len());
 
-        let num_blocks = (size + self.chunk - 1) >> self.chunk_bits;
-        let start_chunk_id = ptr >> self.chunk_bits;
-        let start_block_id = if self.chunk == 1 {
-            start_chunk_id
-        } else {
-            self.memory_dimensions
-                .label_to_index((address_space, start_chunk_id)) as u32
-        };
-        // Because `self.chunk == 1 << self.chunk_bits`
+        let num_blocks = (size + CHUNK - 1) >> CHUNK_BITS;
+        let start_chunk_id = ptr >> CHUNK_BITS;
+        let start_block_id = self
+            .memory_dimensions
+            .label_to_index((address_space, start_chunk_id)) as u32;
         let end_block_id = start_block_id + num_blocks;
         let start_page_id = start_block_id >> PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
@@ -213,13 +204,10 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         self.page_indices.clear();
 
         // Reset trace heights for memory chips as 0
-        // SAFETY: boundary_idx is a compile time constant within bounds
+        // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
         unsafe {
-            *trace_heights.get_unchecked_mut(self.boundary_idx) = 0;
-        }
-        // SAFETY: merkle_tree_index is guaranteed to be in bounds
-        unsafe {
-            *trace_heights.get_unchecked_mut(self.merkle_tree_index) = 0;
+            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) = 0;
+            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) = 0;
         }
         let poseidon2_idx = trace_heights.len() - 2;
         // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
@@ -267,27 +255,18 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         // On page fault, assume we add all leaves in a page
         let leaves = page_access_count << PAGE_BITS;
-        // SAFETY: boundary_idx is a compile time constant within bounds
-        unsafe {
-            *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
-        }
 
-        debug_assert!(self.merkle_tree_index < trace_heights.len());
         debug_assert!(trace_heights.len() >= 2);
-
         let poseidon2_idx = trace_heights.len() - 2;
-        // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
-        unsafe {
-            *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2;
-        }
 
         let merkle_height = self.memory_dimensions.overall_height();
         let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
-        // SAFETY: merkle_tree_index is guaranteed to be in bounds
+        // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
         unsafe {
-            *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * page_access_count * 2;
-            *trace_heights.get_unchecked_mut(self.merkle_tree_index) +=
-                nodes * page_access_count * 2;
+            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves;
+            *trace_heights.get_unchecked_mut(poseidon2_idx) +=
+                leaves * 2 + nodes * page_access_count * 2;
+            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += nodes * page_access_count * 2;
         }
     }
 

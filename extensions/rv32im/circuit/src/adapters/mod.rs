@@ -70,8 +70,8 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and block_size of `DEFAULT_BLOCK_SIZE`
     unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
@@ -89,8 +89,8 @@ pub fn memory_write<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and block_size of `DEFAULT_BLOCK_SIZE`
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
@@ -110,9 +110,9 @@ pub fn timed_read<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and block_size of `DEFAULT_BLOCK_SIZE`
+    unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -129,9 +129,9 @@ pub fn timed_write<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and block_size of `DEFAULT_BLOCK_SIZE`
+    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.

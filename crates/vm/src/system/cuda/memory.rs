@@ -363,14 +363,14 @@ mod tests {
         let touched_bytes = [101u8, 102, 103, 104];
         let touched_bytes_late = [111u8, 112, 113, 114];
         unsafe {
-            final_memory.write::<u8, { crate::arch::CONST_BLOCK_SIZE }>(
+            final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
                 RV32_MEMORY_AS,
                 0,
                 touched_bytes,
             );
-            final_memory.write::<u8, { crate::arch::CONST_BLOCK_SIZE }>(
+            final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
                 RV32_MEMORY_AS,
-                crate::arch::CONST_BLOCK_SIZE as u32,
+                crate::arch::DEFAULT_BLOCK_SIZE as u32,
                 touched_bytes_late,
             );
         }
@@ -405,7 +405,7 @@ mod tests {
                 },
             ),
             (
-                (RV32_MEMORY_AS, crate::arch::CONST_BLOCK_SIZE as u32),
+                (RV32_MEMORY_AS, crate::arch::DEFAULT_BLOCK_SIZE as u32),
                 TimestampedValues {
                     timestamp: 3,
                     values: touched_bytes_late.map(F::from_u8),

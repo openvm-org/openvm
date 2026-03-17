@@ -77,7 +77,7 @@ impl DeviceMemoryTester {
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
         let t = self.memory.timestamp();
-        let (t_prev, data) = unsafe { self.memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
+        let (t_prev, data) = unsafe { self.memory.read::<u8, N>(addr_space as u32, ptr as u32) };
         let data = data.map(F::from_u8);
         self.chip_for_block.get_mut(&N).unwrap().receive(
             addr_space as u32,
@@ -95,7 +95,7 @@ impl DeviceMemoryTester {
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
         let t = self.memory.timestamp();
         let (t_prev, data_prev) = unsafe {
-            self.memory.write::<u8, N, 4>(
+            self.memory.write::<u8, N>(
                 addr_space as u32,
                 ptr as u32,
                 data.map(|x| x.as_canonical_u32() as u8),
