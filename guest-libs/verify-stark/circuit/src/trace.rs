@@ -48,6 +48,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
         proof: &Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         memory_dimensions: MemoryDimensions,
+        def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> PreVerifierData<PB>;
 
@@ -74,6 +75,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         proof: &Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
+        def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> PreVerifierData<CpuBackend<SC>> {
         let (verifier_pvs_record, verifier_p2_compress_inputs, verifier_p2_permute_inputs) =
@@ -95,6 +97,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
             verifier_pvs_record.app_exe_commit,
             verifier_pvs_record.app_vk_commit,
             user_pvs_proof.public_values.clone(),
+            def_idx,
         );
 
         let (paths_ctx, paths_p2_inputs) = if let Some(deferral_merkle_proofs) =
@@ -126,10 +129,12 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
                 .into_iter()
                 .chain(commit_p2_inputs)
                 .chain(memory_p2_inputs)
-                .chain(output_p2_inputs)
                 .chain(paths_p2_inputs)
                 .collect_vec(),
-            poseidon2_permute_inputs: verifier_p2_permute_inputs,
+            poseidon2_permute_inputs: verifier_p2_permute_inputs
+                .into_iter()
+                .chain(output_p2_inputs)
+                .collect_vec(),
             range_inputs,
             verifier_pvs_record,
             output_commit,
@@ -164,6 +169,7 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
         proof: &Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
+        def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> PreVerifierData<GpuBackend> {
         let PreVerifierData {
@@ -179,6 +185,7 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
             proof,
             user_pvs_proof,
             memory_dimensions,
+            def_idx,
             deferral_merkle_proofs,
         );
 

@@ -116,6 +116,7 @@ impl<
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
         def_hook_commit: Option<PB::Commitment>,
+        def_idx: usize,
     ) -> Self
     where
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
@@ -142,6 +143,7 @@ impl<
             def_hook_commit,
             memory_dimensions,
             num_user_pvs,
+            def_idx,
         ));
         let (pk, vk) = engine.keygen(&circuit.airs());
         Self {
@@ -162,6 +164,7 @@ impl<
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
         def_hook_commit: Option<PB::Commitment>,
+        def_idx: usize,
     ) -> Self
     where
         PB::Val: Field + PrimeField32,
@@ -180,12 +183,15 @@ impl<
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
+        // WARNING: def_idx must match the original def_idx used when generating the pk,
+        // or else the generated proof will be incorrect.
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
             def_hook_commit,
             memory_dimensions,
             num_user_pvs,
+            def_idx,
         ));
         let vk = Arc::new(pk.get_vk());
         Self {
@@ -256,5 +262,9 @@ where
         self.prover
             .prove_no_def::<E>(non_root_proof.inner, &non_root_proof.user_pvs_proof)
             .expect("DeferredVerifyProver::prove_no_def failed")
+    }
+
+    fn get_def_idx(&self) -> usize {
+        self.prover.circuit.def_idx
     }
 }

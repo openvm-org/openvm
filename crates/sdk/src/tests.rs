@@ -103,6 +103,7 @@ fn test_verify_stark_deferral() -> Result<()> {
         memory_dimensions,
         num_user_pvs,
         None,
+        0,
     );
     let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
 

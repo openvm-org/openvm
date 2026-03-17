@@ -1,13 +1,13 @@
-use std::borrow::Borrow;
+use std::{array::from_fn, borrow::Borrow};
 
-use itertools::{fold, izip};
+use itertools::{fold, Itertools};
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
     AlignedBorrow,
 };
 use openvm_continuations::utils::digests_to_poseidon2_input;
 use openvm_recursion_circuit::{
-    bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
+    bus::{Poseidon2PermuteBus, Poseidon2PermuteMessage},
     prelude::DIGEST_SIZE,
     primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage},
 };
@@ -31,20 +31,22 @@ const fn exact_div_or_panic(a: usize, b: usize) -> usize {
 pub struct DeferralOutputCommitCols<F> {
     pub is_valid: F,
     pub is_first: F,
+    pub row_idx: F,
+    pub output_len: F,
 
-    pub state: [F; DIGEST_SIZE],
-    pub next_bytes: [F; DIGEST_SIZE],
-
-    pub next_f: [F; VALS_IN_DIGEST],
-    pub next_f_idx: F,
+    pub input_vals: [F; DIGEST_SIZE],
+    pub res_left: [F; DIGEST_SIZE],
+    pub res_right: [F; DIGEST_SIZE],
 }
 
 #[derive(Debug)]
 pub struct DeferralOutputCommitAir {
-    pub poseidon2_bus: Poseidon2CompressBus,
+    pub poseidon2_bus: Poseidon2PermuteBus,
     pub range_bus: RangeCheckerBus,
     pub output_val_bus: OutputValBus,
     pub output_commit_bus: OutputCommitBus,
+
+    pub def_idx: usize,
 }
 
 impl<F> BaseAir<F> for DeferralOutputCommitAir {
@@ -64,83 +66,107 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
         let local: &DeferralOutputCommitCols<AB::Var> = (*local).borrow();
         let next: &DeferralOutputCommitCols<AB::Var> = (*next).borrow();
 
+        let is_transition = next.is_valid - next.is_first;
+        let is_last = local.is_valid - is_transition.clone();
+
         /*
          * Base constraints to ensure that all the valid rows are at the beginning,
-         * and that there is at least one valid and one invalid row. The latter is
-         * important because we send the output commit on the first invalid row.
+         * and that there is at least one valid row. Additionally, row_idx starts at
+         * 0 and increments.
          */
         builder.assert_bool(local.is_valid);
         builder.when_first_row().assert_one(local.is_valid);
         builder
             .when_transition()
             .assert_bool(local.is_valid - next.is_valid);
-        builder.when_last_row().assert_zero(local.is_valid);
 
         builder.when_first_row().assert_one(local.is_first);
         builder.when_transition().assert_zero(next.is_first);
 
-        /*
-         * On valid rows we want to receive the next VALS_IN_DIGEST output values
-         * and constrain that next_bytes is their byte decomposition. To this end
-         * we also constrain that next_f_idx increments.
-         */
-        for (byte_decomp, next_f) in izip!(local.next_bytes.chunks(F_NUM_BYTES), local.next_f) {
-            let composed_f = fold(
-                byte_decomp.iter().enumerate(),
-                AB::Expr::ZERO,
-                |acc, (i, byte)| acc + (AB::Expr::from_usize(1 << (i * 8)) * (*byte).into()),
-            );
-            builder.when(local.is_valid).assert_eq(composed_f, next_f);
-        }
-
-        builder.when_first_row().assert_zero(local.next_f_idx);
+        builder.when_first_row().assert_zero(local.row_idx);
         builder
             .when_transition()
-            .assert_eq(local.next_f_idx + AB::Expr::ONE, next.next_f_idx);
+            .assert_eq(local.row_idx + AB::Expr::ONE, next.row_idx);
 
-        for byte in local.next_bytes {
+        /*
+         * On the first row, input_vals should be [def_idx, output_len, 0, ...].
+         * We constrain def_idx against a constant, and output_len against the
+         * last valid row_idx.
+         */
+        let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
+        initial_state[0] = AB::Expr::from_usize(self.def_idx);
+        initial_state[1] = local.output_len.into();
+
+        assert_array_eq(
+            &mut builder.when_first_row(),
+            local.input_vals,
+            initial_state,
+        );
+
+        builder
+            .when(is_transition)
+            .assert_eq(local.output_len, next.output_len);
+        builder.when(is_last.clone()).assert_eq(
+            local.output_len,
+            local.row_idx * AB::Expr::from_usize(DIGEST_SIZE),
+        );
+
+        /*
+         * On valid rows non-first we want to receive the next VALS_IN_DIGEST values
+         * and constrain that input_vals is their byte decomposition.
+         */
+        let next_f: [_; VALS_IN_DIGEST] = local
+            .input_vals
+            .chunks(F_NUM_BYTES)
+            .map(|c| {
+                fold(c.iter().enumerate(), AB::Expr::ZERO, |acc, (i, byte)| {
+                    acc + (AB::Expr::from_usize(1 << (i * 8)) * (*byte).into())
+                })
+            })
+            .collect_array()
+            .unwrap();
+
+        for byte in local.input_vals {
             self.range_bus.lookup_key(
                 builder,
                 RangeCheckerBusMessage {
                     value: byte.into(),
                     max_bits: AB::Expr::from_u8(8),
                 },
-                local.is_valid,
+                local.is_valid - local.is_first,
             );
         }
 
         self.output_val_bus.receive(
             builder,
             OutputValMessage {
-                values: local.next_f,
-                idx: local.next_f_idx,
+                values: next_f,
+                idx: local.row_idx - AB::Expr::ONE,
             },
-            local.is_valid,
+            local.is_valid - local.is_first,
         );
 
         /*
-         * Compute the output commit and send it on the first invalid row. The first
-         * row starts from zero state, and a compression is done on each row.
+         * Compute the output commit and send it on the last row. We sponge hash each
+         * valid input_vals and take the left child of the last row.
          */
-        assert_array_eq(
-            &mut builder.when_first_row(),
-            local.state,
-            [AB::Expr::ZERO; DIGEST_SIZE],
-        );
-
+        let next_not_first = not(next.is_first);
+        let next_capacity = from_fn(|i| next_not_first.clone() * local.res_right[i]);
         self.poseidon2_bus.lookup_key(
             builder,
-            Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(local.state, local.next_bytes),
-                output: next.state,
+            Poseidon2PermuteMessage {
+                input: digests_to_poseidon2_input(next.input_vals.map(Into::into), next_capacity),
+                output: digests_to_poseidon2_input(next.res_left, next.res_right).map(Into::into),
             },
-            local.is_valid,
+            next.is_valid,
         );
 
         self.output_commit_bus.send(
             builder,
-            OutputCommitMessage { commit: next.state },
-            local.is_valid * not(next.is_valid),
+            OutputCommitMessage {
+                commit: local.res_left,
+            },
+            is_last,
         );
     }
 }

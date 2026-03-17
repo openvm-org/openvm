@@ -57,6 +57,7 @@ impl DeferralProver {
         agg_config: AggregationConfig,
         hook_params: SystemParams,
     ) -> Self {
+        assert_eq!(def_circuit_prover.get_def_idx(), 0);
         let single_circuit_prover = SingleDefCircuitProver::new(
             def_circuit_prover,
             agg_config.params.leaf,
@@ -82,6 +83,7 @@ impl DeferralProver {
         def_hook_pk: Arc<MultiStarkProvingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
     ) -> Self {
+        assert_eq!(def_circuit_prover.get_def_idx(), 0);
         let single_circuit_prover = SingleDefCircuitProver::from_pks(
             def_circuit_prover,
             def_agg_pk.leaf_pk,
@@ -108,6 +110,10 @@ impl DeferralProver {
         mut self,
         def_circuit_prover: DP,
     ) -> Self {
+        assert_eq!(
+            def_circuit_prover.get_def_idx(),
+            self.single_circuit_provers.len()
+        );
         let leaf_params = self.single_circuit_provers[0]
             .leaf_prover
             .get_vk()
