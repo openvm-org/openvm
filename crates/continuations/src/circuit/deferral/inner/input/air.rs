@@ -86,7 +86,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         );
 
         /*
-         * Constrain that if has_verifier_pvs is consistent over all valid rows.
+         * Constrain that has_verifier_pvs is consistent over all valid rows.
          */
         builder.assert_bool(local.has_verifier_pvs);
         builder
