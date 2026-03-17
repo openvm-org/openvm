@@ -1,15 +1,28 @@
-# Recursion Crate Internal Audit Mapping
+# Recursion AIR Map
 
 ## Overview
 
-The recursion crate implements a verifier sub-circuit composed of **39 AIRs** organized across **6 modules** plus 2 system-level AIRs. AIRs communicate via typed buses (permutation checks or lookups).
+This file is a flat reference for the recursion circuit's **39 AIRs** and the buses they
+touch. It complements the module docs in `modules/`:
 
-The modules are chained in a pipeline:
+- module `README.md` pages explain interface, extraction, contract, and module-level
+  correspondence
+- module `airs.md` pages explain per-AIR mechanics, trace columns, walkthroughs, and local
+  bus summaries
+- this page answers: which AIR exists, where its source lives, and which buses it
+  sends/receives/provides/looks up
+
+The main verifier pipeline is:
+
 ```
 ProofShape -> GKR -> BatchConstraint -> Stacking -> WHIR
                                                       |
                                         Transcript (shared by all)
 ```
+
+Primitive lookup providers support multiple stages of that pipeline. See
+[README.md](./README.md) for the high-level overview and [bus-inventory.md](./bus-inventory.md)
+for bus message formats.
 
 ---
 
@@ -83,7 +96,7 @@ ProofShape -> GKR -> BatchConstraint -> Stacking -> WHIR
 | 36 | `FinalPolyMleEvalAir` | `whir/final_poly_mle_eval/air.rs` | MLE evaluation of the final polynomial |
 | 37 | `FinalPolyQueryEvalAir` | `whir/final_poly_query_eval/air.rs` | Query evaluation of the final polynomial |
 
-### System-Level (2 AIRs)
+### Shared Lookup Providers (2 AIRs)
 
 | # | AIR | File | Role |
 |---|-----|------|------|
@@ -228,8 +241,6 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 - `NLiftBus` (S)
 - `FractionFolderInputBus` (S)
 - `Eq3bShapeBus` (S)
-- `ConstraintsFoldingInputBus` (S)
-- `InteractionsFoldingInputBus` (S)
 - `PreHashBus` (S, optional/continuations)
 - `StartingTidxBus` (S, R)
 
@@ -246,6 +257,8 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 **GkrInputAir**
 - `GkrModuleBus` (R)
 - `BatchConstraintModuleBus` (S)
+- `ConstraintsFoldingInputBus` (S)
+- `InteractionsFoldingInputBus` (S)
 - `TranscriptBus` (observe/sample)
 - `ExpBitsLenBus` (L)
 - `GkrLayerInputBus` (S)
@@ -358,17 +371,17 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 - `VerifyQueryBus` (S)
 
 **InitialOpenedValuesAir**
-- `StackingIndicesBus` (R)
-- `WhirMuBus` (R/L)
-- `VerifyQueryBus` (S)
-- `WhirFoldingBus` (R)
-- `Poseidon2PermuteBus` (S)
+- `StackingIndicesBus` (L)
+- `WhirMuBus` (R)
+- `VerifyQueryBus` (R)
+- `WhirFoldingBus` (S)
+- `Poseidon2PermuteBus` (L)
 - `MerkleVerifyBus` (S)
 
 **NonInitialOpenedValuesAir**
-- `VerifyQueryBus` (S)
-- `WhirFoldingBus` (R)
-- `Poseidon2CompressBus` (S)
+- `VerifyQueryBus` (R)
+- `WhirFoldingBus` (S)
+- `Poseidon2CompressBus` (L)
 - `MerkleVerifyBus` (S)
 
 **WhirFoldingAir**
@@ -376,8 +389,8 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 - `WhirFoldingBus` (R, S)
 
 **FinalPolyMleEvalAir**
-- `WhirOpeningPointBus` (R, S)
-- `WhirOpeningPointLookupBus` (L)
+- `WhirOpeningPointBus` (R)
+- `WhirOpeningPointLookupBus` (P, L)
 - `TranscriptBus` (observe)
 - `FinalPolyMleEvalBus` (R)
 - `WhirEqAlphaUBus` (R)
@@ -388,10 +401,10 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 - `WhirQueryBus` (R)
 - `WhirAlphaBus` (L)
 - `WhirGammaBus` (R)
-- `WhirFinalPolyBus` (S)
+- `WhirFinalPolyBus` (L)
 - `FinalPolyQueryEvalBus` (R)
 
-### System-Level
+### Shared Lookup Providers
 
 **PowerCheckerAir**
 - `PowerCheckerBus` (P)
@@ -403,231 +416,63 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 
 ---
 
-## Logical Groups (Partitioned by Bus Connectivity)
+## Major Inter-AIR Bus Connections
 
-Groups are kept to at most 4 AIRs unless deeper coupling requires a larger group.
+This table highlights buses whose producer and consumer AIRs are different. It is a quick
+index for tracing the major wiring paths across the recursion circuit; for full bus contracts,
+see [bus-inventory.md](./bus-inventory.md).
 
-### Group 1: Transcript Infrastructure
-> TranscriptAir, Poseidon2Air, MerkleVerifyAir
-
-Tightly coupled through `Poseidon2PermuteBus` and `Poseidon2CompressBus`. TranscriptAir produces the Fiat-Shamir transcript (sends on `TranscriptBus`, consumed by `Poseidon2PermuteBus`). Poseidon2Air provides both permute and compress lookups. MerkleVerifyAir uses compress lookups and sends commitment verification results.
-
-```
-TranscriptAir --[Poseidon2PermuteBus]--> Poseidon2Air
-MerkleVerifyAir --[Poseidon2CompressBus]--> Poseidon2Air
-MerkleVerifyAir --[CommitmentsBus]--> (ProofShapeAir, WhirRoundAir)
-```
-
-### Group 2: Proof Shape & Range Check
-> ProofShapeAir, PublicValuesAir, RangeCheckerAir
-
-ProofShapeAir is the "data loader" - it populates many global data buses (`AirShapeBus`, `HyperdimBus`, `LiftedHeightsBus`, `CommitmentsBus`). PublicValuesAir handles public value observation. RangeCheckerAir provides the 8-bit range lookup table used by ProofShapeAir and PowerCheckerAir.
-
-```
-ProofShapeAir --[NumPublicValuesBus]--> PublicValuesAir
-ProofShapeAir --[RangeCheckerBus]--> RangeCheckerAir
-ProofShapeAir --[GkrModuleBus]--> (GkrInputAir)
-ProofShapeAir --[FractionFolderInputBus]--> (FractionsFolderAir)
-```
-
-### Group 3: Primitive Lookup Tables
-> PowerCheckerAir, ExpBitsLenAir
-
-Standalone lookup providers. PowerCheckerAir also uses `RangeCheckerBus`. Both are consumed by many AIRs across modules.
-
-```
-PowerCheckerAir --[RangeCheckerBus]--> RangeCheckerAir (Group 2)
-PowerCheckerAir provides: PowerCheckerBus (used by ExpressionClaimAir, ProofShapeAir)
-ExpBitsLenAir provides: ExpBitsLenBus (used by GkrInputAir, WhirRoundAir, SumcheckAir, WhirQueryAir, StackingClaimsAir), RightShiftBus (used by MerkleVerifyAir)
-```
-
-### Group 4: GKR Protocol
-> GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir
-
-Tightly coupled through 6 internal buses (`GkrLayerInputBus`, `GkrLayerOutputBus`, `GkrSumcheckInputBus`, `GkrSumcheckOutputBus`, `GkrSumcheckChallengeBus`, `GkrXiSamplerBus`). Externally: receives from `GkrModuleBus` (ProofShapeAir), sends to `BatchConstraintModuleBus` (FractionsFolderAir), and produces `XiRandomnessBus` challenges.
-
-```
-GkrInputAir --[GkrLayerInput/OutputBus]--> GkrLayerAir
-GkrLayerAir --[GkrSumcheckInput/Output/ChallengeBus]--> GkrLayerSumcheckAir
-GkrInputAir --[GkrXiSamplerBus]--> GkrXiSamplerAir
-All --[XiRandomnessBus]--> (EqNsAir, EqSharpUniAir)
-```
-
-### Group 5: Batch Constraint - Sumcheck Pipeline
-> FractionsFolderAir, UnivariateSumcheckAir, MultilinearSumcheckAir, ExpressionClaimAir
-
-The core sumcheck pipeline. FractionsFolderAir receives the GKR claim and kicks off the batched constraint sumcheck. UnivariateSumcheck handles the front-loaded univariate rounds (l_skip), MultilinearSumcheck handles remaining rounds. ExpressionClaimAir folds individual expression claims with the mu batching challenge.
-
-```
-FractionsFolderAir --[UnivariateSumcheckInputBus]--> UnivariateSumcheckAir
-FractionsFolderAir --[SumcheckClaimBus]--> UnivariateSumcheckAir / MultilinearSumcheckAir
-UnivariateSumcheckAir --[SumcheckClaimBus]--> MultilinearSumcheckAir
-ExpressionClaimAir <--[ExpressionClaimBus]-- (InteractionsFoldingAir, ConstraintsFoldingAir)
-All share: BatchConstraintConductorBus, ConstraintSumcheckRandomnessBus
-```
-
-### Group 6: Batch Constraint - Expression Evaluation
-> SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir
-
-SymbolicExpressionAir evaluates the constraint DAG and sends results to InteractionsFoldingAir and ConstraintsFoldingAir, which fold them into ExpressionClaimBus messages for ExpressionClaimAir (Group 5).
-
-```
-SymbolicExpressionAir --[InteractionsFoldingBus]--> InteractionsFoldingAir
-SymbolicExpressionAir --[ConstraintsFoldingBus]--> ConstraintsFoldingAir
-InteractionsFoldingAir --[ExpressionClaimBus]--> (ExpressionClaimAir)
-ConstraintsFoldingAir --[ExpressionClaimBus]--> (ExpressionClaimAir)
-SymbolicExpressionAir --[ColumnClaimsBus]--> (OpeningClaimsAir)
-```
-
-### Group 7: Batch Constraint - Eq Polynomials (Univariate)
-> EqUniAir, EqSharpUniAir, EqSharpUniReceiverAir, Eq3bAir
-
-Evaluate univariate equality polynomials needed for the batch constraint sumcheck. Connected through `EqZeroNBus`, `EqSharpUniBus`, and `BatchConstraintConductorBus`.
-
-```
-EqUniAir --[EqZeroNBus]--> EqSharpUniReceiverAir / EqNsAir
-EqSharpUniAir --[EqSharpUniBus]--> EqSharpUniReceiverAir
-Eq3bAir --[Eq3bBus]--> (InteractionsFoldingAir)
-All read from: BatchConstraintConductorBus, XiRandomnessBus
-```
-
-### Group 8: Batch Constraint - Eq Polynomials (Multivariate & Negative)
-> EqNsAir, EqNegAir
-
-EqNsAir evaluates multivariate eq polynomials. EqNegAir evaluates negative-hypercube eq polynomials. Cross-module connection: EqNegAir communicates with EqBaseAir (Stacking) through `EqNegBaseRandBus` and `EqNegResultBus`.
-
-```
-EqNsAir --[EqNOuterBus]--> (ExpressionClaimAir, ConstraintsFoldingAir)
-EqNsAir --[SelHypercubeBus]--> (SymbolicExpressionAir)
-EqNegAir --[EqNegBaseRandBus/EqNegResultBus]--> (EqBaseAir in Stacking)
-EqNegAir --[SelUniBus]--> (SymbolicExpressionAir)
-```
-
-### Group 9: Stacking - Claims & Opening
-> OpeningClaimsAir, UnivariateRoundAir, SumcheckRoundsAir, StackingClaimsAir
-
-The stacking protocol pipeline. OpeningClaimsAir receives from `StackingModuleBus` and produces column opening claims. UnivariateRoundAir and SumcheckRoundsAir perform the stacking sumcheck. StackingClaimsAir finalizes and sends to WHIR via `WhirModuleBus`.
-
-```
-OpeningClaimsAir --[ClaimCoefficientsBus]--> StackingClaimsAir
-OpeningClaimsAir --[SumcheckClaimsBus]--> UnivariateRoundAir / SumcheckRoundsAir / StackingClaimsAir
-UnivariateRoundAir --[SumcheckClaimsBus]--> SumcheckRoundsAir
-All share: StackingModuleTidxBus (sequencing)
-StackingClaimsAir --[WhirModuleBus]--> (WhirRoundAir)
-StackingClaimsAir --[WhirMuBus]--> (InitialOpenedValuesAir)
-```
-
-### Group 10: Stacking - Eq Helpers
-> EqBaseAir, EqBitsAir
-
-Support AIRs for stacking sumcheck equality evaluations. EqBaseAir computes base eq evaluations with rotation; EqBitsAir handles bit-decomposed eq evaluations.
-
-```
-EqBaseAir --[EqBaseBus]--> SumcheckRoundsAir (Group 9)
-EqBaseAir --[EqNegBaseRandBus/EqNegResultBus]--> EqNegAir (Group 8)
-EqBitsAir --[EqBitsLookupBus]--> OpeningClaimsAir (Group 9)
-Both use: EqRandValuesLookupBus, EqKernelLookupBus, ConstraintSumcheckRandomnessBus, WhirOpeningPointBus
-```
-
-### Group 11: WHIR - Protocol Control
-> WhirRoundAir, SumcheckAir (WHIR)
-
-WhirRoundAir is the top-level WHIR round controller (receives `WhirModuleBus`, handles commitments, dispatches sumcheck/query/final-poly tasks). SumcheckAir performs the WHIR sumcheck.
-
-```
-WhirRoundAir --[WhirSumcheckBus]--> SumcheckAir
-SumcheckAir --[WhirAlphaBus]--> (WhirFoldingAir, FinalPolyQueryEvalAir)
-SumcheckAir --[WhirEqAlphaUBus]--> (FinalPolyMleEvalAir)
-WhirRoundAir --[VerifyQueriesBus]--> (WhirQueryAir)
-WhirRoundAir --[WhirGammaBus]--> (FinalPolyQueryEvalAir)
-```
-
-### Group 12: WHIR - Query Verification
-> WhirQueryAir, InitialOpenedValuesAir, NonInitialOpenedValuesAir
-
-WhirQueryAir generates queries and dispatches them. InitialOpenedValuesAir handles first-round evaluations (uses Poseidon2 permute + Merkle). NonInitialOpenedValuesAir handles subsequent rounds (uses Poseidon2 compress + Merkle).
-
-```
-WhirQueryAir --[VerifyQueryBus]--> InitialOpenedValuesAir / NonInitialOpenedValuesAir
-InitialOpenedValuesAir --[WhirFoldingBus]--> (WhirFoldingAir)
-NonInitialOpenedValuesAir --[WhirFoldingBus]--> (WhirFoldingAir)
-InitialOpenedValuesAir --[Poseidon2PermuteBus]--> (Poseidon2Air)
-NonInitialOpenedValuesAir --[Poseidon2CompressBus]--> (Poseidon2Air)
-Both --[MerkleVerifyBus]--> (MerkleVerifyAir)
-```
-
-### Group 13: WHIR - Polynomial Folding & Final Poly
-> WhirFoldingAir, FinalPolyMleEvalAir, FinalPolyQueryEvalAir
-
-WhirFoldingAir builds the folding tree from opened values. FinalPolyMleEvalAir evaluates the final polynomial at the MLE point. FinalPolyQueryEvalAir evaluates it at query points.
-
-```
-WhirFoldingAir --[WhirFoldingBus]--> (InitialOpenedValuesAir, NonInitialOpenedValuesAir)
-WhirFoldingAir --[WhirAlphaBus]--> (SumcheckAir)
-FinalPolyMleEvalAir --[WhirFinalPolyBus]--> FinalPolyQueryEvalAir
-FinalPolyMleEvalAir --[FinalPolyFoldingBus]--> (self, internal tree)
-FinalPolyQueryEvalAir --[WhirQueryBus]--> (WhirRoundAir)
-FinalPolyQueryEvalAir --[WhirGammaBus]--> (WhirRoundAir)
-```
-
----
-
-## Cross-Group Bus Connections
-
-The following buses bridge between logical groups:
-
-| Bus | Producer (Group) | Consumer (Group) |
-|-----|-------------------|-------------------|
-| `TranscriptBus` | TranscriptAir (1) | Nearly all AIRs (observe/sample) |
-| `Poseidon2PermuteBus` | Poseidon2Air (1) | TranscriptAir (1), InitialOpenedValuesAir (12) |
-| `Poseidon2CompressBus` | Poseidon2Air (1) | MerkleVerifyAir (1), NonInitialOpenedValuesAir (12) |
-| `MerkleVerifyBus` | MerkleVerifyAir (1) | InitialOpenedValuesAir (12), NonInitialOpenedValuesAir (12) |
-| `CommitmentsBus` | ProofShapeAir (2) | MerkleVerifyAir (1), WhirRoundAir (11) |
-| `AirShapeBus` | ProofShapeAir (2) | SymbolicExpressionAir (6), InteractionsFoldingAir (6), ConstraintsFoldingAir (6), OpeningClaimsAir (9) |
-| `AirPresenceBus` | ProofShapeAir (2) | SymbolicExpressionAir (6) |
-| `Eq3bShapeBus` | ProofShapeAir (2) | Eq3bAir (7) |
-| `EqNsNLogupMaxBus` | ProofShapeAir (2) | EqNsAir (8) |
-| `ConstraintsFoldingInputBus` | ProofShapeAir (2) | ConstraintsFoldingAir (6) |
-| `InteractionsFoldingInputBus` | ProofShapeAir (2) | InteractionsFoldingAir (6) |
-| `HyperdimBus` | ProofShapeAir (2) | SymbolicExpressionAir (6), ExpressionClaimAir (5) |
-| `LiftedHeightsBus` | ProofShapeAir (2) | OpeningClaimsAir (9) |
-| `RangeCheckerBus` | RangeCheckerAir (2) | ProofShapeAir (2), PowerCheckerAir (3) |
-| `PowerCheckerBus` | PowerCheckerAir (3) | ProofShapeAir (2), ExpressionClaimAir (5) |
-| `ExpBitsLenBus` | ExpBitsLenAir (3) | GkrInputAir (4), StackingClaimsAir (9), WhirRoundAir (11), SumcheckAir (11), WhirQueryAir (12) |
-| `RightShiftBus` | ExpBitsLenAir (3) | MerkleVerifyAir (1) |
-| `GkrModuleBus` | ProofShapeAir (2) | GkrInputAir (4) |
-| `BatchConstraintModuleBus` | GkrInputAir (4) | FractionsFolderAir (5) |
-| `XiRandomnessBus` | GKR AIRs (4) | EqNsAir (8), EqSharpUniAir (7) |
-| `StackingModuleBus` | UnivariateSumcheck/MultilinearSumcheck (5) | OpeningClaimsAir (9) |
-| `ConstraintSumcheckRandomnessBus` | Sumcheck AIRs (5) | SumcheckRoundsAir (9), EqBaseAir (10) |
-| `ColumnClaimsBus` | OpeningClaimsAir (9) | SymbolicExpressionAir (6) |
-| `PublicValuesBus` | PublicValuesAir (2) | SymbolicExpressionAir (6) |
-| `StackingIndicesBus` | StackingClaimsAir (9) | InitialOpenedValuesAir (12) |
-| `WhirModuleBus` | StackingClaimsAir (9) | WhirRoundAir (11) |
-| `WhirMuBus` | StackingClaimsAir (9) | InitialOpenedValuesAir (12) |
-| `WhirOpeningPointBus` | SumcheckRoundsAir/EqBaseAir (9/10) | SumcheckAir-WHIR (11), FinalPolyMleEvalAir (13) |
-| `EqNegBaseRandBus` | EqBaseAir (10) | EqNegAir (8) |
-| `EqNegResultBus` | EqNegAir (8) | EqBaseAir (10) |
-| `ExpressionClaimBus` | InteractionsFolding/ConstraintsFolding (6) | ExpressionClaimAir (5) |
-| `FractionFolderInputBus` | ProofShapeAir (2) | FractionsFolderAir (5) |
-| `ExpressionClaimNMaxBus` | ProofShapeAir (2) | ExpressionClaimAir (5) |
-| `NLiftBus` | ProofShapeAir (2) | ConstraintsFoldingAir (6) |
-| `WhirAlphaBus` | SumcheckAir-WHIR (11) | WhirFoldingAir (13), FinalPolyQueryEvalAir (13) |
-| `WhirFoldingBus` | WhirFoldingAir (13) | InitialOpenedValuesAir (12), NonInitialOpenedValuesAir (12) |
-| `VerifyQueryBus` | WhirQueryAir (12) | InitialOpenedValuesAir (12), NonInitialOpenedValuesAir (12) |
+| Bus | Producer AIR(s) | Consumer AIR(s) |
+|-----|-----------------|-----------------|
+| `TranscriptBus` | `TranscriptAir` | Nearly all protocol AIRs (`observe` / `sample`) |
+| `Poseidon2PermuteBus` | `Poseidon2Air` | `TranscriptAir`, `InitialOpenedValuesAir` |
+| `Poseidon2CompressBus` | `Poseidon2Air` | `MerkleVerifyAir`, `NonInitialOpenedValuesAir` |
+| `MerkleVerifyBus` | `InitialOpenedValuesAir`, `NonInitialOpenedValuesAir`, `MerkleVerifyAir` | `MerkleVerifyAir` |
+| `CommitmentsBus` | `ProofShapeAir`, `WhirRoundAir` | `MerkleVerifyAir` |
+| `AirShapeBus` | `ProofShapeAir` | `SymbolicExpressionAir`, `InteractionsFoldingAir`, `ConstraintsFoldingAir`, `OpeningClaimsAir` |
+| `AirPresenceBus` | `ProofShapeAir` | `SymbolicExpressionAir` |
+| `Eq3bShapeBus` | `ProofShapeAir` | `Eq3bAir` |
+| `EqNsNLogupMaxBus` | `ProofShapeAir` | `EqNsAir` |
+| `ConstraintsFoldingInputBus` | `GkrInputAir` | `ConstraintsFoldingAir` |
+| `InteractionsFoldingInputBus` | `GkrInputAir` | `InteractionsFoldingAir` |
+| `HyperdimBus` | `ProofShapeAir` | `SymbolicExpressionAir`, `ExpressionClaimAir` |
+| `LiftedHeightsBus` | `ProofShapeAir` | `OpeningClaimsAir` |
+| `RangeCheckerBus` | `RangeCheckerAir` | `ProofShapeAir`, `PowerCheckerAir` |
+| `PowerCheckerBus` | `PowerCheckerAir` | `ProofShapeAir`, `ExpressionClaimAir` |
+| `ExpBitsLenBus` | `ExpBitsLenAir` | `GkrInputAir`, `StackingClaimsAir`, `WhirRoundAir`, `SumcheckAir` (WHIR), `WhirQueryAir` |
+| `RightShiftBus` | `ExpBitsLenAir` | `MerkleVerifyAir` |
+| `GkrModuleBus` | `ProofShapeAir` | `GkrInputAir` |
+| `BatchConstraintModuleBus` | `GkrInputAir` | `FractionsFolderAir` |
+| `XiRandomnessBus` | `GkrLayerAir`, `GkrLayerSumcheckAir`, `GkrXiSamplerAir` | `EqNsAir`, `EqSharpUniAir` |
+| `StackingModuleBus` | `UnivariateSumcheckAir`, `MultilinearSumcheckAir` | `OpeningClaimsAir`, `MultilinearSumcheckAir` |
+| `ConstraintSumcheckRandomnessBus` | `UnivariateSumcheckAir`, `MultilinearSumcheckAir` | `SumcheckRoundsAir`, `EqBaseAir` |
+| `ColumnClaimsBus` | `OpeningClaimsAir` | `SymbolicExpressionAir` |
+| `PublicValuesBus` | `PublicValuesAir` | `SymbolicExpressionAir` |
+| `StackingIndicesBus` | `StackingClaimsAir` | `InitialOpenedValuesAir` |
+| `WhirModuleBus` | `StackingClaimsAir` | `WhirRoundAir` |
+| `WhirMuBus` | `StackingClaimsAir` | `InitialOpenedValuesAir` |
+| `WhirOpeningPointBus` | `SumcheckRoundsAir`, `EqBaseAir` | `SumcheckAir` (WHIR), `FinalPolyMleEvalAir` |
+| `EqNegBaseRandBus` | `EqBaseAir` | `EqNegAir` |
+| `EqNegResultBus` | `EqNegAir` | `EqBaseAir` |
+| `ExpressionClaimBus` | `InteractionsFoldingAir`, `ConstraintsFoldingAir` | `ExpressionClaimAir` |
+| `FractionFolderInputBus` | `ProofShapeAir` | `FractionsFolderAir` |
+| `ExpressionClaimNMaxBus` | `ProofShapeAir` | `ExpressionClaimAir` |
+| `NLiftBus` | `ProofShapeAir` | `ConstraintsFoldingAir` |
+| `WhirAlphaBus` | `SumcheckAir` (WHIR) | `WhirFoldingAir`, `FinalPolyQueryEvalAir` |
+| `WhirFoldingBus` | `InitialOpenedValuesAir`, `NonInitialOpenedValuesAir`, `WhirFoldingAir` | `WhirFoldingAir` |
+| `VerifyQueryBus` | `WhirQueryAir` | `InitialOpenedValuesAir`, `NonInitialOpenedValuesAir` |
 
 ---
 
 ## Summary
 
-| Module | AIR Count | Internal Buses | Key External Interfaces |
-|--------|-----------|---------------|------------------------|
-| BatchConstraint | 13 | 11 | Receives: BatchConstraintModuleBus, XiRandomnessBus. Sends: StackingModuleBus, ConstraintSumcheckRandomnessBus |
-| Transcript | 3 | 0 | Provides: TranscriptBus, Poseidon2 buses, MerkleVerifyBus |
-| ProofShape | 3 | 3 | Provides: AirShapeBus, HyperdimBus, CommitmentsBus, etc. Sends: GkrModuleBus |
-| GKR | 4 | 6 | Receives: GkrModuleBus. Sends: BatchConstraintModuleBus, XiRandomnessBus |
-| Stacking | 6 | 8 | Receives: StackingModuleBus. Sends: WhirModuleBus, WhirMuBus, ColumnClaimsBus |
-| WHIR | 8 | 12 | Receives: WhirModuleBus. Uses: MerkleVerifyBus, Poseidon2 buses |
-| System | 2 | 0 | Provides: PowerCheckerBus, ExpBitsLenBus, RightShiftBus |
+| Module / Category | AIR Count | Internal Buses | Key External Interfaces |
+|-------------------|-----------|---------------|------------------------|
+| BatchConstraint | 13 | 11 | Receives: `BatchConstraintModuleBus`, `XiRandomnessBus`. Sends: `StackingModuleBus`, `ConstraintSumcheckRandomnessBus` |
+| Transcript | 3 | 0 | Provides: `TranscriptBus`, Poseidon2 buses, `MerkleVerifyBus` |
+| ProofShape | 3 | 3 | Provides: `AirShapeBus`, `HyperdimBus`, `CommitmentsBus`, etc. Sends: `GkrModuleBus` |
+| GKR | 4 | 6 | Receives: `GkrModuleBus`. Sends: `BatchConstraintModuleBus`, `XiRandomnessBus` |
+| Stacking | 6 | 8 | Receives: `StackingModuleBus`. Sends: `WhirModuleBus`, `WhirMuBus`, `ColumnClaimsBus` |
+| WHIR | 8 | 12 | Receives: `WhirModuleBus`. Uses: `MerkleVerifyBus`, Poseidon2 buses |
+| Shared Lookup Providers | 2 | 0 | Provides: `PowerCheckerBus`, `ExpBitsLenBus`, `RightShiftBus` |
 | **Total** | **39** | **40** | |
-
