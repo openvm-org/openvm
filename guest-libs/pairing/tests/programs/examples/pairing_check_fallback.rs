@@ -61,30 +61,37 @@ mod bn254 {
             P: &[AffinePoint<<Self as PairingCheck>::Fp>],
             Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
         ) -> Option<Result<(), PairingCheckError>> {
-            let (c, s) = Self::pairing_check_hint(P, Q);
-
-            // f * s = c^{q - x}
-            // f * s = c^q * c^-x
-            // f * c^x * c^-q * s = 1,
-            //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
-            //   and the curve seed x = -0xd201000000010000
-            //   the miller loop computation includes a conjugation at the end because the value of
-            // the   seed is negative, so we need to conjugate the miller loop input c
-            // as c'. We then substitute   y = -x to get c^-y and finally compute c'^-y
-            // as input to the miller loop: f * c'^-y * c^-q * s = 1
-            let c_q = FieldExtension::frobenius_map(&c, 1);
-            let c_conj = c.conjugate();
-            if c_conj == Fp12::ZERO {
+            let (c, u) = Self::pairing_check_hint(P, Q);
+            if c == Fp12::ZERO {
                 return None;
             }
-            let c_conj_inv = Fp12::ONE.div_unsafe(&c_conj);
+            // Hint is only honest if `u` lies in proper subfield Fp6. Matches <https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bn254/e12_pairing.go#L450>
+            // The Fp6 representation is `fp6_c0 = [s.c[0], s.c[2], s.c[4]]` and `fp6_c1 = [s.c[1],
+            // s.c[3], s.c[5]]`.
+            for i in [1, 3, 5] {
+                if u.c[i] != Fp2::ZERO {
+                    return None;
+                }
+            }
+            let c_inv = Fp12::ONE.div_unsafe(&c);
 
-            // fc = f_{Miller,x,Q}(P) * c^{x}
-            // where
-            //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
-            let fc = Bn254::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
+            // We follow Theorem 3 of https://eprint.iacr.org/2024/640.pdf to check that the pairing equals 1
+            // By the theorem, it suffices to provide c and u such that f * u == c^λ.
+            // Since λ = 6x + 2 + q^3 - q^2 + q, we will check the equivalent condition:
+            // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+            // This is because we can compute f * c^-{6x+2} by embedding the c^-{6x+2} computation
+            // in the miller loop.
 
-            if fc * s == c_q {
+            // c_mul = c^-{q^3 - q^2 + q}
+            let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+            let c_q2 = FieldExtension::frobenius_map(&c, 2);
+            let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+            let c_mul = c_q3_inv * c_q2 * c_q_inv;
+
+            // Pass c inverse into the miller loop so that we compute fc == f * c^-{6x + 2}
+            let fc = Bn254::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+
+            if fc * c_mul * u == Fp12::ONE {
                 Some(Ok(()))
             } else {
                 None
@@ -172,26 +179,33 @@ mod bls12_381 {
             Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
         ) -> Option<Result<(), PairingCheckError>> {
             let (c, s) = Self::pairing_check_hint(P, Q);
+            // Hint is only honest if `s` lies in proper subfield Fp6. Matches <https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/e12_pairing.go#L413>
+            // The Fp6 representation is `fp6_c0 = [s.c[0], s.c[2], s.c[4]]` and `fp6_c1 = [s.c[1],
+            // s.c[3], s.c[5]]`.
+            for i in [1, 3, 5] {
+                if s.c[i] != Fp2::ZERO {
+                    return None;
+                }
+            }
 
-            // f * s = c^{q - x}
-            // f * s = c^q * c^-x
-            // f * c^x * c^-q * s = 1,
-            //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
-            //   and the curve seed x = -0xd201000000010000
-            //   the miller loop computation includes a conjugation at the end because the value of
-            // the   seed is negative, so we need to conjugate the miller loop input c
-            // as c'. We then substitute   y = -x to get c^-y and finally compute c'^-y
-            // as input to the miller loop: f * c'^-y * c^-q * s = 1
+            // The gnark implementation checks that f * s = c^{q - x} where x is the curve seed.
+            // We check an equivalent condition: f * c^x * s = c^q.
+            // This is because we can compute f * c^x by embedding the c^x computation in the miller
+            // loop.
+
+            // We compute c^q before c is consumed by conjugate() below
             let c_q = FieldExtension::frobenius_map(&c, 1);
+
+            // Since the Bls12_381 curve has a negative seed, the miller loop for Bls12_381 is
+            // computed as f_{Miller,x,Q}(P) = conjugate( f_{Miller,-x,Q}(P) * c^{-x} ).
+            // We will pass in the conjugate inverse of c into the miller loop so that we compute
+            // fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} )  (where c' is the conjugate inverse of
+            // c)    = f_{Miller,x,Q}(P) * c^x
             let c_conj = c.conjugate();
             if c_conj == Fp12::ZERO {
                 return None;
             }
             let c_conj_inv = Fp12::ONE.div_unsafe(&c_conj);
-
-            // fc = f_{Miller,x,Q}(P) * c^{x}
-            // where
-            //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
             let fc = Bls12_381::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
             if fc * s == c_q {

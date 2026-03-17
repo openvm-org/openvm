@@ -322,6 +322,14 @@ impl Bls12_381 {
         Q: &[AffinePoint<<Self as PairingCheck>::Fp2>],
     ) -> Option<Result<(), PairingCheckError>> {
         let (c, s) = Self::pairing_check_hint(P, Q);
+        // Hint is only honest if `s` lies in proper subfield Fp6. Matches <https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/e12_pairing.go#L413>
+        // The Fp6 representation is `fp6_c0 = [s.c[0], s.c[2], s.c[4]]` and `fp6_c1 = [s.c[1],
+        // s.c[3], s.c[5]]`.
+        for i in [1, 3, 5] {
+            if s.c[i] != Fp2::ZERO {
+                return None;
+            }
+        }
 
         // The gnark implementation checks that f * s = c^{q - x} where x is the curve seed.
         // We check an equivalent condition: f * c^x * s = c^q.

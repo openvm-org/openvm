@@ -356,6 +356,14 @@ impl Bn254 {
         if c == Fp12::ZERO {
             return None;
         }
+        // Hint is only honest if `u` lies in proper subfield Fp6. Matches <https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bn254/e12_pairing.go#L450>
+        // The Fp6 representation is `fp6_c0 = [s.c[0], s.c[2], s.c[4]]` and `fp6_c1 = [s.c[1],
+        // s.c[3], s.c[5]]`.
+        for i in [1, 3, 5] {
+            if u.c[i] != Fp2::ZERO {
+                return None;
+            }
+        }
         let c_inv = Fp12::ONE.div_unsafe(&c);
 
         // We follow Theorem 3 of https://eprint.iacr.org/2024/640.pdf to check that the pairing equals 1

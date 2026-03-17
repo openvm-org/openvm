@@ -1,6 +1,6 @@
 use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::bn256::{
-    Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
+    Fq, Fq12, Fq2, Fq6, Fr, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
     FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2,
 };
 use num_bigint::BigUint;
@@ -285,6 +285,33 @@ fn test_bn254_pairing_check_hint_host() {
 
     assert_eq!(c, c_cmp);
     assert_eq!(u, u_cmp);
+}
+
+#[allow(non_snake_case)]
+#[test]
+fn test_bad_hint_fails_subfield_host() {
+    let S = G1Affine::generator();
+    let Q = G2Affine::generator();
+
+    let S_mul = [
+        G1Affine::from(S * Fr::from(1)),
+        G1Affine::from(S * Fr::from(2)),
+    ];
+    let Q_mul = [
+        G2Affine::from(Q * Fr::from(2)),
+        G2Affine::from(Q * Fr::from(1)),
+    ];
+
+    let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+    let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+    // Pairing check should **not** pass for this
+    // We check that c = 1, u = f^{-1} will not pass the subfield check
+    let f = openvm_pairing_guest::halo2curves_shims::bn254::Bn254::multi_miller_loop(&s, &q);
+    let u_halo2 = f.invert().unwrap();
+    let u = convert_bn254_halo2_fq12_to_fp12(u_halo2);
+    let subfield_check = u.c[1] == Fp2::ZERO && u.c[3] == Fp2::ZERO && u.c[5] == Fp2::ZERO;
+    assert_eq!(subfield_check, bool::from(u_halo2.c1.is_zero()));
+    assert!(!subfield_check);
 }
 
 #[test]
