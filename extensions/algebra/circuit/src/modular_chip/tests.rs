@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
+    Arena, PreflightExecutor, DEFAULT_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -304,7 +304,7 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_32limb_small() {
-        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_addsub_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -313,12 +313,12 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_32limb_secp256k1() {
-        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_addsub_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             secp256k1_coord_prime(),
             50,
         );
-        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_addsub_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             4,
             secp256k1_scalar_prime(),
             50,
@@ -327,7 +327,7 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_32limb_bn254() {
-        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_addsub_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BN254_MODULUS.clone(),
             50,
@@ -336,7 +336,7 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_48limb_bls12_381() {
-        run_addsub_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_addsub_test::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             0,
             BLS12_381_MODULUS.clone(),
             50,
@@ -400,27 +400,27 @@ mod addsub_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn cuda_test_modular_addsub() {
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             secp256k1_coord_prime(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             4,
             secp256k1_scalar_prime(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BN254_MODULUS.clone(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             0,
             BLS12_381_MODULUS.clone(),
             50,
@@ -677,7 +677,7 @@ mod muldiv_tests {
 
     #[test]
     fn test_modular_muldiv_32limb_small() {
-        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_test_muldiv::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -686,12 +686,12 @@ mod muldiv_tests {
 
     #[test]
     fn test_modular_muldiv_32limb_secp256k1() {
-        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_test_muldiv::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             secp256k1_coord_prime(),
             50,
         );
-        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_test_muldiv::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             4,
             secp256k1_scalar_prime(),
             50,
@@ -700,7 +700,7 @@ mod muldiv_tests {
 
     #[test]
     fn test_modular_muldiv_32limb_bn254() {
-        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_test_muldiv::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BN254_MODULUS.clone(),
             50,
@@ -709,7 +709,7 @@ mod muldiv_tests {
 
     #[test]
     fn test_modular_muldiv_48limb_bls12_381() {
-        run_test_muldiv::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_test_muldiv::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             0,
             BLS12_381_MODULUS.clone(),
             50,
@@ -773,27 +773,27 @@ mod muldiv_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn cuda_test_modular_muldiv() {
-        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
         );
-        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             secp256k1_coord_prime(),
             50,
         );
-        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             4,
             secp256k1_scalar_prime(),
             50,
         );
-        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BN254_MODULUS.clone(),
             50,
         );
-        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_cuda_muldiv_test_with_config::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             0,
             BLS12_381_MODULUS.clone(),
             50,
@@ -981,7 +981,7 @@ mod is_equal_tests {
 
     #[test]
     fn test_modular_is_equal_32limb() {
-        test_is_equal::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        test_is_equal::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             17,
             secp256k1_coord_prime(),
             100,
@@ -990,7 +990,7 @@ mod is_equal_tests {
 
     #[test]
     fn test_modular_is_equal_48limb() {
-        test_is_equal::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        test_is_equal::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             17,
             BLS12_381_MODULUS.clone(),
             100,
@@ -1142,17 +1142,17 @@ mod is_equal_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn cuda_test_modular_is_equal() {
-        run_cuda_is_equal_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_is_equal_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             17,
             secp256k1_coord_prime(),
             50,
         );
-        run_cuda_is_equal_test_with_config::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_is_equal_test_with_config::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             17,
             secp256k1_scalar_prime(),
             50,
         );
-        run_cuda_is_equal_test_with_config::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_cuda_is_equal_test_with_config::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             17,
             BLS12_381_MODULUS.clone(),
             50,
@@ -1255,19 +1255,19 @@ mod is_equal_tests {
 
     #[test]
     fn negative_test_modular_is_equal_32limb() {
-        run_negative_is_equal_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             17,
             1,
         );
 
-        run_negative_is_equal_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             17,
             2,
         );
 
-        run_negative_is_equal_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             17,
             3,
@@ -1276,19 +1276,19 @@ mod is_equal_tests {
 
     #[test]
     fn negative_test_modular_is_equal_48limb() {
-        run_negative_is_equal_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             BLS12_381_MODULUS.clone(),
             17,
             1,
         );
 
-        run_negative_is_equal_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             BLS12_381_MODULUS.clone(),
             17,
             2,
         );
 
-        run_negative_is_equal_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
             BLS12_381_MODULUS.clone(),
             17,
             3,
