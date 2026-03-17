@@ -41,7 +41,7 @@ pub fn deferred_compute_raw<const DEFERRAL_IDX: u16>(
     output_key_ptr: *mut u8,
     input_commit_ptr: *const u8,
 ) {
-    assert!(DEFERRAL_IDX < MAX_DEF_CIRCUITS);
+    const { assert!(DEFERRAL_IDX < MAX_DEF_CIRCUITS) };
 
     #[cfg(target_os = "zkvm")]
     deferral_call!(output_key_ptr, input_commit_ptr, DEFERRAL_IDX);
@@ -57,7 +57,7 @@ pub fn get_deferred_output_raw<const DEFERRAL_IDX: u16>(
     output_ptr: *mut u8,
     output_key_ptr: *const u8,
 ) {
-    assert!(DEFERRAL_IDX < MAX_DEF_CIRCUITS);
+    const { assert!(DEFERRAL_IDX < MAX_DEF_CIRCUITS) };
 
     #[cfg(target_os = "zkvm")]
     deferral_output!(output_ptr, output_key_ptr, DEFERRAL_IDX);
