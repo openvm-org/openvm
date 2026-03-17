@@ -71,14 +71,13 @@ pub fn generate_proving_ctx(
             cols.air_idx = F::from_usize(air_idx);
             cols.cached_idx = F::from_usize(cached_idx);
             cols.current_commit = current_commit;
-            cols.capacity = capacity;
 
             if child_is_agg {
                 cols.res_left = [F::ZERO; DIGEST_SIZE];
                 cols.res_right = [F::ZERO; DIGEST_SIZE];
             } else {
                 let (res_left, res_right) =
-                    poseidon2_compress_with_capacity(cols.current_commit, cols.capacity);
+                    poseidon2_compress_with_capacity(cols.current_commit, capacity);
                 cols.res_left = res_left;
                 cols.res_right = res_right;
                 capacity = res_right;

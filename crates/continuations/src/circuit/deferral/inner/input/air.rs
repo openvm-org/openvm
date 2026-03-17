@@ -1,9 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    SubAir,
-};
+use openvm_circuit_primitives::{utils::not, SubAir};
 use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
@@ -11,7 +8,6 @@ use openvm_recursion_circuit::{
     },
     prelude::DIGEST_SIZE,
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::assert_zeros,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -41,7 +37,6 @@ pub struct InputCommitCols<F> {
     pub air_idx: F,
     pub cached_idx: F,
     pub current_commit: [F; DIGEST_SIZE],
-    pub capacity: [F; DIGEST_SIZE],
 
     pub res_left: [F; DIGEST_SIZE],
     pub res_right: [F; DIGEST_SIZE],
@@ -143,22 +138,30 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * should be all zeros. On subsequent rows, the capacity should match the res_right
          * from the previous row.
          */
-        let is_transition = next.is_valid - next.is_first;
+        let is_transition =
+            NestedForLoopSubAir::<1>::local_is_transition(next.is_valid, next.is_first);
+        let is_last =
+            NestedForLoopSubAir::<1>::local_is_last(local.is_valid, next.is_valid, next.is_first);
 
-        assert_zeros(&mut builder.when(local.is_first), local.capacity);
-        assert_array_eq(
-            &mut builder.when(is_leaf.clone() * is_transition.clone()),
-            local.res_right,
-            next.capacity,
+        self.poseidon2_bus.lookup_key(
+            builder,
+            Poseidon2PermuteMessage {
+                input: digests_to_poseidon2_input(
+                    local.current_commit.map(Into::into),
+                    [AB::Expr::ZERO; _],
+                ),
+                output: digests_to_poseidon2_input(local.res_left, local.res_right).map(Into::into),
+            },
+            local.is_first * is_leaf.clone(),
         );
 
         self.poseidon2_bus.lookup_key(
             builder,
             Poseidon2PermuteMessage {
-                input: digests_to_poseidon2_input(local.current_commit, local.capacity),
-                output: digests_to_poseidon2_input(local.res_left, local.res_right),
+                input: digests_to_poseidon2_input(next.current_commit, local.res_right),
+                output: digests_to_poseidon2_input(next.res_left, next.res_right),
             },
-            local.is_valid * is_leaf.clone(),
+            is_transition * is_leaf.clone(),
         );
 
         /*
@@ -173,7 +176,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                     is_internal * local.current_commit[i] + is_leaf.clone() * local.res_left[i]
                 }),
             },
-            local.is_valid * not::<AB::Expr>(is_transition),
+            is_last,
         );
     }
 }
