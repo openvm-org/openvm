@@ -256,6 +256,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             OnionResultMessage {
                 input_onion: local.input_onion,
                 output_onion: local.output_onion,
+                num_elements: local.def_pvs.num_def_circuit_proofs,
             },
             AB::F::ONE,
         );

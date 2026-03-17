@@ -131,6 +131,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             OnionResultMessage {
                 input_onion: next.input_onion,
                 output_onion: next.output_onion,
+                num_elements: next.row_idx,
             },
             local.is_valid * not(next.is_valid),
         );
