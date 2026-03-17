@@ -198,7 +198,6 @@ p3-merkle-tree = { version = "=0.4.1", default-features = false }
 p3-poseidon2 = { version = "=0.4.1", default-features = false }
 p3-poseidon2-air = { version = "=0.4.1", default-features = false }
 p3-symmetric = { version = "=0.4.1", default-features = false }
-p3-util = { version = "=0.4.1", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
@@ -245,7 +244,6 @@ tokio = "1" # >=1.0.0 to allow downstream flexibility
 abi_stable = "0.11.3"
 bytesize = "2.0"
 zstd = { version = "0.13", default-features = false }
-glob = "0.3.2"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
