@@ -365,7 +365,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
 fn aggregate_deferral_layer(
     prover: &DeferralInnerProver,
     proofs: &[Proof<SC>],
-    child_is_def: bool,
+    child_is_agg: bool,
     child_merkle_depth: usize,
 ) -> Result<Vec<Proof<SC>>> {
     assert!(!proofs.is_empty(), "proof layer must be non-empty");
@@ -376,7 +376,7 @@ fn aggregate_deferral_layer(
         Some(child_merkle_depth)
     };
     for chunk in proofs.chunks(2) {
-        let child_vk_kind = if child_is_def {
+        let child_vk_kind = if child_is_agg {
             DeferralChildVkKind::DeferralAggregation
         } else {
             DeferralChildVkKind::DeferralCircuit
@@ -457,14 +457,17 @@ pub(in crate::tests) fn expected_deferral_leaf_io_commit(
     let def_pvs: &DeferralCircuitPvs<F> = def_proof.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
         .borrow();
-    let folded_input_commit = def_proof
-        .trace_vdata
-        .iter()
+    let commit_values = std::iter::once(def_pvs.input_commit)
+        .chain(
+            def_proof
+                .trace_vdata
+                .iter()
+                .flatten()
+                .flat_map(|vdata| vdata.cached_commitments.iter().copied()),
+        )
         .flatten()
-        .flat_map(|vdata| vdata.cached_commitments.iter().copied())
-        .fold(def_pvs.input_commit, |acc, cached_commit| {
-            poseidon2_compress_with_capacity(acc, cached_commit).0
-        });
+        .collect_vec();
+    let folded_input_commit = poseidon2_hash_slice_with_states(&commit_values).0;
     (folded_input_commit, def_pvs.output_commit)
 }
 

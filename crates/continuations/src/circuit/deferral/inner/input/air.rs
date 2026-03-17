@@ -1,19 +1,20 @@
-use std::borrow::Borrow;
+use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::{utils::not, SubAir};
 use openvm_recursion_circuit::{
     bus::{
-        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+        CachedCommitBus, CachedCommitBusMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
         PublicValuesBus, PublicValuesBusMessage,
     },
     prelude::DIGEST_SIZE,
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing};
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 
 use crate::{
@@ -27,23 +28,23 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct InputCommitCols<F> {
-    // 1 if current_commit and cached_commit need to be hashed, 2 if we can
-    // send the current_commit, 0 if invalid
-    pub state: F,
+    pub is_valid: F,
     pub is_first: F,
 
     pub proof_idx: F,
     pub has_verifier_pvs: F,
-    pub current_commit: [F; DIGEST_SIZE],
 
     pub air_idx: F,
     pub cached_idx: F,
-    pub cached_commit: [F; DIGEST_SIZE],
+    pub current_commit: [F; DIGEST_SIZE],
+
+    pub res_left: [F; DIGEST_SIZE],
+    pub res_right: [F; DIGEST_SIZE],
 }
 
 pub struct InputCommitAir {
     pub public_values_bus: PublicValuesBus,
-    pub poseidon2_bus: Poseidon2CompressBus,
+    pub poseidon2_bus: Poseidon2PermuteBus,
     pub cached_commit_bus: CachedCommitBus,
     pub input_or_merkle_commit_bus: InputOrMerkleCommitBus,
 }
@@ -66,46 +67,34 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         let local: &InputCommitCols<AB::Var> = (*local).borrow();
         let next: &InputCommitCols<AB::Var> = (*next).borrow();
 
-        /*
-         * Constrain that state is correctly set. The first row must be valid (i.e. have state
-         * be 1 or 2), and all valid rows should be at the beginning. Note that proof_idx is
-         * implicitly constrained in DeferralAggPvsAir, which receives one InputOrMerkleCommitBus
-         * message per proof.
-         */
-        builder.assert_tern(local.state);
-        builder
-            .when_first_row()
-            .assert_bool(local.state - AB::Expr::ONE);
-        builder
-            .when_transition()
-            .when_ne(local.state, AB::Expr::ONE)
-            .when_ne(local.state, AB::Expr::TWO)
-            .assert_zero(next.state);
-
-        let is_compress = local.state * (AB::Expr::TWO - local.state);
-        builder
-            .when(is_compress.clone())
-            .assert_bool(next.state - AB::Expr::ONE);
-        builder
-            .when(is_compress.clone())
-            .assert_eq(local.proof_idx, next.proof_idx);
+        NestedForLoopSubAir::<1> {}.eval(
+            builder,
+            (
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first],
+                }
+                .map_into(),
+            ),
+        );
 
         /*
-         * Constrain is_first to be 1 on the first row, and 1 every time a row switches to a new
-         * proof_idx. Also constrain that if has_verifier_pvs is 1, all rows are send rows.
+         * Constrain that has_verifier_pvs is consistent over all valid rows.
          */
-        builder.assert_bool(local.is_first);
-        builder.when_first_row().assert_one(local.is_first);
-        builder
-            .when_ne(local.proof_idx, next.proof_idx)
-            .when(next.state)
-            .assert_one(next.is_first);
-
         builder.assert_bool(local.has_verifier_pvs);
-        builder.assert_eq(local.has_verifier_pvs, next.has_verifier_pvs);
         builder
-            .when(local.has_verifier_pvs)
-            .assert_eq(local.state, AB::Expr::TWO);
+            .when(local.is_valid * next.is_valid)
+            .assert_eq(local.has_verifier_pvs, next.has_verifier_pvs);
+        builder
+            .when(local.is_valid * local.has_verifier_pvs)
+            .assert_one(local.is_first);
 
         /*
          * Read the input commit from public values on the first row for each proof. This is the
@@ -114,7 +103,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          */
         let is_leaf = not(local.has_verifier_pvs);
         let is_internal = local.has_verifier_pvs;
-        let air_idx = is_leaf * AB::Expr::from_usize(DEF_CIRCUIT_PVS_AIR_ID)
+        let air_idx = is_leaf.clone() * AB::Expr::from_usize(DEF_CIRCUIT_PVS_AIR_ID)
             + is_internal * AB::Expr::from_usize(DEF_AGG_PVS_AIR_ID);
 
         for (pv_idx, value) in local.current_commit.iter().enumerate() {
@@ -131,8 +120,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         }
 
         /*
-         * Receive cached trace commits and hash them with current_commit. We should only
-         * do this if state is 1.
+         * Receive cached trace commits and fold them into the sponge on all non-first rows.
          */
         self.cached_commit_bus.receive(
             builder,
@@ -140,31 +128,55 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             CachedCommitBusMessage {
                 air_idx: local.air_idx,
                 cached_idx: local.cached_idx,
-                cached_commit: local.cached_commit,
+                cached_commit: local.current_commit,
             },
-            is_compress.clone(),
+            is_leaf.clone() * (local.is_valid - local.is_first),
+        );
+
+        /*
+         * Fold the received current_commit into the sponge. On the first row, the capacity
+         * should be all zeros. On subsequent rows, the capacity should match the res_right
+         * from the previous row.
+         */
+        let is_transition =
+            NestedForLoopSubAir::<1>::local_is_transition(next.is_valid, next.is_first);
+        let is_last =
+            NestedForLoopSubAir::<1>::local_is_last(local.is_valid, next.is_valid, next.is_first);
+
+        self.poseidon2_bus.lookup_key(
+            builder,
+            Poseidon2PermuteMessage {
+                input: digests_to_poseidon2_input(
+                    local.current_commit.map(Into::into),
+                    [AB::Expr::ZERO; _],
+                ),
+                output: digests_to_poseidon2_input(local.res_left, local.res_right).map(Into::into),
+            },
+            local.is_first * is_leaf.clone(),
         );
 
         self.poseidon2_bus.lookup_key(
             builder,
-            Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(local.current_commit, local.cached_commit),
-                output: next.current_commit,
+            Poseidon2PermuteMessage {
+                input: digests_to_poseidon2_input(next.current_commit, local.res_right),
+                output: digests_to_poseidon2_input(next.res_left, next.res_right),
             },
-            is_compress,
+            is_transition * is_leaf.clone(),
         );
 
         /*
-         * Finally, when state is 2 we want to send current_commit.
+         * Finally, on the last row for this proof we send the input commit.
          */
         self.input_or_merkle_commit_bus.send(
             builder,
             local.proof_idx,
             InputOrMerkleCommitMessage {
-                has_verifier_pvs: local.has_verifier_pvs,
-                commit: local.current_commit,
+                has_verifier_pvs: local.has_verifier_pvs.into(),
+                commit: from_fn(|i| {
+                    is_internal * local.current_commit[i] + is_leaf.clone() * local.res_left[i]
+                }),
             },
-            local.state * (local.state - AB::Expr::ONE) * AB::F::TWO.inverse(),
+            is_last,
         );
     }
 }
