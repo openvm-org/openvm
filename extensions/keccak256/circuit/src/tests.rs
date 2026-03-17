@@ -1,13 +1,17 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use hex::FromHex;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_pointer, TestBuilder, TestChipHarness, TestSC, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -23,15 +27,20 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
     },
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
+    AirRef, Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use p3_keccak_air::NUM_ROUNDS;
 use rand::{rngs::StdRng, Rng};
 use tiny_keccak::Hasher;
 #[cfg(feature = "cuda")]
@@ -48,6 +57,60 @@ use crate::{utils::keccak256, KeccakVmAir, KeccakVmExecutor, KeccakVmFiller};
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> = TestChipHarness<F, KeccakVmExecutor, KeccakVmAir, KeccakVmChip<F>, RA>;
+
+// A test-only wrapper around `KeccakVmAir` that evaluates only the local Keccak constraints.
+// It excludes the execution, memory, and lookup interactions so the regression can target the
+// missing terminal main-trace constraint directly.
+#[derive(Clone, Debug)]
+struct KeccakLocalSoundnessTestAir {
+    sub_air: KeccakVmAir,
+}
+
+impl<F: Field> BaseAirWithPublicValues<F> for KeccakLocalSoundnessTestAir {}
+impl<F: Field> PartitionedBaseAir<F> for KeccakLocalSoundnessTestAir {}
+impl<F: Field> BaseAir<F> for KeccakLocalSoundnessTestAir {
+    fn width(&self) -> usize {
+        <KeccakVmAir as BaseAir<F>>::width(&self.sub_air)
+    }
+}
+
+impl<AB> Air<AB> for KeccakLocalSoundnessTestAir
+where
+    AB: AirBuilder,
+    AB::F: Field,
+    AB::Var: Copy,
+{
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
+        let local: &KeccakVmCols<AB::Var> = (*local).borrow();
+        let next: &KeccakVmCols<AB::Var> = (*next).borrow();
+
+        builder.assert_bool(local.sponge.is_new_start);
+        builder.assert_eq(
+            local.sponge.is_new_start,
+            local.sponge.is_new_start * local.is_first_round(),
+        );
+        builder.assert_eq(
+            local.instruction.is_enabled_first_round,
+            local.instruction.is_enabled * local.is_first_round(),
+        );
+        builder
+            .when_first_row()
+            .assert_one(local.sponge.is_new_start);
+
+        self.sub_air.eval_keccak_f(builder);
+        self.sub_air.constrain_padding(builder, local, next);
+        self.sub_air
+            .constrain_consistency_across_rounds(builder, local, next);
+        builder
+            .when_last_row()
+            .assert_zero(local.instruction.is_enabled);
+    }
+}
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -320,6 +383,130 @@ fn test_keccak256_negative() {
     hasher.finalize(&mut out);
     out[0] = rng.random();
     run_negative_keccak256_test(&input, out, VerificationError::OodEvaluationMismatch);
+}
+
+/// Count execution bus RECEIVEs and memory output WRITEs across a keccak trace.
+///
+/// - RECEIVE fires when `is_enabled * is_new_start = 1` (see `eval_instruction`).
+/// - WRITE fires when `export = 1` (see `constrain_output_write`).
+fn count_bus_signals(trace: &RowMajorMatrix<F>) -> (usize, usize) {
+    let width = trace.width();
+    let mut receives = 0;
+    let mut writes = 0;
+    for row in trace.values.chunks_exact(width) {
+        let cols: &KeccakVmCols<F> = row.borrow();
+        if (cols.instruction.is_enabled * cols.sponge.is_new_start).is_one() {
+            receives += 1;
+        }
+        if cols.inner.export.is_one() {
+            writes += 1;
+        }
+    }
+    (receives, writes)
+}
+
+/// Soundness check for a keccak trace: the trace must either be rejected by the
+/// AIR constraints, or every execution bus RECEIVE must be paired with a memory
+/// output WRITE (i.e. no instruction can be consumed without writing its digest).
+///
+/// Panics if the trace passes the constraints but has unpaired signals — that
+/// would mean a malicious prover can make keccak256 appear to execute while
+/// silently dropping the output digest.
+fn assert_keccak_trace_sound(air: &KeccakVmAir, trace: RowMajorMatrix<F>) {
+    let (receives, writes) = count_bus_signals(&trace);
+
+    disable_debug_builder();
+    let tester = VmChipTestBuilder::default()
+        .build()
+        .load_air_proving_ctx((
+            Arc::new(KeccakLocalSoundnessTestAir {
+                sub_air: air.clone(),
+            }) as AirRef<TestSC>,
+            AirProvingContext::simple_no_pis(Arc::new(trace)),
+        ))
+        .finalize();
+
+    match tester.simple_test() {
+        Ok(_) => {
+            // Constraints passed — the trace must have paired signals.
+            assert_eq!(
+                receives, writes,
+                "Trace accepted but execution bus RECEIVEs ({receives}) != \
+                 memory output WRITEs ({writes}) — a digest was silently dropped"
+            );
+        }
+        Err(_) => {
+            // Constraints rejected the trace — sound regardless of signal counts.
+        }
+    }
+}
+
+/// Exploit demonstration for audit finding #60.
+///
+/// Builds an honest trace (passes) and a forged trace with a phantom instruction
+/// in the partial tail that fires an execution bus RECEIVE but never fires a memory
+/// output WRITE. Both traces must pass [`assert_keccak_trace_sound`]:
+/// - The honest trace passes constraints with paired signals.
+/// - The forged trace is rejected by `when_last_row().assert_zero(is_enabled)`.
+#[test]
+fn enabled_partial_tail_height_64_is_rejected() {
+    let input = vec![7u8; 200];
+    let expected_height = 64;
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_test_harness::<MatrixRecordArena<F>>(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        KECCAK256,
+        Some(&input),
+        None,
+        None,
+    );
+
+    let air = harness.air;
+    let mut ctx: AirProvingContext<CpuBackend<TestSC>> =
+        harness.chip.generate_proving_ctx(harness.arena);
+    let mut trace = Arc::into_inner(
+        ctx.common_main
+            .take()
+            .expect("keccak main trace should be present"),
+    )
+    .expect("keccak main trace should not be shared");
+
+    assert_eq!(trace.height(), expected_height);
+    let tail_start = trace.height() - trace.height() % NUM_ROUNDS;
+    let width = trace.width();
+
+    // Honest trace: should pass constraints with paired signals.
+    assert_keccak_trace_sound(&air, trace.clone());
+
+    // Forge the tail: inject an enabled instruction that never reaches round 23.
+    let template_instruction = {
+        let row = &trace.values[..width];
+        let cols: &KeccakVmCols<F> = row.borrow();
+        cols.instruction
+    };
+    for (row_idx, row) in trace
+        .values
+        .chunks_exact_mut(width)
+        .enumerate()
+        .skip(tail_start)
+    {
+        let cols: &mut KeccakVmCols<F> = row.borrow_mut();
+        cols.instruction = template_instruction;
+        cols.instruction.is_enabled = F::ONE;
+        cols.instruction.is_enabled_first_round = F::from_bool(row_idx == tail_start);
+        cols.instruction.remaining_len = F::ZERO;
+        cols.sponge.is_new_start = F::from_bool(row_idx == tail_start);
+    }
+
+    // Forged trace: the phantom instruction adds an execution RECEIVE with no
+    // output WRITE. assert_keccak_trace_sound accepts this only if the AIR
+    // rejects the trace.
+    assert_keccak_trace_sound(&air, trace);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

@@ -78,7 +78,11 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         self.eval_keccak_f(builder);
         self.constrain_padding(builder, local, next);
         self.constrain_consistency_across_rounds(builder, local, next);
-
+        // Anchor the trace at the end so the wrapped evaluation window cannot leave an
+        // enabled hash in-flight without ever reaching a last-round finalization step.
+        builder
+            .when_last_row()
+            .assert_zero(local.instruction.is_enabled);
         let mem = &local.mem_oc;
         // Interactions:
         self.constrain_absorb(builder, local, next);
