@@ -2,11 +2,28 @@
 
 ## Purpose
 
-The recursion circuit verifies STARK proofs inside a STARK circuit. Given a child proof and its verifying key, the recursion circuit constrains the full SWIRL/STARK verification protocol -- preamble, GKR, batch constraint evaluation, stacking reduction, and WHIR polynomial commitment -- so that a valid recursion proof attests to the validity of the child proof. This enables proof composition: a single recursive proof can attest to arbitrarily many layers of computation.
+The recursion circuit verifies SWIRL proofs inside a SWIRL circuit. The circuit is parameterized by a child verifying key `vk_child`: given `vk_child`, the circuit definition constrains the full SWIRL verification protocol (preamble, GKR, batch constraint evaluation, stacking reduction, and WHIR polynomial commitment). Given a list of valid child proofs (up to a predefined maximum), there is an efficient algorithm to produce a satisfying witness. If any child proof does not verify, no efficient algorithm should be able to find a satisfying witness. This enables proof composition: a single recursive proof can attest to arbitrarily many layers of computation.
 
-The circuit is implemented as a collection of 39 AIRs organized into 6 modules plus 2 system-level AIRs. AIRs communicate through typed buses (permutation checks and lookups) with no out-of-band data flow.
+The circuit is implemented as a collection of 39 AIRs organized into protocol modules plus
+shared lookup/provider AIRs. AIRs communicate through buses (permutation checks and lookups).
 
-## Overall Pipeline
+For the formal correspondence claim and correctness argument, see [verifier-mapping.md](./verifier-mapping.md).
+
+## Conventions
+
+Unless noted otherwise, this documentation uses the following constants:
+
+- `D_EF = 4` — extension field degree (the BabyBear quartic extension)
+- `DIGEST_SIZE = 8` — Poseidon2 digest size in base-field elements
+- `CHUNK = 8` — Poseidon2 sponge rate
+
+## Module Organization
+
+The 39 AIRs are organized into modules that mirror the structure of the reference verifier.
+The reference verifier (`verify()`) processes a child proof in sequential phases; the circuit
+constrains the same relationships via AIR constraints and bus interactions. The module names
+and arrows below reflect data-flow dependencies between verifier stages, not a temporal
+sequence.
 
 ```
 ProofShape --> GKR --> BatchConstraint --> Stacking --> WHIR
@@ -14,14 +31,11 @@ ProofShape --> GKR --> BatchConstraint --> Stacking --> WHIR
                                           Transcript (shared by all)
 ```
 
-The verifier processes a child proof in four sequential phases:
-
-1. **ProofShape (Preamble)** -- Observe proof metadata into the Fiat-Shamir transcript, validate proof structure, populate global data buses.
-2. **GKR** -- Reduce the fractional sumcheck claim (LogUp) to evaluation claims on the input layer polynomials.
-3. **BatchConstraint** -- Evaluate constraint and interaction expressions at the sumcheck point, verify the batched claim.
-4. **Stacking + WHIR** -- Reduce column opening claims via stacked polynomial commitment, then verify the WHIR polynomial commitment protocol (folding sumcheck, query verification, Merkle proofs, final polynomial check).
-
-The **Transcript** module runs alongside all phases, constraining the Poseidon2-based Fiat-Shamir sponge and Merkle tree verification.
+- **ProofShape (Preamble)** -- Validates proof structure, observes metadata into the Fiat-Shamir transcript, populates global data buses.
+- **GKR** -- Constrains the fractional sumcheck (LogUp) reduction to evaluation claims on the input layer polynomials.
+- **BatchConstraint** -- Constrains constraint and interaction expression evaluation at the sumcheck point, verifies the batched claim.
+- **Stacking + WHIR** -- Constrains column opening reduction via stacked polynomial commitment and the WHIR polynomial commitment protocol (folding sumcheck, query verification, Merkle proofs, final polynomial check).
+- **Transcript** -- Constrains the Poseidon2-based Fiat-Shamir sponge and Merkle tree verification. Shared by all modules via `TranscriptBus`.
 
 ```mermaid
 graph LR
@@ -59,127 +73,136 @@ graph LR
     SYS -.->|Lookup Tables| WH
 ```
 
-## AIR Group Architecture
+## Documentation Map
 
-The 39 AIRs are organized into 13 logical groups, partitioned by bus connectivity. While the module view above shows the high-level pipeline, the group view reflects how AIRs are actually coupled through shared buses and matches the [per-group documentation](#documentation-index) below.
+The top-level module docs are the main correspondence documents for the recursive verifier:
 
-```mermaid
-graph TD
-    subgraph cross_cutting["Cross-Cutting Services"]
-        G1["1: Transcript<br/>(TranscriptAir, Poseidon2Air, MerkleVerifyAir)"]
-        G3["3: Primitives<br/>(PowerCheckerAir, ExpBitsLenAir)"]
-    end
+- **[Transcript](./modules/transcript/README.md)** (TranscriptAir, Poseidon2Air, MerkleVerifyAir)
+- **[ProofShape](./modules/proof-shape/README.md)** (ProofShapeAir, PublicValuesAir, RangeCheckerAir)
+- **[Primitive Lookup Tables](./modules/primitives/README.md)** (PowerCheckerAir, ExpBitsLenAir; also covers Poseidon2Air and RangeCheckerAir lookup contracts)
+- **[GKR](./modules/gkr/README.md)** (GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir)
+- **[BatchConstraint](./modules/batch-constraint/README.md)** (13 AIRs)
+- **[Stacking](./modules/stacking/README.md)** (OpeningClaimsAir, UnivariateRoundAir, SumcheckRoundsAir, StackingClaimsAir, EqBaseAir, EqBitsAir)
+- **[WHIR](./modules/whir/README.md)** (8 AIRs)
 
-    subgraph preamble_phase["Preamble"]
-        G2["2: Proof Shape<br/>(ProofShapeAir, PublicValuesAir, RangeCheckerAir)"]
-    end
+These module docs follow a common template:
 
-    subgraph gkr_phase["GKR"]
-        G4["4: GKR Protocol<br/>(GkrInputAir, GkrLayerAir,<br/>GkrLayerSumcheckAir, GkrXiSamplerAir)"]
-    end
+1. **Interface.** External buses forming the module boundary: VK constants, inputs (with receiving AIR), outputs (with sending AIR).
+2. **Extraction.** Which AIR traces to read, and how to assemble them into a reference verifier proof fragment.
+3. **Contract.** The transcript schedule and reference verifier steps the module encodes.
+4. **Module-level argument.** Verification correspondence: mapping each reference verifier check to the responsible AIR.
+5. **Lookup dependencies.** Which lookup-table AIRs the module depends on.
 
-    subgraph bc_phase["Batch Constraint"]
-        G5["5: BC Sumcheck Pipeline<br/>(FractionsFolderAir, UnivariateSumcheckAir,<br/>MultilinearSumcheckAir, ExpressionClaimAir)"]
-        G6["6: BC Expression Eval<br/>(SymbolicExpressionAir,<br/>InteractionsFoldingAir, ConstraintsFoldingAir)"]
-        G7["7: BC Eq Univariate<br/>(EqUniAir, EqSharpUniAir,<br/>EqSharpUniReceiverAir, Eq3bAir)"]
-        G8["8: BC Eq Multivariate<br/>(EqNsAir, EqNegAir)"]
-    end
+**Shared extraction assumption.** Every module's extraction assumes the witness `W`
+satisfies all AIR constraints and bus balancing, and that the Transcript contract
+establishes a single consistent Fiat-Shamir sponge.
 
-    subgraph stacking_phase["Stacking"]
-        G9["9: Stacking Claims<br/>(OpeningClaimsAir, UnivariateRoundAir,<br/>SumcheckRoundsAir, StackingClaimsAir)"]
-        G10["10: Stacking Eq<br/>(EqBaseAir, EqBitsAir)"]
-    end
+If you want the AIR-level breakdown rather than the module-level correspondence docs, use each module's `airs.md` page:
 
-    subgraph whir_phase["WHIR"]
-        G11["11: WHIR Control<br/>(WhirRoundAir, SumcheckAir)"]
-        G12["12: WHIR Query<br/>(WhirQueryAir, InitialOpenedValuesAir,<br/>NonInitialOpenedValuesAir)"]
-        G13["13: WHIR Folding<br/>(WhirFoldingAir, FinalPolyMleEvalAir,<br/>FinalPolyQueryEvalAir)"]
-    end
+- **[Transcript AIRs](./modules/transcript/airs.md)**
+- **[ProofShape AIRs](./modules/proof-shape/airs.md)**
+- **[Primitive AIRs](./modules/primitives/airs.md)**
+- **[GKR AIRs](./modules/gkr/airs.md)**
+- **[BatchConstraint AIRs](./modules/batch-constraint/airs.md)**
+- **[Stacking AIRs](./modules/stacking/airs.md)**
+- **[WHIR AIRs](./modules/whir/airs.md)**
 
-    %% Pipeline handoff (thick arrows)
-    G2 ==>|GkrModuleBus| G4
-    G4 ==>|BatchConstraintModuleBus| G5
-    G5 ==>|StackingModuleBus| G9
-    G9 ==>|WhirModuleBus| G11
+Reference and cross-reference documents:
 
-    %% ProofShape data distribution
-    G2 -->|"FractionFolderInputBus,<br/>ExpressionClaimNMaxBus, HyperdimBus"| G5
-    G2 -->|"AirShapeBus, AirPresenceBus,<br/>HyperdimBus, PublicValuesBus,<br/>NLiftBus, FoldingInputBuses"| G6
-    G2 -->|"AirShapeBus, LiftedHeightsBus"| G9
+- **[Bus Inventory](./bus-inventory.md)** -- bus definitions, message formats, producers, and consumers
+- **[AIR Map](./AIR_MAP.md)** -- complete AIR inventory and bus connectivity by AIR
+- **[Verifier Mapping](./verifier-mapping.md)** -- top-level correspondence claim and mapping to the reference verifier
+- **[Proof Shape Validation](./proof-shape-validation.md)** -- `verify_proof_shape` correspondence
 
-    %% Primitive lookup tables
-    G2 -.->|RangeCheckerBus| G3
-    G3 -.->|PowerCheckerBus| G2
-    G3 -.->|PowerCheckerBus| G5
-    G3 -.->|ExpBitsLenBus| G4
-    G3 -.->|ExpBitsLenBus| G9
-    G3 -.->|ExpBitsLenBus| G11
-    G3 -.->|ExpBitsLenBus| G12
+## Correspondence Decomposition
 
-    %% ProofShape to Eq groups
-    G2 -->|"Eq3bShapeBus"| G7
-    G2 -->|"EqNsNLogupMaxBus"| G8
+The main claim decomposes into:
 
-    %% GKR challenge outputs
-    G4 -->|XiRandomnessBus| G7
-    G4 -->|XiRandomnessBus| G8
+**(T) Transcript consistency.** All transcript interactions across all modules embed into a
+single linear transcript indexed by `tidx`, with no duplicated index and no gaps.
 
-    %% BC cross-group
-    G6 -->|ExpressionClaimBus| G5
-    G5 -->|ConstraintSumcheckRandomnessBus| G9
-    G5 -->|ConstraintSumcheckRandomnessBus| G10
+**(PS) ProofShape consistency.** The structural messages broadcast by ProofShape
+encode `vk_child` and the child proof metadata.
 
-    %% Cross-phase eq polynomials
-    G8 -->|EqNegResultBus| G10
-    G10 -->|EqNegBaseRandBus| G8
+**(LT) Primitive lookup-table correctness.** Each lookup-table AIR's constraints force valid
+table entries. This covers:
+- *Cryptographic providers:* `Poseidon2Air` (permutation and compression tables).
+- *Arithmetic providers:* `PowerCheckerAir` (power-of-two), `ExpBitsLenAir` (exponentiation).
+- *Range/bit providers:* `RangeCheckerAir` (range check table).
 
-    %% Stacking outputs
-    G9 -->|ColumnClaimsBus| G6
-    G9 -->|"StackingIndicesBus, WhirMuBus"| G12
-    G9 -->|WhirOpeningPointBus| G11
-    G10 -->|WhirOpeningPointBus| G13
+**(M-GKR, M-BC, M-Stack, M-WHIR) Module extraction.** For each module, given
+the incoming bus messages and the transcript, we can extract a proof fragment from
+the satisfying trace such that the corresponding reference verification function accepts.
+See the per-module documentation linked below.
 
-    %% Commitment bus
-    G2 -.->|CommitmentsBus| G1
-    G11 -.->|CommitmentsBus| G1
+### Bus semantics
 
-    %% WHIR cross-group
-    G11 -->|VerifyQueriesBus| G12
-    G11 -->|"WhirAlphaBus, WhirGammaBus,<br/>WhirEqAlphaUBus"| G13
-    G13 -->|WhirFoldingBus| G12
+There are two kinds of bus:
 
-    %% Transcript (cross-cutting)
-    G1 -.->|TranscriptBus| G2
-    G1 -.->|TranscriptBus| G4
-    G1 -.->|TranscriptBus| G5
-    G1 -.->|TranscriptBus| G9
-    G1 -.->|TranscriptBus| G11
+**Permutation buses** enforce exact multiset equality between sends and receives.
+If a module's AIR constraints require it to send (or receive) a specific message,
+then a matching receive (or send) must exist in some other AIR.
 
-    %% Crypto buses
-    G12 -->|"Poseidon2PermuteBus,<br/>Poseidon2CompressBus, MerkleVerifyBus"| G1
-```
+**Lookup buses** enforce that every queried key exists in the table (bus
+balancing requires it). The table-side multiplicity may or may not be constrained:
+- **Unconstrained multiplicity** (common case): the prover sets the table-side
+  multiplicity to match however many lookups occur, so the bus always balances as long
+  as the key exists.
+- **Constrained multiplicity**: the table AIR constrains the multiplicity (e.g., to
+  exactly 1 per entry), bounding the number of lookups per key.
 
-**Diagram key:** Thick arrows (`==>`) are pipeline handoff buses. Solid arrows (`-->`) are permutation/data buses. Dashed arrows (`-.->`) are lookup buses. TranscriptBus reaches all groups but is shown only for the primary pipeline groups.
+In either case, the table entries are prover-controlled, so the table AIR's constraints
+must ensure all entries are valid. This is why the Primitive Lookup Tables section
+separately establishes that each table AIR's constraints force valid entries.
 
-### Group Summary
+For full bus definitions and message formats, see [bus-inventory.md](./bus-inventory.md).
 
-| Group | Name | AIRs | Role |
-|-------|------|------|------|
-| 1 | Transcript Infrastructure | TranscriptAir, Poseidon2Air, MerkleVerifyAir | Fiat-Shamir sponge, Poseidon2 lookups, Merkle verification |
-| 2 | Proof Shape & Range Check | ProofShapeAir, PublicValuesAir, RangeCheckerAir | Proof metadata, public values, 8-bit range check table |
-| 3 | Primitive Lookup Tables | PowerCheckerAir, ExpBitsLenAir | Power-of-two and bit-length exponentiation tables |
-| 4 | GKR Protocol | GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir | Layer-by-layer GKR reduction, xi challenge sampling |
-| 5 | BC Sumcheck Pipeline | FractionsFolderAir, UnivariateSumcheckAir, MultilinearSumcheckAir, ExpressionClaimAir | Univariate then multilinear sumcheck, claim folding |
-| 6 | BC Expression Evaluation | SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir | DAG-based constraint/interaction evaluation |
-| 7 | BC Eq Univariate | EqUniAir, EqSharpUniAir, EqSharpUniReceiverAir, Eq3bAir | Univariate equality polynomials |
-| 8 | BC Eq Multivariate | EqNsAir, EqNegAir | Multivariate and negative-dim equality polynomials |
-| 9 | Stacking Claims & Opening | OpeningClaimsAir, UnivariateRoundAir, SumcheckRoundsAir, StackingClaimsAir | Column opening, stacking sumcheck, WHIR handoff |
-| 10 | Stacking Eq Helpers | EqBaseAir, EqBitsAir | Base and bit-decomposed eq polynomials for stacking |
-| 11 | WHIR Control | WhirRoundAir, SumcheckAir (WHIR) | Per-round WHIR control, folding sumcheck |
-| 12 | WHIR Query Verification | WhirQueryAir, InitialOpenedValuesAir, NonInitialOpenedValuesAir | Query dispatch, Merkle opening, Poseidon2 hashing |
-| 13 | WHIR Folding & Final Poly | WhirFoldingAir, FinalPolyMleEvalAir, FinalPolyQueryEvalAir | Polynomial folding tree, final poly evaluation |
+## Witness Extraction
 
-For complete per-AIR bus connectivity and the full cross-group bus connection table, see [AIR_MAP.md](./AIR_MAP.md). For individual bus definitions and message formats, see [bus-inventory.md](./bus-inventory.md).
+`Extract(W)` is a deterministic function from a satisfying witness `W` to a list of
+`Proof` objects -- one per `proof_idx`. The `Proof` type (defined in
+`stark-backend/src/proof.rs`) contains these top-level fields:
+
+| `Proof` field | Extracted from | Module doc |
+| --- | --- | --- |
+| `common_main_commit` | ProofShapeAir trace | [ProofShape](./modules/proof-shape/README.md) PS2 (`CommitmentsBus`) |
+| `trace_vdata[air_idx]` | ProofShapeAir trace | [ProofShape](./modules/proof-shape/README.md) PS1a-PS1b |
+| `public_values[air_idx]` | PublicValuesAir trace | [ProofShape](./modules/proof-shape/README.md) PS4 |
+| `gkr_proof` | GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir | [GKR](./modules/gkr/README.md) Extraction |
+| `batch_constraint_proof` | FractionsFolderAir, UnivariateSumcheckAir, MultilinearSumcheckAir; `column_openings` from Stacking's OpeningClaimsAir (*) | [BatchConstraint](./modules/batch-constraint/README.md) Extraction |
+| `stacking_proof` | UnivariateRoundAir, SumcheckRoundsAir, StackingClaimsAir | [Stacking](./modules/stacking/README.md) Extraction |
+| `whir_proof` | WhirRoundAir, SumcheckAir, InitialOpenedValuesAir, NonInitialOpenedValuesAir, FinalPolyMleEvalAir; `mu_pow_witness` from Stacking's StackingClaimsAir (*) | [WHIR](./modules/whir/README.md) Extraction |
+
+(*) Some fields of `BatchConstraintProof` and `WhirProof` are extracted from Stacking AIRs
+rather than from the eponymous module's AIRs. This reflects module-boundary differences
+between the circuit and the reference verifier: the circuit attributes column opening
+observations and mu PoW to the Stacking module, while the reference verifier performs them
+in `verify_zerocheck_and_logup` and `verify_whir` respectively. The transcript positions
+are identical in both cases. See [Stacking](./modules/stacking/README.md) Extraction for details.
+
+Most proof attributes are **observed** on the transcript (and therefore appear as
+`TranscriptBus` messages with `is_sample = 0`). These are directly readable from the
+transcript -- any satisfying witness pins their values. **Sampled** values (challenges) are
+deterministic functions of preceding observations via the Poseidon2 sponge.
+
+Some attributes are **hinted** rather than observed: Merkle proofs and initial-round opened
+rows appear in WHIR AIR traces but are not observed on the transcript. Their correctness is
+enforced by `MerkleVerifyBus` (which sends to MerkleVerifyAir, which checks the path via
+`Poseidon2CompressBus`) and by the WHIR folding/query constraints.
+
+## AIR Connectivity
+
+Modules are the primary documentation unit. Some module `airs.md` pages use local
+implementation sub-sections such as "sumcheck pipeline" or "query verification" for
+readability, but the docs no longer use a separate global numbered-group layer across the
+whole recursion circuit.
+
+For flat cross-reference material:
+
+- [AIR_MAP.md](./AIR_MAP.md) gives the complete AIR inventory, source paths, per-AIR bus
+  connectivity, and major inter-AIR bus connections.
+- [bus-inventory.md](./bus-inventory.md) gives the bus definitions, message formats,
+  producers, consumers, and invariants.
 
 ## Modules and AIRs
 
@@ -254,39 +277,46 @@ For complete per-AIR bus connectivity and the full cross-group bus connection ta
 
 | Document | Description |
 |----------|-------------|
-| [README.md](./README.md) | This file -- overview, module listing, pipeline diagram |
-| [AIR_MAP.md](./AIR_MAP.md) | Complete AIR inventory with bus connectivity per AIR, logical grouping into 13 groups, and cross-group bus connection table |
+| [README.md](./README.md) | This file -- overview, module listing, reading guide |
+| [AIR_MAP.md](./AIR_MAP.md) | Complete AIR inventory with source paths, per-AIR bus connectivity, and major inter-AIR bus connection table |
 | [bus-inventory.md](./bus-inventory.md) | Comprehensive bus inventory: all buses with types, message formats, invariants, mathematical send/receive set definitions |
-| [verifier-mapping.md](./verifier-mapping.md) | Maps each step of the stark-backend `verify()` function to the responsible AIR(s). Addresses correctness concerns: transcript ordering, LogUp soundness, bus completeness, boundary conditions, and challenge independence |
-| **Group Documentation** | |
-| [group-01-transcript.md](./group-01-transcript.md) | TranscriptAir, Poseidon2Air, MerkleVerifyAir |
-| [group-02-proof-shape.md](./group-02-proof-shape.md) | ProofShapeAir, PublicValuesAir, RangeCheckerAir |
-| [group-03-primitives.md](./group-03-primitives.md) | PowerCheckerAir, ExpBitsLenAir |
-| [group-04-gkr.md](./group-04-gkr.md) | GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir |
-| [group-05-batch-constraint-sumcheck.md](./group-05-batch-constraint-sumcheck.md) | FractionsFolderAir, UnivariateSumcheckAir, MultilinearSumcheckAir, ExpressionClaimAir |
-| [group-06-batch-constraint-expr-eval.md](./group-06-batch-constraint-expr-eval.md) | SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir |
-| [group-07-eq-univariate.md](./group-07-eq-univariate.md) | EqUniAir, EqSharpUniAir, EqSharpUniReceiverAir, Eq3bAir |
-| [group-08-eq-multivariate.md](./group-08-eq-multivariate.md) | EqNsAir, EqNegAir |
-| [group-09-stacking-claims.md](./group-09-stacking-claims.md) | OpeningClaimsAir, UnivariateRoundAir, SumcheckRoundsAir, StackingClaimsAir |
-| [group-10-stacking-eq.md](./group-10-stacking-eq.md) | EqBaseAir, EqBitsAir |
-| [group-11-whir-control.md](./group-11-whir-control.md) | WhirRoundAir, SumcheckAir (WHIR) |
-| [group-12-whir-query.md](./group-12-whir-query.md) | WhirQueryAir, InitialOpenedValuesAir, NonInitialOpenedValuesAir |
-| [group-13-whir-folding.md](./group-13-whir-folding.md) | WhirFoldingAir, FinalPolyMleEvalAir, FinalPolyQueryEvalAir |
+| [verifier-mapping.md](./verifier-mapping.md) | Maps each step of the stark-backend `verify()` function to the responsible AIR(s). Includes glue logic correspondence, module chaining, and correctness concerns |
+| **Module Documentation** | |
+| [Transcript](./modules/transcript/README.md) | Transcript module: interface, contract, sponge correctness |
+| [ProofShape](./modules/proof-shape/README.md) | ProofShape module: interface, extraction, statement (PS1-PS4), module-level argument |
+| [Primitive Lookup Tables](./modules/primitives/README.md) | Primitive lookup tables: per-table contracts |
+| [GKR](./modules/gkr/README.md) | GKR module: interface, extraction, contract, module-level argument |
+| [BatchConstraint](./modules/batch-constraint/README.md) | BatchConstraint module: interface, extraction, contract, module-level argument |
+| [Stacking](./modules/stacking/README.md) | Stacking module: interface, extraction, contract, module-level argument |
+| [WHIR](./modules/whir/README.md) | WHIR module: interface, extraction, contract, module-level argument |
+| [proof-shape-validation.md](./proof-shape-validation.md) | Per-check correspondence for `verify_proof_shape` |
+| **AIR Documentation** | |
+| [Transcript AIRs](./modules/transcript/airs.md) | TranscriptAir, Poseidon2Air, MerkleVerifyAir -- per-AIR details, trace columns, walkthroughs |
+| [ProofShape AIRs](./modules/proof-shape/airs.md) | ProofShapeAir, PublicValuesAir, RangeCheckerAir |
+| [Primitive AIRs](./modules/primitives/airs.md) | PowerCheckerAir, ExpBitsLenAir |
+| [GKR AIRs](./modules/gkr/airs.md) | GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir |
+| [BatchConstraint AIRs](./modules/batch-constraint/airs.md) | FractionsFolderAir, UnivariateSumcheckAir, MultilinearSumcheckAir, ExpressionClaimAir, SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir, EqUniAir, EqSharpUniAir, EqSharpUniReceiverAir, Eq3bAir, EqNsAir, EqNegAir |
+| [Stacking AIRs](./modules/stacking/airs.md) | OpeningClaimsAir, UnivariateRoundAir, SumcheckRoundsAir, StackingClaimsAir, EqBaseAir, EqBitsAir |
+| [WHIR AIRs](./modules/whir/airs.md) | WhirRoundAir, SumcheckAir, WhirQueryAir, InitialOpenedValuesAir, NonInitialOpenedValuesAir, WhirFoldingAir, FinalPolyMleEvalAir, FinalPolyQueryEvalAir |
 
-## How to Read the Documentation
+## Documentation Organization
 
-**Start here** (README.md) for the high-level architecture: what the recursion circuit does, how many AIRs there are, and how they are organized into modules.
+The documentation has three layers:
 
-**For AIR-level detail**, read [AIR_MAP.md](./AIR_MAP.md). It lists every AIR with its file location, role, and complete bus connectivity. The 13 logical groups show which AIRs are tightly coupled and which buses bridge between groups.
+- **Module docs** (`modules/<name>/README.md`) describe the correspondence between the circuit and the reference verifier. Each follows a uniform template: interface, extraction, contract (transcript schedule), and module-level argument mapping reference verifier steps to responsible AIRs.
 
-**For correctness arguments**, read [verifier-mapping.md](./verifier-mapping.md). It maps the stark-backend verifier's `verify()` function step-by-step to the recursion circuit AIRs, demonstrating that every verifier computation is constrained. It also addresses five critical correctness concerns:
+- **AIR docs** (`modules/<name>/airs.md`) describe per-AIR implementation: trace columns, walkthroughs with example data, and bus summaries. Larger modules collect multiple internal AIR subgroups into the same `airs.md` page so the layout stays uniform.
 
-1. **Transcript ordering** -- How TranscriptAir ensures Fiat-Shamir consistency
-2. **LogUp soundness** -- How ProofShapeAir enforces interaction count bounds
-3. **Bus completeness** -- Why no data flows out-of-band
-4. **Boundary conditions** -- How first/last row constraints work
-5. **Challenge independence** -- How Poseidon2 ensures prover cannot influence challenges
+- **[verifier-mapping.md](./verifier-mapping.md)** maps the stark-backend verifier's `verify()` function step-by-step to the recursion circuit AIRs. It also addresses correctness concerns: transcript ordering, LogUp soundness, bus completeness, boundary conditions, and challenge independence.
+
+Reference docs: [AIR_MAP.md](./AIR_MAP.md) for per-AIR bus connectivity, [bus-inventory.md](./bus-inventory.md) for bus definitions and message formats.
 
 ## Source Code Location
 
-The recursion circuit source code is at `crates/recursion/src/`. The stark-backend verifier it constrains is in the [stark-backend](https://github.com/openvm-org/stark-backend) repository at `crates/stark-backend/src/verifier/`.
+The recursion circuit source code is at `crates/recursion/src/`. The stark-backend verifier it
+constrains is in the [stark-backend](https://github.com/openvm-org/stark-backend) repository at
+`crates/stark-backend/src/verifier/`.
+
+Unless explicitly stated otherwise, all `verifier/*.rs` paths referenced throughout these docs
+are relative to `crates/stark-backend/src/verifier/` in that external `stark-backend`
+repository.

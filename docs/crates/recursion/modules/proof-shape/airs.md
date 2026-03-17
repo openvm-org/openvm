@@ -1,6 +1,8 @@
-# Group 02 -- Proof Shape and Public Values
+# ProofShape AIRs
 
 The proof shape group establishes the structure of each child proof being verified. ProofShapeAir iterates over AIRs in each child proof, populating lookup tables for air shapes, commitments, and hyperdimensional parameters. PublicValuesAir reads public values from the transcript and distributes them. RangeCheckerAir provides a simple 8-bit range-check lookup table used throughout the circuit.
+
+**Module-level correspondence:** [README.md](./README.md) (interface, extraction, statement, module-level argument).
 
 ```mermaid
 graph LR
@@ -26,8 +28,9 @@ graph LR
     APB{{AirPresenceBus<br/>Lookup / per-proof}}
     E3SB{{Eq3bShapeBus<br/>Lookup / per-proof}}
     ENLMB{{EqNsNLogupMaxBus<br/>Lookup / per-proof}}
-    CFIB{{ConstraintsFoldingInputBus<br/>PermutationCheck / per-proof}}
-    IFIB{{InteractionsFoldingInputBus<br/>PermutationCheck / per-proof}}
+    POWB{{PowerCheckerBus<br/>Lookup / global}}
+    CCBUS{{CachedCommitBus<br/>PermutationCheck / per-proof}}
+    PHB{{PreHashBus<br/>PermutationCheck / per-proof}}
 
     PSA -- "add_key" --> ASB
     PSA -- "add_key" --> APB
@@ -41,9 +44,10 @@ graph LR
     PSA -- "send" --> ENLMB
     PSA -- "send" --> NLB
     PSA -- "send" --> E3SB
-    PSA -- "send" --> CFIB
-    PSA -- "send" --> IFIB
     PSA -- "send" --> NPVB
+    PSA -- "lookup_key" --> POWB
+    PSA -- "send" --> CCBUS
+    PSA -- "send" --> PHB
 
     PVA -- "send" --> PVB
     PVA -- "receive" --> TB
@@ -76,12 +80,11 @@ None.
 6. **Interaction bound (RangeCheckerBus — lookup):** Enforces `total_interactions < max_interaction_count` via range checks.
 7. **Height verification (PowerCheckerBus — lookup):** Verifies `height = 2^log_height` for each AIR via power-of-two lookup.
 8. **Module handoffs:** Sends `(tidx, n_logup, n_max, is_n_max_greater)` on GkrModuleBus, `(num_present_airs)` on FractionFolderInputBus, `(n_max)` on ExpressionClaimNMaxBus, `(n_logup, n_max)` on EqNsNLogupMaxBus, and `(air_idx, n_lift)` on NLiftBus.
-9. **Eq3b shape (Eq3bShapeBus — sends):** Sends `(sort_idx, n_lift, n_logup)` for each present AIR, providing shape parameters needed by Eq3bAir.
-10. **Folding inputs (ConstraintsFoldingInputBus, InteractionsFoldingInputBus — sends):** Sends the transcript index for the lambda and beta challenges, respectively, to the folding AIRs.
-11. **Cached commits (CachedCommitBus — sends):** Sends cached commitment data for continuations support.
-12. **VK pre-hash (PreHashBus — sends):** Sends the child VK pre-hash for continuations support.
-13. **Public values coordination (NumPublicValuesBus — sends):** Sends per-AIR public value counts to PublicValuesAir.
-14. **Transcript (TranscriptBus — receives):** Receives commitment observations from the transcript.
+9. **Eq3b shape (Eq3bShapeBus — sends):** Sends `(sort_idx, n_lift, n_logup, num_interactions)` for each present AIR, providing shape parameters needed by Eq3bAir.
+10. **Cached commits (CachedCommitBus — sends):** Sends cached commitment data for downstream verifier AIRs, currently including RootVerifierPvsAir and DeferredVerifyPvsAir.
+11. **VK pre-hash (PreHashBus — sends):** Sends the child VK pre-hash for downstream verifier AIRs, currently including RootVerifierPvsAir and DeferredVerifyPvsAir.
+12. **Public values coordination (NumPublicValuesBus — sends):** Sends per-AIR public value counts to PublicValuesAir.
+13. **Transcript (TranscriptBus — receives):** Receives commitment observations from the transcript.
 
 ### Walkthrough
 
@@ -97,7 +100,7 @@ Row | proof_idx | is_first | is_last | sorted_idx | air_id | log_height | is_pre
 
 - **Row 0:** First AIR (highest log_height). Publishes shape properties and hyperdim params. `n_abs = |10 - 8| = 2` (assuming l_skip=8).
 - **Row 1:** Second AIR. `n_abs = |8 - 8| = 0`.
-- **Row 2 (summary):** Validates total interaction count. Sends GkrModuleBus message with accumulated `n_logup` and `n_max`. Sends FractionFolderInputBus with `num_present_airs=2`. Also sends Eq3bShapeBus, ConstraintsFoldingInputBus, InteractionsFoldingInputBus, and EqNsNLogupMaxBus messages.
+- **Row 2 (summary):** Validates total interaction count. Sends GkrModuleBus message with accumulated `n_logup` and `n_max`. Sends FractionFolderInputBus with `num_present_airs=2`. Also sends Eq3bShapeBus and EqNsNLogupMaxBus messages.
 
 AIR selection uses an `idx_flags` encoder (flag columns that decode to the AIR index). The `need_rot` property is loaded from air_data metadata. The `n_logup` value is tracked as an explicit column on each row.
 
@@ -117,7 +120,7 @@ None.
 
 ### AIR Guarantees
 
-1. **Public value distribution (PublicValuesBus — sends):** Sends `(air_idx, pv_idx, value)` for every public value in every child AIR.
+1. **Public value distribution (PublicValuesBus — sends):** Sends `(air_idx, pv_idx, value)` for every public value in every child AIR. When continuations are enabled, each message is sent twice (double multiplicity).
 2. **Transcript reads (TranscriptBus — receives):** Receives each public value from TranscriptBus, confirming it was observed at the correct transcript position.
 3. **Count coordination (NumPublicValuesBus — receives):** Receives per-AIR public value counts from ProofShapeAir, ensuring the correct number of values is distributed.
 
@@ -204,21 +207,21 @@ Since the bus message includes `max_bits=NUM_BITS`, all lookups on this bus impl
 
 | Bus | Type | Direction in This Group | Key Consumers |
 |-----|------|------------------------|---------------|
-| [TranscriptBus](bus-inventory.md#11-transcriptbus) | PermutationCheck (per-proof) | PSA receives (observe_commit); PVA receives (observe) | TranscriptAir sends |
-| [AirShapeBus](bus-inventory.md#31-airshapebus) | Lookup (per-proof) | PSA provides keys | SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir |
-| [AirPresenceBus](bus-inventory.md#510-airpresencebus) | Lookup (per-proof) | PSA provides keys | SymbolicExpressionAir |
-| [HyperdimBus](bus-inventory.md#32-hyperdimbus) | Lookup (per-proof) | PSA provides keys | SymbolicExpressionAir, ExpressionClaimAir |
-| [LiftedHeightsBus](bus-inventory.md#33-liftedheightsbus) | Lookup (per-proof) | PSA provides keys | Stacking AIRs |
-| [CommitmentsBus](bus-inventory.md#34-commitmentsbus) | Lookup (per-proof) | PSA provides keys | MerkleVerifyAir |
-| [PublicValuesBus](bus-inventory.md#35-publicvaluesbus) | PermutationCheck (per-proof) | PVA sends | SymbolicExpressionAir receives |
-| [NumPublicValuesBus](bus-inventory.md#613-numpublicvaluesbus) | PermutationCheck (per-proof) | PSA sends, PVA receives | Internal |
-| [GkrModuleBus](bus-inventory.md#12-gkrmodulebus) | PermutationCheck (per-proof) | PSA sends | GkrInputAir receives |
-| [FractionFolderInputBus](bus-inventory.md#58-fractionfolderinputbus) | PermutationCheck (per-proof) | PSA sends | FractionsFolderAir receives |
-| [ExpressionClaimNMaxBus](bus-inventory.md#57-expressionclaimnmaxbus) | PermutationCheck (per-proof) | PSA sends | ExpressionClaimAir receives |
-| [EqNsNLogupMaxBus](bus-inventory.md#512-eqnsnlogupmaxbus) | Lookup (per-proof) | PSA sends | EqNsAir receives |
-| [NLiftBus](bus-inventory.md#59-nliftbus) | PermutationCheck (per-proof) | PSA sends | ConstraintsFoldingAir receives |
-| [Eq3bShapeBus](bus-inventory.md#511-eq3bshapebus) | Lookup (per-proof) | PSA sends | Eq3bAir receives |
-| [ConstraintsFoldingInputBus](bus-inventory.md#513-constraintsfoldinginputbus) | PermutationCheck (per-proof) | PSA sends | ConstraintsFoldingAir receives |
-| [InteractionsFoldingInputBus](bus-inventory.md#514-interactionsfoldinginputbus) | PermutationCheck (per-proof) | PSA sends | InteractionsFoldingAir receives |
-| [PreHashBus](bus-inventory.md#516-prehashbus) | PermutationCheck (per-proof) | PSA sends (continuations only) | Continuations circuit |
-| [RangeCheckerBus](bus-inventory.md#52-rangecheckerbus) | Lookup (global) | RCA provides keys | PSA, PowerCheckerAir |
+| [TranscriptBus](../../bus-inventory.md#11-transcriptbus) | PermutationCheck (per-proof) | PSA receives (observe_commit); PVA receives (observe) | TranscriptAir sends |
+| [AirShapeBus](../../bus-inventory.md#31-airshapebus) | Lookup (per-proof) | PSA provides keys | SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir |
+| [AirPresenceBus](../../bus-inventory.md#510-airpresencebus) | Lookup (per-proof) | PSA provides keys | SymbolicExpressionAir |
+| [HyperdimBus](../../bus-inventory.md#32-hyperdimbus) | Lookup (per-proof) | PSA provides keys | SymbolicExpressionAir, ExpressionClaimAir |
+| [LiftedHeightsBus](../../bus-inventory.md#33-liftedheightsbus) | Lookup (per-proof) | PSA provides keys | Stacking AIRs |
+| [CommitmentsBus](../../bus-inventory.md#34-commitmentsbus) | Lookup (per-proof) | PSA provides keys | MerkleVerifyAir |
+| [PublicValuesBus](../../bus-inventory.md#35-publicvaluesbus) | PermutationCheck (per-proof) | PVA sends | SymbolicExpressionAir receives |
+| [NumPublicValuesBus](../../bus-inventory.md#613-numpublicvaluesbus) | PermutationCheck (per-proof) | PSA sends, PVA receives | Internal |
+| [GkrModuleBus](../../bus-inventory.md#12-gkrmodulebus) | PermutationCheck (per-proof) | PSA sends | GkrInputAir receives |
+| [FractionFolderInputBus](../../bus-inventory.md#58-fractionfolderinputbus) | PermutationCheck (per-proof) | PSA sends | FractionsFolderAir receives |
+| [ExpressionClaimNMaxBus](../../bus-inventory.md#57-expressionclaimnmaxbus) | PermutationCheck (per-proof) | PSA sends | ExpressionClaimAir receives |
+| [EqNsNLogupMaxBus](../../bus-inventory.md#512-eqnsnlogupmaxbus) | Lookup (per-proof) | PSA sends | EqNsAir receives |
+| [NLiftBus](../../bus-inventory.md#59-nliftbus) | PermutationCheck (per-proof) | PSA sends | ConstraintsFoldingAir receives |
+| [Eq3bShapeBus](../../bus-inventory.md#511-eq3bshapebus) | Lookup (per-proof) | PSA sends | Eq3bAir receives |
+| [CachedCommitBus](../../bus-inventory.md#71-cachedcommitbus) | PermutationCheck (per-proof) | PSA sends when continuations are enabled | RootVerifierPvsAir, DeferredVerifyPvsAir |
+| [PreHashBus](../../bus-inventory.md#516-prehashbus) | PermutationCheck (per-proof) | PSA sends when continuations are enabled | RootVerifierPvsAir, DeferredVerifyPvsAir |
+| [PowerCheckerBus](../../bus-inventory.md#53-powercheckerbus) | Lookup (global) | PSA looks up | PowerCheckerAir provides keys |
+| [RangeCheckerBus](../../bus-inventory.md#52-rangecheckerbus) | Lookup (global) | RCA provides keys | PSA, PowerCheckerAir |

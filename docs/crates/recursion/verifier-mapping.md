@@ -1,6 +1,42 @@
 # Verifier-to-Circuit Mapping: Correctness Justification
 
-This document maps every step of the stark-backend's `verify()` function to the recursion circuit AIRs that constrain it. It argues that the 39-AIR recursion circuit faithfully implements the SWIRL/STARK verification protocol and addresses critical correctness concerns.
+This document maps every step of the stark-backend's `verify()` function to the recursion circuit AIRs that constrain it, and addresses critical correctness concerns.
+
+## Main Claim
+
+Fix a child verifying key `vk_child` and the instantiated verifier sub-circuit
+`C_ver(vk_child)` (`VerifierSubCircuit` from `crates/recursion/src/system/mod.rs`).
+
+`C_ver(vk_child)` consists of 39 AIRs (enumerated in [AIR_MAP.md](./AIR_MAP.md)).
+A *satisfying witness* `W` is an assignment of traces to all AIRs such that all AIR
+constraints are satisfied and all bus interactions balance.
+
+**Circuit-to-code correspondence.** If `W` is a satisfying witness of `C_ver(vk_child)`, then there is a
+deterministic algorithm to extract proofs (containing public values) `pi_j` from
+`W` such that `verify(vk_child, pi_j)` accepts for each `j`, **provided**:
+1. The VK pre-hash observed on the transcript equals `hash(vk_child)`.
+2. The SymbolicExpressionAir cached trace commitment encodes `vk_child`'s symbolic constraints.
+
+**On the VK pre-hash.** The verifier subcircuit cannot constrain the VK pre-hash to equal
+`hash(vk_child)` directly: if `hash(vk_child)` were baked into the circuit as a constant,
+it would change the circuit's own VK, making self-verification impossible. The VK pre-hash
+is observed on the transcript (at tidx 0), so it affects all downstream challenges. When
+continuations are enabled, ProofShapeAir also sends the pre-hash over `PreHashBus` so the
+enclosing circuit can expose it as a public value. Either way, the consumer of the proof
+must verify the pre-hash equals `hash(vk_child)`.
+
+**On the child constraint commitment.** The child VK's symbolic constraints (expression DAGs,
+interaction structure, variable entries) are stored in SymbolicExpressionAir's cached trace
+rather than hardcoded as circuit constants. The commitment to this cached trace is observed
+on the transcript as part of ProofShape's preamble. The enclosing circuit exposes this
+commitment so that a downstream verifier can check it matches the expected child VK's
+constraint structure. See [BatchConstraint](./modules/batch-constraint/README.md) for details.
+
+The other direction -- that if there is a set of proofs `pi_j`, then there exists a
+witness `W` -- is not the focus of this document (preflight and trace generation provide
+an explicit algorithm for that direction).
+
+---
 
 ## Verifier Protocol Overview
 
@@ -47,7 +83,7 @@ These checks are enforced at **circuit construction time** rather than by AIR co
 |---|---|---|---|
 | PoW check for logup | GkrInputAir | TranscriptBus, ExpBitsLenBus | GkrInputAir observes the PoW witness into the transcript and verifies it via ExpBitsLenAir |
 | Sample alpha_logup | GkrInputAir | TranscriptBus | Sampled from transcript; alpha_logup passed to batch constraint module via BatchConstraintModuleBus. beta_logup is sampled at this transcript position but consumed by InteractionsFoldingAir (see Phase 2b) |
-| Observe q0_claim | GkrLayerAir | TranscriptBus | The root denominator claim q0 is observed into the transcript at layer 0 |
+| Observe q0_claim | GkrInputAir | TranscriptBus | The root denominator claim q0 is observed into the transcript by GkrInputAir |
 | GKR layer 0: observe p_xi_0, q_xi_0, p_xi_1, q_xi_1 | GkrLayerAir | TranscriptBus, XiRandomnessBus | Layer claims are observed; the zero-check (p_cross_term == 0) and root consistency (q_cross_term == q0_claim) are verified in-AIR |
 | GKR layer 0: sample mu, reduce to single evaluation | GkrLayerAir | TranscriptBus, XiRandomnessBus | mu becomes the first xi coordinate; linear interpolation is constrained within GkrLayerAir |
 | GKR layers 1..n: sample lambda, run sumcheck | GkrLayerAir, GkrLayerSumcheckAir | TranscriptBus, GkrSumcheckInputBus, GkrSumcheckOutputBus, GkrSumcheckChallengeBus | GkrLayerAir dispatches sumcheck to GkrLayerSumcheckAir (which observes polynomial evaluations, samples ri, performs cubic interpolation, computes eq incrementally). Results return via GkrSumcheckOutputBus |
@@ -83,7 +119,7 @@ These checks are enforced at **circuit construction time** rather than by AIR co
 
 | Verifier Step | Recursion Circuit AIR(s) | Key Buses | Notes |
 |---|---|---|---|
-| Sample lambda (stacking batching) | OpeningClaimsAir | TranscriptBus | Lambda is sampled by OpeningClaimsAir (opening/air.rs:500) for batching column opening claims with rotation |
+| Sample lambda (stacking batching) | OpeningClaimsAir | TranscriptBus | Lambda is sampled by OpeningClaimsAir (`stacking/opening/air.rs:500`, in `OpeningClaimsAir::eval`) for batching column opening claims with rotation |
 | Compute s_0 from column opening claims t_i | OpeningClaimsAir | ColumnClaimsBus, LiftedHeightsBus, AirShapeBus, ClaimCoefficientsBus | OpeningClaimsAir receives column openings from the batch constraint phase and computes the batched stacking claim coefficients |
 | Univariate sumcheck round | UnivariateRoundAir | TranscriptBus, SumcheckClaimsBus, EqRandValuesLookupBus, EqKernelLookupBus | Observes univariate coefficients, verifies sum over multiplicative domain matches s_0, samples u_0 |
 | Quadratic sumcheck rounds (n_stack rounds) | SumcheckRoundsAir | TranscriptBus, SumcheckClaimsBus, EqBaseBus, EqRandValuesLookupBus, ConstraintSumcheckRandomnessBus, WhirOpeningPointBus | Each round: observe s(1), s(2), sample u_i, interpolate. Also receives the batch constraint r values via ConstraintSumcheckRandomnessBus and sends u values via WhirOpeningPointBus |
@@ -111,6 +147,124 @@ These checks are enforced at **circuit construction time** rather than by AIR co
 | Binary k-fold of opened values | WhirFoldingAir | WhirFoldingBus, WhirAlphaBus | Performs the binary folding tree: fold(h; alpha)(X^2) = h(X) + (alpha - X) * (h(X) - h(-X)) / (2X) |
 | Sample gamma, accumulate claims | WhirRoundAir | TranscriptBus, WhirGammaBus | gamma is sampled per round; y0 and query evaluations are accumulated into the running claim |
 | Final check: acc == claim (MLE + query evaluations) | FinalPolyMleEvalAir, FinalPolyQueryEvalAir | WhirFinalPolyBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, WhirEqAlphaUBus, WhirAlphaBus, WhirGammaBus, FinalPolyFoldingBus | FinalPolyMleEvalAir computes prefix * suffix_sum (the MLE term). FinalPolyQueryEvalAir computes the query terms. Together they verify acc == claim |
+
+---
+
+## Glue Logic
+
+The top-level `verify` function (`verifier/mod.rs`) contains glue logic between module calls.
+Each piece is handled by the circuit as follows.
+
+**(G1) SystemParams compatibility check** (line 63). The reference verifier checks
+`config.params() != &mvk.inner.params`. In the circuit, the VK's `params` (including
+`l_skip`, `n_stack`, `k_whir`, etc.) are baked into the circuit at construction time.
+The circuit IS built from these params, so no runtime check is needed.
+
+**(G2) Trace height constraints** (lines 108-120). The reference verifier checks, for each
+`TraceHeightConstraint` in the VK:
+`sum_i(lifted_height[i] * coefficient[i]) < threshold`. ProofShapeAir enforces a single
+composite constraint: `total_interactions = sum_i(num_interactions[i] * lifted_height[i])
+< max_interaction_count` (PS1c in [ProofShape](./modules/proof-shape/README.md)). At circuit construction time, the code asserts that every
+`TraceHeightConstraint` in the child VK is implied by this single constraint (i.e., for each
+constraint, `coefficient[i] <= num_interactions[i]` for all `i` and
+`threshold >= max_interaction_count`). See `VerifierSubCircuit::new()` in `system/mod.rs`.
+
+**(G3) `need_rot_per_commit` assembly** (lines 173-191). The reference verifier constructs
+per-commitment rotation flags and passes them to `verify_stacked_reduction`. In the circuit,
+`need_rot` is a per-AIR VK constant baked into ProofShapeAir's `AirMetadata`. ProofShapeAir
+sends `need_rot` via `AirShapeBus` (property `NeedRot`). Stacking's OpeningClaimsAir receives
+it and gates rotation claim sending: `ColumnClaimsBus` messages for `rot_claim` are only sent
+when `need_rot = 1`, and `rot_claim` is constrained to zero when `need_rot = 0`.
+
+**(G4) `u_cube` computation** (lines 205-210). The reference verifier transforms `u_prism`
+(from `verify_stacked_reduction`) into `u_cube`:
+`u_cube = [u0^{2^0}, u0^{2^1}, ..., u0^{2^{l_skip-1}}, u1, ..., u_{n_stack}]`.
+In the circuit, `WhirOpeningPointBus` carries these values directly:
+- EqBaseAir sends `(idx=i, u0^{2^i})` for `i = 0, ..., l_skip-1` (l_skip messages)
+- SumcheckRoundsAir sends `(idx=round+l_skip-1, u_round)` for `round = 1, ..., n_stack`
+  (n_stack messages, idx = l_skip, ..., l_skip+n_stack-1)
+
+Total: `l_skip + n_stack` messages matching `u_cube`. WHIR's SumcheckAir and
+FinalPolyMleEvalAir receive these. See [Stacking](./modules/stacking/README.md) for details.
+
+**(G5) `commits` assembly** (lines 212-218). The reference verifier collects commitments in
+order: `common_main_commit`, then per-AIR (in sort order) preprocessed commit (if present)
+and cached commitments. In the circuit, ProofShapeAir sends all commitments on
+`CommitmentsBus` using a 2-level indexing scheme: stacking commitments use
+`(major_idx=0, minor_idx=commit_index)`, WHIR round commitments use
+`(major_idx=round+1, minor_idx=0)`. MerkleVerifyAir looks up commitments by this index pair.
+The commitment ordering is determined by the VK-fixed stacking layout structure.
+
+### `verify_proof_shape`
+
+The reference verifier's `verify_proof_shape` (`verifier/proof_shape.rs`) validates that all
+proof arrays have correct lengths before downstream functions access them. In the circuit,
+these checks are distributed across VK-fixed trace structure, AIR loop boundary constraints,
+and bus interaction balancing. See [proof-shape-validation.md](./proof-shape-validation.md) for
+a per-check correspondence.
+
+---
+
+## Module Chaining
+
+The module handoff buses thread the transcript index (`tidx`) through the modules:
+
+```
+ProofShape (tidx = 0 .. tidx_end)
+  ──GkrModuleBus(tidx_end)──▷ GKR (tidx_end .. tidx_bc)
+  ──BatchConstraintModuleBus(tidx_bc)──▷ BatchConstraint (tidx_bc .. tidx_stack)
+  ──StackingModuleBus(tidx_stack)──▷ Stacking (tidx_stack .. tidx_whir)
+  ──WhirModuleBus(tidx_whir)──▷ WHIR (tidx_whir .. end)
+```
+
+**Note on `beta_logup`.** The diagram shows contiguous, non-overlapping transcript ranges,
+but BatchConstraint also samples `beta_logup` at `tidx_if`, which falls inside GKR's range
+(immediately after `alpha_logup`). In the reference verifier, `alpha_logup` and `beta_logup`
+are sampled consecutively; in the circuit, GKR samples `alpha_logup` and reserves a gap for
+BC to sample `beta_logup` via `InteractionsFoldingInputBus` (see [GKR](./modules/gkr/README.md)
+schedule (2)). So BC's transcript operations span two non-contiguous regions: schedule (1)
+at `tidx_if` (within GKR's range) and schedule (2)-(6) starting at `tidx_cf` (see
+[BatchConstraint](./modules/batch-constraint/README.md)).
+
+The composition works because TranscriptAir enforces a single Poseidon2 sponge over
+globally coordinated `tidx` indices, and all observations (prover-supplied proof data) are
+pinned by bus interactions. The transcript indices are partitioned across modules (and even
+across individual AIRs) -- each `tidx` is owned by exactly one AIR. The partition is
+contiguous per module except for BC's `beta_logup` sample at `tidx_if` inside GKR's range. The
+handoff buses thread `tidx` forward so each module knows where its operations
+begin. Given the fixed observations and the single sponge, all sampled challenges are
+determined, and each module amounts to a claim that the reference verifier's corresponding
+function accepts on the extracted proof fragment -- the module-level arguments in each module
+doc establish this.
+
+### Walk-through of `verify()`
+
+Below, each line/block of the reference verifier's `verify()` function (`verifier/mod.rs`)
+is mapped to its circuit counterpart.
+
+| Line | Reference verifier step | Circuit counterpart | Section |
+| --- | --- | --- | --- |
+| 63-64 | `config.params() != &mvk.inner.params` | VK params baked into circuit | G1 |
+| 90-92 | `num_traces == 0` -> error | PS1b: VK-required AIRs must be present | [ProofShape](./modules/proof-shape/README.md) |
+| 94 | `verify_proof_shape(mvk, proof)` | Distributed across VK-fixed structure, AIR loops, bus balancing | [proof-shape-validation.md](./proof-shape-validation.md) |
+| 96-106 | Sort AIRs by `(is_none, Reverse(log_height), air_id)` | ProofShapeAir non-increasing height constraint (tiebreaker is prover choice) | [ProofShape](./modules/proof-shape/README.md) |
+| 108-120 | Trace height constraints | `total_interactions < max_interaction_count` (PS1c) | G2 |
+| 122-123 | `omega_skip` computation | VK constant | -- |
+| 126-155 | Preamble: observe VK pre-hash, commits, PVs | ProofShapeAir + PublicValuesAir transcript preamble | [ProofShape](./modules/proof-shape/README.md) PS3, PS4 |
+| 162-171 | `verify_zerocheck_and_logup` | GKR module + BatchConstraint module | [GKR](./modules/gkr/README.md), [BatchConstraint](./modules/batch-constraint/README.md) |
+| 173-191 | `need_rot_per_commit` assembly | VK-baked `need_rot` via `AirShapeBus` | G3 |
+| 193-203 | `verify_stacked_reduction` | Stacking module | [Stacking](./modules/stacking/README.md) |
+| 205-210 | `u_cube` from `u_prism` | `WhirOpeningPointBus` (EqBaseAir + SumcheckRoundsAir) | G4 |
+| 212-218 | `commits` assembly | `CommitmentsBus` (ProofShapeAir) | G5 |
+| 220-227 | `verify_whir` (incl. mu PoW, mu sampling) | WHIR module (mu PoW/sampling in Stacking's StackingClaimsAir) | [WHIR](./modules/whir/README.md) |
+
+Note: `verify_whir` in the reference verifier begins with mu PoW and mu sampling. In the
+circuit, these are performed by Stacking's StackingClaimsAir (schedule (6)-(7) in
+[Stacking](./modules/stacking/README.md)). The WHIR module receives the initial claim directly via
+`WhirModuleBus`. The transcript positions are identical.
+
+Together, the walk-through and module chaining cover every line of `verify()`, so
+`verify(vk_child, Extract(W)) = accept`.
 
 ---
 
@@ -164,7 +318,7 @@ The enforcement uses **limb decomposition** with range checks:
 
 1. **Preamble -> GKR**: ProofShapeAir sends `(tidx, n_logup, n_max, is_n_max_greater)` via `GkrModuleBus`. This is the only data the GKR module needs from the preamble (the transcript itself is shared via `TranscriptBus`).
 
-2. **GKR -> BatchConstraint**: GkrInputAir sends `(tidx, gkr_input_layer_claim)` via `BatchConstraintModuleBus`. This carries p_hat(xi) and q_hat(xi).
+2. **GKR -> BatchConstraint**: GkrInputAir sends `(tidx, gkr_input_layer_claim)` via `BatchConstraintModuleBus`. This carries p_hat(xi) and q_hat(xi). GkrInputAir also sends transcript positions for the lambda and beta challenges via `ConstraintsFoldingInputBus` and `InteractionsFoldingInputBus`.
 
 3. **BatchConstraint -> Stacking**: UnivariateSumcheckAir and MultilinearSumcheckAir send the `tidx` to the stacking module via `StackingModuleBus`. The sumcheck randomness r is shared via `ConstraintSumcheckRandomnessBus`. Column openings flow through `ColumnClaimsBus`.
 
@@ -216,101 +370,102 @@ No verifier computation reads data that is not routed through one of these buses
 
 ## Overall Architecture Diagram
 
-The following diagram shows all 13 AIR groups and their inter-group bus connections. Buses internal to a single group are omitted.
+The following diagram shows the major AIR clusters and their bus connections. Buses internal
+to a single cluster are omitted.
 
 ```mermaid
 graph TB
-    subgraph "Group 1: Transcript Infrastructure"
+    subgraph "Transcript Infrastructure"
         TranscriptAir
         Poseidon2Air
         MerkleVerifyAir
     end
 
-    subgraph "Group 2: Proof Shape"
+    subgraph "ProofShape"
         ProofShapeAir
         PublicValuesAir
         RangeCheckerAir
     end
 
-    subgraph "Group 3: Primitive Lookup Tables"
+    subgraph "Primitive Lookup Tables"
         PowerCheckerAir
         ExpBitsLenAir
     end
 
-    subgraph "Group 4: GKR Protocol"
+    subgraph "GKR"
         GkrInputAir
         GkrLayerAir
         GkrLayerSumcheckAir
         GkrXiSamplerAir
     end
 
-    subgraph "Group 5: BC Sumcheck Pipeline"
+    subgraph "BatchConstraint: Sumcheck Pipeline"
         FractionsFolderAir
         UnivariateSumcheckAir_BC["UnivariateSumcheckAir"]
         MultilinearSumcheckAir
         ExpressionClaimAir
     end
 
-    subgraph "Group 6: BC Expression Evaluation"
+    subgraph "BatchConstraint: Expression Evaluation"
         SymbolicExpressionAir
         InteractionsFoldingAir
         ConstraintsFoldingAir
     end
 
-    subgraph "Group 7: BC Eq Polynomials (Univariate)"
+    subgraph "BatchConstraint: Eq Polynomials (Univariate)"
         EqUniAir
         EqSharpUniAir
         EqSharpUniReceiverAir
         Eq3bAir
     end
 
-    subgraph "Group 8: BC Eq Polynomials (Multivariate)"
+    subgraph "BatchConstraint: Eq Polynomials (Multivariate)"
         EqNsAir
         EqNegAir
     end
 
-    subgraph "Group 9: Stacking Claims & Opening"
+    subgraph "Stacking: Claims & Opening"
         OpeningClaimsAir
         UnivariateRoundAir
         SumcheckRoundsAir
         StackingClaimsAir
     end
 
-    subgraph "Group 10: Stacking Eq Helpers"
+    subgraph "Stacking: Eq Helpers"
         EqBaseAir
         EqBitsAir
     end
 
-    subgraph "Group 11: WHIR Protocol Control"
+    subgraph "WHIR: Protocol Control"
         WhirRoundAir
         SumcheckAir_WHIR["SumcheckAir (WHIR)"]
     end
 
-    subgraph "Group 12: WHIR Query Verification"
+    subgraph "WHIR: Query Verification"
         WhirQueryAir
         InitialOpenedValuesAir
         NonInitialOpenedValuesAir
     end
 
-    subgraph "Group 13: WHIR Polynomial Folding"
+    subgraph "WHIR: Polynomial Folding"
         WhirFoldingAir
         FinalPolyMleEvalAir
         FinalPolyQueryEvalAir
     end
 
-    %% TranscriptBus: Group 1 -> nearly all groups (omitted for clarity)
+    %% TranscriptBus: Transcript infrastructure -> nearly all AIRs (omitted for clarity)
 
-    %% Group 2 -> Group 1
+    %% ProofShape -> Transcript infrastructure
     ProofShapeAir -- "CommitmentsBus" --> MerkleVerifyAir
 
-    %% Group 2 -> Group 3
+    %% ProofShape -> Primitive lookup tables
     ProofShapeAir -- "RangeCheckerBus" --> RangeCheckerAir
     ProofShapeAir -- "PowerCheckerBus" --> PowerCheckerAir
 
-    %% Group 2 -> Group 4
+    %% ProofShape -> GKR
     ProofShapeAir -- "GkrModuleBus" --> GkrInputAir
 
-    %% Group 2 -> Group 5
+    %% ProofShape -> BatchConstraint
     ProofShapeAir -- "FractionFolderInputBus" --> FractionsFolderAir
     ProofShapeAir -- "ExpressionClaimNMaxBus" --> ExpressionClaimAir
 

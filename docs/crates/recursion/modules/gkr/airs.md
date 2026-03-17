@@ -1,6 +1,8 @@
-# Group 04 -- GKR Protocol
+# GKR AIRs
 
 The GKR group implements the Goldwasser-Kalai-Rothblum fractional sumcheck protocol for verifying LogUp-based interaction arguments. GkrInputAir receives the initial GKR parameters, performs proof-of-work checking, and samples the alpha challenge. GkrLayerAir performs the layer-by-layer reduction, computing cross terms and reducing to single evaluation points. GkrLayerSumcheckAir runs a cubic sumcheck within each layer. GkrXiSamplerAir samples additional xi challenges when `n_max > n_logup`.
+
+**Module-level correspondence:** [README.md](./README.md) (interface, extraction, contract, module-level argument).
 
 ```mermaid
 graph LR
@@ -23,6 +25,9 @@ graph LR
     GXSB{{GkrXiSamplerBus<br/>PermutationCheck / per-proof}}
     XRB{{XiRandomnessBus<br/>PermutationCheck / per-proof}}
 
+    CFIB{{ConstraintsFoldingInputBus<br/>PermutationCheck / per-proof}}
+    IFIB{{InteractionsFoldingInputBus<br/>PermutationCheck / per-proof}}
+
     GIA -- "receive" --> GMB
     GIA -- "send" --> BCM
     GIA -- "receive (observe/sample)" --> TB
@@ -30,6 +35,8 @@ graph LR
     GIA -- "send" --> GLIB
     GIA -- "receive" --> GLOB
     GIA -- "send/receive" --> GXSB
+    GIA -- "send" --> CFIB
+    GIA -- "send" --> IFIB
 
     GLA -- "receive" --> GLIB
     GLA -- "send" --> GLOB
@@ -70,8 +77,9 @@ None.
 2. **Proof-of-work (ExpBitsLenBus — lookup, TranscriptBus — receives):** When `logup_pow_bits > 0`, verifies `generator^pow_sample = 1` via ExpBitsLenBus, where `pow_sample` is sampled from the transcript.
 3. **Layer dispatch (GkrLayerInputBus — sends, GkrLayerOutputBus — receives):** Sends the initial GKR claim to GkrLayerAir and receives the final input-layer claim back.
 4. **Xi sampling (GkrXiSamplerBus — sends/receives):** When additional xi challenges are needed (`n_max > n_logup` or `n_logup = 0`), coordinates with GkrXiSamplerAir.
-5. **Module output (BatchConstraintModuleBus — sends):** Sends `(tidx_end, input_layer_claim)` to the batch constraint module.
-6. **Transcript (TranscriptBus — receives):** Samples `alpha_logup` and observes `q0_claim` from the transcript.
+5. **Module output (BatchConstraintModuleBus — sends):** Sends `(tidx_end + D_EF, [input_layer_claim[0], input_layer_claim[1] - alpha_logup])` to the batch constraint module. Note: the second element of the claim has `alpha_logup` subtracted.
+6. **Folding inputs (ConstraintsFoldingInputBus, InteractionsFoldingInputBus — sends):** Sends the transcript index for the lambda and beta challenges to the folding AIRs.
+7. **Transcript (TranscriptBus — receives):** Samples `alpha_logup` and observes `q0_claim` from the transcript.
 
 ### Walkthrough
 
@@ -93,7 +101,7 @@ Row | is_enabled | proof_idx | n_logup | n_max | tidx | q0_claim     | alpha_log
 
 ### Executive Summary
 
-GkrLayerAir performs the core layer-by-layer GKR reduction. Each row represents one GKR layer (indexed from 0). At the root layer (layer 0), it verifies that the numerator cross term `p_cross = p(xi,0)*q(xi,1) + p(xi,1)*q(xi,0)` is zero and the denominator cross term `q_cross = q(xi,0)*q(xi,1)` equals the sumcheck claim. For each subsequent layer, it samples lambda, computes the new sumcheck claim as `numer + lambda * denom`, sends the claim to GkrLayerSumcheckAir, and receives back the result. On the final layer, it sends `xi = mu` on XiRandomnessBus.
+GkrLayerAir performs the core layer-by-layer GKR reduction. Each row represents one GKR layer (indexed from 0). At the root layer (layer 0), it verifies that the numerator cross term `p_cross = p(xi,0)*q(xi,1) + p(xi,1)*q(xi,0)` is zero and the denominator cross term `q_cross = q(xi,0)*q(xi,1)` equals the sumcheck claim. For each subsequent layer, it samples lambda, computes the new sumcheck claim as `numer + next.lambda * denom` (using the next row's lambda), sends the claim to GkrLayerSumcheckAir, and receives back the result. On the final layer, it sends `xi = mu` on XiRandomnessBus.
 
 ### Public Values
 
@@ -102,8 +110,8 @@ None.
 ### AIR Guarantees
 
 1. **Layer input/output (GkrLayerInputBus — receives, GkrLayerOutputBus — sends):** Receives the initial claim from GkrInputAir; returns the final input-layer claims after all GKR layers.
-2. **Sumcheck dispatch (GkrSumcheckInputBus — sends, GkrSumcheckOutputBus — receives):** Sends per-layer claims to GkrLayerSumcheckAir and receives sumcheck results.
-3. **Challenge sharing (GkrSumcheckChallengeBus — sends):** Sends `mu` challenges for cross-layer eq computation in GkrLayerSumcheckAir.
+2. **Sumcheck dispatch (GkrSumcheckInputBus — sends, GkrSumcheckOutputBus — receives):** Sends per-layer claims to GkrLayerSumcheckAir and receives sumcheck results. Only active on non-root layers (root layer verifies cross terms directly).
+3. **Challenge sharing (GkrSumcheckChallengeBus — sends):** Sends `mu` challenges for cross-layer eq computation in GkrLayerSumcheckAir. Only sent on non-last layers (multiplicity is `is_transition * is_not_dummy`).
 4. **Xi output (XiRandomnessBus — sends):** On the last layer, sends `(idx=0, xi=mu)` for the batch constraint module.
 5. **Transcript (TranscriptBus — receives):** Observes layer claims and samples challenges (`lambda`, `mu`).
 
@@ -140,7 +148,7 @@ None.
 ### AIR Guarantees
 
 1. **Sumcheck input/output (GkrSumcheckInputBus — receives, GkrSumcheckOutputBus — sends):** Receives per-layer claims from GkrLayerAir; returns `(layer_idx, tidx, claim_out, eq_at_r_prime)` after completing a cubic sumcheck for each layer.
-2. **Challenge exchange (GkrSumcheckChallengeBus — receives/sends):** Receives previous-layer challenges and sends current-layer challenges for cross-layer eq computation.
+2. **Challenge exchange (GkrSumcheckChallengeBus — receives/sends):** Receives previous-layer challenges on every enabled non-dummy row. Sends current-layer challenges on non-last-layer rows only (last-layer challenges are published on XiRandomnessBus instead).
 3. **Xi output (XiRandomnessBus — sends):** On the last layer, sends each round's sampled challenge for the batch constraint module.
 4. **Transcript (TranscriptBus — receives):** Observes evaluations `(ev1, ev2, ev3)` and samples round challenges.
 
@@ -198,14 +206,16 @@ Row | is_enabled | proof_idx | idx | tidx | xi
 
 | Bus | Type | Scope | Senders | Receivers |
 |-----|------|-------|---------|-----------|
-| [GkrModuleBus](bus-inventory.md#12-gkrmodulebus) | PermutationCheck | per-proof | ProofShapeAir | GkrInputAir |
-| [GkrLayerInputBus](bus-inventory.md#622-gkrlayerinputbus) | PermutationCheck | per-proof | GkrInputAir | GkrLayerAir |
-| [GkrLayerOutputBus](bus-inventory.md#623-gkrlayeroutputbus) | PermutationCheck | per-proof | GkrLayerAir | GkrInputAir |
-| [GkrSumcheckInputBus](bus-inventory.md#624-gkrsumcheckinputbus) | PermutationCheck | per-proof | GkrLayerAir | GkrLayerSumcheckAir |
-| [GkrSumcheckOutputBus](bus-inventory.md#625-gkrsumcheckoutputbus) | PermutationCheck | per-proof | GkrLayerSumcheckAir | GkrLayerAir |
-| [GkrSumcheckChallengeBus](bus-inventory.md#626-gkrsumcheckchallengebus) | PermutationCheck | per-proof | GkrLayerAir, GkrLayerSumcheckAir | GkrLayerSumcheckAir |
-| [GkrXiSamplerBus](bus-inventory.md#621-gkrxisamplerbus) | PermutationCheck | per-proof | GkrInputAir (send+receive), GkrXiSamplerAir (receive+send) | Round-trip: GkrInputAir sends input, GkrXiSamplerAir receives; GkrXiSamplerAir sends output, GkrInputAir receives |
-| [XiRandomnessBus](bus-inventory.md#41-xirandomnessbus) | PermutationCheck | per-proof | GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir | Batch constraint AIRs |
-| [BatchConstraintModuleBus](bus-inventory.md#13-batchconstraintmodulebus) | PermutationCheck | per-proof | GkrInputAir | FractionsFolderAir |
-| [TranscriptBus](bus-inventory.md#11-transcriptbus) | PermutationCheck | per-proof | All GKR AIRs receive (observe/sample) | TranscriptAir sends |
-| [ExpBitsLenBus](bus-inventory.md#51-expbitslenbus) | Lookup | global | GkrInputAir looks up | ExpBitsLenAir provides |
+| [GkrModuleBus](../../bus-inventory.md#12-gkrmodulebus) | PermutationCheck | per-proof | ProofShapeAir | GkrInputAir |
+| [GkrLayerInputBus](../../bus-inventory.md#622-gkrlayerinputbus) | PermutationCheck | per-proof | GkrInputAir | GkrLayerAir |
+| [GkrLayerOutputBus](../../bus-inventory.md#623-gkrlayeroutputbus) | PermutationCheck | per-proof | GkrLayerAir | GkrInputAir |
+| [GkrSumcheckInputBus](../../bus-inventory.md#624-gkrsumcheckinputbus) | PermutationCheck | per-proof | GkrLayerAir | GkrLayerSumcheckAir |
+| [GkrSumcheckOutputBus](../../bus-inventory.md#625-gkrsumcheckoutputbus) | PermutationCheck | per-proof | GkrLayerSumcheckAir | GkrLayerAir |
+| [GkrSumcheckChallengeBus](../../bus-inventory.md#626-gkrsumcheckchallengebus) | PermutationCheck | per-proof | GkrLayerAir, GkrLayerSumcheckAir | GkrLayerSumcheckAir |
+| [GkrXiSamplerBus](../../bus-inventory.md#621-gkrxisamplerbus) | PermutationCheck | per-proof | GkrInputAir (send+receive), GkrXiSamplerAir (receive+send) | Round-trip: GkrInputAir sends input, GkrXiSamplerAir receives; GkrXiSamplerAir sends output, GkrInputAir receives |
+| [XiRandomnessBus](../../bus-inventory.md#41-xirandomnessbus) | PermutationCheck | per-proof | GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir | Batch constraint AIRs |
+| [BatchConstraintModuleBus](../../bus-inventory.md#13-batchconstraintmodulebus) | PermutationCheck | per-proof | GkrInputAir | FractionsFolderAir |
+| [TranscriptBus](../../bus-inventory.md#11-transcriptbus) | PermutationCheck | per-proof | All GKR AIRs receive (observe/sample) | TranscriptAir sends |
+| [ConstraintsFoldingInputBus](../../bus-inventory.md#513-constraintsfoldinginputbus) | PermutationCheck | per-proof | GkrInputAir | ConstraintsFoldingAir |
+| [InteractionsFoldingInputBus](../../bus-inventory.md#514-interactionsfoldinginputbus) | PermutationCheck | per-proof | GkrInputAir | InteractionsFoldingAir |
+| [ExpBitsLenBus](../../bus-inventory.md#51-expbitslenbus) | Lookup | global | GkrInputAir looks up | ExpBitsLenAir provides |

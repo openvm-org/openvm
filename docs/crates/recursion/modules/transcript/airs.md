@@ -1,6 +1,8 @@
-# Group 01 -- Transcript Infrastructure
+# Transcript AIRs
 
 The transcript group implements the Fiat-Shamir transcript, Poseidon2 hash computations, and Merkle tree verification. Together these three AIRs ensure that every observe and sample operation in the interactive proof protocol is deterministically bound to a Poseidon2 sponge state, that all hash evaluations are correct, and that every commitment opened via a Merkle path resolves to the claimed root.
+
+**Module-level correspondence:** [README.md](./README.md) (interface, contract, sponge correctness).
 
 ```mermaid
 graph LR
@@ -15,6 +17,8 @@ graph LR
     PCB{{Poseidon2CompressBus<br/>Lookup / global}}
     CB{{CommitmentsBus<br/>Lookup / per-proof}}
     MVB{{MerkleVerifyBus<br/>PermutationCheck / per-proof}}
+    RSB{{RightShiftBus<br/>Lookup / global}}
+    FTSB{{FinalTranscriptStateBus<br/>PermutationCheck / per-proof}}
 
     TA -- "send observe/sample msgs" --> TB
     TA -- "lookup_key (permuted)" --> PPB
@@ -24,7 +28,10 @@ graph LR
 
     MA -- "lookup_key (every row)" --> PCB
     MA -- "lookup_key (root row)" --> CB
+    MA -- "lookup_key (final row)" --> RSB
     MA -- "send/receive intermediate hashes" --> MVB
+
+    TA -- "send final state" --> FTSB
 ```
 
 ---
@@ -74,15 +81,15 @@ TranscriptCols<T> {
 }
 ```
 
-Whether a Poseidon2 permutation occurs is determined dynamically from the constraint logic: a permutation is enforced at observe-to-sample mode transitions and whenever a full CHUNK of observations has been absorbed. When no permutation occurs, `prev_state == post_state` is constrained.
+Whether a Poseidon2 permutation occurs is determined dynamically from the constraint logic: a permutation occurs on all non-final same-proof rows *except* sample-to-observe transitions. Specifically, permutation is enforced on observe-to-observe (full CHUNK), observe-to-sample, and sample-to-sample (full CHUNK) transitions. Sample-to-observe transitions do *not* trigger a permutation. When no permutation occurs, `prev_state == post_state` is constrained.
 
 ### NestedForLoopSubAir
 
 TranscriptAir uses `NestedForLoopSubAir<1>` for proof-index tracking. This sub-AIR manages the `proof_idx` counter and `is_proof_start` flag, ensuring correct sequencing across multiple child proofs.
 
-### FinalTranscriptStateBus (Continuations)
+### FinalTranscriptStateBus
 
-When continuations are enabled, TranscriptAir sends the final Poseidon2 sponge state on the last row of each proof via `FinalTranscriptStateBus`. This allows the continuations circuit to resume the transcript state in the next segment.
+When enabled, TranscriptAir sends the final Poseidon2 sponge state on the last row of each proof via `FinalTranscriptStateBus`. Downstream verifier circuits can then bind their own public-value checks to the child proof's terminal transcript state; the current consumer is `DeferredVerifyPvsAir`.
 
 ### Observe vs Sample Ordering
 
@@ -100,7 +107,7 @@ The capacity portion of the state (indices CHUNK..WIDTH, i.e., positions 8..15) 
 - If the next row is an absorb and `mask[i]=0` for position i, the rate element carries over unchanged.
 - If the next row is a squeeze, all rate elements carry over unchanged (squeeze reads from the current state without modifying it).
 
-When no permutation is needed (determined by the constraint logic), `prev_state == post_state` is enforced. A Poseidon2 permutation is triggered at mode transitions (observe ↔ sample) and when a full CHUNK of observations has been absorbed. The permutation constraint ensures that on rows where `is_sample` changes between the current and next row (within the same proof) and `count == CHUNK`, the sponge state is permuted.
+When no permutation is needed (determined by the constraint logic), `prev_state == post_state` is enforced. The permutation condition is: `permuted = local_next_same_proof * NOT(local.is_sample AND NOT next.is_sample)`. This means permutation occurs on all non-final same-proof rows except sample-to-observe transitions. Separately, a `count == CHUNK` constraint is enforced when the mode stays the same between rows (observe-to-observe or sample-to-sample), ensuring the full rate portion is consumed before continuing.
 
 ---
 
@@ -166,9 +173,10 @@ None.
 ### AIR Guarantees
 
 1. **Leaf reception (MerkleVerifyBus — receives):** Receives leaf hashes `(merkle_idx_bit_src, current_idx_bit_src, total_depth, height=0, is_leaf=1, leaf_sub_idx, value, commit_major, commit_minor)` from InitialOpenedValuesAir and NonInitialOpenedValuesAir.
-2. **Hash verification (Poseidon2CompressBus — lookup):** Every intermediate hash in each Merkle authentication path is verified via Poseidon2CompressBus.
-3. **Commitment check (CommitmentsBus — lookup):** The root of each Merkle path is verified against a commitment `(commit_major, commit_minor, root_digest)` on CommitmentsBus.
-4. **Index shifting (RightShiftBus — lookup):** Computes `current_idx_bit_src` by right-shifting `merkle_idx_bit_src` by `max(0, total_depth - k)`, separating the leaf tree index from the authentication path index.
+2. **Intermediate hash propagation (MerkleVerifyBus — sends):** On every valid non-last-merkle row, sends the compression output with `height + 1` to be received by higher-level rows within the same Merkle proof.
+3. **Hash verification (Poseidon2CompressBus — lookup):** Every intermediate hash in each Merkle authentication path is verified via Poseidon2CompressBus.
+4. **Commitment check (CommitmentsBus — lookup):** The root of each Merkle path is verified against a commitment `(commit_major, commit_minor, root_digest)` on CommitmentsBus.
+5. **Index shifting (RightShiftBus — lookup):** Computes `current_idx_bit_src` by right-shifting `merkle_idx_bit_src` by `total_depth - k`, separating the leaf tree index from the authentication path index.
 
 ### Walkthrough
 
@@ -206,9 +214,10 @@ The `merkle_idx_bit_src` field carries the raw Merkle index. The `current_idx_bi
 
 | Bus | Type | Direction in This Group | Participants |
 |-----|------|------------------------|-------------|
-| [TranscriptBus](bus-inventory.md#11-transcriptbus) | PermutationCheck (per-proof) | TranscriptAir sends | All other AIR groups receive |
-| [Poseidon2PermuteBus](bus-inventory.md#21-poseidon2permutebus) | Lookup (global) | Poseidon2Air provides keys; TranscriptAir looks up | Internal |
-| [Poseidon2CompressBus](bus-inventory.md#22-poseidon2compressbus) | Lookup (global) | Poseidon2Air provides keys; MerkleVerifyAir looks up | Internal |
-| [CommitmentsBus](bus-inventory.md#34-commitmentsbus) | Lookup (per-proof) | MerkleVerifyAir looks up | ProofShapeAir provides keys |
-| [MerkleVerifyBus](bus-inventory.md#17-merkleverifybus) | PermutationCheck (per-proof) | MerkleVerifyAir sends/receives internally | Internal |
-| [FinalTranscriptStateBus](bus-inventory.md#515-finaltranscriptstatebus) | PermutationCheck (per-proof) | TranscriptAir sends (continuations only) | Continuations circuit |
+| [TranscriptBus](../../bus-inventory.md#11-transcriptbus) | PermutationCheck (per-proof) | TranscriptAir sends | All other AIR groups receive |
+| [Poseidon2PermuteBus](../../bus-inventory.md#21-poseidon2permutebus) | Lookup (global) | Poseidon2Air provides keys; TranscriptAir looks up | Internal |
+| [Poseidon2CompressBus](../../bus-inventory.md#22-poseidon2compressbus) | Lookup (global) | Poseidon2Air provides keys; MerkleVerifyAir looks up | Internal |
+| [CommitmentsBus](../../bus-inventory.md#34-commitmentsbus) | Lookup (per-proof) | MerkleVerifyAir looks up | ProofShapeAir provides keys |
+| [MerkleVerifyBus](../../bus-inventory.md#17-merkleverifybus) | PermutationCheck (per-proof) | MerkleVerifyAir sends/receives internally | Internal |
+| [RightShiftBus](../../bus-inventory.md#511-rightshiftbus) | Lookup (global) | MerkleVerifyAir looks up | ExpBitsLenAir provides keys |
+| [FinalTranscriptStateBus](../../bus-inventory.md#515-finaltranscriptstatebus) | PermutationCheck (per-proof) | TranscriptAir sends when enabled | DeferredVerifyPvsAir |
