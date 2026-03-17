@@ -20,7 +20,7 @@ use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
     primitives::Chip,
     system::memory::{
         controller::CHUNK, dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress,
@@ -28,10 +28,10 @@ use crate::{
     },
 };
 
-/// Number of CONST_BLOCK_SIZE blocks per CHUNK (e.g., 2 for 8/4).
+/// Number of DEFAULT_BLOCK_SIZE blocks per CHUNK (e.g., 2 for 8/4).
 /// Blocks are on the same row only for Merkle tree hashing (8 bytes at a time).
 /// Memory bus interactions use per-block timestamps.
-pub const BLOCKS_PER_CHUNK: usize = CHUNK / CONST_BLOCK_SIZE;
+pub const BLOCKS_PER_CHUNK: usize = CHUNK / DEFAULT_BLOCK_SIZE;
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
@@ -46,7 +46,7 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
     pub leaf_label: T,
     pub values: [T; CHUNK],
     pub hash: [T; CHUNK],
-    /// Per-block timestamps. Each CONST_BLOCK_SIZE block within the chunk has its own timestamp.
+    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block within the chunk has its own timestamp.
     /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
     /// at t=0 final).
     pub timestamps: [T; BLOCKS_PER_CHUNK],
@@ -120,8 +120,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 
         let chunk_size_f = AB::F::from_usize(CHUNK);
         for block_idx in 0..BLOCKS_PER_CHUNK {
-            let offset = AB::F::from_usize(block_idx * CONST_BLOCK_SIZE);
-            // Split the 1xCHUNK leaf into CONST_BLOCK_SIZE-sized bus messages.
+            let offset = AB::F::from_usize(block_idx * DEFAULT_BLOCK_SIZE);
+            // Split the 1xCHUNK leaf into DEFAULT_BLOCK_SIZE-sized bus messages.
             // Each block uses its own timestamp - untouched blocks stay at t=0.
             self.memory_bus
                 .send(
@@ -129,7 +129,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
                         local.address_space,
                         local.leaf_label * chunk_size_f + offset,
                     ),
-                    local.values[block_idx * CONST_BLOCK_SIZE..(block_idx + 1) * CONST_BLOCK_SIZE]
+                    local.values
+                        [block_idx * DEFAULT_BLOCK_SIZE..(block_idx + 1) * DEFAULT_BLOCK_SIZE]
                         .to_vec(),
                     local.timestamps[block_idx],
                 )
@@ -158,7 +159,7 @@ pub struct FinalTouchedLabel<F, const CHUNK: usize> {
     final_values: [F; CHUNK],
     init_hash: [F; CHUNK],
     final_hash: [F; CHUNK],
-    /// Per-block timestamps. Each CONST_BLOCK_SIZE block has its own timestamp.
+    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block has its own timestamp.
     final_timestamps: [u32; BLOCKS_PER_CHUNK],
 }
 
@@ -226,7 +227,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     /// Finalize the boundary chip with per-block timestamped memory.
     ///
-    /// `final_memory` is at CONST_BLOCK_SIZE granularity (4 bytes per entry, single timestamp
+    /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity (4 bytes per entry, single timestamp
     /// each). This function rechunks into CHUNK-sized (8 bytes) groups with per-block
     /// timestamps. Untouched blocks within a touched chunk get values from initial_memory and
     /// timestamp 0.
@@ -234,20 +235,20 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
-        // Touched stuff at CONST_BLOCK_SIZE granularity
-        final_memory: &TimestampedEquipartition<F, CONST_BLOCK_SIZE>,
+        // Touched stuff at DEFAULT_BLOCK_SIZE granularity
+        final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
         hasher: &H,
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        type BlockInfo<F> = (usize, u32, [F; CONST_BLOCK_SIZE]); // (block_idx, timestamp, values)
+        type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timestamp, values)
         type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
 
         let enriched: Vec<EnrichedEntry<F>> = final_memory
             .par_iter()
             .map(|&((addr_space, ptr), ts_values)| {
                 let chunk_label = ptr / CHUNK as u32;
-                let block_idx = ((ptr % CHUNK as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
                 let key = (addr_space, chunk_label);
                 let block_info = (block_idx, ts_values.timestamp, ts_values.values);
                 (key, block_info)
@@ -278,7 +279,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 for (block_idx, ts, values) in blocks {
                     timestamps[block_idx] = ts;
                     for (i, &val) in values.iter().enumerate() {
-                        final_values[block_idx * CONST_BLOCK_SIZE + i] = val;
+                        final_values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
                     }
                 }
 
