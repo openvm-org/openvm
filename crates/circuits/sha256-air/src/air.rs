@@ -332,6 +332,13 @@ impl Sha256Air {
             .when(local_is_padding_row.clone())
             .assert_zero(local_cols.flags.global_block_idx);
 
+        // `is_last_block` must be block-constant so the digest row cannot disagree with the
+        // first 16 rows about whether this block terminates the message.
+        builder.when(local_cols.flags.is_round_row).assert_eq(
+            local_cols.flags.is_last_block,
+            next_cols.flags.is_last_block,
+        );
+
         // Constrain the local block index
         // We set the local block index to 0 for padding rows
 

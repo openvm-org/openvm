@@ -1,4 +1,8 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use hex::FromHex;
 use openvm_circuit::{
@@ -12,9 +16,12 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    encoder::Encoder,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -22,13 +29,17 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_sha256_air::{
-    get_sha256_num_blocks, Sha256FillerHelper, SHA256_BLOCK_U8S, SHA256_H, SHA256_ROWS_PER_BLOCK,
+    get_flag_pt_array, get_sha256_num_blocks, Sha256FillerHelper, SHA256_BLOCK_U8S,
+    SHA256_BLOCK_WORDS, SHA256_H, SHA256_HASH_WORDS, SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::{dense::DenseMatrix, Matrix},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
@@ -42,11 +53,11 @@ use {
     },
 };
 
-use super::{Sha256VmAir, Sha256VmChip, Sha256VmExecutor};
-use crate::{
-    sha256_solve, Sha256VmDigestCols, Sha256VmFiller, Sha256VmRoundCols, SHA256VM_CONTROL_WIDTH,
-    SHA256VM_DIGEST_WIDTH, SHA256VM_WIDTH,
+use super::{
+    PaddingFlags, Sha256VmAir, Sha256VmChip, Sha256VmControlCols, Sha256VmExecutor,
+    SHA256VM_CONTROL_WIDTH, SHA256VM_DIGEST_WIDTH, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH,
 };
+use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmFiller, Sha256VmRoundCols};
 
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
@@ -383,6 +394,172 @@ fn len_data_range_exploit_is_rejected_with_check() {
         Some(VerificationError::ChallengePhaseError),
         "Trace with len_data decomposing to 16+p ({}) should be rejected by the len_data range check.",
         pranked_len,
+    );
+}
+
+// Audit finding: `is_last_block` is only constrained on the digest row, but
+// `*LastRow` padding flags are checked against the row-local first-4-row value.
+//
+// Execute a 16-byte message (honestly 1 block), then prank the trace so:
+// - the digest row still has `is_last_block = 1`
+// - the first four read rows have `is_last_block = 0`
+// - row 3 uses `EntirePadding` instead of `EntirePaddingLastRow`
+//
+// The inner SHA block is regenerated without the length suffix on row 3, so the
+// block hashes a different 64-byte string while the digest row still claims it is
+// the terminal block of the message.
+//
+// Before the fix, the AIR accepts this because:
+// - `Sha256Air` only checks `is_last_block` is boolean, not block-constant
+// - `Sha256VmAir` only enforces `*LastRow` placement under `when(next.is_last_block)`
+//
+// After the fix, this malicious trace must be rejected.
+#[test]
+fn test_row_local_last_block_can_omit_length_row() {
+    use std::cell::Cell;
+
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, (bitwise_air, bitwise_chip)) =
+        create_harness::<MatrixRecordArena<F>>(&mut tester);
+
+    let message = [0xab_u8; 16];
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        SHA256,
+        Some(&message),
+        None,
+    );
+
+    let address_bits = tester.address_bits();
+    let sha_helper = Sha256FillerHelper::new();
+    let padding_encoder = Encoder::new(PaddingFlags::COUNT, 2, false);
+
+    let exploit_block: [u8; SHA256_BLOCK_U8S] = {
+        let mut b = [0u8; SHA256_BLOCK_U8S];
+        b[..message.len()].copy_from_slice(&message);
+        b[message.len()] = 1 << (RV32_CELL_BITS - 1);
+        b
+    };
+    let exploit_block_words: [u32; SHA256_BLOCK_WORDS] = array::from_fn(|i| {
+        u32::from_be_bytes(exploit_block[i * 4..(i + 1) * 4].try_into().unwrap())
+    });
+    let exploit_hash_words = Sha256FillerHelper::get_block_hash(&SHA256_H, exploit_block);
+    let exploit_hash_bytes: [u8; 32] =
+        array::from_fn(|i| ((exploit_hash_words[i / 4] >> (8 * (3 - i % 4))) & 0xFF) as u8);
+
+    assert_ne!(
+        exploit_hash_bytes,
+        sha256_solve(&message),
+        "Exploit block must hash differently from honest SHA-256(message)"
+    );
+
+    let dst_ptr_cell: Cell<u32> = Cell::new(0);
+    let src_ptr_cell: Cell<u32> = Cell::new(0);
+    let from_ts_cell: Cell<u32> = Cell::new(0);
+    let orig_final_hash_cell: Cell<[[F; SHA256_WORD_U8S]; SHA256_HASH_WORDS]> =
+        Cell::new([[F::ZERO; SHA256_WORD_U8S]; SHA256_HASH_WORDS]);
+
+    let modify_trace = |trace: &mut RowMajorMatrix<F>| {
+        let width = trace.width();
+        let mut found_digest = false;
+
+        for row_idx in 0..trace.height() {
+            let row = &trace.values[row_idx * width..(row_idx + 1) * width];
+            let digest: &Sha256VmDigestCols<F> = row[..SHA256VM_DIGEST_WIDTH].borrow();
+            if digest.inner.flags.is_digest_row.is_one()
+                && digest.inner.flags.is_last_block.is_one()
+            {
+                dst_ptr_cell.set(u32::from_le_bytes(
+                    digest.dst_ptr.map(|x| x.as_canonical_u32() as u8),
+                ));
+                src_ptr_cell.set(u32::from_le_bytes(
+                    digest.src_ptr.map(|x| x.as_canonical_u32() as u8),
+                ));
+                from_ts_cell.set(digest.from_state.timestamp.as_canonical_u32());
+                orig_final_hash_cell.set(digest.inner.final_hash);
+                found_digest = true;
+                break;
+            }
+        }
+
+        assert!(found_digest, "failed to find the final digest row to prank");
+
+        // Rebuild the SHA subtrace so row 3 is all zeros instead of the honest length suffix.
+        bitwise_chip.clear();
+        sha_helper.generate_block_trace(
+            &mut trace.values[..SHA256_ROWS_PER_BLOCK * width],
+            width,
+            SHA256VM_CONTROL_WIDTH,
+            &exploit_block_words,
+            bitwise_chip.as_ref(),
+            &SHA256_H,
+            true,
+            1,
+            0,
+        );
+        sha_helper.generate_missing_cells(
+            &mut trace.values[width..width * (SHA256_ROWS_PER_BLOCK + 1)],
+            width,
+            SHA256VM_CONTROL_WIDTH,
+        );
+
+        // Make `is_last_block` disagree within the block: round rows say "not last",
+        // digest row still says "last".
+        for row_idx in 0..4 {
+            let row = &mut trace.values[row_idx * width..(row_idx + 1) * width];
+            let round: &mut Sha256VmRoundCols<F> = row[..SHA256VM_ROUND_WIDTH].borrow_mut();
+            round.inner.flags.is_last_block = F::ZERO;
+        }
+
+        // Row 3 no longer carries the length suffix.
+        let row = &mut trace.values[3 * width..4 * width];
+        let control: &mut Sha256VmControlCols<F> = row[..SHA256VM_CONTROL_WIDTH].borrow_mut();
+        control.pad_flags =
+            get_flag_pt_array(&padding_encoder, PaddingFlags::EntirePadding as usize)
+                .map(F::from_u32);
+
+        // Re-add the VM-layer range lookups for the final digest row.
+        let msl_rshift = ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS) as u32;
+        let msl_lshift = (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - address_bits) as u32;
+        bitwise_chip.request_range(
+            (dst_ptr_cell.get() >> msl_rshift) << msl_lshift,
+            (src_ptr_cell.get() >> msl_rshift) << msl_lshift,
+        );
+        bitwise_chip.request_range(0, 0);
+        bitwise_chip.request_range(((message.len() as u32) + 8) * 4, 0);
+    };
+
+    disable_debug_builder();
+    let mut tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery((bitwise_air, bitwise_chip));
+
+    // Compensate the memory bus for the forged hash write.
+    let write_ts = from_ts_cell.get() + 3 + 4;
+    let dst_ptr = dst_ptr_cell.get();
+
+    let orig_final_hash = orig_final_hash_cell.get();
+    let honest_hash_flat: [F; 32] = array::from_fn(|i| {
+        orig_final_hash[i / SHA256_WORD_U8S][SHA256_WORD_U8S - 1 - i % SHA256_WORD_U8S]
+    });
+    let exploit_hash_flat: [F; 32] = array::from_fn(|i| F::from_u8(exploit_hash_bytes[i]));
+
+    let memory = tester.memory.as_mut().unwrap();
+    let chip32 = memory.chip_for_block.get_mut(&32).unwrap();
+    chip32.send(RV32_MEMORY_AS, dst_ptr, &honest_hash_flat, write_ts);
+    chip32.receive(RV32_MEMORY_AS, dst_ptr, &exploit_hash_flat, write_ts);
+
+    let tester = tester.finalize();
+    let result = tester.simple_test();
+    assert!(
+        result.is_err(),
+        "Trace with row-local `is_last_block` and missing `*LastRow` length row \
+        should be rejected once the fix is in place",
     );
 }
 

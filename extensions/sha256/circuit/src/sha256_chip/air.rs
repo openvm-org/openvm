@@ -294,10 +294,11 @@ impl Sha256VmAir {
             .when(next.inner.flags.is_first_4_rows)
             .assert_eq(not(next.control.padding_occurred), is_next_not_padding);
 
-        // `pad_flags` is `*LastRow` on the row that contains the last four words of the message
-        builder
-            .when(next.inner.flags.is_last_block)
-            .assert_eq(is_next_4th_row, is_next_last_padding);
+        // `pad_flags` is `*LastRow` iff this is row 3 of the last block of the message.
+        builder.assert_eq(
+            is_next_4th_row * next.inner.flags.is_last_block,
+            is_next_last_padding,
+        );
     }
 
     fn eval_padding_row<AB: InteractionBuilder>(
