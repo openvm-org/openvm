@@ -39,7 +39,7 @@ use crate::{
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
-        CONST_BLOCK_SIZE,
+        DEFAULT_BLOCK_SIZE,
     },
     system::{
         memory::{
@@ -179,13 +179,13 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        // Write pointer in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // Write pointer in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
         // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
         let ptr_bytes = (pointer as u32).to_le_bytes();
-        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
-            let chunk: [u8; CONST_BLOCK_SIZE] =
-                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
-            self.write::<CONST_BLOCK_SIZE>(1, register + i, chunk.map(F::from_u8));
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+            let chunk: [u8; DEFAULT_BLOCK_SIZE] =
+                ptr_bytes[i..i + DEFAULT_BLOCK_SIZE].try_into().unwrap();
+            self.write::<DEFAULT_BLOCK_SIZE>(1, register + i, chunk.map(F::from_u8));
         }
         (register, pointer)
     }
@@ -236,22 +236,22 @@ impl<F: VmField> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        // Write pointer in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // Write pointer in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
         // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
         let ptr_bytes = (pointer as u32).to_le_bytes();
-        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
-            let chunk: [u8; CONST_BLOCK_SIZE] =
-                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
-            self.write::<CONST_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_u8));
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+            let chunk: [u8; DEFAULT_BLOCK_SIZE] =
+                ptr_bytes[i..i + DEFAULT_BLOCK_SIZE].try_into().unwrap();
+            self.write::<DEFAULT_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_u8));
         }
-        // Always write in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // Always write in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
-                self.write::<CONST_BLOCK_SIZE>(
+            for j in (0..NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+                self.write::<DEFAULT_BLOCK_SIZE>(
                     2usize,
                     ptr + j,
-                    write[j..j + CONST_BLOCK_SIZE].try_into().unwrap(),
+                    write[j..j + DEFAULT_BLOCK_SIZE].try_into().unwrap(),
                 );
             }
         }
@@ -320,20 +320,19 @@ impl VmChipTestBuilder<BabyBear> {
 impl<F: VmField> VmChipTestBuilder<F> {
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
-        init_block_size: usize,
     ) -> (SharedVariableRangeCheckerChip, TracingMemory) {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         )));
-        let memory = TracingMemory::new(mem_config, init_block_size);
+        let memory = TracingMemory::new(mem_config);
 
         (range_checker, memory)
     }
 
     pub fn from_config(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
         let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
