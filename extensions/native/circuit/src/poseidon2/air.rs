@@ -159,6 +159,10 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         builder
             .when(end.clone())
             .when(next.inside_row)
+            .assert_one(next_cells[0].is_first_in_row);
+        builder
+            .when(end.clone())
+            .when(next.inside_row)
             .assert_eq(next.very_first_timestamp, next.start_timestamp);
 
         // end
@@ -309,6 +313,11 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             when_inside_row_not_last
                 .when(next_cell.is_first_in_row)
                 .assert_eq(next_cell.opened_index, cell.opened_index + AB::F::ONE);
+            if i == CHUNK - 1 {
+                when_inside_row_not_last
+                    .when(next_cell.is_first_in_row)
+                    .assert_eq(cell.row_pointer + AB::F::ONE, cell.row_end);
+            }
 
             when_inside_row_not_last
                 .when(next_is_exhausted.clone())

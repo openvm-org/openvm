@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::{borrow::BorrowMut, cmp::min};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester},
@@ -10,10 +10,13 @@ use openvm_native_compiler::{
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
-    p3_air::BaseAir,
+    air_builders::debug::DebugConstraintBuilder,
+    interaction::RapPhaseSeqKind,
+    p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32, PrimeField64},
     p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
+        dense::{DenseMatrix, RowMajorMatrix, RowMajorMatrixView},
+        stack::VerticalPair,
         Matrix,
     },
     utils::disable_debug_builder,
@@ -34,6 +37,7 @@ use super::air::VerifyBatchBus;
 use crate::poseidon2::{
     air::NativePoseidon2Air,
     chip::{NativePoseidon2Executor, NativePoseidon2Filler},
+    columns::{InsideRowSpecificCols, NativePoseidon2Cols},
     NativePoseidon2Chip, CHUNK,
 };
 cfg_if::cfg_if! {
@@ -316,6 +320,56 @@ fn test<const N: usize>(cases: [Case; N]) {
     prank_tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
 }
 
+fn assert_poseidon2_local_air_rejects_trace(
+    harness: &Harness<F, SBOX_REGISTERS>,
+    trace: RowMajorMatrix<F>,
+) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let empty: &[F] = &[];
+        let trace_view = trace.as_view();
+        for row_idx in 0..trace.height() {
+            let next_row_idx = (row_idx + 1) % trace.height();
+            let local_row = trace_view.row_slice(row_idx).expect("row exists");
+            let next_row = trace_view.row_slice(next_row_idx).expect("row exists");
+            let mut builder = DebugConstraintBuilder::<BabyBearBlake3Config> {
+                air_name: "NativePoseidon2Air",
+                row_index: row_idx,
+                preprocessed: VerticalPair::new(
+                    RowMajorMatrixView::new_row(empty),
+                    RowMajorMatrixView::new_row(empty),
+                ),
+                partitioned_main: vec![VerticalPair::new(
+                    RowMajorMatrixView::new_row(local_row.as_ref()),
+                    RowMajorMatrixView::new_row(next_row.as_ref()),
+                )],
+                after_challenge: vec![],
+                challenges: &[],
+                public_values: &[],
+                exposed_values_after_challenge: &[],
+                is_first_row: if row_idx == 0 { F::ONE } else { F::ZERO },
+                is_last_row: if row_idx + 1 == trace.height() {
+                    F::ONE
+                } else {
+                    F::ZERO
+                },
+                is_transition: if row_idx + 1 == trace.height() {
+                    F::ZERO
+                } else {
+                    F::ONE
+                },
+                rap_phase_seq_kind: RapPhaseSeqKind::FriLogUp,
+                has_common_main: true,
+            };
+            harness.air.eval(&mut builder);
+        }
+    }));
+
+    assert!(
+        result.is_err(),
+        "expected local Poseidon2 AIR constraints to reject the trace"
+    );
+}
+
 #[test]
 fn verify_batch_test_felt() {
     test([Case {
@@ -392,6 +446,183 @@ fn verify_batch_test_felt_and_ext() {
             opened_element_size: 4,
         },
     ])
+}
+
+#[test]
+fn verify_batch_rejects_unanchored_inside_row_start() {
+    let tester = VmChipTestBuilder::default_native();
+    let harness = create_test_chip::<F, SBOX_REGISTERS>(&tester);
+
+    let air_width = harness.air.width();
+    let inner_width = harness.executor.subchip.air.width();
+    let mut trace = RowMajorMatrix::new(F::zero_vec(2 * air_width), air_width);
+
+    // Keep the Poseidon2 witness valid and only prank the verify-batch columns.
+    // Row 0 is disabled; row 1 is treated as the first row of an inside-row block.
+    let left_inputs: [F; CHUNK] = std::array::from_fn(|i| F::from_usize(i + 1));
+    let inside_state = std::array::from_fn(|i| if i < CHUNK { left_inputs[i] } else { F::ZERO });
+    let inner_trace = harness
+        .executor
+        .subchip
+        .generate_trace(vec![[F::ZERO; 2 * CHUNK], inside_state]);
+
+    trace.row_mut(0)[..inner_width]
+        .copy_from_slice(inner_trace.row_slice(0).expect("row exists").as_ref());
+    trace.row_mut(1)[..inner_width]
+        .copy_from_slice(inner_trace.row_slice(1).expect("row exists").as_ref());
+
+    let row_1: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = trace.row_mut(1).borrow_mut();
+    // This row starts an inside-row block, so cell 0 must be anchored to
+    // opened_values[initial_opened_index][0].
+    row_1.inside_row = F::ONE;
+    row_1.end_inside_row = F::ONE;
+    row_1.very_first_timestamp = F::from_u32(10);
+    row_1.start_timestamp = F::from_u32(10);
+    row_1.opened_element_size_inv = F::ONE;
+    row_1.initial_opened_index = F::ZERO;
+
+    let inside_specific: &mut InsideRowSpecificCols<F> =
+        row_1.specific[..InsideRowSpecificCols::<u8>::width()].borrow_mut();
+    let shared_mem_helper = tester.memory_helper();
+    let mem_helper = shared_mem_helper.as_borrowed();
+    let row_pointer_base = 100usize;
+    let row_end = row_pointer_base + CHUNK;
+    for i in 0..CHUNK {
+        let cell = &mut inside_specific.cells[i];
+        // Malicious witness: the block claims to start at opened_index = 0, but cell 0 is not
+        // marked first-in-row, so the old AIR let it hash another contiguous memory segment.
+        cell.opened_index = F::ZERO;
+        cell.row_pointer = F::from_usize(row_pointer_base + i);
+        cell.row_end = F::from_usize(row_end);
+        cell.is_first_in_row = F::ZERO;
+        mem_helper.fill(0, 11 + (2 * i) as u32, cell.read.as_mut());
+    }
+
+    assert_poseidon2_local_air_rejects_trace(&harness, trace);
+}
+
+#[test]
+fn verify_batch_rejects_opened_index_advance_before_row_end() {
+    let tester = VmChipTestBuilder::default_native();
+    let harness = create_test_chip::<F, SBOX_REGISTERS>(&tester);
+
+    let air_width = harness.air.width();
+    let inner_width = harness.executor.subchip.air.width();
+    let mut trace = RowMajorMatrix::new(F::zero_vec(4 * air_width), air_width);
+
+    // Build two consecutive inside-row rows with a valid Poseidon transition. Only the
+    // verify-batch row boundary bookkeeping is falsified.
+    let row_1_values: [F; CHUNK] = std::array::from_fn(|i| F::from_usize(i + 1));
+    let mut row_1_state = [F::ZERO; 2 * CHUNK];
+    row_1_state[..CHUNK].copy_from_slice(&row_1_values);
+
+    let row_1_output = harness.executor.subchip.permute(row_1_state);
+
+    let row_2_values: [F; CHUNK] = std::array::from_fn(|i| F::from_usize(100 + i));
+    let mut row_2_state = [F::ZERO; 2 * CHUNK];
+    // The right half continues honestly across rows. Only the left half fakes the early jump.
+    row_2_state[..CHUNK].copy_from_slice(&row_2_values);
+    row_2_state[CHUNK..].copy_from_slice(&row_1_output[CHUNK..]);
+
+    let inner_trace = harness.executor.subchip.generate_trace(vec![
+        [F::ZERO; 2 * CHUNK],
+        row_1_state,
+        row_2_state,
+        [F::ZERO; 2 * CHUNK],
+    ]);
+
+    trace.row_mut(0)[..inner_width]
+        .copy_from_slice(inner_trace.row_slice(0).expect("row exists").as_ref());
+    trace.row_mut(1)[..inner_width]
+        .copy_from_slice(inner_trace.row_slice(1).expect("row exists").as_ref());
+    trace.row_mut(2)[..inner_width]
+        .copy_from_slice(inner_trace.row_slice(2).expect("row exists").as_ref());
+    trace.row_mut(3)[..inner_width]
+        .copy_from_slice(inner_trace.row_slice(3).expect("row exists").as_ref());
+
+    let shared_mem_helper = tester.memory_helper();
+    let mem_helper = shared_mem_helper.as_borrowed();
+    let opened_base_pointer = F::from_u32(200);
+    let very_first_timestamp = F::from_u32(10);
+    let row_1_start_timestamp_u32 = 10;
+    let row_2_start_timestamp_u32 = row_1_start_timestamp_u32 + (2 * CHUNK) as u32;
+
+    {
+        let row_1: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = trace.row_mut(1).borrow_mut();
+        row_1.inside_row = F::ONE;
+        row_1.end_inside_row = F::ZERO;
+        row_1.very_first_timestamp = very_first_timestamp;
+        row_1.start_timestamp = F::from_u32(row_1_start_timestamp_u32);
+        row_1.opened_element_size_inv = F::ONE;
+        row_1.initial_opened_index = F::ZERO;
+        row_1.opened_base_pointer = opened_base_pointer;
+
+        let inside_specific: &mut InsideRowSpecificCols<F> =
+            row_1.specific[..InsideRowSpecificCols::<u8>::width()].borrow_mut();
+        let row_pointer_base = 100usize;
+        // This row still has one unread element after CHUNK cells, so the next trace row must
+        // continue the same opened row.
+        let row_end = row_pointer_base + CHUNK + 1;
+        for i in 0..CHUNK {
+            let cell = &mut inside_specific.cells[i];
+            cell.opened_index = F::ZERO;
+            cell.row_pointer = F::from_usize(row_pointer_base + i);
+            cell.row_end = F::from_usize(row_end);
+            cell.is_first_in_row = if i == 0 { F::ONE } else { F::ZERO };
+            if i == 0 {
+                mem_helper.fill(
+                    0,
+                    row_1_start_timestamp_u32,
+                    cell.read_row_pointer_and_length.as_mut(),
+                );
+            }
+            mem_helper.fill(
+                0,
+                row_1_start_timestamp_u32 + (2 * i) as u32 + 1,
+                cell.read.as_mut(),
+            );
+        }
+    }
+
+    {
+        let row_2: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = trace.row_mut(2).borrow_mut();
+        // Malicious witness: row 2 starts a new opened row even though row 1 has not reached
+        // row_end, which skips the final unread element of opened row 0.
+        row_2.inside_row = F::ONE;
+        row_2.end_inside_row = F::ONE;
+        row_2.very_first_timestamp = very_first_timestamp;
+        row_2.start_timestamp = F::from_u32(row_2_start_timestamp_u32);
+        row_2.opened_element_size_inv = F::ONE;
+        row_2.initial_opened_index = F::ZERO;
+        row_2.opened_base_pointer = opened_base_pointer;
+
+        let inside_specific: &mut InsideRowSpecificCols<F> =
+            row_2.specific[..InsideRowSpecificCols::<u8>::width()].borrow_mut();
+        let row_pointer_base = 300usize;
+        let row_end = row_pointer_base + CHUNK;
+        for i in 0..CHUNK {
+            let cell = &mut inside_specific.cells[i];
+            // Pretend row 2 begins at opened row 1 immediately.
+            cell.opened_index = F::ONE;
+            cell.row_pointer = F::from_usize(row_pointer_base + i);
+            cell.row_end = F::from_usize(row_end);
+            cell.is_first_in_row = if i == 0 { F::ONE } else { F::ZERO };
+            if i == 0 {
+                mem_helper.fill(
+                    0,
+                    row_2_start_timestamp_u32,
+                    cell.read_row_pointer_and_length.as_mut(),
+                );
+            }
+            mem_helper.fill(
+                0,
+                row_2_start_timestamp_u32 + (2 * i) as u32 + 1,
+                cell.read.as_mut(),
+            );
+        }
+    }
+
+    assert_poseidon2_local_air_rejects_trace(&harness, trace);
 }
 
 /// Create random instructions for the poseidon2 chip.
