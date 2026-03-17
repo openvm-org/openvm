@@ -5,6 +5,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
         ExecutionError, PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
+        DEFAULT_BLOCK_SIZE,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord},
@@ -34,7 +35,7 @@ use crate::{
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2Chip},
     utils::{
         byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
-        DIGEST_MEMORY_OPS, F_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_MEMORY_OPS,
+        DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
 };
@@ -243,9 +244,9 @@ pub struct DeferralCallAdapterRecord<F> {
 
     // Write auxiliary records
     pub output_commit_and_len_aux:
-        [MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
+        [MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy)]
@@ -293,11 +294,11 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             &mut record.rs_aux.prev_timestamp,
         );
 
-        let input_commit_chunks: [[u8; MEMORY_OP_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
+        let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
             tracing_read(
                 memory,
                 e.as_canonical_u32(),
-                u32::from_le_bytes(record.rs_val) + (i * MEMORY_OP_SIZE) as u32,
+                u32::from_le_bytes(record.rs_val) + (i * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.input_commit_aux[i].prev_timestamp,
             )
         });
@@ -309,17 +310,17 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
         let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
-        let old_input_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+        let old_input_acc_chunks: [[F; DEFAULT_BLOCK_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
                 memory,
-                input_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
+                input_acc_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.old_input_acc_aux[i].prev_timestamp,
             )
         });
-        let old_output_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+        let old_output_acc_chunks: [[F; DEFAULT_BLOCK_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
                 memory,
-                output_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
+                output_acc_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.old_output_acc_aux[i].prev_timestamp,
             )
         });
@@ -356,7 +357,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             tracing_write(
                 memory,
                 e.as_canonical_u32(),
-                u32::from_le_bytes(record.rd_val) + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                u32::from_le_bytes(record.rd_val) + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 memory_op_chunk(&output_commit_and_len, chunk_idx),
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_data,
@@ -372,7 +373,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
             tracing_write_deferral(
                 memory,
-                input_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                input_acc_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 memory_op_chunk(&data.new_input_acc, chunk_idx),
                 &mut record.new_input_acc_aux[chunk_idx].prev_timestamp,
                 &mut record.new_input_acc_aux[chunk_idx].prev_data,
@@ -382,7 +383,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
             tracing_write_deferral(
                 memory,
-                output_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                output_acc_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 memory_op_chunk(&data.new_output_acc, chunk_idx),
                 &mut record.new_output_acc_aux[chunk_idx].prev_timestamp,
                 &mut record.new_output_acc_aux[chunk_idx].prev_data,
