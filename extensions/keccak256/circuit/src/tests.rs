@@ -419,9 +419,7 @@ fn assert_keccak_trace_sound(air: &KeccakVmAir, trace: RowMajorMatrix<F>) {
     let tester = VmChipTestBuilder::default()
         .build()
         .load_air_proving_ctx((
-            Arc::new(KeccakLocalSoundnessTestAir {
-                sub_air: air.clone(),
-            }) as AirRef<TestSC>,
+            Arc::new(KeccakLocalSoundnessTestAir { sub_air: *air }) as AirRef<TestSC>,
             AirProvingContext::simple_no_pis(Arc::new(trace)),
         ))
         .finalize();
