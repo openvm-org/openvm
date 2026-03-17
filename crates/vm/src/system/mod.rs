@@ -28,7 +28,7 @@ use crate::{
         ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor, RowMajorMatrixArena,
         SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField,
-        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, CONST_BLOCK_SIZE, PROGRAM_AIR_ID,
+        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, DEFAULT_BLOCK_SIZE, PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -111,7 +111,7 @@ pub struct SystemRecords<F> {
     pub touched_memory: TouchedMemory<F>,
 }
 
-pub type TouchedMemory<F> = TimestampedEquipartition<F, CONST_BLOCK_SIZE>;
+pub type TouchedMemory<F> = TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 #[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]

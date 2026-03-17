@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::AddressMap;
 use crate::{
-    arch::{MemoryConfig, VmField, CONST_BLOCK_SIZE},
+    arch::{MemoryConfig, VmField, DEFAULT_BLOCK_SIZE},
     system::{
         memory::{
             dimensions::MemoryDimensions,
@@ -186,7 +186,7 @@ impl<F: VmField> MemoryController<F> {
         let hasher = self.hasher_chip.as_ref().unwrap();
         boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
-        // Rechunk CONST_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
+        // Rechunk DEFAULT_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
         // Note: Equipartition key is (addr_space, ptr) where ptr is the starting pointer
         let final_memory_values: Equipartition<F, CHUNK> = {
             use std::collections::BTreeMap;
@@ -194,7 +194,8 @@ impl<F: VmField> MemoryController<F> {
             for ((addr_space, ptr), ts_values) in final_memory {
                 // Align to CHUNK boundary to get the chunk's starting pointer
                 let chunk_ptr = (ptr / CHUNK as u32) * CHUNK as u32;
-                let block_idx_in_chunk = ((ptr % CHUNK as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                let block_idx_in_chunk =
+                    ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
                 let entry = chunk_map.entry((addr_space, chunk_ptr)).or_insert_with(|| {
                     // Initialize with values from initial memory
                     std::array::from_fn(|i| unsafe {
@@ -203,7 +204,7 @@ impl<F: VmField> MemoryController<F> {
                 });
                 // Copy values for this block
                 for (i, val) in ts_values.values.into_iter().enumerate() {
-                    entry[block_idx_in_chunk * CONST_BLOCK_SIZE + i] = val;
+                    entry[block_idx_in_chunk * DEFAULT_BLOCK_SIZE + i] = val;
                 }
             }
             chunk_map

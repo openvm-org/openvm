@@ -9,7 +9,7 @@ use super::{
 use crate::{
     arch::{
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        SystemConfig, VmExecState,
+        SystemConfig, VmExecState, BOUNDARY_AIR_ID, MERKLE_AIR_ID,
     },
     system::memory::online::GuestMemory,
 };
@@ -57,15 +57,14 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
         // Assert that the indices are correct
         debug_assert!(
-            segmentation_ctx.air_names[memory_ctx.boundary_idx].contains("Boundary"),
+            segmentation_ctx.air_names[BOUNDARY_AIR_ID].contains("Boundary"),
             "air_name={}",
-            segmentation_ctx.air_names[memory_ctx.boundary_idx]
+            segmentation_ctx.air_names[BOUNDARY_AIR_ID]
         );
-        let merkle_tree_index = memory_ctx.merkle_tree_index;
         debug_assert!(
-            segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
+            segmentation_ctx.air_names[MERKLE_AIR_ID].contains("Merkle"),
             "air_name={}",
-            segmentation_ctx.air_names[merkle_tree_index]
+            segmentation_ctx.air_names[MERKLE_AIR_ID]
         );
         let mut ctx = Self {
             trace_heights,
