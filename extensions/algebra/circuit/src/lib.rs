@@ -5,7 +5,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
+use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 #[cfg(feature = "cuda")]
@@ -22,9 +22,9 @@ pub const NUM_LIMBS_48: usize = 48;
 
 // Blocks per operation for modular arithmetic (single field element)
 /// Blocks for 32-limb modular operations: 32 / 4 = 8 blocks
-pub const MODULAR_BLOCKS_32: usize = NUM_LIMBS_32 / CONST_BLOCK_SIZE;
+pub const MODULAR_BLOCKS_32: usize = NUM_LIMBS_32 / DEFAULT_BLOCK_SIZE;
 /// Blocks for 48-limb modular operations: 48 / 4 = 12 blocks
-pub const MODULAR_BLOCKS_48: usize = NUM_LIMBS_48 / CONST_BLOCK_SIZE;
+pub const MODULAR_BLOCKS_48: usize = NUM_LIMBS_48 / DEFAULT_BLOCK_SIZE;
 
 // Blocks per operation for Fp2 (two field elements)
 /// Blocks for Fp2 with 32-limb base field: 2 * 8 = 16 blocks

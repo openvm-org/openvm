@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{
-    arch::{DenseRecordArena, CONST_BLOCK_SIZE},
+    arch::{DenseRecordArena, DEFAULT_BLOCK_SIZE},
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
@@ -34,8 +34,8 @@ pub type BaseAlu256AdapterRecord = Rv32VecHeapAdapterRecord<
     2,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    CONST_BLOCK_SIZE,
-    CONST_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
 >;
 pub type BaseAlu256CoreRecord = BaseAluCoreRecord<INT256_NUM_LIMBS>;
 
@@ -62,8 +62,8 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
                 2,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
-                CONST_BLOCK_SIZE,
-                CONST_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
@@ -92,7 +92,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
 /// Branch Equal
 //////////////////////////////////////////////////////////////////////////////////////
 pub type BranchEqual256AdapterRecord =
-    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>;
+    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
 pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_LIMBS>;
 
 #[derive(new)]
@@ -114,7 +114,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = BranchEqualCoreCols::<F, INT256_NUM_LIMBS>::width()
-            + Rv32VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>::width();
+            + Rv32VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
         let d_records = records.to_device().unwrap();
@@ -145,8 +145,8 @@ pub type LessThan256AdapterRecord = Rv32VecHeapAdapterRecord<
     2,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    CONST_BLOCK_SIZE,
-    CONST_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
 >;
 pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 
@@ -173,8 +173,8 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
                 2,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
-                CONST_BLOCK_SIZE,
-                CONST_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
@@ -203,7 +203,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
 /// Branch Less Than
 //////////////////////////////////////////////////////////////////////////////////////
 pub type BranchLessThan256AdapterRecord =
-    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>;
+    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
 pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 
 #[derive(new)]
@@ -225,7 +225,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = BranchLessThanCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
-            + Rv32VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>::width();
+            + Rv32VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
         let d_records = records.to_device().unwrap();
@@ -256,8 +256,8 @@ pub type Shift256AdapterRecord = Rv32VecHeapAdapterRecord<
     2,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    CONST_BLOCK_SIZE,
-    CONST_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
 >;
 pub type Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 
@@ -284,8 +284,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
                 2,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
-                CONST_BLOCK_SIZE,
-                CONST_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
@@ -317,8 +317,8 @@ pub type Multiplication256AdapterRecord = Rv32VecHeapAdapterRecord<
     2,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    CONST_BLOCK_SIZE,
-    CONST_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
+    DEFAULT_BLOCK_SIZE,
 >;
 pub type Multiplication256CoreRecord = MultiplicationCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 
@@ -347,8 +347,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
                 2,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
-                CONST_BLOCK_SIZE,
-                CONST_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
+                DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
