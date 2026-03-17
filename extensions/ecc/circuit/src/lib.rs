@@ -2,7 +2,7 @@
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
+use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
 #[cfg(feature = "cuda")]
 use {
     openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
@@ -19,9 +19,9 @@ pub use weierstrass_chip::*;
 
 // Blocks per ECC operation (2 coordinates per point)
 /// Blocks for ECC with 32-limb coordinates: 2 * (32 / 4) = 16 blocks
-pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / CONST_BLOCK_SIZE);
+pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / DEFAULT_BLOCK_SIZE);
 /// Blocks for ECC with 48-limb coordinates: 2 * (48 / 4) = 24 blocks
-pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / CONST_BLOCK_SIZE);
+pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / DEFAULT_BLOCK_SIZE);
 
 #[cfg(feature = "cuda")]
 pub(crate) type EccRecord<
