@@ -25,7 +25,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use openvm_verify_stark_host::{
     pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID},
-    verify_vm_stark_proof_decoded,
+    verify_vm_stark_proof_pvs,
     vk::NonRootStarkVerifyingKey,
     NonRootStarkProof,
 };
@@ -84,7 +84,7 @@ pub fn get_raw_deferral_results(
     proofs
         .iter()
         .map(|proof| {
-            verify_vm_stark_proof_decoded(vk, proof)?;
+            verify_vm_stark_proof_pvs(vk, proof)?;
 
             let mut ts = default_duplex_sponge_recorder();
             verify(&config, &vk.mvk, &proof.inner, &mut ts)?;
