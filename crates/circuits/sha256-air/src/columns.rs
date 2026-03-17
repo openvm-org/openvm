@@ -106,8 +106,8 @@ pub struct Sha256FlagsCols<T> {
     pub is_first_4_rows: T,
     /// A flag that indicates if the current row is the last (17th) row of a block.
     pub is_digest_row: T,
-    // A flag that indicates if the current row is the last block of the message.
-    // This flag is only used in digest rows.
+    // A flag that indicates if the current block is the last block of the message.
+    // The AIR constrains it to be constant across all 17 rows of the block.
     pub is_last_block: T,
     /// We will encode the row index [0..17) using 5 cells
     pub row_idx: [T; SHA256_ROW_VAR_CNT],

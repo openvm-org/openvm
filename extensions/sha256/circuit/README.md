@@ -48,12 +48,33 @@ Since we can reliably constrain values from four rounds ago, we can build up `in
 
 ### Note about `is_last_block`
 
-The last block of every message should have the `is_last_block` flag set to `1`.
-Note that `is_last_block` is not constrained to be true for the last block of every message, instead it *defines* what the last block of a message is.
-For instance, if we produce an air with 10 blocks and only the last block has `is_last_block = 1` then the constraints will interpret it as a single message of length 10 blocks.
-If, however, we set `is_last_block` to true for the 6th block, the trace will be interpreted as hashing two messages, each of length 5 blocks.
+The `is_last_block` flag is a block-level flag: the AIR constrains it to be constant on all 17 rows
+of a block.
 
-Note that we do constrain, however, that the very last block of the trace has `is_last_block = 1`.
+At the `Sha256Air` level, `is_last_block` defines where one message ends and the next one
+begins. For instance, if we produce an AIR with 10 blocks and only the 10th block has
+`is_last_block = 1`, then the constraints interpret the trace as hashing a single 10-block
+message. If blocks 5 and 10 have `is_last_block = 1`, then the constraints interpret the trace as
+hashing two 5-block messages.
+
+`is_last_block` is also coupled to `local_block_idx` through the digest-row transition rules:
+if a digest row has `is_last_block = 0`, the next block must satisfy
+`next.local_block_idx = local.local_block_idx + 1`; if a digest row has `is_last_block = 1`, the
+next block must restart at `next.local_block_idx = 0`. So `local_block_idx` does not by itself say
+whether the current block is the last one, but `is_last_block` determines whether the local block
+counter continues or resets at the next block boundary.
+
+The SubAir also constrains the very last real block of the trace to have `is_last_block = 1`, so
+the trace always ends at a message boundary before the dummy padding rows begin.
+
+In the VM extension, `is_last_block` is additionally tied to the SHA-256 padding layout and the
+message length:
+- the first padding row satisfies `len = 64 * local_block_idx + 16 * row_idx + padding_offset`
+- `*LastRow` padding flags appear iff row 3 of a block with `is_last_block = 1`
+- on the final digest row, `local_block_idx + 1 = ceil((len + 9) / 64)` is range-checked
+
+Together, these constraints pin the VM-visible terminal block to the block index implied by `len`
+and prevent the digest row from disagreeing with the read rows about which block is the last one.
 
 ### Dummy values
 
@@ -75,7 +96,12 @@ The  `local_block_idx` is the index of the block in the current message.
 It starts at 0 for the first block of each message and increments by 1 for each block.
 The `local_block_idx` is reset to 0 after each message.
 The padding rows will all have `local_block_idx = 0`.
-The `local_block_idx` is used to calculate the length of the message processed so far when the first padding row is encountered.
+The `local_block_idx` is used to calculate the length of the message processed so far when the
+first padding row is encountered.
+It is also coupled to `is_last_block`: a digest row with `is_last_block = 0` must advance the
+counter by 1 into the next block, while a digest row with `is_last_block = 1` must reset the next
+block's `local_block_idx` to 0. On the final digest row, it is additionally checked against `len`
+via `local_block_idx + 1 = ceil((len + 9) / 64)`.
 
 ### VM air vs SubAir
 
