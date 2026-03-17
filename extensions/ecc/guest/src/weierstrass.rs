@@ -23,7 +23,11 @@ pub trait WeierstrassPoint: Clone + Sized {
     fn as_le_bytes(&self) -> &[u8];
 
     /// Raw constructor without asserting point is on the curve.
-    fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self;
+    ///
+    /// # Safety
+    /// - Caller must guarantee `(x, y)` is a valid point on the curve and in any required subgroup.
+    /// - Identity point must be represented by `(0, 0)`.
+    unsafe fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self;
     fn into_coords(self) -> (Self::Coordinate, Self::Coordinate);
     fn x(&self) -> &Self::Coordinate;
     fn y(&self) -> &Self::Coordinate;
@@ -87,8 +91,13 @@ pub trait WeierstrassPoint: Clone + Sized {
     ///   been called already.
     unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self);
 
+    /// Constructs a point on the curve, including the identity point.
+    ///
+    /// # Safety
+    /// - This constructor does not perform any subgroup checks and only guarantees that the point
+    ///   is on the curve.
     #[inline(always)]
-    fn from_xy(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
+    unsafe fn from_xy(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
@@ -99,8 +108,13 @@ pub trait WeierstrassPoint: Clone + Sized {
         }
     }
 
+    /// Constructs a point on the curve, excluding the identity point.
+    ///
+    /// # Safety
+    /// - This constructor does not perform any subgroup checks and only guarantees that the point
+    ///   is a non-identity point on the curve.
     #[inline(always)]
-    fn from_xy_nonidentity(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
+    unsafe fn from_xy_nonidentity(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
@@ -121,6 +135,10 @@ pub trait FromCompressed<Coordinate> {
     /// corresponding y-coordinate that satisfies the elliptic curve equation. If successful, it
     /// returns the point as an instance of Self. If the point cannot be decompressed, it returns
     /// None.
+    ///
+    /// # Safety
+    /// This function does not perform subgroup checks and only checks whether the point is on the
+    /// curve.
     fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
     where
         Self: core::marker::Sized;
@@ -312,7 +330,7 @@ macro_rules! impl_sw_affine {
                     )
                 }
             }
-            fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
+            unsafe fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
                 Self(AffinePoint::new(x, y))
             }
             fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {

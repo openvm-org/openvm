@@ -57,14 +57,16 @@ impl Copy for P256Point {}
 
 impl ConditionallySelectable for P256Point {
     fn conditional_select(a: &P256Point, b: &P256Point, choice: Choice) -> P256Point {
-        P256Point::from_xy_unchecked(
-            P256Coord::conditional_select(
-                <Self as WeierstrassPoint>::x(a),
-                <Self as WeierstrassPoint>::x(b),
-                choice,
-            ),
-            P256Coord::conditional_select(a.y(), b.y(), choice),
-        )
+        unsafe {
+            P256Point::from_xy_unchecked(
+                P256Coord::conditional_select(
+                    <Self as WeierstrassPoint>::x(a),
+                    <Self as WeierstrassPoint>::x(b),
+                    choice,
+                ),
+                P256Coord::conditional_select(a.y(), b.y(), choice),
+            )
+        }
     }
 }
 

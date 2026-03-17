@@ -36,8 +36,8 @@ pub fn main() {
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let mut p1 = Secp256k1Point::from_xy(x1.clone(), y1.clone()).unwrap();
-    let mut p2 = Secp256k1Point::from_xy(x2, y2).unwrap();
+    let mut p1 = unsafe { Secp256k1Point::from_xy(x1.clone(), y1.clone()).unwrap() };
+    let mut p2 = unsafe { Secp256k1Point::from_xy(x2, y2).unwrap() };
 
     // Generic add can handle equal or unequal points.
     let p3 = &p1 + &p2;
@@ -60,7 +60,7 @@ pub fn main() {
     }
 
     // Ec Mul
-    let p1 = Secp256k1Point::from_xy(x1, y1).unwrap();
+    let p1 = unsafe { Secp256k1Point::from_xy(x1, y1).unwrap() };
     let scalar = Secp256k1Scalar::from_u32(12345678);
     // Calculated with https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#ec-multiply-tool
     let x5 = Secp256k1Coord::from_le_bytes_unchecked(&hex!(

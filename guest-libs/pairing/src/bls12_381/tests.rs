@@ -244,7 +244,7 @@ fn test_bls12381_g2_affine() {
             let x = convert_bls12381_halo2_fq2_to_fp2(p.x);
             let y = convert_bls12381_halo2_fq2_to_fp2(p.y);
             // check on curve
-            OpenVmG2Affine::from_xy(x, y).unwrap()
+            unsafe { OpenVmG2Affine::from_xy(x, y).unwrap() }
         });
         let r_add = &p + &q;
         let r_sub = &p - &q;

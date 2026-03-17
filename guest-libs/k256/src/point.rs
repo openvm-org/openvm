@@ -61,14 +61,16 @@ impl ConditionallySelectable for Secp256k1Point {
         b: &Secp256k1Point,
         choice: Choice,
     ) -> Secp256k1Point {
-        Secp256k1Point::from_xy_unchecked(
-            Secp256k1Coord::conditional_select(
-                <Self as WeierstrassPoint>::x(a),
-                <Self as WeierstrassPoint>::x(b),
-                choice,
-            ),
-            Secp256k1Coord::conditional_select(a.y(), b.y(), choice),
-        )
+        unsafe {
+            Secp256k1Point::from_xy_unchecked(
+                Secp256k1Coord::conditional_select(
+                    <Self as WeierstrassPoint>::x(a),
+                    <Self as WeierstrassPoint>::x(b),
+                    choice,
+                ),
+                Secp256k1Coord::conditional_select(a.y(), b.y(), choice),
+            )
+        }
     }
 }
 

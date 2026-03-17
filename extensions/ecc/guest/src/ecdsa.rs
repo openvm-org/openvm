@@ -104,6 +104,9 @@ where
         }
     }
 
+    /// # Safety
+    /// - The uncompressed deserialization checks that the point is on the curve but does not
+    ///   perform any additional subgroup checks.
     pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self>
     where
         for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
@@ -139,7 +142,8 @@ where
                 let (x_bytes, y_bytes) = bytes[1..].split_at(Coordinate::<C>::NUM_LIMBS);
                 let x = Coordinate::<C>::from_be_bytes(x_bytes).ok_or_else(Error::new)?;
                 let y = Coordinate::<C>::from_be_bytes(y_bytes).ok_or_else(Error::new)?;
-                let point = <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)?;
+                let point =
+                    unsafe { <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)? };
                 Self::from_affine(point)
             }
 
