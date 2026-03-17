@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::CONST_BLOCK_SIZE, system::memory::persistent::PersistentBoundaryCols,
+    arch::DEFAULT_BLOCK_SIZE, system::memory::persistent::PersistentBoundaryCols,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::Chip;
@@ -21,7 +21,7 @@ pub struct BoundaryChipGPU {
     pub trace_width: Option<usize>,
 }
 
-const BLOCKS_PER_CHUNK: usize = DIGEST_WIDTH / CONST_BLOCK_SIZE;
+const BLOCKS_PER_CHUNK: usize = DIGEST_WIDTH / DEFAULT_BLOCK_SIZE;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
