@@ -1,6 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use eyre::Result;
+use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         deferral::{DeferralResult, DeferralState},
@@ -19,7 +20,10 @@ use openvm_deferral_circuit::{
     DeferralCpuBuilder, DeferralExtension, DeferralFn, Rv32DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
-use openvm_recursion_circuit::{prelude::DIGEST_SIZE, utils::poseidon2_hash_slice_with_states};
+use openvm_recursion_circuit::{
+    prelude::DIGEST_SIZE,
+    utils::{poseidon2_hash_slice, poseidon2_hash_slice_with_states},
+};
 use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -113,6 +117,22 @@ fn input_commit_to_f(commit: &[u8; 32]) -> [F; DIGEST_SIZE] {
                 | (commit[base + 3] as u32) << 24,
         )
     })
+}
+
+fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
+    commit
+        .iter()
+        .flat_map(|b| [*b, 0, 0, 0])
+        .map(F::from_u8)
+        .collect()
+}
+
+fn f_digest_to_le_bytes(digest: &[F; DIGEST_SIZE]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    for (i, value) in digest.iter().enumerate() {
+        out[4 * i..4 * (i + 1)].copy_from_slice(&value.as_canonical_u32().to_le_bytes());
+    }
+    out
 }
 
 fn compute_output_f_commit(deferral_idx: u32, output_raw: &[u8]) -> [F; DIGEST_SIZE] {
@@ -301,16 +321,34 @@ fn test_deferral_e2e() -> Result<()> {
             .with_extension(DeferralTranspilerExtension::new(transpiler_commits)),
     )?;
 
+    let in_commit_0_f = input_commit_to_f(&INPUT_COMMIT_0);
+    let in_commit_1_f = input_commit_to_f(&INPUT_COMMIT_1);
+    let in_commit_2_f = input_commit_to_f(&INPUT_COMMIT_2);
+
+    let in_commit_0_hashed = poseidon2_hash_slice(&in_commit_0_f).0;
+    let in_commit_1_hashed = poseidon2_hash_slice(&in_commit_1_f).0;
+    let in_commit_2_hashed = poseidon2_hash_slice(&in_commit_2_f).0;
+
+    let in_commit_0_bytes = f_digest_to_le_bytes(&in_commit_0_hashed);
+    let in_commit_1_bytes = f_digest_to_le_bytes(&in_commit_1_hashed);
+    let in_commit_2_bytes = f_digest_to_le_bytes(&in_commit_2_hashed);
+
     // idx 0: unused, idx 1: 3 calls, idx 2: 1 call
     let state_unused = DeferralState::new(Vec::<DeferralResult>::new());
     let mut state1 = DeferralState::new(Vec::<DeferralResult>::new());
-    state1.store_input(INPUT_COMMIT_0.to_vec(), INPUT_RAW_0.to_vec());
-    state1.store_input(INPUT_COMMIT_1.to_vec(), INPUT_RAW_1.to_vec());
-    state1.store_input(INPUT_COMMIT_2.to_vec(), INPUT_RAW_2.to_vec());
+    state1.store_input(in_commit_0_bytes.to_vec(), INPUT_RAW_0.to_vec());
+    state1.store_input(in_commit_1_bytes.to_vec(), INPUT_RAW_1.to_vec());
+    state1.store_input(in_commit_2_bytes.to_vec(), INPUT_RAW_2.to_vec());
     let mut state2 = DeferralState::new(Vec::<DeferralResult>::new());
-    state2.store_input(INPUT_COMMIT_0.to_vec(), INPUT_RAW_0.to_vec());
+    state2.store_input(in_commit_0_bytes.to_vec(), INPUT_RAW_0.to_vec());
 
     let streams = Streams {
+        input_stream: vec![
+            commit_to_stdin_fields(&in_commit_0_bytes),
+            commit_to_stdin_fields(&in_commit_1_bytes),
+            commit_to_stdin_fields(&in_commit_2_bytes),
+        ]
+        .into(),
         deferrals: vec![state_unused, state1, state2],
         ..Default::default()
     };
@@ -354,27 +392,38 @@ fn test_deferral_e2e() -> Result<()> {
         .keygen(&[Arc::new(EmptyAirWithPvs(DeferralCircuitPvs::<u8>::width())) as AirRef<SC>]);
 
     // Circuit idx 1: 3 calls (INPUT_COMMIT_0, INPUT_COMMIT_1, INPUT_COMMIT_2)
-    let idx1_io: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE])> = [
-        (&INPUT_COMMIT_0, INPUT_RAW_0.as_slice()),
-        (&INPUT_COMMIT_1, INPUT_RAW_1.as_slice()),
-        (&INPUT_COMMIT_2, INPUT_RAW_2.as_slice()),
+    let idx1_io: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE], [F; DIGEST_SIZE])> = [
+        (in_commit_0_f, in_commit_0_hashed, INPUT_RAW_0.as_slice()),
+        (in_commit_1_f, in_commit_1_hashed, INPUT_RAW_1.as_slice()),
+        (in_commit_2_f, in_commit_2_hashed, INPUT_RAW_2.as_slice()),
     ]
     .iter()
-    .map(|(commit, raw)| {
-        let input_f = input_commit_to_f(commit);
+    .map(|(input_f, hashed, raw)| {
         let output_raw = deferral_fn_output(1, raw);
         let output_f = compute_output_f_commit(1, &output_raw);
-        (input_f, output_f)
+        (*input_f, *hashed, output_f)
     })
     .collect();
 
     // Circuit idx 2: 1 call (INPUT_COMMIT_0)
-    let idx2_io: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE])> = {
-        let input_f = input_commit_to_f(&INPUT_COMMIT_0);
+    let idx2_io: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE], [F; DIGEST_SIZE])> = {
         let output_raw = deferral_fn_output(2, &INPUT_RAW_0);
         let output_f = compute_output_f_commit(2, &output_raw);
-        vec![(input_f, output_f)]
+        vec![(in_commit_0_f, in_commit_0_hashed, output_f)]
     };
+
+    warn!("generating dummy deferral circuit proofs");
+    let idx1_proofs: Vec<Proof<SC>> = idx1_io
+        .iter()
+        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
+        .collect();
+    let idx2_proofs: Vec<Proof<SC>> = idx2_io
+        .iter()
+        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
+        .collect();
+
+    let idx1_io = idx1_io.into_iter().map(|(_, x, y)| (x, y)).collect_vec();
+    let idx2_io = idx2_io.into_iter().map(|(_, x, y)| (x, y)).collect_vec();
 
     let mut initial_commits = Vec::with_capacity(2 * NUM_DEF_CIRCUITS);
     for _ in 0..NUM_DEF_CIRCUITS {
@@ -384,16 +433,6 @@ fn test_deferral_e2e() -> Result<()> {
     let mut final_commits = initial_commits.clone();
     apply_onion_updates_for_circuit(&mut final_commits, 1, &idx1_io);
     apply_onion_updates_for_circuit(&mut final_commits, 2, &idx2_io);
-
-    warn!("generating dummy deferral circuit proofs");
-    let idx1_proofs: Vec<Proof<SC>> = idx1_io
-        .iter()
-        .map(|(inp, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
-        .collect();
-    let idx2_proofs: Vec<Proof<SC>> = idx2_io
-        .iter()
-        .map(|(inp, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
-        .collect();
 
     // =========================================================================
     // SECTION 4: Aggregate dummy proofs into def hook proofs (one per circuit).
@@ -492,10 +531,10 @@ fn test_deferral_e2e() -> Result<()> {
     }
 
     warn!("aggregating circuit idx 1 (3 leaves)");
-    let hook_proof_1 = aggregate_deferral_tree(&def_circuit_vk, idx1_proofs, idx1_io.clone())?;
+    let hook_proof_1 = aggregate_deferral_tree(&def_circuit_vk, idx1_proofs, idx1_io)?;
 
     warn!("aggregating circuit idx 2 (1 leaf)");
-    let hook_proof_2 = aggregate_deferral_tree(&def_circuit_vk, idx2_proofs, idx2_io.clone())?;
+    let hook_proof_2 = aggregate_deferral_tree(&def_circuit_vk, idx2_proofs, idx2_io)?;
 
     // =========================================================================
     // SECTION 5: VM aggregation path (app -> leaf -> i4l -> ir).

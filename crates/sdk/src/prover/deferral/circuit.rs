@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::{borrow::Borrow, iter::once, sync::Arc};
 
 use eyre::Result;
 use itertools::Itertools;
@@ -9,7 +9,7 @@ use openvm_continuations::{
 };
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{keygen::types::MultiStarkProvingKey, proof::Proof, SystemParams};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, Digest, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::pvs::DagCommit;
 use tracing::info_span;
 
@@ -84,15 +84,17 @@ impl SingleDefCircuitProver {
                 let pvs: &DeferralCircuitPvs<F> = proof.public_values[DEF_CIRCUIT_PVS_AIR_ID]
                     .as_slice()
                     .borrow();
-                let folded_input_commit = proof
-                    .trace_vdata
-                    .iter()
+                let commit_values = once(pvs.input_commit)
+                    .chain(
+                        proof
+                            .trace_vdata
+                            .iter()
+                            .flatten()
+                            .flat_map(|vdata| vdata.cached_commitments.iter().copied()),
+                    )
                     .flatten()
-                    .flat_map(|vdata| vdata.cached_commitments.iter().copied())
-                    .fold(pvs.input_commit, |acc, cached_commit| {
-                        // TODO[INT-6415]: hash slice, not compress
-                        poseidon2_compress_with_capacity(acc, cached_commit).0
-                    });
+                    .collect_vec();
+                let folded_input_commit = poseidon2_hash_slice(&commit_values).0;
                 (folded_input_commit, pvs.output_commit)
             })
             .collect();
