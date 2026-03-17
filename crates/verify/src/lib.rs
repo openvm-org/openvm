@@ -283,5 +283,5 @@ pub fn verify_vm_stark_proof_pvs(
 }
 
 fn is_unset(slice: &[F]) -> bool {
-    slice.iter().fold(true, |acc, &f| acc && (f == F::ZERO))
+    slice.iter().all(|&f| f == F::ZERO)
 }
