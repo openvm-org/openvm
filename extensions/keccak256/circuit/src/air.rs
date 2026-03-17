@@ -417,6 +417,7 @@ impl KeccakVmAir {
         register_aux: &[MemoryReadAuxCols<AB::Var>; KECCAK_REGISTER_READS],
     ) -> AB::Expr {
         let instruction = local.instruction;
+        builder.assert_bool(instruction.is_enabled);
         // Only receive opcode if:
         // - enabled row (not dummy row)
         // - first round of block
