@@ -14,7 +14,7 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `DEFERRAL_AS` will always have cell type `F` and minimum alignment of `1`
+    // - address space `DEFERRAL_AS` has cell type `F` with `DEFAULT_BLOCK_SIZE`-aligned accesses
     unsafe { memory.read::<F, N>(DEFERRAL_AS, ptr) }
 }
 
@@ -39,7 +39,7 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `DEFERRAL_AS` will always have cell type `F` and minimum alignment of `1`
+    // - address space `DEFERRAL_AS` has cell type `F` with `DEFAULT_BLOCK_SIZE`-aligned accesses
     unsafe { memory.write::<F, N>(DEFERRAL_AS, ptr, data) }
 }
 
@@ -104,7 +104,7 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `DEFERRAL_AS` has cell type `F` and block_size of `DEFAULT_BLOCK_SIZE`
+    // - address space `DEFERRAL_AS` has cell type `F` with `DEFAULT_BLOCK_SIZE`-aligned accesses
     unsafe { memory.read::<F, BLOCK_SIZE>(DEFERRAL_AS, ptr) }
 }
 
@@ -118,7 +118,7 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `DEFERRAL_AS` has cell type `F` and block_size of `DEFAULT_BLOCK_SIZE`
+    // - address space `DEFERRAL_AS` has cell type `F` with `DEFAULT_BLOCK_SIZE`-aligned accesses
     unsafe { memory.write::<F, BLOCK_SIZE>(DEFERRAL_AS, ptr, vals) }
 }
 
