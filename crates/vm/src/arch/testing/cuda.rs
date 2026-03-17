@@ -48,7 +48,7 @@ use crate::{
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut, CONST_BLOCK_SIZE,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut, DEFAULT_BLOCK_SIZE,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -263,7 +263,7 @@ impl GpuChipTestBuilder {
         )));
         Self {
             memory: DeviceMemoryTester::new(
-                default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
+                default_tracing_memory(&mem_config),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
@@ -334,14 +334,14 @@ impl GpuChipTestBuilder {
             register,
             (pointer as u32).to_le_bytes().map(F::from_u8),
         );
-        // Always write in CONST_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // Always write in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
-                self.write::<CONST_BLOCK_SIZE>(
+            for j in (0..NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+                self.write::<DEFAULT_BLOCK_SIZE>(
                     2usize,
                     ptr + j,
-                    write[j..j + CONST_BLOCK_SIZE].try_into().unwrap(),
+                    write[j..j + DEFAULT_BLOCK_SIZE].try_into().unwrap(),
                 );
             }
         }

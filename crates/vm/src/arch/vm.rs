@@ -636,9 +636,8 @@ where
             .collect::<Vec<_>>();
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
-        let system_config: &SystemConfig = self.config().as_ref();
         let pc = state.pc();
-        let memory = TracingMemory::from_image(state.memory, system_config.initial_block_size());
+        let memory = TracingMemory::from_image(state.memory);
         let from_state = ExecutionState::new(pc, memory.timestamp());
         let vm_state = VmState::new(
             pc,
