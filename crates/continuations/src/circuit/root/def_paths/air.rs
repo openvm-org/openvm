@@ -45,8 +45,8 @@ pub struct DeferralAccMerklePathsCols<F> {
 
     pub depth: F,
     pub is_skip: F,
-    pub is_untouched: F,
-    pub expected_branch_bits_offset: F,
+    pub is_within_deferral_as: F,
+    pub is_unset: F,
 }
 
 pub struct DeferralAccMerklePathsAir {
@@ -115,17 +115,17 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
             .when(local.is_valid * next.is_valid)
             .assert_one(next.depth - local.depth);
 
-        let is_set = not(next.expected_branch_bits_offset);
+        let is_set = not(next.is_unset);
         self.def_acc_paths_bus.receive(
             builder,
             DeferralAccPathMessage {
                 initial_acc_hash: next.initial_node_commit.map(|v| v * is_set.clone()),
                 final_acc_hash: next.final_node_commit.map(|v| v * is_set.clone()),
                 depth: next.depth * is_set,
-                is_unset: next.expected_branch_bits_offset.into(),
+                is_unset: next.is_unset.into(),
             },
             (local.is_skip - next.is_skip) * (AB::Expr::TWO - next.is_valid)
-                + local.is_untouched
+                + local.is_unset
                     * local.is_valid
                     * (local.is_valid - AB::Expr::ONE)
                     * AB::F::TWO.inverse(),
@@ -133,7 +133,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
 
         assert_array_eq::<_, _, AB::Expr, _>(
             &mut builder
-                .when(local.is_untouched)
+                .when(local.is_unset)
                 .when(local.is_valid)
                 .when_ne(local.is_valid, AB::F::ONE),
             local.initial_node_commit,
@@ -141,36 +141,44 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
         );
 
         /*
-         * Constrain that if no rows are skipped, then is_untouched is be set until
-         * address_height. In this case we constrain the two paths to be equal as long
-         * as is_untouched is set. The path should start with a right sibling in that
-         * case.
+         * Constrain that is_unset, the flag that determines if deferrals are present, is
+         * consistent over all rows.
          */
-        builder.assert_bool(local.is_untouched);
-        builder
-            .when_transition()
-            .assert_bool(local.is_untouched - next.is_untouched);
-        builder.when(local.is_untouched).assert_zero(local.is_skip);
-
-        builder
-            .when_transition()
-            .when(local.is_untouched - next.is_untouched)
-            .assert_eq(local.depth, AB::Expr::from_usize(self.address_height));
+        builder.assert_bool(local.is_unset);
         builder
             .when_first_row()
-            .when(local.is_untouched)
+            .when(local.is_unset)
             .assert_one(local.is_right_child);
+        builder
+            .when(and(local.is_valid, next.is_valid))
+            .assert_eq(local.is_unset, next.is_unset);
 
+        /*
+         * Constrain that is_within_deferral_as is set until address_height. We constrain
+         * the two paths to be equal as long as is_within_deferral_as is set, i.e. that the
+         * part of DEFERRAL_AS that is not included in the Merkle root is left untouched
+         * for the duration of the program execution.
+         */
+        builder.assert_bool(local.is_within_deferral_as);
         builder
             .when_first_row()
-            .assert_eq(local.is_untouched, local.expected_branch_bits_offset);
-        builder.when(and(local.is_valid, next.is_valid)).assert_eq(
-            local.expected_branch_bits_offset,
-            next.expected_branch_bits_offset,
+            .assert_one(local.is_within_deferral_as);
+        builder
+            .when_transition()
+            .assert_bool(local.is_within_deferral_as - next.is_within_deferral_as);
+        builder
+            .when_transition()
+            .when(local.is_within_deferral_as - next.is_within_deferral_as)
+            .assert_eq(local.depth, AB::Expr::from_usize(self.address_height));
+
+        assert_array_eq(
+            &mut builder.when(local.is_within_deferral_as),
+            local.initial_sibling,
+            local.final_sibling,
         );
 
         assert_array_eq(
-            &mut builder.when(local.is_untouched),
+            &mut builder.when(and(local.is_within_deferral_as, local.is_unset)),
             local.initial_node_commit,
             local.final_node_commit,
         );
@@ -201,7 +209,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
                 },
                 local.is_skip.into(),
                 next.is_skip.into(),
-                local.expected_branch_bits_offset.into(),
+                local.is_unset.into(),
             ),
         );
 
@@ -228,7 +236,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
                 },
                 local.is_skip.into(),
                 next.is_skip.into(),
-                local.expected_branch_bits_offset.into(),
+                local.is_unset.into(),
             ),
         );
 
