@@ -154,7 +154,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
             .assert_eq(local.is_unset, next.is_unset);
 
         /*
-         * Constrain that then is_within_deferral_as is be set until address_height. We
+         * Constrain that is_within_deferral_as is be set until address_height. We
          * constrain the two paths to be equal as long as is_within_deferral_as is set,
          * i.e. that the part of DEFERRAL_AS that is not included in the Merkle root is
          * left untouched for the duration of the program execution.
