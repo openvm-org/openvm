@@ -280,12 +280,12 @@ mod host_tests {
         let y1 = P256Coord::from_le_bytes_unchecked(&hex!(
             "ccfb4832085c4133c5a3d9643c50ca11de7a8199ce3b91fe061858aab9439245"
         ));
-        let p1 = P256Point::from_xy(x1, y1).unwrap();
+        let p1 = unsafe { P256Point::from_xy(x1, y1).unwrap() };
         let x2 = P256Coord::from_u32(6);
         let y2 = P256Coord::from_le_bytes_unchecked(&hex!(
             "cb23828228510d22e9c0e70fb802d1dc47007233e5856946c20a25542c4cb236"
         ));
-        let p2 = P256Point::from_xy(x2, y2).unwrap();
+        let p2 = unsafe { P256Point::from_xy(x2, y2).unwrap() };
 
         // Generic add can handle equal or unequal points.
         #[allow(clippy::op_ref)]
@@ -294,19 +294,19 @@ mod host_tests {
         let p4 = &p2 + &p2;
 
         // Add assign and double assign
-        let mut sum = P256Point::from_xy(x1, y1).unwrap();
+        let mut sum = unsafe { P256Point::from_xy(x1, y1).unwrap() };
         sum += &p2;
         if sum.x() != p3.x() || sum.y() != p3.y() {
             panic!();
         }
-        let mut double = P256Point::from_xy(x2, y2).unwrap();
+        let mut double = unsafe { P256Point::from_xy(x2, y2).unwrap() };
         double.double_assign();
         if double.x() != p4.x() || double.y() != p4.y() {
             panic!();
         }
 
         // Ec Mul
-        let p1 = P256Point::from_xy(x1, y1).unwrap();
+        let p1 = unsafe { P256Point::from_xy(x1, y1).unwrap() };
         let scalar = P256Scalar::from_u32(3);
         #[allow(clippy::op_ref)]
         let p2 = &p1.double() + &p1;

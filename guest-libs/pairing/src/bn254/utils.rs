@@ -42,8 +42,10 @@ pub(crate) fn convert_bn254_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
 
 #[allow(unused)]
 pub(crate) fn convert_g2_affine_halo2_to_openvm(p: G2Affine) -> OpenVmG2Affine {
-    OpenVmG2Affine::from_xy_unchecked(
-        convert_bn254_halo2_fq2_to_fp2(p.x),
-        convert_bn254_halo2_fq2_to_fp2(p.y),
-    )
+    unsafe {
+        OpenVmG2Affine::from_xy_unchecked(
+            convert_bn254_halo2_fq2_to_fp2(p.x),
+            convert_bn254_halo2_fq2_to_fp2(p.y),
+        )
+    }
 }
