@@ -156,7 +156,7 @@ fn compute_output_f_commit(deferral_idx: u32, output_raw: &[u8]) -> [F; DIGEST_S
         }
         capacity = res_right;
     }
-    unreachable!("output_raw is either empty or has at least one chunk")
+    unreachable!()
 }
 
 fn hash_deferral_commit(commit: [F; DIGEST_SIZE]) -> [F; DIGEST_SIZE] {
