@@ -31,7 +31,7 @@ use crate::{
         },
         transcript::{
             constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
-            AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent,
+            AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent, NUM_SPLIT_LIMBS,
         },
     },
     stages::{
@@ -167,7 +167,7 @@ pub struct DerivedPipelineState {
     pub consumed_non_preamble_observes: usize,
 }
 
-const BN254_DIGEST_BABYBEAR_LIMBS: usize = 3;
+const BN254_DIGEST_BABYBEAR_LIMBS: usize = NUM_SPLIT_LIMBS;
 
 fn derive_non_preamble_observes(events: &[TranscriptEvent], preamble_observes: usize) -> Vec<u64> {
     events

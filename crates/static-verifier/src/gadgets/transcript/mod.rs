@@ -32,7 +32,7 @@ use crate::{circuit::Fr, utils::bits_for_u64};
 const DIGEST_WIDTH: usize = 1;
 const POSEIDON2_WIDTH: usize = 3;
 const POSEIDON2_RATE: usize = 2;
-const NUM_SPLIT_LIMBS: usize = 3;
+pub(crate) const NUM_SPLIT_LIMBS: usize = 3;
 const POSEIDON2_ROUNDS_F: usize = 8;
 const POSEIDON2_ROUNDS_P: usize = 56;
 const MULTI_FIELD32_RATE: usize = 16;
