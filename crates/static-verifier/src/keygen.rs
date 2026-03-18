@@ -6,12 +6,12 @@ use halo2_base::{
 use crate::{
     config::StaticVerifierShape,
     prover::{
-        Halo2Params, Halo2Prover, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierInput,
-        StaticVerifierProof,
+        Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit,
+        StaticVerifierInput, StaticVerifierProof,
     },
 };
 
-impl Halo2Prover {
+impl StaticVerifierCircuit {
     /// Run keygen to produce a [`Halo2ProvingPinning`].
     ///
     /// The `input` is used as a representative witness for keygen; any valid
@@ -43,8 +43,6 @@ impl Halo2Prover {
 
 /// High-level proving key that owns a [`Halo2ProvingPinning`] together with
 /// the [`StaticVerifierShape`] needed to reconstruct prover builders.
-///
-/// This is analogous to `Halo2WrapperProvingKey` from `openvm-native-recursion`.
 pub struct StaticVerifierProvingKey {
     pub pinning: Halo2ProvingPinning,
     pub shape: StaticVerifierShape,
@@ -58,7 +56,7 @@ impl StaticVerifierProvingKey {
         shape: StaticVerifierShape,
         input: &StaticVerifierInput<'_>,
     ) -> Self {
-        let pinning = Halo2Prover::keygen(params, &shape, input);
+        let pinning = StaticVerifierCircuit::keygen(params, &shape, input);
         Self { pinning, shape }
     }
 
@@ -68,12 +66,12 @@ impl StaticVerifierProvingKey {
         params: &Halo2Params,
         input: &StaticVerifierInput<'_>,
     ) -> StaticVerifierProof {
-        Halo2Prover::prove(params, &self.pinning, &self.shape, input)
+        StaticVerifierCircuit::prove(params, &self.pinning, &self.shape, input)
     }
 
     /// Verify a proof against this proving key's verifying key.
     pub fn verify(&self, params: &Halo2Params, proof: &StaticVerifierProof) -> bool {
-        Halo2Prover::verify(params, self.pinning.pk.get_vk(), proof)
+        StaticVerifierCircuit::verify(params, self.pinning.pk.get_vk(), proof)
     }
 }
 
@@ -143,7 +141,7 @@ impl StaticVerifierProvingKey {
         )
         .use_instance_columns(self.shape.instance_columns);
 
-        let public_inputs = Halo2Prover::populate(&mut builder, input);
+        let public_inputs = StaticVerifierCircuit::populate(&mut builder, input);
 
         let snark = gen_evm_proof_shplonk(
             params,

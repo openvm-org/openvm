@@ -53,14 +53,14 @@ pub struct Halo2ProvingMetadata {
 /// The [`ProvingKey`] does not implement `Serialize`/`Deserialize` generically
 /// for [`BaseCircuitBuilder`]-based circuits (because deserialization requires
 /// `circuit-params` support that is not enabled). Use [`Self::pk_to_bytes`] and
-/// reconstruct via [`Halo2Prover::keygen`] when persistence is needed.
+/// reconstruct via [`StaticVerifierCircuit::keygen`] when persistence is needed.
 #[derive(Debug, Clone)]
 pub struct Halo2ProvingPinning {
     pub pk: ProvingKey<G1Affine>,
     pub metadata: Halo2ProvingMetadata,
 }
 
-/// Output of [`Halo2Prover::prove`].
+/// Output of [`StaticVerifierCircuit::prove`].
 pub struct StaticVerifierProof {
     pub proof_bytes: Vec<u8>,
     pub public_inputs: Vec<Fr>,
@@ -74,15 +74,13 @@ pub struct StaticVerifierInput<'a> {
     pub proof: &'a Proof<NativeConfig>,
 }
 
-/// Low-level, stateless prover for the static verifier Halo2 circuit.
+/// Stateless helper for the static verifier Halo2 circuit.
 ///
-/// All methods are associated functions (no `self`). This mirrors the
-/// `Halo2Prover` pattern from `openvm-native-recursion`.
-///
-/// Keygen is provided separately in [`crate::keygen`].
-pub struct Halo2Prover;
+/// Provides circuit-building utilities (`builder`, `populate`), mock proving,
+/// real proving, and verification. Keygen is in [`crate::keygen`].
+pub struct StaticVerifierCircuit;
 
-impl Halo2Prover {
+impl StaticVerifierCircuit {
     /// Create a [`BaseCircuitBuilder`] configured for the given `stage` and
     /// `shape`.
     pub fn builder(
@@ -97,9 +95,6 @@ impl Halo2Prover {
 
     /// Populate a builder with the static verifier constraints and return the
     /// public inputs.
-    ///
-    /// This is the core circuit-building logic extracted from the test helper
-    /// `build_end_to_end_constraints_from_proof`.
     pub fn populate(
         builder: &mut BaseCircuitBuilder<Fr>,
         input: &StaticVerifierInput<'_>,
@@ -150,7 +145,6 @@ impl Halo2Prover {
             pinning.metadata.config_params.clone(),
             pinning.metadata.break_points.clone(),
         );
-        // Re-configure instance columns to match the shape.
         builder = builder.use_instance_columns(shape.instance_columns);
 
         let public_inputs = Self::populate(&mut builder, input);
@@ -208,7 +202,7 @@ impl Halo2ProvingPinning {
     ///
     /// Use this together with [`Halo2ProvingMetadata`] (which is
     /// `Serialize`/`Deserialize`) for persistence.  Re-create the pinning via
-    /// [`Halo2Prover::keygen`] when loading.
+    /// [`StaticVerifierCircuit::keygen`] when loading.
     pub fn pk_to_bytes(&self) -> Vec<u8> {
         use halo2_base::halo2_proofs::SerdeFormat;
         self.pk.to_bytes(SerdeFormat::RawBytes)
