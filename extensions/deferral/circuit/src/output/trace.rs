@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         get_record_from_slice, CustomBorrow, ExecutionError, MultiRowLayout, MultiRowMetadata,
@@ -16,12 +17,14 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
+};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
 use openvm_rv32im_circuit::adapters::{
     memory_read, read_rv32_register, tracing_read, tracing_write,
@@ -30,12 +33,13 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
+    canonicity::CanonicityTraceGen,
     count::DeferralCircuitCountChip,
     output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
     utils::{
         f_commit_to_bytes, join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS,
-        MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        F_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -139,10 +143,11 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct DeferralOutputExecutor;
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<F, RA> PreflightExecutor<F, RA> for DeferralOutputExecutor
@@ -304,8 +309,8 @@ where
 
             let output_len_bytes = u32::try_from(output_len)
                 .expect("deferral output length should fit a u32")
-                .to_le_bytes()
-                .map(F::from_u8);
+                .to_le_bytes();
+            let output_len_f = output_len_bytes.map(F::from_u8);
 
             for (row_idx, row) in section_chunk.chunks_exact_mut(width).enumerate() {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
@@ -323,6 +328,10 @@ where
 
                 cols.rd_val = header.rd_val.map(F::from_u8);
                 cols.rs_val = header.rs_val.map(F::from_u8);
+                for aux in &mut cols.output_commit_lt_aux {
+                    CanonicityTraceGen::clear_aux(aux);
+                }
+                CanonicityTraceGen::clear_aux(&mut cols.output_len_lt_aux);
 
                 if row_idx == 0 {
                     mem_helper.fill(
@@ -350,7 +359,7 @@ where
                     }
                 }
 
-                cols.output_len.copy_from_slice(&output_len_bytes);
+                cols.output_len = output_len_f;
                 if row_idx == 0 {
                     cols.sponge_inputs = initial_sponge_input;
                     current_poseidon2_res = self.poseidon2_chip.perm_and_record(
@@ -362,8 +371,13 @@ where
                         mem_helper.fill_zero(chunk_aux.as_mut());
                     }
                 } else {
-                    cols.sponge_inputs =
-                        from_fn(|i| F::from_u8(write_bytes[(row_idx - 1) * DIGEST_SIZE + i]));
+                    let output_chunk =
+                        &write_bytes[(row_idx - 1) * DIGEST_SIZE..row_idx * DIGEST_SIZE];
+                    for bytes in output_chunk.chunks_exact(2) {
+                        self.bitwise_lookup_chip
+                            .request_range(bytes[0] as u32, bytes[1] as u32);
+                    }
+                    cols.sponge_inputs = from_fn(|i| F::from_u8(output_chunk[i]));
                     current_poseidon2_res = self.poseidon2_chip.perm_and_record(
                         &cols.sponge_inputs,
                         &current_poseidon2_res,
@@ -390,6 +404,22 @@ where
             for row in section_chunk.chunks_exact_mut(width) {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
                 cols.output_commit = output_commit;
+            }
+            let cols: &mut DeferralOutputCols<F> = section_chunk[..width].borrow_mut();
+            let rc =
+                CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_lt_aux);
+            self.bitwise_lookup_chip.request_range(rc, 0);
+            let output_commit_rcs = output_commit
+                .chunks_exact(F_NUM_BYTES)
+                .zip(cols.output_commit_lt_aux.iter_mut())
+                .map(|(bytes, aux)| {
+                    let x_le = from_fn(|i| bytes[i]);
+                    CanonicityTraceGen::generate_subrow(&x_le, aux)
+                })
+                .collect_vec();
+            for rc_pair in output_commit_rcs.chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(rc_pair[0], rc_pair[1]);
             }
 
             trace = rest;
