@@ -8,7 +8,6 @@ use openvm_circuit::{
     },
     system::memory::merkle::MerkleTree,
 };
-use openvm_continuations::circuit::inner::ProofsType;
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
@@ -99,24 +98,21 @@ where
         let (mut stark_proof, mut internal_metadata) =
             self.agg_prover.prove_vm(continuation_proof)?;
 
-        let wrap_proof_type = if def_inputs.is_empty() {
-            ProofsType::Vm
-        } else {
+        if !def_inputs.is_empty() {
             let def_prover = self.def_prover.as_ref().unwrap();
             let def_hook_proofs = def_prover.deferral_prover.prove(def_inputs)?;
             let def_proof = def_prover.agg_prover.prove_def(def_hook_proofs)?;
             stark_proof =
                 self.agg_prover
                     .prove_mixed(stark_proof, def_proof, &mut internal_metadata)?;
-            ProofsType::Combined
-        };
+        }
 
         // We add one additional internal_recursive layer to reduce the proof size.
         const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
         for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-            stark_proof =
-                self.agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata, wrap_proof_type)?;
+            stark_proof = self
+                .agg_prover
+                .wrap_proof(stark_proof, &mut internal_metadata)?;
         }
 
         // Generate deferral merkle proofs if deferrals are enabled.
@@ -166,26 +162,7 @@ where
                 .agg_prover
                 .internal_recursive_prover
                 .get_dag_commit(true),
-            expected_def_vk_commit: self.def_prover.as_ref().map(|dp| {
-                let hook_dag = dp.agg_prover.leaf_prover.get_dag_commit(false);
-                let leaf_dag = dp.agg_prover.internal_for_leaf_prover.get_dag_commit(false);
-                let i4l_dag = dp
-                    .agg_prover
-                    .internal_recursive_prover
-                    .get_dag_commit(false);
-                poseidon2_hash_slice(
-                    &vec![
-                        hook_dag.cached_commit,
-                        hook_dag.vk_pre_hash,
-                        leaf_dag.cached_commit,
-                        leaf_dag.vk_pre_hash,
-                        i4l_dag.cached_commit,
-                        i4l_dag.vk_pre_hash,
-                    ]
-                    .into_flattened(),
-                )
-                .0
-            }),
+            expected_def_vk_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_vk_commit()),
         }
     }
 }

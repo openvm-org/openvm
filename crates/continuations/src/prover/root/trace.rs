@@ -53,6 +53,8 @@ where
             .poseidon2_compress_inputs
             .extend(other_compress_inputs);
 
+        // Get the verifier sub-circuit trace heights. If deferrals are enabled, there is
+        // an additional AIR at the end.
         let verifier_trace_heights = self.trace_heights.as_ref().map(|v| {
             let num_airs = v.len() - deferral_merkle_proofs.is_some() as usize;
             &v[3..num_airs]

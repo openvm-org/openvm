@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
     VmExecutionConfig,
 };
-use openvm_continuations::{circuit::inner::ProofsType, RootSC};
+use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
 use crate::{
@@ -68,11 +68,10 @@ where
                         "root tracegen returned None after {MAX_ROOT_TRACEGEN_RETRIES} retries"
                     ));
                 }
-                stark_proof = self.stark_prover.agg_prover.wrap_proof(
-                    stark_proof,
-                    &mut internal_metadata,
-                    ProofsType::Vm,
-                )?;
+                stark_proof = self
+                    .stark_prover
+                    .agg_prover
+                    .wrap_proof(stark_proof, &mut internal_metadata)?;
                 attempt += 1;
             }
         };
