@@ -40,6 +40,7 @@ pub struct AggProver {
 pub struct InternalLayerMetadata {
     pub internal_recursive_layer: u32,
     pub internal_node_idx: u32,
+    pub proofs_type: ProofsType,
 }
 
 impl AggProver {
@@ -190,6 +191,7 @@ impl AggProver {
             InternalLayerMetadata {
                 internal_recursive_layer: internal_recursive_layer as u32,
                 internal_node_idx: internal_node_idx as u32,
+                proofs_type: ProofsType::Vm,
             },
         ))
     }
@@ -266,6 +268,7 @@ impl AggProver {
             })
         })?;
 
+        metadata.proofs_type = ProofsType::Combined;
         Ok(vm_proof)
     }
 
@@ -273,7 +276,6 @@ impl AggProver {
         &self,
         mut proof: NonRootStarkProof,
         metadata: &mut InternalLayerMetadata,
-        proofs_type: ProofsType,
     ) -> Result<NonRootStarkProof> {
         proof.inner = info_span!(
             "agg_layer",
@@ -286,7 +288,7 @@ impl AggProver {
                 self.internal_recursive_prover.agg_prove::<E>(
                     &[proof.inner],
                     ChildVkKind::RecursiveSelf,
-                    proofs_type,
+                    metadata.proofs_type,
                     None,
                 )
             })

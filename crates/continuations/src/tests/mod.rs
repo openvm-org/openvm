@@ -290,7 +290,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         None,
         None,
     );
-    let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
+    let ctx = root_prover.generate_proving_ctx_no_def(internal_recursive_proof, &user_pvs_proof);
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let vk = root_prover.get_vk();
@@ -322,7 +322,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
     );
     let ctx = root_base_prover
-        .generate_proving_ctx(internal_recursive_proof.clone(), &user_pvs_proof)
+        .generate_proving_ctx_no_def(internal_recursive_proof.clone(), &user_pvs_proof)
         .unwrap();
     let mut trace_heights = ctx
         .per_trace
@@ -343,7 +343,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         Some(trace_heights.clone()),
     );
     let ctx = root_prover
-        .generate_proving_ctx(internal_recursive_proof, &user_pvs_proof)
+        .generate_proving_ctx_no_def(internal_recursive_proof, &user_pvs_proof)
         .unwrap();
 
     for ((air_idx, air_ctx), expected_height) in ctx.per_trace.iter().zip(trace_heights) {
