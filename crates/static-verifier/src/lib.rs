@@ -12,3 +12,4 @@ pub use config::{
     STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
 };
 pub use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
+pub use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{EF as ChildEF, F as ChildF};
