@@ -12,15 +12,17 @@ use openvm_stark_sdk::{
     },
 };
 
-use crate::stages::{
-    batch_constraints::{
-        compute_trace_id_to_air_id, derive_batch_intermediates_with_inputs,
-        enforce_trace_height_constraints, observe_preamble, BatchConstraintError,
-        BatchIntermediates,
+use crate::{
+    stages::{
+        batch_constraints::{
+            compute_trace_id_to_air_id, derive_batch_intermediates_with_inputs,
+            enforce_trace_height_constraints, observe_preamble, BatchConstraintError,
+            BatchIntermediates,
+        },
+        proof_shape::derive_proof_shape_rules,
     },
-    proof_shape::derive_proof_shape_rules,
+    ChildEF, ChildF,
 };
-use crate::{ChildEF, ChildF};
 
 #[derive(Clone, Debug)]
 pub(crate) struct PreparedPipelineInputs {
