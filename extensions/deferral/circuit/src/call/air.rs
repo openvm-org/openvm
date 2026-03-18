@@ -1,5 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
+use itertools::{izip, Itertools as _};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
@@ -10,6 +11,7 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -24,8 +26,10 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+use p3_field::PrimeField32;
 
 use crate::{
+    canonicity::{CanonicityAuxCols, CanonicitySubAir},
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
@@ -69,12 +73,17 @@ pub struct DeferralCallCoreCols<T> {
     pub deferral_idx: T,
     pub reads: DeferralCallReads<T, T>,
     pub writes: DeferralCallWrites<T, T>,
+
+    pub input_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_len_lt_aux: CanonicityAuxCols<T>,
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct DeferralCallCoreAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
+    pub bitwise_bus: BitwiseOperationLookupBus,
 }
 
 impl<F: Field> BaseAir<F> for DeferralCallCoreAir {
@@ -87,6 +96,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for DeferralCallCoreAir {}
 impl<AB, I> VmCoreAir<AB, I> for DeferralCallCoreAir
 where
     AB: InteractionBuilder,
+    AB::F: PrimeField32,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<DeferralCallReads<AB::Expr, AB::Expr>>,
     I::Writes: From<DeferralCallWrites<AB::Expr, AB::Expr>>,
@@ -101,6 +111,61 @@ where
         let cols: &DeferralCallCoreCols<_> = local_core.borrow();
         builder.assert_bool(cols.is_valid);
 
+        // Constrain the canonicity of both commits and output_len, i.e. that every
+        // F_NUM_BYTES bytes uniquely represents an element of F.
+        let input_commit_rcs = izip!(
+            cols.reads.input_commit.chunks_exact(F_NUM_BYTES),
+            cols.input_commit_lt_aux
+        )
+        .map(|(bytes, aux)| {
+            CanonicitySubAir.assert_canonicity(builder, bytes, &aux, cols.is_valid.into())
+        })
+        .collect_vec();
+
+        let output_commit_rcs = izip!(
+            cols.writes.output_commit.chunks_exact(F_NUM_BYTES),
+            cols.output_commit_lt_aux
+        )
+        .map(|(bytes, aux)| {
+            CanonicitySubAir.assert_canonicity(builder, bytes, &aux, cols.is_valid.into())
+        })
+        .collect_vec();
+
+        let output_len_rc = CanonicitySubAir.assert_canonicity(
+            builder,
+            &cols.writes.output_len,
+            &cols.output_len_lt_aux,
+            cols.is_valid.into(),
+        );
+
+        for rc_pair in input_commit_rcs.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(rc_pair[0].clone(), rc_pair[1].clone())
+                .eval(builder, cols.is_valid);
+        }
+        for rc_pair in output_commit_rcs.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(rc_pair[0].clone(), rc_pair[1].clone())
+                .eval(builder, cols.is_valid);
+        }
+        self.bitwise_bus
+            .send_range(output_len_rc, AB::Expr::ZERO)
+            .eval(builder, cols.is_valid);
+
+        // Range check the bytes that we write to RV32 heap memory.
+        for bytes in cols.writes.output_commit.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, cols.is_valid);
+        }
+
+        for bytes in cols.writes.output_len.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, cols.is_valid);
+        }
+
+        // Constrain the updated accumulators.
         let input_f_commit = byte_commit_to_f(&cols.reads.input_commit);
         let output_f_commit = byte_commit_to_f(&cols.writes.output_commit);
 
