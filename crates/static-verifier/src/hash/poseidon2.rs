@@ -171,7 +171,7 @@ pub(crate) fn hash_babybear_slice_to_digest(
     let mut state = core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64)));
     for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
         for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
-            let cells = chunk.iter().map(|value| value.0).collect::<Vec<_>>();
+            let cells = chunk.iter().map(|value| value.value).collect::<Vec<_>>();
             state[chunk_id] = reduce_32_cells(ctx, range, &cells);
         }
         state = poseidon2_permute_bn254_state(ctx, range, state);

@@ -9,6 +9,7 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, BigPrimeField},
     AssignedValue, Context, QuantumCell,
 };
+use crate::utils::{guarded_debug_assert, guarded_debug_assert_eq};
 use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
@@ -45,6 +46,10 @@ impl BabyBearWire {
         }
         BabyBear::from_u32(b_int.try_into().unwrap())
     }
+
+    pub fn as_u64(&self) -> u64 {
+        PrimeField64::as_canonical_u64(&self.to_baby_bear())
+    }
 }
 
 pub struct BabyBearChip {
@@ -80,13 +85,13 @@ impl BabyBearChip {
     }
 
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
-        debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
+        guarded_debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, a.max_bits);
         let r = BabyBearWire {
             value: r,
             max_bits: BABYBEAR_MAX_BITS,
         };
-        debug_assert_eq!(a.to_baby_bear(), r.to_baby_bear());
+        guarded_debug_assert_eq!(a.to_baby_bear(), r.to_baby_bear());
         r
     }
 
@@ -115,7 +120,7 @@ impl BabyBearChip {
         let value = self.gate().add(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
         let mut c = BabyBearWire { value, max_bits };
-        debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() + b.to_baby_bear());
+        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() + b.to_baby_bear());
         if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             c = self.reduce(ctx, c);
         }
@@ -128,7 +133,7 @@ impl BabyBearChip {
             value,
             max_bits: a.max_bits,
         };
-        debug_assert_eq!(b.to_baby_bear(), -a.to_baby_bear());
+        guarded_debug_assert_eq!(b.to_baby_bear(), -a.to_baby_bear());
         b
     }
 
@@ -147,7 +152,7 @@ impl BabyBearChip {
         let value = self.gate().sub(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
         let mut c = BabyBearWire { value, max_bits };
-        debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() - b.to_baby_bear());
+        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() - b.to_baby_bear());
         if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             c = self.reduce(ctx, c);
         }
@@ -176,7 +181,7 @@ impl BabyBearChip {
         if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             c = self.reduce(ctx, c);
         }
-        debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() * b.to_baby_bear());
+        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() * b.to_baby_bear());
         c
     }
 
@@ -206,7 +211,7 @@ impl BabyBearChip {
         if d.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             d = self.reduce(ctx, d);
         }
-        debug_assert_eq!(
+        guarded_debug_assert_eq!(
             d.to_baby_bear(),
             a.to_baby_bear() * b.to_baby_bear() + c.to_baby_bear()
         );
@@ -242,7 +247,7 @@ impl BabyBearChip {
                 max_bits,
             },
         );
-        debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() / b.to_baby_bear());
+        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() / b.to_baby_bear());
         c
     }
 
@@ -321,7 +326,7 @@ impl BabyBearChip {
 
     pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: BabyBearWire) {
         // The proof of correctness of this function is listed in `signed_div_mod`.
-        debug_assert_eq!(a.to_baby_bear(), BabyBear::ZERO);
+        guarded_debug_assert_eq!(a.to_baby_bear(), BabyBear::ZERO);
         assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         let a_num_bits = a.max_bits;
         let b: BigUint = BabyBear::ORDER_U32.into();
@@ -345,15 +350,59 @@ impl BabyBearChip {
             self.range
                 .gate()
                 .add(ctx, div, QuantumCell::Constant(biguint_to_fe(&bound)));
-        debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
+        guarded_debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
         self.range
             .range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
     }
 
     pub fn assert_equal(&self, ctx: &mut Context<Fr>, a: BabyBearWire, b: BabyBearWire) {
-        debug_assert_eq!(a.to_baby_bear(), b.to_baby_bear());
+        guarded_debug_assert_eq!(a.to_baby_bear(), b.to_baby_bear());
         let diff = self.sub(ctx, a, b);
         self.assert_zero(ctx, diff);
+    }
+
+    pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearWire {
+        self.load_constant(ctx, BabyBear::ZERO)
+    }
+
+    pub fn one(&self, ctx: &mut Context<Fr>) -> BabyBearWire {
+        self.load_constant(ctx, BabyBear::ONE)
+    }
+
+    pub fn mul_const(
+        &self,
+        ctx: &mut Context<Fr>,
+        a: BabyBearWire,
+        c: BabyBear,
+    ) -> BabyBearWire {
+        let c_wire = self.load_constant(ctx, c);
+        self.mul(ctx, a, c_wire)
+    }
+
+    pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+        self.mul(ctx, a, a)
+    }
+
+    pub fn assign_and_range_usize(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: usize,
+    ) -> AssignedValue<Fr> {
+        let cell = ctx.load_witness(Fr::from(value as u64));
+        let bits = bit_length(value as u64).max(1);
+        self.range.range_check(ctx, cell, bits);
+        cell
+    }
+
+    pub fn assign_and_range_u64(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: u64,
+    ) -> AssignedValue<Fr> {
+        let cell = ctx.load_witness(Fr::from(value));
+        let bits = bit_length(value).max(1);
+        self.range.range_check(ctx, cell, bits);
+        cell
     }
 }
 
@@ -432,9 +481,9 @@ where
     let shifted_div = range
         .gate()
         .add(ctx, div, QuantumCell::Constant(biguint_to_fe(&bound)));
-    debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
+    guarded_debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
     range.range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
-    debug_assert!(*rem.value() < biguint_to_fe(&b));
+    guarded_debug_assert!(*rem.value() < biguint_to_fe(&b));
     range.check_big_less_than_safe(ctx, rem, b);
     (div, rem)
 }
