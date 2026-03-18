@@ -81,7 +81,7 @@ impl<
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_commit: Option<CommitBytes>,
+        def_hook_vk_commit: Option<CommitBytes>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
@@ -106,7 +106,7 @@ impl<
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
-            def_hook_commit,
+            def_hook_vk_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -114,7 +114,7 @@ impl<
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(def_hook_commit.is_some()),
+            agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -128,7 +128,7 @@ impl<
         pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_commit: Option<CommitBytes>,
+        def_hook_vk_commit: Option<CommitBytes>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
@@ -152,7 +152,7 @@ impl<
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
-            def_hook_commit,
+            def_hook_vk_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -160,7 +160,7 @@ impl<
         Self {
             pk,
             vk,
-            agg_node_tracegen: T::new(def_hook_commit.is_some()),
+            agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,

@@ -37,7 +37,7 @@ pub use trace::*;
 #[derive(derive_new::new, Clone)]
 pub struct InnerCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub def_hook_commit: Option<CommitBytes>,
+    pub def_hook_cached_commit: Option<CommitBytes>,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for InnerCircuit<S> {
@@ -51,7 +51,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for I
         let pvs_air_consistency_bus =
             PvsAirConsistencyBus::new(self.verifier_circuit.next_bus_idx());
 
-        let deferral_enabled = self.def_hook_commit.is_some();
+        let deferral_enabled = self.def_hook_cached_commit.is_some();
 
         let deferral_config = if deferral_enabled {
             VerifierDeferralConfig::Enabled {
@@ -85,7 +85,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for I
                 cached_commit_bus,
                 poseidon2_bus: poseidon2_compress_bus,
                 pvs_air_consistency_bus,
-                expected_def_hook_commit: self.def_hook_commit.unwrap(),
+                expected_def_hook_cached_commit: self.def_hook_cached_commit.unwrap(),
             }) as AirRef<SC>;
             let unset_vm_pvs_air = Arc::new(UnsetPvsAir {
                 public_values_bus,

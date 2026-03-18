@@ -44,7 +44,7 @@ pub struct DeferralPvsAir {
     pub poseidon2_bus: Poseidon2CompressBus,
     pub pvs_air_consistency_bus: PvsAirConsistencyBus,
 
-    pub expected_def_hook_commit: CommitBytes,
+    pub expected_def_hook_cached_commit: CommitBytes,
 }
 
 impl<F> BaseAir<F> for DeferralPvsAir {
@@ -196,7 +196,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             CachedCommitBusMessage {
                 air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
                 cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
-                cached_commit: self.expected_def_hook_commit.into(),
+                cached_commit: self.expected_def_hook_cached_commit.into(),
             },
             local.is_present * not(local.has_verifier_pvs),
         );

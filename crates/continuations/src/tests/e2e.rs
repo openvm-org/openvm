@@ -137,13 +137,26 @@ fn f_digest_to_le_bytes(digest: &[F; DIGEST_SIZE]) -> [u8; 32] {
 
 fn compute_output_f_commit(deferral_idx: u32, output_raw: &[u8]) -> [F; DIGEST_SIZE] {
     assert!(output_raw.len().is_multiple_of(DIGEST_SIZE));
-    let mut state = [F::ZERO; DIGEST_SIZE];
-    state[0] = F::new(deferral_idx);
-    for chunk in output_raw.chunks_exact(DIGEST_SIZE) {
-        let bytes: [F; DIGEST_SIZE] = std::array::from_fn(|i| F::from_u8(chunk[i]));
-        state = poseidon2_compress_with_capacity(state, bytes).0;
+    let mut initial_input = [F::ZERO; DIGEST_SIZE];
+    initial_input[0] = F::from_u32(deferral_idx);
+    initial_input[1] = F::from_usize(output_raw.len());
+
+    let (empty_output_commit, mut capacity) =
+        poseidon2_compress_with_capacity(initial_input, [F::ZERO; DIGEST_SIZE]);
+    if output_raw.is_empty() {
+        return empty_output_commit;
     }
-    state
+
+    let mut chunks = output_raw.chunks_exact(DIGEST_SIZE).peekable();
+    while let Some(chunk) = chunks.next() {
+        let chunk_f = std::array::from_fn(|i| F::from_u8(chunk[i]));
+        let (res_left, res_right) = poseidon2_compress_with_capacity(chunk_f, capacity);
+        if chunks.peek().is_none() {
+            return res_left;
+        }
+        capacity = res_right;
+    }
+    unreachable!()
 }
 
 fn hash_deferral_commit(commit: [F; DIGEST_SIZE]) -> [F; DIGEST_SIZE] {
@@ -240,11 +253,11 @@ fn make_absent_trace_pvs(
 fn test_deferral_e2e() -> Result<()> {
     setup_tracing_with_log_level(Level::WARN);
 
-    // =========================================================================
-    // SECTION 0: Compute def_hook_commit via the deferral aggregation chain.
+    // =============================================================================
+    // SECTION 0: Compute def_hook_cached_commit via the deferral aggregation chain.
     //
     // All three deferral circuits use EmptyAirWithPvs.
-    // =========================================================================
+    // =============================================================================
     let gpu_engine = GpuEngine::new(app_system_params());
     let empty_air = Arc::new(EmptyAirWithPvs(DeferralCircuitPvs::<u8>::width())) as AirRef<SC>;
     let (_, def_circuit_vk) = gpu_engine.keygen(&[empty_air]);
@@ -264,7 +277,7 @@ fn test_deferral_e2e() -> Result<()> {
     );
     let hook_prover_for_commit =
         DeferralHookProver::new::<GpuEngine>(def_i1_prover.get_vk(), root_system_params());
-    let def_hook_commit = hook_prover_for_commit.get_cached_commit();
+    let def_hook_cached_commit = hook_prover_for_commit.get_cached_commit();
 
     // Compute vk commit using [cached_commit, vk_pre_hash] for def/leaf/i4l.
     let def_circuit_dag_commit = def_leaf_prover.get_dag_commit(false);
@@ -543,7 +556,7 @@ fn test_deferral_e2e() -> Result<()> {
         Arc::new(app_pk.get_vk()),
         leaf_system_params(),
         false,
-        Some(def_hook_commit),
+        Some(def_hook_cached_commit),
     );
     warn!("proving VM leaf aggregation");
     let leaf_vm_proof =
@@ -553,7 +566,7 @@ fn test_deferral_e2e() -> Result<()> {
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
-        Some(def_hook_commit),
+        Some(def_hook_cached_commit),
     );
     warn!("proving VM internal-for-leaf");
     let i4l_vm_proof =
@@ -563,7 +576,7 @@ fn test_deferral_e2e() -> Result<()> {
         i4l_prover.get_vk(),
         internal_system_params(),
         true,
-        Some(def_hook_commit),
+        Some(def_hook_cached_commit),
     );
     warn!("proving VM internal-recursive");
     let ir_vm_proof =
@@ -577,7 +590,7 @@ fn test_deferral_e2e() -> Result<()> {
         hook_prover_for_commit.get_vk(),
         leaf_system_params(),
         false,
-        Some(def_hook_commit),
+        Some(def_hook_cached_commit),
     );
 
     let hook1_pvs = read_hook_pvs(&hook_proof_1);
@@ -617,7 +630,7 @@ fn test_deferral_e2e() -> Result<()> {
         deferral_leaf_prover.get_vk(),
         internal_system_params(),
         false,
-        Some(def_hook_commit),
+        Some(def_hook_cached_commit),
     );
     warn!("proving deferral-path internal-for-leaf");
     let i4l_def_proof = def_i4l_prover.agg_prove::<GpuEngine>(
@@ -631,7 +644,7 @@ fn test_deferral_e2e() -> Result<()> {
         def_i4l_prover.get_vk(),
         internal_system_params(),
         false,
-        Some(def_hook_commit),
+        Some(def_hook_cached_commit),
     );
     warn!("proving deferral-path internal-recursive");
     let ir_def_proof = def_ir_prover.agg_prove::<GpuEngine>(
