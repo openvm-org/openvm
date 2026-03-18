@@ -57,9 +57,6 @@ pub fn generate_proving_ctx(
             cols.is_valid = F::ONE;
             cols.is_first = F::from_bool(row_idx == 0);
             cols.output_len = F::from_usize(output_len);
-            for aux in &mut cols.canonicity_aux {
-                CanonicityTraceGen::clear_aux(aux);
-            }
 
             cols.input_vals = if row_idx == 0 {
                 let mut input = [F::ZERO; DIGEST_SIZE];

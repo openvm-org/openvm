@@ -328,10 +328,6 @@ where
 
                 cols.rd_val = header.rd_val.map(F::from_u8);
                 cols.rs_val = header.rs_val.map(F::from_u8);
-                for aux in &mut cols.output_commit_lt_aux {
-                    CanonicityTraceGen::clear_aux(aux);
-                }
-                CanonicityTraceGen::clear_aux(&mut cols.output_len_lt_aux);
 
                 if row_idx == 0 {
                     mem_helper.fill(
