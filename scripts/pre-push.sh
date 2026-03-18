@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 # Local pre-CI check: runs fmt, clippy, and tests only on crates changed vs a target branch.
-# Usage: ./scripts/pre-ci.sh [target-branch]  (default: main)
+# Usage: ./scripts/pre-push.sh [target-branch]  (default: develop-v2.0.0-beta)
+#
+# To install as a git pre-push hook:
+#
+#   ln -sf ../../scripts/pre-push.sh .git/hooks/pre-push
+#
+# Or, if you use a git worktree or want a wrapper that passes the remote branch:
+#
+#   cat > .git/hooks/pre-push << 'HOOK'
+#   #!/usr/bin/env bash
+#   exec "$(git rev-parse --show-toplevel)/scripts/pre-push.sh"
+#   HOOK
+#   chmod +x .git/hooks/pre-push
+#
+# To bypass the hook for a single push:  git push --no-verify
 set -euo pipefail
 
 TARGET="${1:-develop-v2.0.0-beta}"
