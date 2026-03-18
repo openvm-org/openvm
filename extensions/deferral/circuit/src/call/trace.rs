@@ -12,12 +12,14 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
+};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
 use openvm_rv32im_circuit::adapters::{
     tracing_read, tracing_read_deferral, tracing_write, tracing_write_deferral,
@@ -27,6 +29,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     call::{DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReads, DeferralCallWrites},
+    canonicity::CanonicityTraceGen,
     count::DeferralCircuitCountChip,
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2Chip},
     utils::{
@@ -52,11 +55,12 @@ pub struct DeferralCallCoreExecutor<A> {
     pub(in crate::call) deferral_fns: Vec<Arc<DeferralFn>>,
 }
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for DeferralCallCoreExecutor<A>
@@ -142,13 +146,15 @@ where
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut DeferralCallCoreCols<F> = core_row.borrow_mut();
 
+        let input_commit_f = record.read_data.input_commit.map(F::from_u8);
+        let output_commit_f = record.write_data.output_commit.map(F::from_u8);
+        let output_len_f = record.write_data.output_len.map(F::from_u8);
+
         self.count_chip
             .add_count(record.deferral_idx.as_canonical_u32());
 
-        let input_f_commit: [F; _] =
-            byte_commit_to_f(&record.read_data.input_commit.map(F::from_u8));
-        let output_f_commit: [F; _] =
-            byte_commit_to_f(&record.write_data.output_commit.map(F::from_u8));
+        let input_f_commit: [F; _] = byte_commit_to_f(&input_commit_f);
+        let output_f_commit: [F; _] = byte_commit_to_f(&output_commit_f);
         self.poseidon2_chip
             .perm_and_record(&record.read_data.old_input_acc, &input_f_commit, true);
         self.poseidon2_chip.perm_and_record(
@@ -157,14 +163,51 @@ where
             true,
         );
 
+        for bytes in record.write_data.output_commit.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(bytes[0] as u32, bytes[1] as u32);
+        }
+        for bytes in record.write_data.output_len.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(bytes[0] as u32, bytes[1] as u32);
+        }
+
         // Write columns in reverse order to avoid clobbering the record.
+        let input_commit_rcs = input_commit_f
+            .chunks_exact(F_NUM_BYTES)
+            .zip(cols.input_commit_lt_aux.iter_mut())
+            .map(|(bytes, aux)| {
+                let x_le = from_fn(|i| bytes[i]);
+                CanonicityTraceGen::generate_subrow(&x_le, aux)
+            })
+            .collect_vec();
+        for rc_pair in input_commit_rcs.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(rc_pair[0], rc_pair[1]);
+        }
+
+        let output_commit_rcs = output_commit_f
+            .chunks_exact(F_NUM_BYTES)
+            .zip(cols.output_commit_lt_aux.iter_mut())
+            .map(|(bytes, aux)| {
+                let x_le = from_fn(|i| bytes[i]);
+                CanonicityTraceGen::generate_subrow(&x_le, aux)
+            })
+            .collect_vec();
+        for rc_pair in output_commit_rcs.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(rc_pair[0], rc_pair[1]);
+        }
+        let rc = CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_lt_aux);
+        self.bitwise_lookup_chip.request_range(rc, 0);
+
         cols.writes.new_output_acc = record.write_data.new_output_acc;
         cols.writes.new_input_acc = record.write_data.new_input_acc;
-        cols.writes.output_len = record.write_data.output_len.map(F::from_u8);
-        cols.writes.output_commit = record.write_data.output_commit.map(F::from_u8);
+        cols.writes.output_len = output_len_f;
+        cols.writes.output_commit = output_commit_f;
         cols.reads.old_output_acc = record.read_data.old_output_acc;
         cols.reads.old_input_acc = record.read_data.old_input_acc;
-        cols.reads.input_commit = record.read_data.input_commit.map(F::from_u8);
+        cols.reads.input_commit = input_commit_f;
         cols.deferral_idx = record.deferral_idx;
         cols.is_valid = F::ONE;
     }

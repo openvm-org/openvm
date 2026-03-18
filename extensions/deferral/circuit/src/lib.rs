@@ -4,6 +4,7 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
 pub mod call;
+pub mod canonicity;
 pub mod count;
 pub mod output;
 pub mod poseidon2;

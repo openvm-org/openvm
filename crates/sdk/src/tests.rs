@@ -198,6 +198,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
         memory_dimensions,
         num_user_pvs,
         None,
+        0,
     );
     let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
 

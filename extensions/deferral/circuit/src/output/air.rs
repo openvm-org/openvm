@@ -1,5 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
+use itertools::{izip, Itertools};
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
     system::memory::{
@@ -7,7 +8,10 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::utils::{assert_array_eq, not};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus,
+    utils::{assert_array_eq, not},
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -23,8 +27,10 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+use p3_field::PrimeField32;
 
 use crate::{
+    canonicity::{CanonicityAuxCols, CanonicitySubAir},
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
@@ -64,6 +70,11 @@ pub struct DeferralOutputCols<T> {
     pub output_len: [T; F_NUM_BYTES],
     pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
+    // Auxiliary columns to ensure the canonicity of each F byte decomposition. Both
+    // output_commit and output_len are checked.
+    pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_len_lt_aux: CanonicityAuxCols<T>,
+
     // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
@@ -81,6 +92,7 @@ pub struct DeferralOutputAir {
     pub memory_bridge: MemoryBridge,
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
+    pub bitwise_bus: BitwiseOperationLookupBus,
 }
 
 impl<F> BaseAir<F> for DeferralOutputAir {
@@ -94,6 +106,7 @@ impl<F> PartitionedBaseAir<F> for DeferralOutputAir {}
 impl<AB> Air<AB> for DeferralOutputAir
 where
     AB: InteractionBuilder,
+    AB::F: PrimeField32,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -159,6 +172,33 @@ where
             local.output_len,
             next.output_len,
         );
+
+        // Constrain the canonicity of output_commit and output_len, i.e. that every
+        // F_NUM_BYTES bytes uniquely represents an element of F.
+        let output_commit_rcs = izip!(
+            local.output_commit.chunks_exact(F_NUM_BYTES),
+            local.output_commit_lt_aux
+        )
+        .map(|(bytes, aux)| {
+            CanonicitySubAir.assert_canonicity(builder, bytes, &aux, local.is_first.into())
+        })
+        .collect_vec();
+
+        let output_len_rc = CanonicitySubAir.assert_canonicity(
+            builder,
+            &local.output_len,
+            &local.output_len_lt_aux,
+            local.is_first.into(),
+        );
+
+        for rc_pair in output_commit_rcs.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(rc_pair[0].clone(), rc_pair[1].clone())
+                .eval(builder, local.is_first);
+        }
+        self.bitwise_bus
+            .send_range(output_len_rc, AB::Expr::ZERO)
+            .eval(builder, local.is_first);
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
@@ -267,6 +307,12 @@ where
             .zip(&local.write_bytes_aux)
             .enumerate()
         {
+            for bytes in data.chunks(2) {
+                self.bitwise_bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, local.is_valid - local.is_first);
+            }
+
             self.memory_bridge
                 .write(
                     MemoryAddress::new(

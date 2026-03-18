@@ -3,6 +3,7 @@ use std::{array::from_fn, borrow::Borrow};
 use itertools::{fold, Itertools};
 use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow};
 use openvm_continuations::utils::digests_to_poseidon2_input;
+use openvm_deferral_circuit::canonicity::{CanonicityAuxCols, CanonicitySubAir};
 use openvm_recursion_circuit::{
     bus::{Poseidon2PermuteBus, Poseidon2PermuteMessage},
     prelude::DIGEST_SIZE,
@@ -10,7 +11,7 @@ use openvm_recursion_circuit::{
 };
 use openvm_stark_backend::{interaction::InteractionBuilder, PartitionedBaseAir};
 use p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues};
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
 
 use crate::bus::{OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage};
@@ -34,6 +35,8 @@ pub struct DeferralOutputCommitCols<F> {
     pub input_vals: [F; DIGEST_SIZE],
     pub res_left: [F; DIGEST_SIZE],
     pub res_right: [F; DIGEST_SIZE],
+
+    pub canonicity_aux: [CanonicityAuxCols<F>; VALS_IN_DIGEST],
 }
 
 #[derive(Debug)]
@@ -54,7 +57,10 @@ impl<F> BaseAir<F> for DeferralOutputCommitAir {
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputCommitAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputCommitAir {}
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir
+where
+    AB::F: PrimeField32,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("row 0 present");
@@ -142,6 +148,35 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
             },
             local.is_valid - local.is_first,
         );
+
+        /*
+         * For each output value we need to constraint the canonicity of the byte
+         * decomposition.
+         */
+        let rcs = local
+            .input_vals
+            .chunks(F_NUM_BYTES)
+            .zip(local.canonicity_aux)
+            .map(|(x, aux)| {
+                CanonicitySubAir.assert_canonicity(
+                    builder,
+                    x,
+                    &aux,
+                    local.is_valid - local.is_first,
+                )
+            })
+            .collect_vec();
+
+        for rc in rcs {
+            self.range_bus.lookup_key(
+                builder,
+                RangeCheckerBusMessage {
+                    value: rc,
+                    max_bits: AB::Expr::from_u8(8),
+                },
+                local.is_valid - local.is_first,
+            );
+        }
 
         /*
          * Compute the output commit and send it on the last row. We sponge hash each
