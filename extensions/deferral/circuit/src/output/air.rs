@@ -16,7 +16,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_stark_backend::{
@@ -70,10 +70,9 @@ pub struct DeferralOutputCols<T> {
     pub output_len: [T; F_NUM_BYTES],
     pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
-    // Auxiliary columns to ensure the canonicity of each F byte decomposition. Both
-    // output_commit and output_len are checked.
+    // Auxiliary columns to ensure the canonicity of each F byte decomposition in
+    // output_commit.
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
-    pub output_len_lt_aux: CanonicityAuxCols<T>,
 
     // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
@@ -93,6 +92,7 @@ pub struct DeferralOutputAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
     pub bitwise_bus: BitwiseOperationLookupBus,
+    pub address_bits: usize,
 }
 
 impl<F> BaseAir<F> for DeferralOutputAir {
@@ -184,21 +184,11 @@ where
         })
         .collect_vec();
 
-        let output_len_rc = CanonicitySubAir.assert_canonicity(
-            builder,
-            &local.output_len,
-            &local.output_len_lt_aux,
-            local.is_first.into(),
-        );
-
         for rc_pair in output_commit_rcs.chunks_exact(2) {
             self.bitwise_bus
                 .send_range(rc_pair[0].clone(), rc_pair[1].clone())
                 .eval(builder, local.is_first);
         }
-        self.bitwise_bus
-            .send_range(output_len_rc, AB::Expr::ZERO)
-            .eval(builder, local.is_first);
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
@@ -238,6 +228,31 @@ where
         self.poseidon2_bus
             .lookup(next.sponge_inputs, rhs, next.poseidon2_res, next.is_last)
             .eval(builder, next.is_valid);
+
+        // We range check the top byte of both heap pointers to ensure that each access
+        // is in [0, 2^address_bits). The memory merkle argument ensures each pointer
+        // is less than 2^addr_bits, and this range check ensures the decomposition is
+        // canonical. Note that constraining the starting output pointer is sufficient
+        // to constrain the entire write is in range - even if output_ptr + output_len
+        // wraps, there will be several written values in the middle that do not.
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+
+        self.bitwise_bus
+            .send_range(
+                local.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                local.rs_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+            )
+            .eval(builder, local.is_first);
+
+        // We also constrain output_len to be under 2^address_bits.
+        self.bitwise_bus
+            .send_range(
+                local.output_len[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                AB::Expr::ZERO,
+            )
+            .eval(builder, local.is_first);
 
         // Constrain the heap pointer memory reads.
         let d = AB::Expr::from_u32(RV32_REGISTER_AS);
