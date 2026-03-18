@@ -163,7 +163,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     let output_len_val = u64::from_le_bytes(output_len) as usize;
 
-    // Bytes are sponge-hashed and constrained against output_commit. Thhe
+    // Bytes are sponge-hashed and constrained against output_commit. The
     // sponge rate is DIGEST_SIZE.
     let num_rows = output_len_val / DIGEST_SIZE + 1;
     debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
