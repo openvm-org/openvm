@@ -1,0 +1,169 @@
+use halo2_base::{
+    gates::circuit::CircuitBuilderStage,
+    halo2_proofs::plonk::{keygen_pk, keygen_vk},
+};
+
+use crate::{
+    config::StaticVerifierShape,
+    prover::{
+        Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit,
+        StaticVerifierInput, StaticVerifierProof,
+    },
+};
+
+impl StaticVerifierCircuit {
+    /// Run keygen to produce a [`Halo2ProvingPinning`].
+    ///
+    /// The `input` is used as a representative witness for keygen; any valid
+    /// input for the target circuit shape will do.
+    pub fn keygen(
+        params: &Halo2Params,
+        shape: &StaticVerifierShape,
+        input: &StaticVerifierInput<'_>,
+    ) -> Halo2ProvingPinning {
+        let mut builder = Self::builder(CircuitBuilderStage::Keygen, shape);
+        let public_inputs = Self::populate(&mut builder, input);
+
+        let config_params = builder.calculate_params(Some(shape.minimum_rows));
+
+        let vk = keygen_vk(params, &builder).expect("keygen_vk should succeed");
+        let pk = keygen_pk(params, vk, &builder).expect("keygen_pk should succeed");
+        let break_points = builder.break_points();
+
+        Halo2ProvingPinning {
+            pk,
+            metadata: Halo2ProvingMetadata {
+                config_params,
+                break_points,
+                num_pvs: vec![public_inputs.len()],
+            },
+        }
+    }
+}
+
+/// High-level proving key that owns a [`Halo2ProvingPinning`] together with
+/// the [`StaticVerifierShape`] needed to reconstruct prover builders.
+pub struct StaticVerifierProvingKey {
+    pub pinning: Halo2ProvingPinning,
+    pub shape: StaticVerifierShape,
+}
+
+impl StaticVerifierProvingKey {
+    /// Run keygen and return a proving key that can be reused for multiple
+    /// proofs.
+    pub fn keygen(
+        params: &Halo2Params,
+        shape: StaticVerifierShape,
+        input: &StaticVerifierInput<'_>,
+    ) -> Self {
+        let pinning = StaticVerifierCircuit::keygen(params, &shape, input);
+        Self { pinning, shape }
+    }
+
+    /// Generate a proof using the stored pinning and shape.
+    pub fn prove(
+        &self,
+        params: &Halo2Params,
+        input: &StaticVerifierInput<'_>,
+    ) -> StaticVerifierProof {
+        StaticVerifierCircuit::prove(params, &self.pinning, &self.shape, input)
+    }
+
+    /// Verify a proof against this proving key's verifying key.
+    pub fn verify(&self, params: &Halo2Params, proof: &StaticVerifierProof) -> bool {
+        StaticVerifierCircuit::verify(params, self.pinning.pk.get_vk(), proof)
+    }
+}
+
+// --- EVM support (feature-gated) ---
+
+#[cfg(feature = "evm-prove")]
+use halo2_base::{
+    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr,
+};
+#[cfg(feature = "evm-prove")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "evm-prove")]
+use serde_with::serde_as;
+#[cfg(feature = "evm-prove")]
+use snark_verifier_sdk::{
+    evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
+    SHPLONK,
+};
+
+/// EVM-compatible proof consisting of instances and raw proof bytes.
+#[cfg(feature = "evm-prove")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawEvmProof {
+    pub instances: Vec<Fr>,
+    pub proof: Vec<u8>,
+}
+
+/// Compiled Solidity verifier contract for on-chain verification.
+#[cfg(feature = "evm-prove")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FallbackEvmVerifier {
+    pub sol_code: String,
+    pub artifact: EvmVerifierByteCode,
+}
+
+/// Bytecode of a compiled EVM verifier contract.
+#[cfg(feature = "evm-prove")]
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EvmVerifierByteCode {
+    pub sol_compiler_version: String,
+    pub sol_compiler_options: String,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub bytecode: Vec<u8>,
+}
+
+#[cfg(feature = "evm-prove")]
+impl StaticVerifierProvingKey {
+    /// Generate a Solidity verifier contract for this circuit.
+    pub fn generate_fallback_evm_verifier(&self, params: &Halo2Params) -> String {
+        gen_evm_verifier_sol_code::<BaseCircuitBuilder<Fr>, SHPLONK>(
+            params,
+            self.pinning.pk.get_vk(),
+            self.pinning.metadata.num_pvs.clone(),
+        )
+    }
+
+    /// Generate an EVM-compatible proof.
+    pub fn prove_for_evm(
+        &self,
+        params: &Halo2Params,
+        input: &StaticVerifierInput<'_>,
+    ) -> RawEvmProof {
+        let mut builder = BaseCircuitBuilder::prover(
+            self.pinning.metadata.config_params.clone(),
+            self.pinning.metadata.break_points.clone(),
+        )
+        .use_instance_columns(self.shape.instance_columns);
+
+        let public_inputs = StaticVerifierCircuit::populate(&mut builder, input);
+
+        let snark = gen_evm_proof_shplonk(
+            params,
+            &self.pinning.pk,
+            builder,
+            vec![public_inputs.clone()],
+        );
+
+        RawEvmProof {
+            instances: public_inputs,
+            proof: snark,
+        }
+    }
+}
+
+/// Verify an EVM proof using a deployed verifier contract.
+///
+/// Returns the gas used on success, or an error message on failure.
+#[cfg(feature = "evm-verify")]
+pub fn evm_verify(deployment_code: &[u8], proof: &RawEvmProof) -> Result<u64, String> {
+    let calldata =
+        snark_verifier_sdk::evm::encode_calldata(&[proof.instances.as_slice()], &proof.proof);
+    snark_verifier_sdk::evm::evm_verify(deployment_code.to_vec(), calldata)
+        .map_err(|e| format!("EVM verification failed: {e}"))
+}

@@ -1,9 +1,10 @@
 use halo2_base::gates::circuit::BaseCircuitParams;
+use serde::{Deserialize, Serialize};
 
 pub const STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0: usize = 1;
 pub const STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0: usize = 1;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct StaticVerifierShape {
     pub k: usize,
     pub lookup_bits: usize,

@@ -2048,9 +2048,9 @@ dependencies = [
 
 [[package]]
 name = "halo2-base"
-version = "0.5.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab57020fceb5657e837836ab89ee87a5e8d5f1e1662a353e23c00f2cde41446f"
+checksum = "678cf3adc0a39d7b4d9b82315a655201aa24a430dd1902b162c508047f56ac69"
 dependencies = [
  "getset",
  "halo2-axiom",
@@ -2065,6 +2065,26 @@ dependencies = [
  "rustc-hash 1.1.0",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "halo2-ecc"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "645c00681fdd1febaf552d8814e9f5a6a142d81a1514102190da07039588b366"
+dependencies = [
+ "halo2-base",
+ "itertools 0.11.0",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "rayon",
+ "serde",
+ "serde_json",
+ "test-case",
 ]
 
 [[package]]
@@ -4223,6 +4243,9 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand_chacha 0.3.1",
+ "serde",
+ "serde_with",
+ "snark-verifier-sdk",
  "zkhash",
 ]
 
@@ -5780,6 +5803,50 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "snark-verifier"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c426469de23e6a799d6755465df2aec9bec12e5a263c817394c28b833614da6"
+dependencies = [
+ "halo2-base",
+ "halo2-ecc",
+ "hex",
+ "itertools 0.11.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "pairing 0.23.0",
+ "rand 0.8.5",
+ "ruint 1.17.2",
+ "serde",
+ "sha3",
+]
+
+[[package]]
+name = "snark-verifier-sdk"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89cc442a507abb490f3c2f5e2a0be2626b1d9d9ea2137fb240c6ddf5a8377e24"
+dependencies = [
+ "bincode",
+ "ethereum-types",
+ "getset",
+ "halo2-base",
+ "hex",
+ "itertools 0.11.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde",
+ "serde_json",
+ "snark-verifier",
+]
 
 [[package]]
 name = "socket2"
