@@ -169,7 +169,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
         builder
             .when_transition()
             .when(local.is_within_deferral_as - next.is_within_deferral_as)
-            .assert_eq(local.depth, AB::Expr::from_usize(self.address_height));
+            .assert_eq(next.depth, AB::Expr::from_usize(self.address_height));
+        builder
+            .when_last_row()
+            .assert_zero(local.is_within_deferral_as);
 
         assert_array_eq(
             &mut builder.when(local.is_within_deferral_as),

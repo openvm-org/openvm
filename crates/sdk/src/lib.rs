@@ -28,7 +28,7 @@ use openvm_circuit::{
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine, SystemParams};
 use openvm_stark_sdk::config::{
-    baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine,
+    baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, Digest},
     root_params_with_100_bits_security,
 };
 use openvm_transpiler::{
@@ -229,6 +229,10 @@ where
             self.def_path_prover.is_none(),
             "Deferral prover already defined"
         );
+        assert!(
+            self.agg_prover.get().is_none(),
+            "Agg prover has already been initialized without deferrals"
+        );
 
         let deferral_tree_config = AggregationTreeConfig {
             num_children_leaf: 2,
@@ -247,6 +251,20 @@ where
 
         self.def_path_prover = Some(Arc::new(def_path_prover));
         self
+    }
+
+    /// Returns the def_hook_prover cached commit.
+    pub fn def_hook_cached_commit(&self) -> Option<Digest> {
+        self.def_path_prover
+            .as_ref()
+            .map(|p| p.def_hook_cached_commit())
+    }
+
+    /// Returns the def_hook_prover vk commit.
+    pub fn def_hook_vk_commit(&self) -> Option<Digest> {
+        self.def_path_prover
+            .as_ref()
+            .map(|p| p.def_hook_vk_commit())
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target
@@ -420,7 +438,7 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<(NonRootStarkProof, VerificationBaseline), SdkError> {
         let mut prover = self.prover(app_exe)?;
-        let proof = prover.prove(inputs, def_inputs)?;
+        let proof = prover.prove(inputs, def_inputs)?.0;
         let baseline = prover.generate_baseline();
         Ok((proof, baseline))
     }
@@ -487,6 +505,7 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
+            self.def_path_prover.clone(),
             self.root_prover(),
         )?;
         Ok(evm_prover)
@@ -498,15 +517,11 @@ where
         let app_pk = self.app_pk();
         self.agg_prover
             .get_or_init(|| {
-                let def_hook_commit = self
-                    .def_path_prover
-                    .as_ref()
-                    .map(|p| p.deferral_prover.def_hook_prover.get_cached_commit());
                 Arc::new(AggProver::new(
                     Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
                     self.agg_config.clone(),
                     self.agg_tree_config,
-                    def_hook_commit,
+                    self.def_hook_cached_commit(),
                 ))
             })
             .clone()
@@ -524,6 +539,7 @@ where
                     self.agg_config.params.clone(),
                     self.agg_tree_config,
                     root_params.clone(),
+                    self.def_path_prover.clone(),
                 )
                 .expect("Trace heights did not generate properly");
 
@@ -542,6 +558,7 @@ where
                     root_params,
                     memory_dimensions,
                     num_user_pvs,
+                    self.def_hook_vk_commit(),
                     Some(trace_heights),
                 ))
             })
