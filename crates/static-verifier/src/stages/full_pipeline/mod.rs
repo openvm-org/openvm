@@ -264,22 +264,15 @@ fn derive_query_index_bits(params: &SystemParams) -> Vec<usize> {
     let mut query_index_bits = Vec::new();
     for round in &params.whir.rounds {
         let query_bits = log_rs_domain_size - k_whir;
-        query_index_bits.extend(core::iter::repeat(query_bits).take(round.num_queries));
+        query_index_bits.extend(core::iter::repeat_n(query_bits, round.num_queries));
         log_rs_domain_size -= 1;
     }
     query_index_bits
 }
 
 fn derive_folding_counts_per_round(params: &SystemParams) -> Vec<usize> {
-    let mut remaining = params.num_whir_sumcheck_rounds();
     let k_whir = params.k_whir();
-    let mut per_round = Vec::with_capacity(params.num_whir_rounds());
-    for _ in 0..params.num_whir_rounds() {
-        let count = remaining.min(k_whir);
-        per_round.push(count);
-        remaining = remaining.saturating_sub(count);
-    }
-    per_round
+    vec![k_whir; params.num_whir_rounds()]
 }
 
 fn derive_batch_n_per_trace(
