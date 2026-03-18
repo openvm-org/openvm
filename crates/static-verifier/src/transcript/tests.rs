@@ -8,7 +8,7 @@ use halo2_base::{
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
-        D_EF as NATIVE_EF_DEGREE,
+        Digest as NativeDigest, Transcript as NativeTranscript, D_EF as NATIVE_EF_DEGREE,
     },
     openvm_stark_backend::{
         p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
@@ -22,6 +22,55 @@ use crate::{
     field::baby_bear::BabyBearChip,
     ChildEF, ChildF,
 };
+
+#[derive(Clone, Debug)]
+pub(crate) struct LoggedTranscript {
+    inner: NativeTranscript,
+    events: Vec<TranscriptEvent>,
+}
+
+impl Default for LoggedTranscript {
+    fn default() -> Self {
+        Self {
+            inner: default_transcript(),
+            events: Vec::new(),
+        }
+    }
+}
+
+impl LoggedTranscript {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn into_events(self) -> Vec<TranscriptEvent> {
+        self.events
+    }
+}
+
+impl FiatShamirTranscript<NativeConfig> for LoggedTranscript {
+    fn observe(&mut self, value: ChildF) {
+        self.events
+            .push(TranscriptEvent::Observe(value.as_canonical_u64()));
+        self.inner.observe(value);
+    }
+
+    fn sample(&mut self) -> ChildF {
+        let sampled = self.inner.sample();
+        self.events
+            .push(TranscriptEvent::Sample(sampled.as_canonical_u64()));
+        sampled
+    }
+
+    fn observe_commit(&mut self, digest: NativeDigest) {
+        self.inner.observe_commit(digest);
+        for packed in digest {
+            for limb in split_bn254_to_babybear_u64(packed) {
+                self.events.push(TranscriptEvent::Observe(limb));
+            }
+        }
+    }
+}
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)

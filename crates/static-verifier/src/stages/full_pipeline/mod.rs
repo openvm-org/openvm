@@ -10,22 +10,36 @@ use halo2_base::{
     AssignedValue, Context,
 };
 use num_bigint::BigUint;
+#[cfg(test)]
+use openvm_stark_sdk::openvm_stark_backend::calculate_n_logup;
+#[cfg(test)]
+use openvm_stark_sdk::openvm_stark_backend::StarkProtocolConfig;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
     },
     openvm_stark_backend::{
         air_builders::symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
-        calculate_n_logup,
         interaction::Interaction,
         keygen::types::MultiStarkVerifyingKey,
         p3_field::{PrimeField, PrimeField64},
         proof::Proof,
         prover::stacked_pcs::StackedLayout,
-        StarkProtocolConfig, SystemParams,
+        SystemParams,
     },
 };
 
+#[cfg(test)]
+use crate::stages::{
+    full_pipeline::witness::{
+        collect_trace_commitments, derive_u_cube_from_prism, prepare_pipeline_inputs,
+    },
+    proof_shape::{derive_proof_shape_intermediates, derive_proof_shape_ownership_schedule},
+    stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
+    whir::derive_whir_intermediates_with_inputs,
+};
+#[cfg(test)]
+use crate::transcript::tests::LoggedTranscript;
 use crate::{
     field::baby_bear::{
         BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
@@ -37,35 +51,28 @@ use crate::{
             constrain_batch_intermediates_with_shared_trace_ids, AssignedBatchIntermediates,
             BatchConstraintError, BatchIntermediates,
         },
-        full_pipeline::witness::{
-            collect_trace_commitments, derive_need_rot_per_commit, derive_u_cube_from_prism,
-            prepare_pipeline_inputs,
-        },
+        full_pipeline::witness::derive_need_rot_per_commit,
         proof_shape::{
             constrain_checked_proof_shape_witness_state_with_ownership,
-            derive_and_constrain_proof_shape, derive_proof_shape_intermediates,
-            derive_proof_shape_ownership_schedule, derive_proof_shape_rules,
+            derive_and_constrain_proof_shape, derive_proof_shape_rules,
             AssignedProofShapeIntermediates, ProofShapeIntermediates, ProofShapeOwnershipSchedule,
             ProofShapePreambleError, RawProofShapeWitnessState,
         },
         stacked_reduction::{
             constrain_stacked_reduction_from_proof_inputs,
             constrain_stacked_reduction_intermediates_with_shared_inputs,
-            derive_stacked_reduction_intermediates_with_inputs,
             AssignedStackedReductionIntermediates, QCoeffAccumulationTerm,
             StackedReductionConstraintError, StackedReductionIntermediates,
         },
         whir::{
             constrain_checked_whir_witness_state_with_shared_inputs,
-            constrain_whir_from_proof_inputs, derive_whir_intermediates_with_inputs,
-            AssignedWhirIntermediates, RawWhirWitnessState, SharedWhirWitnessInputs, WhirError,
-            WhirIntermediates,
+            constrain_whir_from_proof_inputs, AssignedWhirIntermediates, RawWhirWitnessState,
+            SharedWhirWitnessInputs, WhirError, WhirIntermediates,
         },
     },
     transcript::{
         constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
-        AssignedTranscriptEvent, DigestWire, LoggedTranscript, TranscriptEvent, TranscriptGadget,
-        NUM_SPLIT_LIMBS,
+        AssignedTranscriptEvent, DigestWire, TranscriptEvent, TranscriptGadget, NUM_SPLIT_LIMBS,
     },
     utils::usize_to_u64,
     ChildF, Fr,
@@ -203,6 +210,7 @@ fn derive_non_preamble_observes(events: &[TranscriptEvent], preamble_observes: u
         .collect::<Vec<_>>()
 }
 
+#[cfg(test)]
 pub fn derive_pipeline_intermediates(
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
@@ -577,6 +585,7 @@ fn derive_preamble_observe_count(
     count
 }
 
+#[cfg(test)]
 fn derive_pipeline_transcript_schedule(
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
@@ -749,6 +758,7 @@ fn derive_pipeline_transcript_schedule(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn derive_raw_pipeline_witness_state(
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
@@ -2348,6 +2358,7 @@ pub(crate) fn constrain_pipeline_intermediates(
 }
 
 // Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
+#[cfg(test)]
 pub(crate) fn constrain_checked_pipeline_witness_state(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -2370,7 +2381,7 @@ pub(crate) fn constrain_checked_pipeline_witness_state(
     CheckedPipelineWitnessState { assigned, derived }
 }
 
-pub fn derive_and_constrain_pipeline(
+pub fn constrained_verify(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     config: &NativeConfig,

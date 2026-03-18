@@ -190,8 +190,8 @@ fn build_end_to_end_constraints_from_proof(
     let range = builder.range_chip();
     let public_input_cells = {
         let ctx = builder.main(0);
-        let assigned = derive_and_constrain_pipeline(ctx, &range, config, vk, proof)
-            .expect("pipeline derive+constrain should succeed");
+        let assigned = constrained_verify(ctx, &range, config, vk, proof)
+            .expect("pipeline constrained verify should succeed");
 
         range
             .gate()
@@ -536,8 +536,8 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
         let public_input_cells = {
             let ctx = builder.main(0);
             clear_recorded_ext_base_consts();
-            let assigned = derive_and_constrain_pipeline(ctx, &range, engine.config(), &vk, &proof)
-                .expect("pipeline derive+constrain should succeed before ext-constant prank");
+            let assigned = constrained_verify(ctx, &range, engine.config(), &vk, &proof)
+                .expect("pipeline constrained verify should succeed before ext-constant prank");
             let records = take_recorded_ext_base_consts();
             for (family, constant) in base_families {
                 prank_recorded_ext_constant(ctx, &records, family, constant);

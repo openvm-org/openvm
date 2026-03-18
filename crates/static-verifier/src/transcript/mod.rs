@@ -7,15 +7,11 @@ use halo2_base::{
     AssignedValue, Context,
 };
 use num_bigint::BigUint;
+#[cfg(test)]
+use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField64;
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{
-        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
-        Digest as NativeDigest, Transcript as NativeTranscript,
-    },
-    openvm_stark_backend::{
-        p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField64},
-        FiatShamirTranscript,
-    },
+    config::baby_bear_bn254_poseidon2::{Bn254Scalar, Digest as NativeDigest},
+    openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField},
 };
 
 use crate::{
@@ -45,59 +41,6 @@ pub enum TranscriptEvent {
 }
 
 #[derive(Clone, Debug)]
-pub struct LoggedTranscript {
-    inner: NativeTranscript,
-    events: Vec<TranscriptEvent>,
-}
-
-impl Default for LoggedTranscript {
-    fn default() -> Self {
-        Self {
-            inner: default_transcript(),
-            events: Vec::new(),
-        }
-    }
-}
-
-impl LoggedTranscript {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn events(&self) -> &[TranscriptEvent] {
-        &self.events
-    }
-
-    pub fn into_events(self) -> Vec<TranscriptEvent> {
-        self.events
-    }
-}
-
-impl FiatShamirTranscript<NativeConfig> for LoggedTranscript {
-    fn observe(&mut self, value: ChildF) {
-        self.events
-            .push(TranscriptEvent::Observe(value.as_canonical_u64()));
-        self.inner.observe(value);
-    }
-
-    fn sample(&mut self) -> ChildF {
-        let sampled = self.inner.sample();
-        self.events
-            .push(TranscriptEvent::Sample(sampled.as_canonical_u64()));
-        sampled
-    }
-
-    fn observe_commit(&mut self, digest: NativeDigest) {
-        self.inner.observe_commit(digest);
-        for packed in digest {
-            for limb in split_bn254_to_babybear_u64(packed) {
-                self.events.push(TranscriptEvent::Observe(limb));
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
 pub struct TranscriptGadget {
     sponge_state: [AssignedValue<Fr>; POSEIDON2_WIDTH],
     input_buffer: Vec<BabyBearWire>,
@@ -108,6 +51,7 @@ fn bn254_to_halo2(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
+#[cfg(test)]
 fn split_bn254_to_babybear_u64(value: Bn254Scalar) -> [u64; NUM_SPLIT_LIMBS] {
     let digits = value.as_canonical_biguint().to_u64_digits();
     core::array::from_fn(|i| {
@@ -399,4 +343,4 @@ pub fn constrain_transcript_events(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
