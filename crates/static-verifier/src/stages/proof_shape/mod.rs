@@ -1025,10 +1025,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     let air_presence_flags: Vec<AssignedValue<Fr>> = actual
         .air_presence_flags
         .iter()
-        .map(|&actual_flag| {
-            let flag = ctx.load_constant(Fr::from(actual_flag as u64));
-            flag
-        })
+        .map(|&actual_flag| ctx.load_constant(Fr::from(actual_flag as u64)))
         .collect();
 
     let air_required_flags = actual

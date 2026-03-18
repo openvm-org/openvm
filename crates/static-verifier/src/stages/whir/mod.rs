@@ -237,7 +237,7 @@ fn check_witness_with_sample_bits(
         return (true, 0);
     }
     transcript.observe(witness);
-    let sampled_bits = transcript.sample_bits(bits) as u64;
+    let sampled_bits = transcript.sample_bits(bits);
     (sampled_bits == 0, sampled_bits)
 }
 
@@ -430,7 +430,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
         for (query_idx, index) in query_indices_iter.enumerate() {
             let query_position = query_indices.len();
             query_index_bits.push(query_bits);
-            query_indices.push(index as u64);
+            query_indices.push(index);
 
             let zi_root = omega.exp_u64(index);
             let zi = zi_root.exp_power_of_2(k_whir);
