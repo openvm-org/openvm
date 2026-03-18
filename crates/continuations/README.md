@@ -69,7 +69,7 @@ pub fn new(
     system_params: SystemParams,
     memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,
-    def_hook_commit: Option<CommitBytes>,
+    def_hook_vk_commit: Option<CommitBytes>,
     trace_heights: Option<Vec<usize>>,
 ) -> Self
 ```
@@ -79,7 +79,7 @@ pub fn new(
 - `system_params` — parent system parameters
 - `memory_dimensions` — the memory dimensions used for app execution, used to compute whether each sibling hash in the Merkle proof should be the left or right sibling
 - `num_user_pvs` — number of user public values
-- `def_hook_commit` — cached trace commit of the deferral hook circuit (if deferrals are enabled)
+- `def_hook_vk_commit` — `vk_commit` hash of the deferral hook aggregation tree
 - `trace_heights` - constant heights that the traces of the root proof must be
 
 The constructor pre-generates the parent proving and verifying keys, which can be saved.

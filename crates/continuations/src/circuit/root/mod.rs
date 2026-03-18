@@ -31,7 +31,7 @@ pub const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
 pub struct RootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
     pub(crate) internal_recursive_dag_commit: DagCommitBytes,
-    pub(crate) def_hook_commit: Option<CommitBytes>,
+    pub(crate) def_hook_vk_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
 }
@@ -60,7 +60,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
                 permute_bus: bus_inventory.poseidon2_permute_bus,
             },
             expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
-            expected_def_hook_commit: self.def_hook_commit,
+            expected_def_hook_vk_commit: self.def_hook_vk_commit,
         };
         let user_pvs_commit_air = commit::UserPvsCommitAir::new(
             bus_inventory.poseidon2_compress_bus,
@@ -75,7 +75,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
             self.memory_dimensions,
             self.num_user_pvs,
         );
-        let acc_paths_air = self.def_hook_commit.map(|_| {
+        let acc_paths_air = self.def_hook_vk_commit.map(|_| {
             Arc::new(def_paths::DeferralAccMerklePathsAir::new(
                 bus_inventory.poseidon2_compress_bus,
                 def_acc_paths_bus,
