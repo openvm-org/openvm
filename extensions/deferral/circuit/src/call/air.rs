@@ -105,18 +105,20 @@ where
         let output_f_commit = byte_commit_to_f(&cols.writes.output_commit);
 
         self.poseidon2_bus
-            .compress(
+            .lookup(
                 cols.reads.old_input_acc,
                 input_f_commit,
                 cols.writes.new_input_acc,
+                AB::Expr::ONE,
             )
             .eval(builder, cols.is_valid);
 
         self.poseidon2_bus
-            .compress(
+            .lookup(
                 cols.reads.old_output_acc,
                 output_f_commit,
                 cols.writes.new_output_acc,
+                AB::Expr::ONE,
             )
             .eval(builder, cols.is_valid);
 
