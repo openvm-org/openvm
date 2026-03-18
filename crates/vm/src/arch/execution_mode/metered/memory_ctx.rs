@@ -2,12 +2,14 @@ use abi_stable::std_types::RVec;
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
 use crate::{
-    arch::{SystemConfig, BOUNDARY_AIR_ID, DEFAULT_BLOCK_SIZE, MERKLE_AIR_ID},
-    system::memory::dimensions::MemoryDimensions,
+    arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
+    system::memory::{dimensions::MemoryDimensions, CHUNK},
 };
 
-const CHUNK: u32 = DEFAULT_BLOCK_SIZE as u32;
-const CHUNK_BITS: u32 = CHUNK.ilog2();
+/// CHUNK granularity (merkle leaf size) for page fault tracking.
+/// Must match the CHUNK used to compute `MemoryDimensions::address_height`.
+const CHUNK_U32: u32 = CHUNK as u32;
+const CHUNK_BITS: u32 = CHUNK_U32.ilog2();
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
@@ -161,11 +163,12 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     ) {
         debug_assert!((address_space as usize) < self.addr_space_access_count.len());
 
-        let num_blocks = (size + CHUNK - 1) >> CHUNK_BITS;
-        let start_chunk_id = ptr >> CHUNK_BITS;
+        let chunk_idx = ptr >> CHUNK_BITS;
+        let end_chunk_idx = (ptr + size - 1) >> CHUNK_BITS;
+        let num_blocks = end_chunk_idx - chunk_idx + 1;
         let start_block_id = self
             .memory_dimensions
-            .label_to_index((address_space, start_chunk_id)) as u32;
+            .label_to_index((address_space, chunk_idx)) as u32;
         let end_block_id = start_block_id + num_blocks;
         let start_page_id = start_block_id >> PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
@@ -248,25 +251,48 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         self.page_indices_since_checkpoint_len = 0;
     }
 
-    /// Apply height updates given page counts
+    /// Overestimates trace heights from page faults.
+    ///
+    /// Memory leaves (CHUNK-sized) form a sparse merkle tree of height `h`. Each segment
+    /// maintains an initial and final tree, so all counts are doubled.
+    ///
+    /// On each page fault, we conservatively assume all `2^PAGE_BITS` leaves in the page
+    /// are touched and no merkle nodes are shared across pages:
+    ///
+    /// ```text
+    ///        [root]              height h
+    ///        /    \
+    ///      ...    ...
+    ///      /        \
+    ///   [page]    [page]         (h - PAGE_BITS) nodes above each page
+    ///   / .. \
+    ///  L  ..  L                  2^PAGE_BITS leaves, (2^PAGE_BITS - 1) internal nodes
+    /// ```
+    ///
+    /// Per page fault:
+    /// - BOUNDARY_AIR: `2 * 2^PAGE_BITS` rows (one init + one final row per leaf)
+    /// - MERKLE_AIR:   `2 * nodes_per_page` rows
+    /// - Poseidon2:    `2 * 2^PAGE_BITS` (leaf compression) + `2 * nodes_per_page` (tree hashes)
     #[inline(always)]
     fn apply_height_updates(&self, trace_heights: &mut [u32], addr_space_access_count: &[u32]) {
         let page_access_count: u32 = addr_space_access_count.iter().sum();
 
-        // On page fault, assume we add all leaves in a page
+        // Leaves touched: conservatively assume every leaf in each faulted page is touched.
         let leaves = page_access_count << PAGE_BITS;
-
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
 
         let merkle_height = self.memory_dimensions.overall_height();
-        let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
+        let nodes_per_page = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
         unsafe {
-            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves;
+            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves * 2;
+            // Poseidon2: 2 hashes per leaf (compression) + 2 per internal node (init + final tree)
             *trace_heights.get_unchecked_mut(poseidon2_idx) +=
-                leaves * 2 + nodes * page_access_count * 2;
-            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += nodes * page_access_count * 2;
+                leaves * 2 + nodes_per_page * page_access_count * 2;
+            // Merkle AIR: 2 rows per internal node (init + final tree)
+            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) +=
+                nodes_per_page * page_access_count * 2;
         }
     }
 
@@ -288,6 +314,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_bitset_insert_range() {
         // 513 bits
