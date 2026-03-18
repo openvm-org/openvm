@@ -302,8 +302,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // access is in [0, 2^address_bits). The memory merkle argument ensures
         // that each read/write pointer is less than 2^addr_bits, and this range
         // check ensures the accesses don't wrap around P.
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
         let limb_shift =
             AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+
         self.bitwise_bus
             .send_range(
                 cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,

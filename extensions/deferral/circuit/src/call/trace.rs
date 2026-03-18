@@ -174,6 +174,7 @@ where
         }
 
         // NOTE: this range check is done in the adapter AIR
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
         self.bitwise_lookup_chip.request_range(
             (record.write_data.output_len[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
@@ -403,7 +404,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
 
         // Range checks must happen before we start writing adapter columns,
         // since the record and columns share the same backing buffer.
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+
         self.bitwise_lookup_chip.request_range(
             (record.rd_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
             (record.rs_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,

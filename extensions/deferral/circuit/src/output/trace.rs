@@ -331,8 +331,10 @@ where
                 cols.rs_val = header.rs_val.map(F::from_u8);
 
                 if row_idx == 0 {
+                    debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
                     let limb_shift_bits =
                         RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+
                     self.bitwise_lookup_chip.request_range(
                         (header.rd_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
                         (header.rs_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,

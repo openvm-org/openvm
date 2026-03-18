@@ -235,8 +235,10 @@ where
         // canonical. Note that constraining the starting output pointer is sufficient
         // to constrain the entire write is in range - even if output_ptr + output_len
         // wraps, there will be several written values in the middle that do not.
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
         let limb_shift =
             AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+
         self.bitwise_bus
             .send_range(
                 local.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
