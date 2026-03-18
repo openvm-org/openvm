@@ -52,10 +52,12 @@ impl<T: PrimeCharacteristicRing> DeferralPoseidon2Interaction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
-        let key: [_; 3 * PERIPHERY_POSEIDON2_CHUNK_SIZE + 1] = once(self.is_compress)
-            .chain(self.left)
+        let key: [_; 3 * PERIPHERY_POSEIDON2_CHUNK_SIZE + 1] = self
+            .left
+            .into_iter()
             .chain(self.right)
             .chain(self.output)
+            .chain(once(self.is_compress))
             .collect_array()
             .unwrap();
         self.bus.lookup_key(builder, key, count);

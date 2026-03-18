@@ -71,17 +71,21 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralPoseidon2Air<AB::F
 
         self.bus.add_key_with_lookups(
             builder,
-            once(AB::Expr::ONE)
-                .chain(inputs.into_iter().map(Into::into))
-                .chain(compress_res.iter().copied().map(Into::into)),
+            inputs
+                .into_iter()
+                .map(Into::into)
+                .chain(compress_res.iter().copied().map(Into::into))
+                .chain(once(AB::Expr::ONE)),
             local.compress_mult,
         );
 
         self.bus.add_key_with_lookups(
             builder,
-            once(AB::Expr::ZERO)
-                .chain(inputs.into_iter().map(Into::into))
-                .chain(capacity_res.iter().copied().map(Into::into)),
+            inputs
+                .into_iter()
+                .map(Into::into)
+                .chain(capacity_res.iter().copied().map(Into::into))
+                .chain(once(AB::Expr::ZERO)),
             local.capacity_mult,
         );
     }

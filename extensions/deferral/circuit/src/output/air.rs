@@ -235,7 +235,7 @@ where
         });
         let output_commit_and_len =
             combine_output(local.output_commit.map(Into::into), output_len_full);
-        let output_commit_and_len_chunks: [[<AB as AirBuilder>::Expr; 4]; 10] =
+        let output_commit_and_len_chunks =
             split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );

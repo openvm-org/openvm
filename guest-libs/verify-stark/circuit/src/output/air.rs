@@ -1,10 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    AlignedBorrow,
-};
+use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow};
 use openvm_continuations::utils::digests_to_poseidon2_input;
 use openvm_recursion_circuit::{
     bus::{Poseidon2PermuteBus, Poseidon2PermuteMessage},
@@ -104,7 +101,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
         );
 
         builder
-            .when(is_transition)
+            .when(is_transition.clone())
             .assert_eq(local.output_len, next.output_len);
         builder.when(is_last.clone()).assert_eq(
             local.output_len,
@@ -150,8 +147,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
          * Compute the output commit and send it on the last row. We sponge hash each
          * valid input_vals and take the left child of the last row.
          */
-        let next_not_first = not(next.is_first);
-        let next_capacity = from_fn(|i| next_not_first.clone() * local.res_right[i]);
+        let next_capacity = from_fn(|i| is_transition.clone() * local.res_right[i]);
         self.poseidon2_bus.lookup_key(
             builder,
             Poseidon2PermuteMessage {

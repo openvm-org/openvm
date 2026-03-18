@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use eyre::Result;
+use itertools::Itertools;
 use openvm_continuations::{
     bn254::CommitBytes,
     prover::{DeferralChildVkKind, DeferralCircuitProver},
@@ -132,7 +133,7 @@ impl DeferralProver {
         let per_circuit = self
             .single_circuit_provers
             .iter()
-            .zip(inputs)
+            .zip_eq(inputs)
             .map(|(prover, inputs)| prover.prove(inputs))
             .collect::<Result<Vec<_>>>()?;
 
