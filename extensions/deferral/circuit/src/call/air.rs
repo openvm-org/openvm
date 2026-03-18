@@ -16,7 +16,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
@@ -76,7 +76,6 @@ pub struct DeferralCallCoreCols<T> {
 
     pub input_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
-    pub output_len_lt_aux: CanonicityAuxCols<T>,
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
@@ -131,13 +130,6 @@ where
         })
         .collect_vec();
 
-        let output_len_rc = CanonicitySubAir.assert_canonicity(
-            builder,
-            &cols.writes.output_len,
-            &cols.output_len_lt_aux,
-            cols.is_valid.into(),
-        );
-
         for rc_pair in input_commit_rcs.chunks_exact(2) {
             self.bitwise_bus
                 .send_range(rc_pair[0].clone(), rc_pair[1].clone())
@@ -148,9 +140,6 @@ where
                 .send_range(rc_pair[0].clone(), rc_pair[1].clone())
                 .eval(builder, cols.is_valid);
         }
-        self.bitwise_bus
-            .send_range(output_len_rc, AB::Expr::ZERO)
-            .eval(builder, cols.is_valid);
 
         // Range check the bytes that we write to RV32 heap memory.
         for bytes in cols.writes.output_commit.chunks_exact(2) {
@@ -258,6 +247,8 @@ pub struct DeferralCallAdapterCols<T> {
 pub struct DeferralCallAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+    pub bitwise_bus: BitwiseOperationLookupBus,
+    pub address_bits: usize,
 }
 
 impl<F: Field> BaseAir<F> for DeferralCallAdapterAir {
@@ -307,6 +298,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
+        // We range check the top byte of both heap pointers to ensure that each
+        // access is in [0, 2^address_bits). The memory merkle argument ensures
+        // that each read/write pointer is less than 2^addr_bits, and this range
+        // check ensures the accesses don't wrap around P.
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+        self.bitwise_bus
+            .send_range(
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                cols.rs_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+
         // Accumulators are read then updated in the native address space, using
         // deferral_idx (instruction immediate / operand c) to determine the
         // accumulator memory address.
@@ -331,6 +335,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             new_input_acc,
             new_output_acc,
         } = ctx.writes;
+
+        // Constrain output_len to be under 2^address_bits also.
+        self.bitwise_bus
+            .send_range(
+                output_len[RV32_REGISTER_NUM_LIMBS - 1].clone() * limb_shift,
+                AB::Expr::ZERO,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
 
         let output_len_full = from_fn(|i| {
             if i < F_NUM_BYTES {
