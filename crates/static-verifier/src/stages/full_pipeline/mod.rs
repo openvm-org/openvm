@@ -8,7 +8,7 @@ use halo2_base::{
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar, F as NativeF,
+        BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
     },
     openvm_stark_backend::{
         air_builders::symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
@@ -58,7 +58,7 @@ use crate::{
         AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent, NUM_SPLIT_LIMBS,
     },
     utils::usize_to_u64,
-    Fr,
+    ChildF, Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -128,7 +128,7 @@ pub struct PipelineTranscriptSchedule {
     pub batch_trace_has_preprocessed: Vec<bool>,
     pub batch_column_openings_need_rot: Vec<Vec<bool>>,
     pub batch_column_opening_expected_widths: Vec<Vec<usize>>,
-    pub batch_trace_constraint_nodes: Vec<Vec<SymbolicExpressionNode<NativeF>>>,
+    pub batch_trace_constraint_nodes: Vec<Vec<SymbolicExpressionNode<ChildF>>>,
     pub batch_trace_constraint_indices: Vec<Vec<usize>>,
     pub batch_trace_interactions: Vec<Vec<Interaction<usize>>>,
     pub stacked_q_coeff_terms: Vec<QCoeffAccumulationTerm>,
@@ -1514,7 +1514,7 @@ fn encode_symbolic_entry(entry: Entry) -> (u64, u64, u64) {
     }
 }
 
-fn encode_symbolic_node(node: &SymbolicExpressionNode<NativeF>) -> [u64; 7] {
+fn encode_symbolic_node(node: &SymbolicExpressionNode<ChildF>) -> [u64; 7] {
     match node {
         SymbolicExpressionNode::Variable(var) => {
             let (entry_tag, arg0, arg1) = encode_symbolic_entry(var.entry);
@@ -1571,8 +1571,8 @@ fn encode_symbolic_node(node: &SymbolicExpressionNode<NativeF>) -> [u64; 7] {
 }
 
 fn constrain_symbolic_node_ownership(
-    actual_nodes: &[SymbolicExpressionNode<NativeF>],
-    owned_nodes: &[SymbolicExpressionNode<NativeF>],
+    actual_nodes: &[SymbolicExpressionNode<ChildF>],
+    owned_nodes: &[SymbolicExpressionNode<ChildF>],
 ) {
     assert_eq!(actual_nodes.len(), owned_nodes.len());
     for (actual_node, owned_node) in actual_nodes.iter().zip(owned_nodes.iter()) {

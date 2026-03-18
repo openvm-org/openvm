@@ -8,7 +8,7 @@ use halo2_base::{
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest,
-        Transcript as NativeTranscript, EF as NativeEF, F as NativeF,
+        Transcript as NativeTranscript,
     },
     openvm_stark_backend::{
         hasher::MerkleHasher,
@@ -42,7 +42,7 @@ use crate::{
         stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
     },
     utils::usize_to_u64,
-    Fr,
+    ChildEF, ChildF, Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -50,8 +50,8 @@ pub enum WhirError {
     SystemParamsMismatch,
     TraceHeightsTooLarge,
     ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<NativeEF>),
-    StackedReduction(StackedReductionError<NativeEF>),
+    BatchConstraint(NativeBatchConstraintError<ChildEF>),
+    StackedReduction(StackedReductionError<ChildEF>),
     Whir(VerifyWhirError),
     BatchSetup(BatchConstraintError),
 }
@@ -62,14 +62,14 @@ impl From<ProofShapeError> for WhirError {
     }
 }
 
-impl From<NativeBatchConstraintError<NativeEF>> for WhirError {
-    fn from(value: NativeBatchConstraintError<NativeEF>) -> Self {
+impl From<NativeBatchConstraintError<ChildEF>> for WhirError {
+    fn from(value: NativeBatchConstraintError<ChildEF>) -> Self {
         Self::BatchConstraint(value)
     }
 }
 
-impl From<StackedReductionError<NativeEF>> for WhirError {
-    fn from(value: StackedReductionError<NativeEF>) -> Self {
+impl From<StackedReductionError<ChildEF>> for WhirError {
+    fn from(value: StackedReductionError<ChildEF>) -> Self {
         Self::StackedReduction(value)
     }
 }
@@ -100,18 +100,18 @@ pub struct WhirIntermediates {
     pub mu_pow_witness: u64,
     pub mu_pow_sampled_bits: u64,
     pub mu_pow_witness_ok: bool,
-    pub mu_challenge: NativeEF,
+    pub mu_challenge: ChildEF,
     pub folding_pow_bits: usize,
     pub folding_pow_witnesses: Vec<u64>,
     pub folding_pow_sampled_bits: Vec<u64>,
     pub folding_pow_witness_ok: Vec<bool>,
-    pub folding_alphas: Vec<NativeEF>,
-    pub z0_challenges: Vec<NativeEF>,
+    pub folding_alphas: Vec<ChildEF>,
+    pub z0_challenges: Vec<ChildEF>,
     pub query_phase_pow_bits: usize,
     pub query_phase_pow_witnesses: Vec<u64>,
     pub query_phase_pow_sampled_bits: Vec<u64>,
     pub query_phase_pow_witness_ok: Vec<bool>,
-    pub gammas: Vec<NativeEF>,
+    pub gammas: Vec<ChildEF>,
     pub folding_counts_per_round: Vec<usize>,
     pub query_counts_per_round: Vec<usize>,
     pub query_index_bits: Vec<usize>,
@@ -121,14 +121,14 @@ pub struct WhirIntermediates {
     pub merkle_paths: Vec<MerklePathIntermediates>,
     pub final_poly_len: usize,
     pub expected_final_poly_len: usize,
-    pub stacking_openings: Vec<Vec<NativeEF>>,
-    pub whir_sumcheck_polys: Vec<Vec<NativeEF>>,
-    pub ood_values: Vec<NativeEF>,
-    pub final_poly: Vec<NativeEF>,
-    pub u_cube: Vec<NativeEF>,
-    pub final_claim: NativeEF,
-    pub final_acc: NativeEF,
-    pub final_residual: NativeEF,
+    pub stacking_openings: Vec<Vec<ChildEF>>,
+    pub whir_sumcheck_polys: Vec<Vec<ChildEF>>,
+    pub ood_values: Vec<ChildEF>,
+    pub final_poly: Vec<ChildEF>,
+    pub u_cube: Vec<ChildEF>,
+    pub final_claim: ChildEF,
+    pub final_acc: ChildEF,
+    pub final_residual: ChildEF,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -191,39 +191,39 @@ pub struct CheckedWhirWitnessState {
 struct PreparedWhirInputs {
     transcript: NativeTranscript,
     commits: Vec<NativeDigest>,
-    u_cube: Vec<NativeEF>,
+    u_cube: Vec<ChildEF>,
 }
 
-pub(crate) fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
+pub(crate) fn ext_to_coeffs(value: ChildEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
     core::array::from_fn(|i| {
-        <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
+        <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value)[i]
             .as_canonical_u64()
     })
 }
 
-pub(crate) fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
+pub(crate) fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> ChildEF {
+    ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(coeffs[i]))
 }
 
 fn digest_to_fr(digest: NativeDigest) -> Fr {
     biguint_to_fe(&digest[0].as_canonical_biguint())
 }
 
-fn base_slice_to_u64_vec(values: &[NativeF]) -> Vec<u64> {
+fn base_slice_to_u64_vec(values: &[ChildF]) -> Vec<u64> {
     values
         .iter()
         .map(|value| value.as_canonical_u64())
         .collect::<Vec<_>>()
 }
 
-fn ext_to_u64_vec(value: NativeEF) -> Vec<u64> {
+fn ext_to_u64_vec(value: ChildEF) -> Vec<u64> {
     ext_to_coeffs(value).to_vec()
 }
 
 fn check_witness_with_sample_bits(
     transcript: &mut impl FiatShamirTranscript<NativeConfig>,
     bits: usize,
-    witness: NativeF,
+    witness: ChildF,
 ) -> (bool, u64) {
     if bits == 0 {
         return (true, 0);
@@ -267,9 +267,9 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
     transcript: &mut impl FiatShamirTranscript<NativeConfig>,
     config: &NativeConfig,
     whir_proof: &WhirProof<NativeConfig>,
-    stacking_openings: &[Vec<NativeEF>],
+    stacking_openings: &[Vec<ChildEF>],
     commitments: &[NativeDigest],
-    u: &[NativeEF],
+    u: &[ChildEF],
 ) -> Result<WhirIntermediates, VerifyWhirError> {
     let params = config.params();
     let widths = stacking_openings
@@ -314,7 +314,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
         .iter()
         .flatten()
         .zip(mu_pows.iter())
-        .fold(NativeEF::ZERO, |acc, (&opening, &mu_pow)| {
+        .fold(ChildEF::ZERO, |acc, (&opening, &mu_pow)| {
             acc + mu_pow * opening
         });
 
@@ -412,7 +412,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
         let mut ys_round = Vec::with_capacity(num_queries);
 
         let hasher = config.hasher();
-        let omega = NativeF::two_adic_generator(log_rs_domain_size);
+        let omega = ChildF::two_adic_generator(log_rs_domain_size);
 
         for (query_idx, index) in query_indices_iter.enumerate() {
             let query_position = query_indices.len();
@@ -423,7 +423,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
             let zi = zi_root.exp_power_of_2(k_whir);
 
             let yi = if is_initial_round {
-                let mut codeword_vals = vec![NativeEF::ZERO; 1 << k_whir];
+                let mut codeword_vals = vec![ChildEF::ZERO; 1 << k_whir];
                 let mut mu_pow_iter = mu_pows.iter();
 
                 for commit_idx in 0..commitments.len() {
@@ -465,7 +465,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
                         }
                     }
                 }
-                binary_k_fold::<NativeF, NativeEF>(codeword_vals, &alphas_round, zi_root)
+                binary_k_fold::<ChildF, ChildEF>(codeword_vals, &alphas_round, zi_root)
             } else {
                 let opened_values = codeword_opened_values[whir_round - 1][query_idx].clone();
                 let merkle_proof = &codeword_merkle_proofs[whir_round - 1][query_idx];
@@ -502,7 +502,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
                         .collect::<Vec<_>>(),
                 });
 
-                binary_k_fold::<NativeF, NativeEF>(opened_values, &alphas_round, zi_root)
+                binary_k_fold::<ChildF, ChildEF>(opened_values, &alphas_round, zi_root)
             };
 
             zs_round.push(zi);
@@ -550,7 +550,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
                 .expect("slc_len is at least one in non-final rounds");
             let term = gamma
                 * eval_eq_mle(alpha_slc, z0_pow_left)
-                * horner_eval::<NativeEF, NativeEF, NativeEF>(final_poly, *z0_pow_max);
+                * horner_eval::<ChildEF, ChildEF, ChildEF>(final_poly, *z0_pow_max);
             acc += term;
         }
 
@@ -561,7 +561,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
                 .expect("slc_len is at least one for query evaluations");
             let term = gamma_pow
                 * eval_eq_mle(alpha_slc, zi_pow_left)
-                * horner_eval::<NativeEF, NativeF, NativeEF>(final_poly, *zi_pow_max);
+                * horner_eval::<ChildEF, ChildF, ChildEF>(final_poly, *zi_pow_max);
             acc += term;
         }
 
@@ -657,7 +657,7 @@ pub fn derive_whir_intermediates(
 fn assign_ext(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
-    value: NativeEF,
+    value: ChildEF,
 ) -> BabyBearExtWire {
     ext_chip.load_witness(ctx, value)
 }
@@ -669,10 +669,10 @@ fn eval_mobius_eq_mle_assigned(
     x: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
     assert_eq!(u.len(), x.len(), "mobius-eq arity mismatch");
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut acc = one;
     for (u_i, x_i) in u.iter().zip(x.iter()) {
-        let two_u = ext_chip.mul_base_const(ctx, u_i, NativeF::TWO);
+        let two_u = ext_chip.mul_base_const(ctx, u_i, ChildF::TWO);
         let w0 = ext_chip.sub(ctx, &one, &two_u);
         let one_minus_x = ext_chip.sub(ctx, &one, x_i);
         let left = ext_chip.mul(ctx, &w0, &one_minus_x);
@@ -694,7 +694,7 @@ fn eval_mle_evals_at_point_assigned(
         1usize << x.len(),
         "MLE table length must be 2^arity",
     );
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut values = evals.to_vec();
     let mut len = values.len();
     for xj in x.iter().rev() {
@@ -721,10 +721,8 @@ fn invert_base_assigned(
 ) -> BabyBearWire {
     let value_u64 = value.as_u64();
     assert!(value_u64 != 0, "cannot invert zero BabyBear value");
-    let inv_u64 = NativeF::from_u64(value_u64).inverse().as_canonical_u64();
-    let inv = ext_chip
-        .base()
-        .load_witness(ctx, NativeF::from_u64(inv_u64));
+    let inv_u64 = ChildF::from_u64(value_u64).inverse().as_canonical_u64();
+    let inv = ext_chip.base().load_witness(ctx, ChildF::from_u64(inv_u64));
     let one = ext_chip.base().one(ctx);
     let check = ext_chip.base().mul(ctx, value, &inv);
     ext_chip.base().assert_equal(ctx, &check, &one);
@@ -739,7 +737,7 @@ fn query_root_from_bits_assigned(
 ) -> BabyBearWire {
     let gate = ext_chip.range().gate();
     let one = ctx.load_constant(Fr::from(1u64));
-    let omega = NativeF::two_adic_generator(log_rs_domain_size);
+    let omega = ChildF::two_adic_generator(log_rs_domain_size);
     let mut root = ext_chip.base().one(ctx);
     for (bit_idx, &bit) in query_bits.iter().enumerate() {
         let omega_pow = omega.exp_u64(1u64 << bit_idx).as_canonical_u64();
@@ -750,7 +748,7 @@ fn query_root_from_bits_assigned(
         };
         let selected = ext_chip
             .base()
-            .load_witness(ctx, NativeF::from_u64(selected_u64));
+            .load_witness(ctx, ChildF::from_u64(selected_u64));
         let omega_pow_const = ctx.load_constant(Fr::from(omega_pow));
         let bit_times_pow = gate.mul(ctx, bit, omega_pow_const);
         let one_minus_bit = gate.sub(ctx, one, bit);
@@ -779,11 +777,11 @@ fn binary_k_fold_assigned(
     }
 
     let k = alphas.len();
-    let omega_k = NativeF::two_adic_generator(k);
+    let omega_k = ChildF::two_adic_generator(k);
     let omega_k_inv = omega_k.inverse();
     let tw = omega_k.powers().take(1usize << (k - 1)).collect();
     let inv_tw = omega_k_inv.powers().take(1usize << (k - 1)).collect();
-    let half = NativeF::ONE.halve();
+    let half = ChildF::ONE.halve();
 
     let mut x_pow = *x;
     let x_inv = invert_base_assigned(ctx, ext_chip, x);
@@ -872,7 +870,7 @@ fn constrain_merkle_path(
         .iter()
         .map(|leaf| {
             leaf.iter()
-                .map(|&value| ext_chip.base().load_witness(ctx, NativeF::from_u64(value)))
+                .map(|&value| ext_chip.base().load_witness(ctx, ChildF::from_u64(value)))
                 .collect::<Vec<BabyBearWire>>()
         })
         .collect::<Vec<_>>();
@@ -1309,7 +1307,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let final_claim = assign_ext(ctx, ext_chip, actual.final_claim);
     let final_acc = assign_ext(ctx, ext_chip, actual.final_acc);
     let zero = ext_chip.zero(ctx);
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
 
     let round_count = ext_chip
         .base()
@@ -1727,7 +1725,7 @@ pub(crate) fn constrain_checked_whir_witness_state_unchecked(
     CheckedWhirWitnessState { assigned, derived }
 }
 
-pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
+pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> ChildEF {
     coeffs_to_ext(coeffs)
 }
 

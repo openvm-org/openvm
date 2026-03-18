@@ -26,7 +26,6 @@ use halo2_base::{
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         BabyBearBn254Poseidon2Config as NativeConfig, BabyBearBn254Poseidon2CpuEngine,
-        EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
         p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField64, TwoAdicField},
@@ -46,6 +45,7 @@ use crate::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
     },
+    ChildEF, ChildF,
 };
 
 const END_TO_END_K: u32 = 22;
@@ -262,10 +262,10 @@ fn recompute_trace_height_sums(raw: &mut RawPipelineWitnessState, threshold_fail
     }
 }
 
-fn tamper_native_ext_first_coeff(value: &mut NativeEF) {
-    let coeffs: Vec<NativeF> = BasedVectorSpace::as_basis_coefficients_slice(value).to_vec();
-    let new_c0 = NativeF::from_u64((coeffs[0].as_canonical_u64() + 1) % BABY_BEAR_MODULUS_U64);
-    *value = NativeEF::from_basis_coefficients_fn(|i| if i == 0 { new_c0 } else { coeffs[i] });
+fn tamper_native_ext_first_coeff(value: &mut ChildEF) {
+    let coeffs: Vec<ChildF> = BasedVectorSpace::as_basis_coefficients_slice(value).to_vec();
+    let new_c0 = ChildF::from_u64((coeffs[0].as_canonical_u64() + 1) % BABY_BEAR_MODULUS_U64);
+    *value = ChildEF::from_basis_coefficients_fn(|i| if i == 0 { new_c0 } else { coeffs[i] });
 }
 
 fn prank_recorded_ext_constant(
@@ -284,9 +284,9 @@ fn prank_recorded_ext_constant(
 }
 
 fn add_delta_to_whir_stacking_opening(
-    openings: &mut [Vec<NativeEF>],
+    openings: &mut [Vec<ChildEF>],
     flat_idx: usize,
-    delta: NativeEF,
+    delta: ChildEF,
 ) {
     let mut cursor = flat_idx;
     for commit_openings in openings {
@@ -315,11 +315,11 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
         trace_idx: usize,
         part_idx: usize,
         claim_idx: usize,
-        weight: NativeEF,
+        weight: ChildEF,
     }
 
     let mut term_locs = Vec::new();
-    let mut lambda_pow = NativeEF::ONE;
+    let mut lambda_pow = ChildEF::ONE;
     let mut push_part_terms = |trace_idx: usize, part_idx: usize, need_rot: bool| {
         let len = openings[trace_idx][part_idx].len();
         if need_rot {
@@ -375,12 +375,12 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
         "stacked batch opening terms must be non-empty for tamper test",
     );
 
-    let delta = NativeEF::ONE;
-    if lambda == NativeEF::ZERO {
+    let delta = ChildEF::ONE;
+    if lambda == ChildEF::ZERO {
         let target = term_locs
             .iter()
             .copied()
-            .find(|loc| loc.weight == NativeEF::ZERO)
+            .find(|loc| loc.weight == ChildEF::ZERO)
             .unwrap_or(term_locs[0]);
         openings[target.trace_idx][target.part_idx][target.claim_idx] += delta;
         return;
@@ -392,7 +392,7 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
     );
     let first = term_locs[0];
     let second = term_locs[1];
-    let cancel_delta = NativeEF::ZERO - (delta * first.weight * second.weight.inverse());
+    let cancel_delta = ChildEF::ZERO - (delta * first.weight * second.weight.inverse());
 
     openings[first.trace_idx][first.part_idx][first.claim_idx] += delta;
 
@@ -408,13 +408,13 @@ fn tamper_whir_stacking_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
         "WHIR stacking openings must include at least two values for decoupling tamper",
     );
 
-    let delta = NativeEF::ONE;
-    if mu == NativeEF::ZERO {
+    let delta = ChildEF::ONE;
+    if mu == ChildEF::ZERO {
         add_delta_to_whir_stacking_opening(openings, 1, delta);
         return;
     }
 
-    let cancel_delta = NativeEF::ZERO - (delta * mu.inverse());
+    let cancel_delta = ChildEF::ZERO - (delta * mu.inverse());
     add_delta_to_whir_stacking_opening(openings, 0, delta);
     add_delta_to_whir_stacking_opening(openings, 1, cancel_delta);
 }
@@ -433,7 +433,7 @@ fn tamper_stacked_claim_chain_payload_preserving_residual(raw: &mut RawPipelineW
 
     tamper_native_ext_first_coeff(&mut stacked.sumcheck_round_polys[0][0]);
     stacked.final_claim = stacked.final_sum;
-    stacked.final_residual = NativeEF::ZERO;
+    stacked.final_residual = ChildEF::ZERO;
 }
 
 #[test]
@@ -507,7 +507,7 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
 
-    let subgroup_root = NativeF::two_adic_generator(raw.schedule.l_skip).as_canonical_u64();
+    let subgroup_root = ChildF::two_adic_generator(raw.schedule.l_skip).as_canonical_u64();
     let bus_constant = raw
         .schedule
         .batch_trace_interactions
@@ -519,7 +519,7 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let normalization_family_constants = (1..=31usize)
         .map(|pow| {
             (0..pow)
-                .fold(NativeF::ONE, |acc, _| acc.halve())
+                .fold(ChildF::ONE, |acc, _| acc.halve())
                 .as_canonical_u64()
         })
         .collect::<Vec<_>>();
@@ -604,10 +604,10 @@ fn pipeline_constraints_fail_when_batch_opening_family_width_is_padded() {
         "fixture must include at least one batch opening family",
     );
 
-    raw.intermediates.batch.column_openings[0][0].push(NativeEF::ZERO);
-    raw.intermediates.batch.column_openings[0][0].push(NativeEF::ZERO);
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
+    raw.intermediates.batch.column_openings[0][0].push(ChildEF::ZERO);
+    raw.intermediates.batch.column_openings[0][0].push(ChildEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(ChildEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -638,9 +638,9 @@ fn pipeline_constraints_fail_when_stacked_opening_family_width_is_padded() {
         "fixture must include stacked opening families",
     );
 
-    raw.intermediates.stacked_reduction.q_coeffs[0].push(NativeEF::ZERO);
-    raw.intermediates.stacked_reduction.stacking_openings[0].push(NativeEF::ZERO);
-    raw.intermediates.whir.stacking_openings[0].push(NativeEF::ZERO);
+    raw.intermediates.stacked_reduction.q_coeffs[0].push(ChildEF::ZERO);
+    raw.intermediates.stacked_reduction.stacking_openings[0].push(ChildEF::ZERO);
+    raw.intermediates.whir.stacking_openings[0].push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -688,8 +688,8 @@ fn pipeline_constraints_fail_when_batch_ref_to_stacked_coupling_has_trailing_suf
             && !raw.intermediates.stacked_reduction.batch_column_openings[0].is_empty(),
         "fixture must include stacked batch-opening families",
     );
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(ChildEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -714,7 +714,7 @@ fn pipeline_constraints_fail_when_stacked_to_whir_coupling_has_trailing_suffix()
         !raw.intermediates.whir.stacking_openings.is_empty(),
         "fixture must include WHIR stacking-opening families",
     );
-    raw.intermediates.whir.stacking_openings[0].push(NativeEF::ZERO);
+    raw.intermediates.whir.stacking_openings[0].push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1140,7 +1140,7 @@ fn pipeline_constraints_fail_when_batch_sumcheck_arity_is_tampered() {
     raw.intermediates
         .batch
         .sumcheck_round_polys
-        .push(vec![NativeEF::ZERO; raw.intermediates.batch.batch_degree]);
+        .push(vec![ChildEF::ZERO; raw.intermediates.batch.batch_degree]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1164,7 +1164,7 @@ fn pipeline_constraints_fail_when_batch_univariate_arity_is_tampered() {
     raw.intermediates
         .batch
         .univariate_round_coeffs
-        .push(NativeEF::ZERO);
+        .push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1591,7 +1591,7 @@ fn pipeline_constraints_fail_when_logup_pow_mirror_witness_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch.logup_pow_witness = NativeF::from_u64(
+    raw.intermediates.batch.logup_pow_witness = ChildF::from_u64(
         (raw.intermediates.batch.logup_pow_witness.as_canonical_u64() + 1) % BABY_BEAR_MODULUS_U64,
     );
 
@@ -1683,7 +1683,7 @@ fn pipeline_constraints_fail_when_residual_only_mirrors_are_forged() {
 
     tamper_native_ext_first_coeff(&mut raw.intermediates.whir.final_claim);
     tamper_native_ext_first_coeff(&mut raw.intermediates.whir.final_acc);
-    raw.intermediates.whir.final_residual = NativeEF::ZERO;
+    raw.intermediates.whir.final_residual = ChildEF::ZERO;
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {

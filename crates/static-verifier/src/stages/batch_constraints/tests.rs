@@ -7,9 +7,7 @@ use halo2_base::{
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2CpuEngine, EF as NativeEF, F as NativeF,
-    },
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
     openvm_stark_backend::{
         p3_field::{PrimeCharacteristicRing, PrimeField64},
         test_utils::{test_system_params_small, FibFixture, InteractionsFixture11, TestFixture},
@@ -22,6 +20,7 @@ use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
+    ChildEF, ChildF,
 };
 
 fn derive_and_constrain_batch(
@@ -136,7 +135,7 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
     let actual = derive_batch_intermediates(engine.config(), &vk, &proof)
         .expect("native batch derivation must pass");
 
-    let subgroup_root = NativeF::two_adic_generator(actual.l_skip).as_canonical_u64();
+    let subgroup_root = ChildF::two_adic_generator(actual.l_skip).as_canonical_u64();
     let bus_constant = actual
         .trace_interactions
         .iter()
@@ -145,7 +144,7 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
         .find(|&value| value > 1)
         .unwrap_or(1);
     let normalization_constant = (0..actual.l_skip)
-        .fold(NativeF::ONE, |acc, _| acc.halve())
+        .fold(ChildF::ONE, |acc, _| acc.halve())
         .as_canonical_u64();
 
     let constants = [
@@ -161,7 +160,7 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
             let range = builder.range_chip();
             let ctx = builder.main(0);
             let ext_chip = BabyBearExtChip::new(BabyBearChip::new(&range));
-            let ext = ext_chip.from_base_const(ctx, NativeF::from_u64(constant));
+            let ext = ext_chip.from_base_const(ctx, ChildF::from_u64(constant));
             ext.0[0]
                 .0
                 .debug_prank(ctx, Fr::from((constant + 1) % BABY_BEAR_MODULUS_U64));
@@ -206,7 +205,7 @@ fn batch_constraints_reject_q0_claim_witness_when_total_interactions_is_zero() {
         actual.total_interactions, 0,
         "fixture must hit zero-interaction GKR branch",
     );
-    actual.gkr_q0_claim = Some(NativeEF::ONE);
+    actual.gkr_q0_claim = Some(ChildEF::ONE);
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_mock(true, move |builder| {
@@ -225,7 +224,7 @@ fn batch_constraints_reject_q0_claim_witness_when_total_interactions_is_zero() {
 fn batch_derivation_keeps_backend_parity_on_zero_interaction_tampered_q0_claim() {
     let engine = test_engine();
     let (vk, mut proof) = FibFixture::new(0, 1, 1 << 5).keygen_and_prove(&engine);
-    proof.gkr_proof.q0_claim += NativeEF::ONE;
+    proof.gkr_proof.q0_claim += ChildEF::ONE;
 
     let actual = derive_batch_intermediates(engine.config(), &vk, &proof)
         .expect("backend-equivalent derivation must ignore q0_claim when interactions are zero");
@@ -252,7 +251,7 @@ fn batch_constraints_fail_on_tampered_intermediate_claims() {
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
 
-    actual.consistency_residual += NativeEF::ONE;
+    actual.consistency_residual += ChildEF::ONE;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -267,7 +266,7 @@ fn batch_constraints_reject_trailing_padded_column_openings() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
-    actual.column_openings[0][0].push(NativeEF::ZERO);
+    actual.column_openings[0][0].push(ChildEF::ZERO);
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -305,7 +304,7 @@ fn batch_constraints_reject_sumcheck_round_count_suffix() {
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     actual
         .sumcheck_round_polys
-        .push(vec![NativeEF::ZERO; actual.batch_degree]);
+        .push(vec![ChildEF::ZERO; actual.batch_degree]);
 
     assert_rejected_without_host_panic(|| {
         run_mock(false, move |builder| {
@@ -322,7 +321,7 @@ fn batch_constraints_reject_univariate_coeff_arity_suffix() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
-    actual.univariate_round_coeffs.push(NativeEF::ZERO);
+    actual.univariate_round_coeffs.push(ChildEF::ZERO);
 
     assert_rejected_without_host_panic(|| {
         run_mock(false, move |builder| {
@@ -356,7 +355,7 @@ fn batch_constraints_ignore_tampered_pow_witness_mirror() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
-    actual.logup_pow_witness += NativeF::ONE;
+    actual.logup_pow_witness += ChildF::ONE;
 
     run_mock(true, move |builder| {
         let range = builder.range_chip();
@@ -375,7 +374,7 @@ fn batch_constraints_fail_on_tampered_gkr_layer_claims() {
         !actual.gkr_claims_per_layer.is_empty(),
         "fixture should contain GKR layer claims when interactions are present",
     );
-    actual.gkr_claims_per_layer[0][0] += NativeEF::ONE;
+    actual.gkr_claims_per_layer[0][0] += ChildEF::ONE;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -421,7 +420,7 @@ fn batch_constraints_fail_on_coordinated_consistency_rhs_forgery() {
     actual.trace_interactions[0][0].bus_index =
         actual.trace_interactions[0][0].bus_index.wrapping_add(1);
     actual.consistency_rhs = actual.consistency_lhs;
-    actual.consistency_residual = NativeEF::ZERO;
+    actual.consistency_residual = ChildEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -438,8 +437,7 @@ fn batch_rejects_invalid_pow_witness() {
     let old = proof.gkr_proof.logup_pow_witness.as_canonical_u64();
     let mut found_invalid = false;
     for delta in 1..=1024u64 {
-        proof.gkr_proof.logup_pow_witness =
-            NativeF::from_u64((old + delta) % BABY_BEAR_MODULUS_U64);
+        proof.gkr_proof.logup_pow_witness = ChildF::from_u64((old + delta) % BABY_BEAR_MODULUS_U64);
         let result = derive_batch_intermediates(engine.config(), &vk, &proof);
         if matches!(
             result,
@@ -462,7 +460,7 @@ fn batch_rejects_gkr_numerator_mismatch() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.batch_constraint_proof.numerator_term_per_air[0] += NativeEF::ONE;
+    proof.batch_constraint_proof.numerator_term_per_air[0] += ChildEF::ONE;
 
     let err = derive_batch_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered numerator term should fail GKR numerator check");
@@ -479,7 +477,7 @@ fn batch_rejects_gkr_denominator_mismatch() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.batch_constraint_proof.denominator_term_per_air[0] += NativeEF::ONE;
+    proof.batch_constraint_proof.denominator_term_per_air[0] += ChildEF::ONE;
 
     let err = derive_batch_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered denominator term should fail GKR denominator check");
@@ -496,7 +494,7 @@ fn batch_rejects_sum_claim_mismatch() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.batch_constraint_proof.univariate_round_coeffs[0] += NativeEF::ONE;
+    proof.batch_constraint_proof.univariate_round_coeffs[0] += ChildEF::ONE;
 
     let err = derive_batch_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered univariate coefficients should fail sum-claim check");
@@ -511,7 +509,7 @@ fn batch_rejects_inconsistent_claims() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.batch_constraint_proof.column_openings[0][0][0] += NativeEF::ONE;
+    proof.batch_constraint_proof.column_openings[0][0][0] += ChildEF::ONE;
 
     let err = derive_batch_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered openings should fail consistency check");
