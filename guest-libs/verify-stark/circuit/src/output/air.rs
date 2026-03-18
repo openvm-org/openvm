@@ -36,7 +36,7 @@ pub struct DeferralOutputCommitCols<F> {
     pub res_left: [F; DIGEST_SIZE],
     pub res_right: [F; DIGEST_SIZE],
 
-    pub canonicity_aux: [CanonicityAuxCols<F>; F_NUM_BYTES],
+    pub canonicity_aux: [CanonicityAuxCols<F>; VALS_IN_DIGEST],
 }
 
 #[derive(Debug)]
