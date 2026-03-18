@@ -146,6 +146,7 @@ openvm-recursion-circuit = { path = "crates/recursion", default-features = false
 openvm-recursion-circuit-derive = { path = "crates/recursion/derive", default-features = false }
 openvm-continuations = { path = "crates/continuations", default-features = false }
 openvm-verify-stark-host = { path = "crates/verify", default-features = false }
+openvm-static-verifier = { path = "crates/static-verifier", default-features = false }
 openvm-sdk = { path = "crates/sdk", default-features = false }
 openvm-sdk-config = { path = "crates/sdk-config", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
