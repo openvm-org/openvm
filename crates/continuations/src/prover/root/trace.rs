@@ -95,7 +95,7 @@ where
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
     ) -> Option<ProvingContext<PB>> {
         assert!(
-            self.circuit.def_hook_commit.is_none(),
+            self.circuit.def_hook_vk_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
         );
         self.generate_proving_ctx(proof, user_pvs_proof, None)

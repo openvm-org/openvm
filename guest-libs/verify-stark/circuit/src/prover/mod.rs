@@ -115,7 +115,7 @@ impl<
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_commit: Option<PB::Commitment>,
+        def_hook_vk_commit: Option<PB::Commitment>,
         def_idx: usize,
     ) -> Self
     where
@@ -136,11 +136,11 @@ impl<
             cached_commit: child_vk_pcs_data.commitment.into(),
             pre_hash: child_vk.pre_hash.into(),
         };
-        let def_hook_commit = def_hook_commit.map(Into::into);
+        let def_hook_vk_commit = def_hook_vk_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
-            def_hook_commit,
+            def_hook_vk_commit,
             memory_dimensions,
             num_user_pvs,
             def_idx,
@@ -149,7 +149,7 @@ impl<
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(def_hook_commit.is_some()),
+            agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -164,7 +164,7 @@ impl<
         pk: Arc<MultiStarkProvingKey<SC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_commit: Option<PB::Commitment>,
+        def_hook_vk_commit: Option<PB::Commitment>,
         def_idx: usize,
     ) -> Self
     where
@@ -179,7 +179,7 @@ impl<
                 final_state_bus_enabled: true,
             },
         );
-        let def_hook_commit = def_hook_commit.map(Into::into);
+        let def_hook_vk_commit = def_hook_vk_commit.map(Into::into);
         let internal_recursive_dag_commit = DagCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
@@ -189,7 +189,7 @@ impl<
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
-            def_hook_commit,
+            def_hook_vk_commit,
             memory_dimensions,
             num_user_pvs,
             def_idx,
@@ -198,7 +198,7 @@ impl<
         Self {
             pk,
             vk,
-            agg_node_tracegen: T::new(def_hook_commit.is_some()),
+            agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
