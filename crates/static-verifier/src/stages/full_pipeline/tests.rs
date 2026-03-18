@@ -42,9 +42,9 @@ use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
-    gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
-    stages::batch_constraints::{
+    field::baby_bear::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
+        BABY_BEAR_MODULUS_U64,
     },
 };
 
@@ -262,11 +262,10 @@ fn recompute_trace_height_sums(raw: &mut RawPipelineWitnessState, threshold_fail
     }
 }
 
-fn native_ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
-    core::array::from_fn(|i| {
-        <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
-            .as_canonical_u64()
-    })
+fn tamper_native_ext_first_coeff(value: &mut NativeEF) {
+    let coeffs: Vec<NativeF> = BasedVectorSpace::as_basis_coefficients_slice(value).to_vec();
+    let new_c0 = NativeF::from_u64((coeffs[0].as_canonical_u64() + 1) % BABY_BEAR_MODULUS_U64);
+    *value = NativeEF::from_basis_coefficients_fn(|i| if i == 0 { new_c0 } else { coeffs[i] });
 }
 
 fn prank_recorded_ext_constant(
@@ -285,15 +284,14 @@ fn prank_recorded_ext_constant(
 }
 
 fn add_delta_to_whir_stacking_opening(
-    openings: &mut [Vec<[u64; BABY_BEAR_EXT_DEGREE]>],
+    openings: &mut [Vec<NativeEF>],
     flat_idx: usize,
     delta: NativeEF,
 ) {
     let mut cursor = flat_idx;
     for commit_openings in openings {
         if cursor < commit_openings.len() {
-            let value = stacked_coeffs_to_native_ext(commit_openings[cursor]);
-            commit_openings[cursor] = native_ext_to_coeffs(value + delta);
+            commit_openings[cursor] += delta;
             return;
         }
         cursor = cursor.saturating_sub(commit_openings.len());
@@ -302,7 +300,7 @@ fn add_delta_to_whir_stacking_opening(
 }
 
 fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessState) {
-    let lambda = stacked_coeffs_to_native_ext(raw.intermediates.stacked_reduction.lambda);
+    let lambda = raw.intermediates.stacked_reduction.lambda;
     let lambda_sqr = lambda * lambda;
 
     let need_rot_schedule = raw
@@ -384,11 +382,7 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
             .copied()
             .find(|loc| loc.weight == NativeEF::ZERO)
             .unwrap_or(term_locs[0]);
-        let value = stacked_coeffs_to_native_ext(
-            openings[target.trace_idx][target.part_idx][target.claim_idx],
-        );
-        openings[target.trace_idx][target.part_idx][target.claim_idx] =
-            native_ext_to_coeffs(value + delta);
+        openings[target.trace_idx][target.part_idx][target.claim_idx] += delta;
         return;
     }
 
@@ -400,19 +394,13 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
     let second = term_locs[1];
     let cancel_delta = NativeEF::ZERO - (delta * first.weight * second.weight.inverse());
 
-    let first_value =
-        stacked_coeffs_to_native_ext(openings[first.trace_idx][first.part_idx][first.claim_idx]);
-    openings[first.trace_idx][first.part_idx][first.claim_idx] =
-        native_ext_to_coeffs(first_value + delta);
+    openings[first.trace_idx][first.part_idx][first.claim_idx] += delta;
 
-    let second_value =
-        stacked_coeffs_to_native_ext(openings[second.trace_idx][second.part_idx][second.claim_idx]);
-    openings[second.trace_idx][second.part_idx][second.claim_idx] =
-        native_ext_to_coeffs(second_value + cancel_delta);
+    openings[second.trace_idx][second.part_idx][second.claim_idx] += cancel_delta;
 }
 
 fn tamper_whir_stacking_openings_claim_preserving(raw: &mut RawPipelineWitnessState) {
-    let mu = stacked_coeffs_to_native_ext(raw.intermediates.whir.mu_challenge);
+    let mu = raw.intermediates.whir.mu_challenge;
     let openings = &mut raw.intermediates.whir.stacking_openings;
     let total_openings = openings.iter().map(Vec::len).sum::<usize>();
     assert!(
@@ -443,10 +431,9 @@ fn tamper_stacked_claim_chain_payload_preserving_residual(raw: &mut RawPipelineW
         "stacked sumcheck rounds must expose [s(1), s(2)]",
     );
 
-    stacked.sumcheck_round_polys[0][0][0] =
-        (stacked.sumcheck_round_polys[0][0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    tamper_native_ext_first_coeff(&mut stacked.sumcheck_round_polys[0][0]);
     stacked.final_claim = stacked.final_sum;
-    stacked.final_residual = [0; BABY_BEAR_EXT_DEGREE];
+    stacked.final_residual = NativeEF::ZERO;
 }
 
 #[test]
@@ -481,8 +468,7 @@ fn pipeline_constraints_fail_when_whir_claim_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.whir.final_claim[0] =
-        (raw.intermediates.whir.final_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
+    tamper_native_ext_first_coeff(&mut raw.intermediates.whir.final_claim);
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
     run_mock(false, &public_inputs, |builder| {
@@ -501,7 +487,7 @@ fn pipeline_constraints_fail_when_batch_challenge_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch.r[0][0] = (raw.intermediates.batch.r[0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    tamper_native_ext_first_coeff(&mut raw.intermediates.batch.r[0]);
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
     run_mock(false, &public_inputs, |builder| {
@@ -574,8 +560,7 @@ fn pipeline_constraints_fail_when_stacked_r_is_decoupled_from_batch_r() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.stacked_reduction.r[0][0] =
-        (raw.intermediates.stacked_reduction.r[0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    tamper_native_ext_first_coeff(&mut raw.intermediates.stacked_reduction.r[0]);
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
     run_mock(false, &public_inputs, |builder| {
@@ -619,10 +604,10 @@ fn pipeline_constraints_fail_when_batch_opening_family_width_is_padded() {
         "fixture must include at least one batch opening family",
     );
 
-    raw.intermediates.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.batch.column_openings[0][0].push(NativeEF::ZERO);
+    raw.intermediates.batch.column_openings[0][0].push(NativeEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -653,9 +638,9 @@ fn pipeline_constraints_fail_when_stacked_opening_family_width_is_padded() {
         "fixture must include stacked opening families",
     );
 
-    raw.intermediates.stacked_reduction.q_coeffs[0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.stacked_reduction.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.whir.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.q_coeffs[0].push(NativeEF::ZERO);
+    raw.intermediates.stacked_reduction.stacking_openings[0].push(NativeEF::ZERO);
+    raw.intermediates.whir.stacking_openings[0].push(NativeEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -703,8 +688,8 @@ fn pipeline_constraints_fail_when_batch_ref_to_stacked_coupling_has_trailing_suf
             && !raw.intermediates.stacked_reduction.batch_column_openings[0].is_empty(),
         "fixture must include stacked batch-opening families",
     );
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(NativeEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -729,7 +714,7 @@ fn pipeline_constraints_fail_when_stacked_to_whir_coupling_has_trailing_suffix()
         !raw.intermediates.whir.stacking_openings.is_empty(),
         "fixture must include WHIR stacking-opening families",
     );
-    raw.intermediates.whir.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.whir.stacking_openings[0].push(NativeEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -859,10 +844,10 @@ fn pipeline_constraints_fail_on_coordinated_preamble_stage_log_height_tamper() {
         preamble_idx += 1;
     }
     match &mut raw.intermediates.transcript_events[preamble_idx] {
-        crate::gadgets::transcript::TranscriptEvent::Observe(value) => {
+        crate::transcript::TranscriptEvent::Observe(value) => {
             *value = new_log_height as u64;
         }
-        crate::gadgets::transcript::TranscriptEvent::Sample(_) => {
+        crate::transcript::TranscriptEvent::Sample(_) => {
             panic!("expected preamble transcript event to be an observe");
         }
     }
@@ -888,14 +873,9 @@ fn pipeline_constraints_fail_when_transcript_sample_is_tampered() {
         .intermediates
         .transcript_events
         .iter()
-        .position(|event| {
-            matches!(
-                event,
-                crate::gadgets::transcript::TranscriptEvent::Sample(_)
-            )
-        })
+        .position(|event| matches!(event, crate::transcript::TranscriptEvent::Sample(_)))
         .expect("pipeline transcript event log should contain sampled challenges");
-    if let crate::gadgets::transcript::TranscriptEvent::Sample(value) =
+    if let crate::transcript::TranscriptEvent::Sample(value) =
         &mut raw.intermediates.transcript_events[sample_idx]
     {
         *value = (*value + 1) % BABY_BEAR_MODULUS_U64;
@@ -923,12 +903,7 @@ fn pipeline_constraints_fail_when_transcript_event_order_is_tampered() {
         .intermediates
         .transcript_events
         .iter()
-        .position(|event| {
-            matches!(
-                event,
-                crate::gadgets::transcript::TranscriptEvent::Sample(_)
-            )
-        })
+        .position(|event| matches!(event, crate::transcript::TranscriptEvent::Sample(_)))
         .expect("pipeline transcript event log should contain sampled challenges");
     assert!(
         sample_idx > 0,
@@ -965,11 +940,11 @@ fn pipeline_constraints_fail_when_post_preamble_interleaving_is_reordered() {
                     &raw.intermediates.transcript_events[idx + 1]
                 ),
                 (
-                    crate::gadgets::transcript::TranscriptEvent::Observe(_),
-                    crate::gadgets::transcript::TranscriptEvent::Sample(_)
+                    crate::transcript::TranscriptEvent::Observe(_),
+                    crate::transcript::TranscriptEvent::Sample(_)
                 ) | (
-                    crate::gadgets::transcript::TranscriptEvent::Sample(_),
-                    crate::gadgets::transcript::TranscriptEvent::Observe(_)
+                    crate::transcript::TranscriptEvent::Sample(_),
+                    crate::transcript::TranscriptEvent::Observe(_)
                 )
             )
         })
@@ -997,7 +972,7 @@ fn pipeline_constraints_fail_when_transcript_has_unconsumed_sample_event() {
         .expect("native pipeline witness derivation must pass");
     raw.intermediates
         .transcript_events
-        .push(crate::gadgets::transcript::TranscriptEvent::Sample(0));
+        .push(crate::transcript::TranscriptEvent::Sample(0));
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1162,10 +1137,10 @@ fn pipeline_constraints_fail_when_batch_sumcheck_arity_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch.sumcheck_round_polys.push(vec![
-        [0; BABY_BEAR_EXT_DEGREE];
-        raw.intermediates.batch.batch_degree
-    ]);
+    raw.intermediates
+        .batch
+        .sumcheck_round_polys
+        .push(vec![NativeEF::ZERO; raw.intermediates.batch.batch_degree]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1189,7 +1164,7 @@ fn pipeline_constraints_fail_when_batch_univariate_arity_is_tampered() {
     raw.intermediates
         .batch
         .univariate_round_coeffs
-        .push([0; BABY_BEAR_EXT_DEGREE]);
+        .push(NativeEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1509,8 +1484,7 @@ fn pipeline_constraints_fail_when_gkr_non_xi_challenge_is_tampered() {
         !raw.intermediates.batch.gkr_non_xi_samples.is_empty(),
         "fixture should produce non-xi GKR challenges",
     );
-    raw.intermediates.batch.gkr_non_xi_samples[0][0] =
-        (raw.intermediates.batch.gkr_non_xi_samples[0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    tamper_native_ext_first_coeff(&mut raw.intermediates.batch.gkr_non_xi_samples[0]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1537,11 +1511,11 @@ fn pipeline_constraints_fail_when_non_preamble_observe_is_tampered() {
         .enumerate()
         .skip(preamble_len)
         .find_map(|(idx, event)| match event {
-            crate::gadgets::transcript::TranscriptEvent::Observe(_) => Some(idx),
-            crate::gadgets::transcript::TranscriptEvent::Sample(_) => None,
+            crate::transcript::TranscriptEvent::Observe(_) => Some(idx),
+            crate::transcript::TranscriptEvent::Sample(_) => None,
         })
         .expect("expected a non-preamble observe event");
-    if let crate::gadgets::transcript::TranscriptEvent::Observe(value) =
+    if let crate::transcript::TranscriptEvent::Observe(value) =
         &mut raw.intermediates.transcript_events[observe_idx]
     {
         *value = (*value + 1) % BABY_BEAR_MODULUS_U64;
@@ -1598,7 +1572,7 @@ fn pipeline_constraints_fail_when_stage_payload_observe_stream_is_inconsistent()
         .gkr_q0_claim
         .as_mut()
         .expect("non-zero interaction fixture should assign q0 claim witness");
-    gkr_q0_claim[0] = (gkr_q0_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
+    tamper_native_ext_first_coeff(gkr_q0_claim);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1617,8 +1591,9 @@ fn pipeline_constraints_fail_when_logup_pow_mirror_witness_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch.logup_pow_witness =
-        (raw.intermediates.batch.logup_pow_witness + 1) % BABY_BEAR_MODULUS_U64;
+    raw.intermediates.batch.logup_pow_witness = NativeF::from_u64(
+        (raw.intermediates.batch.logup_pow_witness.as_canonical_u64() + 1) % BABY_BEAR_MODULUS_U64,
+    );
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1706,11 +1681,9 @@ fn pipeline_constraints_fail_when_residual_only_mirrors_are_forged() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
 
-    raw.intermediates.whir.final_claim[0] =
-        (raw.intermediates.whir.final_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
-    raw.intermediates.whir.final_acc[0] =
-        (raw.intermediates.whir.final_acc[0] + 1) % BABY_BEAR_MODULUS_U64;
-    raw.intermediates.whir.final_residual = [0; BABY_BEAR_EXT_DEGREE];
+    tamper_native_ext_first_coeff(&mut raw.intermediates.whir.final_claim);
+    tamper_native_ext_first_coeff(&mut raw.intermediates.whir.final_acc);
+    raw.intermediates.whir.final_residual = NativeEF::ZERO;
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {

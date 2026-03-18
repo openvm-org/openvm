@@ -1,10 +1,14 @@
 use halo2_base::{
-    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+    gates::{
+        circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+        range::RangeChip,
+    },
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2CpuEngine, EF as NativeEF},
     openvm_stark_backend::{
+        p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
         test_utils::{test_system_params_small, InteractionsFixture11, TestFixture},
         verifier::stacked_reduction::StackedReductionError,
         StarkEngine,
@@ -14,8 +18,23 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
-    gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
+    field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
 };
+
+fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
+    core::array::from_fn(|i| {
+        <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
+            .as_canonical_u64()
+    })
+}
+
+fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
+    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
+}
+
+fn make_ext_chip(range: &RangeChip<Fr>) -> BabyBearExtChip<'_> {
+    BabyBearExtChip::new(BabyBearChip::new(range))
+}
 
 /// Standalone stacked-reduction derive+constrain wrapper is internal; external callers must use
 /// transcript-owned stage composition (`stages::full_pipeline`) as the acceptance boundary.
@@ -27,7 +46,8 @@ fn derive_and_constrain_stacked_reduction(
     proof: &Proof<NativeConfig>,
 ) -> Result<AssignedStackedReductionIntermediates, StackedReductionConstraintError> {
     let raw = derive_raw_stacked_witness_state(config, mvk, proof)?;
-    Ok(constrain_checked_stacked_witness_state(ctx, range, &raw).assigned)
+    let ext_chip = make_ext_chip(range);
+    Ok(constrain_checked_stacked_witness_state(ctx, &ext_chip, &raw).assigned)
 }
 
 fn derive_raw_stacked_witness_state(
@@ -42,13 +62,13 @@ fn derive_raw_stacked_witness_state(
 
 fn constrain_checked_stacked_witness_state(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     raw: &RawStackedWitnessState,
 ) -> CheckedStackedWitnessState {
-    let assigned = constrain_stacked_reduction_intermediates(ctx, range, &raw.intermediates);
+    let assigned = constrain_stacked_reduction_intermediates(ctx, ext_chip, &raw.intermediates);
     let derived = DerivedStackedState {
-        s_0_residual: assigned.s_0_residual.clone(),
-        final_residual: assigned.final_residual.clone(),
+        s_0_residual: assigned.s_0_residual,
+        final_residual: assigned.final_residual,
     };
     CheckedStackedWitnessState { assigned, derived }
 }
@@ -116,12 +136,17 @@ fn stacked_constraints_fail_on_tampered_intermediate_sum() {
     let mut actual = derive_stacked_reduction_intermediates(engine.config(), &vk, &proof)
         .expect("native stacked reduction must pass");
 
-    actual.final_residual[0] = (actual.final_residual[0] + 1) % BABY_BEAR_MODULUS_U64;
+    {
+        let mut coeffs = ext_to_coeffs(actual.final_residual);
+        coeffs[0] = (coeffs[0] + 1) % BABY_BEAR_MODULUS_U64;
+        actual.final_residual = coeffs_to_ext(coeffs);
+    }
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &range, &actual);
+        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
     });
 }
 
@@ -131,13 +156,14 @@ fn stacked_constraints_reject_trailing_padded_q_coeff_width() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual = derive_stacked_reduction_intermediates(engine.config(), &vk, &proof)
         .expect("native stacked reduction must pass");
-    actual.q_coeffs[0].push([0; BABY_BEAR_EXT_DEGREE]);
-    actual.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
+    actual.q_coeffs[0].push(NativeEF::ZERO);
+    actual.stacking_openings[0].push(NativeEF::ZERO);
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &range, &actual);
+        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
     });
 }
 
@@ -152,19 +178,24 @@ fn stacked_constraints_fail_on_coordinated_q_coeff_forgery() {
         "fixture must include at least one q-coeff entry",
     );
 
-    actual.q_coeffs[0][0][0] = (actual.q_coeffs[0][0][0] + 1) % BABY_BEAR_MODULUS_U64;
-    let opening = coeffs_to_ext(actual.stacking_openings[0][0]);
+    {
+        let mut coeffs = ext_to_coeffs(actual.q_coeffs[0][0]);
+        coeffs[0] = (coeffs[0] + 1) % BABY_BEAR_MODULUS_U64;
+        actual.q_coeffs[0][0] = coeffs_to_ext(coeffs);
+    }
+    let opening = actual.stacking_openings[0][0];
     let delta = NativeEF::ONE * opening;
-    let forged_final_sum = coeffs_to_ext(actual.final_sum) + delta;
-    let forged_final_claim = coeffs_to_ext(actual.final_claim) + delta;
-    actual.final_sum = ext_to_coeffs(forged_final_sum);
-    actual.final_claim = ext_to_coeffs(forged_final_claim);
-    actual.final_residual = [0; BABY_BEAR_EXT_DEGREE];
+    let forged_final_sum = actual.final_sum + delta;
+    let forged_final_claim = actual.final_claim + delta;
+    actual.final_sum = forged_final_sum;
+    actual.final_claim = forged_final_claim;
+    actual.final_residual = NativeEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &range, &actual);
+        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
     });
 }
 
@@ -184,15 +215,19 @@ fn stacked_constraints_fail_on_coordinated_sumcheck_claim_chain_forgery() {
         "stacked sumcheck rounds must expose [s(1), s(2)]",
     );
 
-    actual.sumcheck_round_polys[0][0][0] =
-        (actual.sumcheck_round_polys[0][0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    {
+        let mut coeffs = ext_to_coeffs(actual.sumcheck_round_polys[0][0]);
+        coeffs[0] = (coeffs[0] + 1) % BABY_BEAR_MODULUS_U64;
+        actual.sumcheck_round_polys[0][0] = coeffs_to_ext(coeffs);
+    }
     actual.final_claim = actual.final_sum;
-    actual.final_residual = [0; BABY_BEAR_EXT_DEGREE];
+    actual.final_residual = NativeEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &range, &actual);
+        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
     });
 }
 

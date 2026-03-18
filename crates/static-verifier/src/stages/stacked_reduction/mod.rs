@@ -1,6 +1,6 @@
 use std::iter::zip;
 
-use halo2_base::{gates::range::RangeChip, Context};
+use halo2_base::Context;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, EF as NativeEF,
@@ -8,7 +8,7 @@ use openvm_stark_sdk::{
     },
     openvm_stark_backend::{
         keygen::types::MultiStarkVerifyingKey,
-        p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
+        p3_field::{BasedVectorSpace, PrimeCharacteristicRing},
         poly_common::{
             eval_eq_mle, eval_eq_prism, eval_in_uni, eval_rot_kernel_prism, horner_eval,
             interpolate_quadratic_at_012,
@@ -24,12 +24,11 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_EXT_DEGREE},
+    field::baby_bear::{BabyBearExtChip, BabyBearExtWire, BABY_BEAR_EXT_DEGREE},
     stages::{
         batch_constraints::{
             eval_eq_mle_binary_assigned, eval_eq_prism_assigned, eval_eq_uni_at_one_assigned,
-            eval_rot_kernel_prism_assigned, ext_from_base_const, ext_mul_base_const,
-            ext_pow_power_of_two, BatchConstraintError,
+            eval_rot_kernel_prism_assigned, BatchConstraintError,
         },
         pipeline::prepare_pipeline_inputs,
         shared_math::{
@@ -37,7 +36,6 @@ use crate::{
             interpolate_quadratic_at_012_assigned,
         },
     },
-    utils::assign_and_range_usize,
     Fr,
 };
 
@@ -94,40 +92,40 @@ pub struct QCoeffAccumulationTerm {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StackedReductionIntermediates {
     pub l_skip: usize,
-    pub lambda: [u64; BABY_BEAR_EXT_DEGREE],
-    pub batch_column_openings: Vec<Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>>,
+    pub lambda: NativeEF,
+    pub batch_column_openings: Vec<Vec<Vec<NativeEF>>>,
     pub batch_column_openings_need_rot: Vec<Vec<bool>>,
     pub q_coeff_terms: Vec<QCoeffAccumulationTerm>,
-    pub r: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub univariate_round_coeffs: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub sumcheck_round_polys: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
-    pub stacking_openings: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
-    pub q_coeffs: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
+    pub r: Vec<NativeEF>,
+    pub univariate_round_coeffs: Vec<NativeEF>,
+    pub sumcheck_round_polys: Vec<Vec<NativeEF>>,
+    pub stacking_openings: Vec<Vec<NativeEF>>,
+    pub q_coeffs: Vec<Vec<NativeEF>>,
     pub stacking_matrix_expected_widths: Vec<usize>,
-    pub s_0: [u64; BABY_BEAR_EXT_DEGREE],
-    pub s_0_sum_eval: [u64; BABY_BEAR_EXT_DEGREE],
-    pub s_0_residual: [u64; BABY_BEAR_EXT_DEGREE],
-    pub final_claim: [u64; BABY_BEAR_EXT_DEGREE],
-    pub final_sum: [u64; BABY_BEAR_EXT_DEGREE],
-    pub final_residual: [u64; BABY_BEAR_EXT_DEGREE],
-    pub u: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
+    pub s_0: NativeEF,
+    pub s_0_sum_eval: NativeEF,
+    pub s_0_residual: NativeEF,
+    pub final_claim: NativeEF,
+    pub final_sum: NativeEF,
+    pub final_residual: NativeEF,
+    pub u: Vec<NativeEF>,
 }
 
 #[derive(Clone, Debug)]
 pub struct AssignedStackedReductionIntermediates {
-    pub lambda: BabyBearExtVar,
-    pub univariate_round_coeffs: Vec<BabyBearExtVar>,
-    pub sumcheck_round_polys: Vec<Vec<BabyBearExtVar>>,
-    pub batch_column_openings: Vec<Vec<Vec<BabyBearExtVar>>>,
-    pub r: Vec<BabyBearExtVar>,
-    pub stacking_openings: Vec<Vec<BabyBearExtVar>>,
-    pub s_0: BabyBearExtVar,
-    pub s_0_sum_eval: BabyBearExtVar,
-    pub s_0_residual: BabyBearExtVar,
-    pub final_claim: BabyBearExtVar,
-    pub final_sum: BabyBearExtVar,
-    pub final_residual: BabyBearExtVar,
-    pub u: Vec<BabyBearExtVar>,
+    pub lambda: BabyBearExtWire,
+    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
+    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
+    pub batch_column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
+    pub r: Vec<BabyBearExtWire>,
+    pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
+    pub s_0: BabyBearExtWire,
+    pub s_0_sum_eval: BabyBearExtWire,
+    pub s_0_residual: BabyBearExtWire,
+    pub final_claim: BabyBearExtWire,
+    pub final_sum: BabyBearExtWire,
+    pub final_residual: BabyBearExtWire,
+    pub u: Vec<BabyBearExtWire>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,25 +135,14 @@ pub struct RawStackedWitnessState {
 
 #[derive(Clone, Debug)]
 pub struct DerivedStackedState {
-    pub s_0_residual: BabyBearExtVar,
-    pub final_residual: BabyBearExtVar,
+    pub s_0_residual: BabyBearExtWire,
+    pub final_residual: BabyBearExtWire,
 }
 
 #[derive(Clone, Debug)]
 pub struct CheckedStackedWitnessState {
     pub assigned: AssignedStackedReductionIntermediates,
     pub derived: DerivedStackedState,
-}
-
-fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
-    core::array::from_fn(|i| {
-        <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
-            .as_canonical_u64()
-    })
-}
-
-fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -322,51 +309,19 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
 
     Ok(StackedReductionIntermediates {
         l_skip,
-        lambda: ext_to_coeffs(lambda),
-        batch_column_openings: column_openings
-            .iter()
-            .map(|per_air| {
-                per_air
-                    .iter()
-                    .map(|part| part.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>(),
+        lambda,
+        batch_column_openings: column_openings.clone(),
         batch_column_openings_need_rot: need_rot_per_commit.to_vec(),
         q_coeff_terms,
-        r: r.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>(),
-        univariate_round_coeffs: proof
-            .univariate_round_coeffs
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
+        r: r.to_vec(),
+        univariate_round_coeffs: proof.univariate_round_coeffs.clone(),
         sumcheck_round_polys: proof
             .sumcheck_round_polys
             .iter()
-            .map(|poly| poly.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>())
-            .collect::<Vec<_>>(),
-        stacking_openings: proof
-            .stacking_openings
-            .iter()
-            .map(|openings| {
-                openings
-                    .iter()
-                    .copied()
-                    .map(ext_to_coeffs)
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>(),
-        q_coeffs: q_coeffs
-            .iter()
-            .map(|coeffs| {
-                coeffs
-                    .iter()
-                    .copied()
-                    .map(ext_to_coeffs)
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>(),
+            .map(|arr| arr.to_vec())
+            .collect(),
+        stacking_openings: proof.stacking_openings.clone(),
+        q_coeffs,
         stacking_matrix_expected_widths: layouts
             .iter()
             .map(|layout| {
@@ -377,13 +332,13 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
                     .expect("stacked layout must contain at least one column")
             })
             .collect::<Vec<_>>(),
-        s_0: ext_to_coeffs(s_0),
-        s_0_sum_eval: ext_to_coeffs(s_0_sum_eval),
-        s_0_residual: ext_to_coeffs(s_0_residual),
-        final_claim: ext_to_coeffs(claim),
-        final_sum: ext_to_coeffs(final_sum),
-        final_residual: ext_to_coeffs(final_residual),
-        u: u.into_iter().map(ext_to_coeffs).collect(),
+        s_0,
+        s_0_sum_eval,
+        s_0_residual,
+        final_claim: claim,
+        final_sum,
+        final_residual,
+        u,
     })
 }
 
@@ -411,32 +366,30 @@ pub fn derive_stacked_reduction_intermediates(
 
 fn assign_ext(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    coeffs: [u64; BABY_BEAR_EXT_DEGREE],
-) -> BabyBearExtVar {
-    baby_bear.load_ext_witness(ctx, range, coeffs)
+    ext_chip: &BabyBearExtChip<'_>,
+    value: NativeEF,
+) -> BabyBearExtWire {
+    ext_chip.load_witness(ctx, value)
 }
 
 fn eval_in_uni_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
     n: isize,
-    z: &BabyBearExtVar,
-) -> BabyBearExtVar {
+    z: &BabyBearExtWire,
+) -> BabyBearExtWire {
     if n.is_negative() {
-        let z_pow = ext_pow_power_of_two(ctx, range, baby_bear, z, l_skip.wrapping_add_signed(n));
-        eval_eq_uni_at_one_assigned(ctx, range, baby_bear, n.unsigned_abs(), &z_pow)
+        let z_pow = ext_chip.pow_power_of_two(ctx, z, l_skip.wrapping_add_signed(n));
+        eval_eq_uni_at_one_assigned(ctx, ext_chip, n.unsigned_abs(), &z_pow)
     } else {
-        ext_from_base_const(ctx, baby_bear, 1)
+        ext_chip.from_base_const(ctx, NativeF::from_u64(1))
     }
 }
 
 pub(crate) fn constrain_stacked_reduction_intermediates(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     actual: &StackedReductionIntermediates,
 ) -> AssignedStackedReductionIntermediates {
     assert!(!actual.u.is_empty(), "stacked challenges must be non-empty");
@@ -456,25 +409,23 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         "stacked expected-width schedule must align with q-coeff layout",
     );
 
-    let baby_bear = BabyBearArithmeticGadgets;
-
-    let lambda = assign_ext(ctx, range, &baby_bear, actual.lambda);
+    let lambda = assign_ext(ctx, ext_chip, actual.lambda);
     let u = actual
         .u
         .iter()
-        .map(|&actual_u| assign_ext(ctx, range, &baby_bear, actual_u))
+        .map(|&actual_u| assign_ext(ctx, ext_chip, actual_u))
         .collect::<Vec<_>>();
     let univariate_round_coeffs = actual
         .univariate_round_coeffs
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let sumcheck_round_polys = actual
         .sumcheck_round_polys
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| assign_ext(ctx, ext_chip, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -484,7 +435,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         .map(|openings| {
             openings
                 .iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| assign_ext(ctx, ext_chip, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -496,7 +447,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
                 .iter()
                 .map(|part| {
                     part.iter()
-                        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                        .map(|&value| assign_ext(ctx, ext_chip, value))
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
@@ -505,7 +456,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
     let r = actual
         .r
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let q_coeffs = actual
         .q_coeffs
@@ -513,7 +464,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         .map(|coeffs| {
             coeffs
                 .iter()
-                .map(|&value| assign_ext(ctx, range, &baby_bear, value))
+                .map(|&value| assign_ext(ctx, ext_chip, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -523,13 +474,17 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         .zip(actual.q_coeffs.iter())
         .zip(actual.stacking_matrix_expected_widths.iter())
     {
-        let opening_width = assign_and_range_usize(ctx, range, opening_row.len());
-        let q_coeff_width = assign_and_range_usize(ctx, range, q_coeff_row.len());
-        let expected_width_cell = assign_and_range_usize(ctx, range, expected_width);
+        let opening_width = ext_chip
+            .base()
+            .assign_and_range_usize(ctx, opening_row.len());
+        let q_coeff_width = ext_chip
+            .base()
+            .assign_and_range_usize(ctx, q_coeff_row.len());
+        let expected_width_cell = ext_chip.base().assign_and_range_usize(ctx, expected_width);
         ctx.constrain_equal(&opening_width, &expected_width_cell);
         ctx.constrain_equal(&q_coeff_width, &expected_width_cell);
     }
-    let s_0 = assign_ext(ctx, range, &baby_bear, actual.s_0);
+    let s_0 = assign_ext(ctx, ext_chip, actual.s_0);
 
     let mut t_claims = Vec::new();
     let commit_need_rot = &actual.batch_column_openings_need_rot;
@@ -542,7 +497,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
             .get(trace_idx)
             .expect("common-main need_rot metadata must cover all traces");
         t_claims.extend(column_openings_by_rot_assigned(
-            ctx, range, &baby_bear, &parts[0], need_rot,
+            ctx, ext_chip, &parts[0], need_rot,
         ));
     }
     let mut commit_idx = 1usize;
@@ -552,7 +507,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
                 .first()
                 .expect("non-common commit need_rot metadata must be singleton");
             t_claims.extend(column_openings_by_rot_assigned(
-                ctx, range, &baby_bear, cols, need_rot,
+                ctx, ext_chip, cols, need_rot,
             ));
             commit_idx += 1;
         }
@@ -563,36 +518,36 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         "all non-common commitments must be consumed when deriving t-claims",
     );
 
-    let lambda_sqr = baby_bear.ext_mul(ctx, range, &lambda, &lambda);
+    let lambda_sqr = ext_chip.mul(ctx, &lambda, &lambda);
     let mut lambda_sqr_powers = Vec::with_capacity(t_claims.len());
-    let mut cur_lambda_sqr = ext_from_base_const(ctx, &baby_bear, 1);
+    let mut cur_lambda_sqr = ext_chip.from_base_const(ctx, NativeF::from_u64(1));
     for _ in 0..t_claims.len() {
-        lambda_sqr_powers.push(cur_lambda_sqr.clone());
-        cur_lambda_sqr = baby_bear.ext_mul(ctx, range, &cur_lambda_sqr, &lambda_sqr);
+        lambda_sqr_powers.push(cur_lambda_sqr);
+        cur_lambda_sqr = ext_chip.mul(ctx, &cur_lambda_sqr, &lambda_sqr);
     }
-    let mut derived_s_0 = baby_bear.ext_zero(ctx, range);
+    let mut derived_s_0 = ext_chip.zero(ctx);
     for ((claim, claim_rot), lambda_pow) in t_claims.iter().zip(lambda_sqr_powers.iter()) {
-        let claim_rot_lambda = baby_bear.ext_mul(ctx, range, claim_rot, &lambda);
-        let batched_claim = baby_bear.ext_add(ctx, range, claim, &claim_rot_lambda);
-        let term = baby_bear.ext_mul(ctx, range, &batched_claim, lambda_pow);
-        derived_s_0 = baby_bear.ext_add(ctx, range, &derived_s_0, &term);
+        let claim_rot_lambda = ext_chip.mul(ctx, claim_rot, &lambda);
+        let batched_claim = ext_chip.add(ctx, claim, &claim_rot_lambda);
+        let term = ext_chip.mul(ctx, &batched_claim, lambda_pow);
+        derived_s_0 = ext_chip.add(ctx, &derived_s_0, &term);
     }
-    baby_bear.assert_ext_equal(ctx, &derived_s_0, &s_0);
+    ext_chip.assert_equal(ctx, &derived_s_0, &s_0);
 
-    let s_0_sum_eval = assign_ext(ctx, range, &baby_bear, actual.s_0_sum_eval);
+    let s_0_sum_eval = assign_ext(ctx, ext_chip, actual.s_0_sum_eval);
     let stride = 1usize << actual.l_skip;
-    let mut derived_s_0_sum_eval = baby_bear.ext_zero(ctx, range);
+    let mut derived_s_0_sum_eval = ext_chip.zero(ctx);
     for coeff in univariate_round_coeffs.iter().step_by(stride) {
-        derived_s_0_sum_eval = baby_bear.ext_add(ctx, range, &derived_s_0_sum_eval, coeff);
+        derived_s_0_sum_eval = ext_chip.add(ctx, &derived_s_0_sum_eval, coeff);
     }
     let derived_s_0_sum_eval =
-        ext_mul_base_const(ctx, range, &baby_bear, &derived_s_0_sum_eval, stride as u64);
-    baby_bear.assert_ext_equal(ctx, &derived_s_0_sum_eval, &s_0_sum_eval);
+        ext_chip.mul_base_const(ctx, &derived_s_0_sum_eval, NativeF::from_u64(stride as u64));
+    ext_chip.assert_equal(ctx, &derived_s_0_sum_eval, &s_0_sum_eval);
 
-    let s_0_residual = assign_ext(ctx, range, &baby_bear, actual.s_0_residual);
+    let s_0_residual = assign_ext(ctx, ext_chip, actual.s_0_residual);
     // Equation-first check: s_0_residual = s_0 - s_0_sum_eval.
-    let derived_s_0_residual = baby_bear.ext_sub(ctx, range, &s_0, &s_0_sum_eval);
-    baby_bear.assert_ext_equal(ctx, &derived_s_0_residual, &s_0_residual);
+    let derived_s_0_residual = ext_chip.sub(ctx, &s_0, &s_0_sum_eval);
+    ext_chip.assert_equal(ctx, &derived_s_0_residual, &s_0_residual);
 
     assert!(
         !univariate_round_coeffs.is_empty(),
@@ -603,10 +558,10 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         u.len(),
         "stacked sumcheck rounds must align with sampled u challenges",
     );
-    let final_claim = assign_ext(ctx, range, &baby_bear, actual.final_claim);
+    let final_claim = assign_ext(ctx, ext_chip, actual.final_claim);
     // Recompute native claim chain from constrained univariate/sumcheck payloads and u challenges.
     let mut derived_claim =
-        horner_eval_ext_poly_assigned(ctx, range, &baby_bear, &univariate_round_coeffs, &u[0]);
+        horner_eval_ext_poly_assigned(ctx, ext_chip, &univariate_round_coeffs, &u[0]);
     for (round_idx, round_poly) in sumcheck_round_polys.iter().enumerate() {
         assert_eq!(
             round_poly.len(),
@@ -615,23 +570,22 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         );
         let s_j_1 = &round_poly[0];
         let s_j_2 = &round_poly[1];
-        let s_j_0 = baby_bear.ext_sub(ctx, range, &derived_claim, s_j_1);
+        let s_j_0 = ext_chip.sub(ctx, &derived_claim, s_j_1);
         derived_claim = interpolate_quadratic_at_012_assigned(
             ctx,
-            range,
-            &baby_bear,
+            ext_chip,
             [&s_j_0, s_j_1, s_j_2],
             &u[round_idx + 1],
         );
     }
-    baby_bear.assert_ext_equal(ctx, &derived_claim, &final_claim);
+    ext_chip.assert_equal(ctx, &derived_claim, &final_claim);
 
-    let final_sum = assign_ext(ctx, range, &baby_bear, actual.final_sum);
+    let final_sum = assign_ext(ctx, ext_chip, actual.final_sum);
     let mut derived_q_coeffs = actual
         .stacking_matrix_expected_widths
         .iter()
         .map(|&width| {
-            core::iter::repeat_with(|| baby_bear.ext_zero(ctx, range))
+            core::iter::repeat_with(|| ext_chip.zero(ctx))
                 .take(width)
                 .collect::<Vec<_>>()
         })
@@ -650,39 +604,28 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
             term.lambda_idx < lambda_sqr_powers.len(),
             "q-coeff lambda index out of bounds",
         );
-        let eq_mle =
-            eval_eq_mle_binary_assigned(ctx, range, &baby_bear, &u[n_lift + 1..], &term.b_bits);
-        let ind = eval_in_uni_assigned(ctx, range, &baby_bear, actual.l_skip, term.n, &u[0]);
+        let eq_mle = eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &term.b_bits);
+        let ind = eval_in_uni_assigned(ctx, ext_chip, actual.l_skip, term.n, &u[0]);
         let (l, rs_n) = if term.n.is_negative() {
             (
                 actual.l_skip.wrapping_add_signed(term.n),
-                vec![ext_pow_power_of_two(
-                    ctx,
-                    range,
-                    &baby_bear,
-                    &r[0],
-                    term.n.unsigned_abs(),
-                )],
+                vec![ext_chip.pow_power_of_two(ctx, &r[0], term.n.unsigned_abs())],
             )
         } else {
             (actual.l_skip, r[..=n_lift].to_vec())
         };
-        let eq_prism = eval_eq_prism_assigned(ctx, range, &baby_bear, l, &u[..=n_lift], &rs_n);
-        let mut batched =
-            baby_bear.ext_mul(ctx, range, &lambda_sqr_powers[term.lambda_idx], &eq_prism);
+        let eq_prism = eval_eq_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
+        let mut batched = ext_chip.mul(ctx, &lambda_sqr_powers[term.lambda_idx], &eq_prism);
         if term.need_rot {
-            let rot_kernel =
-                eval_rot_kernel_prism_assigned(ctx, range, &baby_bear, l, &u[..=n_lift], &rs_n);
-            let lambda_rot = baby_bear.ext_mul(ctx, range, &lambda, &rot_kernel);
-            let rot_term =
-                baby_bear.ext_mul(ctx, range, &lambda_sqr_powers[term.lambda_idx], &lambda_rot);
-            batched = baby_bear.ext_add(ctx, range, &batched, &rot_term);
+            let rot_kernel = eval_rot_kernel_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
+            let lambda_rot = ext_chip.mul(ctx, &lambda, &rot_kernel);
+            let rot_term = ext_chip.mul(ctx, &lambda_sqr_powers[term.lambda_idx], &lambda_rot);
+            batched = ext_chip.add(ctx, &batched, &rot_term);
         }
-        let batched_ind = baby_bear.ext_mul(ctx, range, &batched, &ind);
-        let coeff = baby_bear.ext_mul(ctx, range, &eq_mle, &batched_ind);
-        let updated = baby_bear.ext_add(
+        let batched_ind = ext_chip.mul(ctx, &batched, &ind);
+        let coeff = ext_chip.mul(ctx, &eq_mle, &batched_ind);
+        let updated = ext_chip.add(
             ctx,
-            range,
             &derived_q_coeffs[term.commit_idx][term.target_col_idx],
             &coeff,
         );
@@ -690,26 +633,26 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
     }
     for (derived_row, assigned_row) in derived_q_coeffs.iter().zip(q_coeffs.iter()) {
         for (derived_coeff, assigned_coeff) in derived_row.iter().zip(assigned_row.iter()) {
-            baby_bear.assert_ext_equal(ctx, derived_coeff, assigned_coeff);
+            ext_chip.assert_equal(ctx, derived_coeff, assigned_coeff);
         }
     }
-    let mut derived_final_sum = baby_bear.ext_zero(ctx, range);
+    let mut derived_final_sum = ext_chip.zero(ctx);
     for (coeff_row, opening_row) in derived_q_coeffs.iter().zip(stacking_openings.iter()) {
         for (coeff, opening) in coeff_row.iter().zip(opening_row.iter()) {
-            let term = baby_bear.ext_mul(ctx, range, coeff, opening);
-            derived_final_sum = baby_bear.ext_add(ctx, range, &derived_final_sum, &term);
+            let term = ext_chip.mul(ctx, coeff, opening);
+            derived_final_sum = ext_chip.add(ctx, &derived_final_sum, &term);
         }
     }
-    baby_bear.assert_ext_equal(ctx, &derived_final_sum, &final_sum);
+    ext_chip.assert_equal(ctx, &derived_final_sum, &final_sum);
 
-    let final_residual = assign_ext(ctx, range, &baby_bear, actual.final_residual);
+    let final_residual = assign_ext(ctx, ext_chip, actual.final_residual);
     // Equation-first check: final_residual = final_claim - final_sum.
-    let derived_final_residual = baby_bear.ext_sub(ctx, range, &final_claim, &final_sum);
-    baby_bear.assert_ext_equal(ctx, &derived_final_residual, &final_residual);
+    let derived_final_residual = ext_chip.sub(ctx, &final_claim, &final_sum);
+    ext_chip.assert_equal(ctx, &derived_final_residual, &final_residual);
 
-    let zero = baby_bear.ext_zero(ctx, range);
-    baby_bear.assert_ext_equal(ctx, &s_0_residual, &zero);
-    baby_bear.assert_ext_equal(ctx, &final_residual, &zero);
+    let zero = ext_chip.zero(ctx);
+    ext_chip.assert_equal(ctx, &s_0_residual, &zero);
+    ext_chip.assert_equal(ctx, &final_residual, &zero);
 
     AssignedStackedReductionIntermediates {
         lambda,
@@ -729,7 +672,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
 }
 
 pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    coeffs_to_ext(coeffs)
+    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
 }
 
 #[cfg(test)]

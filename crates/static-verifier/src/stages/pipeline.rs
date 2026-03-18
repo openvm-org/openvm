@@ -15,9 +15,9 @@ use openvm_stark_sdk::{
 
 use super::{
     batch_constraints::{
-        coeffs_to_native_ext as batch_coeffs_to_ext, compute_trace_id_to_air_id,
-        derive_batch_intermediates_with_inputs, enforce_trace_height_constraints, observe_preamble,
-        BatchConstraintError, BatchIntermediates,
+        compute_trace_id_to_air_id, derive_batch_intermediates_with_inputs,
+        enforce_trace_height_constraints, observe_preamble, BatchConstraintError,
+        BatchIntermediates,
     },
     proof_shape::derive_proof_shape_rules,
 };
@@ -147,12 +147,7 @@ pub(crate) fn prepare_pipeline_inputs<TS: FiatShamirTranscript<NativeConfig>>(
         &n_per_trace,
         &omega_skip_pows,
     )?;
-    let r = batch
-        .r
-        .iter()
-        .copied()
-        .map(batch_coeffs_to_ext)
-        .collect::<Vec<_>>();
+    let r = batch.r.to_vec();
     let need_rot_per_commit = derive_need_rot_per_commit(mvk0, proof, &trace_id_to_air_id)?;
 
     Ok(PreparedPipelineInputs {
