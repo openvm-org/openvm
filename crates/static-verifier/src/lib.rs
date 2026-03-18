@@ -3,6 +3,7 @@
 pub mod config;
 pub mod field;
 pub mod hash;
+pub mod prover;
 pub mod stages;
 pub mod transcript;
 mod utils;
@@ -13,3 +14,7 @@ pub use config::{
 };
 pub use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 pub use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{EF as ChildEF, F as ChildF};
+pub use prover::{
+    Halo2Params, Halo2Prover, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierInput,
+    StaticVerifierProof, StaticVerifierProvingKey,
+};
