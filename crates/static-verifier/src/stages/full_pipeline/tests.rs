@@ -555,7 +555,7 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
 }
 
 #[test]
-fn pipeline_constraints_fail_when_stacked_r_is_decoupled_from_batch_r() {
+fn pipeline_constraints_ignore_stacked_r_mirror_tamper() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
@@ -563,7 +563,7 @@ fn pipeline_constraints_fail_when_stacked_r_is_decoupled_from_batch_r() {
     tamper_native_ext_first_coeff(&mut raw.intermediates.stacked_reduction.r[0]);
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
-    run_mock(false, &public_inputs, |builder| {
+    run_mock(true, &public_inputs, |builder| {
         build_end_to_end_constraints_from_intermediates(
             builder,
             &raw.intermediates,
@@ -574,7 +574,7 @@ fn pipeline_constraints_fail_when_stacked_r_is_decoupled_from_batch_r() {
 }
 
 #[test]
-fn pipeline_constraints_fail_when_stacked_batch_openings_are_decoupled_from_batch_openings() {
+fn pipeline_constraints_ignore_stacked_batch_opening_mirror_tamper() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
@@ -582,7 +582,7 @@ fn pipeline_constraints_fail_when_stacked_batch_openings_are_decoupled_from_batc
     tamper_stacked_batch_openings_claim_preserving(&mut raw);
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
-    run_mock(false, &public_inputs, |builder| {
+    run_mock(true, &public_inputs, |builder| {
         build_end_to_end_constraints_from_intermediates(
             builder,
             &raw.intermediates,
@@ -656,7 +656,7 @@ fn pipeline_constraints_fail_when_stacked_opening_family_width_is_padded() {
 }
 
 #[test]
-fn pipeline_constraints_fail_when_whir_stacking_openings_are_decoupled_from_stacked_openings() {
+fn pipeline_constraints_ignore_whir_stacking_opening_mirror_tamper() {
     let engine = test_engine();
     let (vk, proof) = CachedFixture11::new(engine.config().clone()).keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
@@ -664,7 +664,7 @@ fn pipeline_constraints_fail_when_whir_stacking_openings_are_decoupled_from_stac
     tamper_whir_stacking_openings_claim_preserving(&mut raw);
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
-    run_mock(false, &public_inputs, |builder| {
+    run_mock(true, &public_inputs, |builder| {
         build_end_to_end_constraints_from_intermediates(
             builder,
             &raw.intermediates,
@@ -675,7 +675,7 @@ fn pipeline_constraints_fail_when_whir_stacking_openings_are_decoupled_from_stac
 }
 
 #[test]
-fn pipeline_constraints_fail_when_batch_ref_to_stacked_coupling_has_trailing_suffix() {
+fn pipeline_constraints_ignore_stacked_batch_opening_suffix_mirror_tamper() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
@@ -692,20 +692,18 @@ fn pipeline_constraints_fail_when_batch_ref_to_stacked_coupling_has_trailing_suf
     raw.intermediates.stacked_reduction.batch_column_openings[0][0].push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
-    assert_rejected_without_host_panic(|| {
-        run_mock(false, &public_inputs, |builder| {
-            build_end_to_end_constraints_from_intermediates(
-                builder,
-                &raw.intermediates,
-                &raw.statement,
-                &raw.schedule,
-            );
-        });
+    run_mock(true, &public_inputs, |builder| {
+        build_end_to_end_constraints_from_intermediates(
+            builder,
+            &raw.intermediates,
+            &raw.statement,
+            &raw.schedule,
+        );
     });
 }
 
 #[test]
-fn pipeline_constraints_fail_when_stacked_to_whir_coupling_has_trailing_suffix() {
+fn pipeline_constraints_ignore_whir_stacking_opening_suffix_mirror_tamper() {
     let engine = test_engine();
     let (vk, proof) = CachedFixture11::new(engine.config().clone()).keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
@@ -717,15 +715,13 @@ fn pipeline_constraints_fail_when_stacked_to_whir_coupling_has_trailing_suffix()
     raw.intermediates.whir.stacking_openings[0].push(ChildEF::ZERO);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
-    assert_rejected_without_host_panic(|| {
-        run_mock(false, &public_inputs, |builder| {
-            build_end_to_end_constraints_from_intermediates(
-                builder,
-                &raw.intermediates,
-                &raw.statement,
-                &raw.schedule,
-            );
-        });
+    run_mock(true, &public_inputs, |builder| {
+        build_end_to_end_constraints_from_intermediates(
+            builder,
+            &raw.intermediates,
+            &raw.statement,
+            &raw.schedule,
+        );
     });
 }
 

@@ -49,13 +49,22 @@ fn constrain_checked_batch_witness_state(
     range: &RangeChip<Fr>,
     raw: &RawBatchWitnessState,
 ) -> CheckedBatchWitnessState {
-    let assigned = constrain_batch_intermediates_unchecked(ctx, range, &raw.intermediates);
+    let assigned =
+        constrain_batch_intermediates_with_shared_trace_ids(ctx, range, &raw.intermediates, None);
     let derived = DerivedBatchState {
         sum_claim: assigned.sum_claim,
         sum_univ_domain_s_0: assigned.sum_univ_domain_s_0,
         consistency_residual: assigned.consistency_residual,
     };
     CheckedBatchWitnessState { assigned, derived }
+}
+
+fn constrain_batch_intermediates_for_test(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    actual: &BatchIntermediates,
+) -> AssignedBatchIntermediates {
+    constrain_batch_intermediates_with_shared_trace_ids(ctx, range, actual, None)
 }
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -191,7 +200,7 @@ fn batch_derivation_omits_q0_claim_when_total_interactions_is_zero() {
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -211,7 +220,7 @@ fn batch_constraints_reject_q0_claim_witness_when_total_interactions_is_zero() {
         run_mock(true, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+            let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
         });
     }));
     assert!(
@@ -240,7 +249,7 @@ fn batch_derivation_keeps_backend_parity_on_zero_interaction_tampered_q0_claim()
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -256,7 +265,7 @@ fn batch_constraints_fail_on_tampered_intermediate_claims() {
     run_mock(false, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -271,7 +280,7 @@ fn batch_constraints_reject_trailing_padded_column_openings() {
     run_mock(false, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -291,7 +300,7 @@ fn batch_constraints_reject_numerator_denominator_cardinality_mismatch() {
         run_mock(false, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+            let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
         });
     });
 }
@@ -310,7 +319,7 @@ fn batch_constraints_reject_sumcheck_round_count_suffix() {
         run_mock(false, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+            let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
         });
     });
 }
@@ -327,7 +336,7 @@ fn batch_constraints_reject_univariate_coeff_arity_suffix() {
         run_mock(false, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+            let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
         });
     });
 }
@@ -345,7 +354,7 @@ fn batch_constraints_fail_on_tampered_pow_sample_bits() {
     run_mock(false, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -360,7 +369,7 @@ fn batch_constraints_ignore_tampered_pow_witness_mirror() {
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -379,7 +388,7 @@ fn batch_constraints_fail_on_tampered_gkr_layer_claims() {
     run_mock(false, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -402,7 +411,7 @@ fn batch_constraints_fail_on_tampered_gkr_sumcheck_shape() {
     run_mock(false, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 
@@ -425,7 +434,7 @@ fn batch_constraints_fail_on_coordinated_consistency_rhs_forgery() {
     run_mock(false, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = constrain_batch_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_batch_intermediates_for_test(ctx, &range, &actual);
     });
 }
 

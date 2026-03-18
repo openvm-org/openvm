@@ -145,15 +145,18 @@ pub struct MerklePathIntermediates {
 #[derive(Clone, Debug)]
 pub struct AssignedWhirIntermediates {
     pub mu_pow_bits: AssignedValue<Fr>,
+    pub mu_pow_witness: BabyBearWire,
     pub mu_pow_sampled_bits: AssignedValue<Fr>,
     pub mu_pow_witness_ok: AssignedValue<Fr>,
     pub mu_challenge: BabyBearExtWire,
     pub folding_pow_bits: AssignedValue<Fr>,
+    pub folding_pow_witnesses: Vec<BabyBearWire>,
     pub folding_pow_sampled_bits: Vec<AssignedValue<Fr>>,
     pub folding_pow_witness_ok: Vec<AssignedValue<Fr>>,
     pub folding_alphas: Vec<BabyBearExtWire>,
     pub z0_challenges: Vec<BabyBearExtWire>,
     pub query_phase_pow_bits: AssignedValue<Fr>,
+    pub query_phase_pow_witnesses: Vec<BabyBearWire>,
     pub query_phase_pow_sampled_bits: Vec<AssignedValue<Fr>>,
     pub query_phase_pow_witness_ok: Vec<AssignedValue<Fr>>,
     pub gammas: Vec<BabyBearExtWire>,
@@ -743,19 +746,11 @@ fn query_root_from_bits_assigned(
     let mut root = ext_chip.base().one(ctx);
     for (bit_idx, &bit) in query_bits.iter().enumerate() {
         let omega_pow = omega.exp_u64(1u64 << bit_idx).as_canonical_u64();
-        let selected_u64 = if *bit.value() == Fr::from(1u64) {
-            omega_pow
-        } else {
-            1u64
-        };
-        let selected = ext_chip
-            .base()
-            .load_witness(ctx, ChildF::from_u64(selected_u64));
         let omega_pow_const = ctx.load_constant(Fr::from(omega_pow));
         let bit_times_pow = gate.mul(ctx, bit, omega_pow_const);
         let one_minus_bit = gate.sub(ctx, one, bit);
         let rhs = gate.add(ctx, bit_times_pow, one_minus_bit);
-        ctx.constrain_equal(&selected.0, &rhs);
+        let selected = BabyBearWire(rhs);
         root = ext_chip.base().mul(ctx, &root, &selected);
     }
     root
@@ -844,11 +839,17 @@ struct AssignedMerklePathPayload {
     query_bits: Vec<AssignedValue<Fr>>,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SharedWhirWitnessInputs<'a> {
+    pub stacking_openings: Option<&'a [Vec<BabyBearExtWire>]>,
+    pub initial_commitment_roots: Option<&'a [AssignedValue<Fr>]>,
+    pub u_cube: Option<&'a [BabyBearExtWire]>,
+}
+
 fn constrain_merkle_path(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
-    query_index: AssignedValue<Fr>,
-    query_index_bits: usize,
+    query_bits: &[AssignedValue<Fr>],
     leaf_inputs: &[Vec<u64>],
     siblings: &[Fr],
     root_digest: AssignedValue<Fr>,
@@ -865,7 +866,7 @@ fn constrain_merkle_path(
     gate.assert_is_const(
         ctx,
         &merkle_depth,
-        &Fr::from(usize_to_u64(query_index_bits)),
+        &Fr::from(usize_to_u64(query_bits.len())),
     );
 
     let leaf_values = leaf_inputs
@@ -882,11 +883,7 @@ fn constrain_merkle_path(
         .collect::<Vec<_>>();
 
     let mut cur = tree_compress_assigned_digests(ctx, ext_chip, leaf_hashes);
-    let query_bits = if siblings.is_empty() {
-        Vec::new()
-    } else {
-        gate.num_to_bits(ctx, query_index, siblings.len())
-    };
+    let query_bits = query_bits.to_vec();
 
     for (bit, sibling_digest) in query_bits.iter().zip(siblings.iter()) {
         let sibling = ctx.load_witness(*sibling_digest);
@@ -905,59 +902,88 @@ fn constrain_merkle_path(
     }
 }
 
-// Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
-pub(crate) fn constrain_whir_intermediates_unchecked(
+pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
     actual: &WhirIntermediates,
+    shared: SharedWhirWitnessInputs<'_>,
 ) -> AssignedWhirIntermediates {
     let gate = ext_chip.range().gate();
 
-    let query_index_bits_len = ext_chip
-        .base()
-        .assign_and_range_usize(ctx, actual.query_index_bits.len());
     let query_indices_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_indices.len());
-    ctx.constrain_equal(&query_index_bits_len, &query_indices_len);
+    gate.assert_is_const(
+        ctx,
+        &query_indices_len,
+        &Fr::from(usize_to_u64(actual.query_index_bits.len())),
+    );
 
-    let folding_pow_sampled_len = ext_chip
+    let _folding_pow_sampled_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.folding_pow_sampled_bits.len());
     let folding_pow_ok_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.folding_pow_witness_ok.len());
-    ctx.constrain_equal(&folding_pow_sampled_len, &folding_pow_ok_len);
+    gate.assert_is_const(
+        ctx,
+        &folding_pow_ok_len,
+        &Fr::from(usize_to_u64(actual.folding_pow_sampled_bits.len())),
+    );
 
-    let query_pow_sampled_len = ext_chip
+    let _query_pow_sampled_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_phase_pow_sampled_bits.len());
     let query_pow_ok_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_phase_pow_witness_ok.len());
-    ctx.constrain_equal(&query_pow_sampled_len, &query_pow_ok_len);
+    gate.assert_is_const(
+        ctx,
+        &query_pow_ok_len,
+        &Fr::from(usize_to_u64(actual.query_phase_pow_sampled_bits.len())),
+    );
 
     let query_round_count = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_counts_per_round.len());
-    ctx.constrain_equal(&query_round_count, &query_pow_sampled_len);
     let folding_round_count = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.folding_counts_per_round.len());
-    ctx.constrain_equal(&folding_round_count, &query_pow_sampled_len);
+    gate.assert_is_const(
+        ctx,
+        &query_round_count,
+        &Fr::from(usize_to_u64(actual.query_phase_pow_sampled_bits.len())),
+    );
+    gate.assert_is_const(
+        ctx,
+        &folding_round_count,
+        &Fr::from(usize_to_u64(actual.query_phase_pow_sampled_bits.len())),
+    );
 
     let folding_pow_witness_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.folding_pow_witnesses.len());
-    ctx.constrain_equal(&folding_pow_witness_len, &folding_pow_sampled_len);
     let query_pow_witness_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_phase_pow_witnesses.len());
-    ctx.constrain_equal(&query_pow_witness_len, &query_pow_sampled_len);
+    gate.assert_is_const(
+        ctx,
+        &folding_pow_witness_len,
+        &Fr::from(usize_to_u64(actual.folding_pow_sampled_bits.len())),
+    );
+    gate.assert_is_const(
+        ctx,
+        &query_pow_witness_len,
+        &Fr::from(usize_to_u64(actual.query_phase_pow_sampled_bits.len())),
+    );
     let whir_sumcheck_poly_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.whir_sumcheck_polys.len());
-    ctx.constrain_equal(&whir_sumcheck_poly_len, &folding_pow_sampled_len);
+    gate.assert_is_const(
+        ctx,
+        &whir_sumcheck_poly_len,
+        &Fr::from(usize_to_u64(actual.folding_pow_sampled_bits.len())),
+    );
 
     let codeword_commitment_count = ext_chip
         .base()
@@ -986,6 +1012,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let mu_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.mu_pow_bits);
+    let mu_pow_witness = ext_chip
+        .base()
+        .load_witness(ctx, ChildF::from_u64(actual.mu_pow_witness));
     let mu_pow_sampled_bits = ext_chip
         .base()
         .assign_and_range_u64(ctx, actual.mu_pow_sampled_bits);
@@ -996,15 +1025,23 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     } else {
         gate.assert_is_const(ctx, &mu_pow_sampled_bits, &Fr::from(0u64));
     }
-    let mu_pow_witness_ok = ctx.load_constant(Fr::from(actual.mu_pow_witness_ok as u64));
-    let mu_pow_is_zero = gate.is_zero(ctx, mu_pow_sampled_bits);
-    ctx.constrain_equal(&mu_pow_witness_ok, &mu_pow_is_zero);
+    let mu_pow_witness_ok = gate.is_zero(ctx, mu_pow_sampled_bits);
+    gate.assert_is_const(
+        ctx,
+        &mu_pow_witness_ok,
+        &Fr::from(actual.mu_pow_witness_ok as u64),
+    );
     gate.assert_is_const(ctx, &mu_pow_witness_ok, &Fr::from(1u64));
     let mu_challenge = assign_ext(ctx, ext_chip, actual.mu_challenge);
 
     let folding_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.folding_pow_bits);
+    let folding_pow_witnesses = actual
+        .folding_pow_witnesses
+        .iter()
+        .map(|&witness| ext_chip.base().load_witness(ctx, ChildF::from_u64(witness)))
+        .collect::<Vec<_>>();
     let mut folding_pow_sampled_bits = Vec::with_capacity(actual.folding_pow_sampled_bits.len());
     let mut folding_pow_witness_ok = Vec::with_capacity(actual.folding_pow_witness_ok.len());
     for (&sampled_bits, &actual_ok) in actual
@@ -1021,9 +1058,8 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             gate.assert_is_const(ctx, &sampled_bits, &Fr::from(0u64));
         }
 
-        let bit = ctx.load_constant(Fr::from(actual_ok as u64));
-        let is_zero = gate.is_zero(ctx, sampled_bits);
-        ctx.constrain_equal(&bit, &is_zero);
+        let bit = gate.is_zero(ctx, sampled_bits);
+        gate.assert_is_const(ctx, &bit, &Fr::from(actual_ok as u64));
         gate.assert_is_const(ctx, &bit, &Fr::from(1u64));
         folding_pow_sampled_bits.push(sampled_bits);
         folding_pow_witness_ok.push(bit);
@@ -1032,6 +1068,11 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let query_phase_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_phase_pow_bits);
+    let query_phase_pow_witnesses = actual
+        .query_phase_pow_witnesses
+        .iter()
+        .map(|&witness| ext_chip.base().load_witness(ctx, ChildF::from_u64(witness)))
+        .collect::<Vec<_>>();
     let mut query_phase_pow_sampled_bits =
         Vec::with_capacity(actual.query_phase_pow_sampled_bits.len());
     let mut query_phase_pow_witness_ok =
@@ -1050,9 +1091,8 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             gate.assert_is_const(ctx, &sampled_bits, &Fr::from(0u64));
         }
 
-        let bit = ctx.load_constant(Fr::from(actual_ok as u64));
-        let is_zero = gate.is_zero(ctx, sampled_bits);
-        ctx.constrain_equal(&bit, &is_zero);
+        let bit = gate.is_zero(ctx, sampled_bits);
+        gate.assert_is_const(ctx, &bit, &Fr::from(actual_ok as u64));
         gate.assert_is_const(ctx, &bit, &Fr::from(1u64));
         query_phase_pow_sampled_bits.push(sampled_bits);
         query_phase_pow_witness_ok.push(bit);
@@ -1098,11 +1138,23 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         &Fr::from(usize_to_u64(expected_merkle_paths)),
     );
 
-    let initial_commitment_roots = actual
-        .initial_commitment_roots
-        .iter()
-        .map(|&root| ctx.load_witness(root))
-        .collect::<Vec<_>>();
+    let initial_commitment_roots = shared.initial_commitment_roots.map_or_else(
+        || {
+            actual
+                .initial_commitment_roots
+                .iter()
+                .map(|&root| ctx.load_witness(root))
+                .collect::<Vec<_>>()
+        },
+        |roots| {
+            assert_eq!(
+                roots.len(),
+                actual.initial_commitment_roots.len(),
+                "shared initial commitment roots must align with host witness",
+            );
+            roots.to_vec()
+        },
+    );
     let codeword_commitment_roots = actual
         .codeword_commitment_roots
         .iter()
@@ -1122,6 +1174,16 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let zero_query_index = ctx.load_constant(Fr::from(0u64));
 
     for _ in 0..initial_query_count {
+        let expected_bits = actual.query_index_bits[global_query_position];
+        let query_index = query_indices
+            .get(global_query_position)
+            .copied()
+            .unwrap_or(zero_query_index);
+        let query_bits = if expected_bits == 0 {
+            Vec::new()
+        } else {
+            gate.num_to_bits(ctx, query_index, expected_bits)
+        };
         for &initial_root in &initial_commitment_roots {
             let path = actual
                 .merkle_paths
@@ -1136,7 +1198,6 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                 &Fr::from(usize_to_u64(global_query_position)),
             );
 
-            let expected_bits = actual.query_index_bits[global_query_position];
             let path_query_bits = ext_chip
                 .base()
                 .assign_and_range_usize(ctx, path.query_index_bits);
@@ -1146,21 +1207,13 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                 &Fr::from(usize_to_u64(expected_bits)),
             );
 
-            let query_index = query_indices
-                .get(global_query_position)
-                .copied()
-                .unwrap_or(zero_query_index);
-            let path_root = ctx.load_witness(path.root_digest);
-            let expected_root = initial_root;
-            ctx.constrain_equal(&path_root, &expected_root);
             let payload = constrain_merkle_path(
                 ctx,
                 ext_chip,
-                query_index,
-                expected_bits,
+                &query_bits,
                 &path.leaf_inputs,
                 &path.siblings,
-                path_root,
+                initial_root,
             );
             merkle_payloads.push(payload);
 
@@ -1199,17 +1252,18 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                 .get(global_query_position)
                 .copied()
                 .unwrap_or(zero_query_index);
-            let path_root = ctx.load_witness(path.root_digest);
-            let expected_root = round_root;
-            ctx.constrain_equal(&path_root, &expected_root);
+            let query_bits = if expected_bits == 0 {
+                Vec::new()
+            } else {
+                gate.num_to_bits(ctx, query_index, expected_bits)
+            };
             let payload = constrain_merkle_path(
                 ctx,
                 ext_chip,
-                query_index,
-                expected_bits,
+                &query_bits,
                 &path.leaf_inputs,
                 &path.siblings,
-                path_root,
+                round_root,
             );
             merkle_payloads.push(payload);
 
@@ -1267,15 +1321,27 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         .iter()
         .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
-    let stacking_openings = actual
-        .stacking_openings
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|&value| assign_ext(ctx, ext_chip, value))
+    let stacking_openings = shared.stacking_openings.map_or_else(
+        || {
+            actual
+                .stacking_openings
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .map(|&value| assign_ext(ctx, ext_chip, value))
+                        .collect::<Vec<_>>()
+                })
                 .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+        },
+        |openings| {
+            assert_eq!(
+                openings.len(),
+                actual.stacking_openings.len(),
+                "shared stacking openings must align with host witness",
+            );
+            openings.to_vec()
+        },
+    );
     let stacking_opening_count = ext_chip
         .base()
         .assign_and_range_usize(ctx, stacking_openings.len());
@@ -1285,11 +1351,23 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         &Fr::from(usize_to_u64(initial_commitment_roots.len())),
     );
 
-    let u_cube = actual
-        .u_cube
-        .iter()
-        .map(|&value| assign_ext(ctx, ext_chip, value))
-        .collect::<Vec<_>>();
+    let u_cube = shared.u_cube.map_or_else(
+        || {
+            actual
+                .u_cube
+                .iter()
+                .map(|&value| assign_ext(ctx, ext_chip, value))
+                .collect::<Vec<_>>()
+        },
+        |u_cube| {
+            assert_eq!(
+                u_cube.len(),
+                actual.u_cube.len(),
+                "shared u-cube wires must align with host witness",
+            );
+            u_cube.to_vec()
+        },
+    );
     let folding_alphas = actual
         .folding_alphas
         .iter()
@@ -1311,17 +1389,25 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, ChildF::ONE);
 
-    let round_count = ext_chip
+    let _round_count = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.query_counts_per_round.len());
     let folding_rounds = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.folding_counts_per_round.len());
-    ctx.constrain_equal(&round_count, &folding_rounds);
+    gate.assert_is_const(
+        ctx,
+        &folding_rounds,
+        &Fr::from(usize_to_u64(actual.query_counts_per_round.len())),
+    );
     let gamma_count = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.gammas.len());
-    ctx.constrain_equal(&round_count, &gamma_count);
+    gate.assert_is_const(
+        ctx,
+        &gamma_count,
+        &Fr::from(usize_to_u64(actual.query_counts_per_round.len())),
+    );
     let z0_count = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.z0_challenges.len());
@@ -1483,13 +1569,6 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                         &payload_query_bits_len,
                         &Fr::from(usize_to_u64(query_bits_len)),
                     );
-                    for (&lhs, &rhs) in payload
-                        .query_bits
-                        .iter()
-                        .zip(query_bit_source.query_bits.iter())
-                    {
-                        ctx.constrain_equal(&lhs, &rhs);
-                    }
                     for row in &payload.leaf_values {
                         let row_width = ext_chip.base().assign_and_range_usize(ctx, row.len());
                         gate.assert_is_const(
@@ -1685,15 +1764,18 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
 
     AssignedWhirIntermediates {
         mu_pow_bits,
+        mu_pow_witness,
         mu_pow_sampled_bits,
         mu_pow_witness_ok,
         mu_challenge,
         folding_pow_bits,
+        folding_pow_witnesses,
         folding_pow_sampled_bits,
         folding_pow_witness_ok,
         folding_alphas,
         z0_challenges,
         query_phase_pow_bits,
+        query_phase_pow_witnesses,
         query_phase_pow_sampled_bits,
         query_phase_pow_witness_ok,
         gammas,
@@ -1712,13 +1794,14 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     }
 }
 
-// Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
-pub(crate) fn constrain_checked_whir_witness_state_unchecked(
+pub(crate) fn constrain_checked_whir_witness_state_with_shared_inputs(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
     raw: &RawWhirWitnessState,
+    shared: SharedWhirWitnessInputs<'_>,
 ) -> CheckedWhirWitnessState {
-    let assigned = constrain_whir_intermediates_unchecked(ctx, ext_chip, &raw.intermediates);
+    let assigned =
+        constrain_whir_intermediates_with_shared_inputs(ctx, ext_chip, &raw.intermediates, shared);
     let derived = DerivedWhirState {
         final_acc: assigned.final_acc,
         final_claim: assigned.final_claim,

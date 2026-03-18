@@ -167,9 +167,27 @@ fn constrain_checked_whir_witness_state_strict(
     raw: &RawWhirWitnessState,
     ownership: &WhirStrictOwnership,
 ) -> CheckedWhirWitnessState {
-    let checked = constrain_checked_whir_witness_state_unchecked(ctx, ext_chip, raw);
+    let checked = constrain_checked_whir_witness_state_with_shared_inputs(
+        ctx,
+        ext_chip,
+        raw,
+        SharedWhirWitnessInputs::default(),
+    );
     constrain_whir_strict_metadata(ctx, ext_chip, raw, &checked.assigned, ownership);
     checked
+}
+
+fn constrain_whir_intermediates_for_test(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
+    actual: &WhirIntermediates,
+) -> AssignedWhirIntermediates {
+    constrain_whir_intermediates_with_shared_inputs(
+        ctx,
+        ext_chip,
+        actual,
+        SharedWhirWitnessInputs::default(),
+    )
 }
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -253,8 +271,12 @@ fn whir_strict_constraints_reject_forged_standalone_metadata() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _unchecked =
-            constrain_checked_whir_witness_state_unchecked(ctx, &ext_chip, &raw_for_unchecked);
+        let _unchecked = constrain_checked_whir_witness_state_with_shared_inputs(
+            ctx,
+            &ext_chip,
+            &raw_for_unchecked,
+            SharedWhirWitnessInputs::default(),
+        );
     });
 
     run_mock(false, move |builder| {
@@ -287,7 +309,7 @@ fn whir_constraints_fail_on_tampered_intermediate_final_claim() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -322,7 +344,7 @@ fn whir_constraints_fail_on_coordinated_final_claim_forgery() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -339,7 +361,7 @@ fn whir_constraints_fail_on_tampered_pow_sample_bits() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -362,7 +384,7 @@ fn whir_constraints_ignore_tampered_pow_witness_mirrors() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -378,7 +400,7 @@ fn whir_constraints_fail_on_tampered_query_index() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -394,7 +416,7 @@ fn whir_constraints_fail_on_tampered_merkle_path() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -414,7 +436,7 @@ fn whir_constraints_fail_on_merkle_depth_query_bit_mismatch() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -434,7 +456,7 @@ fn whir_constraints_fail_on_missing_coverage_tuple() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -450,7 +472,7 @@ fn whir_constraints_fail_on_wrong_root_binding() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -466,7 +488,7 @@ fn whir_constraints_fail_on_tampered_final_poly_len() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
+        let _assigned = constrain_whir_intermediates_for_test(ctx, &ext_chip, &actual);
     });
 }
 

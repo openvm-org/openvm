@@ -66,12 +66,26 @@ fn constrain_checked_stacked_witness_state(
     ext_chip: &BabyBearExtChip<'_>,
     raw: &RawStackedWitnessState,
 ) -> CheckedStackedWitnessState {
-    let assigned = constrain_stacked_reduction_intermediates(ctx, ext_chip, &raw.intermediates);
+    let assigned = constrain_stacked_reduction_intermediates_with_shared_inputs(
+        ctx,
+        ext_chip,
+        &raw.intermediates,
+        None,
+        None,
+    );
     let derived = DerivedStackedState {
         s_0_residual: assigned.s_0_residual,
         final_residual: assigned.final_residual,
     };
     CheckedStackedWitnessState { assigned, derived }
+}
+
+fn constrain_stacked_reduction_for_test(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
+    actual: &StackedReductionIntermediates,
+) -> AssignedStackedReductionIntermediates {
+    constrain_stacked_reduction_intermediates_with_shared_inputs(ctx, ext_chip, actual, None, None)
 }
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -147,7 +161,7 @@ fn stacked_constraints_fail_on_tampered_intermediate_sum() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
+        let _assigned = constrain_stacked_reduction_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -164,7 +178,7 @@ fn stacked_constraints_reject_trailing_padded_q_coeff_width() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
+        let _assigned = constrain_stacked_reduction_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -196,7 +210,7 @@ fn stacked_constraints_fail_on_coordinated_q_coeff_forgery() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
+        let _assigned = constrain_stacked_reduction_for_test(ctx, &ext_chip, &actual);
     });
 }
 
@@ -228,7 +242,7 @@ fn stacked_constraints_fail_on_coordinated_sumcheck_claim_chain_forgery() {
         let range = builder.range_chip();
         let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual);
+        let _assigned = constrain_stacked_reduction_for_test(ctx, &ext_chip, &actual);
     });
 }
 
