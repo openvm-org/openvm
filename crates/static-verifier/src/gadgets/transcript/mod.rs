@@ -27,7 +27,7 @@ use zkhash::{
 use super::baby_bear::{
     BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
 };
-use crate::{circuit::Fr, utils::bits_for_u64};
+use crate::{utils::bits_for_u64, Fr};
 
 const DIGEST_WIDTH: usize = 1;
 const POSEIDON2_WIDTH: usize = 3;

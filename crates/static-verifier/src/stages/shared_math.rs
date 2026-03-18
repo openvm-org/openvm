@@ -5,9 +5,9 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    circuit::Fr,
     gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar},
     stages::batch_constraints::{ext_from_base_const, ext_mul_base_const},
+    Fr,
 };
 
 pub(crate) fn column_openings_by_rot_assigned(
