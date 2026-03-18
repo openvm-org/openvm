@@ -195,19 +195,6 @@ pub struct CheckedWhirWitnessState {
     pub derived: DerivedWhirState,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct WhirStrictOwnership {
-    pub k_whir: usize,
-    pub initial_log_rs_domain_size: usize,
-    pub mu_pow_bits: usize,
-    pub folding_pow_bits: usize,
-    pub query_phase_pow_bits: usize,
-    pub folding_counts_per_round: Vec<usize>,
-    pub query_counts_per_round: Vec<usize>,
-    pub query_index_bits: Vec<usize>,
-    pub expected_final_poly_len: usize,
-}
-
 #[derive(Clone, Debug)]
 struct PreparedWhirInputs {
     transcript: NativeTranscript,
@@ -1732,29 +1719,6 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     }
 }
 
-// Internal standalone whir wrapper for intra-crate composition/tests.
-pub(crate) fn derive_and_constrain_whir(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<AssignedWhirIntermediates, WhirError> {
-    let raw = derive_raw_whir_witness_state(config, mvk, proof)?;
-    let ownership = derive_whir_strict_ownership(config, mvk, proof)?;
-    Ok(constrain_checked_whir_witness_state_strict(ctx, range, &raw, &ownership).assigned)
-}
-
-pub(crate) fn derive_raw_whir_witness_state(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<RawWhirWitnessState, WhirError> {
-    Ok(RawWhirWitnessState {
-        intermediates: derive_whir_intermediates(config, mvk, proof)?,
-    })
-}
-
 // Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
 pub(crate) fn constrain_checked_whir_witness_state_unchecked(
     ctx: &mut Context<Fr>,
@@ -1768,122 +1732,6 @@ pub(crate) fn constrain_checked_whir_witness_state_unchecked(
         final_residual: assigned.final_residual.clone(),
     };
     CheckedWhirWitnessState { assigned, derived }
-}
-
-pub(crate) fn derive_whir_strict_ownership(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<WhirStrictOwnership, WhirError> {
-    let expected = derive_whir_intermediates(config, mvk, proof)?;
-    Ok(WhirStrictOwnership {
-        k_whir: expected.k_whir,
-        initial_log_rs_domain_size: expected.initial_log_rs_domain_size,
-        mu_pow_bits: expected.mu_pow_bits,
-        folding_pow_bits: expected.folding_pow_bits,
-        query_phase_pow_bits: expected.query_phase_pow_bits,
-        folding_counts_per_round: expected.folding_counts_per_round,
-        query_counts_per_round: expected.query_counts_per_round,
-        query_index_bits: expected.query_index_bits,
-        expected_final_poly_len: expected.expected_final_poly_len,
-    })
-}
-
-fn constrain_whir_strict_metadata(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    raw: &RawWhirWitnessState,
-    assigned: &AssignedWhirIntermediates,
-    ownership: &WhirStrictOwnership,
-) {
-    let gate = range.gate();
-    let k_whir = assign_and_range_usize(ctx, range, raw.intermediates.k_whir);
-    gate.assert_is_const(ctx, &k_whir, &Fr::from(usize_to_u64(ownership.k_whir)));
-
-    let initial_log_rs_domain_size =
-        assign_and_range_usize(ctx, range, raw.intermediates.initial_log_rs_domain_size);
-    gate.assert_is_const(
-        ctx,
-        &initial_log_rs_domain_size,
-        &Fr::from(usize_to_u64(ownership.initial_log_rs_domain_size)),
-    );
-
-    gate.assert_is_const(
-        ctx,
-        &assigned.mu_pow_bits,
-        &Fr::from(usize_to_u64(ownership.mu_pow_bits)),
-    );
-    gate.assert_is_const(
-        ctx,
-        &assigned.folding_pow_bits,
-        &Fr::from(usize_to_u64(ownership.folding_pow_bits)),
-    );
-    gate.assert_is_const(
-        ctx,
-        &assigned.query_phase_pow_bits,
-        &Fr::from(usize_to_u64(ownership.query_phase_pow_bits)),
-    );
-    gate.assert_is_const(
-        ctx,
-        &assigned.final_poly_len,
-        &Fr::from(usize_to_u64(ownership.expected_final_poly_len)),
-    );
-
-    assert_eq!(
-        raw.intermediates.folding_counts_per_round.len(),
-        ownership.folding_counts_per_round.len(),
-        "WHIR strict folding-count schedule length mismatch",
-    );
-    for (&actual_count, &expected_count) in raw
-        .intermediates
-        .folding_counts_per_round
-        .iter()
-        .zip(ownership.folding_counts_per_round.iter())
-    {
-        let count = assign_and_range_usize(ctx, range, actual_count);
-        gate.assert_is_const(ctx, &count, &Fr::from(usize_to_u64(expected_count)));
-    }
-
-    assert_eq!(
-        raw.intermediates.query_counts_per_round.len(),
-        ownership.query_counts_per_round.len(),
-        "WHIR strict query-count schedule length mismatch",
-    );
-    for (&actual_count, &expected_count) in raw
-        .intermediates
-        .query_counts_per_round
-        .iter()
-        .zip(ownership.query_counts_per_round.iter())
-    {
-        let count = assign_and_range_usize(ctx, range, actual_count);
-        gate.assert_is_const(ctx, &count, &Fr::from(usize_to_u64(expected_count)));
-    }
-
-    assert_eq!(
-        raw.intermediates.query_index_bits.len(),
-        ownership.query_index_bits.len(),
-        "WHIR strict query-index-bit schedule length mismatch",
-    );
-    for (&actual_bits, &expected_bits) in raw
-        .intermediates
-        .query_index_bits
-        .iter()
-        .zip(ownership.query_index_bits.iter())
-    {
-        let bits = assign_and_range_usize(ctx, range, actual_bits);
-        gate.assert_is_const(ctx, &bits, &Fr::from(usize_to_u64(expected_bits)));
-    }
-}
-
-pub(crate) fn constrain_checked_whir_witness_state_strict(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    raw: &RawWhirWitnessState,
-    ownership: &WhirStrictOwnership,
-) -> CheckedWhirWitnessState {
-    let checked = constrain_checked_whir_witness_state_unchecked(ctx, range, raw);
-    constrain_whir_strict_metadata(ctx, range, raw, &checked.assigned, ownership);
-    checked
 }
 
 pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {

@@ -727,42 +727,6 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
     }
 }
 
-/// Standalone stacked-reduction derive+constrain wrapper is internal; external callers must use
-/// transcript-owned stage composition (`stages::full_pipeline`) as the acceptance boundary.
-pub(crate) fn derive_and_constrain_stacked_reduction(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<AssignedStackedReductionIntermediates, StackedReductionConstraintError> {
-    let raw = derive_raw_stacked_witness_state(config, mvk, proof)?;
-    Ok(constrain_checked_stacked_witness_state(ctx, range, &raw).assigned)
-}
-
-pub(crate) fn derive_raw_stacked_witness_state(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<RawStackedWitnessState, StackedReductionConstraintError> {
-    Ok(RawStackedWitnessState {
-        intermediates: derive_stacked_reduction_intermediates(config, mvk, proof)?,
-    })
-}
-
-pub(crate) fn constrain_checked_stacked_witness_state(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    raw: &RawStackedWitnessState,
-) -> CheckedStackedWitnessState {
-    let assigned = constrain_stacked_reduction_intermediates(ctx, range, &raw.intermediates);
-    let derived = DerivedStackedState {
-        s_0_residual: assigned.s_0_residual.clone(),
-        final_residual: assigned.final_residual.clone(),
-    };
-    CheckedStackedWitnessState { assigned, derived }
-}
-
 pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
     coeffs_to_ext(coeffs)
 }
