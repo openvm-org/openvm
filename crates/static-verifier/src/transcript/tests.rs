@@ -1,5 +1,8 @@
 use halo2_base::{
-    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+    gates::{
+        circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+        RangeInstructions,
+    },
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
@@ -14,8 +17,9 @@ use openvm_stark_sdk::{
 };
 
 use super::*;
-use crate::config::{
-    STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
+use crate::{
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    field::baby_bear::BabyBearChip,
 };
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -86,44 +90,46 @@ fn transcript_outputs_match_native_interleaved_flow() {
     let expected_followup = native.sample().as_canonical_u64();
 
     run_mock(true, |builder| {
-        let baby_bear = BabyBearArithmeticGadgets;
-
         let range = builder.range_chip();
+        let baby_bear = BabyBearChip::new(&range);
+
         let ctx = builder.main(0);
         let gate = range.gate();
 
         let mut transcript = TranscriptGadget::new(ctx);
 
-        let one = baby_bear.load_witness(ctx, &range, 1);
-        let two = baby_bear.load_witness(ctx, &range, 2);
-        let three = baby_bear.load_witness(ctx, &range, 3);
+        let one = baby_bear.load_witness(ctx, NativeF::from_u64(1));
+        let two = baby_bear.load_witness(ctx, NativeF::from_u64(2));
+        let three = baby_bear.load_witness(ctx, NativeF::from_u64(3));
         transcript.observe(ctx, &range, &baby_bear, &one);
         transcript.observe(ctx, &range, &baby_bear, &two);
         transcript.observe(ctx, &range, &baby_bear, &three);
 
-        let observed_ext = baby_bear.load_ext_witness(ctx, &range, observed_ext_coeffs);
+        let observed_ext = BabyBearExtWire(core::array::from_fn(|i| {
+            baby_bear.load_witness(ctx, NativeF::from_u64(observed_ext_coeffs[i]))
+        }));
         transcript.observe_ext(ctx, &range, &baby_bear, &observed_ext);
 
-        let digest_var = TranscriptGadget::load_digest_witness(ctx, digest);
-        transcript.observe_commit(ctx, &range, &baby_bear, &digest_var);
+        let digest_wire = TranscriptGadget::load_digest_witness(ctx, digest);
+        transcript.observe_commit(ctx, &range, &baby_bear, &digest_wire);
 
         let sampled = transcript.sample(ctx, &range, &baby_bear);
-        gate.assert_is_const(ctx, &sampled.cell, &Fr::from(expected_sample));
+        gate.assert_is_const(ctx, &sampled.0, &Fr::from(expected_sample));
 
         let sampled_ext = transcript.sample_ext(ctx, &range, &baby_bear);
-        for (i, coeff) in sampled_ext.coeffs.iter().enumerate() {
-            gate.assert_is_const(ctx, &coeff.cell, &Fr::from(expected_ext[i]));
+        for (i, coeff) in sampled_ext.0.iter().enumerate() {
+            gate.assert_is_const(ctx, &coeff.0, &Fr::from(expected_ext[i]));
         }
 
         let sampled_bits = transcript.sample_bits(ctx, &range, &baby_bear, 17);
         gate.assert_is_const(ctx, &sampled_bits, &Fr::from(expected_bits));
 
-        let pow_witness = baby_bear.load_witness(ctx, &range, witness_for_pow);
+        let pow_witness = baby_bear.load_witness(ctx, NativeF::from_u64(witness_for_pow));
         let pow_ok = transcript.check_witness(ctx, &range, &baby_bear, 9, &pow_witness);
         gate.assert_is_const(ctx, &pow_ok, &Fr::from(expected_pow as u64));
 
         let followup = transcript.sample(ctx, &range, &baby_bear);
-        gate.assert_is_const(ctx, &followup.cell, &Fr::from(expected_followup));
+        gate.assert_is_const(ctx, &followup.0, &Fr::from(expected_followup));
     });
 }
 
@@ -136,26 +142,26 @@ fn transcript_check_witness_zero_bits_matches_native() {
     let expected_second = native.sample().as_canonical_u64();
 
     run_mock(true, |builder| {
-        let baby_bear = BabyBearArithmeticGadgets;
-
         let range = builder.range_chip();
+        let baby_bear = BabyBearChip::new(&range);
+
         let ctx = builder.main(0);
         let gate = range.gate();
 
         let mut transcript = TranscriptGadget::new(ctx);
 
-        let obs = baby_bear.load_witness(ctx, &range, 99);
+        let obs = baby_bear.load_witness(ctx, NativeF::from_u64(99));
         transcript.observe(ctx, &range, &baby_bear, &obs);
 
         let first = transcript.sample(ctx, &range, &baby_bear);
-        gate.assert_is_const(ctx, &first.cell, &Fr::from(expected_first));
+        gate.assert_is_const(ctx, &first.0, &Fr::from(expected_first));
 
-        let witness = baby_bear.load_witness(ctx, &range, 7);
+        let witness = baby_bear.load_witness(ctx, NativeF::from_u64(7));
         let check = transcript.check_witness(ctx, &range, &baby_bear, 0, &witness);
         gate.assert_is_const(ctx, &check, &Fr::from(expected_check as u64));
 
         let second = transcript.sample(ctx, &range, &baby_bear);
-        gate.assert_is_const(ctx, &second.cell, &Fr::from(expected_second));
+        gate.assert_is_const(ctx, &second.0, &Fr::from(expected_second));
     });
 }
 
@@ -163,8 +169,8 @@ fn transcript_check_witness_zero_bits_matches_native() {
 fn transcript_sample_bits_rejects_bits_equal_31() {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_mock(true, |builder| {
-            let baby_bear = BabyBearArithmeticGadgets;
             let range = builder.range_chip();
+            let baby_bear = BabyBearChip::new(&range);
             let ctx = builder.main(0);
             let mut transcript = TranscriptGadget::new(ctx);
             let _ = transcript.sample_bits(ctx, &range, &baby_bear, 31);

@@ -5,7 +5,7 @@ use halo2_base::{
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2CpuEngine, F as NativeF},
     openvm_stark_backend::{
-        p3_field::{PrimeCharacteristicRing, PrimeField64},
+        p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
         test_utils::{test_system_params_small, InteractionsFixture11, TestFixture},
         verifier::whir::VerifyWhirError,
         StarkEngine,
@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
-    gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
+    field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,14 +34,14 @@ struct WhirStrictOwnership {
 // Internal standalone whir wrapper for intra-crate composition/tests.
 fn derive_and_constrain_whir(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     proof: &Proof<NativeConfig>,
 ) -> Result<AssignedWhirIntermediates, WhirError> {
     let raw = derive_raw_whir_witness_state(config, mvk, proof)?;
     let ownership = derive_whir_strict_ownership(config, mvk, proof)?;
-    Ok(constrain_checked_whir_witness_state_strict(ctx, range, &raw, &ownership).assigned)
+    Ok(constrain_checked_whir_witness_state_strict(ctx, ext_chip, &raw, &ownership).assigned)
 }
 
 fn derive_raw_whir_witness_state(
@@ -75,17 +75,18 @@ fn derive_whir_strict_ownership(
 
 fn constrain_whir_strict_metadata(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     raw: &RawWhirWitnessState,
     assigned: &AssignedWhirIntermediates,
     ownership: &WhirStrictOwnership,
 ) {
-    let gate = range.gate();
-    let k_whir = assign_and_range_usize(ctx, range, raw.intermediates.k_whir);
+    let base_chip = ext_chip.base();
+    let gate = base_chip.gate();
+    let k_whir = base_chip.assign_and_range_usize(ctx, raw.intermediates.k_whir);
     gate.assert_is_const(ctx, &k_whir, &Fr::from(usize_to_u64(ownership.k_whir)));
 
     let initial_log_rs_domain_size =
-        assign_and_range_usize(ctx, range, raw.intermediates.initial_log_rs_domain_size);
+        base_chip.assign_and_range_usize(ctx, raw.intermediates.initial_log_rs_domain_size);
     gate.assert_is_const(
         ctx,
         &initial_log_rs_domain_size,
@@ -124,7 +125,7 @@ fn constrain_whir_strict_metadata(
         .iter()
         .zip(ownership.folding_counts_per_round.iter())
     {
-        let count = assign_and_range_usize(ctx, range, actual_count);
+        let count = base_chip.assign_and_range_usize(ctx, actual_count);
         gate.assert_is_const(ctx, &count, &Fr::from(usize_to_u64(expected_count)));
     }
 
@@ -139,7 +140,7 @@ fn constrain_whir_strict_metadata(
         .iter()
         .zip(ownership.query_counts_per_round.iter())
     {
-        let count = assign_and_range_usize(ctx, range, actual_count);
+        let count = base_chip.assign_and_range_usize(ctx, actual_count);
         gate.assert_is_const(ctx, &count, &Fr::from(usize_to_u64(expected_count)));
     }
 
@@ -154,19 +155,19 @@ fn constrain_whir_strict_metadata(
         .iter()
         .zip(ownership.query_index_bits.iter())
     {
-        let bits = assign_and_range_usize(ctx, range, actual_bits);
+        let bits = base_chip.assign_and_range_usize(ctx, actual_bits);
         gate.assert_is_const(ctx, &bits, &Fr::from(usize_to_u64(expected_bits)));
     }
 }
 
 fn constrain_checked_whir_witness_state_strict(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     raw: &RawWhirWitnessState,
     ownership: &WhirStrictOwnership,
 ) -> CheckedWhirWitnessState {
-    let checked = constrain_checked_whir_witness_state_unchecked(ctx, range, raw);
-    constrain_whir_strict_metadata(ctx, range, raw, &checked.assigned, ownership);
+    let checked = constrain_checked_whir_witness_state_unchecked(ctx, ext_chip, raw);
+    constrain_whir_strict_metadata(ctx, ext_chip, raw, &checked.assigned, ownership);
     checked
 }
 
@@ -213,6 +214,10 @@ fn test_engine() -> BabyBearBn254Poseidon2CpuEngine {
     BabyBearBn254Poseidon2CpuEngine::new(test_system_params_small(2, 8, 3))
 }
 
+fn make_ext_chip(range: &halo2_base::gates::range::RangeChip<Fr>) -> BabyBearExtChip<'_> {
+    BabyBearExtChip::new(BabyBearChip::new(range))
+}
+
 #[test]
 fn whir_intermediates_match_native_for_interactions_fixture() {
     let engine = test_engine();
@@ -220,11 +225,13 @@ fn whir_intermediates_match_native_for_interactions_fixture() {
 
     run_mock(true, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let assigned = derive_and_constrain_whir(ctx, &range, engine.config(), &vk, &proof)
+        let assigned = derive_and_constrain_whir(ctx, &ext_chip, engine.config(), &vk, &proof)
             .expect("whir derive+constrain should succeed");
 
-        range
+        ext_chip
+            .base()
             .gate()
             .assert_is_const(ctx, &assigned.mu_pow_witness_ok, &Fr::from(1u64));
     });
@@ -243,15 +250,17 @@ fn whir_strict_constraints_reject_forged_standalone_metadata() {
 
     run_mock(true, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
         let _unchecked =
-            constrain_checked_whir_witness_state_unchecked(ctx, &range, &raw_for_unchecked);
+            constrain_checked_whir_witness_state_unchecked(ctx, &ext_chip, &raw_for_unchecked);
     });
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _strict = constrain_checked_whir_witness_state_strict(ctx, &range, &raw, &ownership);
+        let _strict = constrain_checked_whir_witness_state_strict(ctx, &ext_chip, &raw, &ownership);
     });
 }
 
@@ -262,12 +271,22 @@ fn whir_constraints_fail_on_tampered_intermediate_final_claim() {
     let mut actual =
         derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
-    actual.final_residual[0] = (actual.final_residual[0] + 1) % BABY_BEAR_MODULUS_U64;
+    {
+        let coeffs = <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(
+            &actual.final_residual,
+        );
+        let mut new_coeffs: [u64; BABY_BEAR_EXT_DEGREE] =
+            core::array::from_fn(|i| coeffs[i].as_canonical_u64());
+        new_coeffs[0] = (new_coeffs[0] + 1) % BABY_BEAR_MODULUS_U64;
+        actual.final_residual =
+            NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(new_coeffs[i]));
+    }
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -278,15 +297,32 @@ fn whir_constraints_fail_on_coordinated_final_claim_forgery() {
     let mut actual =
         derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
-    actual.final_claim[0] = (actual.final_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
-    actual.final_acc[0] = (actual.final_acc[0] + 1) % BABY_BEAR_MODULUS_U64;
+    {
+        let claim_coeffs = <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(
+            &actual.final_claim,
+        );
+        let mut new_claim: [u64; BABY_BEAR_EXT_DEGREE] =
+            core::array::from_fn(|i| claim_coeffs[i].as_canonical_u64());
+        new_claim[0] = (new_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
+        actual.final_claim =
+            NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(new_claim[i]));
+    }
+    {
+        let acc_coeffs =
+            <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&actual.final_acc);
+        let mut new_acc: [u64; BABY_BEAR_EXT_DEGREE] =
+            core::array::from_fn(|i| acc_coeffs[i].as_canonical_u64());
+        new_acc[0] = (new_acc[0] + 1) % BABY_BEAR_MODULUS_U64;
+        actual.final_acc = NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(new_acc[i]));
+    }
     // Keep residual mirror at zero so legacy residual-only checks would accept.
-    actual.final_residual = [0; BABY_BEAR_EXT_DEGREE];
+    actual.final_residual = NativeEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -301,8 +337,9 @@ fn whir_constraints_fail_on_tampered_pow_sample_bits() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -323,8 +360,9 @@ fn whir_constraints_ignore_tampered_pow_witness_mirrors() {
 
     run_mock(true, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -338,8 +376,9 @@ fn whir_constraints_fail_on_tampered_query_index() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -353,8 +392,9 @@ fn whir_constraints_fail_on_tampered_merkle_path() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -372,8 +412,9 @@ fn whir_constraints_fail_on_merkle_depth_query_bit_mismatch() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -391,8 +432,9 @@ fn whir_constraints_fail_on_missing_coverage_tuple() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -406,8 +448,9 @@ fn whir_constraints_fail_on_wrong_root_binding() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
@@ -421,8 +464,9 @@ fn whir_constraints_fail_on_tampered_final_poly_len() {
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let ext_chip = make_ext_chip(&range);
         let ctx = builder.main(0);
-        let _assigned = constrain_whir_intermediates_unchecked(ctx, &range, &actual);
+        let _assigned = constrain_whir_intermediates_unchecked(ctx, &ext_chip, &actual);
     });
 }
 
