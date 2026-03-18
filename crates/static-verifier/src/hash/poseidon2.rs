@@ -154,6 +154,7 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         }
     }
 
+    #[allow(clippy::needless_range_loop)]
     fn matmul_internal(
         &mut self,
         ctx: &mut Context<F>,
@@ -162,6 +163,7 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
     ) {
         assert_eq!(T, 3);
         let sum = gate.sum(ctx, self.s.iter().copied());
+        #[allow(clippy::needless_range_loop)]
         for i in 0..T {
             // This is the same as `self.s[i] = gate.mul_add(ctx, self.s[i],
             // Constant(mat_internal_diag_m_1[i]), sum)` but we save a cell by reusing `sum`.
@@ -200,7 +202,7 @@ pub(crate) const DIGEST_WIDTH: usize = 1;
 const MULTI_FIELD32_RATE: usize = 16;
 const MULTI_FIELD32_NUM_F_ELMS: usize = 8;
 
-fn reduce_32_cells(
+pub(crate) fn reduce_32_cells(
     ctx: &mut Context<Fr>,
     gate: &impl GateInstructions<Fr>,
     values: &[AssignedValue<Fr>],
@@ -223,9 +225,8 @@ pub(crate) fn hash_babybear_slice_to_digest(
 ) -> AssignedValue<Fr> {
     let gate = range.gate();
     let params = &*super::POSEIDON2_PARAMS;
-    let mut state = Poseidon2State::new(core::array::from_fn(|_| {
-        ctx.load_constant(Fr::from(0u64))
-    }));
+    let mut state =
+        Poseidon2State::new(core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64))));
     for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
         for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
             let cells = chunk.iter().map(|value| value.value).collect::<Vec<_>>();
