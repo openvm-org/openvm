@@ -828,16 +828,15 @@ fn binary_k_fold_assigned(
     alphas: &[BabyBearExtVar],
     x: &BabyBearVar,
 ) -> BabyBearExtVar {
-    if alphas.is_empty() {
-        assert_eq!(values.len(), 1, "k=0 fold must have exactly one value");
-        return values[0].clone();
-    }
     let n = values.len();
     assert_eq!(
         n,
         1usize << alphas.len(),
         "binary-k fold value count must match 2^k",
     );
+    if alphas.is_empty() {
+        return values[0].clone();
+    }
 
     let k = alphas.len();
     let omega_k = NativeF::two_adic_generator(k);
@@ -1502,8 +1501,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                                 .get(col_idx)
                                 .cloned()
                                 .unwrap_or_else(|| zero_base.clone());
-                            let opened_ext =
-                                ext_from_base_var(ctx, &baby_bear, &opened_base);
+                            let opened_ext = ext_from_base_var(ctx, &baby_bear, &opened_base);
                             let weighted = baby_bear.ext_mul(ctx, range, &opened_ext, mu_pow);
                             codeword_vals[row_idx] =
                                 baby_bear.ext_add(ctx, range, &codeword_vals[row_idx], &weighted);
