@@ -195,28 +195,42 @@ pub fn verify_vm_stark_proof_pvs(
         });
     }
 
-    // Check that recursion_flag is 2, i.e. that the penultimate layer is internal
-    // recursive.
-    if recursion_flag != F::TWO {
+    // Check that recursion_flag is 1 or 2, i.e. that the penultimate layer is
+    // internal-for-leaf or internal-recursive.
+    if recursion_flag != F::ONE && recursion_flag != F::TWO {
         return Err(VerifyStarkError::InvalidRecursionFlag(recursion_flag));
     }
 
-    // Check internal_recursive_dag_commit against expected_commits.
-    if internal_recursive_dag_commit.cached_commit
-        != vk.baseline.internal_recursive_dag_commit.cached_commit
-    {
-        return Err(VerifyStarkError::InternalRecursiveDagCachedCommitMismatch {
-            expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
-            actual: internal_recursive_dag_commit.cached_commit,
-        });
-    }
-    if internal_recursive_dag_commit.vk_pre_hash
-        != vk.baseline.internal_recursive_dag_commit.vk_pre_hash
-    {
-        return Err(VerifyStarkError::InternalRecursiveDagPreHashMismatch {
-            expected: vk.baseline.internal_recursive_dag_commit.vk_pre_hash,
-            actual: internal_recursive_dag_commit.vk_pre_hash,
-        });
+    // Check internal_recursive_dag_commit against expected_commits if recursion_flag
+    // is 2, and check it is unset if recursion_flag is 1.
+    if recursion_flag == F::TWO {
+        if internal_recursive_dag_commit.cached_commit
+            != vk.baseline.internal_recursive_dag_commit.cached_commit
+        {
+            return Err(VerifyStarkError::InternalRecursiveDagCachedCommitMismatch {
+                expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
+                actual: internal_recursive_dag_commit.cached_commit,
+            });
+        }
+        if internal_recursive_dag_commit.vk_pre_hash
+            != vk.baseline.internal_recursive_dag_commit.vk_pre_hash
+        {
+            return Err(VerifyStarkError::InternalRecursiveDagPreHashMismatch {
+                expected: vk.baseline.internal_recursive_dag_commit.vk_pre_hash,
+                actual: internal_recursive_dag_commit.vk_pre_hash,
+            });
+        }
+    } else {
+        if !is_unset(&internal_recursive_dag_commit.cached_commit) {
+            return Err(VerifyStarkError::InternalRecursiveDagCachedCommitSet {
+                actual: internal_recursive_dag_commit.cached_commit,
+            });
+        }
+        if !is_unset(&internal_recursive_dag_commit.vk_pre_hash) {
+            return Err(VerifyStarkError::InternalRecursiveDagPreHashSet {
+                actual: internal_recursive_dag_commit.vk_pre_hash,
+            });
+        }
     }
 
     // Deferral verification
