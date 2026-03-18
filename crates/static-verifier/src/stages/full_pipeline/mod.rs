@@ -1,5 +1,7 @@
 pub(crate) mod witness;
 
+use std::sync::Arc;
+
 use core::iter::{once, zip};
 
 use halo2_base::{
@@ -782,13 +784,13 @@ fn bind_sample_ext(ctx: &mut Context<Fr>, cursor: &mut SampleCursor<'_>, target:
             ctx.constrain_equal(&zero, &one);
             zero
         });
-        ctx.constrain_equal(&coeff.0, &sampled);
+        ctx.constrain_equal(&coeff.value, &sampled);
     }
 }
 
 fn derive_u_cube_from_stacked_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     l_skip: usize,
     stacked_u: &[BabyBearExtWire],
 ) -> Vec<BabyBearExtWire> {
@@ -799,7 +801,7 @@ fn derive_u_cube_from_stacked_assigned(
     let mut power = stacked_u.first().copied().unwrap_or(zero_ext);
     for _ in 0..l_skip {
         derived_u_cube.push(power);
-        power = ext_chip.square(ctx, &power);
+        power = ext_chip.square(ctx, power);
     }
     derived_u_cube.extend(stacked_u.iter().skip(1).copied());
     derived_u_cube
@@ -807,7 +809,7 @@ fn derive_u_cube_from_stacked_assigned(
 
 fn push_ext_observe_cells(observes: &mut Vec<AssignedValue<Fr>>, value: &BabyBearExtWire) {
     for coeff in &value.0 {
-        observes.push(coeff.0);
+        observes.push(coeff.value);
     }
 }
 
@@ -842,10 +844,10 @@ fn derive_stage_payload_observe_cells(
 ) -> Vec<AssignedValue<Fr>> {
     let mut observes = Vec::new();
     let zero = ctx.load_constant(Fr::from(0u64));
-    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(range));
+    let ext_chip = BabyBearExtChip::new(Arc::new(BabyBearChip::new(Arc::new(range.clone()))));
     let zero_ext = ext_chip.zero(ctx);
     if schedule.logup_pow_bits > 0 {
-        observes.push(batch.logup_pow_witness.0);
+        observes.push(batch.logup_pow_witness.value);
     }
 
     if schedule.has_gkr_observe_payload {
@@ -958,7 +960,7 @@ fn derive_stage_payload_observe_cells(
     }
 
     if schedule.mu_pow_bits > 0 {
-        observes.push(whir.mu_pow_witness.0);
+        observes.push(whir.mu_pow_witness.value);
     }
     let mut sumcheck_cursor = 0usize;
     let mut folding_pow_cursor = 0usize;
@@ -984,7 +986,7 @@ fn derive_stage_payload_observe_cells(
                     .get(folding_pow_cursor)
                     .copied()
                     .unwrap_or(ext_chip.base().zero(ctx));
-                observes.push(pow_witness.0);
+                observes.push(pow_witness.value);
             }
             sumcheck_cursor += 1;
             folding_pow_cursor += 1;
@@ -1003,7 +1005,7 @@ fn derive_stage_payload_observe_cells(
                 .unwrap_or(zero);
             let root_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, codeword_root);
             for limb in root_limbs {
-                observes.push(limb.0);
+                observes.push(limb.value);
             }
             let ood = whir.ood_values.get(round_idx).unwrap_or(&zero_ext);
             push_ext_observe_cells(&mut observes, ood);
@@ -1015,7 +1017,7 @@ fn derive_stage_payload_observe_cells(
                 .get(round_idx)
                 .copied()
                 .unwrap_or(ext_chip.base().zero(ctx));
-            observes.push(pow_witness.0);
+            observes.push(pow_witness.value);
         }
     }
 
@@ -1398,10 +1400,10 @@ fn derive_preamble_observe_cells_from_stage(
     let common_main_commit_limbs =
         split_assigned_bn254_to_babybear_limbs(ctx, range, statement_public_inputs[1]);
     for limb in pre_hash_limbs {
-        observes.push(limb.0);
+        observes.push(limb.value);
     }
     for limb in common_main_commit_limbs {
-        observes.push(limb.0);
+        observes.push(limb.value);
     }
 
     let (preprocessed_roots_by_air, cached_roots_by_air) = map_initial_commitment_roots_by_air(
@@ -1429,7 +1431,7 @@ fn derive_preamble_observe_cells_from_stage(
 
                 let root_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, root);
                 for limb in root_limbs {
-                    observes.push(limb.0);
+                    observes.push(limb.value);
                 }
             } else {
                 observes.push(proof_shape.air_log_heights[air_idx]);
@@ -1438,13 +1440,13 @@ fn derive_preamble_observe_cells_from_stage(
             for &cached_root in &cached_roots_by_air[air_idx] {
                 let cached_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, cached_root);
                 for limb in cached_limbs {
-                    observes.push(limb.0);
+                    observes.push(limb.value);
                 }
             }
         }
 
         for pv in &batch.public_values[air_idx] {
-            observes.push(pv.0);
+            observes.push(pv.value);
         }
     }
 
@@ -1756,8 +1758,8 @@ pub(crate) fn constrain_pipeline_intermediates(
     // replay-owned, and schedule metadata is bound through a transcript-derived public
     // commitment.
     let gate = range.gate();
-    let base_chip = BabyBearChip::new(range);
-    let ext_chip = BabyBearExtChip::new(base_chip);
+    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
+    let ext_chip = BabyBearExtChip::new(base_chip.clone());
     let zero_ext = ext_chip.zero(ctx);
     let zero_cell = ctx.load_constant(Fr::from(0u64));
 
@@ -2120,7 +2122,7 @@ pub(crate) fn constrain_pipeline_intermediates(
             .get(gkr_xi_len - 1)
             .copied()
             .unwrap_or(zero_ext);
-        ext_chip.assert_equal(ctx, &xi_0, &gkr_last);
+        ext_chip.assert_equal(ctx, xi_0, gkr_last);
         for idx in 1..gkr_xi_len {
             let xi_val = batch.xi.get(idx).copied().unwrap_or(zero_ext);
             let gkr_prev = batch
@@ -2128,7 +2130,7 @@ pub(crate) fn constrain_pipeline_intermediates(
                 .get(idx - 1)
                 .copied()
                 .unwrap_or(zero_ext);
-            ext_chip.assert_equal(ctx, &xi_val, &gkr_prev);
+            ext_chip.assert_equal(ctx, xi_val, gkr_prev);
         }
     }
     for xi_challenge in batch.xi.iter().skip(gkr_xi_len) {

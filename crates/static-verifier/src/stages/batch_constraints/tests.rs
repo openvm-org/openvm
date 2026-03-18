@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
@@ -73,7 +75,12 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
         .use_k(BATCH_K as usize)
         .use_lookup_bits(8)
         .use_instance_columns(1);
-    build(&mut builder);
+
+    if expect_satisfied {
+        build(&mut builder);
+    } else {
+        crate::utils::with_debug_asserts_disabled(|| build(&mut builder));
+    }
 
     let params = builder.calculate_params(Some(32768));
     // This scaffold intentionally checks for one phase-0 lookup column so tests
@@ -168,10 +175,10 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
         run_mock(false, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let ext_chip = BabyBearExtChip::new(BabyBearChip::new(&range));
+            let ext_chip = BabyBearExtChip::new(Arc::new(BabyBearChip::new(Arc::new(range.clone()))));
             let ext = ext_chip.from_base_const(ctx, ChildF::from_u64(constant));
             ext.0[0]
-                .0
+                .value
                 .debug_prank(ctx, Fr::from((constant + 1) % BABY_BEAR_MODULUS_U64));
             // `load_constant` no longer creates lookup rows; add a tiny lookup so
             // `run_mock` still validates the expected phase-0 lookup shape.

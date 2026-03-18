@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
@@ -49,7 +51,7 @@ fn run_mock(build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
 fn baby_bear_base_ops_match_native_mod_arithmetic() {
     run_mock(|builder| {
         let range = builder.range_chip();
-        let chip = BabyBearChip::new(&range);
+        let chip = BabyBearChip::new(Arc::new(range.clone()));
         let ctx = builder.main(0);
         let gate = range.gate();
 
@@ -65,11 +67,18 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
             let a = chip.load_witness(ctx, ChildF::from_u64(a_u64));
             let b = chip.load_witness(ctx, ChildF::from_u64(b_u64));
 
-            let sum = chip.add(ctx, &a, &b);
-            let diff = chip.sub(ctx, &a, &b);
-            let prod = chip.mul(ctx, &a, &b);
-            let neg = chip.neg(ctx, &a);
-            let by_const = chip.mul_const(ctx, &a, ChildF::from_u64(11));
+            // Reduce results to canonical form before comparing, since the new
+            // BabyBearChip uses lazy reduction and wire values may be unreduced.
+            let sum = chip.add(ctx, a, b);
+            let sum = chip.reduce(ctx, sum);
+            let diff = chip.sub(ctx, a, b);
+            let diff = chip.reduce(ctx, diff);
+            let prod = chip.mul(ctx, a, b);
+            let prod = chip.reduce(ctx, prod);
+            let neg = chip.neg(ctx, a);
+            let neg = chip.reduce(ctx, neg);
+            let by_const = chip.mul_const(ctx, a, ChildF::from_u64(11));
+            let by_const = chip.reduce(ctx, by_const);
 
             let expected_sum = (a_u64 + b_u64) % BABY_BEAR_MODULUS_U64;
             let expected_diff = (a_u64 + BABY_BEAR_MODULUS_U64 - b_u64) % BABY_BEAR_MODULUS_U64;
@@ -83,11 +92,11 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
             let expected_by_const =
                 ((a_u64 as u128 * 11u128) % BABY_BEAR_MODULUS_U64 as u128) as u64;
 
-            gate.assert_is_const(ctx, &sum.0, &Fr::from(expected_sum));
-            gate.assert_is_const(ctx, &diff.0, &Fr::from(expected_diff));
-            gate.assert_is_const(ctx, &prod.0, &Fr::from(expected_prod));
-            gate.assert_is_const(ctx, &neg.0, &Fr::from(expected_neg));
-            gate.assert_is_const(ctx, &by_const.0, &Fr::from(expected_by_const));
+            gate.assert_is_const(ctx, &sum.value, &Fr::from(expected_sum));
+            gate.assert_is_const(ctx, &diff.value, &Fr::from(expected_diff));
+            gate.assert_is_const(ctx, &prod.value, &Fr::from(expected_prod));
+            gate.assert_is_const(ctx, &neg.value, &Fr::from(expected_neg));
+            gate.assert_is_const(ctx, &by_const.value, &Fr::from(expected_by_const));
         }
     });
 }
@@ -96,8 +105,8 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
 fn baby_bear_ext_mul_matches_native_binomial_extension() {
     run_mock(|builder| {
         let range = builder.range_chip();
-        let base_chip = BabyBearChip::new(&range);
-        let ext_chip = BabyBearExtChip::new(base_chip);
+        let base_chip = BabyBearChip::new(Arc::new(range.clone()));
+        let ext_chip = BabyBearExt4Chip::new(Arc::new(base_chip));
         let ctx = builder.main(0);
         let gate = range.gate();
 
@@ -108,10 +117,14 @@ fn baby_bear_ext_mul_matches_native_binomial_extension() {
         let lhs = ext_chip.load_witness(ctx, lhs_native);
         let rhs = ext_chip.load_witness(ctx, rhs_native);
 
-        let sum = ext_chip.add(ctx, &lhs, &rhs);
-        let diff = ext_chip.sub(ctx, &lhs, &rhs);
-        let prod = ext_chip.mul(ctx, &lhs, &rhs);
-        let sqr = ext_chip.square(ctx, &lhs);
+        let sum = ext_chip.add(ctx, lhs, rhs);
+        let sum = ext_chip.reduce_max_bits(ctx, sum);
+        let diff = ext_chip.sub(ctx, lhs, rhs);
+        let diff = ext_chip.reduce_max_bits(ctx, diff);
+        let prod = ext_chip.mul(ctx, lhs, rhs);
+        let prod = ext_chip.reduce_max_bits(ctx, prod);
+        let sqr = ext_chip.square(ctx, lhs);
+        let sqr = ext_chip.reduce_max_bits(ctx, sqr);
 
         let sum_native = lhs_native + rhs_native;
         let diff_native = lhs_native - rhs_native;
@@ -136,10 +149,10 @@ fn baby_bear_ext_mul_matches_native_binomial_extension() {
         });
 
         for i in 0..BABY_BEAR_EXT_DEGREE {
-            gate.assert_is_const(ctx, &sum.0[i].0, &Fr::from(expected_sum[i]));
-            gate.assert_is_const(ctx, &diff.0[i].0, &Fr::from(expected_diff[i]));
-            gate.assert_is_const(ctx, &prod.0[i].0, &Fr::from(expected_prod[i]));
-            gate.assert_is_const(ctx, &sqr.0[i].0, &Fr::from(expected_sqr[i]));
+            gate.assert_is_const(ctx, &sum.0[i].value, &Fr::from(expected_sum[i]));
+            gate.assert_is_const(ctx, &diff.0[i].value, &Fr::from(expected_diff[i]));
+            gate.assert_is_const(ctx, &prod.0[i].value, &Fr::from(expected_prod[i]));
+            gate.assert_is_const(ctx, &sqr.0[i].value, &Fr::from(expected_sqr[i]));
         }
     });
 }
