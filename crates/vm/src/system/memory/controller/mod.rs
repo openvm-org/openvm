@@ -25,7 +25,7 @@ use crate::{
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            persistent::PersistentBoundaryChip,
+            persistent::{group_touched_memory_by_chunk, PersistentBoundaryChip},
         },
         poseidon2::Poseidon2PeripheryChip,
         TouchedMemory,
@@ -188,27 +188,22 @@ impl<F: VmField> MemoryController<F> {
 
         // Rechunk DEFAULT_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
         // Note: Equipartition key is (addr_space, ptr) where ptr is the starting pointer
-        let final_memory_values: Equipartition<F, CHUNK> = {
-            use std::collections::BTreeMap;
-            let mut chunk_map: BTreeMap<(u32, u32), [F; CHUNK]> = BTreeMap::new();
-            for ((addr_space, ptr), ts_values) in final_memory {
-                // Align to CHUNK boundary to get the chunk's starting pointer
-                let chunk_ptr = (ptr / CHUNK as u32) * CHUNK as u32;
-                let block_idx_in_chunk =
-                    ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
-                let entry = chunk_map.entry((addr_space, chunk_ptr)).or_insert_with(|| {
-                    // Initialize with values from initial memory
-                    std::array::from_fn(|i| unsafe {
+        let final_memory_values: Equipartition<F, CHUNK> =
+            group_touched_memory_by_chunk(&final_memory)
+                .into_iter()
+                .map(|((addr_space, chunk_label), blocks)| {
+                    let chunk_ptr = chunk_label * CHUNK as u32;
+                    let mut values = std::array::from_fn(|i| unsafe {
                         initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
-                    })
-                });
-                // Copy values for this block
-                for (i, val) in ts_values.values.into_iter().enumerate() {
-                    entry[block_idx_in_chunk * DEFAULT_BLOCK_SIZE + i] = val;
-                }
-            }
-            chunk_map
-        };
+                    });
+                    for (block_idx, _, block_values) in blocks {
+                        for (i, val) in block_values.into_iter().enumerate() {
+                            values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
+                        }
+                    }
+                    ((addr_space, chunk_ptr), values)
+                })
+                .collect();
         merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
 
         vec![
