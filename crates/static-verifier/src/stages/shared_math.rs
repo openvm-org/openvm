@@ -1,6 +1,8 @@
-use halo2_base::{Context, gates::range::RangeChip};
-use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::F as NativeF;
-use openvm_stark_sdk::openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField64};
+use halo2_base::{gates::range::RangeChip, Context};
+use openvm_stark_sdk::{
+    config::baby_bear_bn254_poseidon2::F as NativeF,
+    openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField64},
+};
 
 use crate::{
     circuit::Fr,
@@ -55,8 +57,8 @@ pub(crate) fn interpolate_quadratic_at_012_assigned(
     evals: [&BabyBearExtVar; 3],
     x: &BabyBearExtVar,
 ) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
-    let two = ext_from_base_const(ctx, range, baby_bear, 2);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
+    let two = ext_from_base_const(ctx, baby_bear, 2);
     let inv_two = NativeF::ONE.halve().as_canonical_u64();
 
     let x_minus_one = baby_bear.ext_sub(ctx, range, x, &one);

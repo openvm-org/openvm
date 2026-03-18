@@ -1,17 +1,16 @@
 use core::iter::zip;
 
 use halo2_base::{
-    AssignedValue, Context,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
     utils::biguint_to_fe,
+    AssignedValue, Context,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest, EF as NativeEF,
-        F as NativeF, Transcript as NativeTranscript, default_transcript,
+        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest,
+        Transcript as NativeTranscript, EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
-        FiatShamirTranscript, StarkProtocolConfig,
         hasher::MerkleHasher,
         keygen::types::MultiStarkVerifyingKey,
         p3_field::{
@@ -19,38 +18,37 @@ use openvm_stark_sdk::{
             TwoAdicField,
         },
         poly_common::{
-            Squarable, eval_eq_mle, eval_mle_evals_at_point, eval_mobius_eq_mle, horner_eval,
-            interpolate_quadratic_at_012,
+            eval_eq_mle, eval_mle_evals_at_point, eval_mobius_eq_mle, horner_eval,
+            interpolate_quadratic_at_012, Squarable,
         },
         proof::{Proof, WhirProof},
         verifier::{
             batch_constraints::BatchConstraintError as NativeBatchConstraintError,
             proof_shape::ProofShapeError,
             stacked_reduction::StackedReductionError,
-            whir::{VerifyWhirError, binary_k_fold, merkle_verify},
+            whir::{binary_k_fold, merkle_verify, VerifyWhirError},
         },
+        FiatShamirTranscript, StarkProtocolConfig,
     },
 };
 
 use crate::{
     circuit::Fr,
     gadgets::{
-        baby_bear::{BABY_BEAR_EXT_DEGREE, BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar},
+        baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar, BABY_BEAR_EXT_DEGREE},
         transcript::{compress_bn254_digests, hash_babybear_slice_to_digest},
     },
-    stages::batch_constraints::{
-        BatchConstraintError, eval_eq_mle_assigned, ext_from_base_const, ext_mul_base_const,
-        ext_pow_power_of_two,
-    },
-    stages::stacked_reduction::{
-        coeffs_to_native_ext as stacked_coeffs_to_native_ext,
-        derive_stacked_reduction_intermediates_with_inputs,
-    },
     stages::{
-        pipeline::{
-            collect_trace_commitments, derive_u_cube_from_prism, prepare_pipeline_inputs,
+        batch_constraints::{
+            eval_eq_mle_assigned, ext_from_base_const, ext_mul_base_const, ext_pow_power_of_two,
+            BatchConstraintError,
         },
+        pipeline::{collect_trace_commitments, derive_u_cube_from_prism, prepare_pipeline_inputs},
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
+        stacked_reduction::{
+            coeffs_to_native_ext as stacked_coeffs_to_native_ext,
+            derive_stacked_reduction_intermediates_with_inputs,
+        },
     },
     utils::{assign_and_range_u64, assign_and_range_usize, usize_to_u64},
 };
@@ -697,12 +695,6 @@ pub fn derive_whir_intermediates(
     .map_err(Into::into)
 }
 
-fn assign_bool(ctx: &mut Context<Fr>, range: &RangeChip<Fr>, value: bool) -> AssignedValue<Fr> {
-    let bit = ctx.load_witness(Fr::from(value as u64));
-    range.gate().assert_bit(ctx, bit);
-    bit
-}
-
 fn assign_ext(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -714,11 +706,10 @@ fn assign_ext(
 
 fn ext_from_base_var(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
     baby_bear: &BabyBearArithmeticGadgets,
     value: &BabyBearVar,
 ) -> BabyBearExtVar {
-    let zero = baby_bear.zero(ctx, range);
+    let zero = baby_bear.zero(ctx);
     BabyBearExtVar {
         coeffs: core::array::from_fn(|idx| {
             if idx == 0 {
@@ -738,7 +729,7 @@ fn eval_mobius_eq_mle_assigned(
     x: &[BabyBearExtVar],
 ) -> BabyBearExtVar {
     assert_eq!(u.len(), x.len(), "mobius-eq arity mismatch");
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut acc = one.clone();
     for (u_i, x_i) in u.iter().zip(x.iter()) {
         let two_u = ext_mul_base_const(ctx, range, baby_bear, u_i, 2);
@@ -764,7 +755,7 @@ fn eval_mle_evals_at_point_assigned(
         1usize << x.len(),
         "MLE table length must be 2^arity",
     );
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut values = evals.to_vec();
     let mut len = values.len();
     for xj in x.iter().rev() {
@@ -794,7 +785,7 @@ fn invert_base_assigned(
     assert!(value_u64 != 0, "cannot invert zero BabyBear value");
     let inv_u64 = NativeF::from_u64(value_u64).inverse().as_canonical_u64();
     let inv = baby_bear.load_witness(ctx, range, inv_u64);
-    let one = baby_bear.one(ctx, range);
+    let one = baby_bear.one(ctx);
     let check = baby_bear.mul(ctx, range, value, &inv);
     baby_bear.assert_equal(ctx, &check, &one);
     inv
@@ -810,7 +801,7 @@ fn query_root_from_bits_assigned(
     let gate = range.gate();
     let one = ctx.load_constant(Fr::from(1u64));
     let omega = NativeF::two_adic_generator(log_rs_domain_size);
-    let mut root = baby_bear.one(ctx, range);
+    let mut root = baby_bear.one(ctx);
     for (bit_idx, &bit) in query_bits.iter().enumerate() {
         let omega_pow = omega.exp_u64(1u64 << bit_idx).as_canonical_u64();
         let selected_u64 = if *bit.value() == Fr::from(1u64) {
@@ -870,10 +861,10 @@ fn binary_k_fold_assigned(
             let lo = values[i].clone();
             let hi = values[i + m].clone();
             let lo_minus_hi = baby_bear.ext_sub(ctx, range, &lo, &hi);
-            let t_ext = ext_from_base_var(ctx, range, baby_bear, &t);
+            let t_ext = ext_from_base_var(ctx, baby_bear, &t);
             let alpha_minus_t = baby_bear.ext_sub(ctx, range, alpha, &t_ext);
             let fold = baby_bear.ext_mul(ctx, range, &alpha_minus_t, &lo_minus_hi);
-            let t_inv_half_ext = ext_from_base_var(ctx, range, baby_bear, &t_inv_half);
+            let t_inv_half_ext = ext_from_base_var(ctx, baby_bear, &t_inv_half);
             let fold = baby_bear.ext_mul(ctx, range, &fold, &t_inv_half_ext);
             values[i] = baby_bear.ext_add(ctx, range, &lo, &fold);
         }
@@ -1042,7 +1033,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     } else {
         gate.assert_is_const(ctx, &mu_pow_sampled_bits, &Fr::from(0u64));
     }
-    let mu_pow_witness_ok = assign_bool(ctx, range, actual.mu_pow_witness_ok);
+    let mu_pow_witness_ok = ctx.load_constant(Fr::from(actual.mu_pow_witness_ok as u64));
     let mu_pow_is_zero = gate.is_zero(ctx, mu_pow_sampled_bits);
     ctx.constrain_equal(&mu_pow_witness_ok, &mu_pow_is_zero);
     gate.assert_is_const(ctx, &mu_pow_witness_ok, &Fr::from(1u64));
@@ -1063,7 +1054,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             gate.assert_is_const(ctx, &sampled_bits, &Fr::from(0u64));
         }
 
-        let bit = assign_bool(ctx, range, actual_ok);
+        let bit = ctx.load_constant(Fr::from(actual_ok as u64));
         let is_zero = gate.is_zero(ctx, sampled_bits);
         ctx.constrain_equal(&bit, &is_zero);
         gate.assert_is_const(ctx, &bit, &Fr::from(1u64));
@@ -1088,7 +1079,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             gate.assert_is_const(ctx, &sampled_bits, &Fr::from(0u64));
         }
 
-        let bit = assign_bool(ctx, range, actual_ok);
+        let bit = ctx.load_constant(Fr::from(actual_ok as u64));
         let is_zero = gate.is_zero(ctx, sampled_bits);
         ctx.constrain_equal(&bit, &is_zero);
         gate.assert_is_const(ctx, &bit, &Fr::from(1u64));
@@ -1327,7 +1318,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let final_claim = assign_ext(ctx, range, &baby_bear, actual.final_claim);
     let final_acc = assign_ext(ctx, range, &baby_bear, actual.final_acc);
     let zero = baby_bear.ext_zero(ctx, range);
-    let one = ext_from_base_const(ctx, range, &baby_bear, 1);
+    let one = ext_from_base_const(ctx, &baby_bear, 1);
 
     let round_count = assign_and_range_usize(ctx, range, actual.query_counts_per_round.len());
     let folding_rounds = assign_and_range_usize(ctx, range, actual.folding_counts_per_round.len());
@@ -1397,7 +1388,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let mut query_cursor = 0usize;
     let mut log_rs_domain_size = actual.initial_log_rs_domain_size;
     let mut zs_per_round = Vec::with_capacity(actual.query_counts_per_round.len());
-    let zero_base = baby_bear.zero(ctx, range);
+    let zero_base = baby_bear.zero(ctx);
     let default_merkle_payload = AssignedMerklePathPayload {
         leaf_values: vec![vec![zero_base.clone()]],
         query_bits: Vec::new(),
@@ -1461,7 +1452,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                 &query_bit_source.query_bits,
                 log_rs_domain_size,
             );
-            let zi_root_ext = ext_from_base_var(ctx, range, &baby_bear, &zi_root_base);
+            let zi_root_ext = ext_from_base_var(ctx, &baby_bear, &zi_root_base);
             let zi = ext_pow_power_of_two(ctx, range, &baby_bear, &zi_root_ext, actual.k_whir);
             zs_round.push(zi);
 
@@ -1512,7 +1503,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                                 .cloned()
                                 .unwrap_or_else(|| zero_base.clone());
                             let opened_ext =
-                                ext_from_base_var(ctx, range, &baby_bear, &opened_base);
+                                ext_from_base_var(ctx, &baby_bear, &opened_base);
                             let weighted = baby_bear.ext_mul(ctx, range, &opened_ext, mu_pow);
                             codeword_vals[row_idx] =
                                 baby_bear.ext_add(ctx, range, &codeword_vals[row_idx], &weighted);

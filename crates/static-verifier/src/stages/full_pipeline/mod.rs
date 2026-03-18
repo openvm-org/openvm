@@ -1,9 +1,9 @@
 use core::iter::zip;
 
 use halo2_base::{
-    AssignedValue, Context,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
     utils::biguint_to_fe,
+    AssignedValue, Context,
 };
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
@@ -11,14 +11,14 @@ use openvm_stark_sdk::{
         BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar, F as NativeF,
     },
     openvm_stark_backend::{
-        StarkProtocolConfig, SystemParams,
-        air_builders::symbolic::{SymbolicExpressionNode, symbolic_variable::Entry},
+        air_builders::symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
         calculate_n_logup,
         interaction::Interaction,
         keygen::types::MultiStarkVerifyingKey,
         p3_field::{PrimeField, PrimeField64},
         proof::Proof,
         prover::stacked_pcs::StackedLayout,
+        StarkProtocolConfig, SystemParams,
     },
 };
 
@@ -26,37 +26,38 @@ use crate::{
     circuit::Fr,
     gadgets::{
         baby_bear::{
-            BABY_BEAR_BITS, BABY_BEAR_EXT_DEGREE, BABY_BEAR_MODULUS_U64, BabyBearArithmeticGadgets,
-            BabyBearExtVar,
+            BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_BITS, BABY_BEAR_EXT_DEGREE,
+            BABY_BEAR_MODULUS_U64,
         },
         transcript::{
-            AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent,
             constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
+            AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent,
         },
     },
     stages::{
         batch_and_stacked::{
-            AssignedBatchAndStackedIntermediates, BatchAndStackedError, BatchAndStackedIntermediates, RawBatchAndStackedWitnessState,
             constrain_checked_batch_and_stacked_witness_state_unchecked,
+            AssignedBatchAndStackedIntermediates, BatchAndStackedError,
+            BatchAndStackedIntermediates, RawBatchAndStackedWitnessState,
         },
         pipeline::{
             collect_trace_commitments, derive_need_rot_per_commit, derive_u_cube_from_prism,
             prepare_pipeline_inputs,
         },
         proof_shape::{
-            AssignedProofShapeIntermediates, ProofShapeIntermediates, ProofShapeOwnershipSchedule, ProofShapePreambleError,
-            RawProofShapeWitnessState, constrain_checked_proof_shape_witness_state_with_ownership,
-            derive_proof_shape_intermediates, derive_proof_shape_ownership_schedule, derive_proof_shape_rules,
+            constrain_checked_proof_shape_witness_state_with_ownership,
+            derive_proof_shape_intermediates, derive_proof_shape_ownership_schedule,
+            derive_proof_shape_rules, AssignedProofShapeIntermediates, ProofShapeIntermediates,
+            ProofShapeOwnershipSchedule, ProofShapePreambleError, RawProofShapeWitnessState,
         },
         stacked_reduction::{
-            StackedReductionConstraintError, QCoeffAccumulationTerm,
             coeffs_to_native_ext as stacked_coeffs_to_native_ext,
-            derive_stacked_reduction_intermediates_with_inputs,
+            derive_stacked_reduction_intermediates_with_inputs, QCoeffAccumulationTerm,
+            StackedReductionConstraintError,
         },
         whir::{
-            AssignedWhirIntermediates, WhirError, WhirIntermediates, RawWhirWitnessState,
-            constrain_checked_whir_witness_state_unchecked,
-            derive_whir_intermediates_with_inputs,
+            constrain_checked_whir_witness_state_unchecked, derive_whir_intermediates_with_inputs,
+            AssignedWhirIntermediates, RawWhirWitnessState, WhirError, WhirIntermediates,
         },
     },
     utils::{assign_and_range_u64, usize_to_u64},
@@ -167,38 +168,6 @@ pub struct DerivedPipelineState {
 }
 
 const BN254_DIGEST_BABYBEAR_LIMBS: usize = 3;
-
-fn constrain_usize_to_const(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    actual: usize,
-    expected: usize,
-) {
-    let actual_cell = ctx.load_witness(Fr::from(usize_to_u64(actual)));
-    gate.assert_is_const(ctx, &actual_cell, &Fr::from(usize_to_u64(expected)));
-}
-
-fn constrain_usize_equal(
-    ctx: &mut Context<Fr>,
-    _gate: &impl GateInstructions<Fr>,
-    lhs: usize,
-    rhs: usize,
-) {
-    let lhs_cell = ctx.load_witness(Fr::from(usize_to_u64(lhs)));
-    let rhs_cell = ctx.load_witness(Fr::from(usize_to_u64(rhs)));
-    ctx.constrain_equal(&lhs_cell, &rhs_cell);
-}
-
-fn constrain_bool_to_const(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    actual: bool,
-    expected: bool,
-) {
-    let actual_cell = ctx.load_witness(Fr::from(actual as u64));
-    gate.assert_bit(ctx, actual_cell);
-    gate.assert_is_const(ctx, &actual_cell, &Fr::from(expected as u64));
-}
 
 fn derive_non_preamble_observes(events: &[TranscriptEvent], preamble_observes: usize) -> Vec<u64> {
     events
@@ -510,12 +479,7 @@ fn derive_pipeline_transcript_schedule(
     let batch_total_interactions =
         derive_batch_total_interactions(mvk, trace_id_to_air_id, &batch_n_per_trace, l_skip);
     let batch_n_logup = calculate_n_logup(l_skip, batch_total_interactions);
-    let batch_n_max = batch_n_per_trace
-        .iter()
-        .copied()
-        .max()
-        .unwrap_or(0)
-        .max(0) as usize;
+    let batch_n_max = batch_n_per_trace.iter().copied().max().unwrap_or(0).max(0) as usize;
     let batch_degree = mvk0.max_constraint_degree() + 1;
     let l_skip_width = if l_skip >= usize::BITS as usize {
         0usize
@@ -668,8 +632,9 @@ pub(crate) fn derive_raw_pipeline_witness_state(
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     proof: &Proof<NativeConfig>,
 ) -> Result<RawPipelineWitnessState, PipelineError> {
-    // Strict assignment boundary: this is the only unchecked host-derivation entrypoint for the pipeline.
-    // All downstream APIs consume this typed bundle and add explicit in-circuit checks.
+    // Strict assignment boundary: this is the only unchecked host-derivation entrypoint for the
+    // pipeline. All downstream APIs consume this typed bundle and add explicit in-circuit
+    // checks.
     let intermediates = derive_pipeline_intermediates(config, mvk, proof)?;
     let schedule = derive_pipeline_transcript_schedule(config, mvk, proof, &intermediates)?;
     let statement = derive_pipeline_statement_witness(mvk, proof);
@@ -736,14 +701,8 @@ impl<'a> EventCursor<'a> {
         ctx.load_constant(Fr::from(0u64))
     }
 
-    fn constrain_consumed_prefix(
-        &self,
-        ctx: &mut Context<Fr>,
-        gate: &impl GateInstructions<Fr>,
-        expected: usize,
-    ) {
-        let consumed = ctx.load_witness(Fr::from(usize_to_u64(self.cursor)));
-        gate.assert_is_const(ctx, &consumed, &Fr::from(usize_to_u64(expected)));
+    fn constrain_consumed_prefix(&self, expected: usize) {
+        assert_eq!(self.cursor, expected);
     }
 }
 
@@ -844,8 +803,7 @@ fn bind_u_cube_from_stacked(
     stacked_u: &[BabyBearExtVar],
     whir_u_cube: &[BabyBearExtVar],
 ) {
-    let gate = range.gate();
-    constrain_bool_to_const(ctx, gate, !stacked_u.is_empty(), true);
+    assert!(!stacked_u.is_empty());
     let baby_bear = BabyBearArithmeticGadgets;
     let zero_ext = baby_bear.ext_zero(ctx, range);
 
@@ -860,7 +818,7 @@ fn bind_u_cube_from_stacked(
     }
     derived_u_cube.extend(stacked_u.iter().skip(1).cloned());
 
-    constrain_usize_equal(ctx, gate, derived_u_cube.len(), whir_u_cube.len());
+    assert_eq!(derived_u_cube.len(), whir_u_cube.len());
     for (idx, derived) in derived_u_cube.iter().enumerate() {
         let actual = whir_u_cube.get(idx).unwrap_or(&zero_ext);
         baby_bear.assert_ext_equal(ctx, derived, actual);
@@ -904,7 +862,6 @@ fn derive_stage_payload_observe_cells(
 ) -> Vec<AssignedValue<Fr>> {
     let mut observes = Vec::new();
     let zero = ctx.load_constant(Fr::from(0u64));
-    let gate = range.gate();
     let baby_bear = BabyBearArithmeticGadgets;
     let zero_ext = baby_bear.ext_zero(ctx, range);
 
@@ -941,15 +898,11 @@ fn derive_stage_payload_observe_cells(
         }
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch.numerator_term_per_air.len(),
         batch.denominator_term_per_air.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch.numerator_term_per_air.len(),
         schedule.batch_n_per_trace.len(),
     );
@@ -966,9 +919,7 @@ fn derive_stage_payload_observe_cells(
         push_ext_observe_cells(&mut observes, den);
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch.univariate_round_coeffs.len(),
         schedule.batch_univariate_coeffs_len,
     );
@@ -980,19 +931,12 @@ fn derive_stage_payload_observe_cells(
         push_ext_observe_cells(&mut observes, coeff);
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
-        batch.sumcheck_round_polys.len(),
-        schedule.batch_n_max,
-    );
+    assert_eq!(batch.sumcheck_round_polys.len(), schedule.batch_n_max,);
     for round_idx in 0..schedule.batch_n_max {
         let round_evals = batch.sumcheck_round_polys.get(round_idx);
-        constrain_usize_to_const(
-            ctx,
-            gate,
+        assert_eq!(
             round_evals.map_or(0usize, |round| round.len()),
-            schedule.batch_degree,
+            schedule.batch_degree
         );
         for eval_idx in 0..schedule.batch_degree {
             let eval = round_evals
@@ -1104,18 +1048,8 @@ fn derive_stage_payload_observe_cells(
         }
     }
 
-    let sumcheck_consumed = ctx.load_witness(Fr::from(usize_to_u64(sumcheck_cursor)));
-    gate.assert_is_const(
-        ctx,
-        &sumcheck_consumed,
-        &Fr::from(usize_to_u64(whir.whir_sumcheck_polys.len())),
-    );
-    let folding_pow_consumed = ctx.load_witness(Fr::from(usize_to_u64(folding_pow_cursor)));
-    gate.assert_is_const(
-        ctx,
-        &folding_pow_consumed,
-        &Fr::from(usize_to_u64(actual.whir.folding_pow_witnesses.len())),
-    );
+    assert_eq!(sumcheck_cursor, whir.whir_sumcheck_polys.len());
+    assert_eq!(folding_pow_cursor, actual.whir.folding_pow_witnesses.len());
 
     observes
 }
@@ -1350,12 +1284,7 @@ fn constrain_post_preamble_event_kinds(
     let expected_post_preamble = derive_post_preamble_event_kind_schedule(actual, schedule);
     let post_preamble_start = core::cmp::min(preamble_observe_count, replay_events.len());
     let actual_post_preamble = &replay_events[post_preamble_start..];
-    let actual_len = ctx.load_witness(Fr::from(usize_to_u64(actual_post_preamble.len())));
-    gate.assert_is_const(
-        ctx,
-        &actual_len,
-        &Fr::from(usize_to_u64(expected_post_preamble.len())),
-    );
+    assert_eq!(actual_post_preamble.len(), expected_post_preamble.len());
 
     for (event, is_sample_expected) in actual_post_preamble.iter().zip(expected_post_preamble) {
         gate.assert_is_const(ctx, &event.is_sample, &Fr::from(is_sample_expected as u64));
@@ -1364,23 +1293,30 @@ fn constrain_post_preamble_event_kinds(
 
 fn bind_batch_to_stacked_inputs(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
     actual: &PipelineIntermediates,
     batch_and_stacked: &AssignedBatchAndStackedIntermediates,
 ) {
-    let gate = range.gate();
     let baby_bear = BabyBearArithmeticGadgets;
 
-    constrain_usize_equal(ctx, gate, batch_and_stacked.batch.r.len(), batch_and_stacked.stacked_reduction.r.len());
-    for (batch_r, stacked_r) in batch_and_stacked.batch.r.iter().zip(&batch_and_stacked.stacked_reduction.r) {
+    assert_eq!(
+        batch_and_stacked.batch.r.len(),
+        batch_and_stacked.stacked_reduction.r.len()
+    );
+    for (batch_r, stacked_r) in batch_and_stacked
+        .batch
+        .r
+        .iter()
+        .zip(&batch_and_stacked.stacked_reduction.r)
+    {
         baby_bear.assert_ext_equal(ctx, batch_r, stacked_r);
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.column_openings.len(),
-        batch_and_stacked.stacked_reduction.batch_column_openings.len(),
+        batch_and_stacked
+            .stacked_reduction
+            .batch_column_openings
+            .len(),
     );
     for (batch_trace, stacked_trace) in batch_and_stacked
         .batch
@@ -1388,9 +1324,9 @@ fn bind_batch_to_stacked_inputs(
         .iter()
         .zip(&batch_and_stacked.stacked_reduction.batch_column_openings)
     {
-        constrain_usize_equal(ctx, gate, batch_trace.len(), stacked_trace.len());
+        assert_eq!(batch_trace.len(), stacked_trace.len());
         for (batch_part, stacked_part) in batch_trace.iter().zip(stacked_trace) {
-            constrain_usize_equal(ctx, gate, batch_part.len(), stacked_part.len());
+            assert_eq!(batch_part.len(), stacked_part.len());
             for (batch_opening, stacked_opening) in batch_part.iter().zip(stacked_part) {
                 baby_bear.assert_ext_equal(ctx, batch_opening, stacked_opening);
             }
@@ -1398,15 +1334,18 @@ fn bind_batch_to_stacked_inputs(
     }
 
     let batch_need_rot = &actual.batch_and_stacked.batch.column_openings_need_rot;
-    let stacked_need_rot = &actual.batch_and_stacked.stacked_reduction.batch_column_openings_need_rot;
+    let stacked_need_rot = &actual
+        .batch_and_stacked
+        .stacked_reduction
+        .batch_column_openings_need_rot;
     let expected_stacked_rows = 1usize
         + batch_need_rot
             .iter()
             .map(|row| row.len().saturating_sub(1))
             .sum::<usize>();
-    constrain_usize_equal(ctx, gate, stacked_need_rot.len(), expected_stacked_rows);
+    assert_eq!(stacked_need_rot.len(), expected_stacked_rows);
     let stacked_common_row_width = stacked_need_rot.first().map_or(0usize, Vec::len);
-    constrain_usize_equal(ctx, gate, stacked_common_row_width, batch_need_rot.len());
+    assert_eq!(stacked_common_row_width, batch_need_rot.len());
     for trace_idx in 0..batch_need_rot.len() {
         let batch_common = batch_need_rot[trace_idx].first().copied().unwrap_or(false);
         let stacked_common = stacked_need_rot
@@ -1414,10 +1353,9 @@ fn bind_batch_to_stacked_inputs(
             .and_then(|row| row.get(trace_idx))
             .copied()
             .unwrap_or(false);
-        let batch_cell = ctx.load_witness(Fr::from(batch_common as u64));
-        let stacked_cell = ctx.load_witness(Fr::from(stacked_common as u64));
-        gate.assert_bit(ctx, batch_cell);
-        gate.assert_bit(ctx, stacked_cell);
+        assert_eq!(batch_common, stacked_common);
+        let batch_cell = ctx.load_constant(Fr::from(batch_common as u64));
+        let stacked_cell = ctx.load_constant(Fr::from(stacked_common as u64));
         ctx.constrain_equal(&batch_cell, &stacked_cell);
     }
 
@@ -1425,32 +1363,28 @@ fn bind_batch_to_stacked_inputs(
     for batch_row in batch_need_rot {
         for &batch_part in batch_row.iter().skip(1) {
             let stacked_row = stacked_need_rot.get(commit_idx);
-            constrain_usize_to_const(ctx, gate, stacked_row.map_or(0usize, |row| row.len()), 1);
+            assert_eq!(stacked_row.map_or(0usize, |row| row.len()), 1);
             let stacked_part = stacked_row
                 .and_then(|row| row.first())
                 .copied()
                 .unwrap_or(false);
-            let batch_cell = ctx.load_witness(Fr::from(batch_part as u64));
-            let stacked_cell = ctx.load_witness(Fr::from(stacked_part as u64));
-            gate.assert_bit(ctx, batch_cell);
-            gate.assert_bit(ctx, stacked_cell);
+            assert_eq!(batch_part, stacked_part);
+            let batch_cell = ctx.load_constant(Fr::from(batch_part as u64));
+            let stacked_cell = ctx.load_constant(Fr::from(stacked_part as u64));
             ctx.constrain_equal(&batch_cell, &stacked_cell);
             commit_idx += 1;
         }
     }
-    constrain_usize_equal(ctx, gate, commit_idx, stacked_need_rot.len());
+    assert_eq!(commit_idx, stacked_need_rot.len());
 }
 
 fn bind_stacked_openings_to_whir(
     ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
     batch_and_stacked: &AssignedBatchAndStackedIntermediates,
     whir: &AssignedWhirIntermediates,
 ) {
     let baby_bear = BabyBearArithmeticGadgets;
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.stacked_reduction.stacking_openings.len(),
         whir.stacking_openings.len(),
     );
@@ -1460,7 +1394,7 @@ fn bind_stacked_openings_to_whir(
         .iter()
         .zip(&whir.stacking_openings)
     {
-        constrain_usize_equal(ctx, gate, stacked_commit.len(), whir_commit.len());
+        assert_eq!(stacked_commit.len(), whir_commit.len());
         for (stacked_opening, whir_opening) in stacked_commit.iter().zip(whir_commit) {
             baby_bear.assert_ext_equal(ctx, stacked_opening, whir_opening);
         }
@@ -1469,14 +1403,13 @@ fn bind_stacked_openings_to_whir(
 
 fn map_initial_commitment_roots_by_air(
     ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
     initial_commitment_roots: &[AssignedValue<Fr>],
     trace_id_to_air_id: &[usize],
     air_has_preprocessed: &[bool],
     air_cached_commitment_lens: &[usize],
 ) -> (Vec<Option<AssignedValue<Fr>>>, Vec<Vec<AssignedValue<Fr>>>) {
     let num_airs = air_has_preprocessed.len();
-    constrain_usize_to_const(ctx, gate, air_cached_commitment_lens.len(), num_airs);
+    assert_eq!(air_cached_commitment_lens.len(), num_airs);
 
     let mut preprocessed_roots = vec![None; num_airs];
     let mut cached_roots = vec![Vec::new(); num_airs];
@@ -1511,8 +1444,8 @@ fn map_initial_commitment_roots_by_air(
         root_cursor += cached_len;
     }
 
-    constrain_usize_to_const(ctx, gate, invalid_air_index_count, 0);
-    constrain_usize_equal(ctx, gate, root_cursor, initial_commitment_roots.len());
+    assert_eq!(invalid_air_index_count, 0);
+    assert_eq!(root_cursor, initial_commitment_roots.len());
     (preprocessed_roots, cached_roots)
 }
 
@@ -1526,25 +1459,17 @@ fn derive_preamble_observe_cells_from_stage(
     statement_public_inputs: [AssignedValue<Fr>; 2],
     schedule: &PipelineTranscriptSchedule,
 ) -> Vec<AssignedValue<Fr>> {
-    let gate = range.gate();
     let num_airs = schedule.air_is_required.len();
-    constrain_usize_to_const(ctx, gate, schedule.air_has_preprocessed.len(), num_airs);
-    constrain_usize_to_const(
-        ctx,
-        gate,
-        schedule.air_preprocessed_commit_roots.len(),
-        num_airs,
-    );
-    constrain_usize_to_const(ctx, gate, proof_shape.air_presence_flags.len(), num_airs);
-    constrain_usize_to_const(ctx, gate, proof_shape.air_log_heights.len(), num_airs);
-    constrain_usize_to_const(
-        ctx,
-        gate,
+    assert_eq!(schedule.air_has_preprocessed.len(), num_airs);
+    assert_eq!(schedule.air_preprocessed_commit_roots.len(), num_airs);
+    assert_eq!(proof_shape.air_presence_flags.len(), num_airs);
+    assert_eq!(proof_shape.air_log_heights.len(), num_airs);
+    assert_eq!(
         actual.proof_shape.air_cached_commitment_lens.len(),
-        num_airs,
+        num_airs
     );
-    constrain_usize_to_const(ctx, gate, batch_and_stacked.batch.public_values.len(), num_airs);
-    constrain_bool_to_const(ctx, gate, !whir.initial_commitment_roots.is_empty(), true);
+    assert_eq!(batch_and_stacked.batch.public_values.len(), num_airs);
+    assert!(!whir.initial_commitment_roots.is_empty());
 
     let mut observes = Vec::new();
     let pre_hash_limbs =
@@ -1566,7 +1491,6 @@ fn derive_preamble_observe_cells_from_stage(
 
     let (preprocessed_roots_by_air, cached_roots_by_air) = map_initial_commitment_roots_by_air(
         ctx,
-        gate,
         &whir.initial_commitment_roots,
         &actual.proof_shape.trace_id_to_air_id,
         &schedule.air_has_preprocessed,
@@ -1580,18 +1504,8 @@ fn derive_preamble_observe_cells_from_stage(
 
         if actual.proof_shape.air_presence_flags[air_idx] {
             if schedule.air_has_preprocessed[air_idx] {
-                constrain_bool_to_const(
-                    ctx,
-                    gate,
-                    preprocessed_roots_by_air[air_idx].is_some(),
-                    true,
-                );
-                constrain_bool_to_const(
-                    ctx,
-                    gate,
-                    schedule.air_preprocessed_commit_roots[air_idx].is_some(),
-                    true,
-                );
+                assert!(preprocessed_roots_by_air[air_idx].is_some());
+                assert!(schedule.air_preprocessed_commit_roots[air_idx].is_some());
                 let root = preprocessed_roots_by_air[air_idx]
                     .unwrap_or_else(|| ctx.load_constant(Fr::from(0u64)));
                 let expected_root =
@@ -1691,18 +1605,15 @@ fn encode_symbolic_node(node: &SymbolicExpressionNode<NativeF>) -> [u64; 7] {
 }
 
 fn constrain_symbolic_node_ownership(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
     actual_nodes: &[SymbolicExpressionNode<NativeF>],
     owned_nodes: &[SymbolicExpressionNode<NativeF>],
 ) {
-    constrain_usize_equal(ctx, gate, actual_nodes.len(), owned_nodes.len());
+    assert_eq!(actual_nodes.len(), owned_nodes.len());
     for (actual_node, owned_node) in actual_nodes.iter().zip(owned_nodes.iter()) {
         let actual_encoding = encode_symbolic_node(actual_node);
         let owned_encoding = encode_symbolic_node(owned_node);
         for (&actual_word, &owned_word) in actual_encoding.iter().zip(owned_encoding.iter()) {
-            let cell = ctx.load_witness(Fr::from(actual_word));
-            gate.assert_is_const(ctx, &cell, &Fr::from(owned_word));
+            assert_eq!(actual_word, owned_word);
         }
     }
 }
@@ -1717,15 +1628,11 @@ fn constrain_metadata_ownership(
 ) {
     let l_skip = schedule.l_skip as isize;
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.batch_and_stacked.batch.n_per_trace.len(),
         schedule.batch_n_per_trace.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.batch_and_stacked.batch.n_per_trace.len(),
         actual.proof_shape.trace_id_to_air_id.len(),
     );
@@ -1744,15 +1651,11 @@ fn constrain_metadata_ownership(
         let air_idx = actual.proof_shape.trace_id_to_air_id[trace_idx];
         let shifted = actual_n + l_skip;
         let shifted_expected = expected_n + l_skip;
-        constrain_bool_to_const(ctx, gate, shifted >= 0, true);
-        constrain_bool_to_const(ctx, gate, shifted_expected >= 0, true);
-        let shifted_cell = ctx.load_witness(Fr::from(shifted.max(0) as u64));
-        gate.assert_is_const(
-            ctx,
-            &shifted_cell,
-            &Fr::from(shifted_expected.max(0) as u64),
-        );
-        constrain_bool_to_const(ctx, gate, air_idx < proof_shape.air_log_heights.len(), true);
+        assert!(shifted >= 0);
+        assert!(shifted_expected >= 0);
+        assert_eq!(shifted.max(0) as u64, shifted_expected.max(0) as u64);
+        let shifted_cell = ctx.load_constant(Fr::from(shifted_expected.max(0) as u64));
+        assert!(air_idx < proof_shape.air_log_heights.len());
         let air_log_height = proof_shape
             .air_log_heights
             .get(air_idx)
@@ -1761,8 +1664,10 @@ fn constrain_metadata_ownership(
         ctx.constrain_equal(&shifted_cell, &air_log_height);
     }
 
-    let batch_l_skip = ctx.load_witness(Fr::from(actual.batch_and_stacked.batch.l_skip as u64));
-    gate.assert_is_const(ctx, &batch_l_skip, &Fr::from(schedule.l_skip as u64));
+    assert_eq!(
+        actual.batch_and_stacked.batch.l_skip as u64,
+        schedule.l_skip as u64
+    );
     gate.assert_is_const(
         ctx,
         &batch_and_stacked.batch.n_logup,
@@ -1774,9 +1679,7 @@ fn constrain_metadata_ownership(
         &Fr::from(schedule.batch_n_max as u64),
     );
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.batch_and_stacked.batch.trace_has_preprocessed.len(),
         schedule.batch_trace_has_preprocessed.len(),
     );
@@ -1787,14 +1690,15 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.batch_trace_has_preprocessed)
     {
-        let flag = ctx.load_witness(Fr::from(actual_flag as u64));
-        gate.assert_is_const(ctx, &flag, &Fr::from(expected_flag as u64));
+        assert_eq!(actual_flag, expected_flag);
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
-        actual.batch_and_stacked.batch.column_openings_need_rot.len(),
+    assert_eq!(
+        actual
+            .batch_and_stacked
+            .batch
+            .column_openings_need_rot
+            .len(),
         schedule.batch_column_openings_need_rot.len(),
     );
     for (actual_row, expected_row) in actual
@@ -1804,16 +1708,17 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.batch_column_openings_need_rot)
     {
-        constrain_usize_equal(ctx, gate, actual_row.len(), expected_row.len());
+        assert_eq!(actual_row.len(), expected_row.len());
         for (&actual_flag, &expected_flag) in actual_row.iter().zip(expected_row) {
-            let flag = ctx.load_witness(Fr::from(actual_flag as u64));
-            gate.assert_is_const(ctx, &flag, &Fr::from(expected_flag as u64));
+            assert_eq!(actual_flag, expected_flag);
         }
     }
-    constrain_usize_equal(
-        ctx,
-        gate,
-        actual.batch_and_stacked.batch.column_opening_expected_widths.len(),
+    assert_eq!(
+        actual
+            .batch_and_stacked
+            .batch
+            .column_opening_expected_widths
+            .len(),
         schedule.batch_column_opening_expected_widths.len(),
     );
     for (actual_row, expected_row) in actual
@@ -1823,16 +1728,13 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.batch_column_opening_expected_widths)
     {
-        constrain_usize_equal(ctx, gate, actual_row.len(), expected_row.len());
+        assert_eq!(actual_row.len(), expected_row.len());
         for (&actual_width, &expected_width) in actual_row.iter().zip(expected_row) {
-            let width = ctx.load_witness(Fr::from(actual_width as u64));
-            gate.assert_is_const(ctx, &width, &Fr::from(expected_width as u64));
+            assert_eq!(actual_width, expected_width);
         }
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.batch_and_stacked.batch.trace_constraint_nodes.len(),
         schedule.batch_trace_constraint_nodes.len(),
     );
@@ -1843,13 +1745,15 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.batch_trace_constraint_nodes)
     {
-        constrain_symbolic_node_ownership(ctx, gate, actual_nodes, expected_nodes);
+        constrain_symbolic_node_ownership(actual_nodes, expected_nodes);
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
-        actual.batch_and_stacked.batch.trace_constraint_indices.len(),
+    assert_eq!(
+        actual
+            .batch_and_stacked
+            .batch
+            .trace_constraint_indices
+            .len(),
         schedule.batch_trace_constraint_indices.len(),
     );
     for (actual_indices, expected_indices) in actual
@@ -1859,16 +1763,13 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.batch_trace_constraint_indices)
     {
-        constrain_usize_equal(ctx, gate, actual_indices.len(), expected_indices.len());
+        assert_eq!(actual_indices.len(), expected_indices.len());
         for (&actual_idx, &expected_idx) in actual_indices.iter().zip(expected_indices) {
-            let idx = ctx.load_witness(Fr::from(actual_idx as u64));
-            gate.assert_is_const(ctx, &idx, &Fr::from(expected_idx as u64));
+            assert_eq!(actual_idx, expected_idx);
         }
     }
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.batch_and_stacked.batch.trace_interactions.len(),
         schedule.batch_trace_interactions.len(),
     );
@@ -1879,49 +1780,37 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.batch_trace_interactions)
     {
-        constrain_usize_equal(
-            ctx,
-            gate,
-            actual_interactions.len(),
-            expected_interactions.len(),
-        );
+        assert_eq!(actual_interactions.len(), expected_interactions.len(),);
         for (actual_interaction, expected_interaction) in
             actual_interactions.iter().zip(expected_interactions)
         {
-            let bus_index = ctx.load_witness(Fr::from(actual_interaction.bus_index as u64));
-            gate.assert_is_const(
-                ctx,
-                &bus_index,
-                &Fr::from(expected_interaction.bus_index as u64),
-            );
-
-            let count = ctx.load_witness(Fr::from(actual_interaction.count as u64));
-            gate.assert_is_const(ctx, &count, &Fr::from(expected_interaction.count as u64));
-
-            constrain_usize_equal(
-                ctx,
-                gate,
+            assert_eq!(actual_interaction.bus_index, expected_interaction.bus_index);
+            assert_eq!(actual_interaction.count, expected_interaction.count);
+            assert_eq!(
                 actual_interaction.message.len(),
-                expected_interaction.message.len(),
+                expected_interaction.message.len()
             );
             for (&actual_msg_idx, &expected_msg_idx) in actual_interaction
                 .message
                 .iter()
                 .zip(&expected_interaction.message)
             {
-                let msg_idx = ctx.load_witness(Fr::from(actual_msg_idx as u64));
-                gate.assert_is_const(ctx, &msg_idx, &Fr::from(expected_msg_idx as u64));
+                assert_eq!(actual_msg_idx, expected_msg_idx);
             }
         }
     }
 
-    let stacked_l_skip = ctx.load_witness(Fr::from(actual.batch_and_stacked.stacked_reduction.l_skip as u64));
-    gate.assert_is_const(ctx, &stacked_l_skip, &Fr::from(schedule.l_skip as u64));
-    constrain_usize_equal(
-        ctx,
-        gate,
-        actual.batch_and_stacked.stacked_reduction.q_coeff_terms.len(),
-        schedule.stacked_q_coeff_terms.len(),
+    assert_eq!(
+        actual.batch_and_stacked.stacked_reduction.l_skip as u64,
+        schedule.l_skip as u64
+    );
+    assert_eq!(
+        actual
+            .batch_and_stacked
+            .stacked_reduction
+            .q_coeff_terms
+            .len(),
+        schedule.stacked_q_coeff_terms.len()
     );
     for (actual_term, expected_term) in actual
         .batch_and_stacked
@@ -1930,46 +1819,22 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.stacked_q_coeff_terms)
     {
-        let commit_idx = ctx.load_witness(Fr::from(actual_term.commit_idx as u64));
-        gate.assert_is_const(ctx, &commit_idx, &Fr::from(expected_term.commit_idx as u64));
-
-        let target_col_idx = ctx.load_witness(Fr::from(actual_term.target_col_idx as u64));
-        gate.assert_is_const(
-            ctx,
-            &target_col_idx,
-            &Fr::from(expected_term.target_col_idx as u64),
-        );
-
-        let lambda_idx = ctx.load_witness(Fr::from(actual_term.lambda_idx as u64));
-        gate.assert_is_const(ctx, &lambda_idx, &Fr::from(expected_term.lambda_idx as u64));
-
-        let need_rot = ctx.load_witness(Fr::from(actual_term.need_rot as u64));
-        gate.assert_is_const(ctx, &need_rot, &Fr::from(expected_term.need_rot as u64));
+        assert_eq!(actual_term.commit_idx, expected_term.commit_idx);
+        assert_eq!(actual_term.target_col_idx, expected_term.target_col_idx);
+        assert_eq!(actual_term.lambda_idx, expected_term.lambda_idx);
+        assert_eq!(actual_term.need_rot, expected_term.need_rot);
 
         let shifted_n = actual_term.n + l_skip;
         let shifted_expected_n = expected_term.n + l_skip;
-        constrain_bool_to_const(ctx, gate, shifted_n >= 0, true);
-        constrain_bool_to_const(ctx, gate, shifted_expected_n >= 0, true);
-        let shifted_n_cell = ctx.load_witness(Fr::from(shifted_n.max(0) as u64));
-        gate.assert_is_const(
-            ctx,
-            &shifted_n_cell,
-            &Fr::from(shifted_expected_n.max(0) as u64),
-        );
-        constrain_usize_equal(
-            ctx,
-            gate,
-            actual_term.b_bits.len(),
-            expected_term.b_bits.len(),
-        );
+        assert!(shifted_n >= 0);
+        assert!(shifted_expected_n >= 0);
+        assert_eq!(shifted_n.max(0) as u64, shifted_expected_n.max(0) as u64);
+        assert_eq!(actual_term.b_bits.len(), expected_term.b_bits.len());
         for (&actual_bit, &expected_bit) in actual_term.b_bits.iter().zip(&expected_term.b_bits) {
-            let bit = ctx.load_witness(Fr::from(actual_bit as u64));
-            gate.assert_is_const(ctx, &bit, &Fr::from(expected_bit as u64));
+            assert_eq!(actual_bit, expected_bit);
         }
     }
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual
             .batch_and_stacked
             .stacked_reduction
@@ -1984,19 +1849,13 @@ fn constrain_metadata_ownership(
         .iter()
         .zip(&schedule.stacked_matrix_expected_widths)
     {
-        let width = ctx.load_witness(Fr::from(actual_width as u64));
-        gate.assert_is_const(ctx, &width, &Fr::from(expected_width as u64));
+        assert_eq!(actual_width, expected_width);
     }
 
-    let k_whir = ctx.load_witness(Fr::from(actual.whir.k_whir as u64));
-    gate.assert_is_const(ctx, &k_whir, &Fr::from(schedule.whir_k_whir as u64));
-
-    let initial_log_rs_domain_size =
-        ctx.load_witness(Fr::from(actual.whir.initial_log_rs_domain_size as u64));
-    gate.assert_is_const(
-        ctx,
-        &initial_log_rs_domain_size,
-        &Fr::from(schedule.whir_initial_log_rs_domain_size as u64),
+    assert_eq!(actual.whir.k_whir, schedule.whir_k_whir);
+    assert_eq!(
+        actual.whir.initial_log_rs_domain_size,
+        schedule.whir_initial_log_rs_domain_size
     );
 }
 
@@ -2008,34 +1867,27 @@ pub(crate) fn constrain_pipeline_intermediates(
     statement: &PipelineStatementWitness,
     schedule: &PipelineTranscriptSchedule,
 ) -> AssignedPipelineIntermediates {
-    // Statement/schedule inputs are constrained in-circuit: statement public inputs are replay-owned,
-    // and schedule metadata is bound through a transcript-derived public commitment.
+    // Statement/schedule inputs are constrained in-circuit: statement public inputs are
+    // replay-owned, and schedule metadata is bound through a transcript-derived public
+    // commitment.
     let gate = range.gate();
     let baby_bear = BabyBearArithmeticGadgets;
     let zero_ext = baby_bear.ext_zero(ctx, range);
     let zero_cell = ctx.load_constant(Fr::from(0u64));
 
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.whir.folding_counts_per_round.len(),
         schedule.folding_counts_per_round.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.whir.query_counts_per_round.len(),
         schedule.query_counts_per_round.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.whir.query_index_bits.len(),
         schedule.query_index_bits.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.proof_shape.trace_height_thresholds.len(),
         schedule.proof_shape_ownership.trace_height_thresholds.len(),
     );
@@ -2050,8 +1902,9 @@ pub(crate) fn constrain_pipeline_intermediates(
     )
     .assigned;
     let mut batch_and_stacked_with_owned_nodes = actual.batch_and_stacked.clone();
-    batch_and_stacked_with_owned_nodes.batch.trace_constraint_nodes =
-        schedule.batch_trace_constraint_nodes.clone();
+    batch_and_stacked_with_owned_nodes
+        .batch
+        .trace_constraint_nodes = schedule.batch_trace_constraint_nodes.clone();
     let batch_and_stacked = constrain_checked_batch_and_stacked_witness_state_unchecked(
         ctx,
         range,
@@ -2068,9 +1921,16 @@ pub(crate) fn constrain_pipeline_intermediates(
         },
     )
     .assigned;
-    constrain_metadata_ownership(ctx, gate, actual, &proof_shape, &batch_and_stacked, schedule);
-    bind_batch_to_stacked_inputs(ctx, range, actual, &batch_and_stacked);
-    bind_stacked_openings_to_whir(ctx, gate, &batch_and_stacked, &whir);
+    constrain_metadata_ownership(
+        ctx,
+        gate,
+        actual,
+        &proof_shape,
+        &batch_and_stacked,
+        schedule,
+    );
+    bind_batch_to_stacked_inputs(ctx, actual, &batch_and_stacked);
+    bind_stacked_openings_to_whir(ctx, &batch_and_stacked, &whir);
     let transcript_replay = constrain_transcript_events(ctx, range, &actual.transcript_events);
 
     let statement_public_inputs = [
@@ -2087,19 +1947,16 @@ pub(crate) fn constrain_pipeline_intermediates(
         statement_public_inputs,
         schedule,
     );
-    let preamble_observe_count =
-        ctx.load_witness(Fr::from(usize_to_u64(preamble_observe_cells.len())));
-    gate.assert_is_const(
-        ctx,
-        &preamble_observe_count,
-        &Fr::from(usize_to_u64(schedule.raw_preamble_observe_count)),
+    assert_eq!(
+        preamble_observe_cells.len(),
+        schedule.raw_preamble_observe_count
     );
     let mut event_cursor = EventCursor::new(&transcript_replay.events);
     for preamble_cell in &preamble_observe_cells {
         let observed_cell = event_cursor.consume_observe(ctx, gate);
         ctx.constrain_equal(preamble_cell, &observed_cell);
     }
-    event_cursor.constrain_consumed_prefix(ctx, gate, schedule.raw_preamble_observe_count);
+    event_cursor.constrain_consumed_prefix(schedule.raw_preamble_observe_count);
     constrain_post_preamble_event_kinds(
         ctx,
         gate,
@@ -2117,57 +1974,38 @@ pub(crate) fn constrain_pipeline_intermediates(
         non_preamble_observe_cells.push(observed_cell);
         ctx.constrain_equal(&payload_cell, &observed_cell);
     }
-    let non_preamble_observe_count =
-        ctx.load_witness(Fr::from(usize_to_u64(non_preamble_observe_cells.len())));
-    gate.assert_is_const(
-        ctx,
-        &non_preamble_observe_count,
-        &Fr::from(usize_to_u64(schedule.non_preamble_observe_count)),
+    assert_eq!(
+        non_preamble_observe_cells.len(),
+        schedule.non_preamble_observe_count
     );
-    let total_observe_count =
-        ctx.load_witness(Fr::from(usize_to_u64(transcript_replay.observes.len())));
-    gate.assert_is_const(
-        ctx,
-        &total_observe_count,
-        &Fr::from(usize_to_u64(
-            preamble_observe_cells.len() + non_preamble_observe_cells.len(),
-        )),
+    assert_eq!(
+        transcript_replay.observes.len(),
+        preamble_observe_cells.len() + non_preamble_observe_cells.len(),
     );
 
-    let proof_shape_l_skip = ctx.load_witness(Fr::from(actual.proof_shape.l_skip as u64));
-    gate.assert_is_const(ctx, &proof_shape_l_skip, &Fr::from(schedule.l_skip as u64));
+    assert_eq!(actual.proof_shape.l_skip as u64, schedule.l_skip as u64);
     gate.assert_is_const(
         ctx,
         &proof_shape.max_log_height_allowed,
         &Fr::from(schedule.proof_shape_max_log_height_allowed as u64),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         proof_shape.air_required_flags.len(),
         schedule.air_is_required.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         proof_shape.air_expected_public_value_lens.len(),
         schedule.air_num_public_values.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         proof_shape.air_expected_cached_commitment_lens.len(),
         schedule.air_num_cached_mains.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         actual.proof_shape.air_public_value_lens.len(),
         schedule.air_is_required.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.public_values.len(),
         schedule.air_is_required.len(),
     );
@@ -2219,10 +2057,9 @@ pub(crate) fn constrain_pipeline_intermediates(
             &expected_cached_len,
             &Fr::from(expected_cached_commitments as u64),
         );
-        constrain_usize_equal(
-            ctx,
-            gate,
-            batch_and_stacked.batch
+        assert_eq!(
+            batch_and_stacked
+                .batch
                 .public_values
                 .get(air_idx)
                 .map_or(0usize, |row| row.len()),
@@ -2240,8 +2077,7 @@ pub(crate) fn constrain_pipeline_intermediates(
         .iter()
         .zip(&schedule.proof_shape_ownership.trace_height_thresholds)
     {
-        let threshold = ctx.load_witness(Fr::from(actual_threshold));
-        gate.assert_is_const(ctx, &threshold, &Fr::from(schedule_threshold));
+        assert_eq!(actual_threshold, schedule_threshold);
     }
     gate.assert_is_const(
         ctx,
@@ -2258,57 +2094,54 @@ pub(crate) fn constrain_pipeline_intermediates(
     } else {
         0
     };
-    constrain_usize_to_const(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.gkr_claims_per_layer.len(),
-        expected_gkr_rounds,
+        expected_gkr_rounds
     );
-    constrain_usize_to_const(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.gkr_sumcheck_polys.len(),
-        expected_gkr_rounds.saturating_sub(1),
+        expected_gkr_rounds.saturating_sub(1)
     );
     for claims in &batch_and_stacked.batch.gkr_claims_per_layer {
-        constrain_usize_to_const(ctx, gate, claims.len(), 4);
+        assert_eq!(claims.len(), 4);
     }
-    for (round_idx, evals) in batch_and_stacked.batch.gkr_sumcheck_polys.iter().enumerate() {
-        constrain_usize_to_const(ctx, gate, evals.len(), (round_idx + 1) * 3);
+    for (round_idx, evals) in batch_and_stacked
+        .batch
+        .gkr_sumcheck_polys
+        .iter()
+        .enumerate()
+    {
+        assert_eq!(evals.len(), (round_idx + 1) * 3);
     }
     gate.assert_is_const(
         ctx,
         &batch_and_stacked.batch.batch_degree,
         &Fr::from(schedule.batch_degree as u64),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.numerator_term_per_air.len(),
         batch_and_stacked.batch.denominator_term_per_air.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.numerator_term_per_air.len(),
         schedule.batch_n_per_trace.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.univariate_round_coeffs.len(),
         schedule.batch_univariate_coeffs_len,
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         batch_and_stacked.batch.sumcheck_round_polys.len(),
         schedule.batch_n_max,
     );
     for round in &batch_and_stacked.batch.sumcheck_round_polys {
-        constrain_usize_to_const(ctx, gate, round.len(), schedule.batch_degree);
+        assert_eq!(round.len(), schedule.batch_degree);
     }
-    gate.assert_is_const(ctx, &whir.mu_pow_bits, &Fr::from(schedule.mu_pow_bits as u64));
+    gate.assert_is_const(
+        ctx,
+        &whir.mu_pow_bits,
+        &Fr::from(schedule.mu_pow_bits as u64),
+    );
     gate.assert_is_const(
         ctx,
         &whir.folding_pow_bits,
@@ -2324,12 +2157,9 @@ pub(crate) fn constrain_pipeline_intermediates(
         &whir.final_poly_len,
         &Fr::from(schedule.whir_expected_final_poly_len as u64),
     );
-    let whir_expected_final_poly_len =
-        ctx.load_witness(Fr::from(actual.whir.expected_final_poly_len as u64));
-    gate.assert_is_const(
-        ctx,
-        &whir_expected_final_poly_len,
-        &Fr::from(schedule.whir_expected_final_poly_len as u64),
+    assert_eq!(
+        actual.whir.expected_final_poly_len,
+        schedule.whir_expected_final_poly_len
     );
 
     for (&actual_count, &expected_count) in actual
@@ -2338,8 +2168,7 @@ pub(crate) fn constrain_pipeline_intermediates(
         .iter()
         .zip(&schedule.folding_counts_per_round)
     {
-        let count = ctx.load_witness(Fr::from(actual_count as u64));
-        gate.assert_is_const(ctx, &count, &Fr::from(expected_count as u64));
+        assert_eq!(actual_count, expected_count);
     }
     for (&actual_count, &expected_count) in actual
         .whir
@@ -2347,8 +2176,7 @@ pub(crate) fn constrain_pipeline_intermediates(
         .iter()
         .zip(&schedule.query_counts_per_round)
     {
-        let count = ctx.load_witness(Fr::from(actual_count as u64));
-        gate.assert_is_const(ctx, &count, &Fr::from(expected_count as u64));
+        assert_eq!(actual_count, expected_count);
     }
     for (&actual_bits, &expected_bits) in actual
         .whir
@@ -2356,30 +2184,18 @@ pub(crate) fn constrain_pipeline_intermediates(
         .iter()
         .zip(&schedule.query_index_bits)
     {
-        let bits = ctx.load_witness(Fr::from(actual_bits as u64));
-        gate.assert_is_const(ctx, &bits, &Fr::from(expected_bits as u64));
+        assert_eq!(actual_bits, expected_bits);
     }
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         whir.folding_alphas.len(),
         whir.folding_pow_sampled_bits.len(),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(
         whir.z0_challenges.len(),
         schedule.query_counts_per_round.len().saturating_sub(1),
     );
-    constrain_usize_equal(
-        ctx,
-        gate,
-        whir.gammas.len(),
-        schedule.query_counts_per_round.len(),
-    );
-    constrain_usize_equal(
-        ctx,
-        gate,
+    assert_eq!(whir.gammas.len(), schedule.query_counts_per_round.len(),);
+    assert_eq!(
         batch_and_stacked.batch.trace_id_to_air_id.len(),
         proof_shape.trace_id_to_air_id.len(),
     );
@@ -2402,7 +2218,11 @@ pub(crate) fn constrain_pipeline_intermediates(
         batch_and_stacked.batch.logup_pow_sampled_bits,
         false,
     );
-    bind_sample_ext(ctx, &mut sample_cursor, &batch_and_stacked.batch.alpha_logup);
+    bind_sample_ext(
+        ctx,
+        &mut sample_cursor,
+        &batch_and_stacked.batch.alpha_logup,
+    );
     bind_sample_ext(ctx, &mut sample_cursor, &batch_and_stacked.batch.beta_logup);
     for gkr_challenge in &batch_and_stacked.batch.gkr_non_xi_samples {
         bind_sample_ext(ctx, &mut sample_cursor, gkr_challenge);
@@ -2410,8 +2230,11 @@ pub(crate) fn constrain_pipeline_intermediates(
     for gkr_xi_challenge in &batch_and_stacked.batch.gkr_xi_sample_order {
         bind_sample_ext(ctx, &mut sample_cursor, gkr_xi_challenge);
     }
-    let gkr_xi_len_cell =
-        assign_and_range_u64(ctx, range, usize_to_u64(batch_and_stacked.batch.gkr_xi_sample_order.len()));
+    let gkr_xi_len_cell = assign_and_range_u64(
+        ctx,
+        range,
+        usize_to_u64(batch_and_stacked.batch.gkr_xi_sample_order.len()),
+    );
     range.check_less_than_safe(
         ctx,
         gkr_xi_len_cell,
@@ -2446,7 +2269,11 @@ pub(crate) fn constrain_pipeline_intermediates(
         bind_sample_ext(ctx, &mut sample_cursor, r_challenge);
     }
 
-    bind_sample_ext(ctx, &mut sample_cursor, &batch_and_stacked.stacked_reduction.lambda);
+    bind_sample_ext(
+        ctx,
+        &mut sample_cursor,
+        &batch_and_stacked.stacked_reduction.lambda,
+    );
     for u_challenge in &batch_and_stacked.stacked_reduction.u {
         bind_sample_ext(ctx, &mut sample_cursor, u_challenge);
     }
@@ -2542,35 +2369,18 @@ pub(crate) fn constrain_pipeline_intermediates(
         gamma_idx += 1;
     }
 
-    gate.assert_is_const(ctx, &batch_and_stacked.batch.logup_pow_witness_ok, &Fr::from(1u64));
+    gate.assert_is_const(
+        ctx,
+        &batch_and_stacked.batch.logup_pow_witness_ok,
+        &Fr::from(1u64),
+    );
     gate.assert_is_const(ctx, &whir.mu_pow_witness_ok, &Fr::from(1u64));
 
-    let folding_bound = ctx.load_witness(Fr::from(usize_to_u64(folding_idx)));
-    gate.assert_is_const(
-        ctx,
-        &folding_bound,
-        &Fr::from(usize_to_u64(whir.folding_pow_sampled_bits.len())),
-    );
-    let query_bound = ctx.load_witness(Fr::from(usize_to_u64(query_idx)));
-    gate.assert_is_const(
-        ctx,
-        &query_bound,
-        &Fr::from(usize_to_u64(whir.query_indices.len())),
-    );
-    let z0_bound = ctx.load_witness(Fr::from(usize_to_u64(z0_idx)));
-    gate.assert_is_const(
-        ctx,
-        &z0_bound,
-        &Fr::from(usize_to_u64(whir.z0_challenges.len())),
-    );
-    let gamma_bound = ctx.load_witness(Fr::from(usize_to_u64(gamma_idx)));
-    gate.assert_is_const(ctx, &gamma_bound, &Fr::from(usize_to_u64(whir.gammas.len())));
-    let consumed_samples = ctx.load_witness(Fr::from(usize_to_u64(sample_cursor.cursor)));
-    gate.assert_is_const(
-        ctx,
-        &consumed_samples,
-        &Fr::from(usize_to_u64(transcript_replay.samples.len())),
-    );
+    assert_eq!(folding_idx, whir.folding_pow_sampled_bits.len());
+    assert_eq!(query_idx, whir.query_indices.len());
+    assert_eq!(z0_idx, whir.z0_challenges.len());
+    assert_eq!(gamma_idx, whir.gammas.len());
+    assert_eq!(sample_cursor.cursor, transcript_replay.samples.len());
 
     bind_u_cube_from_stacked(
         ctx,

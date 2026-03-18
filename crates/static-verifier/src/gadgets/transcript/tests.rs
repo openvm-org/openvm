@@ -1,23 +1,22 @@
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
+    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar, D_EF as NATIVE_EF_DEGREE,
-        EF as NativeEF, F as NativeF, default_transcript,
+        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
+        D_EF as NATIVE_EF_DEGREE, EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
-        FiatShamirTranscript,
         p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
+        FiatShamirTranscript,
     },
-};
-
-use crate::config::{
-    STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
 };
 
 use super::*;
+use crate::config::{
+    STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
+};
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)

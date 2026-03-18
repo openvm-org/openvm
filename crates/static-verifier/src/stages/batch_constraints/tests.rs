@@ -1,6 +1,8 @@
-
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
+    gates::{
+        circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+        RangeInstructions,
+    },
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
@@ -8,19 +10,18 @@ use openvm_stark_sdk::{
         BabyBearBn254Poseidon2CpuEngine, EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
-        StarkEngine,
         p3_field::{PrimeCharacteristicRing, PrimeField64},
-        test_utils::{FibFixture, InteractionsFixture11, TestFixture, test_system_params_small},
+        test_utils::{test_system_params_small, FibFixture, InteractionsFixture11, TestFixture},
         verifier::batch_constraints::BatchConstraintError as NativeBatchConstraintError,
+        StarkEngine,
     },
 };
 
+use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
     gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
 };
-
-use super::*;
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     const BATCH_K: u32 = 22;
@@ -31,6 +32,9 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
     build(&mut builder);
 
     let params = builder.calculate_params(Some(32768));
+    // This scaffold intentionally checks for one phase-0 lookup column so tests
+    // run against the same baseline shape as the rest of static-verifier.
+    // If a test body only uses constants, it must add at least one lookup row.
     assert_eq!(
         params
             .num_advice_per_phase
@@ -121,10 +125,14 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
             let range = builder.range_chip();
             let ctx = builder.main(0);
             let baby_bear = BabyBearArithmeticGadgets;
-            let ext = ext_from_base_const(ctx, &range, &baby_bear, constant);
+            let ext = ext_from_base_const(ctx, &baby_bear, constant);
             ext.coeffs[0]
                 .cell
                 .debug_prank(ctx, Fr::from((constant + 1) % BABY_BEAR_MODULUS_U64));
+            // `load_constant` no longer creates lookup rows; add a tiny lookup so
+            // `run_mock` still validates the expected phase-0 lookup shape.
+            let lookup_anchor = ctx.load_constant(Fr::from(7u64));
+            range.range_check(ctx, lookup_anchor, 4);
             let _ = family;
         });
     }
@@ -205,8 +213,8 @@ fn batch_derivation_keeps_backend_parity_on_zero_interaction_tampered_q0_claim()
 fn batch_constraints_fail_on_tampered_intermediate_claims() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
 
     actual.consistency_residual[0] = (actual.consistency_residual[0] + 1) % BABY_BEAR_MODULUS_U64;
 
@@ -221,8 +229,8 @@ fn batch_constraints_fail_on_tampered_intermediate_claims() {
 fn batch_constraints_reject_trailing_padded_column_openings() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     actual.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
 
     run_mock(false, move |builder| {
@@ -236,8 +244,8 @@ fn batch_constraints_reject_trailing_padded_column_openings() {
 fn batch_constraints_reject_numerator_denominator_cardinality_mismatch() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     assert!(
         !actual.denominator_term_per_air.is_empty(),
         "fixture must include denominator terms",
@@ -257,8 +265,8 @@ fn batch_constraints_reject_numerator_denominator_cardinality_mismatch() {
 fn batch_constraints_reject_sumcheck_round_count_suffix() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     actual
         .sumcheck_round_polys
         .push(vec![[0; BABY_BEAR_EXT_DEGREE]; actual.batch_degree]);
@@ -276,8 +284,8 @@ fn batch_constraints_reject_sumcheck_round_count_suffix() {
 fn batch_constraints_reject_univariate_coeff_arity_suffix() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     actual
         .univariate_round_coeffs
         .push([0; BABY_BEAR_EXT_DEGREE]);
@@ -295,8 +303,8 @@ fn batch_constraints_reject_univariate_coeff_arity_suffix() {
 fn batch_constraints_fail_on_tampered_pow_sample_bits() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
 
     actual.logup_pow_sampled_bits = 1;
     actual.logup_pow_witness_ok = true;
@@ -312,8 +320,8 @@ fn batch_constraints_fail_on_tampered_pow_sample_bits() {
 fn batch_constraints_ignore_tampered_pow_witness_mirror() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     actual.logup_pow_witness = (actual.logup_pow_witness + 1) % BABY_BEAR_MODULUS_U64;
 
     run_mock(true, move |builder| {
@@ -327,8 +335,8 @@ fn batch_constraints_ignore_tampered_pow_witness_mirror() {
 fn batch_constraints_fail_on_tampered_gkr_layer_claims() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     assert!(
         !actual.gkr_claims_per_layer.is_empty(),
         "fixture should contain GKR layer claims when interactions are present",
@@ -347,8 +355,8 @@ fn batch_constraints_fail_on_tampered_gkr_layer_claims() {
 fn batch_constraints_fail_on_tampered_gkr_sumcheck_shape() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     let first_round = actual
         .gkr_sumcheck_polys
         .first_mut()
@@ -370,8 +378,8 @@ fn batch_constraints_fail_on_tampered_gkr_sumcheck_shape() {
 fn batch_constraints_fail_on_coordinated_consistency_rhs_forgery() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_batch_intermediates(engine.config(), &vk, &proof)
-        .expect("native batch must pass");
+    let mut actual =
+        derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     assert!(
         !actual.trace_interactions.is_empty() && !actual.trace_interactions[0].is_empty(),
         "fixture should include at least one interaction for consistency replay tamper",
@@ -427,7 +435,9 @@ fn batch_rejects_gkr_numerator_mismatch() {
         .expect_err("tampered numerator term should fail GKR numerator check");
     assert!(matches!(
         err,
-        BatchConstraintError::BatchConstraint(NativeBatchConstraintError::GkrNumeratorMismatch { .. })
+        BatchConstraintError::BatchConstraint(
+            NativeBatchConstraintError::GkrNumeratorMismatch { .. }
+        )
     ));
 }
 
