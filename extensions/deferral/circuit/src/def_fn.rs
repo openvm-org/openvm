@@ -85,7 +85,7 @@ fn hash_output_raw<F: VmField>(
     state[1] = F::from_usize(output_ref.len());
 
     let (lhs, rhs) = state_to_chunks(&state);
-    if output_ref.len() == 0 {
+    if output_ref.is_empty() {
         let res = hasher.perm(&lhs, &rhs, true);
         return f_commit_to_bytes(&res).to_vec();
     }

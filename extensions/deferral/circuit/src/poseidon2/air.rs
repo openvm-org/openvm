@@ -73,7 +73,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralPoseidon2Air<AB::F
             builder,
             once(AB::Expr::ONE)
                 .chain(inputs.into_iter().map(Into::into))
-                .chain(compress_res.into_iter().copied().map(Into::into)),
+                .chain(compress_res.iter().copied().map(Into::into)),
             local.compress_mult,
         );
 
@@ -81,7 +81,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralPoseidon2Air<AB::F
             builder,
             once(AB::Expr::ZERO)
                 .chain(inputs.into_iter().map(Into::into))
-                .chain(capacity_res.into_iter().copied().map(Into::into)),
+                .chain(capacity_res.iter().copied().map(Into::into)),
             local.capacity_mult,
         );
     }

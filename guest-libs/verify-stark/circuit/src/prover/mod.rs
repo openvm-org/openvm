@@ -156,6 +156,7 @@ impl<
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_pk(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         child_vk_pcs_data: CommittedTraceData<PB>,
