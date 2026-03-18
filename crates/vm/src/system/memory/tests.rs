@@ -7,7 +7,7 @@ use test_case::test_case;
 
 use crate::arch::{
     testing::{TestBuilder, VmChipTestBuilder},
-    MemoryConfig,
+    MemoryConfig, DEFAULT_BLOCK_SIZE,
 };
 
 type F = BabyBear;
@@ -19,43 +19,16 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
     // and intersecting/overlapping blocks,
     // by limiting the space of valid pointers.
     let max_ptr = 20;
-    let aligns = [4, 4, 4];
     let value_bounds = [256, 256, 256];
     for _ in 0..its {
-        let addr_sp = rng.random_range(1..=aligns.len());
-        let align: usize = aligns[addr_sp - 1];
+        let addr_sp = rng.random_range(1..=value_bounds.len());
         let value_bound: u32 = value_bounds[addr_sp - 1];
-        let ptr = rng.random_range(0..max_ptr / align) * align;
-        // Accesses use the address space minimum block size.
-        let log_len = align.trailing_zeros();
-        match log_len {
-            0 => tester.write::<1>(
-                addr_sp,
-                ptr,
-                array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
-            ),
-            1 => tester.write::<2>(
-                addr_sp,
-                ptr,
-                array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
-            ),
-            2 => tester.write::<4>(
-                addr_sp,
-                ptr,
-                array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
-            ),
-            3 => tester.write::<8>(
-                addr_sp,
-                ptr,
-                array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
-            ),
-            4 => tester.write::<16>(
-                addr_sp,
-                ptr,
-                array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
-            ),
-            _ => unreachable!(),
-        }
+        let ptr = rng.random_range(0..max_ptr / DEFAULT_BLOCK_SIZE) * DEFAULT_BLOCK_SIZE;
+        tester.write::<DEFAULT_BLOCK_SIZE>(
+            addr_sp,
+            ptr,
+            array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
+        );
     }
 }
 

@@ -9,9 +9,9 @@ mod aot {
     use openvm_circuit::{
         arch::{
             execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
-            AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE,
+            AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET,
         },
-        system::memory::online::GuestMemory,
+        system::memory::{online::GuestMemory, CHUNK},
     };
     /// This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
     const DEFAULT_PAGE_BITS: usize = 6;
@@ -166,29 +166,29 @@ mod aot {
         // 
         // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
         // Inputs:
-        // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.
+        // - `chunk`: always CHUNK (8), the merkle leaf size.
         // - `address_space`: always a constant because it is derived from an Instruction
         // - `size`: RV32 instruction always read 4 bytes(in the AIR level).
         // - `self.memory_dimensions.address_height`: known at AOT compilation time because it is derived from the memory configuration.
         // Inside the function body:
-        // - `num_blocks`: `(size + self.chunk - 1) >> self.chunk_bits = (4 + 8 - 1) >> 3 = 1`
+        // - `num_blocks`: `(size + chunk - 1) >> chunk_bits = (4 + 8 - 1) >> 3 = 1`
         // - `as_offset = (addr_space - ADDR_SPACE_OFFSET) as u64) << self.address_height)`: constant because `address_space` and `address_height` constant
-        // - `start_chunk_id`: `ptr >> self.chunk_bits`
-        // - `start_block_id`: `start_chunk_id + as_offset`
+        // - `chunk_idx`: `ptr >> chunk_bits`
+        // - `start_block_id`: `chunk_idx + as_offset`
         // - `end_block_id`: `start_block_id + num_blocks = start_block_id +1`
         // - `start_page_id`: `start_block_id >> PAGE_BITS`
         // - `end_page_id`: ((end_block_id - 1) >> PAGE_BITS) + 1 = start_block_id >> PAGE_BITS + 1;
         //
         // Therefore the loop only iterates once for `page_id = start_page_id`.
 
-        let chunk_bits = DEFAULT_BLOCK_SIZE.ilog2();
+        let chunk_bits = CHUNK.ilog2();
         let as_offset = ((address_space - ADDR_SPACE_OFFSET) as u64)
             << (config.memory_config.memory_dimensions().address_height);
 
         let mut asm_str = String::new();
-        // `start_chunk_id`: `ptr >> self.chunk_bits`
+        // `chunk_idx`: `ptr >> chunk_bits`
         asm_str += &format!("    shr {ptr_reg}, {chunk_bits}\n");
-        // `start_block_id`: `start_chunk_id + as_offset`
+        // `start_block_id`: `chunk_idx + as_offset`
         asm_str += &format!("    add {ptr_reg}, {as_offset}\n");
         // `start_page_id`: `start_block_id >> PAGE_BITS`
         // NOTE: This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
