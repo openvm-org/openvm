@@ -22,6 +22,14 @@ use crate::{
     utils::usize_to_u64,
 };
 
+fn constrain_proof_shape_intermediates(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    actual: &ProofShapeIntermediates,
+) -> AssignedProofShapeIntermediates {
+    constrain_proof_shape_intermediates_with_ownership(ctx, range, actual, None)
+}
+
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(15)
