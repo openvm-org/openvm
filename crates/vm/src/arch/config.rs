@@ -8,9 +8,7 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{
-    p3_field::Field, p3_util::log2_strict_usize, StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -189,21 +187,14 @@ impl Default for MemoryConfig {
 impl MemoryConfig {
     pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
         // By default only address spaces 1..=4 have non-empty cell counts.
-        // Unassigned address spaces default to block_size=DEFAULT_BLOCK_SIZE with native32 cells.
         let mut addr_spaces =
-            vec![
-                AddressSpaceHostConfig::new(0, DEFAULT_BLOCK_SIZE, MemoryCellType::field32());
-                num_addr_spaces
-            ];
-        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
-        addr_spaces[RV32_REGISTER_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_BLOCK_SIZE, MemoryCellType::U8);
+            vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
+        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        addr_spaces[RV32_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
-        addr_spaces[RV32_MEMORY_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_BLOCK_SIZE, MemoryCellType::U8);
+        addr_spaces[RV32_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
-        addr_spaces[PUBLIC_VALUES_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_BLOCK_SIZE, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
         addr_spaces
     }
@@ -214,13 +205,6 @@ impl MemoryConfig {
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
-    }
-
-    pub fn block_size_bits(&self) -> Vec<u8> {
-        self.addr_spaces
-            .iter()
-            .map(|addr_sp| log2_strict_usize(addr_sp.block_size) as u8)
-            .collect()
     }
 }
 
@@ -349,11 +333,6 @@ pub struct AddressSpaceHostConfig {
     /// The number of memory cells in each address space, where a memory cell refers to a single
     /// addressable unit of memory as defined by the ISA.
     pub num_cells: usize,
-    /// Block size for memory accesses. Each address space has a fixed block size that determines
-    /// the granularity of memory bus interactions.
-    ///
-    /// **Note**: Block size is in terms of memory cells.
-    pub block_size: usize,
     pub layout: MemoryCellType,
 }
 
@@ -363,8 +342,6 @@ impl AddressSpaceHostConfig {
         self.num_cells * self.layout.size()
     }
 }
-
-pub(crate) const MAX_CELL_BYTE_SIZE: usize = 8;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryCellType {
