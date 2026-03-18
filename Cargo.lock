@@ -5175,7 +5175,9 @@ name = "openvm-static-verifier"
 version = "2.0.0-alpha"
 dependencies = [
  "halo2-base",
+ "itertools 0.14.0",
  "num-bigint 0.4.6",
+ "num-integer",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand_chacha 0.3.1",
