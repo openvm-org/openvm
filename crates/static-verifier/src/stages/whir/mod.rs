@@ -724,14 +724,7 @@ fn invert_base_assigned(
     ext_chip: &BabyBearExtChip<'_>,
     value: &BabyBearWire,
 ) -> BabyBearWire {
-    let value_u64 = value.as_u64();
-    assert!(value_u64 != 0, "cannot invert zero BabyBear value");
-    let inv_u64 = ChildF::from_u64(value_u64).inverse().as_canonical_u64();
-    let inv = ext_chip.base().load_witness(ctx, ChildF::from_u64(inv_u64));
-    let one = ext_chip.base().one(ctx);
-    let check = ext_chip.base().mul(ctx, value, &inv);
-    ext_chip.base().assert_equal(ctx, &check, &one);
-    inv
+    ext_chip.base().invert(ctx, value)
 }
 
 fn query_root_from_bits_assigned(
@@ -1026,11 +1019,6 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
         gate.assert_is_const(ctx, &mu_pow_sampled_bits, &Fr::from(0u64));
     }
     let mu_pow_witness_ok = gate.is_zero(ctx, mu_pow_sampled_bits);
-    gate.assert_is_const(
-        ctx,
-        &mu_pow_witness_ok,
-        &Fr::from(actual.mu_pow_witness_ok as u64),
-    );
     gate.assert_is_const(ctx, &mu_pow_witness_ok, &Fr::from(1u64));
     let mu_challenge = assign_ext(ctx, ext_chip, actual.mu_challenge);
 
@@ -1044,11 +1032,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
         .collect::<Vec<_>>();
     let mut folding_pow_sampled_bits = Vec::with_capacity(actual.folding_pow_sampled_bits.len());
     let mut folding_pow_witness_ok = Vec::with_capacity(actual.folding_pow_witness_ok.len());
-    for (&sampled_bits, &actual_ok) in actual
-        .folding_pow_sampled_bits
-        .iter()
-        .zip(&actual.folding_pow_witness_ok)
-    {
+    for &sampled_bits in &actual.folding_pow_sampled_bits {
         let sampled_bits = ext_chip.base().assign_and_range_u64(ctx, sampled_bits);
         if actual.folding_pow_bits > 0 {
             ext_chip
@@ -1059,7 +1043,6 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
         }
 
         let bit = gate.is_zero(ctx, sampled_bits);
-        gate.assert_is_const(ctx, &bit, &Fr::from(actual_ok as u64));
         gate.assert_is_const(ctx, &bit, &Fr::from(1u64));
         folding_pow_sampled_bits.push(sampled_bits);
         folding_pow_witness_ok.push(bit);
@@ -1077,11 +1060,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
         Vec::with_capacity(actual.query_phase_pow_sampled_bits.len());
     let mut query_phase_pow_witness_ok =
         Vec::with_capacity(actual.query_phase_pow_witness_ok.len());
-    for (&sampled_bits, &actual_ok) in actual
-        .query_phase_pow_sampled_bits
-        .iter()
-        .zip(&actual.query_phase_pow_witness_ok)
-    {
+    for &sampled_bits in &actual.query_phase_pow_sampled_bits {
         let sampled_bits = ext_chip.base().assign_and_range_u64(ctx, sampled_bits);
         if actual.query_phase_pow_bits > 0 {
             ext_chip
@@ -1092,7 +1071,6 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
         }
 
         let bit = gate.is_zero(ctx, sampled_bits);
-        gate.assert_is_const(ctx, &bit, &Fr::from(actual_ok as u64));
         gate.assert_is_const(ctx, &bit, &Fr::from(1u64));
         query_phase_pow_sampled_bits.push(sampled_bits);
         query_phase_pow_witness_ok.push(bit);

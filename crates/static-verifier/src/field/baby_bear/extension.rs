@@ -14,16 +14,6 @@ use crate::{ChildEF, ChildF, Fr};
 #[derive(Copy, Clone, Debug)]
 pub struct BabyBearExtWire(pub [BabyBearWire; BABY_BEAR_EXT_DEGREE]);
 
-impl BabyBearExtWire {
-    pub fn as_u64(&self) -> [u64; BABY_BEAR_EXT_DEGREE] {
-        core::array::from_fn(|i| self.0[i].as_u64())
-    }
-
-    pub fn value(&self) -> ChildEF {
-        ChildEF::from_basis_coefficients_fn(|i| self.0[i].value())
-    }
-}
-
 #[cfg(test)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RecordedExtBaseConst {

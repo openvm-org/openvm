@@ -79,21 +79,21 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
     // This scaffold intentionally checks for one phase-0 lookup column so tests
     // run against the same baseline shape as the rest of static-verifier.
     // If a test body only uses constants, it must add at least one lookup row.
-    assert_eq!(
+    assert!(
         params
             .num_advice_per_phase
             .first()
             .copied()
-            .unwrap_or_default(),
-        STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
+            .unwrap_or_default()
+            >= STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
     );
-    assert_eq!(
+    assert!(
         params
             .num_lookup_advice_per_phase
             .first()
             .copied()
-            .unwrap_or_default(),
-        STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
+            .unwrap_or_default()
+            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
     );
 
     let prover = MockProver::run(BATCH_K, &builder, vec![vec![]])

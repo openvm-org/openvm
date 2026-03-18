@@ -1031,31 +1031,49 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         .map(|&actual_flag| ctx.load_constant(Fr::from(actual_flag as u64)))
         .collect::<Vec<_>>();
 
+    let air_presence_flags = actual
+        .air_presence_flags
+        .iter()
+        .map(|&actual_flag| {
+            let flag = base_chip.assign_and_range_u64(ctx, actual_flag as u64);
+            gate.assert_bit(ctx, flag);
+            flag
+        })
+        .collect::<Vec<_>>();
+
     let air_public_value_lens = actual
         .air_public_value_lens
         .iter()
         .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
         .collect::<Vec<_>>();
-    for (actual_len, &expected_len) in air_public_value_lens
+    let air_expected_public_value_lens = actual
+        .air_expected_public_value_lens
         .iter()
-        .zip(actual.air_expected_public_value_lens.iter())
+        .map(|&expected_len| base_chip.assign_and_range_usize(ctx, expected_len))
+        .collect::<Vec<_>>();
+    for (actual_len, expected_len) in air_public_value_lens
+        .iter()
+        .zip(air_expected_public_value_lens.iter())
     {
-        gate.assert_is_const(ctx, actual_len, &Fr::from(usize_to_u64(expected_len)));
+        ctx.constrain_equal(actual_len, expected_len);
     }
-    let air_expected_public_value_lens = air_public_value_lens.clone();
 
     let air_cached_commitment_lens = actual
         .air_cached_commitment_lens
         .iter()
         .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
         .collect::<Vec<_>>();
-    for (actual_len, &expected_len) in air_cached_commitment_lens
+    let air_expected_cached_commitment_lens = actual
+        .air_expected_cached_commitment_lens
         .iter()
-        .zip(actual.air_expected_cached_commitment_lens.iter())
+        .map(|&expected_len| base_chip.assign_and_range_usize(ctx, expected_len))
+        .collect::<Vec<_>>();
+    for (actual_len, expected_len) in air_cached_commitment_lens
+        .iter()
+        .zip(air_expected_cached_commitment_lens.iter())
     {
-        gate.assert_is_const(ctx, actual_len, &Fr::from(usize_to_u64(expected_len)));
+        ctx.constrain_equal(actual_len, expected_len);
     }
-    let air_expected_cached_commitment_lens = air_cached_commitment_lens.clone();
 
     let max_log_height_allowed =
         base_chip.assign_and_range_usize(ctx, actual.max_log_height_allowed);
@@ -1077,7 +1095,6 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         .map(|air_idx| ctx.load_constant(Fr::from(usize_to_u64(air_idx))))
         .collect::<Vec<_>>();
 
-    let mut air_presence_flags = Vec::with_capacity(actual.num_airs);
     for (air_idx, &air_const) in air_index_consts.iter().enumerate() {
         let mut trace_count = ctx.load_constant(Fr::from(0u64));
         for &trace_air in &trace_id_to_air_id {
@@ -1086,12 +1103,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
             trace_count = gate.add(ctx, trace_count, is_match);
         }
         gate.assert_bit(ctx, trace_count);
-        gate.assert_is_const(
-            ctx,
-            &trace_count,
-            &Fr::from(actual.air_presence_flags[air_idx] as u64),
-        );
-        air_presence_flags.push(trace_count);
+        ctx.constrain_equal(&trace_count, &air_presence_flags[air_idx]);
     }
 
     let mut trace_log_heights = Vec::with_capacity(trace_id_to_air_id.len());
@@ -1131,47 +1143,43 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         gate.assert_is_const(ctx, &tie_break_violation, &Fr::from(0u64));
     }
 
-    let trace_height_sums = owned_trace_height_thresholds
+    let trace_height_sums = actual
+        .trace_height_sums
         .iter()
-        .enumerate()
-        .map(|(constraint_idx, &threshold)| {
-            let mut sum = ctx.load_constant(Fr::from(0u64));
-            let coeffs = &owned_trace_height_coefficients[constraint_idx];
-            for (&trace_air, &trace_log_height) in trace_id_to_air_id.iter().zip(&trace_log_heights)
-            {
-                let mut coeff_for_trace = ctx.load_constant(Fr::from(0u64));
-                for (air_idx, &air_const) in air_index_consts.iter().enumerate() {
-                    let diff = gate.sub(ctx, trace_air, air_const);
-                    let is_match = gate.is_zero(ctx, diff);
-                    let coeff_const = ctx.load_constant(Fr::from(coeffs[air_idx]));
-                    let weighted = gate.mul(ctx, is_match, coeff_const);
-                    coeff_for_trace = gate.add(ctx, coeff_for_trace, weighted);
-                }
-
-                let mut trace_pow = ctx.load_constant(Fr::from(0u64));
-                for log_height in 0..=actual.max_log_height_allowed {
-                    let log_const = ctx.load_constant(Fr::from(usize_to_u64(log_height)));
-                    let log_diff = gate.sub(ctx, trace_log_height, log_const);
-                    let is_log = gate.is_zero(ctx, log_diff);
-                    let pow = 1u64 << (max(log_height, actual.l_skip) as u32);
-                    let pow_const = ctx.load_constant(Fr::from(pow));
-                    let weighted = gate.mul(ctx, is_log, pow_const);
-                    trace_pow = gate.add(ctx, trace_pow, weighted);
-                }
-
-                let contribution = gate.mul(ctx, coeff_for_trace, trace_pow);
-                sum = gate.add(ctx, sum, contribution);
+        .map(|&sum| base_chip.assign_and_range_u64(ctx, sum))
+        .collect::<Vec<_>>();
+    assert_eq!(trace_height_sums.len(), owned_trace_height_thresholds.len());
+    for (constraint_idx, &threshold) in owned_trace_height_thresholds.iter().enumerate() {
+        let mut sum = ctx.load_constant(Fr::from(0u64));
+        let coeffs = &owned_trace_height_coefficients[constraint_idx];
+        for (&trace_air, &trace_log_height) in trace_id_to_air_id.iter().zip(&trace_log_heights) {
+            let mut coeff_for_trace = ctx.load_constant(Fr::from(0u64));
+            for (air_idx, &air_const) in air_index_consts.iter().enumerate() {
+                let diff = gate.sub(ctx, trace_air, air_const);
+                let is_match = gate.is_zero(ctx, diff);
+                let coeff_const = ctx.load_constant(Fr::from(coeffs[air_idx]));
+                let weighted = gate.mul(ctx, is_match, coeff_const);
+                coeff_for_trace = gate.add(ctx, coeff_for_trace, weighted);
             }
 
-            base_chip.range().check_less_than_safe(ctx, sum, threshold);
-            gate.assert_is_const(
-                ctx,
-                &sum,
-                &Fr::from(actual.trace_height_sums[constraint_idx]),
-            );
-            sum
-        })
-        .collect::<Vec<_>>();
+            let mut trace_pow = ctx.load_constant(Fr::from(0u64));
+            for log_height in 0..=actual.max_log_height_allowed {
+                let log_const = ctx.load_constant(Fr::from(usize_to_u64(log_height)));
+                let log_diff = gate.sub(ctx, trace_log_height, log_const);
+                let is_log = gate.is_zero(ctx, log_diff);
+                let pow = 1u64 << (max(log_height, actual.l_skip) as u32);
+                let pow_const = ctx.load_constant(Fr::from(pow));
+                let weighted = gate.mul(ctx, is_log, pow_const);
+                trace_pow = gate.add(ctx, trace_pow, weighted);
+            }
+
+            let contribution = gate.mul(ctx, coeff_for_trace, trace_pow);
+            sum = gate.add(ctx, sum, contribution);
+        }
+
+        base_chip.range().check_less_than_safe(ctx, sum, threshold);
+        ctx.constrain_equal(&sum, &trace_height_sums[constraint_idx]);
+    }
 
     let one = ctx.load_constant(Fr::from(1u64));
     for (presence, required) in air_presence_flags.iter().zip(air_required_flags.iter()) {
@@ -1186,17 +1194,8 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     }
 
     let presence_sum = gate.sum(ctx, air_presence_flags.iter().copied());
-    let num_airs_present = presence_sum;
-    gate.assert_is_const(
-        ctx,
-        &num_airs_present,
-        &Fr::from(usize_to_u64(actual.trace_id_to_air_id.len())),
-    );
-    gate.assert_is_const(
-        ctx,
-        &num_airs_present,
-        &Fr::from(usize_to_u64(actual.num_airs_present)),
-    );
+    let num_airs_present = num_traces;
+    ctx.constrain_equal(&presence_sum, &num_airs_present);
 
     AssignedProofShapeIntermediates {
         num_airs,

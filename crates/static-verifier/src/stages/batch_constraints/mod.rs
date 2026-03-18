@@ -1470,11 +1470,6 @@ pub(crate) fn constrain_batch_intermediates_with_shared_trace_ids(
     }
 
     let logup_pow_witness_ok = gate.is_zero(ctx, logup_pow_sampled_bits);
-    gate.assert_is_const(
-        ctx,
-        &logup_pow_witness_ok,
-        &Fr::from(actual.logup_pow_witness_ok as u64),
-    );
     gate.assert_is_const(ctx, &logup_pow_witness_ok, &Fr::from(1u64));
     let gkr_q0_claim = if actual.total_interactions == 0 {
         assert!(

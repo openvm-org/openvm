@@ -5,7 +5,6 @@ use halo2_base::{
     halo2_proofs::arithmetic::Field,
     utils::{biguint_to_fe, fe_to_biguint},
     AssignedValue, Context,
-    QuantumCell::Constant,
 };
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
@@ -27,7 +26,6 @@ use crate::{
         poseidon2_permute_bn254_state, reduce_32_cells, DIGEST_WIDTH, POSEIDON2_RATE,
         POSEIDON2_WIDTH,
     },
-    utils::bits_for_u64,
     ChildF, Fr,
 };
 
@@ -134,42 +132,12 @@ fn decompose_packed_bn254_to_split_limbs(
     range: &RangeChip<Fr>,
     packed: AssignedValue<Fr>,
 ) -> [AssignedValue<Fr>; NUM_SPLIT_LIMBS] {
-    let packed_big = fe_to_biguint(packed.value());
-    let digits = packed_big.to_u64_digits();
-
-    let limb_vals = [
-        digits.first().copied().unwrap_or(0),
-        digits.get(1).copied().unwrap_or(0),
-        digits.get(2).copied().unwrap_or(0),
-    ];
-    let high_val_big = packed_big >> 192;
-    let high_val = u64::try_from(high_val_big)
-        .expect("packed BN254 high limb should fit in u64 under canonical decomposition");
-
-    let limbs = limb_vals.map(|limb| {
-        let cell = ctx.load_witness(Fr::from(limb));
-        range.range_check(ctx, cell, 64);
-        cell
-    });
-
-    let high = ctx.load_witness(Fr::from(high_val));
-    range.range_check(ctx, high, bits_for_u64(split_high_bound()));
+    let limb_base: BigUint = BigUint::from(1u64) << 64usize;
+    let (quot0, limb0) = range.div_mod(ctx, packed, limb_base.clone(), 254);
+    let (quot1, limb1) = range.div_mod(ctx, quot0, limb_base.clone(), 190);
+    let (high, limb2) = range.div_mod(ctx, quot1, limb_base, 126);
     range.check_less_than_safe(ctx, high, split_high_bound() + 1);
-
-    let gate = range.gate();
-    let pow_64 = biguint_to_fe(&(BigUint::from(1u64) << 64));
-    let pow_128 = biguint_to_fe(&(BigUint::from(1u64) << 128));
-    let pow_192 = biguint_to_fe(&(BigUint::from(1u64) << 192));
-
-    let limb1 = gate.mul(ctx, limbs[1], Constant(pow_64));
-    let limb2 = gate.mul(ctx, limbs[2], Constant(pow_128));
-    let high_scaled = gate.mul(ctx, high, Constant(pow_192));
-    let lower = gate.add(ctx, limbs[0], limb1);
-    let upper = gate.add(ctx, limb2, high_scaled);
-    let recomposed = gate.add(ctx, lower, upper);
-    ctx.constrain_equal(&packed, &recomposed);
-
-    limbs
+    [limb0, limb1, limb2]
 }
 
 fn reduce_assigned_limb_to_babybear(
@@ -178,28 +146,13 @@ fn reduce_assigned_limb_to_babybear(
     baby_bear: &BabyBearChip<'_>,
     limb: AssignedValue<Fr>,
 ) -> BabyBearWire {
-    let limb_u64 = fe_to_biguint(limb.value())
-        .to_u64_digits()
-        .first()
-        .copied()
-        .unwrap_or(0);
-    let quotient = limb_u64 / BABY_BEAR_MODULUS_U64;
-    let remainder = limb_u64 % BABY_BEAR_MODULUS_U64;
-
-    let remainder_var = baby_bear.load_witness(ctx, ChildF::from_u64(remainder));
-    let quotient_cell = ctx.load_witness(Fr::from(quotient));
-    range.check_less_than_safe(ctx, quotient_cell, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
-
-    let gate = range.gate();
-    let recomposed = gate.mul_add(
-        ctx,
-        quotient_cell,
-        Constant(Fr::from(BABY_BEAR_MODULUS_U64)),
-        remainder_var.0,
-    );
-    ctx.constrain_equal(&limb, &recomposed);
-
-    remainder_var
+    let (quotient, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
+    range.check_less_than_safe(ctx, quotient, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
+    let reduced = BabyBearWire(remainder);
+    baby_bear
+        .range()
+        .check_less_than_safe(ctx, reduced.0, BABY_BEAR_MODULUS_U64);
+    reduced
 }
 
 pub fn split_assigned_bn254_to_babybear_limbs(
@@ -409,7 +362,6 @@ pub fn constrain_transcript_events(
     events: &[TranscriptEvent],
 ) -> TranscriptReplay {
     let baby_bear = BabyBearChip::new(range);
-    let gate = range.gate();
     let mut transcript = TranscriptGadget::new(ctx);
     let mut replay = TranscriptReplay {
         events: Vec::with_capacity(events.len()),
@@ -431,12 +383,13 @@ pub fn constrain_transcript_events(
             }
             TranscriptEvent::Sample(expected) => {
                 let sampled = transcript.sample(ctx, range, &baby_bear);
-                gate.assert_is_const(ctx, &sampled.0, &Fr::from(*expected));
+                let expected_sample = baby_bear.load_witness(ctx, ChildF::from_u64(*expected));
+                ctx.constrain_equal(&sampled.0, &expected_sample.0);
                 let is_sample = ctx.load_constant(Fr::ONE);
-                replay.samples.push(sampled.0);
+                replay.samples.push(expected_sample.0);
                 replay.events.push(AssignedTranscriptEvent {
                     is_sample,
-                    value: sampled.0,
+                    value: expected_sample.0,
                 });
             }
         }

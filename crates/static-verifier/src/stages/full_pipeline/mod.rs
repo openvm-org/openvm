@@ -646,58 +646,6 @@ pub fn derive_pipeline_public_inputs(
     vec![statement.mvk_pre_hash, statement.proof_common_main_commit]
 }
 
-struct EventCursor<'a> {
-    events: &'a [AssignedTranscriptEvent],
-    cursor: usize,
-}
-
-impl<'a> EventCursor<'a> {
-    fn new(events: &'a [AssignedTranscriptEvent]) -> Self {
-        Self { events, cursor: 0 }
-    }
-
-    fn consume_observe(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        gate: &impl GateInstructions<Fr>,
-    ) -> AssignedValue<Fr> {
-        if let Some(event) = self.events.get(self.cursor) {
-            gate.assert_is_const(ctx, &event.is_sample, &Fr::from(0u64));
-            self.cursor += 1;
-            event.value
-        } else {
-            let missing_event = ctx.load_witness(Fr::from(0u64));
-            gate.assert_is_const(ctx, &missing_event, &Fr::from(1u64));
-            ctx.load_constant(Fr::from(0u64))
-        }
-    }
-
-    fn consume_next_observe(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        gate: &impl GateInstructions<Fr>,
-    ) -> AssignedValue<Fr> {
-        while self.cursor < self.events.len() {
-            let event = self
-                .events
-                .get(self.cursor)
-                .expect("transcript event cursor exceeded available events");
-            self.cursor += 1;
-            if *event.is_sample.value() == Fr::from(0u64) {
-                gate.assert_is_const(ctx, &event.is_sample, &Fr::from(0u64));
-                return event.value;
-            }
-        }
-        let missing_event = ctx.load_witness(Fr::from(0u64));
-        gate.assert_is_const(ctx, &missing_event, &Fr::from(1u64));
-        ctx.load_constant(Fr::from(0u64))
-    }
-
-    fn constrain_consumed_prefix(&self, expected: usize) {
-        assert_eq!(self.cursor, expected);
-    }
-}
-
 struct SampleCursor<'a> {
     samples: &'a [AssignedValue<Fr>],
     cursor: usize,
@@ -1853,12 +1801,16 @@ pub(crate) fn constrain_pipeline_intermediates(
         preamble_observe_cells.len(),
         schedule.raw_preamble_observe_count
     );
-    let mut event_cursor = EventCursor::new(&transcript_replay.events);
-    for preamble_cell in &preamble_observe_cells {
-        let observed_cell = event_cursor.consume_observe(ctx, gate);
+    assert!(
+        transcript_replay.observes.len() >= preamble_observe_cells.len(),
+        "transcript observe stream shorter than preamble payload",
+    );
+    for (preamble_cell, observed_cell) in preamble_observe_cells
+        .iter()
+        .zip(transcript_replay.observes.iter().copied())
+    {
         ctx.constrain_equal(preamble_cell, &observed_cell);
     }
-    event_cursor.constrain_consumed_prefix(schedule.raw_preamble_observe_count);
     constrain_post_preamble_event_kinds(
         ctx,
         gate,
@@ -1870,16 +1822,26 @@ pub(crate) fn constrain_pipeline_intermediates(
 
     let stage_payload_observe_cells =
         derive_stage_payload_observe_cells(ctx, range, &batch, &stacked_reduction, &whir, schedule);
-    let mut non_preamble_observe_cells = Vec::with_capacity(stage_payload_observe_cells.len());
-    for payload_cell in stage_payload_observe_cells {
-        let observed_cell = event_cursor.consume_next_observe(ctx, gate);
-        non_preamble_observe_cells.push(observed_cell);
-        ctx.constrain_equal(&payload_cell, &observed_cell);
-    }
+    let non_preamble_observe_cells = transcript_replay
+        .observes
+        .iter()
+        .skip(preamble_observe_cells.len())
+        .copied()
+        .collect::<Vec<_>>();
     assert_eq!(
         non_preamble_observe_cells.len(),
         schedule.non_preamble_observe_count
     );
+    assert_eq!(
+        stage_payload_observe_cells.len(),
+        non_preamble_observe_cells.len()
+    );
+    for (payload_cell, observed_cell) in stage_payload_observe_cells
+        .iter()
+        .zip(non_preamble_observe_cells.iter().copied())
+    {
+        ctx.constrain_equal(payload_cell, &observed_cell);
+    }
     assert_eq!(
         transcript_replay.observes.len(),
         preamble_observe_cells.len() + non_preamble_observe_cells.len(),
