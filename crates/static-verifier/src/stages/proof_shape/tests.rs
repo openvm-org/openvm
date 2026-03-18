@@ -1,5 +1,9 @@
 use halo2_base::{
-    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+    gates::{
+        circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+        range::RangeChip,
+        RangeInstructions,
+    },
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
@@ -19,6 +23,7 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    field::baby_bear::BabyBearChip,
     utils::usize_to_u64,
 };
 
@@ -27,7 +32,8 @@ fn constrain_proof_shape_intermediates(
     range: &RangeChip<Fr>,
     actual: &ProofShapeIntermediates,
 ) -> AssignedProofShapeIntermediates {
-    constrain_proof_shape_intermediates_with_ownership(ctx, range, actual, None)
+    let base_chip = BabyBearChip::new(range);
+    constrain_proof_shape_intermediates_with_ownership(ctx, &base_chip, actual, None)
 }
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -82,8 +88,10 @@ where
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let assigned = derive_and_constrain_proof_shape(ctx, &range, engine.config(), &vk, &proof)
-            .expect("proof-shape derive+constrain should succeed");
+        let base_chip = BabyBearChip::new(&range);
+        let assigned =
+            derive_and_constrain_proof_shape(ctx, &base_chip, engine.config(), &vk, &proof)
+                .expect("proof-shape derive+constrain should succeed");
 
         range.gate().assert_is_const(
             ctx,

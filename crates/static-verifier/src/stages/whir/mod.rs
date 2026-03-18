@@ -1,7 +1,7 @@
 use core::iter::zip;
 
 use halo2_base::{
-    gates::{range::RangeChip, GateInstructions, RangeInstructions},
+    gates::{GateInstructions, RangeInstructions},
     utils::biguint_to_fe,
     AssignedValue, Context,
 };
@@ -33,23 +33,15 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    gadgets::{
-        baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar, BABY_BEAR_EXT_DEGREE},
-        transcript::{compress_bn254_digests, hash_babybear_slice_to_digest},
-    },
+    field::baby_bear::{BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE},
+    hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     stages::{
-        batch_constraints::{
-            eval_eq_mle_assigned, ext_from_base_const, ext_mul_base_const, ext_pow_power_of_two,
-            BatchConstraintError,
-        },
+        batch_constraints::{eval_eq_mle_assigned, BatchConstraintError},
         pipeline::{collect_trace_commitments, derive_u_cube_from_prism, prepare_pipeline_inputs},
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
-        stacked_reduction::{
-            coeffs_to_native_ext as stacked_coeffs_to_native_ext,
-            derive_stacked_reduction_intermediates_with_inputs,
-        },
+        stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
     },
-    utils::{assign_and_range_u64, assign_and_range_usize, usize_to_u64},
+    utils::usize_to_u64,
     Fr,
 };
 
@@ -108,18 +100,18 @@ pub struct WhirIntermediates {
     pub mu_pow_witness: u64,
     pub mu_pow_sampled_bits: u64,
     pub mu_pow_witness_ok: bool,
-    pub mu_challenge: [u64; BABY_BEAR_EXT_DEGREE],
+    pub mu_challenge: NativeEF,
     pub folding_pow_bits: usize,
     pub folding_pow_witnesses: Vec<u64>,
     pub folding_pow_sampled_bits: Vec<u64>,
     pub folding_pow_witness_ok: Vec<bool>,
-    pub folding_alphas: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub z0_challenges: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
+    pub folding_alphas: Vec<NativeEF>,
+    pub z0_challenges: Vec<NativeEF>,
     pub query_phase_pow_bits: usize,
     pub query_phase_pow_witnesses: Vec<u64>,
     pub query_phase_pow_sampled_bits: Vec<u64>,
     pub query_phase_pow_witness_ok: Vec<bool>,
-    pub gammas: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
+    pub gammas: Vec<NativeEF>,
     pub folding_counts_per_round: Vec<usize>,
     pub query_counts_per_round: Vec<usize>,
     pub query_index_bits: Vec<usize>,
@@ -129,14 +121,14 @@ pub struct WhirIntermediates {
     pub merkle_paths: Vec<MerklePathIntermediates>,
     pub final_poly_len: usize,
     pub expected_final_poly_len: usize,
-    pub stacking_openings: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
-    pub whir_sumcheck_polys: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
-    pub ood_values: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub final_poly: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub u_cube: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub final_claim: [u64; BABY_BEAR_EXT_DEGREE],
-    pub final_acc: [u64; BABY_BEAR_EXT_DEGREE],
-    pub final_residual: [u64; BABY_BEAR_EXT_DEGREE],
+    pub stacking_openings: Vec<Vec<NativeEF>>,
+    pub whir_sumcheck_polys: Vec<Vec<NativeEF>>,
+    pub ood_values: Vec<NativeEF>,
+    pub final_poly: Vec<NativeEF>,
+    pub u_cube: Vec<NativeEF>,
+    pub final_claim: NativeEF,
+    pub final_acc: NativeEF,
+    pub final_residual: NativeEF,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -153,28 +145,28 @@ pub struct AssignedWhirIntermediates {
     pub mu_pow_bits: AssignedValue<Fr>,
     pub mu_pow_sampled_bits: AssignedValue<Fr>,
     pub mu_pow_witness_ok: AssignedValue<Fr>,
-    pub mu_challenge: BabyBearExtVar,
+    pub mu_challenge: BabyBearExtWire,
     pub folding_pow_bits: AssignedValue<Fr>,
     pub folding_pow_sampled_bits: Vec<AssignedValue<Fr>>,
     pub folding_pow_witness_ok: Vec<AssignedValue<Fr>>,
-    pub folding_alphas: Vec<BabyBearExtVar>,
-    pub z0_challenges: Vec<BabyBearExtVar>,
+    pub folding_alphas: Vec<BabyBearExtWire>,
+    pub z0_challenges: Vec<BabyBearExtWire>,
     pub query_phase_pow_bits: AssignedValue<Fr>,
     pub query_phase_pow_sampled_bits: Vec<AssignedValue<Fr>>,
     pub query_phase_pow_witness_ok: Vec<AssignedValue<Fr>>,
-    pub gammas: Vec<BabyBearExtVar>,
+    pub gammas: Vec<BabyBearExtWire>,
     pub query_indices: Vec<AssignedValue<Fr>>,
-    pub whir_sumcheck_polys: Vec<Vec<BabyBearExtVar>>,
-    pub stacking_openings: Vec<Vec<BabyBearExtVar>>,
+    pub whir_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
+    pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
     pub initial_commitment_roots: Vec<AssignedValue<Fr>>,
     pub codeword_commitment_roots: Vec<AssignedValue<Fr>>,
-    pub ood_values: Vec<BabyBearExtVar>,
-    pub final_poly: Vec<BabyBearExtVar>,
+    pub ood_values: Vec<BabyBearExtWire>,
+    pub final_poly: Vec<BabyBearExtWire>,
     pub final_poly_len: AssignedValue<Fr>,
-    pub u_cube: Vec<BabyBearExtVar>,
-    pub final_claim: BabyBearExtVar,
-    pub final_acc: BabyBearExtVar,
-    pub final_residual: BabyBearExtVar,
+    pub u_cube: Vec<BabyBearExtWire>,
+    pub final_claim: BabyBearExtWire,
+    pub final_acc: BabyBearExtWire,
+    pub final_residual: BabyBearExtWire,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -184,9 +176,9 @@ pub struct RawWhirWitnessState {
 
 #[derive(Clone, Debug)]
 pub struct DerivedWhirState {
-    pub final_acc: BabyBearExtVar,
-    pub final_claim: BabyBearExtVar,
-    pub final_residual: BabyBearExtVar,
+    pub final_acc: BabyBearExtWire,
+    pub final_claim: BabyBearExtWire,
+    pub final_residual: BabyBearExtWire,
 }
 
 #[derive(Clone, Debug)]
@@ -202,14 +194,14 @@ struct PreparedWhirInputs {
     u_cube: Vec<NativeEF>,
 }
 
-fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
+pub(crate) fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
     core::array::from_fn(|i| {
         <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
             .as_canonical_u64()
     })
 }
 
-fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
+pub(crate) fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
     NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
 }
 
@@ -260,12 +252,7 @@ fn prepare_whir_inputs(
         &prepared.r,
         &prepared.omega_skip_pows,
     )?;
-    let u_prism = stacked
-        .u
-        .iter()
-        .copied()
-        .map(stacked_coeffs_to_native_ext)
-        .collect::<Vec<_>>();
+    let u_prism = stacked.u.clone();
     let u_cube = derive_u_cube_from_prism(&u_prism, prepared.l_skip)?;
     let commits = collect_trace_commitments(&mvk.inner, proof, &prepared.trace_id_to_air_id)?;
 
@@ -380,7 +367,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
 
                 let alpha = transcript.sample_ext();
                 alphas_round.push(alpha);
-                folding_alphas.push(ext_to_coeffs(alpha));
+                folding_alphas.push(alpha);
 
                 let ev0 = claim - ev1;
                 claim = interpolate_quadratic_at_012(&[ev0, ev1, ev2], alpha);
@@ -604,7 +591,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
         mu_pow_witness: mu_pow_witness.as_canonical_u64(),
         mu_pow_sampled_bits,
         mu_pow_witness_ok,
-        mu_challenge: ext_to_coeffs(mu),
+        mu_challenge: mu,
         folding_pow_bits: params.whir.folding_pow_bits,
         folding_pow_witnesses: folding_pow_witnesses
             .iter()
@@ -613,7 +600,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
         folding_pow_sampled_bits,
         folding_pow_witness_ok,
         folding_alphas,
-        z0_challenges: z0s.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>(),
+        z0_challenges: z0s,
         query_phase_pow_bits: params.whir.query_phase_pow_bits,
         query_phase_pow_witnesses: query_phase_pow_witnesses
             .iter()
@@ -621,11 +608,7 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
             .collect::<Vec<_>>(),
         query_phase_pow_sampled_bits,
         query_phase_pow_witness_ok,
-        gammas: gammas
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
+        gammas,
         folding_counts_per_round,
         query_counts_per_round,
         query_index_bits,
@@ -635,28 +618,17 @@ pub(crate) fn derive_whir_intermediates_with_inputs(
         merkle_paths,
         final_poly_len,
         expected_final_poly_len,
-        stacking_openings: stacking_openings
-            .iter()
-            .map(|row| row.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>())
-            .collect::<Vec<_>>(),
+        stacking_openings: stacking_openings.to_vec(),
         whir_sumcheck_polys: whir_sumcheck_polys
             .iter()
-            .map(|poly| poly.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>())
+            .map(|poly| poly.to_vec())
             .collect::<Vec<_>>(),
-        ood_values: ood_values
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
-        final_poly: final_poly
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
-        u_cube: u.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>(),
-        final_claim: ext_to_coeffs(claim),
-        final_acc: ext_to_coeffs(acc),
-        final_residual: ext_to_coeffs(final_residual),
+        ood_values: ood_values.to_vec(),
+        final_poly: final_poly.to_vec(),
+        u_cube: u.to_vec(),
+        final_claim: claim,
+        final_acc: acc,
+        final_residual,
     })
 }
 
@@ -684,111 +656,91 @@ pub fn derive_whir_intermediates(
 
 fn assign_ext(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    coeffs: [u64; BABY_BEAR_EXT_DEGREE],
-) -> BabyBearExtVar {
-    baby_bear.load_ext_witness(ctx, range, coeffs)
-}
-
-fn ext_from_base_var(
-    ctx: &mut Context<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    value: &BabyBearVar,
-) -> BabyBearExtVar {
-    let zero = baby_bear.zero(ctx);
-    BabyBearExtVar {
-        coeffs: core::array::from_fn(|idx| {
-            if idx == 0 {
-                value.clone()
-            } else {
-                zero.clone()
-            }
-        }),
-    }
+    ext_chip: &BabyBearExtChip<'_>,
+    value: NativeEF,
+) -> BabyBearExtWire {
+    ext_chip.load_witness(ctx, value)
 }
 
 fn eval_mobius_eq_mle_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    u: &[BabyBearExtVar],
-    x: &[BabyBearExtVar],
-) -> BabyBearExtVar {
+    ext_chip: &BabyBearExtChip<'_>,
+    u: &[BabyBearExtWire],
+    x: &[BabyBearExtWire],
+) -> BabyBearExtWire {
     assert_eq!(u.len(), x.len(), "mobius-eq arity mismatch");
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut acc = one.clone();
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut acc = one;
     for (u_i, x_i) in u.iter().zip(x.iter()) {
-        let two_u = ext_mul_base_const(ctx, range, baby_bear, u_i, 2);
-        let w0 = baby_bear.ext_sub(ctx, range, &one, &two_u);
-        let one_minus_x = baby_bear.ext_sub(ctx, range, &one, x_i);
-        let left = baby_bear.ext_mul(ctx, range, &w0, &one_minus_x);
-        let right = baby_bear.ext_mul(ctx, range, u_i, x_i);
-        let factor = baby_bear.ext_add(ctx, range, &left, &right);
-        acc = baby_bear.ext_mul(ctx, range, &acc, &factor);
+        let two_u = ext_chip.mul_base_const(ctx, u_i, NativeF::TWO);
+        let w0 = ext_chip.sub(ctx, &one, &two_u);
+        let one_minus_x = ext_chip.sub(ctx, &one, x_i);
+        let left = ext_chip.mul(ctx, &w0, &one_minus_x);
+        let right = ext_chip.mul(ctx, u_i, x_i);
+        let factor = ext_chip.add(ctx, &left, &right);
+        acc = ext_chip.mul(ctx, &acc, &factor);
     }
     acc
 }
 
 fn eval_mle_evals_at_point_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    evals: &[BabyBearExtVar],
-    x: &[BabyBearExtVar],
-) -> BabyBearExtVar {
+    ext_chip: &BabyBearExtChip<'_>,
+    evals: &[BabyBearExtWire],
+    x: &[BabyBearExtWire],
+) -> BabyBearExtWire {
     assert_eq!(
         evals.len(),
         1usize << x.len(),
         "MLE table length must be 2^arity",
     );
-    let one = ext_from_base_const(ctx, baby_bear, 1);
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
     let mut values = evals.to_vec();
     let mut len = values.len();
     for xj in x.iter().rev() {
         len >>= 1;
-        let one_minus_xj = baby_bear.ext_sub(ctx, range, &one, xj);
+        let one_minus_xj = ext_chip.sub(ctx, &one, xj);
         for i in 0..len {
-            let lo = values[i].clone();
-            let hi = values[i + len].clone();
-            let lo_term = baby_bear.ext_mul(ctx, range, &lo, &one_minus_xj);
-            let hi_term = baby_bear.ext_mul(ctx, range, &hi, xj);
-            values[i] = baby_bear.ext_add(ctx, range, &lo_term, &hi_term);
+            let lo = values[i];
+            let hi = values[i + len];
+            let lo_term = ext_chip.mul(ctx, &lo, &one_minus_xj);
+            let hi_term = ext_chip.mul(ctx, &hi, xj);
+            values[i] = ext_chip.add(ctx, &lo_term, &hi_term);
         }
     }
     values
         .first()
-        .cloned()
+        .copied()
         .expect("MLE reduction must produce one value")
 }
 
 fn invert_base_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    value: &BabyBearVar,
-) -> BabyBearVar {
+    ext_chip: &BabyBearExtChip<'_>,
+    value: &BabyBearWire,
+) -> BabyBearWire {
     let value_u64 = value.as_u64();
     assert!(value_u64 != 0, "cannot invert zero BabyBear value");
     let inv_u64 = NativeF::from_u64(value_u64).inverse().as_canonical_u64();
-    let inv = baby_bear.load_witness(ctx, range, inv_u64);
-    let one = baby_bear.one(ctx);
-    let check = baby_bear.mul(ctx, range, value, &inv);
-    baby_bear.assert_equal(ctx, &check, &one);
+    let inv = ext_chip
+        .base()
+        .load_witness(ctx, NativeF::from_u64(inv_u64));
+    let one = ext_chip.base().one(ctx);
+    let check = ext_chip.base().mul(ctx, value, &inv);
+    ext_chip.base().assert_equal(ctx, &check, &one);
     inv
 }
 
 fn query_root_from_bits_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     query_bits: &[AssignedValue<Fr>],
     log_rs_domain_size: usize,
-) -> BabyBearVar {
-    let gate = range.gate();
+) -> BabyBearWire {
+    let gate = ext_chip.range().gate();
     let one = ctx.load_constant(Fr::from(1u64));
     let omega = NativeF::two_adic_generator(log_rs_domain_size);
-    let mut root = baby_bear.one(ctx);
+    let mut root = ext_chip.base().one(ctx);
     for (bit_idx, &bit) in query_bits.iter().enumerate() {
         let omega_pow = omega.exp_u64(1u64 << bit_idx).as_canonical_u64();
         let selected_u64 = if *bit.value() == Fr::from(1u64) {
@@ -796,25 +748,26 @@ fn query_root_from_bits_assigned(
         } else {
             1u64
         };
-        let selected = baby_bear.load_witness(ctx, range, selected_u64);
+        let selected = ext_chip
+            .base()
+            .load_witness(ctx, NativeF::from_u64(selected_u64));
         let omega_pow_const = ctx.load_constant(Fr::from(omega_pow));
         let bit_times_pow = gate.mul(ctx, bit, omega_pow_const);
         let one_minus_bit = gate.sub(ctx, one, bit);
         let rhs = gate.add(ctx, bit_times_pow, one_minus_bit);
-        ctx.constrain_equal(&selected.cell, &rhs);
-        root = baby_bear.mul(ctx, range, &root, &selected);
+        ctx.constrain_equal(&selected.0, &rhs);
+        root = ext_chip.base().mul(ctx, &root, &selected);
     }
     root
 }
 
 fn binary_k_fold_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    mut values: Vec<BabyBearExtVar>,
-    alphas: &[BabyBearExtVar],
-    x: &BabyBearVar,
-) -> BabyBearExtVar {
+    ext_chip: &BabyBearExtChip<'_>,
+    mut values: Vec<BabyBearExtWire>,
+    alphas: &[BabyBearExtWire],
+    x: &BabyBearWire,
+) -> BabyBearExtWire {
     let n = values.len();
     assert_eq!(
         n,
@@ -822,7 +775,7 @@ fn binary_k_fold_assigned(
         "binary-k fold value count must match 2^k",
     );
     if alphas.is_empty() {
-        return values[0].clone();
+        return values[0];
     }
 
     let k = alphas.len();
@@ -830,39 +783,38 @@ fn binary_k_fold_assigned(
     let omega_k_inv = omega_k.inverse();
     let tw = omega_k.powers().take(1usize << (k - 1)).collect();
     let inv_tw = omega_k_inv.powers().take(1usize << (k - 1)).collect();
-    let half = NativeF::ONE.halve().as_canonical_u64();
+    let half = NativeF::ONE.halve();
 
-    let mut x_pow = x.clone();
-    let x_inv = invert_base_assigned(ctx, range, baby_bear, x);
+    let mut x_pow = *x;
+    let x_inv = invert_base_assigned(ctx, ext_chip, x);
     let mut x_inv_pow = x_inv;
 
     for (j, alpha) in alphas.iter().enumerate() {
         let m = n >> (j + 1);
         for i in 0..m {
-            let t = baby_bear.mul_const(ctx, range, &x_pow, tw[i << j].as_canonical_u64());
-            let t_inv =
-                baby_bear.mul_const(ctx, range, &x_inv_pow, inv_tw[i << j].as_canonical_u64());
-            let t_inv_half = baby_bear.mul_const(ctx, range, &t_inv, half);
+            let t = ext_chip.base().mul_const(ctx, &x_pow, tw[i << j]);
+            let t_inv = ext_chip.base().mul_const(ctx, &x_inv_pow, inv_tw[i << j]);
+            let t_inv_half = ext_chip.base().mul_const(ctx, &t_inv, half);
 
-            let lo = values[i].clone();
-            let hi = values[i + m].clone();
-            let lo_minus_hi = baby_bear.ext_sub(ctx, range, &lo, &hi);
-            let t_ext = ext_from_base_var(ctx, baby_bear, &t);
-            let alpha_minus_t = baby_bear.ext_sub(ctx, range, alpha, &t_ext);
-            let fold = baby_bear.ext_mul(ctx, range, &alpha_minus_t, &lo_minus_hi);
-            let t_inv_half_ext = ext_from_base_var(ctx, baby_bear, &t_inv_half);
-            let fold = baby_bear.ext_mul(ctx, range, &fold, &t_inv_half_ext);
-            values[i] = baby_bear.ext_add(ctx, range, &lo, &fold);
+            let lo = values[i];
+            let hi = values[i + m];
+            let lo_minus_hi = ext_chip.sub(ctx, &lo, &hi);
+            let t_ext = ext_chip.from_base_var(ctx, &t);
+            let alpha_minus_t = ext_chip.sub(ctx, alpha, &t_ext);
+            let fold = ext_chip.mul(ctx, &alpha_minus_t, &lo_minus_hi);
+            let t_inv_half_ext = ext_chip.from_base_var(ctx, &t_inv_half);
+            let fold = ext_chip.mul(ctx, &fold, &t_inv_half_ext);
+            values[i] = ext_chip.add(ctx, &lo, &fold);
         }
-        x_pow = baby_bear.square(ctx, range, &x_pow);
-        x_inv_pow = baby_bear.square(ctx, range, &x_inv_pow);
+        x_pow = ext_chip.base().square(ctx, &x_pow);
+        x_inv_pow = ext_chip.base().square(ctx, &x_inv_pow);
     }
-    values[0].clone()
+    values[0]
 }
 
 fn tree_compress_assigned_digests(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     digests: Vec<AssignedValue<Fr>>,
 ) -> AssignedValue<Fr> {
     assert!(
@@ -873,7 +825,12 @@ fn tree_compress_assigned_digests(
     while level.len() > 1 {
         let mut next = Vec::with_capacity(level.len() / 2);
         for pair in level.chunks_exact(2) {
-            next.push(compress_bn254_digests(ctx, range, pair[0], pair[1]));
+            next.push(compress_bn254_digests(
+                ctx,
+                ext_chip.range(),
+                pair[0],
+                pair[1],
+            ));
         }
         level = next;
     }
@@ -883,13 +840,13 @@ fn tree_compress_assigned_digests(
 }
 
 struct AssignedMerklePathPayload {
-    leaf_values: Vec<Vec<BabyBearVar>>,
+    leaf_values: Vec<Vec<BabyBearWire>>,
     query_bits: Vec<AssignedValue<Fr>>,
 }
 
 fn constrain_merkle_path(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     query_index: AssignedValue<Fr>,
     query_index_bits: usize,
     leaf_inputs: &[Vec<u64>],
@@ -901,11 +858,10 @@ fn constrain_merkle_path(
         "leaf input count must be power of two"
     );
 
-    let gate = range.gate();
-    let baby_bear = BabyBearArithmeticGadgets;
+    let gate = ext_chip.range().gate();
     let one = ctx.load_constant(Fr::from(1u64));
 
-    let merkle_depth = assign_and_range_usize(ctx, range, siblings.len());
+    let merkle_depth = ext_chip.base().assign_and_range_usize(ctx, siblings.len());
     gate.assert_is_const(
         ctx,
         &merkle_depth,
@@ -916,16 +872,16 @@ fn constrain_merkle_path(
         .iter()
         .map(|leaf| {
             leaf.iter()
-                .map(|&value| baby_bear.load_witness(ctx, range, value))
-                .collect::<Vec<BabyBearVar>>()
+                .map(|&value| ext_chip.base().load_witness(ctx, NativeF::from_u64(value)))
+                .collect::<Vec<BabyBearWire>>()
         })
         .collect::<Vec<_>>();
     let leaf_hashes = leaf_values
         .iter()
-        .map(|leaf| hash_babybear_slice_to_digest(ctx, range, leaf))
+        .map(|leaf| hash_babybear_slice_to_digest(ctx, ext_chip.range(), leaf))
         .collect::<Vec<_>>();
 
-    let mut cur = tree_compress_assigned_digests(ctx, range, leaf_hashes);
+    let mut cur = tree_compress_assigned_digests(ctx, ext_chip, leaf_hashes);
     let query_bits = if siblings.is_empty() {
         Vec::new()
     } else {
@@ -934,8 +890,8 @@ fn constrain_merkle_path(
 
     for (bit, sibling_digest) in query_bits.iter().zip(siblings.iter()) {
         let sibling = ctx.load_witness(*sibling_digest);
-        let left_right = compress_bn254_digests(ctx, range, cur, sibling);
-        let right_left = compress_bn254_digests(ctx, range, sibling, cur);
+        let left_right = compress_bn254_digests(ctx, ext_chip.range(), cur, sibling);
+        let right_left = compress_bn254_digests(ctx, ext_chip.range(), sibling, cur);
         let one_minus_bit = gate.sub(ctx, one, *bit);
         let pick_right_left = gate.mul(ctx, right_left, *bit);
         let pick_left_right = gate.mul(ctx, left_right, one_minus_bit);
@@ -952,46 +908,60 @@ fn constrain_merkle_path(
 // Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
 pub(crate) fn constrain_whir_intermediates_unchecked(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     actual: &WhirIntermediates,
 ) -> AssignedWhirIntermediates {
-    let gate = range.gate();
-    let baby_bear = BabyBearArithmeticGadgets;
+    let gate = ext_chip.range().gate();
 
-    let query_index_bits_len = assign_and_range_usize(ctx, range, actual.query_index_bits.len());
-    let query_indices_len = assign_and_range_usize(ctx, range, actual.query_indices.len());
+    let query_index_bits_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_index_bits.len());
+    let query_indices_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_indices.len());
     ctx.constrain_equal(&query_index_bits_len, &query_indices_len);
 
-    let folding_pow_sampled_len =
-        assign_and_range_usize(ctx, range, actual.folding_pow_sampled_bits.len());
-    let folding_pow_ok_len =
-        assign_and_range_usize(ctx, range, actual.folding_pow_witness_ok.len());
+    let folding_pow_sampled_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.folding_pow_sampled_bits.len());
+    let folding_pow_ok_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.folding_pow_witness_ok.len());
     ctx.constrain_equal(&folding_pow_sampled_len, &folding_pow_ok_len);
 
-    let query_pow_sampled_len =
-        assign_and_range_usize(ctx, range, actual.query_phase_pow_sampled_bits.len());
-    let query_pow_ok_len =
-        assign_and_range_usize(ctx, range, actual.query_phase_pow_witness_ok.len());
+    let query_pow_sampled_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_phase_pow_sampled_bits.len());
+    let query_pow_ok_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_phase_pow_witness_ok.len());
     ctx.constrain_equal(&query_pow_sampled_len, &query_pow_ok_len);
 
-    let query_round_count = assign_and_range_usize(ctx, range, actual.query_counts_per_round.len());
+    let query_round_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_counts_per_round.len());
     ctx.constrain_equal(&query_round_count, &query_pow_sampled_len);
-    let folding_round_count =
-        assign_and_range_usize(ctx, range, actual.folding_counts_per_round.len());
+    let folding_round_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.folding_counts_per_round.len());
     ctx.constrain_equal(&folding_round_count, &query_pow_sampled_len);
 
-    let folding_pow_witness_len =
-        assign_and_range_usize(ctx, range, actual.folding_pow_witnesses.len());
+    let folding_pow_witness_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.folding_pow_witnesses.len());
     ctx.constrain_equal(&folding_pow_witness_len, &folding_pow_sampled_len);
-    let query_pow_witness_len =
-        assign_and_range_usize(ctx, range, actual.query_phase_pow_witnesses.len());
+    let query_pow_witness_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_phase_pow_witnesses.len());
     ctx.constrain_equal(&query_pow_witness_len, &query_pow_sampled_len);
-    let whir_sumcheck_poly_len =
-        assign_and_range_usize(ctx, range, actual.whir_sumcheck_polys.len());
+    let whir_sumcheck_poly_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.whir_sumcheck_polys.len());
     ctx.constrain_equal(&whir_sumcheck_poly_len, &folding_pow_sampled_len);
 
-    let codeword_commitment_count =
-        assign_and_range_usize(ctx, range, actual.codeword_commitment_roots.len());
+    let codeword_commitment_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.codeword_commitment_roots.len());
     gate.assert_is_const(
         ctx,
         &codeword_commitment_count,
@@ -1000,22 +970,29 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         )),
     );
 
-    let k_whir = assign_and_range_usize(ctx, range, actual.k_whir);
+    let k_whir = ext_chip.base().assign_and_range_usize(ctx, actual.k_whir);
     let k_whir_is_zero = gate.is_zero(ctx, k_whir);
     gate.assert_is_const(ctx, &k_whir_is_zero, &Fr::from(0u64));
 
-    let _initial_log_rs_domain_size =
-        assign_and_range_usize(ctx, range, actual.initial_log_rs_domain_size);
-    range.check_less_than_safe(
+    let _initial_log_rs_domain_size = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.initial_log_rs_domain_size);
+    ext_chip.range().check_less_than_safe(
         ctx,
         k_whir,
         usize_to_u64(actual.initial_log_rs_domain_size).saturating_add(1),
     );
 
-    let mu_pow_bits = assign_and_range_usize(ctx, range, actual.mu_pow_bits);
-    let mu_pow_sampled_bits = assign_and_range_u64(ctx, range, actual.mu_pow_sampled_bits);
+    let mu_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.mu_pow_bits);
+    let mu_pow_sampled_bits = ext_chip
+        .base()
+        .assign_and_range_u64(ctx, actual.mu_pow_sampled_bits);
     if actual.mu_pow_bits > 0 {
-        range.range_check(ctx, mu_pow_sampled_bits, actual.mu_pow_bits);
+        ext_chip
+            .range()
+            .range_check(ctx, mu_pow_sampled_bits, actual.mu_pow_bits);
     } else {
         gate.assert_is_const(ctx, &mu_pow_sampled_bits, &Fr::from(0u64));
     }
@@ -1023,9 +1000,11 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let mu_pow_is_zero = gate.is_zero(ctx, mu_pow_sampled_bits);
     ctx.constrain_equal(&mu_pow_witness_ok, &mu_pow_is_zero);
     gate.assert_is_const(ctx, &mu_pow_witness_ok, &Fr::from(1u64));
-    let mu_challenge = assign_ext(ctx, range, &baby_bear, actual.mu_challenge);
+    let mu_challenge = assign_ext(ctx, ext_chip, actual.mu_challenge);
 
-    let folding_pow_bits = assign_and_range_usize(ctx, range, actual.folding_pow_bits);
+    let folding_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.folding_pow_bits);
     let mut folding_pow_sampled_bits = Vec::with_capacity(actual.folding_pow_sampled_bits.len());
     let mut folding_pow_witness_ok = Vec::with_capacity(actual.folding_pow_witness_ok.len());
     for (&sampled_bits, &actual_ok) in actual
@@ -1033,9 +1012,11 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         .iter()
         .zip(&actual.folding_pow_witness_ok)
     {
-        let sampled_bits = assign_and_range_u64(ctx, range, sampled_bits);
+        let sampled_bits = ext_chip.base().assign_and_range_u64(ctx, sampled_bits);
         if actual.folding_pow_bits > 0 {
-            range.range_check(ctx, sampled_bits, actual.folding_pow_bits);
+            ext_chip
+                .range()
+                .range_check(ctx, sampled_bits, actual.folding_pow_bits);
         } else {
             gate.assert_is_const(ctx, &sampled_bits, &Fr::from(0u64));
         }
@@ -1048,7 +1029,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         folding_pow_witness_ok.push(bit);
     }
 
-    let query_phase_pow_bits = assign_and_range_usize(ctx, range, actual.query_phase_pow_bits);
+    let query_phase_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_phase_pow_bits);
     let mut query_phase_pow_sampled_bits =
         Vec::with_capacity(actual.query_phase_pow_sampled_bits.len());
     let mut query_phase_pow_witness_ok =
@@ -1058,9 +1041,11 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         .iter()
         .zip(&actual.query_phase_pow_witness_ok)
     {
-        let sampled_bits = assign_and_range_u64(ctx, range, sampled_bits);
+        let sampled_bits = ext_chip.base().assign_and_range_u64(ctx, sampled_bits);
         if actual.query_phase_pow_bits > 0 {
-            range.range_check(ctx, sampled_bits, actual.query_phase_pow_bits);
+            ext_chip
+                .range()
+                .range_check(ctx, sampled_bits, actual.query_phase_pow_bits);
         } else {
             gate.assert_is_const(ctx, &sampled_bits, &Fr::from(0u64));
         }
@@ -1081,7 +1066,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             let actual_idx = actual.query_indices.get(query_pos).copied().unwrap_or(0u64);
             let idx = ctx.load_witness(Fr::from(actual_idx));
             if actual_bits > 0 {
-                range.range_check(ctx, idx, actual_bits);
+                ext_chip.range().range_check(ctx, idx, actual_bits);
             } else {
                 gate.assert_is_const(ctx, &idx, &Fr::from(0));
             }
@@ -1090,7 +1075,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         .collect();
 
     let expected_query_count = actual.query_counts_per_round.iter().sum::<usize>();
-    let assigned_query_count = assign_and_range_usize(ctx, range, query_indices.len());
+    let assigned_query_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, query_indices.len());
     gate.assert_is_const(
         ctx,
         &assigned_query_count,
@@ -1102,7 +1089,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         .len()
         .saturating_mul(initial_query_count)
         + actual.query_counts_per_round.iter().skip(1).sum::<usize>();
-    let merkle_path_count = assign_and_range_usize(ctx, range, actual.merkle_paths.len());
+    let merkle_path_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.merkle_paths.len());
     gate.assert_is_const(
         ctx,
         &merkle_path_count,
@@ -1138,7 +1127,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                 .merkle_paths
                 .get(path_cursor)
                 .unwrap_or(&default_merkle_path);
-            let query_position = assign_and_range_usize(ctx, range, path.query_position);
+            let query_position = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, path.query_position);
             gate.assert_is_const(
                 ctx,
                 &query_position,
@@ -1146,7 +1137,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             );
 
             let expected_bits = actual.query_index_bits[global_query_position];
-            let path_query_bits = assign_and_range_usize(ctx, range, path.query_index_bits);
+            let path_query_bits = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, path.query_index_bits);
             gate.assert_is_const(
                 ctx,
                 &path_query_bits,
@@ -1162,7 +1155,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             ctx.constrain_equal(&path_root, &expected_root);
             let payload = constrain_merkle_path(
                 ctx,
-                range,
+                ext_chip,
                 query_index,
                 expected_bits,
                 &path.leaf_inputs,
@@ -1183,7 +1176,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                 .merkle_paths
                 .get(path_cursor)
                 .unwrap_or(&default_merkle_path);
-            let query_position = assign_and_range_usize(ctx, range, path.query_position);
+            let query_position = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, path.query_position);
             gate.assert_is_const(
                 ctx,
                 &query_position,
@@ -1191,7 +1186,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             );
 
             let expected_bits = actual.query_index_bits[global_query_position];
-            let path_query_bits = assign_and_range_usize(ctx, range, path.query_index_bits);
+            let path_query_bits = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, path.query_index_bits);
             gate.assert_is_const(
                 ctx,
                 &path_query_bits,
@@ -1207,7 +1204,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             ctx.constrain_equal(&path_root, &expected_root);
             let payload = constrain_merkle_path(
                 ctx,
-                range,
+                ext_chip,
                 query_index,
                 expected_bits,
                 &path.leaf_inputs,
@@ -1220,26 +1217,32 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             global_query_position += 1;
         }
     }
-    let path_cursor_cell = assign_and_range_usize(ctx, range, path_cursor);
+    let path_cursor_cell = ext_chip.base().assign_and_range_usize(ctx, path_cursor);
     gate.assert_is_const(
         ctx,
         &path_cursor_cell,
         &Fr::from(usize_to_u64(actual.merkle_paths.len())),
     );
-    let consumed_query_count = assign_and_range_usize(ctx, range, global_query_position);
+    let consumed_query_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, global_query_position);
     gate.assert_is_const(
         ctx,
         &consumed_query_count,
         &Fr::from(usize_to_u64(query_indices.len())),
     );
-    let payload_count = assign_and_range_usize(ctx, range, merkle_payloads.len());
+    let payload_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, merkle_payloads.len());
     gate.assert_is_const(
         ctx,
         &payload_count,
         &Fr::from(usize_to_u64(actual.merkle_paths.len())),
     );
 
-    let final_poly_len = assign_and_range_usize(ctx, range, actual.final_poly_len);
+    let final_poly_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.final_poly_len);
     gate.assert_is_const(
         ctx,
         &final_poly_len,
@@ -1250,30 +1253,32 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| assign_ext(ctx, ext_chip, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
     let ood_values = actual
         .ood_values
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let final_poly = actual
         .final_poly
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let stacking_openings = actual
         .stacking_openings
         .iter()
         .map(|row| {
             row.iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| assign_ext(ctx, ext_chip, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    let stacking_opening_count = assign_and_range_usize(ctx, range, stacking_openings.len());
+    let stacking_opening_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, stacking_openings.len());
     gate.assert_is_const(
         ctx,
         &stacking_opening_count,
@@ -1283,35 +1288,43 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let u_cube = actual
         .u_cube
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let folding_alphas = actual
         .folding_alphas
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let z0_challenges = actual
         .z0_challenges
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
     let gammas = actual
         .gammas
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| assign_ext(ctx, ext_chip, value))
         .collect::<Vec<_>>();
 
-    let final_claim = assign_ext(ctx, range, &baby_bear, actual.final_claim);
-    let final_acc = assign_ext(ctx, range, &baby_bear, actual.final_acc);
-    let zero = baby_bear.ext_zero(ctx, range);
-    let one = ext_from_base_const(ctx, &baby_bear, 1);
+    let final_claim = assign_ext(ctx, ext_chip, actual.final_claim);
+    let final_acc = assign_ext(ctx, ext_chip, actual.final_acc);
+    let zero = ext_chip.zero(ctx);
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
 
-    let round_count = assign_and_range_usize(ctx, range, actual.query_counts_per_round.len());
-    let folding_rounds = assign_and_range_usize(ctx, range, actual.folding_counts_per_round.len());
+    let round_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.query_counts_per_round.len());
+    let folding_rounds = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.folding_counts_per_round.len());
     ctx.constrain_equal(&round_count, &folding_rounds);
-    let gamma_count = assign_and_range_usize(ctx, range, actual.gammas.len());
+    let gamma_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.gammas.len());
     ctx.constrain_equal(&round_count, &gamma_count);
-    let z0_count = assign_and_range_usize(ctx, range, actual.z0_challenges.len());
+    let z0_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.z0_challenges.len());
     gate.assert_is_const(
         ctx,
         &z0_count,
@@ -1319,7 +1332,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             actual.query_counts_per_round.len().saturating_sub(1),
         )),
     );
-    let ood_count = assign_and_range_usize(ctx, range, ood_values.len());
+    let ood_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, ood_values.len());
     gate.assert_is_const(
         ctx,
         &ood_count,
@@ -1327,7 +1342,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             actual.query_counts_per_round.len().saturating_sub(1),
         )),
     );
-    let folding_alpha_count = assign_and_range_usize(ctx, range, folding_alphas.len());
+    let folding_alpha_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, folding_alphas.len());
     gate.assert_is_const(
         ctx,
         &folding_alpha_count,
@@ -1336,7 +1353,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         )),
     );
     if let Some(&first_query_bits) = actual.query_index_bits.first() {
-        let first_query_bits_cell = assign_and_range_usize(ctx, range, first_query_bits);
+        let first_query_bits_cell = ext_chip
+            .base()
+            .assign_and_range_usize(ctx, first_query_bits);
         gate.assert_is_const(
             ctx,
             &first_query_bits_cell,
@@ -1350,22 +1369,22 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
 
     let total_width = stacking_openings.iter().map(Vec::len).sum::<usize>();
     let mut mu_pows = Vec::with_capacity(total_width);
-    let mut mu_pow = one.clone();
+    let mut mu_pow = one;
     for _ in 0..total_width {
-        mu_pows.push(mu_pow.clone());
-        mu_pow = baby_bear.ext_mul(ctx, range, &mu_pow, &mu_challenge);
+        mu_pows.push(mu_pow);
+        mu_pow = ext_chip.mul(ctx, &mu_pow, &mu_challenge);
     }
 
-    let mut derived_claim = baby_bear.ext_zero(ctx, range);
+    let mut derived_claim = ext_chip.zero(ctx);
     let mut mu_idx = 0usize;
     for commit_openings in &stacking_openings {
         for opening in commit_openings {
-            let weighted = baby_bear.ext_mul(ctx, range, opening, &mu_pows[mu_idx]);
-            derived_claim = baby_bear.ext_add(ctx, range, &derived_claim, &weighted);
+            let weighted = ext_chip.mul(ctx, opening, &mu_pows[mu_idx]);
+            derived_claim = ext_chip.add(ctx, &derived_claim, &weighted);
             mu_idx += 1;
         }
     }
-    let consumed_mu_pows = assign_and_range_usize(ctx, range, mu_idx);
+    let consumed_mu_pows = ext_chip.base().assign_and_range_usize(ctx, mu_idx);
     gate.assert_is_const(ctx, &consumed_mu_pows, &Fr::from(usize_to_u64(total_width)));
 
     let mut alpha_cursor = 0usize;
@@ -1374,9 +1393,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
     let mut query_cursor = 0usize;
     let mut log_rs_domain_size = actual.initial_log_rs_domain_size;
     let mut zs_per_round = Vec::with_capacity(actual.query_counts_per_round.len());
-    let zero_base = baby_bear.zero(ctx);
+    let zero_base = ext_chip.base().zero(ctx);
     let default_merkle_payload = AssignedMerklePathPayload {
-        leaf_values: vec![vec![zero_base.clone()]],
+        leaf_values: vec![vec![zero_base]],
         query_bits: Vec::new(),
     };
 
@@ -1387,24 +1406,21 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
 
         for alpha in alphas_round {
             let evals = whir_sumcheck_polys.get(sumcheck_cursor);
-            let eval_count = assign_and_range_usize(ctx, range, evals.map_or(0usize, Vec::len));
+            let eval_count = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, evals.map_or(0usize, Vec::len));
             gate.assert_is_const(ctx, &eval_count, &Fr::from(2u64));
             let ev1 = evals
                 .and_then(|round| round.first())
-                .cloned()
-                .unwrap_or_else(|| zero.clone());
+                .copied()
+                .unwrap_or(zero);
             let ev2 = evals
                 .and_then(|round| round.get(1))
-                .cloned()
-                .unwrap_or_else(|| zero.clone());
-            let ev0 = baby_bear.ext_sub(ctx, range, &derived_claim, &ev1);
-            derived_claim = interpolate_quadratic_at_012_assigned(
-                ctx,
-                range,
-                &baby_bear,
-                [&ev0, &ev1, &ev2],
-                alpha,
-            );
+                .copied()
+                .unwrap_or(zero);
+            let ev0 = ext_chip.sub(ctx, &derived_claim, &ev1);
+            derived_claim =
+                interpolate_quadratic_at_012_assigned(ctx, ext_chip, [&ev0, &ev1, &ev2], alpha);
             sumcheck_cursor += 1;
         }
 
@@ -1413,7 +1429,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
 
         for _ in 0..num_queries {
             let query_bits_len = *actual.query_index_bits.get(query_cursor).unwrap_or(&0usize);
-            let query_bits_len_cell = assign_and_range_usize(ctx, range, query_bits_len);
+            let query_bits_len_cell = ext_chip.base().assign_and_range_usize(ctx, query_bits_len);
             gate.assert_is_const(
                 ctx,
                 &query_bits_len_cell,
@@ -1424,8 +1440,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             let query_bit_source = merkle_payloads
                 .get(payload_cursor)
                 .unwrap_or(&default_merkle_payload);
-            let query_bit_count =
-                assign_and_range_usize(ctx, range, query_bit_source.query_bits.len());
+            let query_bit_count = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, query_bit_source.query_bits.len());
             gate.assert_is_const(
                 ctx,
                 &query_bit_count,
@@ -1433,33 +1450,34 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             );
             let zi_root_base = query_root_from_bits_assigned(
                 ctx,
-                range,
-                &baby_bear,
+                ext_chip,
                 &query_bit_source.query_bits,
                 log_rs_domain_size,
             );
-            let zi_root_ext = ext_from_base_var(ctx, &baby_bear, &zi_root_base);
-            let zi = ext_pow_power_of_two(ctx, range, &baby_bear, &zi_root_ext, actual.k_whir);
+            let zi_root_ext = ext_chip.from_base_var(ctx, &zi_root_base);
+            let zi = ext_chip.pow_power_of_two(ctx, &zi_root_ext, actual.k_whir);
             zs_round.push(zi);
 
             let yi = if round_idx == 0 {
                 let row_count = 1usize << fold_count;
-                let mut codeword_vals = vec![baby_bear.ext_zero(ctx, range); row_count];
+                let mut codeword_vals = vec![ext_chip.zero(ctx); row_count];
                 let mut mu_power_idx = 0usize;
 
                 for (commit_idx, commit_openings) in stacking_openings.iter().enumerate() {
                     let payload = merkle_payloads
                         .get(payload_cursor + commit_idx)
                         .unwrap_or(&default_merkle_payload);
-                    let opened_row_count =
-                        assign_and_range_usize(ctx, range, payload.leaf_values.len());
+                    let opened_row_count = ext_chip
+                        .base()
+                        .assign_and_range_usize(ctx, payload.leaf_values.len());
                     gate.assert_is_const(
                         ctx,
                         &opened_row_count,
                         &Fr::from(usize_to_u64(row_count)),
                     );
-                    let payload_query_bits_len =
-                        assign_and_range_usize(ctx, range, payload.query_bits.len());
+                    let payload_query_bits_len = ext_chip
+                        .base()
+                        .assign_and_range_usize(ctx, payload.query_bits.len());
                     gate.assert_is_const(
                         ctx,
                         &payload_query_bits_len,
@@ -1473,7 +1491,7 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                         ctx.constrain_equal(&lhs, &rhs);
                     }
                     for row in &payload.leaf_values {
-                        let row_width = assign_and_range_usize(ctx, range, row.len());
+                        let row_width = ext_chip.base().assign_and_range_usize(ctx, row.len());
                         gate.assert_is_const(
                             ctx,
                             &row_width,
@@ -1484,40 +1502,32 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                     for col_idx in 0..commit_openings.len() {
                         let mu_pow = &mu_pows[mu_power_idx];
                         for (row_idx, row) in payload.leaf_values.iter().enumerate() {
-                            let opened_base = row
-                                .get(col_idx)
-                                .cloned()
-                                .unwrap_or_else(|| zero_base.clone());
-                            let opened_ext = ext_from_base_var(ctx, &baby_bear, &opened_base);
-                            let weighted = baby_bear.ext_mul(ctx, range, &opened_ext, mu_pow);
+                            let opened_base = row.get(col_idx).copied().unwrap_or(zero_base);
+                            let opened_ext = ext_chip.from_base_var(ctx, &opened_base);
+                            let weighted = ext_chip.mul(ctx, &opened_ext, mu_pow);
                             codeword_vals[row_idx] =
-                                baby_bear.ext_add(ctx, range, &codeword_vals[row_idx], &weighted);
+                                ext_chip.add(ctx, &codeword_vals[row_idx], &weighted);
                         }
                         mu_power_idx += 1;
                     }
                 }
-                let consumed_mu_power_idx = assign_and_range_usize(ctx, range, mu_power_idx);
+                let consumed_mu_power_idx =
+                    ext_chip.base().assign_and_range_usize(ctx, mu_power_idx);
                 gate.assert_is_const(
                     ctx,
                     &consumed_mu_power_idx,
                     &Fr::from(usize_to_u64(mu_pows.len())),
                 );
                 payload_cursor += stacking_openings.len();
-                binary_k_fold_assigned(
-                    ctx,
-                    range,
-                    &baby_bear,
-                    codeword_vals,
-                    alphas_round,
-                    &zi_root_base,
-                )
+                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, alphas_round, &zi_root_base)
             } else {
                 let payload = merkle_payloads
                     .get(payload_cursor)
                     .unwrap_or(&default_merkle_payload);
                 payload_cursor += 1;
-                let non_initial_row_count =
-                    assign_and_range_usize(ctx, range, payload.leaf_values.len());
+                let non_initial_row_count = ext_chip
+                    .base()
+                    .assign_and_range_usize(ctx, payload.leaf_values.len());
                 gate.assert_is_const(
                     ctx,
                     &non_initial_row_count,
@@ -1527,27 +1537,18 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
                     .leaf_values
                     .iter()
                     .map(|row| {
-                        let row_width = assign_and_range_usize(ctx, range, row.len());
+                        let row_width = ext_chip.base().assign_and_range_usize(ctx, row.len());
                         gate.assert_is_const(
                             ctx,
                             &row_width,
                             &Fr::from(usize_to_u64(BABY_BEAR_EXT_DEGREE)),
                         );
-                        BabyBearExtVar {
-                            coeffs: core::array::from_fn(|idx| {
-                                row.get(idx).cloned().unwrap_or_else(|| zero_base.clone())
-                            }),
-                        }
+                        BabyBearExtWire(core::array::from_fn(|idx| {
+                            row.get(idx).copied().unwrap_or(zero_base)
+                        }))
                     })
                     .collect::<Vec<_>>();
-                binary_k_fold_assigned(
-                    ctx,
-                    range,
-                    &baby_bear,
-                    opened_values,
-                    alphas_round,
-                    &zi_root_base,
-                )
+                binary_k_fold_assigned(ctx, ext_chip, opened_values, alphas_round, &zi_root_base)
             };
             ys_round.push(yi);
             query_cursor += 1;
@@ -1555,45 +1556,45 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
 
         let gamma = &gammas[round_idx];
         if round_idx + 1 != actual.query_counts_per_round.len() {
-            let y0_term = baby_bear.ext_mul(ctx, range, &ood_values[round_idx], gamma);
-            derived_claim = baby_bear.ext_add(ctx, range, &derived_claim, &y0_term);
+            let y0_term = ext_chip.mul(ctx, &ood_values[round_idx], gamma);
+            derived_claim = ext_chip.add(ctx, &derived_claim, &y0_term);
         }
-        let mut gamma_pow = baby_bear.ext_mul(ctx, range, gamma, gamma);
+        let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
         for yi in &ys_round {
-            let term = baby_bear.ext_mul(ctx, range, yi, &gamma_pow);
-            derived_claim = baby_bear.ext_add(ctx, range, &derived_claim, &term);
-            gamma_pow = baby_bear.ext_mul(ctx, range, &gamma_pow, gamma);
+            let term = ext_chip.mul(ctx, yi, &gamma_pow);
+            derived_claim = ext_chip.add(ctx, &derived_claim, &term);
+            gamma_pow = ext_chip.mul(ctx, &gamma_pow, gamma);
         }
 
         zs_per_round.push(zs_round);
         log_rs_domain_size = log_rs_domain_size.saturating_sub(1);
     }
 
-    let consumed_alpha_count = assign_and_range_usize(ctx, range, alpha_cursor);
+    let consumed_alpha_count = ext_chip.base().assign_and_range_usize(ctx, alpha_cursor);
     gate.assert_is_const(
         ctx,
         &consumed_alpha_count,
         &Fr::from(usize_to_u64(folding_alphas.len())),
     );
-    let consumed_sumcheck_count = assign_and_range_usize(ctx, range, sumcheck_cursor);
+    let consumed_sumcheck_count = ext_chip.base().assign_and_range_usize(ctx, sumcheck_cursor);
     gate.assert_is_const(
         ctx,
         &consumed_sumcheck_count,
         &Fr::from(usize_to_u64(whir_sumcheck_polys.len())),
     );
-    let consumed_payload_count = assign_and_range_usize(ctx, range, payload_cursor);
+    let consumed_payload_count = ext_chip.base().assign_and_range_usize(ctx, payload_cursor);
     gate.assert_is_const(
         ctx,
         &consumed_payload_count,
         &Fr::from(usize_to_u64(merkle_payloads.len())),
     );
-    let consumed_query_count = assign_and_range_usize(ctx, range, query_cursor);
+    let consumed_query_count = ext_chip.base().assign_and_range_usize(ctx, query_cursor);
     gate.assert_is_const(
         ctx,
         &consumed_query_count,
         &Fr::from(usize_to_u64(query_indices.len())),
     );
-    baby_bear.assert_ext_equal(ctx, &derived_claim, &final_claim);
+    ext_chip.assert_equal(ctx, &derived_claim, &final_claim);
 
     let rounds = actual.query_counts_per_round.len();
     let t = actual.k_whir * rounds;
@@ -1605,11 +1606,9 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         u_cube.len() >= t,
         "u_cube vector must cover k_whir * rounds prefix",
     );
-    let prefix =
-        eval_mobius_eq_mle_assigned(ctx, range, &baby_bear, &u_cube[..t], &folding_alphas[..t]);
-    let suffix =
-        eval_mle_evals_at_point_assigned(ctx, range, &baby_bear, &final_poly, &u_cube[t..]);
-    let mut derived_final_acc = baby_bear.ext_mul(ctx, range, &prefix, &suffix);
+    let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
+    let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
+    let mut derived_final_acc = ext_chip.mul(ctx, &prefix, &suffix);
 
     let mut alpha_offset = actual.k_whir;
     for round_idx in 0..rounds {
@@ -1620,11 +1619,10 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
         if round_idx + 1 != rounds {
             let z0 = &z0_challenges[round_idx];
             let mut z0_pows = Vec::with_capacity(slc_len);
-            z0_pows.push(z0.clone());
+            z0_pows.push(*z0);
             for _ in 1..slc_len {
-                let next = baby_bear.ext_mul(
+                let next = ext_chip.mul(
                     ctx,
-                    range,
                     z0_pows.last().expect("z0 power sequence is non-empty"),
                     z0_pows.last().expect("z0 power sequence is non-empty"),
                 );
@@ -1632,30 +1630,27 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             }
             let z0_max = z0_pows
                 .last()
-                .cloned()
+                .copied()
                 .expect("z0 power sequence is non-empty");
             let eq = eval_eq_mle_assigned(
                 ctx,
-                range,
-                &baby_bear,
+                ext_chip,
                 alpha_slc,
                 &z0_pows[..z0_pows.len().saturating_sub(1)],
             );
-            let poly_eval =
-                horner_eval_ext_poly_assigned(ctx, range, &baby_bear, &final_poly, &z0_max);
-            let term = baby_bear.ext_mul(ctx, range, gamma, &eq);
-            let term = baby_bear.ext_mul(ctx, range, &term, &poly_eval);
-            derived_final_acc = baby_bear.ext_add(ctx, range, &derived_final_acc, &term);
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &z0_max);
+            let term = ext_chip.mul(ctx, gamma, &eq);
+            let term = ext_chip.mul(ctx, &term, &poly_eval);
+            derived_final_acc = ext_chip.add(ctx, &derived_final_acc, &term);
         }
 
-        let mut gamma_pow = baby_bear.ext_mul(ctx, range, gamma, gamma);
+        let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
         for zi in &zs_per_round[round_idx] {
             let mut zi_pows = Vec::with_capacity(slc_len);
-            zi_pows.push(zi.clone());
+            zi_pows.push(*zi);
             for _ in 1..slc_len {
-                let next = baby_bear.ext_mul(
+                let next = ext_chip.mul(
                     ctx,
-                    range,
                     zi_pows.last().expect("zi power sequence is non-empty"),
                     zi_pows.last().expect("zi power sequence is non-empty"),
                 );
@@ -1663,32 +1658,30 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
             }
             let zi_max = zi_pows
                 .last()
-                .cloned()
+                .copied()
                 .expect("zi power sequence is non-empty");
             let eq = eval_eq_mle_assigned(
                 ctx,
-                range,
-                &baby_bear,
+                ext_chip,
                 alpha_slc,
                 &zi_pows[..zi_pows.len().saturating_sub(1)],
             );
-            let poly_eval =
-                horner_eval_ext_poly_assigned(ctx, range, &baby_bear, &final_poly, &zi_max);
-            let term = baby_bear.ext_mul(ctx, range, &gamma_pow, &eq);
-            let term = baby_bear.ext_mul(ctx, range, &term, &poly_eval);
-            derived_final_acc = baby_bear.ext_add(ctx, range, &derived_final_acc, &term);
-            gamma_pow = baby_bear.ext_mul(ctx, range, &gamma_pow, gamma);
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &zi_max);
+            let term = ext_chip.mul(ctx, &gamma_pow, &eq);
+            let term = ext_chip.mul(ctx, &term, &poly_eval);
+            derived_final_acc = ext_chip.add(ctx, &derived_final_acc, &term);
+            gamma_pow = ext_chip.mul(ctx, &gamma_pow, gamma);
         }
 
         alpha_offset += actual.k_whir;
     }
-    baby_bear.assert_ext_equal(ctx, &derived_final_acc, &final_acc);
+    ext_chip.assert_equal(ctx, &derived_final_acc, &final_acc);
 
-    let final_residual = assign_ext(ctx, range, &baby_bear, actual.final_residual);
-    let derived_final_residual = baby_bear.ext_sub(ctx, range, &final_acc, &final_claim);
-    baby_bear.assert_ext_equal(ctx, &derived_final_residual, &final_residual);
+    let final_residual = assign_ext(ctx, ext_chip, actual.final_residual);
+    let derived_final_residual = ext_chip.sub(ctx, &final_acc, &final_claim);
+    ext_chip.assert_equal(ctx, &derived_final_residual, &final_residual);
 
-    baby_bear.assert_ext_equal(ctx, &final_residual, &zero);
+    ext_chip.assert_equal(ctx, &final_residual, &zero);
 
     AssignedWhirIntermediates {
         mu_pow_bits,
@@ -1722,14 +1715,14 @@ pub(crate) fn constrain_whir_intermediates_unchecked(
 // Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
 pub(crate) fn constrain_checked_whir_witness_state_unchecked(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     raw: &RawWhirWitnessState,
 ) -> CheckedWhirWitnessState {
-    let assigned = constrain_whir_intermediates_unchecked(ctx, range, &raw.intermediates);
+    let assigned = constrain_whir_intermediates_unchecked(ctx, ext_chip, &raw.intermediates);
     let derived = DerivedWhirState {
-        final_acc: assigned.final_acc.clone(),
-        final_claim: assigned.final_claim.clone(),
-        final_residual: assigned.final_residual.clone(),
+        final_acc: assigned.final_acc,
+        final_claim: assigned.final_claim,
+        final_residual: assigned.final_residual,
     };
     CheckedWhirWitnessState { assigned, derived }
 }

@@ -1,6 +1,7 @@
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+        range::RangeChip,
         RangeInstructions,
     },
     halo2_proofs::dev::MockProver,
@@ -20,7 +21,7 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
-    gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
+    field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
 };
 
 fn derive_and_constrain_batch(
@@ -51,9 +52,9 @@ fn constrain_checked_batch_witness_state(
 ) -> CheckedBatchWitnessState {
     let assigned = constrain_batch_intermediates_unchecked(ctx, range, &raw.intermediates);
     let derived = DerivedBatchState {
-        sum_claim: assigned.sum_claim.clone(),
-        sum_univ_domain_s_0: assigned.sum_univ_domain_s_0.clone(),
-        consistency_residual: assigned.consistency_residual.clone(),
+        sum_claim: assigned.sum_claim,
+        sum_univ_domain_s_0: assigned.sum_univ_domain_s_0,
+        consistency_residual: assigned.consistency_residual,
     };
     CheckedBatchWitnessState { assigned, derived }
 }
@@ -159,10 +160,10 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
         run_mock(false, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let baby_bear = BabyBearArithmeticGadgets;
-            let ext = ext_from_base_const(ctx, &baby_bear, constant);
-            ext.coeffs[0]
-                .cell
+            let ext_chip = BabyBearExtChip::new(BabyBearChip::new(&range));
+            let ext = ext_chip.from_base_const(ctx, NativeF::from_u64(constant));
+            ext.0[0]
+                .0
                 .debug_prank(ctx, Fr::from((constant + 1) % BABY_BEAR_MODULUS_U64));
             // `load_constant` no longer creates lookup rows; add a tiny lookup so
             // `run_mock` still validates the expected phase-0 lookup shape.
@@ -205,7 +206,7 @@ fn batch_constraints_reject_q0_claim_witness_when_total_interactions_is_zero() {
         actual.total_interactions, 0,
         "fixture must hit zero-interaction GKR branch",
     );
-    actual.gkr_q0_claim = Some([1, 0, 0, 0]);
+    actual.gkr_q0_claim = Some(NativeEF::ONE);
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_mock(true, move |builder| {
@@ -251,7 +252,7 @@ fn batch_constraints_fail_on_tampered_intermediate_claims() {
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
 
-    actual.consistency_residual[0] = (actual.consistency_residual[0] + 1) % BABY_BEAR_MODULUS_U64;
+    actual.consistency_residual += NativeEF::ONE;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -266,7 +267,7 @@ fn batch_constraints_reject_trailing_padded_column_openings() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
-    actual.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    actual.column_openings[0][0].push(NativeEF::ZERO);
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -304,7 +305,7 @@ fn batch_constraints_reject_sumcheck_round_count_suffix() {
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
     actual
         .sumcheck_round_polys
-        .push(vec![[0; BABY_BEAR_EXT_DEGREE]; actual.batch_degree]);
+        .push(vec![NativeEF::ZERO; actual.batch_degree]);
 
     assert_rejected_without_host_panic(|| {
         run_mock(false, move |builder| {
@@ -321,9 +322,7 @@ fn batch_constraints_reject_univariate_coeff_arity_suffix() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
-    actual
-        .univariate_round_coeffs
-        .push([0; BABY_BEAR_EXT_DEGREE]);
+    actual.univariate_round_coeffs.push(NativeEF::ZERO);
 
     assert_rejected_without_host_panic(|| {
         run_mock(false, move |builder| {
@@ -357,7 +356,7 @@ fn batch_constraints_ignore_tampered_pow_witness_mirror() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual =
         derive_batch_intermediates(engine.config(), &vk, &proof).expect("native batch must pass");
-    actual.logup_pow_witness = (actual.logup_pow_witness + 1) % BABY_BEAR_MODULUS_U64;
+    actual.logup_pow_witness += NativeF::ONE;
 
     run_mock(true, move |builder| {
         let range = builder.range_chip();
@@ -376,8 +375,7 @@ fn batch_constraints_fail_on_tampered_gkr_layer_claims() {
         !actual.gkr_claims_per_layer.is_empty(),
         "fixture should contain GKR layer claims when interactions are present",
     );
-    actual.gkr_claims_per_layer[0][0][0] =
-        (actual.gkr_claims_per_layer[0][0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    actual.gkr_claims_per_layer[0][0] += NativeEF::ONE;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -423,7 +421,7 @@ fn batch_constraints_fail_on_coordinated_consistency_rhs_forgery() {
     actual.trace_interactions[0][0].bus_index =
         actual.trace_interactions[0][0].bus_index.wrapping_add(1);
     actual.consistency_rhs = actual.consistency_lhs;
-    actual.consistency_residual = [0; BABY_BEAR_EXT_DEGREE];
+    actual.consistency_residual = NativeEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();

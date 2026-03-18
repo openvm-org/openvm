@@ -23,15 +23,9 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    gadgets::{
-        baby_bear::{
-            BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_BITS, BABY_BEAR_EXT_DEGREE,
-            BABY_BEAR_MODULUS_U64,
-        },
-        transcript::{
-            constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
-            AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent, NUM_SPLIT_LIMBS,
-        },
+    field::baby_bear::{
+        BabyBearChip, BabyBearExtChip, BabyBearExtWire, BABY_BEAR_BITS, BABY_BEAR_EXT_DEGREE,
+        BABY_BEAR_MODULUS_U64,
     },
     stages::{
         batch_constraints::{
@@ -49,7 +43,6 @@ use crate::{
             ProofShapeOwnershipSchedule, ProofShapePreambleError, RawProofShapeWitnessState,
         },
         stacked_reduction::{
-            coeffs_to_native_ext as stacked_coeffs_to_native_ext,
             constrain_stacked_reduction_intermediates,
             derive_stacked_reduction_intermediates_with_inputs,
             AssignedStackedReductionIntermediates, QCoeffAccumulationTerm,
@@ -60,7 +53,11 @@ use crate::{
             AssignedWhirIntermediates, RawWhirWitnessState, WhirError, WhirIntermediates,
         },
     },
-    utils::{assign_and_range_u64, usize_to_u64},
+    transcript::{
+        constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
+        AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent, NUM_SPLIT_LIMBS,
+    },
+    utils::usize_to_u64,
     Fr,
 };
 
@@ -216,12 +213,7 @@ pub fn derive_pipeline_intermediates(
         PipelineError::StackedReduction(StackedReductionConstraintError::StackedReduction(err))
     })?;
 
-    let u_prism = stacked_reduction
-        .u
-        .iter()
-        .copied()
-        .map(stacked_coeffs_to_native_ext)
-        .collect::<Vec<_>>();
+    let u_prism = stacked_reduction.u.clone();
     let u_cube =
         derive_u_cube_from_prism(&u_prism, prepared.l_skip).map_err(PipelineError::Batch)?;
     let commits = collect_trace_commitments(&mvk.inner, proof, &prepared.trace_id_to_air_id)
@@ -779,56 +771,52 @@ fn bind_sample_bits(
     ctx.constrain_equal(&sampled_bits, &target_bits);
 }
 
-fn bind_sample_ext(ctx: &mut Context<Fr>, cursor: &mut SampleCursor<'_>, target: &BabyBearExtVar) {
-    for coeff in &target.coeffs {
+fn bind_sample_ext(ctx: &mut Context<Fr>, cursor: &mut SampleCursor<'_>, target: &BabyBearExtWire) {
+    for coeff in &target.0 {
         let sampled = cursor.consume().unwrap_or_else(|| {
             let zero = ctx.load_constant(Fr::from(0u64));
             let one = ctx.load_constant(Fr::from(1u64));
             ctx.constrain_equal(&zero, &one);
             zero
         });
-        ctx.constrain_equal(&coeff.cell, &sampled);
+        ctx.constrain_equal(&coeff.0, &sampled);
     }
 }
 
 fn bind_u_cube_from_stacked(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
-    stacked_u: &[BabyBearExtVar],
-    whir_u_cube: &[BabyBearExtVar],
+    stacked_u: &[BabyBearExtWire],
+    whir_u_cube: &[BabyBearExtWire],
 ) {
     assert!(!stacked_u.is_empty());
-    let baby_bear = BabyBearArithmeticGadgets;
-    let zero_ext = baby_bear.ext_zero(ctx, range);
+    let zero_ext = ext_chip.zero(ctx);
 
     let mut derived_u_cube = Vec::with_capacity(l_skip + stacked_u.len().saturating_sub(1));
-    let mut power = stacked_u
-        .first()
-        .cloned()
-        .unwrap_or_else(|| zero_ext.clone());
+    let mut power = stacked_u.first().copied().unwrap_or(zero_ext);
     for _ in 0..l_skip {
-        derived_u_cube.push(power.clone());
-        power = baby_bear.ext_mul(ctx, range, &power, &power);
+        derived_u_cube.push(power);
+        power = ext_chip.square(ctx, &power);
     }
-    derived_u_cube.extend(stacked_u.iter().skip(1).cloned());
+    derived_u_cube.extend(stacked_u.iter().skip(1).copied());
 
     assert_eq!(derived_u_cube.len(), whir_u_cube.len());
     for (idx, derived) in derived_u_cube.iter().enumerate() {
-        let actual = whir_u_cube.get(idx).unwrap_or(&zero_ext);
-        baby_bear.assert_ext_equal(ctx, derived, actual);
+        let actual = whir_u_cube.get(idx).copied().unwrap_or(zero_ext);
+        ext_chip.assert_equal(ctx, derived, &actual);
     }
 }
 
-fn push_ext_observe_cells(observes: &mut Vec<AssignedValue<Fr>>, value: &BabyBearExtVar) {
-    for coeff in &value.coeffs {
-        observes.push(coeff.cell);
+fn push_ext_observe_cells(observes: &mut Vec<AssignedValue<Fr>>, value: &BabyBearExtWire) {
+    for coeff in &value.0 {
+        observes.push(coeff.0);
     }
 }
 
 fn push_column_claim_observe_cells(
     observes: &mut Vec<AssignedValue<Fr>>,
-    claims: &[BabyBearExtVar],
+    claims: &[BabyBearExtWire],
     need_rot: bool,
     zero: AssignedValue<Fr>,
 ) {
@@ -858,14 +846,13 @@ fn derive_stage_payload_observe_cells(
 ) -> Vec<AssignedValue<Fr>> {
     let mut observes = Vec::new();
     let zero = ctx.load_constant(Fr::from(0u64));
-    let baby_bear = BabyBearArithmeticGadgets;
-    let zero_ext = baby_bear.ext_zero(ctx, range);
+    let base_chip = BabyBearChip::new(range);
+    let ext_chip = BabyBearExtChip::new(base_chip);
+    let zero_ext = ext_chip.zero(ctx);
     if schedule.logup_pow_bits > 0 {
-        observes.push(assign_and_range_u64(
-            ctx,
-            range,
-            actual.batch.logup_pow_witness,
-        ));
+        observes.push(
+            base_chip.assign_and_range_u64(ctx, actual.batch.logup_pow_witness.as_canonical_u64()),
+        );
     }
 
     if schedule.has_gkr_observe_payload {
@@ -978,11 +965,11 @@ fn derive_stage_payload_observe_cells(
     }
 
     if schedule.mu_pow_bits > 0 {
-        observes.push(assign_and_range_u64(ctx, range, actual.whir.mu_pow_witness));
+        observes.push(base_chip.assign_and_range_u64(ctx, actual.whir.mu_pow_witness));
     }
     let mut sumcheck_cursor = 0usize;
     let mut folding_pow_cursor = 0usize;
-    let default_whir_round = vec![zero_ext.clone(), zero_ext.clone()];
+    let default_whir_round = vec![zero_ext, zero_ext];
     for round_idx in 0..schedule.query_counts_per_round.len() {
         let folding_count = schedule
             .folding_counts_per_round
@@ -1005,7 +992,7 @@ fn derive_stage_payload_observe_cells(
                     .get(folding_pow_cursor)
                     .copied()
                     .unwrap_or(0);
-                observes.push(assign_and_range_u64(ctx, range, pow_witness));
+                observes.push(base_chip.assign_and_range_u64(ctx, pow_witness));
             }
             sumcheck_cursor += 1;
             folding_pow_cursor += 1;
@@ -1024,7 +1011,7 @@ fn derive_stage_payload_observe_cells(
                 .unwrap_or(zero);
             let root_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, codeword_root);
             for limb in root_limbs {
-                observes.push(limb.cell);
+                observes.push(limb.0);
             }
             let ood = whir.ood_values.get(round_idx).unwrap_or(&zero_ext);
             push_ext_observe_cells(&mut observes, ood);
@@ -1037,7 +1024,7 @@ fn derive_stage_payload_observe_cells(
                 .get(round_idx)
                 .copied()
                 .unwrap_or(0);
-            observes.push(assign_and_range_u64(ctx, range, pow_witness));
+            observes.push(base_chip.assign_and_range_u64(ctx, pow_witness));
         }
     }
 
@@ -1286,15 +1273,14 @@ fn constrain_post_preamble_event_kinds(
 
 fn bind_batch_to_stacked_inputs(
     ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     actual: &PipelineIntermediates,
     batch: &AssignedBatchIntermediates,
     stacked_reduction: &AssignedStackedReductionIntermediates,
 ) {
-    let baby_bear = BabyBearArithmeticGadgets;
-
     assert_eq!(batch.r.len(), stacked_reduction.r.len());
     for (batch_r, stacked_r) in batch.r.iter().zip(&stacked_reduction.r) {
-        baby_bear.assert_ext_equal(ctx, batch_r, stacked_r);
+        ext_chip.assert_equal(ctx, batch_r, stacked_r);
     }
 
     assert_eq!(
@@ -1310,7 +1296,7 @@ fn bind_batch_to_stacked_inputs(
         for (batch_part, stacked_part) in batch_trace.iter().zip(stacked_trace) {
             assert_eq!(batch_part.len(), stacked_part.len());
             for (batch_opening, stacked_opening) in batch_part.iter().zip(stacked_part) {
-                baby_bear.assert_ext_equal(ctx, batch_opening, stacked_opening);
+                ext_chip.assert_equal(ctx, batch_opening, stacked_opening);
             }
         }
     }
@@ -1359,10 +1345,10 @@ fn bind_batch_to_stacked_inputs(
 
 fn bind_stacked_openings_to_whir(
     ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
     stacked_reduction: &AssignedStackedReductionIntermediates,
     whir: &AssignedWhirIntermediates,
 ) {
-    let baby_bear = BabyBearArithmeticGadgets;
     assert_eq!(
         stacked_reduction.stacking_openings.len(),
         whir.stacking_openings.len(),
@@ -1374,7 +1360,7 @@ fn bind_stacked_openings_to_whir(
     {
         assert_eq!(stacked_commit.len(), whir_commit.len());
         for (stacked_opening, whir_opening) in stacked_commit.iter().zip(whir_commit) {
-            baby_bear.assert_ext_equal(ctx, stacked_opening, whir_opening);
+            ext_chip.assert_equal(ctx, stacked_opening, whir_opening);
         }
     }
 }
@@ -1457,10 +1443,10 @@ fn derive_preamble_observe_cells_from_stage(
     let common_main_commit_limbs =
         split_assigned_bn254_to_babybear_limbs(ctx, range, statement_public_inputs[1]);
     for limb in pre_hash_limbs {
-        observes.push(limb.cell);
+        observes.push(limb.0);
     }
     for limb in common_main_commit_limbs {
-        observes.push(limb.cell);
+        observes.push(limb.0);
     }
     let first_initial_commitment_root = whir
         .initial_commitment_roots
@@ -1495,7 +1481,7 @@ fn derive_preamble_observe_cells_from_stage(
 
                 let root_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, root);
                 for limb in root_limbs {
-                    observes.push(limb.cell);
+                    observes.push(limb.0);
                 }
             } else {
                 observes.push(proof_shape.air_log_heights[air_idx]);
@@ -1504,13 +1490,13 @@ fn derive_preamble_observe_cells_from_stage(
             for &cached_root in &cached_roots_by_air[air_idx] {
                 let cached_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, cached_root);
                 for limb in cached_limbs {
-                    observes.push(limb.cell);
+                    observes.push(limb.0);
                 }
             }
         }
 
         for pv in &batch.public_values[air_idx] {
-            observes.push(pv.cell);
+            observes.push(pv.0);
         }
     }
 
@@ -1819,8 +1805,9 @@ pub(crate) fn constrain_pipeline_intermediates(
     // replay-owned, and schedule metadata is bound through a transcript-derived public
     // commitment.
     let gate = range.gate();
-    let baby_bear = BabyBearArithmeticGadgets;
-    let zero_ext = baby_bear.ext_zero(ctx, range);
+    let base_chip = BabyBearChip::new(range);
+    let ext_chip = BabyBearExtChip::new(base_chip);
+    let zero_ext = ext_chip.zero(ctx);
     let zero_cell = ctx.load_constant(Fr::from(0u64));
 
     assert_eq!(
@@ -1842,7 +1829,7 @@ pub(crate) fn constrain_pipeline_intermediates(
 
     let proof_shape = constrain_checked_proof_shape_witness_state_with_ownership(
         ctx,
-        range,
+        &base_chip,
         &RawProofShapeWitnessState {
             intermediates: actual.proof_shape.clone(),
         },
@@ -1853,18 +1840,18 @@ pub(crate) fn constrain_pipeline_intermediates(
     batch_with_owned_nodes.trace_constraint_nodes = schedule.batch_trace_constraint_nodes.clone();
     let batch = constrain_batch_intermediates_unchecked(ctx, range, &batch_with_owned_nodes);
     let stacked_reduction =
-        constrain_stacked_reduction_intermediates(ctx, range, &actual.stacked_reduction);
+        constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual.stacked_reduction);
     let whir = constrain_checked_whir_witness_state_unchecked(
         ctx,
-        range,
+        &ext_chip,
         &RawWhirWitnessState {
             intermediates: actual.whir.clone(),
         },
     )
     .assigned;
     constrain_metadata_ownership(ctx, gate, actual, &proof_shape, &batch, schedule);
-    bind_batch_to_stacked_inputs(ctx, actual, &batch, &stacked_reduction);
-    bind_stacked_openings_to_whir(ctx, &stacked_reduction, &whir);
+    bind_batch_to_stacked_inputs(ctx, &ext_chip, actual, &batch, &stacked_reduction);
+    bind_stacked_openings_to_whir(ctx, &ext_chip, &stacked_reduction, &whir);
     let transcript_replay = constrain_transcript_events(ctx, range, &actual.transcript_events);
 
     let statement_public_inputs = [
@@ -2152,7 +2139,7 @@ pub(crate) fn constrain_pipeline_intermediates(
         bind_sample_ext(ctx, &mut sample_cursor, gkr_xi_challenge);
     }
     let gkr_xi_len_cell =
-        assign_and_range_u64(ctx, range, usize_to_u64(batch.gkr_xi_sample_order.len()));
+        base_chip.assign_and_range_u64(ctx, usize_to_u64(batch.gkr_xi_sample_order.len()));
     range.check_less_than_safe(
         ctx,
         gkr_xi_len_cell,
@@ -2160,16 +2147,21 @@ pub(crate) fn constrain_pipeline_intermediates(
     );
     let gkr_xi_len = batch.gkr_xi_sample_order.len();
     if gkr_xi_len > 0 {
-        let xi_0 = batch.xi.first().unwrap_or(&zero_ext);
+        let xi_0 = batch.xi.first().copied().unwrap_or(zero_ext);
         let gkr_last = batch
             .gkr_xi_sample_order
             .get(gkr_xi_len - 1)
-            .unwrap_or(&zero_ext);
-        baby_bear.assert_ext_equal(ctx, xi_0, gkr_last);
+            .copied()
+            .unwrap_or(zero_ext);
+        ext_chip.assert_equal(ctx, &xi_0, &gkr_last);
         for idx in 1..gkr_xi_len {
-            let xi_val = batch.xi.get(idx).unwrap_or(&zero_ext);
-            let gkr_prev = batch.gkr_xi_sample_order.get(idx - 1).unwrap_or(&zero_ext);
-            baby_bear.assert_ext_equal(ctx, xi_val, gkr_prev);
+            let xi_val = batch.xi.get(idx).copied().unwrap_or(zero_ext);
+            let gkr_prev = batch
+                .gkr_xi_sample_order
+                .get(idx - 1)
+                .copied()
+                .unwrap_or(zero_ext);
+            ext_chip.assert_equal(ctx, &xi_val, &gkr_prev);
         }
     }
     for xi_challenge in batch.xi.iter().skip(gkr_xi_len) {
@@ -2289,7 +2281,7 @@ pub(crate) fn constrain_pipeline_intermediates(
 
     bind_u_cube_from_stacked(
         ctx,
-        range,
+        &ext_chip,
         schedule.l_skip,
         &stacked_reduction.u,
         &whir.u_cube,
