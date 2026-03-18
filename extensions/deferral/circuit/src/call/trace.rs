@@ -61,6 +61,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    address_bits: usize,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for DeferralCallCoreExecutor<A>
@@ -172,6 +173,14 @@ where
                 .request_range(bytes[0] as u32, bytes[1] as u32);
         }
 
+        // NOTE: this range check is done in the adapter AIR
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+        self.bitwise_lookup_chip.request_range(
+            (record.write_data.output_len[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            0,
+        );
+
         // Write columns in reverse order to avoid clobbering the record.
         let input_commit_rcs = input_commit_f
             .chunks_exact(F_NUM_BYTES)
@@ -198,8 +207,6 @@ where
             self.bitwise_lookup_chip
                 .request_range(rc_pair[0], rc_pair[1]);
         }
-        let rc = CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_lt_aux);
-        self.bitwise_lookup_chip.request_range(rc, 0);
 
         cols.writes.new_output_acc = record.write_data.new_output_acc;
         cols.writes.new_input_acc = record.write_data.new_input_acc;
@@ -244,8 +251,11 @@ pub struct DeferralCallAdapterRecord<F> {
 #[derive(Clone, Copy)]
 pub struct DeferralCallAdapterExecutor;
 
-#[derive(derive_new::new)]
-pub struct DeferralCallAdapterFiller;
+#[derive(Clone, derive_new::new)]
+pub struct DeferralCallAdapterFiller {
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    address_bits: usize,
+}
 
 impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
     const WIDTH: usize = DeferralCallAdapterCols::<u8>::width();
@@ -391,6 +401,16 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         let record: &DeferralCallAdapterRecord<F> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut DeferralCallAdapterCols<F> = adapter_row.borrow_mut();
+
+        // Range checks must happen before we start writing adapter columns,
+        // since the record and columns share the same backing buffer.
+        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+
+        self.bitwise_lookup_chip.request_range(
+            (record.rd_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            (record.rs_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+        );
 
         // Timestamps in AIR are assigned in strict sequence starting from
         // `from_state.timestamp`; mirror that exact sequence in reverse here.
