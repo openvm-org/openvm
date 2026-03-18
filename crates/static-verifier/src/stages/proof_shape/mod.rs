@@ -900,14 +900,6 @@ pub fn derive_proof_shape_ownership_schedule(
     })
 }
 
-pub(crate) fn constrain_proof_shape_intermediates(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    actual: &ProofShapeIntermediates,
-) -> AssignedProofShapeIntermediates {
-    constrain_proof_shape_intermediates_with_ownership(ctx, range, actual, None)
-}
-
 pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
