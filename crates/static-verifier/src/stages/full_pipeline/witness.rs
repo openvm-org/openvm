@@ -12,7 +12,7 @@ use openvm_stark_sdk::{
     },
 };
 
-use super::{
+use crate::stages::{
     batch_constraints::{
         compute_trace_id_to_air_id, derive_batch_intermediates_with_inputs,
         enforce_trace_height_constraints, observe_preamble, BatchConstraintError,

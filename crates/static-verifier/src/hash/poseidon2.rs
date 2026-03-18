@@ -1,3 +1,4 @@
+//! Bn254 Scalar Poseidon2 permutation halo2-base implementation
 use std::sync::OnceLock;
 
 use halo2_base::{

@@ -1,3 +1,5 @@
+pub(crate) mod witness;
+
 use core::iter::zip;
 
 use halo2_base::{
@@ -32,7 +34,7 @@ use crate::{
             constrain_batch_intermediates_unchecked, AssignedBatchIntermediates,
             BatchConstraintError, BatchIntermediates,
         },
-        pipeline::{
+        full_pipeline::witness::{
             collect_trace_commitments, derive_need_rot_per_commit, derive_u_cube_from_prism,
             prepare_pipeline_inputs,
         },
