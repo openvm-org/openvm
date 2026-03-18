@@ -4,41 +4,40 @@ use std::cell::RefCell;
 use std::{iter::zip, slice};
 
 use halo2_base::{
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
     AssignedValue, Context,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest, EF as NativeEF,
-        F as NativeF, default_transcript,
+        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest,
+        EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
-        FiatShamirTranscript, StarkProtocolConfig,
         air_builders::symbolic::{
-            SymbolicConstraints, SymbolicExpressionNode,
             symbolic_expression::SymbolicEvaluator,
             symbolic_variable::{Entry, SymbolicVariable},
+            SymbolicConstraints, SymbolicExpressionNode,
         },
         calculate_n_logup,
         interaction::Interaction,
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
         p3_field::{
-            BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField64, TwoAdicField,
-            batch_multiplicative_inverse,
+            batch_multiplicative_inverse, BasedVectorSpace, Field, PrimeCharacteristicRing,
+            PrimeField64, TwoAdicField,
         },
-        poly_common::{UnivariatePoly, eval_eq_mle, eval_eq_sharp_uni, eval_eq_uni},
-        proof::{BatchConstraintProof, GkrProof, Proof, column_openings_by_rot},
+        poly_common::{eval_eq_mle, eval_eq_sharp_uni, eval_eq_uni, UnivariatePoly},
+        proof::{column_openings_by_rot, BatchConstraintProof, GkrProof, Proof},
         verifier::{
             batch_constraints::BatchConstraintError as NativeBatchConstraintError,
-            fractional_sumcheck_gkr::verify_gkr,
-            proof_shape::ProofShapeError,
+            fractional_sumcheck_gkr::verify_gkr, proof_shape::ProofShapeError,
         },
+        FiatShamirTranscript, StarkProtocolConfig,
     },
 };
 
 use crate::{
     circuit::Fr,
-    gadgets::baby_bear::{BABY_BEAR_EXT_DEGREE, BabyBearArithmeticGadgets, BabyBearExtVar},
+    gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_EXT_DEGREE},
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
     utils::{assign_and_range_u64, assign_and_range_usize, usize_to_u64},
 };
@@ -264,8 +263,8 @@ fn validate_symbolic_nodes(
         };
         match var.entry {
             Entry::Preprocessed { .. } => {
-                let vp = preprocessed
-                    .ok_or(BatchConstraintError::MissingPreprocessedView { air_id })?;
+                let vp =
+                    preprocessed.ok_or(BatchConstraintError::MissingPreprocessedView { air_id })?;
                 if var.index >= vp.len() {
                     return Err(BatchConstraintError::SymbolicVariableOutOfBounds {
                         air_id,
@@ -1007,12 +1006,6 @@ pub fn derive_batch_intermediates(
     .map_err(Into::into)
 }
 
-fn assign_bool(ctx: &mut Context<Fr>, range: &RangeChip<Fr>, value: bool) -> AssignedValue<Fr> {
-    let bit = ctx.load_witness(Fr::from(value as u64));
-    range.gate().assert_bit(ctx, bit);
-    bit
-}
-
 fn assign_ext(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -1058,11 +1051,10 @@ pub(crate) fn take_recorded_ext_base_consts() -> Vec<RecordedExtBaseConst> {
 
 pub(crate) fn ext_from_base_const(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
     baby_bear: &BabyBearArithmeticGadgets,
     constant: u64,
 ) -> BabyBearExtVar {
-    let c0 = baby_bear.load_constant(ctx, range, constant);
+    let c0 = baby_bear.load_constant(ctx, constant);
     #[cfg(test)]
     RECORDED_EXT_BASE_CONSTS.with(|records| {
         records.borrow_mut().push(RecordedExtBaseConst {
@@ -1075,7 +1067,7 @@ pub(crate) fn ext_from_base_const(
             if idx == 0 {
                 c0.clone()
             } else {
-                baby_bear.zero(ctx, range)
+                baby_bear.zero(ctx)
             }
         }),
     }
@@ -1106,13 +1098,13 @@ fn eval_lagrange_on_integer_grid(
     let n = evals.len().saturating_sub(1);
     let mut acc = baby_bear.ext_zero(ctx, range);
     for (i, eval_i) in evals.iter().enumerate() {
-        let mut basis = ext_from_base_const(ctx, range, baby_bear, 1);
+        let mut basis = ext_from_base_const(ctx, baby_bear, 1);
         let mut denom = NativeF::ONE;
         for j in 0..=n {
             if i == j {
                 continue;
             }
-            let x_j = ext_from_base_const(ctx, range, baby_bear, j as u64);
+            let x_j = ext_from_base_const(ctx, baby_bear, j as u64);
             let x_minus_j = baby_bear.ext_sub(ctx, range, point, &x_j);
             basis = baby_bear.ext_mul(ctx, range, &basis, &x_minus_j);
 
@@ -1133,11 +1125,10 @@ fn eval_lagrange_on_integer_grid(
 
 fn ext_from_base_var(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
     baby_bear: &BabyBearArithmeticGadgets,
     value: &crate::gadgets::baby_bear::BabyBearVar,
 ) -> BabyBearExtVar {
-    let zero = baby_bear.zero(ctx, range);
+    let zero = baby_bear.zero(ctx);
     BabyBearExtVar {
         coeffs: core::array::from_fn(|idx| {
             if idx == 0 {
@@ -1181,8 +1172,8 @@ fn progression_exp_2_assigned(
     l: usize,
 ) -> BabyBearExtVar {
     let mut pow = m.clone();
-    let mut sum = ext_from_base_const(ctx, range, baby_bear, 1);
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let mut sum = ext_from_base_const(ctx, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     for _ in 0..l {
         let one_plus_pow = baby_bear.ext_add(ctx, range, &one, &pow);
         sum = baby_bear.ext_mul(ctx, range, &sum, &one_plus_pow);
@@ -1199,7 +1190,7 @@ pub(crate) fn eval_eq_mle_assigned(
     y: &[BabyBearExtVar],
 ) -> BabyBearExtVar {
     assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut acc = one.clone();
     for (x_i, y_i) in x.iter().zip(y.iter()) {
         let xy = baby_bear.ext_mul(ctx, range, x_i, y_i);
@@ -1224,7 +1215,7 @@ pub(crate) fn eval_eq_mle_binary_assigned(
         y_bits.len(),
         "eq_mle binary vector length mismatch",
     );
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut acc = one.clone();
     for (x_i, bit) in x.iter().zip(y_bits.iter().copied()) {
         let factor = if bit {
@@ -1245,7 +1236,7 @@ pub(crate) fn eval_eq_uni_assigned(
     x: &BabyBearExtVar,
     y: &BabyBearExtVar,
 ) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut res = one.clone();
     let mut x_pow = x.clone();
     let mut y_pow = y.clone();
@@ -1273,7 +1264,7 @@ pub(crate) fn eval_eq_uni_at_one_assigned(
     l_skip: usize,
     x: &BabyBearExtVar,
 ) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut res = one.clone();
     let mut x_pow = x.clone();
     for _ in 0..l_skip {
@@ -1296,7 +1287,7 @@ fn eval_eq_sharp_uni_assigned(
     xi_1: &[BabyBearExtVar],
     z: &BabyBearExtVar,
 ) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut eq_xi_evals = vec![baby_bear.ext_zero(ctx, range); 1usize << xi_1.len()];
     eq_xi_evals[0] = one.clone();
 
@@ -1323,7 +1314,7 @@ fn eval_eq_sharp_uni_assigned(
     let mut res = baby_bear.ext_zero(ctx, range);
     let l_skip = xi_1.len();
     for (omega_pow, eq_xi_eval) in omega_skip_pows.iter().zip(eq_xi_evals.iter()) {
-        let omega_ext = ext_from_base_const(ctx, range, baby_bear, omega_pow.as_canonical_u64());
+        let omega_ext = ext_from_base_const(ctx, baby_bear, omega_pow.as_canonical_u64());
         let eq_uni = eval_eq_uni_assigned(ctx, range, baby_bear, l_skip, z, &omega_ext);
         let term = baby_bear.ext_mul(ctx, range, &eq_uni, eq_xi_eval);
         res = baby_bear.ext_add(ctx, range, &res, &term);
@@ -1356,7 +1347,7 @@ fn eval_eq_rot_cube_assigned(
     y: &[BabyBearExtVar],
 ) -> (BabyBearExtVar, BabyBearExtVar) {
     assert_eq!(x.len(), y.len(), "eq_rot_cube vector length mismatch");
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut rot = one.clone();
     let mut eq = one.clone();
     for i in (0..x.len()).rev() {
@@ -1469,7 +1460,7 @@ impl AssignedConstraintEvaluator<'_> {
         baby_bear: &BabyBearArithmeticGadgets,
     ) -> BabyBearExtVar {
         let zero = baby_bear.ext_zero(ctx, range);
-        let one = ext_from_base_const(ctx, range, baby_bear, 1);
+        let one = ext_from_base_const(ctx, baby_bear, 1);
         baby_bear.assert_ext_equal(ctx, &zero, &one);
         zero
     }
@@ -1513,7 +1504,7 @@ impl AssignedConstraintEvaluator<'_> {
                 let Some(value) = self.public_values.get(index) else {
                     return self.reject_malformed_symbolic_var(ctx, range, baby_bear);
                 };
-                ext_from_base_var(ctx, range, baby_bear, value)
+                ext_from_base_var(ctx, baby_bear, value)
             }
             _ => self.reject_malformed_symbolic_var(ctx, range, baby_bear),
         }
@@ -1527,7 +1518,7 @@ fn eval_symbolic_nodes_assigned(
     evaluator: &AssignedConstraintEvaluator<'_>,
     nodes: &[SymbolicExpressionNode<NativeF>],
 ) -> Vec<BabyBearExtVar> {
-    let one = ext_from_base_const(ctx, range, baby_bear, 1);
+    let one = ext_from_base_const(ctx, baby_bear, 1);
     let mut exprs: Vec<BabyBearExtVar> = Vec::with_capacity(nodes.len());
     for node in nodes {
         let expr = match node {
@@ -1535,7 +1526,7 @@ fn eval_symbolic_nodes_assigned(
                 evaluator.eval_var(ctx, range, baby_bear, *var)
             }
             SymbolicExpressionNode::Constant(c) => {
-                ext_from_base_const(ctx, range, baby_bear, c.as_canonical_u64())
+                ext_from_base_const(ctx, baby_bear, c.as_canonical_u64())
             }
             SymbolicExpressionNode::Add {
                 left_idx,
@@ -1642,7 +1633,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         gate.assert_is_const(ctx, &logup_pow_sampled_bits, &Fr::from(0u64));
     }
 
-    let logup_pow_witness_ok = assign_bool(ctx, range, actual.logup_pow_witness_ok);
+    let logup_pow_witness_ok = ctx.load_constant(Fr::from(actual.logup_pow_witness_ok as u64));
     let logup_pow_is_zero = gate.is_zero(ctx, logup_pow_sampled_bits);
     ctx.constrain_equal(&logup_pow_witness_ok, &logup_pow_is_zero);
     gate.assert_is_const(ctx, &logup_pow_witness_ok, &Fr::from(1u64));
@@ -1773,9 +1764,10 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
                 .get(part_idx)
                 .expect("rotation schedule must cover each opening part");
             if need_rot {
-                let is_even = ctx.load_witness(Fr::from((part_openings.len() % 2 == 0) as u64));
-                gate.assert_bit(ctx, is_even);
-                gate.assert_is_const(ctx, &is_even, &Fr::from(1u64));
+                assert!(
+                    part_openings.len() % 2 == 0,
+                    "rotation column openings must be even"
+                );
             }
         }
     }
@@ -1821,7 +1813,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .collect::<Vec<_>>();
 
     let zero = baby_bear.ext_zero(ctx, range);
-    let one = ext_from_base_const(ctx, range, &baby_bear, 1);
+    let one = ext_from_base_const(ctx, &baby_bear, 1);
     let mut gkr_sample_stream =
         Vec::with_capacity(gkr_non_xi_samples.len() + gkr_xi_sample_order.len());
     gkr_sample_stream.extend(gkr_non_xi_samples.iter().cloned());
@@ -2025,7 +2017,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 
     let sum_claim = assign_ext(ctx, range, &baby_bear, actual.sum_claim);
     let mut derived_sum_claim = baby_bear.ext_zero(ctx, range);
-    let mut cur_mu_pow = ext_from_base_const(ctx, range, &baby_bear, 1);
+    let mut cur_mu_pow = ext_from_base_const(ctx, &baby_bear, 1);
     for (num_term, den_term) in numerator_term_per_air
         .iter()
         .zip(denominator_term_per_air.iter())
@@ -2278,7 +2270,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
                 beta_pow = baby_bear.ext_mul(ctx, range, &beta_pow, &beta_logup);
             }
             let bus_const =
-                ext_from_base_const(ctx, range, &baby_bear, u64::from(interaction.bus_index) + 1);
+                ext_from_base_const(ctx, &baby_bear, u64::from(interaction.bus_index) + 1);
             let bus_term = baby_bear.ext_mul(ctx, range, &bus_const, &beta_pow);
             denom_eval = baby_bear.ext_add(ctx, range, &denom_eval, &bus_term);
 
@@ -2288,7 +2280,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             denom = baby_bear.ext_add(ctx, range, &denom, &eq_times_denom);
         }
 
-        let norm = ext_from_base_const(ctx, range, &baby_bear, norm_factor);
+        let norm = ext_from_base_const(ctx, &baby_bear, norm_factor);
         let num_norm = baby_bear.ext_mul(ctx, range, &num, &norm);
         let num_scaled = baby_bear.ext_mul(ctx, range, &num_norm, &eq_sharp_ns[n_lift]);
         let denom_scaled = baby_bear.ext_mul(ctx, range, &denom, &eq_sharp_ns[n_lift]);

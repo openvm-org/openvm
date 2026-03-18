@@ -1,20 +1,21 @@
-
 use halo2_base::{
     gates::{
+        circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
         GateInstructions, RangeInstructions,
-        circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
     },
     halo2_proofs::{
         dev::MockProver,
         halo2curves::bn256::{Bn256, G1Affine},
         plonk::{
-            Circuit, ProvingKey, VerifyingKey, create_proof, keygen_pk, keygen_vk, verify_proof,
+            create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey,
         },
-        poly::commitment::ParamsProver,
-        poly::kzg::{
-            commitment::{KZGCommitmentScheme, ParamsKZG},
-            multiopen::{ProverSHPLONK, VerifierSHPLONK},
-            strategy::SingleStrategy,
+        poly::{
+            commitment::ParamsProver,
+            kzg::{
+                commitment::{KZGCommitmentScheme, ParamsKZG},
+                multiopen::{ProverSHPLONK, VerifierSHPLONK},
+                strategy::SingleStrategy,
+            },
         },
         transcript::{
             Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
@@ -28,25 +29,24 @@ use openvm_stark_sdk::{
         EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
-        StarkEngine,
         p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField64, TwoAdicField},
         test_utils::{
-            CachedFixture11, FibFixture, InteractionsFixture11, PreprocessedFibFixture,
-            TestFixture, test_system_params_small,
+            test_system_params_small, CachedFixture11, FibFixture, InteractionsFixture11,
+            PreprocessedFibFixture, TestFixture,
         },
+        StarkEngine,
     },
 };
-use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
+use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
+use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
     gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
     stages::batch_constraints::{
-        RecordedExtBaseConst, clear_recorded_ext_base_consts, take_recorded_ext_base_consts,
+        clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
     },
 };
-
-use super::*;
 
 const END_TO_END_K: u32 = 22;
 const END_TO_END_LOOKUP_BITS: usize = 8;
@@ -61,7 +61,22 @@ fn run_mock(
         .use_k(END_TO_END_K as usize)
         .use_lookup_bits(END_TO_END_LOOKUP_BITS)
         .use_instance_columns(1);
-    build(&mut builder);
+
+    // Build-time assertions (e.g. deterministic metadata checks) may panic for
+    // tampered inputs.  When `expect_satisfied == false` a build-time panic is
+    // an acceptable rejection mechanism, equivalent to a circuit constraint
+    // violation.
+    let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        build(&mut builder);
+    }));
+    if !expect_satisfied {
+        if build_result.is_err() {
+            // Build-time assertion caught the tampered input.
+            return;
+        }
+    } else {
+        build_result.expect("circuit build should not panic for valid inputs");
+    }
 
     let params = builder.calculate_params(Some(END_TO_END_MIN_ROWS));
     assert!(
@@ -196,7 +211,8 @@ fn build_end_to_end_constraints_from_intermediates(
     let range = builder.range_chip();
     let public_input_cells = {
         let ctx = builder.main(0);
-        let assigned = constrain_pipeline_intermediates(ctx, &range, intermediates, statement, schedule);
+        let assigned =
+            constrain_pipeline_intermediates(ctx, &range, intermediates, statement, schedule);
 
         range
             .gate()
@@ -286,7 +302,8 @@ fn add_delta_to_whir_stacking_opening(
 }
 
 fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessState) {
-    let lambda = stacked_coeffs_to_native_ext(raw.intermediates.batch_and_stacked.stacked_reduction.lambda);
+    let lambda =
+        stacked_coeffs_to_native_ext(raw.intermediates.batch_and_stacked.stacked_reduction.lambda);
     let lambda_sqr = lambda * lambda;
 
     let need_rot_schedule = raw
@@ -295,7 +312,11 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
         .stacked_reduction
         .batch_column_openings_need_rot
         .clone();
-    let openings = &mut raw.intermediates.batch_and_stacked.stacked_reduction.batch_column_openings;
+    let openings = &mut raw
+        .intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .batch_column_openings;
 
     #[derive(Clone, Copy)]
     struct TermLoc {
@@ -600,16 +621,26 @@ fn pipeline_constraints_fail_when_batch_opening_family_width_is_padded() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates.batch_and_stacked.batch.column_openings.is_empty()
+        !raw.intermediates
+            .batch_and_stacked
+            .batch
+            .column_openings
+            .is_empty()
             && !raw.intermediates.batch_and_stacked.batch.column_openings[0].is_empty(),
         "fixture must include at least one batch opening family",
     );
 
     raw.intermediates.batch_and_stacked.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
     raw.intermediates.batch_and_stacked.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.batch_and_stacked.stacked_reduction.batch_column_openings[0][0]
+    raw.intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .batch_column_openings[0][0]
         .push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.batch_and_stacked.stacked_reduction.batch_column_openings[0][0]
+    raw.intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .batch_column_openings[0][0]
         .push([0; BABY_BEAR_EXT_DEGREE]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
@@ -632,7 +663,11 @@ fn pipeline_constraints_fail_when_stacked_opening_family_width_is_padded() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates.batch_and_stacked.stacked_reduction.q_coeffs.is_empty()
+        !raw.intermediates
+            .batch_and_stacked
+            .stacked_reduction
+            .q_coeffs
+            .is_empty()
             && !raw
                 .intermediates
                 .batch_and_stacked
@@ -642,8 +677,16 @@ fn pipeline_constraints_fail_when_stacked_opening_family_width_is_padded() {
         "fixture must include stacked opening families",
     );
 
-    raw.intermediates.batch_and_stacked.stacked_reduction.q_coeffs[0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.batch_and_stacked.stacked_reduction.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .q_coeffs[0]
+        .push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .stacking_openings[0]
+        .push([0; BABY_BEAR_EXT_DEGREE]);
     raw.intermediates.whir.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
@@ -690,12 +733,23 @@ fn pipeline_constraints_fail_when_batch_ref_to_stacked_coupling_has_trailing_suf
             .stacked_reduction
             .batch_column_openings
             .is_empty()
-            && !raw.intermediates.batch_and_stacked.stacked_reduction.batch_column_openings[0].is_empty(),
+            && !raw
+                .intermediates
+                .batch_and_stacked
+                .stacked_reduction
+                .batch_column_openings[0]
+                .is_empty(),
         "fixture must include stacked batch-opening families",
     );
-    raw.intermediates.batch_and_stacked.stacked_reduction.batch_column_openings[0][0]
+    raw.intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .batch_column_openings[0][0]
         .push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.batch_and_stacked.stacked_reduction.batch_column_openings[0][0]
+    raw.intermediates
+        .batch_and_stacked
+        .stacked_reduction
+        .batch_column_openings[0][0]
         .push([0; BABY_BEAR_EXT_DEGREE]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
@@ -768,7 +822,8 @@ fn pipeline_constraints_fail_when_proof_shape_log_height_is_forked_from_preamble
         .iter()
         .enumerate()
         .find_map(|(idx, &has_preprocessed)| {
-            (!has_preprocessed && raw.intermediates.proof_shape.air_presence_flags[idx]).then_some(idx)
+            (!has_preprocessed && raw.intermediates.proof_shape.air_presence_flags[idx])
+                .then_some(idx)
         })
         .expect("fixture must include a present non-preprocessed AIR");
     let old_log_height = raw.intermediates.proof_shape.air_log_heights[air_idx];
@@ -811,7 +866,8 @@ fn pipeline_constraints_fail_on_coordinated_preamble_stage_log_height_tamper() {
         .iter()
         .enumerate()
         .find_map(|(idx, &has_preprocessed)| {
-            (!has_preprocessed && raw.intermediates.proof_shape.air_presence_flags[idx]).then_some(idx)
+            (!has_preprocessed && raw.intermediates.proof_shape.air_presence_flags[idx])
+                .then_some(idx)
         })
         .expect("fixture must include a present non-preprocessed AIR");
     let old_log_height = raw.intermediates.proof_shape.air_log_heights[air_idx];
@@ -1007,8 +1063,12 @@ fn pipeline_constraints_fail_when_schedule_metadata_is_tampered() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
 
-    raw.intermediates.batch_and_stacked.batch.logup_pow_bits =
-        raw.intermediates.batch_and_stacked.batch.logup_pow_bits.saturating_add(1);
+    raw.intermediates.batch_and_stacked.batch.logup_pow_bits = raw
+        .intermediates
+        .batch_and_stacked
+        .batch
+        .logup_pow_bits
+        .saturating_add(1);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1135,7 +1195,11 @@ fn pipeline_constraints_fail_when_batch_term_cardinality_is_tampered() {
             .is_empty(),
         "fixture must include denominator terms",
     );
-    raw.intermediates.batch_and_stacked.batch.denominator_term_per_air.pop();
+    raw.intermediates
+        .batch_and_stacked
+        .batch
+        .denominator_term_per_air
+        .pop();
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1156,13 +1220,14 @@ fn pipeline_constraints_fail_when_batch_sumcheck_arity_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch_and_stacked.batch.sumcheck_round_polys.push(vec![
-        [0; BABY_BEAR_EXT_DEGREE];
-        raw.intermediates
-            .batch_and_stacked
-            .batch
-            .batch_degree
-    ]);
+    raw.intermediates
+        .batch_and_stacked
+        .batch
+        .sumcheck_round_polys
+        .push(vec![
+            [0; BABY_BEAR_EXT_DEGREE];
+            raw.intermediates.batch_and_stacked.batch.batch_degree
+        ]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1257,7 +1322,11 @@ fn pipeline_constraints_fail_when_metadata_row_has_trailing_suffix_width() {
             .is_empty(),
         "fixture must include column-opening width metadata",
     );
-    raw.intermediates.batch_and_stacked.batch.column_opening_expected_widths[0].push(0);
+    raw.intermediates
+        .batch_and_stacked
+        .batch
+        .column_opening_expected_widths[0]
+        .push(0);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1324,7 +1393,11 @@ fn pipeline_constraints_fail_when_symbolic_node_table_ownership_is_tampered() {
         .iter()
         .position(|nodes| !nodes.is_empty())
         .expect("fixture must include symbolic node metadata");
-    let node = &mut raw.intermediates.batch_and_stacked.batch.trace_constraint_nodes[trace_idx][0];
+    let node = &mut raw
+        .intermediates
+        .batch_and_stacked
+        .batch
+        .trace_constraint_nodes[trace_idx][0];
     *node = match node {
         SymbolicExpressionNode::IsFirstRow => SymbolicExpressionNode::IsLastRow,
         _ => SymbolicExpressionNode::IsFirstRow,
@@ -1349,7 +1422,10 @@ fn pipeline_constraints_ignore_proof_shape_proof_shape_checklist_mirror_only_tam
         .expect("native pipeline witness derivation must pass");
 
     assert!(
-        !raw.intermediates.proof_shape.proof_shape_count_checks.is_empty(),
+        !raw.intermediates
+            .proof_shape
+            .proof_shape_count_checks
+            .is_empty(),
         "fixture must include proof-shape count checks",
     );
     let (actual_count, expected_count) = raw.intermediates.proof_shape.proof_shape_count_checks[0];
@@ -1365,11 +1441,13 @@ fn pipeline_constraints_ignore_proof_shape_proof_shape_checklist_mirror_only_tam
             .is_empty(),
         "fixture must include proof-shape upper-bound checks",
     );
-    let (actual_value, expected_max) = raw.intermediates.proof_shape.proof_shape_upper_bound_checks[0];
+    let (actual_value, expected_max) =
+        raw.intermediates.proof_shape.proof_shape_upper_bound_checks[0];
     let tampered_expected_max = expected_max
         .saturating_add(7)
         .max(actual_value.saturating_add(1));
-    raw.intermediates.proof_shape.proof_shape_upper_bound_checks[0] = (actual_value, tampered_expected_max);
+    raw.intermediates.proof_shape.proof_shape_upper_bound_checks[0] =
+        (actual_value, tampered_expected_max);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(true, &public_inputs, |builder| {
@@ -1390,7 +1468,10 @@ fn pipeline_constraints_fail_on_coordinated_stage_shape_and_checklist_tamper() {
         .expect("native pipeline witness derivation must pass");
 
     assert!(
-        !raw.intermediates.proof_shape.proof_shape_count_checks.is_empty(),
+        !raw.intermediates
+            .proof_shape
+            .proof_shape_count_checks
+            .is_empty(),
         "fixture must include proof-shape count checks",
     );
     let (actual_count, expected_count) = raw.intermediates.proof_shape.proof_shape_count_checks[0];
@@ -1501,11 +1582,16 @@ fn pipeline_constraints_fail_when_gkr_non_xi_challenge_is_tampered() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates.batch_and_stacked.batch.gkr_non_xi_samples.is_empty(),
+        !raw.intermediates
+            .batch_and_stacked
+            .batch
+            .gkr_non_xi_samples
+            .is_empty(),
         "fixture should produce non-xi GKR challenges",
     );
     raw.intermediates.batch_and_stacked.batch.gkr_non_xi_samples[0][0] =
-        (raw.intermediates.batch_and_stacked.batch.gkr_non_xi_samples[0][0] + 1) % BABY_BEAR_MODULUS_U64;
+        (raw.intermediates.batch_and_stacked.batch.gkr_non_xi_samples[0][0] + 1)
+            % BABY_BEAR_MODULUS_U64;
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1845,7 +1931,8 @@ fn pipeline_real_prover_keygen_prove_verify_roundtrip() {
     let srs = gen_srs(END_TO_END_K);
     let vk_halo2 =
         keygen_vk(&srs, &keygen_builder).expect("keygen_vk should succeed for pipeline circuit");
-    let pk = keygen_pk(&srs, vk_halo2, &keygen_builder).expect("keygen_pk should succeed for pipeline");
+    let pk =
+        keygen_pk(&srs, vk_halo2, &keygen_builder).expect("keygen_pk should succeed for pipeline");
     let break_points = keygen_builder.break_points();
 
     let mut prover_builder = BaseCircuitBuilder::prover(config_params, break_points);

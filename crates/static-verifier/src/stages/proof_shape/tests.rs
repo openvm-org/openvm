@@ -1,5 +1,5 @@
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
+    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
@@ -7,21 +7,20 @@ use openvm_stark_sdk::{
         BabyBearBn254Poseidon2Config as NativeConfig, BabyBearBn254Poseidon2CpuEngine,
     },
     openvm_stark_backend::{
-        StarkEngine,
         keygen::types::LinearConstraint,
         test_utils::{
-            CachedFixture11, FibFixture, InteractionsFixture11, PreprocessedFibFixture,
-            TestFixture, test_system_params_small,
+            test_system_params_small, CachedFixture11, FibFixture, InteractionsFixture11,
+            PreprocessedFibFixture, TestFixture,
         },
+        StarkEngine,
     },
 };
 
-use crate::config::{
-    STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
-};
-use crate::utils::usize_to_u64;
-
 use super::*;
+use crate::{
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    utils::usize_to_u64,
+};
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
@@ -69,8 +68,8 @@ where
     Fx: TestFixture<NativeConfig>,
 {
     let (vk, proof) = fixture.keygen_and_prove(engine);
-    let actual =
-        derive_proof_shape_intermediates(engine.config(), &vk, &proof).expect("native proof-shape must pass");
+    let actual = derive_proof_shape_intermediates(engine.config(), &vk, &proof)
+        .expect("native proof-shape must pass");
 
     run_mock(true, move |builder| {
         let range = builder.range_chip();
@@ -103,8 +102,8 @@ fn proof_shape_intermediates_match_native_for_reference_fixtures() {
 fn proof_shape_constraints_fail_when_trace_height_sum_is_tampered() {
     let engine = test_engine();
     let (vk, proof) = FibFixture::new(5, 8, 1 << 5).keygen_and_prove(&engine);
-    let mut actual =
-        derive_proof_shape_intermediates(engine.config(), &vk, &proof).expect("native proof-shape must pass");
+    let mut actual = derive_proof_shape_intermediates(engine.config(), &vk, &proof)
+        .expect("native proof-shape must pass");
     actual.trace_height_sums[0] = actual.trace_height_thresholds[0];
 
     run_mock(false, move |builder| {
@@ -118,8 +117,8 @@ fn proof_shape_constraints_fail_when_trace_height_sum_is_tampered() {
 fn proof_shape_constraints_fail_when_required_air_presence_rule_is_tampered() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual =
-        derive_proof_shape_intermediates(engine.config(), &vk, &proof).expect("native proof-shape must pass");
+    let mut actual = derive_proof_shape_intermediates(engine.config(), &vk, &proof)
+        .expect("native proof-shape must pass");
     actual.air_required_flags[0] = true;
     actual.air_presence_flags[0] = false;
 
@@ -134,8 +133,8 @@ fn proof_shape_constraints_fail_when_required_air_presence_rule_is_tampered() {
 fn proof_shape_constraints_ignore_proof_shape_checklist_mirror_tamper() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual =
-        derive_proof_shape_intermediates(engine.config(), &vk, &proof).expect("native proof-shape must pass");
+    let mut actual = derive_proof_shape_intermediates(engine.config(), &vk, &proof)
+        .expect("native proof-shape must pass");
     actual.proof_shape_count_checks[0].0 += 1;
 
     run_mock(true, move |builder| {
@@ -149,8 +148,8 @@ fn proof_shape_constraints_ignore_proof_shape_checklist_mirror_tamper() {
 fn proof_shape_constraints_fail_when_trace_order_is_tampered() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual =
-        derive_proof_shape_intermediates(engine.config(), &vk, &proof).expect("native proof-shape must pass");
+    let mut actual = derive_proof_shape_intermediates(engine.config(), &vk, &proof)
+        .expect("native proof-shape must pass");
     assert!(
         actual.trace_id_to_air_id.len() >= 2,
         "fixture should include at least two traces for ordering tamper test",

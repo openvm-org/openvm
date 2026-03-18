@@ -1,38 +1,37 @@
 use std::iter::zip;
 
-use halo2_base::{Context, gates::range::RangeChip};
+use halo2_base::{gates::range::RangeChip, Context};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, EF as NativeEF, F as NativeF,
-        default_transcript,
+        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, EF as NativeEF,
+        F as NativeF,
     },
     openvm_stark_backend::{
-        FiatShamirTranscript,
         keygen::types::MultiStarkVerifyingKey,
         p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
         poly_common::{
             eval_eq_mle, eval_eq_prism, eval_in_uni, eval_rot_kernel_prism, horner_eval,
             interpolate_quadratic_at_012,
         },
-        proof::{Proof, StackingProof, column_openings_by_rot},
+        proof::{column_openings_by_rot, Proof, StackingProof},
         prover::stacked_pcs::StackedLayout,
         verifier::{
             batch_constraints::BatchConstraintError as NativeBatchConstraintError,
-            proof_shape::ProofShapeError,
-            stacked_reduction::StackedReductionError,
+            proof_shape::ProofShapeError, stacked_reduction::StackedReductionError,
         },
+        FiatShamirTranscript,
     },
 };
 
 use crate::{
     circuit::Fr,
-    gadgets::baby_bear::{BABY_BEAR_EXT_DEGREE, BabyBearArithmeticGadgets, BabyBearExtVar},
-    stages::batch_constraints::{
-        BatchConstraintError, eval_eq_mle_binary_assigned, eval_eq_prism_assigned,
-        eval_eq_uni_at_one_assigned, eval_rot_kernel_prism_assigned, ext_from_base_const,
-        ext_mul_base_const, ext_pow_power_of_two,
-    },
+    gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_EXT_DEGREE},
     stages::{
+        batch_constraints::{
+            eval_eq_mle_binary_assigned, eval_eq_prism_assigned, eval_eq_uni_at_one_assigned,
+            eval_rot_kernel_prism_assigned, ext_from_base_const, ext_mul_base_const,
+            ext_pow_power_of_two, BatchConstraintError,
+        },
         pipeline::prepare_pipeline_inputs,
         shared_math::{
             column_openings_by_rot_assigned, horner_eval_ext_poly_assigned,
@@ -430,7 +429,7 @@ fn eval_in_uni_assigned(
         let z_pow = ext_pow_power_of_two(ctx, range, baby_bear, z, l_skip.wrapping_add_signed(n));
         eval_eq_uni_at_one_assigned(ctx, range, baby_bear, n.unsigned_abs(), &z_pow)
     } else {
-        ext_from_base_const(ctx, range, baby_bear, 1)
+        ext_from_base_const(ctx, baby_bear, 1)
     }
 }
 
@@ -565,7 +564,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
 
     let lambda_sqr = baby_bear.ext_mul(ctx, range, &lambda, &lambda);
     let mut lambda_sqr_powers = Vec::with_capacity(t_claims.len());
-    let mut cur_lambda_sqr = ext_from_base_const(ctx, range, &baby_bear, 1);
+    let mut cur_lambda_sqr = ext_from_base_const(ctx, &baby_bear, 1);
     for _ in 0..t_claims.len() {
         lambda_sqr_powers.push(cur_lambda_sqr.clone());
         cur_lambda_sqr = baby_bear.ext_mul(ctx, range, &cur_lambda_sqr, &lambda_sqr);

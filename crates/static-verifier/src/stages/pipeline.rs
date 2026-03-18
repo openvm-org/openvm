@@ -4,20 +4,20 @@ use openvm_stark_sdk::{
         F as NativeF,
     },
     openvm_stark_backend::{
-        FiatShamirTranscript, StarkProtocolConfig,
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
         p3_field::{PrimeCharacteristicRing, TwoAdicField},
         poly_common::Squarable,
         proof::Proof,
         prover::stacked_pcs::StackedLayout,
+        FiatShamirTranscript, StarkProtocolConfig,
     },
 };
 
 use super::{
     batch_constraints::{
-        BatchConstraintError, BatchIntermediates, coeffs_to_native_ext as batch_coeffs_to_ext,
-        compute_trace_id_to_air_id, derive_batch_intermediates_with_inputs,
-        enforce_trace_height_constraints, observe_preamble,
+        coeffs_to_native_ext as batch_coeffs_to_ext, compute_trace_id_to_air_id,
+        derive_batch_intermediates_with_inputs, enforce_trace_height_constraints, observe_preamble,
+        BatchConstraintError, BatchIntermediates,
     },
     proof_shape::derive_proof_shape_rules,
 };
@@ -59,12 +59,10 @@ pub(crate) fn derive_need_rot_per_commit(
     proof: &Proof<NativeConfig>,
     trace_id_to_air_id: &[usize],
 ) -> Result<Vec<Vec<bool>>, BatchConstraintError> {
-    let mut need_rot_per_commit = vec![
-        trace_id_to_air_id
-            .iter()
-            .map(|&air_id| mvk0.per_air[air_id].params.need_rot)
-            .collect::<Vec<_>>(),
-    ];
+    let mut need_rot_per_commit = vec![trace_id_to_air_id
+        .iter()
+        .map(|&air_id| mvk0.per_air[air_id].params.need_rot)
+        .collect::<Vec<_>>()];
     for &air_id in trace_id_to_air_id {
         let need_rot = mvk0.per_air[air_id].params.need_rot;
         if mvk0.per_air[air_id].preprocessed_data.is_some() {

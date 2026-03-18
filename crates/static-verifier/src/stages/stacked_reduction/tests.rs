@@ -1,24 +1,21 @@
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
+    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2CpuEngine, EF as NativeEF},
     openvm_stark_backend::{
-        StarkEngine,
-        test_utils::{InteractionsFixture11, TestFixture, test_system_params_small},
+        test_utils::{test_system_params_small, InteractionsFixture11, TestFixture},
         verifier::stacked_reduction::StackedReductionError,
+        StarkEngine,
     },
-};
-
-use crate::{
-    config::{
-        STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
-    },
-    gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
 };
 
 use super::*;
+use crate::{
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
+};
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     const MOCK_K: u32 = 22;
@@ -70,14 +67,9 @@ fn stacked_intermediates_match_native_for_interactions_fixture() {
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let _assigned = derive_and_constrain_stacked_reduction(
-            ctx,
-            &range,
-            engine.config(),
-            &vk,
-            &proof,
-        )
-        .expect("stacked-reduction derive+constrain should succeed");
+        let _assigned =
+            derive_and_constrain_stacked_reduction(ctx, &range, engine.config(), &vk, &proof)
+                .expect("stacked-reduction derive+constrain should succeed");
     });
 }
 
