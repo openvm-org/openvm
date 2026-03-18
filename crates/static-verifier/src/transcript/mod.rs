@@ -7,6 +7,7 @@ use halo2_base::{
     AssignedValue, Context,
     QuantumCell::Constant,
 };
+use itertools::Itertools;
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
@@ -25,7 +26,7 @@ use crate::{
         BABY_BEAR_MODULUS_U64,
     },
     hash::{
-        poseidon2::{Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
+        poseidon2::{reduce_32_cells, Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
         POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
     utils::bits_for_u64,
@@ -242,16 +243,11 @@ impl TranscriptGadget {
         range: &RangeChip<Fr>,
         values: &[BabyBearWire],
     ) -> AssignedValue<Fr> {
-        let gate = range.gate();
-        let base = Fr::from(1u64 << 32);
-        let mut power = Fr::from(1u64);
-        let mut acc = ctx.load_constant(Fr::from(0u64));
-
-        for value in values {
-            acc = gate.mul_add(ctx, value.value, Constant(power), acc);
-            power *= base;
-        }
-        acc
+        reduce_32_cells(
+            ctx,
+            range.gate(),
+            &values.iter().map(|v| v.value).collect_vec(),
+        )
     }
 
     fn split_state_to_babybear(

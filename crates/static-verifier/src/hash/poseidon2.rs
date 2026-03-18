@@ -154,7 +154,6 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         }
     }
 
-    #[allow(clippy::needless_range_loop)]
     fn matmul_internal(
         &mut self,
         ctx: &mut Context<F>,
