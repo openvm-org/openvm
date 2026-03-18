@@ -134,14 +134,6 @@ where
             .write(address_space, pointer, value.map(F::from_usize));
     }
 
-    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.write(address_space, pointer, [value]);
-    }
-
-    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.read::<1>(address_space, pointer)[0]
-    }
-
     fn address_bits(&self) -> usize {
         self.memory.controller.memory_config().pointer_max_bits
     }
@@ -434,14 +426,15 @@ where
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            let mut memory_controller = memory_tester.controller;
-            let mut memory = memory_tester.memory;
+            let MemoryTester {
+                chip: mem_chip,
+                mut memory,
+                controller: mut memory_controller,
+            } = memory_tester;
             let touched_memory = memory.finalize::<Val<SC>>();
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
-            for mem_chip in memory_tester.chip_for_block.into_values() {
-                self = self.load_periphery((mem_chip.air, mem_chip));
-            }
+            self = self.load_periphery((mem_chip.air, mem_chip));
             let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
                 memory_controller.memory_config(),
