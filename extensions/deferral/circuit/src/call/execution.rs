@@ -5,10 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use openvm_circuit::{
-    arch::{hasher::Hasher, *},
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -208,8 +205,8 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     // (output_commit, output_len) pair, corresponds to guest struct OutputKey
     let output_key = combine_output(output_commit, output_len.to_le_bytes());
 
-    let new_input_acc = poseidon2_chip.compress(&old_input_acc, &input_commit);
-    let new_output_acc = poseidon2_chip.compress(&old_output_acc, &output_f_commit);
+    let new_input_acc = poseidon2_chip.perm(&old_input_acc, &input_commit, true);
+    let new_output_acc = poseidon2_chip.perm(&old_output_acc, &output_f_commit, true);
 
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
         exec_state.vm_write::<u8, MEMORY_OP_SIZE>(

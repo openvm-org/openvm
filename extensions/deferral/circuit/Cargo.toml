@@ -35,6 +35,8 @@ eyre.workspace = true
 serde.workspace = true
 static_assertions.workspace = true
 cfg-if.workspace = true
+dashmap.workspace = true
+rustc-hash.workspace = true
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }

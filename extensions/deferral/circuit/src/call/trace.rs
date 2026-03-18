@@ -3,10 +3,8 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice,
-        hasher::{Hasher, HasherChip},
-        AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout, ExecutionError,
-        PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
+        get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
+        ExecutionError, PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord},
@@ -107,8 +105,8 @@ where
 
         let output_f_commit =
             byte_commit_to_f(&output_commit.iter().map(|v| F::from_u8(*v)).collect_vec());
-        let new_input_acc = poseidon2_chip.compress(&read_data.old_input_acc, &input_commit);
-        let new_output_acc = poseidon2_chip.compress(&read_data.old_output_acc, &output_f_commit);
+        let new_input_acc = poseidon2_chip.perm(&read_data.old_input_acc, &input_commit, true);
+        let new_output_acc = poseidon2_chip.perm(&read_data.old_output_acc, &output_f_commit, true);
 
         let output_len_u32 =
             u32::try_from(output_len).expect("deferral output length should fit in a u32");
@@ -152,9 +150,12 @@ where
         let output_f_commit: [F; _] =
             byte_commit_to_f(&record.write_data.output_commit.map(F::from_u8));
         self.poseidon2_chip
-            .compress_and_record(&record.read_data.old_input_acc, &input_f_commit);
-        self.poseidon2_chip
-            .compress_and_record(&record.read_data.old_output_acc, &output_f_commit);
+            .perm_and_record(&record.read_data.old_input_acc, &input_f_commit, true);
+        self.poseidon2_chip.perm_and_record(
+            &record.read_data.old_output_acc,
+            &output_f_commit,
+            true,
+        );
 
         // Write columns in reverse order to avoid clobbering the record.
         cols.writes.new_output_acc = record.write_data.new_output_acc;
