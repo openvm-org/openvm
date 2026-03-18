@@ -1,24 +1,16 @@
 use std::{array::from_fn, fmt::Debug};
 
 use getset::Getters;
-use itertools::zip_eq;
 use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
-    p3_util::log2_strict_usize,
 };
 use tracing::instrument;
 
 use crate::{
-    arch::{
-        AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, DEFAULT_BLOCK_SIZE,
-        MAX_CELL_BYTE_SIZE,
-    },
-    system::{
-        memory::{MemoryAddress, TimestampedEquipartition, TimestampedValues},
-        TouchedMemory,
-    },
+    arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, DEFAULT_BLOCK_SIZE},
+    system::{memory::TimestampedValues, TouchedMemory},
 };
 
 mod basic;
@@ -382,12 +374,9 @@ pub struct TracingMemory {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
-    /// Maps (addr_space, ptr / block_size[addr_space]) → timestamp of last access.
-    /// A value of 0 means the slot has never been accessed.
+    /// Maps `(addr_space, ptr / DEFAULT_BLOCK_SIZE)` to the latest access timestamp.
+    /// A value of 0 means the 4-cell touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
-    /// For each `addr_space`, the block size for memory accesses. All memory accesses in
-    /// `addr_space` must be aligned to this block size.
-    pub block_size: Vec<u32>,
 }
 
 impl TracingMemory {
@@ -398,19 +387,15 @@ impl TracingMemory {
 
     /// Constructor from pre-existing memory image.
     pub fn from_image(image: GuestMemory) -> Self {
-        let (meta, block_size): (Vec<_>, Vec<_>) =
-            zip_eq(image.memory.get_memory(), &image.memory.config)
-                .map(|(mem, addr_sp)| {
-                    let num_cells = mem.size() / addr_sp.layout.size();
-                    let block_size = addr_sp.block_size;
-                    let total_metadata_len = num_cells.div_ceil(block_size);
-                    (PagedVec::new(total_metadata_len), block_size as u32)
-                })
-                .unzip();
+        let meta = image
+            .memory
+            .config
+            .iter()
+            .map(|config| PagedVec::new(config.num_cells.div_ceil(DEFAULT_BLOCK_SIZE)))
+            .collect();
         Self {
             data: image,
             meta,
-            block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
         }
     }
@@ -419,7 +404,10 @@ impl TracingMemory {
     fn assert_valid_access(&self, block_size: usize, addr_space: u32, ptr: u32) {
         debug_assert_ne!(addr_space, 0);
         debug_assert!(block_size.is_power_of_two());
-        debug_assert_eq!(block_size, self.block_size[addr_space as usize] as usize);
+        debug_assert_eq!(
+            block_size, DEFAULT_BLOCK_SIZE,
+            "TracingMemory only supports {DEFAULT_BLOCK_SIZE}-cell accesses; got {block_size}"
+        );
         assert_eq!(
             ptr % block_size as u32,
             0,
@@ -427,13 +415,11 @@ impl TracingMemory {
         );
     }
 
-    /// Returns the previous access timestamp and updates metadata for this access.
-    /// Each read/write accesses exactly one metadata slot since callers always use
-    /// BLOCK_SIZE == block_size[addr_space].
+    /// Returns the previous access timestamp and updates the metadata slot.
+    /// Block size is always `DEFAULT_BLOCK_SIZE`, so this is a single-slot read/write.
     #[inline(always)]
     fn prev_access_time(&mut self, address_space: usize, pointer: usize) -> u32 {
-        let bs = self.block_size[address_space] as usize;
-        let idx = pointer / bs;
+        let idx = pointer / DEFAULT_BLOCK_SIZE;
         // SAFETY: address_space is validated during instruction decoding
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let prev = meta_page.get(idx);
@@ -447,7 +433,8 @@ impl TracingMemory {
     /// # Safety
     /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` must equal the address space's block size.
+    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `DEFAULT_BLOCK_SIZE`
+    ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &mut self,
@@ -470,7 +457,8 @@ impl TracingMemory {
     /// # Safety
     /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` must equal the address space's block size.
+    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `DEFAULT_BLOCK_SIZE`
+    ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
@@ -505,23 +493,22 @@ impl TracingMemory {
     /// Finalize the boundary and merkle chips.
     #[instrument(name = "memory_finalize", skip_all)]
     pub fn finalize<F: Field>(&mut self) -> TouchedMemory<F> {
-        let touched_blocks = self.touched_blocks();
-        self.touched_blocks_to_equipartition::<F, DEFAULT_BLOCK_SIZE>(touched_blocks)
+        self.touched_blocks_to_equipartition::<F>(self.touched_blocks())
     }
 
-    /// Returns the list of all touched blocks (address, timestamp). Sorted by address.
+    /// Returns the list of all touched blocks (address, timestamp), sorted by address.
     fn touched_blocks(&self) -> Vec<(Address, u32)> {
-        assert_eq!(self.meta.len(), self.block_size.len());
-        self.meta
+        assert_eq!(self.meta.len(), self.data.memory.config.len());
+        let mut touched_blocks: Vec<_> = self
+            .meta
             .par_iter()
-            .zip(self.block_size.par_iter())
             .enumerate()
-            .flat_map(|(addr_space, (meta_page, &bs))| {
+            .flat_map_iter(|(addr_space, meta_page)| {
                 meta_page
                     .par_iter()
                     .filter_map(move |(idx, timestamp)| {
                         if timestamp > INITIAL_TIMESTAMP {
-                            let ptr = idx as u32 * bs;
+                            let ptr = idx as u32 * DEFAULT_BLOCK_SIZE as u32;
                             Some(((addr_space as u32, ptr), timestamp))
                         } else {
                             None
@@ -529,100 +516,35 @@ impl TracingMemory {
                     })
                     .collect::<Vec<_>>()
             })
-            .collect()
+            .collect();
+        // This sort may not be strictly necessary, but it makes the finalize path independent of
+        // Rayon ordering.
+        touched_blocks.sort_unstable_by_key(|(addr, _)| *addr);
+        touched_blocks
     }
 
-    /// Returns the equipartition of the touched blocks.
-    fn touched_blocks_to_equipartition<F: Field, const CHUNK: usize>(
-        &mut self,
+    /// Returns the fixed 4-byte touched memory equipartition.
+    fn touched_blocks_to_equipartition<F: Field>(
+        &self,
         touched_blocks: Vec<((u32, u32), u32)>,
-    ) -> TimestampedEquipartition<F, CHUNK> {
-        let mut final_memory = Vec::new();
-
+    ) -> TouchedMemory<F> {
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
-        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, touched_blocks);
-
-        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
-        final_memory
-    }
-
-    fn handle_touched_blocks<F: Field, const CHUNK: usize>(
-        &mut self,
-        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
-        touched_blocks: Vec<((u32, u32), u32)>,
-    ) {
-        let mut current_values = vec![0u8; MAX_CELL_BYTE_SIZE * CHUNK];
-        let mut current_cnt = 0;
-        let mut current_address = MemoryAddress::new(0, 0);
-        let mut current_timestamps = vec![0u32; CHUNK];
-        for ((addr_space, ptr), timestamp) in touched_blocks {
-            // SAFETY: addr_space of touched blocks are all in bounds
-            let addr_space_config =
-                unsafe { *self.data.memory.config.get_unchecked(addr_space as usize) };
-            let block_size = addr_space_config.block_size;
-            let cell_size = addr_space_config.layout.size();
-            debug_assert!(ptr % block_size as u32 == 0);
-
-            assert!(
-                current_cnt == 0
-                    || (current_address.address_space == addr_space
-                        && current_address.pointer + current_cnt as u32 == ptr),
-                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
-            );
-
-            if current_cnt == 0 {
-                assert_eq!(
-                    ptr & (CHUNK as u32 - 1),
-                    0,
-                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
-                );
-                current_address = MemoryAddress::new(addr_space, ptr);
-            }
-
-            // SAFETY: current_cnt / block_size < CHUNK / block_size <= CHUNK
-            unsafe {
-                *current_timestamps.get_unchecked_mut(current_cnt / block_size) = timestamp;
-            }
-
-            for i in 0..block_size as u32 {
-                let cell_data = unsafe {
-                    self.data.memory.get_u8_slice(
-                        addr_space,
-                        (ptr + i) as usize * cell_size,
-                        cell_size,
-                    )
-                };
-                current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
-                    .copy_from_slice(cell_data);
-                current_cnt += 1;
-                if current_cnt == CHUNK {
-                    let timestamp = *current_timestamps[..CHUNK / block_size]
-                        .iter()
-                        .max()
-                        .unwrap();
-                    final_memory.push((
-                        (current_address.address_space, current_address.pointer),
-                        TimestampedValues {
-                            timestamp,
-                            values: from_fn(|i| unsafe {
-                                addr_space_config.layout.to_field(
-                                    &current_values[i * cell_size..i * cell_size + cell_size],
-                                )
-                            }),
-                        },
-                    ));
-                    current_address.pointer += current_cnt as u32;
-                    current_cnt = 0;
-                }
-            }
-        }
-        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
-    }
-
-    pub fn block_size_bits(&self) -> Vec<u8> {
-        self.block_size
-            .iter()
-            .map(|&x| log2_strict_usize(x as usize) as u8)
+        touched_blocks
+            .into_par_iter()
+            .map(|((addr_space, ptr), timestamp)| {
+                let addr_space_config = &self.data.memory.config[addr_space as usize];
+                let cell_size = addr_space_config.layout.size();
+                let values = from_fn(|i| unsafe {
+                    addr_space_config
+                        .layout
+                        .to_field(self.data.memory.get_u8_slice(
+                            addr_space,
+                            (ptr as usize + i) * cell_size,
+                            cell_size,
+                        ))
+                });
+                ((addr_space, ptr), TimestampedValues { timestamp, values })
+            })
             .collect()
     }
 }

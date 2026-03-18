@@ -163,6 +163,35 @@ pub struct FinalTouchedLabel<F, const CHUNK: usize> {
     final_timestamps: [u32; BLOCKS_PER_CHUNK],
 }
 
+type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timestamp, values)
+type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
+pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
+
+pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
+    final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+) -> ChunkedTouchedMemory<F> {
+    let mut enriched: Vec<EnrichedEntry<F>> = final_memory
+        .par_iter()
+        .map(|&((addr_space, ptr), ts_values)| {
+            let chunk_label = ptr / CHUNK as u32;
+            let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
+            let key = (addr_space, chunk_label);
+            let block_info = (block_idx, ts_values.timestamp, ts_values.values);
+            (key, block_info)
+        })
+        .collect();
+    enriched.sort_unstable_by_key(|(key, _)| *key);
+
+    enriched
+        .chunk_by(|a, b| a.0 == b.0)
+        .map(|group| {
+            let key = group[0].0;
+            let blocks = group.iter().map(|&(_, info)| info).collect();
+            (key, blocks)
+        })
+        .collect()
+}
+
 impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
     fn default() -> Self {
         Self::Running(FxHashSet::default())
@@ -218,6 +247,9 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     }
 
     pub fn touch_range(&mut self, address_space: u32, pointer: u32, len: u32) {
+        if len == 0 {
+            return;
+        }
         let start_label = pointer / CHUNK as u32;
         let end_label = (pointer + len - 1) / CHUNK as u32;
         for label in start_label..=end_label {
@@ -241,30 +273,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timestamp, values)
-        type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
-
-        let enriched: Vec<EnrichedEntry<F>> = final_memory
-            .par_iter()
-            .map(|&((addr_space, ptr), ts_values)| {
-                let chunk_label = ptr / CHUNK as u32;
-                let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
-                let key = (addr_space, chunk_label);
-                let block_info = (block_idx, ts_values.timestamp, ts_values.values);
-                (key, block_info)
-            })
-            .collect();
-
-        let chunk_groups: Vec<_> = enriched
-            .chunk_by(|a, b| a.0 == b.0)
-            .map(|group| {
-                let key = group[0].0;
-                let blocks: Vec<BlockInfo<F>> = group.iter().map(|&(_, info)| info).collect();
-                (key, blocks)
-            })
-            .collect();
-
-        let final_touched_labels: Vec<_> = chunk_groups
+        let final_touched_labels: Vec<_> = group_touched_memory_by_chunk(final_memory)
             .into_par_iter()
             .map(|((addr_space, chunk_label), blocks)| {
                 let chunk_ptr = chunk_label * CHUNK as u32;
