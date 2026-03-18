@@ -1,7 +1,7 @@
 use core::cmp::{max, Reverse};
 
 use halo2_base::{
-    gates::{range::RangeChip, GateInstructions, RangeInstructions},
+    gates::{GateInstructions, RangeInstructions},
     AssignedValue, Context,
 };
 use openvm_stark_sdk::{
@@ -20,7 +20,8 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    utils::{assign_and_range_u64, assign_and_range_usize, bits_for_u64, usize_to_u64},
+    field::baby_bear::BabyBearChip,
+    utils::{bits_for_u64, usize_to_u64},
     Fr,
 };
 
@@ -902,7 +903,7 @@ pub fn derive_proof_shape_ownership_schedule(
 
 pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    base_chip: &BabyBearChip<'_>,
     actual: &ProofShapeIntermediates,
     ownership_schedule: Option<&ProofShapeOwnershipSchedule>,
 ) -> AssignedProofShapeIntermediates {
@@ -966,7 +967,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         actual.air_presence_flags.len(),
         actual.air_log_heights.len()
     );
-    let gate = range.gate();
+    let gate = base_chip.gate();
 
     if let Some(schedule) = ownership_schedule {
         assert_eq!(
@@ -985,20 +986,20 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
                 "trace-height coefficient row witness/schedule width mismatch",
             );
             for (&actual_coeff, &owned_coeff) in actual_coeffs.iter().zip(owned_coeffs) {
-                let coeff_cell = assign_and_range_u64(ctx, range, actual_coeff);
+                let coeff_cell = base_chip.assign_and_range_u64(ctx, actual_coeff);
                 gate.assert_is_const(ctx, &coeff_cell, &Fr::from(owned_coeff));
             }
         }
     }
 
-    let num_airs = assign_and_range_usize(ctx, range, actual.num_airs);
+    let num_airs = base_chip.assign_and_range_usize(ctx, actual.num_airs);
     gate.assert_is_const(
         ctx,
         &num_airs,
         &Fr::from(usize_to_u64(actual.air_presence_flags.len())),
     );
 
-    let num_traces = assign_and_range_usize(ctx, range, actual.num_traces);
+    let num_traces = base_chip.assign_and_range_usize(ctx, actual.num_traces);
     gate.assert_is_const(
         ctx,
         &num_traces,
@@ -1009,8 +1010,10 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         .trace_id_to_air_id
         .iter()
         .map(|&actual_air_id| {
-            let air_id = assign_and_range_usize(ctx, range, actual_air_id);
-            range.check_less_than_safe(ctx, air_id, usize_to_u64(actual.num_airs));
+            let air_id = base_chip.assign_and_range_usize(ctx, actual_air_id);
+            base_chip
+                .range()
+                .check_less_than_safe(ctx, air_id, usize_to_u64(actual.num_airs));
             air_id
         })
         .collect::<Vec<_>>();
@@ -1037,12 +1040,12 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     let air_public_value_lens = actual
         .air_public_value_lens
         .iter()
-        .map(|&actual_len| assign_and_range_usize(ctx, range, actual_len))
+        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
         .collect::<Vec<_>>();
     let air_expected_public_value_lens = actual
         .air_expected_public_value_lens
         .iter()
-        .map(|&actual_len| assign_and_range_usize(ctx, range, actual_len))
+        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
         .collect::<Vec<_>>();
     for (actual_len, expected_len) in air_public_value_lens
         .iter()
@@ -1054,12 +1057,12 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     let air_cached_commitment_lens = actual
         .air_cached_commitment_lens
         .iter()
-        .map(|&actual_len| assign_and_range_usize(ctx, range, actual_len))
+        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
         .collect::<Vec<_>>();
     let air_expected_cached_commitment_lens = actual
         .air_expected_cached_commitment_lens
         .iter()
-        .map(|&actual_len| assign_and_range_usize(ctx, range, actual_len))
+        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
         .collect::<Vec<_>>();
     for (actual_len, expected_len) in air_cached_commitment_lens
         .iter()
@@ -1068,13 +1071,14 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         ctx.constrain_equal(actual_len, expected_len);
     }
 
-    let max_log_height_allowed = assign_and_range_usize(ctx, range, actual.max_log_height_allowed);
+    let max_log_height_allowed =
+        base_chip.assign_and_range_usize(ctx, actual.max_log_height_allowed);
     let air_log_heights = actual
         .air_log_heights
         .iter()
         .map(|&actual_log_height| {
-            let log_height = assign_and_range_usize(ctx, range, actual_log_height);
-            range.check_less_than_safe(
+            let log_height = base_chip.assign_and_range_usize(ctx, actual_log_height);
+            base_chip.range().check_less_than_safe(
                 ctx,
                 log_height,
                 usize_to_u64(actual.max_log_height_allowed).saturating_add(1),
@@ -1115,7 +1119,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
 
     for i in 0..trace_log_heights.len().saturating_sub(1) {
         let log_diff = gate.sub(ctx, trace_log_heights[i], trace_log_heights[i + 1]);
-        range.range_check(
+        base_chip.range().range_check(
             ctx,
             log_diff,
             bits_for_u64(usize_to_u64(actual.max_log_height_allowed)),
@@ -1124,7 +1128,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         let logs_equal = gate.is_zero(ctx, log_diff);
         let id_diff = gate.sub(ctx, trace_id_to_air_id[i + 1], trace_id_to_air_id[i]);
         let tied_id_diff = gate.mul(ctx, logs_equal, id_diff);
-        range.range_check(
+        base_chip.range().range_check(
             ctx,
             tied_id_diff,
             bits_for_u64(usize_to_u64(actual.num_airs)),
@@ -1166,11 +1170,11 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
                 sum = gate.add(ctx, sum, contribution);
             }
 
-            range.check_less_than_safe(ctx, sum, threshold);
+            base_chip.range().check_less_than_safe(ctx, sum, threshold);
 
             // Keep the host-derived sum as debug observability only.
             let debug_sum =
-                assign_and_range_u64(ctx, range, actual.trace_height_sums[constraint_idx]);
+                base_chip.assign_and_range_u64(ctx, actual.trace_height_sums[constraint_idx]);
             ctx.constrain_equal(&sum, &debug_sum);
             sum
         })
@@ -1188,7 +1192,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         gate.assert_is_const(ctx, &absent_log_height, &Fr::from(0u64));
     }
 
-    let num_airs_present = assign_and_range_usize(ctx, range, actual.num_airs_present);
+    let num_airs_present = base_chip.assign_and_range_usize(ctx, actual.num_airs_present);
     gate.assert_is_const(
         ctx,
         &num_airs_present,
@@ -1217,7 +1221,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
 
 pub fn derive_and_constrain_proof_shape(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    base_chip: &BabyBearChip<'_>,
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     proof: &Proof<NativeConfig>,
@@ -1226,7 +1230,7 @@ pub fn derive_and_constrain_proof_shape(
     let ownership = derive_proof_shape_ownership_schedule(mvk, proof)?;
     Ok(constrain_checked_proof_shape_witness_state_with_ownership(
         ctx,
-        range,
+        base_chip,
         &raw,
         Some(&ownership),
     )
@@ -1245,13 +1249,13 @@ pub(crate) fn derive_raw_proof_shape_witness_state(
 
 pub(crate) fn constrain_checked_proof_shape_witness_state_with_ownership(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    base_chip: &BabyBearChip<'_>,
     raw: &RawProofShapeWitnessState,
     ownership_schedule: Option<&ProofShapeOwnershipSchedule>,
 ) -> CheckedProofShapeWitnessState {
     let assigned = constrain_proof_shape_intermediates_with_ownership(
         ctx,
-        range,
+        base_chip,
         &raw.intermediates,
         ownership_schedule,
     );

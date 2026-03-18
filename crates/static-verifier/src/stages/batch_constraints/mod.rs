@@ -1,10 +1,8 @@
 use core::cmp::Reverse;
-#[cfg(test)]
-use std::cell::RefCell;
 use std::{iter::zip, slice};
 
 use halo2_base::{
-    gates::{range::RangeChip, GateInstructions, RangeInstructions},
+    gates::{GateInstructions, RangeInstructions},
     AssignedValue, Context,
 };
 use openvm_stark_sdk::{
@@ -36,9 +34,11 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_EXT_DEGREE},
+    field::baby_bear::{
+        BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE,
+    },
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
-    utils::{assign_and_range_u64, assign_and_range_usize, usize_to_u64},
+    utils::usize_to_u64,
     Fr,
 };
 
@@ -91,43 +91,43 @@ pub struct BatchIntermediates {
     pub trace_constraint_nodes: Vec<Vec<SymbolicExpressionNode<NativeF>>>,
     pub trace_constraint_indices: Vec<Vec<usize>>,
     pub trace_interactions: Vec<Vec<Interaction<usize>>>,
-    pub public_values: Vec<Vec<u64>>,
+    pub public_values: Vec<Vec<NativeF>>,
     pub logup_pow_bits: usize,
-    pub logup_pow_witness: u64,
+    pub logup_pow_witness: NativeF,
     pub logup_pow_sampled_bits: u64,
     pub logup_pow_witness_ok: bool,
-    pub gkr_q0_claim: Option<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub gkr_claims_per_layer: Vec<[[u64; BABY_BEAR_EXT_DEGREE]; 4]>,
-    pub gkr_sumcheck_polys: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
-    pub numerator_term_per_air: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub denominator_term_per_air: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub univariate_round_coeffs: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub sumcheck_round_polys: Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>,
-    pub column_openings: Vec<Vec<Vec<[u64; BABY_BEAR_EXT_DEGREE]>>>,
+    pub gkr_q0_claim: Option<NativeEF>,
+    pub gkr_claims_per_layer: Vec<[NativeEF; 4]>,
+    pub gkr_sumcheck_polys: Vec<Vec<NativeEF>>,
+    pub numerator_term_per_air: Vec<NativeEF>,
+    pub denominator_term_per_air: Vec<NativeEF>,
+    pub univariate_round_coeffs: Vec<NativeEF>,
+    pub sumcheck_round_polys: Vec<Vec<NativeEF>>,
+    pub column_openings: Vec<Vec<Vec<NativeEF>>>,
     pub column_openings_need_rot: Vec<Vec<bool>>,
     pub column_opening_expected_widths: Vec<Vec<usize>>,
-    pub gkr_numerator_residual: [u64; BABY_BEAR_EXT_DEGREE],
-    pub gkr_denominator_residual: [u64; BABY_BEAR_EXT_DEGREE],
-    pub gkr_denominator_claim: [u64; BABY_BEAR_EXT_DEGREE],
-    pub alpha_logup: [u64; BABY_BEAR_EXT_DEGREE],
-    pub beta_logup: [u64; BABY_BEAR_EXT_DEGREE],
-    pub gkr_non_xi_samples: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub gkr_xi_sample_order: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub xi: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
-    pub lambda: [u64; BABY_BEAR_EXT_DEGREE],
-    pub mu: [u64; BABY_BEAR_EXT_DEGREE],
-    pub sum_claim: [u64; BABY_BEAR_EXT_DEGREE],
-    pub sum_univ_domain_s_0: [u64; BABY_BEAR_EXT_DEGREE],
-    pub consistency_lhs: [u64; BABY_BEAR_EXT_DEGREE],
-    pub consistency_rhs: [u64; BABY_BEAR_EXT_DEGREE],
-    pub consistency_residual: [u64; BABY_BEAR_EXT_DEGREE],
-    pub r: Vec<[u64; BABY_BEAR_EXT_DEGREE]>,
+    pub gkr_numerator_residual: NativeEF,
+    pub gkr_denominator_residual: NativeEF,
+    pub gkr_denominator_claim: NativeEF,
+    pub alpha_logup: NativeEF,
+    pub beta_logup: NativeEF,
+    pub gkr_non_xi_samples: Vec<NativeEF>,
+    pub gkr_xi_sample_order: Vec<NativeEF>,
+    pub xi: Vec<NativeEF>,
+    pub lambda: NativeEF,
+    pub mu: NativeEF,
+    pub sum_claim: NativeEF,
+    pub sum_univ_domain_s_0: NativeEF,
+    pub consistency_lhs: NativeEF,
+    pub consistency_rhs: NativeEF,
+    pub consistency_residual: NativeEF,
+    pub r: Vec<NativeEF>,
 }
 
 #[derive(Clone, Debug)]
 pub struct AssignedBatchIntermediates {
     pub trace_id_to_air_id: Vec<AssignedValue<Fr>>,
-    pub public_values: Vec<Vec<crate::gadgets::baby_bear::BabyBearVar>>,
+    pub public_values: Vec<Vec<BabyBearWire>>,
     pub total_interactions: AssignedValue<Fr>,
     pub n_logup: AssignedValue<Fr>,
     pub n_max: AssignedValue<Fr>,
@@ -135,31 +135,31 @@ pub struct AssignedBatchIntermediates {
     pub logup_pow_bits: AssignedValue<Fr>,
     pub logup_pow_sampled_bits: AssignedValue<Fr>,
     pub logup_pow_witness_ok: AssignedValue<Fr>,
-    pub gkr_q0_claim: Option<BabyBearExtVar>,
-    pub gkr_claims_per_layer: Vec<Vec<BabyBearExtVar>>,
-    pub gkr_sumcheck_polys: Vec<Vec<BabyBearExtVar>>,
-    pub numerator_term_per_air: Vec<BabyBearExtVar>,
-    pub denominator_term_per_air: Vec<BabyBearExtVar>,
-    pub univariate_round_coeffs: Vec<BabyBearExtVar>,
-    pub sumcheck_round_polys: Vec<Vec<BabyBearExtVar>>,
-    pub column_openings: Vec<Vec<Vec<BabyBearExtVar>>>,
+    pub gkr_q0_claim: Option<BabyBearExtWire>,
+    pub gkr_claims_per_layer: Vec<Vec<BabyBearExtWire>>,
+    pub gkr_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
+    pub numerator_term_per_air: Vec<BabyBearExtWire>,
+    pub denominator_term_per_air: Vec<BabyBearExtWire>,
+    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
+    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
+    pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
     pub column_openings_need_rot: Vec<Vec<bool>>,
-    pub gkr_numerator_residual: BabyBearExtVar,
-    pub gkr_denominator_residual: BabyBearExtVar,
-    pub gkr_denominator_claim: BabyBearExtVar,
-    pub alpha_logup: BabyBearExtVar,
-    pub beta_logup: BabyBearExtVar,
-    pub gkr_non_xi_samples: Vec<BabyBearExtVar>,
-    pub gkr_xi_sample_order: Vec<BabyBearExtVar>,
-    pub xi: Vec<BabyBearExtVar>,
-    pub lambda: BabyBearExtVar,
-    pub mu: BabyBearExtVar,
-    pub sum_claim: BabyBearExtVar,
-    pub sum_univ_domain_s_0: BabyBearExtVar,
-    pub consistency_lhs: BabyBearExtVar,
-    pub consistency_rhs: BabyBearExtVar,
-    pub consistency_residual: BabyBearExtVar,
-    pub r: Vec<BabyBearExtVar>,
+    pub gkr_numerator_residual: BabyBearExtWire,
+    pub gkr_denominator_residual: BabyBearExtWire,
+    pub gkr_denominator_claim: BabyBearExtWire,
+    pub alpha_logup: BabyBearExtWire,
+    pub beta_logup: BabyBearExtWire,
+    pub gkr_non_xi_samples: Vec<BabyBearExtWire>,
+    pub gkr_xi_sample_order: Vec<BabyBearExtWire>,
+    pub xi: Vec<BabyBearExtWire>,
+    pub lambda: BabyBearExtWire,
+    pub mu: BabyBearExtWire,
+    pub sum_claim: BabyBearExtWire,
+    pub sum_univ_domain_s_0: BabyBearExtWire,
+    pub consistency_lhs: BabyBearExtWire,
+    pub consistency_rhs: BabyBearExtWire,
+    pub consistency_residual: BabyBearExtWire,
+    pub r: Vec<BabyBearExtWire>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -169,26 +169,15 @@ pub struct RawBatchWitnessState {
 
 #[derive(Clone, Debug)]
 pub struct DerivedBatchState {
-    pub sum_claim: BabyBearExtVar,
-    pub sum_univ_domain_s_0: BabyBearExtVar,
-    pub consistency_residual: BabyBearExtVar,
+    pub sum_claim: BabyBearExtWire,
+    pub sum_univ_domain_s_0: BabyBearExtWire,
+    pub consistency_residual: BabyBearExtWire,
 }
 
 #[derive(Clone, Debug)]
 pub struct CheckedBatchWitnessState {
     pub assigned: AssignedBatchIntermediates,
     pub derived: DerivedBatchState,
-}
-
-fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
-    core::array::from_fn(|i| {
-        <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
-            .as_canonical_u64()
-    })
-}
-
-fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
 }
 
 type ViewPair<'a, T> = &'a [(T, T)];
@@ -539,7 +528,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         let sampled_ext = logging_transcript
             .into_sampled()
             .chunks_exact(BABY_BEAR_EXT_DEGREE)
-            .map(|chunk| core::array::from_fn(|i| chunk[i]))
+            .map(|chunk| NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(chunk[i])))
             .collect::<Vec<_>>();
         let gkr_xi_samples = xi.len();
         assert!(
@@ -853,69 +842,31 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
                     .clone()
             })
             .collect::<Vec<_>>(),
-        public_values: public_values
-            .iter()
-            .map(|values| {
-                values
-                    .iter()
-                    .map(|value| value.as_canonical_u64())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>(),
+        public_values: public_values.to_vec(),
         logup_pow_bits,
-        logup_pow_witness: gkr_proof.logup_pow_witness.as_canonical_u64(),
+        logup_pow_witness: gkr_proof.logup_pow_witness,
         logup_pow_sampled_bits,
         logup_pow_witness_ok,
-        gkr_q0_claim: (total_interactions > 0).then(|| ext_to_coeffs(gkr_proof.q0_claim)),
+        gkr_q0_claim: (total_interactions > 0).then_some(gkr_proof.q0_claim),
         gkr_claims_per_layer: gkr_proof
             .claims_per_layer
             .iter()
-            .map(|claims| {
-                [
-                    ext_to_coeffs(claims.p_xi_0),
-                    ext_to_coeffs(claims.q_xi_0),
-                    ext_to_coeffs(claims.p_xi_1),
-                    ext_to_coeffs(claims.q_xi_1),
-                ]
-            })
+            .map(|claims| [claims.p_xi_0, claims.q_xi_0, claims.p_xi_1, claims.q_xi_1])
             .collect::<Vec<_>>(),
         gkr_sumcheck_polys: gkr_proof
             .sumcheck_polys
             .iter()
             .map(|poly| {
                 poly.iter()
-                    .flat_map(|evals| evals.iter().copied().map(ext_to_coeffs))
+                    .flat_map(|evals| evals.iter().copied())
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>(),
-        numerator_term_per_air: numerator_term_per_air
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
-        denominator_term_per_air: denominator_term_per_air
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
-        univariate_round_coeffs: univariate_round_coeffs
-            .iter()
-            .copied()
-            .map(ext_to_coeffs)
-            .collect::<Vec<_>>(),
-        sumcheck_round_polys: sumcheck_round_polys
-            .iter()
-            .map(|poly| poly.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>())
-            .collect::<Vec<_>>(),
-        column_openings: column_openings
-            .iter()
-            .map(|per_air| {
-                per_air
-                    .iter()
-                    .map(|part| part.iter().copied().map(ext_to_coeffs).collect::<Vec<_>>())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>(),
+        numerator_term_per_air: numerator_term_per_air.to_vec(),
+        denominator_term_per_air: denominator_term_per_air.to_vec(),
+        univariate_round_coeffs: univariate_round_coeffs.to_vec(),
+        sumcheck_round_polys: sumcheck_round_polys.to_vec(),
+        column_openings: column_openings.to_vec(),
         column_openings_need_rot: trace_id_to_air_id
             .iter()
             .map(|&air_id| {
@@ -943,22 +894,22 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
                 widths
             })
             .collect::<Vec<_>>(),
-        gkr_numerator_residual: ext_to_coeffs(gkr_numerator_residual),
-        gkr_denominator_residual: ext_to_coeffs(gkr_denominator_residual),
-        gkr_denominator_claim: ext_to_coeffs(q_xi_claim),
-        alpha_logup: ext_to_coeffs(alpha_logup),
-        beta_logup: ext_to_coeffs(beta_logup),
+        gkr_numerator_residual,
+        gkr_denominator_residual,
+        gkr_denominator_claim: q_xi_claim,
+        alpha_logup,
+        beta_logup,
         gkr_non_xi_samples,
         gkr_xi_sample_order,
-        xi: xi.iter().copied().map(ext_to_coeffs).collect(),
-        lambda: ext_to_coeffs(lambda),
-        mu: ext_to_coeffs(mu),
-        sum_claim: ext_to_coeffs(sum_claim),
-        sum_univ_domain_s_0: ext_to_coeffs(sum_univ_domain_s_0),
-        consistency_lhs: ext_to_coeffs(cur_sum),
-        consistency_rhs: ext_to_coeffs(evaluated_claim),
-        consistency_residual: ext_to_coeffs(consistency_residual),
-        r: rs.into_iter().map(ext_to_coeffs).collect(),
+        xi,
+        lambda,
+        mu,
+        sum_claim,
+        sum_univ_domain_s_0,
+        consistency_lhs: cur_sum,
+        consistency_rhs: evaluated_claim,
+        consistency_residual,
+        r: rs,
     })
 }
 
@@ -1007,107 +958,38 @@ pub fn derive_batch_intermediates(
     .map_err(Into::into)
 }
 
-fn assign_ext(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    coeffs: [u64; BABY_BEAR_EXT_DEGREE],
-) -> BabyBearExtVar {
-    baby_bear.load_ext_witness(ctx, range, coeffs)
-}
-
-pub(crate) fn ext_mul_base_const(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    value: &BabyBearExtVar,
-    constant: u64,
-) -> BabyBearExtVar {
-    let coeffs =
-        core::array::from_fn(|idx| baby_bear.mul_const(ctx, range, &value.coeffs[idx], constant));
-    BabyBearExtVar { coeffs }
-}
-
-#[cfg(test)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct RecordedExtBaseConst {
-    pub constant: u64,
-    pub cell: AssignedValue<Fr>,
-}
-
-#[cfg(test)]
-thread_local! {
-    static RECORDED_EXT_BASE_CONSTS: RefCell<Vec<RecordedExtBaseConst>> = const { RefCell::new(Vec::new()) };
-}
-
-#[cfg(test)]
-pub(crate) fn clear_recorded_ext_base_consts() {
-    RECORDED_EXT_BASE_CONSTS.with(|records| records.borrow_mut().clear());
-}
-
-#[cfg(test)]
-pub(crate) fn take_recorded_ext_base_consts() -> Vec<RecordedExtBaseConst> {
-    RECORDED_EXT_BASE_CONSTS.with(|records| records.borrow_mut().drain(..).collect())
-}
-
-pub(crate) fn ext_from_base_const(
-    ctx: &mut Context<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    constant: u64,
-) -> BabyBearExtVar {
-    let c0 = baby_bear.load_constant(ctx, constant);
-    #[cfg(test)]
-    RECORDED_EXT_BASE_CONSTS.with(|records| {
-        records.borrow_mut().push(RecordedExtBaseConst {
-            constant,
-            cell: c0.cell,
-        });
-    });
-    BabyBearExtVar {
-        coeffs: core::array::from_fn(|idx| {
-            if idx == 0 {
-                c0.clone()
-            } else {
-                baby_bear.zero(ctx)
-            }
-        }),
-    }
-}
-
 fn eval_ext_poly_horner(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    coeffs: &[BabyBearExtVar],
-    point: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let mut acc = baby_bear.ext_zero(ctx, range);
+    ext_chip: &BabyBearExtChip<'_>,
+    coeffs: &[BabyBearExtWire],
+    point: &BabyBearExtWire,
+) -> BabyBearExtWire {
+    let mut acc = ext_chip.zero(ctx);
     for coeff in coeffs.iter().rev() {
-        acc = baby_bear.ext_mul(ctx, range, &acc, point);
-        acc = baby_bear.ext_add(ctx, range, &acc, coeff);
+        acc = ext_chip.mul(ctx, &acc, point);
+        acc = ext_chip.add(ctx, &acc, coeff);
     }
     acc
 }
 
 fn eval_lagrange_on_integer_grid(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    point: &BabyBearExtVar,
-    evals: &[BabyBearExtVar],
-) -> BabyBearExtVar {
+    ext_chip: &BabyBearExtChip<'_>,
+    point: &BabyBearExtWire,
+    evals: &[BabyBearExtWire],
+) -> BabyBearExtWire {
     let n = evals.len().saturating_sub(1);
-    let mut acc = baby_bear.ext_zero(ctx, range);
+    let mut acc = ext_chip.zero(ctx);
     for (i, eval_i) in evals.iter().enumerate() {
-        let mut basis = ext_from_base_const(ctx, baby_bear, 1);
+        let mut basis = ext_chip.from_base_const(ctx, NativeF::ONE);
         let mut denom = NativeF::ONE;
         for j in 0..=n {
             if i == j {
                 continue;
             }
-            let x_j = ext_from_base_const(ctx, baby_bear, j as u64);
-            let x_minus_j = baby_bear.ext_sub(ctx, range, point, &x_j);
-            basis = baby_bear.ext_mul(ctx, range, &basis, &x_minus_j);
+            let x_j = ext_chip.from_base_const(ctx, NativeF::from_u64(j as u64));
+            let x_minus_j = ext_chip.sub(ctx, point, &x_j);
+            basis = ext_chip.mul(ctx, &basis, &x_minus_j);
 
             let diff = if i >= j {
                 NativeF::from_usize(i - j)
@@ -1116,191 +998,138 @@ fn eval_lagrange_on_integer_grid(
             };
             denom *= diff;
         }
-        let denom_inv = denom.inverse().as_canonical_u64();
-        let basis = ext_mul_base_const(ctx, range, baby_bear, &basis, denom_inv);
-        let term = baby_bear.ext_mul(ctx, range, eval_i, &basis);
-        acc = baby_bear.ext_add(ctx, range, &acc, &term);
-    }
-    acc
-}
-
-fn ext_from_base_var(
-    ctx: &mut Context<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    value: &crate::gadgets::baby_bear::BabyBearVar,
-) -> BabyBearExtVar {
-    let zero = baby_bear.zero(ctx);
-    BabyBearExtVar {
-        coeffs: core::array::from_fn(|idx| {
-            if idx == 0 {
-                value.clone()
-            } else {
-                zero.clone()
-            }
-        }),
-    }
-}
-
-fn ext_neg(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    value: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let zero = baby_bear.ext_zero(ctx, range);
-    baby_bear.ext_sub(ctx, range, &zero, value)
-}
-
-pub(crate) fn ext_pow_power_of_two(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    value: &BabyBearExtVar,
-    exp_power: usize,
-) -> BabyBearExtVar {
-    let mut acc = value.clone();
-    for _ in 0..exp_power {
-        acc = baby_bear.ext_mul(ctx, range, &acc, &acc);
+        let denom_inv = denom.inverse();
+        let basis = ext_chip.mul_base_const(ctx, &basis, denom_inv);
+        let term = ext_chip.mul(ctx, eval_i, &basis);
+        acc = ext_chip.add(ctx, &acc, &term);
     }
     acc
 }
 
 fn progression_exp_2_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    m: &BabyBearExtVar,
+    ext_chip: &BabyBearExtChip<'_>,
+    m: &BabyBearExtWire,
     l: usize,
-) -> BabyBearExtVar {
-    let mut pow = m.clone();
-    let mut sum = ext_from_base_const(ctx, baby_bear, 1);
-    let one = ext_from_base_const(ctx, baby_bear, 1);
+) -> BabyBearExtWire {
+    let mut pow = *m;
+    let mut sum = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
     for _ in 0..l {
-        let one_plus_pow = baby_bear.ext_add(ctx, range, &one, &pow);
-        sum = baby_bear.ext_mul(ctx, range, &sum, &one_plus_pow);
-        pow = baby_bear.ext_mul(ctx, range, &pow, &pow);
+        let one_plus_pow = ext_chip.add(ctx, &one, &pow);
+        sum = ext_chip.mul(ctx, &sum, &one_plus_pow);
+        pow = ext_chip.mul(ctx, &pow, &pow);
     }
     sum
 }
 
 pub(crate) fn eval_eq_mle_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    x: &[BabyBearExtVar],
-    y: &[BabyBearExtVar],
-) -> BabyBearExtVar {
+    ext_chip: &BabyBearExtChip<'_>,
+    x: &[BabyBearExtWire],
+    y: &[BabyBearExtWire],
+) -> BabyBearExtWire {
     assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut acc = one.clone();
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut acc = one;
     for (x_i, y_i) in x.iter().zip(y.iter()) {
-        let xy = baby_bear.ext_mul(ctx, range, x_i, y_i);
-        let two_xy = ext_mul_base_const(ctx, range, baby_bear, &xy, 2);
-        let one_minus_y = baby_bear.ext_sub(ctx, range, &one, y_i);
-        let one_minus_y_minus_x = baby_bear.ext_sub(ctx, range, &one_minus_y, x_i);
-        let factor = baby_bear.ext_add(ctx, range, &one_minus_y_minus_x, &two_xy);
-        acc = baby_bear.ext_mul(ctx, range, &acc, &factor);
+        let xy = ext_chip.mul(ctx, x_i, y_i);
+        let two_xy = ext_chip.mul_base_const(ctx, &xy, NativeF::TWO);
+        let one_minus_y = ext_chip.sub(ctx, &one, y_i);
+        let one_minus_y_minus_x = ext_chip.sub(ctx, &one_minus_y, x_i);
+        let factor = ext_chip.add(ctx, &one_minus_y_minus_x, &two_xy);
+        acc = ext_chip.mul(ctx, &acc, &factor);
     }
     acc
 }
 
 pub(crate) fn eval_eq_mle_binary_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    x: &[BabyBearExtVar],
+    ext_chip: &BabyBearExtChip<'_>,
+    x: &[BabyBearExtWire],
     y_bits: &[bool],
-) -> BabyBearExtVar {
+) -> BabyBearExtWire {
     assert_eq!(
         x.len(),
         y_bits.len(),
         "eq_mle binary vector length mismatch",
     );
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut acc = one.clone();
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut acc = one;
     for (x_i, bit) in x.iter().zip(y_bits.iter().copied()) {
         let factor = if bit {
-            x_i.clone()
+            *x_i
         } else {
-            baby_bear.ext_sub(ctx, range, &one, x_i)
+            ext_chip.sub(ctx, &one, x_i)
         };
-        acc = baby_bear.ext_mul(ctx, range, &acc, &factor);
+        acc = ext_chip.mul(ctx, &acc, &factor);
     }
     acc
 }
 
 pub(crate) fn eval_eq_uni_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
-    x: &BabyBearExtVar,
-    y: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut res = one.clone();
-    let mut x_pow = x.clone();
-    let mut y_pow = y.clone();
+    x: &BabyBearExtWire,
+    y: &BabyBearExtWire,
+) -> BabyBearExtWire {
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut res = one;
+    let mut x_pow = *x;
+    let mut y_pow = *y;
     for _ in 0..l_skip {
-        let x_plus_y = baby_bear.ext_add(ctx, range, &x_pow, &y_pow);
-        let x_minus_one = baby_bear.ext_sub(ctx, range, &x_pow, &one);
-        let y_minus_one = baby_bear.ext_sub(ctx, range, &y_pow, &one);
-        let correction = baby_bear.ext_mul(ctx, range, &x_minus_one, &y_minus_one);
-        let scaled_res = baby_bear.ext_mul(ctx, range, &x_plus_y, &res);
-        res = baby_bear.ext_add(ctx, range, &scaled_res, &correction);
-        x_pow = baby_bear.ext_mul(ctx, range, &x_pow, &x_pow);
-        y_pow = baby_bear.ext_mul(ctx, range, &y_pow, &y_pow);
+        let x_plus_y = ext_chip.add(ctx, &x_pow, &y_pow);
+        let x_minus_one = ext_chip.sub(ctx, &x_pow, &one);
+        let y_minus_one = ext_chip.sub(ctx, &y_pow, &one);
+        let correction = ext_chip.mul(ctx, &x_minus_one, &y_minus_one);
+        let scaled_res = ext_chip.mul(ctx, &x_plus_y, &res);
+        res = ext_chip.add(ctx, &scaled_res, &correction);
+        x_pow = ext_chip.mul(ctx, &x_pow, &x_pow);
+        y_pow = ext_chip.mul(ctx, &y_pow, &y_pow);
     }
-    let half_pow_l = NativeF::ONE
-        .halve()
-        .exp_u64(l_skip as u64)
-        .as_canonical_u64();
-    ext_mul_base_const(ctx, range, baby_bear, &res, half_pow_l)
+    let half_pow_l = NativeF::ONE.halve().exp_u64(l_skip as u64);
+    ext_chip.mul_base_const(ctx, &res, half_pow_l)
 }
 
 pub(crate) fn eval_eq_uni_at_one_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
-    x: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut res = one.clone();
-    let mut x_pow = x.clone();
+    x: &BabyBearExtWire,
+) -> BabyBearExtWire {
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut res = one;
+    let mut x_pow = *x;
     for _ in 0..l_skip {
-        let x_plus_one = baby_bear.ext_add(ctx, range, &x_pow, &one);
-        res = baby_bear.ext_mul(ctx, range, &res, &x_plus_one);
-        x_pow = baby_bear.ext_mul(ctx, range, &x_pow, &x_pow);
+        let x_plus_one = ext_chip.add(ctx, &x_pow, &one);
+        res = ext_chip.mul(ctx, &res, &x_plus_one);
+        x_pow = ext_chip.mul(ctx, &x_pow, &x_pow);
     }
-    let half_pow_l = NativeF::ONE
-        .halve()
-        .exp_u64(l_skip as u64)
-        .as_canonical_u64();
-    ext_mul_base_const(ctx, range, baby_bear, &res, half_pow_l)
+    let half_pow_l = NativeF::ONE.halve().exp_u64(l_skip as u64);
+    ext_chip.mul_base_const(ctx, &res, half_pow_l)
 }
 
 fn eval_eq_sharp_uni_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     omega_skip_pows: &[NativeF],
-    xi_1: &[BabyBearExtVar],
-    z: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut eq_xi_evals = vec![baby_bear.ext_zero(ctx, range); 1usize << xi_1.len()];
-    eq_xi_evals[0] = one.clone();
+    xi_1: &[BabyBearExtWire],
+    z: &BabyBearExtWire,
+) -> BabyBearExtWire {
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut eq_xi_evals = vec![ext_chip.zero(ctx); 1usize << xi_1.len()];
+    eq_xi_evals[0] = one;
 
     // Match `evals_eq_hypercube_serial` ordering from the native verifier:
     // mask bit `i` corresponds to `xi_1[i]`.
     for (i, xi) in xi_1.iter().enumerate() {
         let span = 1usize << i;
-        let one_minus_xi = baby_bear.ext_sub(ctx, range, &one, xi);
+        let one_minus_xi = ext_chip.sub(ctx, &one, xi);
         for idx in 0..span {
-            let prev = eq_xi_evals[idx].clone();
-            let lo = baby_bear.ext_mul(ctx, range, &prev, &one_minus_xi);
-            let hi = baby_bear.ext_mul(ctx, range, &prev, xi);
+            let prev = eq_xi_evals[idx];
+            let lo = ext_chip.mul(ctx, &prev, &one_minus_xi);
+            let hi = ext_chip.mul(ctx, &prev, xi);
             eq_xi_evals[idx] = lo;
             eq_xi_evals[span + idx] = hi;
         }
@@ -1312,244 +1141,230 @@ fn eval_eq_sharp_uni_assigned(
         "eq_sharp eval table width mismatch",
     );
 
-    let mut res = baby_bear.ext_zero(ctx, range);
+    let mut res = ext_chip.zero(ctx);
     let l_skip = xi_1.len();
     for (omega_pow, eq_xi_eval) in omega_skip_pows.iter().zip(eq_xi_evals.iter()) {
-        let omega_ext = ext_from_base_const(ctx, baby_bear, omega_pow.as_canonical_u64());
-        let eq_uni = eval_eq_uni_assigned(ctx, range, baby_bear, l_skip, z, &omega_ext);
-        let term = baby_bear.ext_mul(ctx, range, &eq_uni, eq_xi_eval);
-        res = baby_bear.ext_add(ctx, range, &res, &term);
+        let omega_ext = ext_chip.from_base_const(ctx, *omega_pow);
+        let eq_uni = eval_eq_uni_assigned(ctx, ext_chip, l_skip, z, &omega_ext);
+        let term = ext_chip.mul(ctx, &eq_uni, eq_xi_eval);
+        res = ext_chip.add(ctx, &res, &term);
     }
     res
 }
 
 pub(crate) fn eval_eq_prism_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
-    x: &[BabyBearExtVar],
-    y: &[BabyBearExtVar],
-) -> BabyBearExtVar {
+    x: &[BabyBearExtWire],
+    y: &[BabyBearExtWire],
+) -> BabyBearExtWire {
     assert!(
         !x.is_empty() && !y.is_empty(),
         "eq_prism vectors must be non-empty",
     );
-    let eq_uni = eval_eq_uni_assigned(ctx, range, baby_bear, l_skip, &x[0], &y[0]);
-    let eq_mle = eval_eq_mle_assigned(ctx, range, baby_bear, &x[1..], &y[1..]);
-    baby_bear.ext_mul(ctx, range, &eq_uni, &eq_mle)
+    let eq_uni = eval_eq_uni_assigned(ctx, ext_chip, l_skip, &x[0], &y[0]);
+    let eq_mle = eval_eq_mle_assigned(ctx, ext_chip, &x[1..], &y[1..]);
+    ext_chip.mul(ctx, &eq_uni, &eq_mle)
 }
 
 fn eval_eq_rot_cube_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    x: &[BabyBearExtVar],
-    y: &[BabyBearExtVar],
-) -> (BabyBearExtVar, BabyBearExtVar) {
+    ext_chip: &BabyBearExtChip<'_>,
+    x: &[BabyBearExtWire],
+    y: &[BabyBearExtWire],
+) -> (BabyBearExtWire, BabyBearExtWire) {
     assert_eq!(x.len(), y.len(), "eq_rot_cube vector length mismatch");
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut rot = one.clone();
-    let mut eq = one.clone();
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut rot = one;
+    let mut eq = one;
     for i in (0..x.len()).rev() {
-        let one_minus_y = baby_bear.ext_sub(ctx, range, &one, &y[i]);
-        let one_minus_x = baby_bear.ext_sub(ctx, range, &one, &x[i]);
-        let x_times = baby_bear.ext_mul(ctx, range, &x[i], &one_minus_y);
-        let term1 = baby_bear.ext_mul(ctx, range, &x_times, &eq);
-        let y_times = baby_bear.ext_mul(ctx, range, &one_minus_x, &y[i]);
-        let term2 = baby_bear.ext_mul(ctx, range, &y_times, &rot);
-        rot = baby_bear.ext_add(ctx, range, &term1, &term2);
+        let one_minus_y = ext_chip.sub(ctx, &one, &y[i]);
+        let one_minus_x = ext_chip.sub(ctx, &one, &x[i]);
+        let x_times = ext_chip.mul(ctx, &x[i], &one_minus_y);
+        let term1 = ext_chip.mul(ctx, &x_times, &eq);
+        let y_times = ext_chip.mul(ctx, &one_minus_x, &y[i]);
+        let term2 = ext_chip.mul(ctx, &y_times, &rot);
+        rot = ext_chip.add(ctx, &term1, &term2);
 
-        let xy = baby_bear.ext_mul(ctx, range, &x[i], &y[i]);
-        let one_minus_xy = baby_bear.ext_mul(ctx, range, &one_minus_x, &one_minus_y);
-        let eq_factor = baby_bear.ext_add(ctx, range, &xy, &one_minus_xy);
-        eq = baby_bear.ext_mul(ctx, range, &eq, &eq_factor);
+        let xy = ext_chip.mul(ctx, &x[i], &y[i]);
+        let one_minus_xy = ext_chip.mul(ctx, &one_minus_x, &one_minus_y);
+        let eq_factor = ext_chip.add(ctx, &xy, &one_minus_xy);
+        eq = ext_chip.mul(ctx, &eq, &eq_factor);
     }
     (eq, rot)
 }
 
 pub(crate) fn eval_rot_kernel_prism_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
-    x: &[BabyBearExtVar],
-    y: &[BabyBearExtVar],
-) -> BabyBearExtVar {
+    x: &[BabyBearExtWire],
+    y: &[BabyBearExtWire],
+) -> BabyBearExtWire {
     assert!(
         !x.is_empty() && !y.is_empty(),
         "rot-kernel vectors must be non-empty",
     );
-    let omega = NativeF::two_adic_generator(l_skip).as_canonical_u64();
-    let y0_omega = ext_mul_base_const(ctx, range, baby_bear, &y[0], omega);
-    let eq_uni_rot = eval_eq_uni_assigned(ctx, range, baby_bear, l_skip, &x[0], &y0_omega);
-    let (eq_cube, rot_cube) = eval_eq_rot_cube_assigned(ctx, range, baby_bear, &x[1..], &y[1..]);
-    let term_a = baby_bear.ext_mul(ctx, range, &eq_uni_rot, &eq_cube);
+    let omega = NativeF::two_adic_generator(l_skip);
+    let y0_omega = ext_chip.mul_base_const(ctx, &y[0], omega);
+    let eq_uni_rot = eval_eq_uni_assigned(ctx, ext_chip, l_skip, &x[0], &y0_omega);
+    let (eq_cube, rot_cube) = eval_eq_rot_cube_assigned(ctx, ext_chip, &x[1..], &y[1..]);
+    let term_a = ext_chip.mul(ctx, &eq_uni_rot, &eq_cube);
 
-    let eq_uni_x_one = eval_eq_uni_at_one_assigned(ctx, range, baby_bear, l_skip, &x[0]);
-    let eq_uni_y_one = eval_eq_uni_at_one_assigned(ctx, range, baby_bear, l_skip, &y0_omega);
-    let rot_minus_eq = baby_bear.ext_sub(ctx, range, &rot_cube, &eq_cube);
-    let eq_uni_product = baby_bear.ext_mul(ctx, range, &eq_uni_x_one, &eq_uni_y_one);
-    let term_b = baby_bear.ext_mul(ctx, range, &eq_uni_product, &rot_minus_eq);
-    baby_bear.ext_add(ctx, range, &term_a, &term_b)
+    let eq_uni_x_one = eval_eq_uni_at_one_assigned(ctx, ext_chip, l_skip, &x[0]);
+    let eq_uni_y_one = eval_eq_uni_at_one_assigned(ctx, ext_chip, l_skip, &y0_omega);
+    let rot_minus_eq = ext_chip.sub(ctx, &rot_cube, &eq_cube);
+    let eq_uni_product = ext_chip.mul(ctx, &eq_uni_x_one, &eq_uni_y_one);
+    let term_b = ext_chip.mul(ctx, &eq_uni_product, &rot_minus_eq);
+    ext_chip.add(ctx, &term_a, &term_b)
 }
 
 fn interpolate_linear_at_01_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    eval0: &BabyBearExtVar,
-    eval1: &BabyBearExtVar,
-    x: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let delta = baby_bear.ext_sub(ctx, range, eval1, eval0);
-    let scaled = baby_bear.ext_mul(ctx, range, &delta, x);
-    baby_bear.ext_add(ctx, range, &scaled, eval0)
+    ext_chip: &BabyBearExtChip<'_>,
+    eval0: &BabyBearExtWire,
+    eval1: &BabyBearExtWire,
+    x: &BabyBearExtWire,
+) -> BabyBearExtWire {
+    let delta = ext_chip.sub(ctx, eval1, eval0);
+    let scaled = ext_chip.mul(ctx, &delta, x);
+    ext_chip.add(ctx, &scaled, eval0)
 }
 
 fn interpolate_cubic_at_0123_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    evals: [&BabyBearExtVar; 4],
-    x: &BabyBearExtVar,
-) -> BabyBearExtVar {
-    let inv6 = NativeF::from_u64(6).inverse().as_canonical_u64();
-    let s1 = baby_bear.ext_sub(ctx, range, evals[1], evals[0]);
-    let s2 = baby_bear.ext_sub(ctx, range, evals[2], evals[0]);
-    let s3 = baby_bear.ext_sub(ctx, range, evals[3], evals[0]);
+    ext_chip: &BabyBearExtChip<'_>,
+    evals: [&BabyBearExtWire; 4],
+    x: &BabyBearExtWire,
+) -> BabyBearExtWire {
+    let inv6 = NativeF::from_u64(6).inverse();
+    let s1 = ext_chip.sub(ctx, evals[1], evals[0]);
+    let s2 = ext_chip.sub(ctx, evals[2], evals[0]);
+    let s3 = ext_chip.sub(ctx, evals[3], evals[0]);
 
-    let s2_minus_s1 = baby_bear.ext_sub(ctx, range, &s2, &s1);
-    let triple = ext_mul_base_const(ctx, range, baby_bear, &s2_minus_s1, 3);
-    let d3 = baby_bear.ext_sub(ctx, range, &s3, &triple);
+    let s2_minus_s1 = ext_chip.sub(ctx, &s2, &s1);
+    let triple = ext_chip.mul_base_const(ctx, &s2_minus_s1, NativeF::from_u64(3));
+    let d3 = ext_chip.sub(ctx, &s3, &triple);
 
-    let p = ext_mul_base_const(ctx, range, baby_bear, &d3, inv6);
-    let s2_minus_d3 = baby_bear.ext_sub(ctx, range, &s2, &d3);
-    let half = NativeF::ONE.halve().as_canonical_u64();
-    let q_half = ext_mul_base_const(ctx, range, baby_bear, &s2_minus_d3, half);
-    let q = baby_bear.ext_sub(ctx, range, &q_half, &s1);
-    let p_plus_q = baby_bear.ext_add(ctx, range, &p, &q);
-    let r = baby_bear.ext_sub(ctx, range, &s1, &p_plus_q);
+    let p = ext_chip.mul_base_const(ctx, &d3, inv6);
+    let s2_minus_d3 = ext_chip.sub(ctx, &s2, &d3);
+    let half = NativeF::ONE.halve();
+    let q_half = ext_chip.mul_base_const(ctx, &s2_minus_d3, half);
+    let q = ext_chip.sub(ctx, &q_half, &s1);
+    let p_plus_q = ext_chip.add(ctx, &p, &q);
+    let r = ext_chip.sub(ctx, &s1, &p_plus_q);
 
-    let p_mul_x = baby_bear.ext_mul(ctx, range, &p, x);
-    let px_plus_q = baby_bear.ext_add(ctx, range, &p_mul_x, &q);
-    let quad_mul_x = baby_bear.ext_mul(ctx, range, &px_plus_q, x);
-    let quad = baby_bear.ext_add(ctx, range, &quad_mul_x, &r);
-    let cubic = baby_bear.ext_mul(ctx, range, &quad, x);
-    baby_bear.ext_add(ctx, range, &cubic, evals[0])
+    let p_mul_x = ext_chip.mul(ctx, &p, x);
+    let px_plus_q = ext_chip.add(ctx, &p_mul_x, &q);
+    let quad_mul_x = ext_chip.mul(ctx, &px_plus_q, x);
+    let quad = ext_chip.add(ctx, &quad_mul_x, &r);
+    let cubic = ext_chip.mul(ctx, &quad, x);
+    ext_chip.add(ctx, &cubic, evals[0])
 }
 
 #[derive(Clone)]
 struct AssignedViewPair {
-    local: BabyBearExtVar,
-    next: BabyBearExtVar,
+    local: BabyBearExtWire,
+    next: BabyBearExtWire,
 }
 
 struct AssignedConstraintEvaluator<'a> {
     preprocessed: Option<&'a [AssignedViewPair]>,
     partitioned_main: &'a [Vec<AssignedViewPair>],
-    is_first_row: BabyBearExtVar,
-    is_last_row: BabyBearExtVar,
-    public_values: &'a [crate::gadgets::baby_bear::BabyBearVar],
+    is_first_row: BabyBearExtWire,
+    is_last_row: BabyBearExtWire,
+    public_values: &'a [BabyBearWire],
 }
 
 impl AssignedConstraintEvaluator<'_> {
     fn reject_malformed_symbolic_var(
         &self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
-    ) -> BabyBearExtVar {
-        let zero = baby_bear.ext_zero(ctx, range);
-        let one = ext_from_base_const(ctx, baby_bear, 1);
-        baby_bear.assert_ext_equal(ctx, &zero, &one);
+        ext_chip: &BabyBearExtChip<'_>,
+    ) -> BabyBearExtWire {
+        let zero = ext_chip.zero(ctx);
+        let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+        ext_chip.assert_equal(ctx, &zero, &one);
         zero
     }
 
     fn eval_var(
         &self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
+        ext_chip: &BabyBearExtChip<'_>,
         symbolic_var: SymbolicVariable<NativeF>,
-    ) -> BabyBearExtVar {
+    ) -> BabyBearExtWire {
         let index = symbolic_var.index;
         match symbolic_var.entry {
             Entry::Preprocessed { offset } => {
                 let Some(vp) = self.preprocessed else {
-                    return self.reject_malformed_symbolic_var(ctx, range, baby_bear);
+                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
                 };
                 let Some(value) = vp.get(index) else {
-                    return self.reject_malformed_symbolic_var(ctx, range, baby_bear);
+                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
                 };
                 if offset == 0 {
-                    value.local.clone()
+                    value.local
                 } else {
-                    value.next.clone()
+                    value.next
                 }
             }
             Entry::Main { part_index, offset } => {
                 let Some(vp) = self.partitioned_main.get(part_index) else {
-                    return self.reject_malformed_symbolic_var(ctx, range, baby_bear);
+                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
                 };
                 let Some(value) = vp.get(index) else {
-                    return self.reject_malformed_symbolic_var(ctx, range, baby_bear);
+                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
                 };
                 if offset == 0 {
-                    value.local.clone()
+                    value.local
                 } else {
-                    value.next.clone()
+                    value.next
                 }
             }
             Entry::Public => {
                 let Some(value) = self.public_values.get(index) else {
-                    return self.reject_malformed_symbolic_var(ctx, range, baby_bear);
+                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
                 };
-                ext_from_base_var(ctx, baby_bear, value)
+                ext_chip.from_base_var(ctx, value)
             }
-            _ => self.reject_malformed_symbolic_var(ctx, range, baby_bear),
+            _ => self.reject_malformed_symbolic_var(ctx, ext_chip),
         }
     }
 }
 
 fn eval_symbolic_nodes_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    ext_chip: &BabyBearExtChip<'_>,
     evaluator: &AssignedConstraintEvaluator<'_>,
     nodes: &[SymbolicExpressionNode<NativeF>],
-) -> Vec<BabyBearExtVar> {
-    let one = ext_from_base_const(ctx, baby_bear, 1);
-    let mut exprs: Vec<BabyBearExtVar> = Vec::with_capacity(nodes.len());
+) -> Vec<BabyBearExtWire> {
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut exprs: Vec<BabyBearExtWire> = Vec::with_capacity(nodes.len());
     for node in nodes {
         let expr = match node {
-            SymbolicExpressionNode::Variable(var) => {
-                evaluator.eval_var(ctx, range, baby_bear, *var)
-            }
-            SymbolicExpressionNode::Constant(c) => {
-                ext_from_base_const(ctx, baby_bear, c.as_canonical_u64())
-            }
+            SymbolicExpressionNode::Variable(var) => evaluator.eval_var(ctx, ext_chip, *var),
+            SymbolicExpressionNode::Constant(c) => ext_chip.from_base_const(ctx, *c),
             SymbolicExpressionNode::Add {
                 left_idx,
                 right_idx,
                 ..
-            } => baby_bear.ext_add(ctx, range, &exprs[*left_idx], &exprs[*right_idx]),
+            } => ext_chip.add(ctx, &exprs[*left_idx], &exprs[*right_idx]),
             SymbolicExpressionNode::Sub {
                 left_idx,
                 right_idx,
                 ..
-            } => baby_bear.ext_sub(ctx, range, &exprs[*left_idx], &exprs[*right_idx]),
-            SymbolicExpressionNode::Neg { idx, .. } => ext_neg(ctx, range, baby_bear, &exprs[*idx]),
+            } => ext_chip.sub(ctx, &exprs[*left_idx], &exprs[*right_idx]),
+            SymbolicExpressionNode::Neg { idx, .. } => ext_chip.neg(ctx, &exprs[*idx]),
             SymbolicExpressionNode::Mul {
                 left_idx,
                 right_idx,
                 ..
-            } => baby_bear.ext_mul(ctx, range, &exprs[*left_idx], &exprs[*right_idx]),
-            SymbolicExpressionNode::IsFirstRow => evaluator.is_first_row.clone(),
-            SymbolicExpressionNode::IsLastRow => evaluator.is_last_row.clone(),
-            SymbolicExpressionNode::IsTransition => {
-                baby_bear.ext_sub(ctx, range, &one, &evaluator.is_last_row)
-            }
+            } => ext_chip.mul(ctx, &exprs[*left_idx], &exprs[*right_idx]),
+            SymbolicExpressionNode::IsFirstRow => evaluator.is_first_row,
+            SymbolicExpressionNode::IsLastRow => evaluator.is_last_row,
+            SymbolicExpressionNode::IsTransition => ext_chip.sub(ctx, &one, &evaluator.is_last_row),
         };
         exprs.push(expr);
     }
@@ -1558,12 +1373,11 @@ fn eval_symbolic_nodes_assigned(
 
 fn column_openings_by_rot_assigned(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
-    openings: &[BabyBearExtVar],
+    ext_chip: &BabyBearExtChip<'_>,
+    openings: &[BabyBearExtWire],
     need_rot: bool,
 ) -> Vec<AssignedViewPair> {
-    shared_math::column_openings_by_rot_assigned(ctx, range, baby_bear, openings, need_rot)
+    shared_math::column_openings_by_rot_assigned(ctx, ext_chip, openings, need_rot)
         .into_iter()
         .map(|(local, next)| AssignedViewPair { local, next })
         .collect::<Vec<_>>()
@@ -1572,7 +1386,7 @@ fn column_openings_by_rot_assigned(
 // Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
 pub(crate) fn constrain_batch_intermediates_unchecked(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    range: &halo2_base::gates::range::RangeChip<Fr>,
     actual: &BatchIntermediates,
 ) -> AssignedBatchIntermediates {
     assert!(!actual.r.is_empty(), "batch challenges must be non-empty");
@@ -1602,31 +1416,42 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         "trace interaction sets must align with trace count",
     );
 
-    let gate = range.gate();
-    let baby_bear = BabyBearArithmeticGadgets;
+    let base_chip = BabyBearChip::new(range);
+    let ext_chip = BabyBearExtChip::new(base_chip);
+    let gate = ext_chip.range().gate();
 
     let trace_id_to_air_id = actual
         .trace_id_to_air_id
         .iter()
-        .map(|&actual_air_id| assign_and_range_usize(ctx, range, actual_air_id))
+        .map(|&actual_air_id| ext_chip.base().assign_and_range_usize(ctx, actual_air_id))
         .collect();
 
-    let total_interactions = assign_and_range_u64(ctx, range, actual.total_interactions);
+    let total_interactions = ext_chip
+        .base()
+        .assign_and_range_u64(ctx, actual.total_interactions);
 
-    let n_logup = assign_and_range_usize(ctx, range, actual.n_logup);
+    let n_logup = ext_chip.base().assign_and_range_usize(ctx, actual.n_logup);
 
-    let n_max = assign_and_range_usize(ctx, range, actual.n_max);
+    let n_max = ext_chip.base().assign_and_range_usize(ctx, actual.n_max);
     gate.assert_is_const(
         ctx,
         &n_max,
         &Fr::from(usize_to_u64(actual.r.len().saturating_sub(1))),
     );
-    let batch_degree = assign_and_range_usize(ctx, range, actual.batch_degree);
+    let batch_degree = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.batch_degree);
 
-    let logup_pow_bits = assign_and_range_usize(ctx, range, actual.logup_pow_bits);
-    let logup_pow_sampled_bits = assign_and_range_u64(ctx, range, actual.logup_pow_sampled_bits);
+    let logup_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.logup_pow_bits);
+    let logup_pow_sampled_bits = ext_chip
+        .base()
+        .assign_and_range_u64(ctx, actual.logup_pow_sampled_bits);
     if actual.logup_pow_bits > 0 {
-        range.range_check(ctx, logup_pow_sampled_bits, actual.logup_pow_bits);
+        ext_chip
+            .range()
+            .range_check(ctx, logup_pow_sampled_bits, actual.logup_pow_bits);
     } else {
         gate.assert_is_const(ctx, &logup_pow_sampled_bits, &Fr::from(0u64));
     }
@@ -1645,7 +1470,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         let q0_claim = actual
             .gkr_q0_claim
             .expect("non-zero interaction branch must include GKR q0 claim witness");
-        Some(assign_ext(ctx, range, &baby_bear, q0_claim))
+        Some(ext_chip.load_witness(ctx, q0_claim))
     };
     let gkr_claims_per_layer = actual
         .gkr_claims_per_layer
@@ -1653,7 +1478,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .map(|claims| {
             claims
                 .iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| ext_chip.load_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -1662,7 +1487,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| ext_chip.load_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -1670,31 +1495,37 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     let numerator_term_per_air = actual
         .numerator_term_per_air
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     let denominator_term_per_air = actual
         .denominator_term_per_air
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     let univariate_round_coeffs = actual
         .univariate_round_coeffs
         .iter()
-        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     let sumcheck_round_polys = actual
         .sumcheck_round_polys
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                .map(|&value| ext_chip.load_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 
-    let trace_count = assign_and_range_usize(ctx, range, actual.trace_id_to_air_id.len());
-    let numerator_len = assign_and_range_usize(ctx, range, numerator_term_per_air.len());
-    let denominator_len = assign_and_range_usize(ctx, range, denominator_term_per_air.len());
+    let trace_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.trace_id_to_air_id.len());
+    let numerator_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, numerator_term_per_air.len());
+    let denominator_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, denominator_term_per_air.len());
     ctx.constrain_equal(&numerator_len, &denominator_len);
     ctx.constrain_equal(&numerator_len, &trace_count);
 
@@ -1707,14 +1538,20 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .batch_degree
         .saturating_mul(l_skip_width.saturating_sub(1))
         .saturating_add(1);
-    let univariate_len = assign_and_range_usize(ctx, range, univariate_round_coeffs.len());
-    let expected_univariate_len_cell = assign_and_range_usize(ctx, range, expected_univariate_len);
+    let univariate_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, univariate_round_coeffs.len());
+    let expected_univariate_len_cell = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, expected_univariate_len);
     ctx.constrain_equal(&univariate_len, &expected_univariate_len_cell);
 
-    let sumcheck_round_count = assign_and_range_usize(ctx, range, sumcheck_round_polys.len());
+    let sumcheck_round_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, sumcheck_round_polys.len());
     ctx.constrain_equal(&sumcheck_round_count, &n_max);
     for round in &sumcheck_round_polys {
-        let round_width = assign_and_range_usize(ctx, range, round.len());
+        let round_width = ext_chip.base().assign_and_range_usize(ctx, round.len());
         ctx.constrain_equal(&round_width, &batch_degree);
     }
     let column_openings = actual
@@ -1725,7 +1562,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
                 .iter()
                 .map(|part| {
                     part.iter()
-                        .map(|&coeffs| assign_ext(ctx, range, &baby_bear, coeffs))
+                        .map(|&value| ext_chip.load_witness(ctx, value))
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
@@ -1747,15 +1584,19 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .zip(actual.column_opening_expected_widths.iter())
         .enumerate()
     {
-        let part_count = assign_and_range_usize(ctx, range, openings.len());
-        let expected_part_count = assign_and_range_usize(ctx, range, expected_widths.len());
+        let part_count = ext_chip.base().assign_and_range_usize(ctx, openings.len());
+        let expected_part_count = ext_chip
+            .base()
+            .assign_and_range_usize(ctx, expected_widths.len());
         ctx.constrain_equal(&part_count, &expected_part_count);
 
         for (part_idx, (part_openings, &expected_width)) in
             openings.iter().zip(expected_widths.iter()).enumerate()
         {
-            let opening_width = assign_and_range_usize(ctx, range, part_openings.len());
-            let expected_width_cell = assign_and_range_usize(ctx, range, expected_width);
+            let opening_width = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, part_openings.len());
+            let expected_width_cell = ext_chip.base().assign_and_range_usize(ctx, expected_width);
             ctx.constrain_equal(&opening_width, &expected_width_cell);
 
             let need_rot = *actual.column_openings_need_rot[trace_idx]
@@ -1770,34 +1611,33 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         }
     }
 
-    let gkr_numerator_residual = assign_ext(ctx, range, &baby_bear, actual.gkr_numerator_residual);
+    let gkr_numerator_residual = ext_chip.load_witness(ctx, actual.gkr_numerator_residual);
 
-    let gkr_denominator_residual =
-        assign_ext(ctx, range, &baby_bear, actual.gkr_denominator_residual);
-    let gkr_denominator_claim = assign_ext(ctx, range, &baby_bear, actual.gkr_denominator_claim);
-    let alpha_logup = assign_ext(ctx, range, &baby_bear, actual.alpha_logup);
-    let beta_logup = assign_ext(ctx, range, &baby_bear, actual.beta_logup);
+    let gkr_denominator_residual = ext_chip.load_witness(ctx, actual.gkr_denominator_residual);
+    let gkr_denominator_claim = ext_chip.load_witness(ctx, actual.gkr_denominator_claim);
+    let alpha_logup = ext_chip.load_witness(ctx, actual.alpha_logup);
+    let beta_logup = ext_chip.load_witness(ctx, actual.beta_logup);
     let gkr_non_xi_samples = actual
         .gkr_non_xi_samples
         .iter()
-        .map(|&value| assign_ext(ctx, range, &baby_bear, value))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     let gkr_xi_sample_order = actual
         .gkr_xi_sample_order
         .iter()
-        .map(|&value| assign_ext(ctx, range, &baby_bear, value))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     let xi = actual
         .xi
         .iter()
-        .map(|&value| assign_ext(ctx, range, &baby_bear, value))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
-    let lambda = assign_ext(ctx, range, &baby_bear, actual.lambda);
-    let mu = assign_ext(ctx, range, &baby_bear, actual.mu);
+    let lambda = ext_chip.load_witness(ctx, actual.lambda);
+    let mu = ext_chip.load_witness(ctx, actual.mu);
     let r = actual
         .r
         .iter()
-        .map(|&actual_r| assign_ext(ctx, range, &baby_bear, actual_r))
+        .map(|&actual_r| ext_chip.load_witness(ctx, actual_r))
         .collect::<Vec<_>>();
     let assigned_public_values = actual
         .public_values
@@ -1805,22 +1645,26 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .map(|values| {
             values
                 .iter()
-                .map(|&value| baby_bear.load_witness(ctx, range, value))
+                .map(|&value| ext_chip.base().load_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 
-    let zero = baby_bear.ext_zero(ctx, range);
-    let one = ext_from_base_const(ctx, &baby_bear, 1);
+    let zero = ext_chip.zero(ctx);
+    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
     let mut gkr_sample_stream =
         Vec::with_capacity(gkr_non_xi_samples.len() + gkr_xi_sample_order.len());
-    gkr_sample_stream.extend(gkr_non_xi_samples.iter().cloned());
-    gkr_sample_stream.extend(gkr_xi_sample_order.iter().cloned());
+    gkr_sample_stream.extend(gkr_non_xi_samples.iter().copied());
+    gkr_sample_stream.extend(gkr_xi_sample_order.iter().copied());
     let mut gkr_sample_cursor = 0usize;
     let total_gkr_rounds = actual.l_skip + actual.n_logup;
 
-    let gkr_layer_claim_count = assign_and_range_usize(ctx, range, gkr_claims_per_layer.len());
-    let gkr_sumcheck_count = assign_and_range_usize(ctx, range, gkr_sumcheck_polys.len());
+    let gkr_layer_claim_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, gkr_claims_per_layer.len());
+    let gkr_sumcheck_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, gkr_sumcheck_polys.len());
     if actual.total_interactions == 0 {
         gate.assert_is_const(ctx, &gkr_layer_claim_count, &Fr::from(0u64));
         gate.assert_is_const(ctx, &gkr_sumcheck_count, &Fr::from(0u64));
@@ -1839,21 +1683,21 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims) = if actual.total_interactions == 0
     {
-        (zero.clone(), alpha_logup.clone(), Vec::new())
+        (zero, alpha_logup, Vec::new())
     } else {
         let layer0 = gkr_claims_per_layer
             .first()
             .cloned()
-            .unwrap_or_else(|| vec![zero.clone(), zero.clone(), zero.clone(), zero.clone()]);
-        let layer0_len = assign_and_range_usize(ctx, range, layer0.len());
+            .unwrap_or_else(|| vec![zero, zero, zero, zero]);
+        let layer0_len = ext_chip.base().assign_and_range_usize(ctx, layer0.len());
         gate.assert_is_const(ctx, &layer0_len, &Fr::from(4u64));
 
-        let p0_q1 = baby_bear.ext_mul(ctx, range, &layer0[0], &layer0[3]);
-        let p1_q0 = baby_bear.ext_mul(ctx, range, &layer0[2], &layer0[1]);
-        let p_cross = baby_bear.ext_add(ctx, range, &p0_q1, &p1_q0);
-        let q_cross = baby_bear.ext_mul(ctx, range, &layer0[1], &layer0[3]);
-        baby_bear.assert_ext_equal(ctx, &p_cross, &zero);
-        baby_bear.assert_ext_equal(
+        let p0_q1 = ext_chip.mul(ctx, &layer0[0], &layer0[3]);
+        let p1_q0 = ext_chip.mul(ctx, &layer0[2], &layer0[1]);
+        let p_cross = ext_chip.add(ctx, &p0_q1, &p1_q0);
+        let q_cross = ext_chip.mul(ctx, &layer0[1], &layer0[3]);
+        ext_chip.assert_equal(ctx, &p_cross, &zero);
+        ext_chip.assert_equal(
             ctx,
             &q_cross,
             gkr_q0_claim
@@ -1863,101 +1707,93 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 
         let mu0 = gkr_sample_stream
             .get(gkr_sample_cursor)
-            .cloned()
-            .unwrap_or_else(|| zero.clone());
+            .copied()
+            .unwrap_or(zero);
         gkr_sample_cursor += 1;
         let mut numer_claim =
-            interpolate_linear_at_01_assigned(ctx, range, &baby_bear, &layer0[0], &layer0[2], &mu0);
+            interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[0], &layer0[2], &mu0);
         let mut denom_claim =
-            interpolate_linear_at_01_assigned(ctx, range, &baby_bear, &layer0[1], &layer0[3], &mu0);
+            interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[1], &layer0[3], &mu0);
         let mut gkr_r = vec![mu0];
 
         for round in 1..total_gkr_rounds {
             let lambda_round = gkr_sample_stream
                 .get(gkr_sample_cursor)
-                .cloned()
-                .unwrap_or_else(|| zero.clone());
+                .copied()
+                .unwrap_or(zero);
             gkr_sample_cursor += 1;
 
-            let lambda_denom = baby_bear.ext_mul(ctx, range, &lambda_round, &denom_claim);
-            let mut claim = baby_bear.ext_add(ctx, range, &numer_claim, &lambda_denom);
+            let lambda_denom = ext_chip.mul(ctx, &lambda_round, &denom_claim);
+            let mut claim = ext_chip.add(ctx, &numer_claim, &lambda_denom);
             let round_polys = gkr_sumcheck_polys
                 .get(round - 1)
                 .cloned()
                 .unwrap_or_default();
-            let round_poly_len = assign_and_range_usize(ctx, range, round_polys.len());
+            let round_poly_len = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, round_polys.len());
             gate.assert_is_const(ctx, &round_poly_len, &Fr::from(usize_to_u64(round * 3)));
 
             let mut gkr_r_prime = Vec::with_capacity(round);
-            let mut eq = one.clone();
+            let mut eq = one;
             for (subround, xi_prev) in gkr_r.iter().enumerate().take(round) {
-                let ev1 = round_polys
-                    .get(subround * 3)
-                    .cloned()
-                    .unwrap_or_else(|| zero.clone());
-                let ev2 = round_polys
-                    .get(subround * 3 + 1)
-                    .cloned()
-                    .unwrap_or_else(|| zero.clone());
-                let ev3 = round_polys
-                    .get(subround * 3 + 2)
-                    .cloned()
-                    .unwrap_or_else(|| zero.clone());
+                let ev1 = round_polys.get(subround * 3).copied().unwrap_or(zero);
+                let ev2 = round_polys.get(subround * 3 + 1).copied().unwrap_or(zero);
+                let ev3 = round_polys.get(subround * 3 + 2).copied().unwrap_or(zero);
                 let ri = gkr_sample_stream
                     .get(gkr_sample_cursor)
-                    .cloned()
-                    .unwrap_or_else(|| zero.clone());
+                    .copied()
+                    .unwrap_or(zero);
                 gkr_sample_cursor += 1;
-                gkr_r_prime.push(ri.clone());
+                gkr_r_prime.push(ri);
 
-                let ev0 = baby_bear.ext_sub(ctx, range, &claim, &ev1);
+                let ev0 = ext_chip.sub(ctx, &claim, &ev1);
                 claim = interpolate_cubic_at_0123_assigned(
                     ctx,
-                    range,
-                    &baby_bear,
+                    &ext_chip,
                     [&ev0, &ev1, &ev2, &ev3],
                     &ri,
                 );
-                let xi_ri = baby_bear.ext_mul(ctx, range, xi_prev, &ri);
-                let one_minus_xi = baby_bear.ext_sub(ctx, range, &one, xi_prev);
-                let one_minus_ri = baby_bear.ext_sub(ctx, range, &one, &ri);
-                let one_minus_term = baby_bear.ext_mul(ctx, range, &one_minus_xi, &one_minus_ri);
-                let eq_factor = baby_bear.ext_add(ctx, range, &xi_ri, &one_minus_term);
-                eq = baby_bear.ext_mul(ctx, range, &eq, &eq_factor);
+                let xi_ri = ext_chip.mul(ctx, xi_prev, &ri);
+                let one_minus_xi = ext_chip.sub(ctx, &one, xi_prev);
+                let one_minus_ri = ext_chip.sub(ctx, &one, &ri);
+                let one_minus_term = ext_chip.mul(ctx, &one_minus_xi, &one_minus_ri);
+                let eq_factor = ext_chip.add(ctx, &xi_ri, &one_minus_term);
+                eq = ext_chip.mul(ctx, &eq, &eq_factor);
             }
 
             let layer_claims = gkr_claims_per_layer
                 .get(round)
                 .cloned()
-                .unwrap_or_else(|| vec![zero.clone(), zero.clone(), zero.clone(), zero.clone()]);
-            let layer_claim_count = assign_and_range_usize(ctx, range, layer_claims.len());
+                .unwrap_or_else(|| vec![zero, zero, zero, zero]);
+            let layer_claim_count = ext_chip
+                .base()
+                .assign_and_range_usize(ctx, layer_claims.len());
             gate.assert_is_const(ctx, &layer_claim_count, &Fr::from(4u64));
-            let p0_q1 = baby_bear.ext_mul(ctx, range, &layer_claims[0], &layer_claims[3]);
-            let p1_q0 = baby_bear.ext_mul(ctx, range, &layer_claims[2], &layer_claims[1]);
-            let p_cross = baby_bear.ext_add(ctx, range, &p0_q1, &p1_q0);
-            let q_cross = baby_bear.ext_mul(ctx, range, &layer_claims[1], &layer_claims[3]);
-            let lambda_q_cross = baby_bear.ext_mul(ctx, range, &lambda_round, &q_cross);
-            let claim_sum = baby_bear.ext_add(ctx, range, &p_cross, &lambda_q_cross);
-            let expected_claim = baby_bear.ext_mul(ctx, range, &claim_sum, &eq);
-            baby_bear.assert_ext_equal(ctx, &expected_claim, &claim);
+            let p0_q1 = ext_chip.mul(ctx, &layer_claims[0], &layer_claims[3]);
+            let p1_q0 = ext_chip.mul(ctx, &layer_claims[2], &layer_claims[1]);
+            let p_cross = ext_chip.add(ctx, &p0_q1, &p1_q0);
+            let q_cross = ext_chip.mul(ctx, &layer_claims[1], &layer_claims[3]);
+            let lambda_q_cross = ext_chip.mul(ctx, &lambda_round, &q_cross);
+            let claim_sum = ext_chip.add(ctx, &p_cross, &lambda_q_cross);
+            let expected_claim = ext_chip.mul(ctx, &claim_sum, &eq);
+            ext_chip.assert_equal(ctx, &expected_claim, &claim);
 
             let mu_round = gkr_sample_stream
                 .get(gkr_sample_cursor)
-                .cloned()
-                .unwrap_or_else(|| zero.clone());
+                .copied()
+                .unwrap_or(zero);
             gkr_sample_cursor += 1;
             numer_claim = interpolate_linear_at_01_assigned(
                 ctx,
-                range,
-                &baby_bear,
+                &ext_chip,
                 &layer_claims[0],
                 &layer_claims[2],
                 &mu_round,
             );
             denom_claim = interpolate_linear_at_01_assigned(
                 ctx,
-                range,
-                &baby_bear,
+                &ext_chip,
                 &layer_claims[1],
                 &layer_claims[3],
                 &mu_round,
@@ -1970,96 +1806,98 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         (numer_claim, denom_claim, gkr_r)
     };
 
-    let gkr_sample_cursor_cell = assign_and_range_usize(ctx, range, gkr_sample_cursor);
+    let gkr_sample_cursor_cell = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, gkr_sample_cursor);
     gate.assert_is_const(
         ctx,
         &gkr_sample_cursor_cell,
         &Fr::from(usize_to_u64(gkr_sample_stream.len())),
     );
-    let gkr_xi_claim_count = assign_and_range_usize(ctx, range, gkr_xi_claims.len());
-    range.check_less_than_safe(
+    let gkr_xi_claim_count = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, gkr_xi_claims.len());
+    ext_chip.range().check_less_than_safe(
         ctx,
         gkr_xi_claim_count,
         usize_to_u64(xi.len()).saturating_add(1),
     );
     for (expected_xi, assigned_xi) in gkr_xi_claims.iter().zip(xi.iter()) {
-        baby_bear.assert_ext_equal(ctx, expected_xi, assigned_xi);
+        ext_chip.assert_equal(ctx, expected_xi, assigned_xi);
     }
 
     for (num_term, den_term) in numerator_term_per_air
         .iter()
         .zip(denominator_term_per_air.iter())
     {
-        gkr_p_xi_claim = baby_bear.ext_sub(ctx, range, &gkr_p_xi_claim, num_term);
-        gkr_q_xi_claim = baby_bear.ext_sub(ctx, range, &gkr_q_xi_claim, den_term);
+        gkr_p_xi_claim = ext_chip.sub(ctx, &gkr_p_xi_claim, num_term);
+        gkr_q_xi_claim = ext_chip.sub(ctx, &gkr_q_xi_claim, den_term);
     }
     let derived_gkr_numerator_residual = gkr_p_xi_claim;
-    let derived_gkr_denominator_claim = gkr_q_xi_claim.clone();
+    let derived_gkr_denominator_claim = gkr_q_xi_claim;
     let derived_gkr_denominator_residual =
-        baby_bear.ext_sub(ctx, range, &derived_gkr_denominator_claim, &alpha_logup);
-    baby_bear.assert_ext_equal(
+        ext_chip.sub(ctx, &derived_gkr_denominator_claim, &alpha_logup);
+    ext_chip.assert_equal(
         ctx,
         &derived_gkr_numerator_residual,
         &gkr_numerator_residual,
     );
-    baby_bear.assert_ext_equal(ctx, &derived_gkr_denominator_claim, &gkr_denominator_claim);
-    baby_bear.assert_ext_equal(
+    ext_chip.assert_equal(ctx, &derived_gkr_denominator_claim, &gkr_denominator_claim);
+    ext_chip.assert_equal(
         ctx,
         &derived_gkr_denominator_residual,
         &gkr_denominator_residual,
     );
-    baby_bear.assert_ext_equal(ctx, &gkr_numerator_residual, &zero);
-    baby_bear.assert_ext_equal(ctx, &gkr_denominator_residual, &zero);
+    ext_chip.assert_equal(ctx, &gkr_numerator_residual, &zero);
+    ext_chip.assert_equal(ctx, &gkr_denominator_residual, &zero);
 
-    let sum_claim = assign_ext(ctx, range, &baby_bear, actual.sum_claim);
-    let mut derived_sum_claim = baby_bear.ext_zero(ctx, range);
-    let mut cur_mu_pow = ext_from_base_const(ctx, &baby_bear, 1);
+    let sum_claim = ext_chip.load_witness(ctx, actual.sum_claim);
+    let mut derived_sum_claim = ext_chip.zero(ctx);
+    let mut cur_mu_pow = ext_chip.from_base_const(ctx, NativeF::ONE);
     for (num_term, den_term) in numerator_term_per_air
         .iter()
         .zip(denominator_term_per_air.iter())
     {
-        let num_weighted = baby_bear.ext_mul(ctx, range, num_term, &cur_mu_pow);
-        derived_sum_claim = baby_bear.ext_add(ctx, range, &derived_sum_claim, &num_weighted);
-        cur_mu_pow = baby_bear.ext_mul(ctx, range, &cur_mu_pow, &mu);
+        let num_weighted = ext_chip.mul(ctx, num_term, &cur_mu_pow);
+        derived_sum_claim = ext_chip.add(ctx, &derived_sum_claim, &num_weighted);
+        cur_mu_pow = ext_chip.mul(ctx, &cur_mu_pow, &mu);
 
-        let den_weighted = baby_bear.ext_mul(ctx, range, den_term, &cur_mu_pow);
-        derived_sum_claim = baby_bear.ext_add(ctx, range, &derived_sum_claim, &den_weighted);
-        cur_mu_pow = baby_bear.ext_mul(ctx, range, &cur_mu_pow, &mu);
+        let den_weighted = ext_chip.mul(ctx, den_term, &cur_mu_pow);
+        derived_sum_claim = ext_chip.add(ctx, &derived_sum_claim, &den_weighted);
+        cur_mu_pow = ext_chip.mul(ctx, &cur_mu_pow, &mu);
     }
-    baby_bear.assert_ext_equal(ctx, &sum_claim, &derived_sum_claim);
+    ext_chip.assert_equal(ctx, &sum_claim, &derived_sum_claim);
 
-    let sum_univ_domain_s_0 = assign_ext(ctx, range, &baby_bear, actual.sum_univ_domain_s_0);
+    let sum_univ_domain_s_0 = ext_chip.load_witness(ctx, actual.sum_univ_domain_s_0);
     let stride = 1usize << actual.l_skip;
-    let mut derived_univ_sum = baby_bear.ext_zero(ctx, range);
+    let mut derived_univ_sum = ext_chip.zero(ctx);
     for coeff in univariate_round_coeffs.iter().step_by(stride) {
-        derived_univ_sum = baby_bear.ext_add(ctx, range, &derived_univ_sum, coeff);
+        derived_univ_sum = ext_chip.add(ctx, &derived_univ_sum, coeff);
     }
     let derived_univ_sum =
-        ext_mul_base_const(ctx, range, &baby_bear, &derived_univ_sum, stride as u64);
-    baby_bear.assert_ext_equal(ctx, &sum_univ_domain_s_0, &derived_univ_sum);
-    baby_bear.assert_ext_equal(ctx, &sum_claim, &sum_univ_domain_s_0);
+        ext_chip.mul_base_const(ctx, &derived_univ_sum, NativeF::from_u64(stride as u64));
+    ext_chip.assert_equal(ctx, &sum_univ_domain_s_0, &derived_univ_sum);
+    ext_chip.assert_equal(ctx, &sum_claim, &sum_univ_domain_s_0);
 
-    let consistency_lhs = assign_ext(ctx, range, &baby_bear, actual.consistency_lhs);
+    let consistency_lhs = ext_chip.load_witness(ctx, actual.consistency_lhs);
     let mut derived_consistency_lhs =
-        eval_ext_poly_horner(ctx, range, &baby_bear, &univariate_round_coeffs, &r[0]);
+        eval_ext_poly_horner(ctx, &ext_chip, &univariate_round_coeffs, &r[0]);
     for (round_idx, round_evals) in sumcheck_round_polys.iter().enumerate() {
-        let s_1 = round_evals.first().cloned().unwrap_or_else(|| zero.clone());
-        let s_0 = baby_bear.ext_sub(ctx, range, &derived_consistency_lhs, &s_1);
+        let s_1 = round_evals.first().copied().unwrap_or(zero);
+        let s_0 = ext_chip.sub(ctx, &derived_consistency_lhs, &s_1);
         let mut interpolation_evals = Vec::with_capacity(round_evals.len() + 1);
         interpolation_evals.push(s_0);
-        interpolation_evals.extend(round_evals.iter().cloned());
-        let next_r = r
-            .get(round_idx + 1)
-            .cloned()
-            .unwrap_or_else(|| zero.clone());
+        interpolation_evals.extend(round_evals.iter().copied());
+        let next_r = r.get(round_idx + 1).copied().unwrap_or(zero);
         derived_consistency_lhs =
-            eval_lagrange_on_integer_grid(ctx, range, &baby_bear, &next_r, &interpolation_evals);
+            eval_lagrange_on_integer_grid(ctx, &ext_chip, &next_r, &interpolation_evals);
     }
-    baby_bear.assert_ext_equal(ctx, &consistency_lhs, &derived_consistency_lhs);
+    ext_chip.assert_equal(ctx, &consistency_lhs, &derived_consistency_lhs);
 
-    let required_xi_len =
-        assign_and_range_usize(ctx, range, actual.l_skip.saturating_add(actual.n_logup));
-    range.check_less_than_safe(
+    let required_xi_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, actual.l_skip.saturating_add(actual.n_logup));
+    ext_chip.range().check_less_than_safe(
         ctx,
         required_xi_len,
         usize_to_u64(xi.len()).saturating_add(1),
@@ -2088,8 +1926,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             stacked_idx += 1 << (actual.l_skip + n_lift);
             let eq = eval_eq_mle_binary_assigned(
                 ctx,
-                range,
-                &baby_bear,
+                &ext_chip,
                 &xi[actual.l_skip + n_lift..actual.l_skip + actual.n_logup],
                 &b_vec,
             );
@@ -2098,13 +1935,12 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         eq_3b_per_trace.push(eq_3b);
     }
 
-    let mut eq_ns = vec![one.clone(); actual.n_max + 1];
-    let mut eq_sharp_ns = vec![one.clone(); actual.n_max + 1];
-    eq_ns[0] = eval_eq_uni_assigned(ctx, range, &baby_bear, actual.l_skip, &xi[0], &r[0]);
+    let mut eq_ns = vec![one; actual.n_max + 1];
+    let mut eq_sharp_ns = vec![one; actual.n_max + 1];
+    eq_ns[0] = eval_eq_uni_assigned(ctx, &ext_chip, actual.l_skip, &xi[0], &r[0]);
     eq_sharp_ns[0] = eval_eq_sharp_uni_assigned(
         ctx,
-        range,
-        &baby_bear,
+        &ext_chip,
         &omega_skip_pows,
         &xi[..actual.l_skip],
         &r[0],
@@ -2112,20 +1948,19 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     for (i, r_i) in r.iter().enumerate().skip(1).take(actual.n_max) {
         let eq_mle = eval_eq_mle_assigned(
             ctx,
-            range,
-            &baby_bear,
-            &[xi[actual.l_skip + i - 1].clone()],
+            &ext_chip,
+            &[xi[actual.l_skip + i - 1]],
             core::slice::from_ref(r_i),
         );
-        eq_ns[i] = baby_bear.ext_mul(ctx, range, &eq_ns[i - 1], &eq_mle);
-        eq_sharp_ns[i] = baby_bear.ext_mul(ctx, range, &eq_sharp_ns[i - 1], &eq_mle);
+        eq_ns[i] = ext_chip.mul(ctx, &eq_ns[i - 1], &eq_mle);
+        eq_sharp_ns[i] = ext_chip.mul(ctx, &eq_sharp_ns[i - 1], &eq_mle);
     }
     if actual.n_max > 0 {
-        let mut r_rev_prod = r[actual.n_max].clone();
+        let mut r_rev_prod = r[actual.n_max];
         for i in (0..actual.n_max).rev() {
-            eq_ns[i] = baby_bear.ext_mul(ctx, range, &eq_ns[i], &r_rev_prod);
-            eq_sharp_ns[i] = baby_bear.ext_mul(ctx, range, &eq_sharp_ns[i], &r_rev_prod);
-            r_rev_prod = baby_bear.ext_mul(ctx, range, &r_rev_prod, &r[i]);
+            eq_ns[i] = ext_chip.mul(ctx, &eq_ns[i], &r_rev_prod);
+            eq_sharp_ns[i] = ext_chip.mul(ctx, &eq_sharp_ns[i], &r_rev_prod);
+            r_rev_prod = ext_chip.mul(ctx, &r_rev_prod, &r[i]);
         }
     }
 
@@ -2150,22 +1985,11 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             "per-trace rotation flags must align with opening parts",
         );
 
-        let common_main = column_openings_by_rot_assigned(
-            ctx,
-            range,
-            &baby_bear,
-            &air_openings[0],
-            need_rot_flags[0],
-        );
+        let common_main =
+            column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[0], need_rot_flags[0]);
         let has_preprocessed = actual.trace_has_preprocessed[trace_idx];
         let preprocessed = has_preprocessed.then(|| {
-            column_openings_by_rot_assigned(
-                ctx,
-                range,
-                &baby_bear,
-                &air_openings[1],
-                need_rot_flags[1],
-            )
+            column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[1], need_rot_flags[1])
         });
         let cached_idx = 1 + has_preprocessed as usize;
         let mut partitioned_main = air_openings[cached_idx..]
@@ -2174,8 +1998,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             .map(|(part_offset, opening)| {
                 column_openings_by_rot_assigned(
                     ctx,
-                    range,
-                    &baby_bear,
+                    &ext_chip,
                     opening,
                     need_rot_flags[cached_idx + part_offset],
                 )
@@ -2186,37 +2009,27 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         let (l, rs_n, norm_factor) = if n.is_negative() {
             (
                 actual.l_skip.wrapping_add_signed(n),
-                vec![ext_pow_power_of_two(
-                    ctx,
-                    range,
-                    &baby_bear,
-                    &r[0],
-                    n.unsigned_abs(),
-                )],
-                NativeF::from_usize(1usize << n.unsigned_abs())
-                    .inverse()
-                    .as_canonical_u64(),
+                vec![ext_chip.pow_power_of_two(ctx, &r[0], n.unsigned_abs())],
+                NativeF::from_usize(1usize << n.unsigned_abs()).inverse(),
             )
         } else {
-            (actual.l_skip, r[..=n_lift].to_vec(), 1u64)
+            (actual.l_skip, r[..=n_lift].to_vec(), NativeF::ONE)
         };
 
-        let inv_l = NativeF::from_usize(1usize << l)
-            .inverse()
-            .as_canonical_u64();
-        let mut is_first_row = progression_exp_2_assigned(ctx, range, &baby_bear, &rs_n[0], l);
-        is_first_row = ext_mul_base_const(ctx, range, &baby_bear, &is_first_row, inv_l);
+        let inv_l = NativeF::from_usize(1usize << l).inverse();
+        let mut is_first_row = progression_exp_2_assigned(ctx, &ext_chip, &rs_n[0], l);
+        is_first_row = ext_chip.mul_base_const(ctx, &is_first_row, inv_l);
         for x in rs_n.iter().skip(1) {
-            let one_minus_x = baby_bear.ext_sub(ctx, range, &one, x);
-            is_first_row = baby_bear.ext_mul(ctx, range, &is_first_row, &one_minus_x);
+            let one_minus_x = ext_chip.sub(ctx, &one, x);
+            is_first_row = ext_chip.mul(ctx, &is_first_row, &one_minus_x);
         }
 
-        let omega = NativeF::two_adic_generator(l).as_canonical_u64();
-        let rs0_omega = ext_mul_base_const(ctx, range, &baby_bear, &rs_n[0], omega);
-        let mut is_last_row = progression_exp_2_assigned(ctx, range, &baby_bear, &rs0_omega, l);
-        is_last_row = ext_mul_base_const(ctx, range, &baby_bear, &is_last_row, inv_l);
+        let omega = NativeF::two_adic_generator(l);
+        let rs0_omega = ext_chip.mul_base_const(ctx, &rs_n[0], omega);
+        let mut is_last_row = progression_exp_2_assigned(ctx, &ext_chip, &rs0_omega, l);
+        is_last_row = ext_chip.mul_base_const(ctx, &is_last_row, inv_l);
         for x in rs_n.iter().skip(1) {
-            is_last_row = baby_bear.ext_mul(ctx, range, &is_last_row, x);
+            is_last_row = ext_chip.mul(ctx, &is_last_row, x);
         }
 
         let evaluator = AssignedConstraintEvaluator {
@@ -2232,20 +2045,19 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 
         let node_values = eval_symbolic_nodes_assigned(
             ctx,
-            range,
-            &baby_bear,
+            &ext_chip,
             &evaluator,
             &actual.trace_constraint_nodes[trace_idx],
         );
 
-        let mut expr = baby_bear.ext_zero(ctx, range);
-        let mut lambda_pow = one.clone();
+        let mut expr = ext_chip.zero(ctx);
+        let mut lambda_pow = one;
         for &constraint_idx in &actual.trace_constraint_indices[trace_idx] {
-            let term = baby_bear.ext_mul(ctx, range, &node_values[constraint_idx], &lambda_pow);
-            expr = baby_bear.ext_add(ctx, range, &expr, &term);
-            lambda_pow = baby_bear.ext_mul(ctx, range, &lambda_pow, &lambda);
+            let term = ext_chip.mul(ctx, &node_values[constraint_idx], &lambda_pow);
+            expr = ext_chip.add(ctx, &expr, &term);
+            lambda_pow = ext_chip.mul(ctx, &lambda_pow, &lambda);
         }
-        constraints_evals.push(baby_bear.ext_mul(ctx, range, &eq_ns[n_lift], &expr));
+        constraints_evals.push(ext_chip.mul(ctx, &eq_ns[n_lift], &expr));
 
         let interactions = &actual.trace_interactions[trace_idx];
         let eq_3bs = &eq_3b_per_trace[trace_idx];
@@ -2254,52 +2066,50 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             eq_3bs.len(),
             "trace interaction count must match computed eq_3b weights",
         );
-        let mut num = baby_bear.ext_zero(ctx, range);
-        let mut denom = baby_bear.ext_zero(ctx, range);
+        let mut num = ext_chip.zero(ctx);
+        let mut denom = ext_chip.zero(ctx);
         for (eq_3b, interaction) in eq_3bs.iter().zip(interactions.iter()) {
-            let count_eval = node_values[interaction.count].clone();
-            let mut denom_eval = baby_bear.ext_zero(ctx, range);
-            let mut beta_pow = one.clone();
+            let count_eval = node_values[interaction.count];
+            let mut denom_eval = ext_chip.zero(ctx);
+            let mut beta_pow = one;
             for &msg_idx in &interaction.message {
-                let term = baby_bear.ext_mul(ctx, range, &node_values[msg_idx], &beta_pow);
-                denom_eval = baby_bear.ext_add(ctx, range, &denom_eval, &term);
-                beta_pow = baby_bear.ext_mul(ctx, range, &beta_pow, &beta_logup);
+                let term = ext_chip.mul(ctx, &node_values[msg_idx], &beta_pow);
+                denom_eval = ext_chip.add(ctx, &denom_eval, &term);
+                beta_pow = ext_chip.mul(ctx, &beta_pow, &beta_logup);
             }
-            let bus_const =
-                ext_from_base_const(ctx, &baby_bear, u64::from(interaction.bus_index) + 1);
-            let bus_term = baby_bear.ext_mul(ctx, range, &bus_const, &beta_pow);
-            denom_eval = baby_bear.ext_add(ctx, range, &denom_eval, &bus_term);
+            let bus_const = ext_chip
+                .from_base_const(ctx, NativeF::from_u64(u64::from(interaction.bus_index) + 1));
+            let bus_term = ext_chip.mul(ctx, &bus_const, &beta_pow);
+            denom_eval = ext_chip.add(ctx, &denom_eval, &bus_term);
 
-            let eq_times_count = baby_bear.ext_mul(ctx, range, eq_3b, &count_eval);
-            num = baby_bear.ext_add(ctx, range, &num, &eq_times_count);
-            let eq_times_denom = baby_bear.ext_mul(ctx, range, eq_3b, &denom_eval);
-            denom = baby_bear.ext_add(ctx, range, &denom, &eq_times_denom);
+            let eq_times_count = ext_chip.mul(ctx, eq_3b, &count_eval);
+            num = ext_chip.add(ctx, &num, &eq_times_count);
+            let eq_times_denom = ext_chip.mul(ctx, eq_3b, &denom_eval);
+            denom = ext_chip.add(ctx, &denom, &eq_times_denom);
         }
 
-        let norm = ext_from_base_const(ctx, &baby_bear, norm_factor);
-        let num_norm = baby_bear.ext_mul(ctx, range, &num, &norm);
-        let num_scaled = baby_bear.ext_mul(ctx, range, &num_norm, &eq_sharp_ns[n_lift]);
-        let denom_scaled = baby_bear.ext_mul(ctx, range, &denom, &eq_sharp_ns[n_lift]);
+        let norm = ext_chip.from_base_const(ctx, norm_factor);
+        let num_norm = ext_chip.mul(ctx, &num, &norm);
+        let num_scaled = ext_chip.mul(ctx, &num_norm, &eq_sharp_ns[n_lift]);
+        let denom_scaled = ext_chip.mul(ctx, &denom, &eq_sharp_ns[n_lift]);
         interactions_evals.push(num_scaled);
         interactions_evals.push(denom_scaled);
     }
 
-    let consistency_rhs = assign_ext(ctx, range, &baby_bear, actual.consistency_rhs);
-    let mut derived_consistency_rhs = baby_bear.ext_zero(ctx, range);
-    let mut cur_mu_pow = one.clone();
+    let consistency_rhs = ext_chip.load_witness(ctx, actual.consistency_rhs);
+    let mut derived_consistency_rhs = ext_chip.zero(ctx);
+    let mut cur_mu_pow = one;
     for term in interactions_evals.iter().chain(constraints_evals.iter()) {
-        let weighted_term = baby_bear.ext_mul(ctx, range, term, &cur_mu_pow);
-        derived_consistency_rhs =
-            baby_bear.ext_add(ctx, range, &derived_consistency_rhs, &weighted_term);
-        cur_mu_pow = baby_bear.ext_mul(ctx, range, &cur_mu_pow, &mu);
+        let weighted_term = ext_chip.mul(ctx, term, &cur_mu_pow);
+        derived_consistency_rhs = ext_chip.add(ctx, &derived_consistency_rhs, &weighted_term);
+        cur_mu_pow = ext_chip.mul(ctx, &cur_mu_pow, &mu);
     }
-    baby_bear.assert_ext_equal(ctx, &consistency_rhs, &derived_consistency_rhs);
+    ext_chip.assert_equal(ctx, &consistency_rhs, &derived_consistency_rhs);
 
-    let consistency_residual = assign_ext(ctx, range, &baby_bear, actual.consistency_residual);
-    let derived_consistency_residual =
-        baby_bear.ext_sub(ctx, range, &consistency_lhs, &consistency_rhs);
-    baby_bear.assert_ext_equal(ctx, &derived_consistency_residual, &consistency_residual);
-    baby_bear.assert_ext_equal(ctx, &consistency_residual, &zero);
+    let consistency_residual = ext_chip.load_witness(ctx, actual.consistency_residual);
+    let derived_consistency_residual = ext_chip.sub(ctx, &consistency_lhs, &consistency_rhs);
+    ext_chip.assert_equal(ctx, &derived_consistency_residual, &consistency_residual);
+    ext_chip.assert_equal(ctx, &consistency_residual, &zero);
 
     AssignedBatchIntermediates {
         trace_id_to_air_id,
@@ -2340,7 +2150,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 }
 
 pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    coeffs_to_ext(coeffs)
+    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
 }
 
 #[cfg(test)]

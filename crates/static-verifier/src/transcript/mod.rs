@@ -18,37 +18,25 @@ use openvm_stark_sdk::{
         FiatShamirTranscript,
     },
 };
-use zkhash::{
-    ark_ff::{BigInteger as _, PrimeField as _},
-    fields::bn256::FpBN256 as ArkBn254,
-    poseidon2::poseidon2_instance_bn256::{MAT_DIAG3_M_1, RC3},
+
+use crate::{
+    field::baby_bear::{
+        BabyBearChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
+    },
+    hash::poseidon2::{
+        poseidon2_permute_bn254_state, reduce_32_cells, DIGEST_WIDTH, POSEIDON2_RATE,
+        POSEIDON2_WIDTH,
+    },
+    utils::bits_for_u64,
+    Fr,
 };
 
-use super::baby_bear::{
-    BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
-};
-use crate::{utils::bits_for_u64, Fr};
-
-const DIGEST_WIDTH: usize = 1;
-const POSEIDON2_WIDTH: usize = 3;
-const POSEIDON2_RATE: usize = 2;
 pub(crate) const NUM_SPLIT_LIMBS: usize = 3;
-const POSEIDON2_ROUNDS_F: usize = 8;
-const POSEIDON2_ROUNDS_P: usize = 56;
-const MULTI_FIELD32_RATE: usize = 16;
-const MULTI_FIELD32_NUM_F_ELMS: usize = 8;
 const MAX_U64_DIV_BABY_BEAR_PLUS_ONE: u64 =
     ((u64::MAX as u128 / BABY_BEAR_MODULUS_U64 as u128) + 1) as u64;
 
 #[derive(Clone, Debug)]
-struct Poseidon2Params {
-    external_rc: Vec<[Fr; POSEIDON2_WIDTH]>,
-    internal_rc: Vec<Fr>,
-    mat_internal_diag_m_1: [Fr; POSEIDON2_WIDTH],
-}
-
-#[derive(Clone, Debug)]
-pub struct DigestVar {
+pub struct DigestWire {
     pub elems: [AssignedValue<Fr>; DIGEST_WIDTH],
 }
 
@@ -114,8 +102,8 @@ impl FiatShamirTranscript<NativeConfig> for LoggedTranscript {
 #[derive(Clone, Debug)]
 pub struct TranscriptGadget {
     sponge_state: [AssignedValue<Fr>; POSEIDON2_WIDTH],
-    input_buffer: Vec<BabyBearVar>,
-    output_buffer: Vec<BabyBearVar>,
+    input_buffer: Vec<BabyBearWire>,
+    output_buffer: Vec<BabyBearWire>,
 }
 
 fn bn254_to_halo2(value: Bn254Scalar) -> Fr {
@@ -127,52 +115,6 @@ fn split_bn254_to_babybear_u64(value: Bn254Scalar) -> [u64; NUM_SPLIT_LIMBS] {
     core::array::from_fn(|i| {
         let limb = digits.get(i).copied().unwrap_or(0);
         NativeF::from_u64(limb).as_canonical_u64()
-    })
-}
-
-// TODO: re-expose from stark-sdk
-fn poseidon2_params() -> &'static Poseidon2Params {
-    static PARAMS: OnceLock<Poseidon2Params> = OnceLock::new();
-    PARAMS.get_or_init(|| {
-        let mut round_constants: Vec<[Fr; POSEIDON2_WIDTH]> = RC3
-            .iter()
-            .map(|round| {
-                round
-                    .iter()
-                    .copied()
-                    .map(|value: ArkBn254| {
-                        let bytes = value.into_bigint().to_bytes_le();
-                        let big = BigUint::from_bytes_le(&bytes);
-                        biguint_to_fe(&big)
-                    })
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .expect("RC3 must have width-3 round constants")
-            })
-            .collect();
-
-        let rounds_f_beginning = POSEIDON2_ROUNDS_F / 2;
-        let internal_end = rounds_f_beginning + POSEIDON2_ROUNDS_P;
-        let internal_rc = round_constants
-            .drain(rounds_f_beginning..internal_end)
-            .map(|round| round[0])
-            .collect::<Vec<_>>();
-
-        Poseidon2Params {
-            external_rc: round_constants,
-            internal_rc,
-            mat_internal_diag_m_1: MAT_DIAG3_M_1
-                .iter()
-                .copied()
-                .map(|value| {
-                    let bytes = value.into_bigint().to_bytes_le();
-                    let big = BigUint::from_bytes_le(&bytes);
-                    biguint_to_fe(&big)
-                })
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("MAT_DIAG3_M_1 must contain exactly three constants"),
-        }
     })
 }
 
@@ -233,9 +175,9 @@ fn decompose_packed_bn254_to_split_limbs(
 fn reduce_assigned_limb_to_babybear(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
-    baby_bear: &BabyBearArithmeticGadgets,
+    baby_bear: &BabyBearChip<'_>,
     limb: AssignedValue<Fr>,
-) -> BabyBearVar {
+) -> BabyBearWire {
     let limb_u64 = fe_to_biguint(limb.value())
         .to_u64_digits()
         .first()
@@ -244,7 +186,7 @@ fn reduce_assigned_limb_to_babybear(
     let quotient = limb_u64 / BABY_BEAR_MODULUS_U64;
     let remainder = limb_u64 % BABY_BEAR_MODULUS_U64;
 
-    let remainder_var = baby_bear.load_witness(ctx, range, remainder);
+    let remainder_var = baby_bear.load_witness(ctx, NativeF::from_u64(remainder));
     let quotient_cell = ctx.load_witness(Fr::from(quotient));
     range.check_less_than_safe(ctx, quotient_cell, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
 
@@ -253,7 +195,7 @@ fn reduce_assigned_limb_to_babybear(
         ctx,
         quotient_cell,
         Constant(Fr::from(BABY_BEAR_MODULUS_U64)),
-        remainder_var.cell,
+        remainder_var.0,
     );
     ctx.constrain_equal(&limb, &recomposed);
 
@@ -264,123 +206,10 @@ pub fn split_assigned_bn254_to_babybear_limbs(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     packed: AssignedValue<Fr>,
-) -> [BabyBearVar; NUM_SPLIT_LIMBS] {
-    let baby_bear = BabyBearArithmeticGadgets;
+) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
+    let baby_bear = BabyBearChip::new(range);
     let limbs = decompose_packed_bn254_to_split_limbs(ctx, range, packed);
     core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, range, &baby_bear, limbs[idx]))
-}
-
-fn poseidon2_x_pow5(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    value: AssignedValue<Fr>,
-) -> AssignedValue<Fr> {
-    let value_sq = gate.mul(ctx, value, value);
-    let value_4 = gate.mul(ctx, value_sq, value_sq);
-    gate.mul(ctx, value, value_4)
-}
-
-fn poseidon2_matmul_external(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    state: &mut [AssignedValue<Fr>; POSEIDON2_WIDTH],
-) {
-    let sum = gate.sum(ctx, state.iter().cloned());
-    for value in state.iter_mut() {
-        *value = gate.add(ctx, *value, sum);
-    }
-}
-
-fn poseidon2_matmul_internal(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    state: &mut [AssignedValue<Fr>; POSEIDON2_WIDTH],
-    diag_m_1: [Fr; POSEIDON2_WIDTH],
-) {
-    let sum = gate.sum(ctx, state.iter().cloned());
-    for (idx, value) in state.iter_mut().enumerate() {
-        *value = gate.mul_add(ctx, *value, Constant(diag_m_1[idx]), sum);
-    }
-}
-
-pub(crate) fn poseidon2_permute_bn254_state(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    mut state: [AssignedValue<Fr>; POSEIDON2_WIDTH],
-) -> [AssignedValue<Fr>; POSEIDON2_WIDTH] {
-    let gate = range.gate();
-    let params = poseidon2_params();
-    let rounds_f_beginning = POSEIDON2_ROUNDS_F / 2;
-
-    poseidon2_matmul_external(ctx, gate, &mut state);
-
-    for round in 0..rounds_f_beginning {
-        for (idx, value) in state.iter_mut().enumerate() {
-            *value = gate.add(ctx, *value, Constant(params.external_rc[round][idx]));
-            *value = poseidon2_x_pow5(ctx, gate, *value);
-        }
-        poseidon2_matmul_external(ctx, gate, &mut state);
-    }
-
-    for round in 0..POSEIDON2_ROUNDS_P {
-        state[0] = gate.add(ctx, state[0], Constant(params.internal_rc[round]));
-        state[0] = poseidon2_x_pow5(ctx, gate, state[0]);
-        poseidon2_matmul_internal(ctx, gate, &mut state, params.mat_internal_diag_m_1);
-    }
-
-    for round in rounds_f_beginning..POSEIDON2_ROUNDS_F {
-        for (idx, value) in state.iter_mut().enumerate() {
-            *value = gate.add(ctx, *value, Constant(params.external_rc[round][idx]));
-            *value = poseidon2_x_pow5(ctx, gate, *value);
-        }
-        poseidon2_matmul_external(ctx, gate, &mut state);
-    }
-
-    state
-}
-
-pub(crate) fn reduce_32_cells(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    values: &[AssignedValue<Fr>],
-) -> AssignedValue<Fr> {
-    let gate = range.gate();
-    let base = Fr::from(1u64 << 32);
-    let mut power = Fr::from(1u64);
-    let mut acc = ctx.load_constant(Fr::from(0u64));
-
-    for value in values {
-        acc = gate.mul_add(ctx, *value, Constant(power), acc);
-        power *= base;
-    }
-    acc
-}
-
-pub(crate) fn hash_babybear_slice_to_digest(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    values: &[BabyBearVar],
-) -> AssignedValue<Fr> {
-    let mut state = core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64)));
-    for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
-        for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
-            let cells = chunk.iter().map(|value| value.cell).collect::<Vec<_>>();
-            state[chunk_id] = reduce_32_cells(ctx, range, &cells);
-        }
-        state = poseidon2_permute_bn254_state(ctx, range, state);
-    }
-    state[0]
-}
-
-pub(crate) fn compress_bn254_digests(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    left: AssignedValue<Fr>,
-    right: AssignedValue<Fr>,
-) -> AssignedValue<Fr> {
-    let zero = ctx.load_constant(Fr::from(0u64));
-    let state = poseidon2_permute_bn254_state(ctx, range, [left, right, zero]);
-    state[0]
 }
 
 impl TranscriptGadget {
@@ -393,8 +222,8 @@ impl TranscriptGadget {
         }
     }
 
-    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: NativeDigest) -> DigestVar {
-        DigestVar {
+    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: NativeDigest) -> DigestWire {
+        DigestWire {
             elems: core::array::from_fn(|i| ctx.load_witness(bn254_to_halo2(digest[i]))),
         }
     }
@@ -407,9 +236,9 @@ impl TranscriptGadget {
         &self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        values: &[BabyBearVar],
+        values: &[BabyBearWire],
     ) -> AssignedValue<Fr> {
-        let cells = values.iter().map(|value| value.cell).collect::<Vec<_>>();
+        let cells = values.iter().map(|value| value.0).collect::<Vec<_>>();
         reduce_32_cells(ctx, range, &cells)
     }
 
@@ -417,9 +246,9 @@ impl TranscriptGadget {
         &self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
+        baby_bear: &BabyBearChip<'_>,
         packed: AssignedValue<Fr>,
-    ) -> [BabyBearVar; NUM_SPLIT_LIMBS] {
+    ) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
         let limbs = decompose_packed_bn254_to_split_limbs(ctx, range, packed);
         core::array::from_fn(|idx| {
             reduce_assigned_limb_to_babybear(ctx, range, baby_bear, limbs[idx])
@@ -430,7 +259,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
+        baby_bear: &BabyBearChip<'_>,
     ) {
         assert!(
             self.input_buffer.len() <= NUM_SPLIT_LIMBS * POSEIDON2_RATE,
@@ -455,11 +284,11 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
-        value: &BabyBearVar,
+        baby_bear: &BabyBearChip<'_>,
+        value: &BabyBearWire,
     ) {
         self.output_buffer.clear();
-        self.input_buffer.push(value.clone());
+        self.input_buffer.push(*value);
         if self.input_buffer.len() == NUM_SPLIT_LIMBS * POSEIDON2_RATE {
             self.duplexing(ctx, range, baby_bear);
         }
@@ -469,10 +298,10 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
-        value: &BabyBearExtVar,
+        baby_bear: &BabyBearChip<'_>,
+        value: &BabyBearExtWire,
     ) {
-        for coeff in &value.coeffs {
+        for coeff in &value.0 {
             self.observe(ctx, range, baby_bear, coeff);
         }
     }
@@ -481,8 +310,8 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
-        digest: &DigestVar,
+        baby_bear: &BabyBearChip<'_>,
+        digest: &DigestWire,
     ) {
         for packed in &digest.elems {
             let limbs = self.split_state_to_babybear(ctx, range, baby_bear, *packed);
@@ -496,8 +325,8 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
-    ) -> BabyBearVar {
+        baby_bear: &BabyBearChip<'_>,
+    ) -> BabyBearWire {
         if !self.input_buffer.is_empty() || self.output_buffer.is_empty() {
             self.duplexing(ctx, range, baby_bear);
         }
@@ -511,17 +340,17 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
-    ) -> BabyBearExtVar {
+        baby_bear: &BabyBearChip<'_>,
+    ) -> BabyBearExtWire {
         let coeffs = core::array::from_fn(|_| self.sample(ctx, range, baby_bear));
-        BabyBearExtVar { coeffs }
+        BabyBearExtWire(coeffs)
     }
 
     pub fn sample_bits(
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
+        baby_bear: &BabyBearChip<'_>,
         bits: usize,
     ) -> AssignedValue<Fr> {
         assert!(
@@ -538,12 +367,7 @@ impl TranscriptGadget {
             return ctx.load_constant(Fr::from(0u64));
         }
 
-        let (_, rem) = range.div_mod(
-            ctx,
-            sampled.cell,
-            BigUint::from(1u64) << bits,
-            BABY_BEAR_BITS,
-        );
+        let (_, rem) = range.div_mod(ctx, sampled.0, BigUint::from(1u64) << bits, BABY_BEAR_BITS);
         range.range_check(ctx, rem, bits);
         rem
     }
@@ -552,9 +376,9 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearArithmeticGadgets,
+        baby_bear: &BabyBearChip<'_>,
         bits: usize,
-        witness: &BabyBearVar,
+        witness: &BabyBearWire,
     ) -> AssignedValue<Fr> {
         if bits == 0 {
             return ctx.load_constant(Fr::from(1u64));
@@ -564,48 +388,6 @@ impl TranscriptGadget {
         let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
         range.gate().is_zero(ctx, sampled_bits)
     }
-}
-
-pub fn constrain_transcript_events(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    events: &[TranscriptEvent],
-) -> TranscriptReplay {
-    let baby_bear = BabyBearArithmeticGadgets;
-    let gate = range.gate();
-    let mut transcript = TranscriptGadget::new(ctx);
-    let mut replay = TranscriptReplay {
-        events: Vec::with_capacity(events.len()),
-        observes: Vec::new(),
-        samples: Vec::new(),
-    };
-
-    for event in events {
-        match event {
-            TranscriptEvent::Observe(value) => {
-                let observed = baby_bear.load_witness(ctx, range, *value);
-                transcript.observe(ctx, range, &baby_bear, &observed);
-                let is_sample = ctx.load_zero();
-                replay.observes.push(observed.cell);
-                replay.events.push(AssignedTranscriptEvent {
-                    is_sample,
-                    value: observed.cell,
-                });
-            }
-            TranscriptEvent::Sample(expected) => {
-                let sampled = transcript.sample(ctx, range, &baby_bear);
-                gate.assert_is_const(ctx, &sampled.cell, &Fr::from(*expected));
-                let is_sample = ctx.load_constant(Fr::ONE);
-                replay.samples.push(sampled.cell);
-                replay.events.push(AssignedTranscriptEvent {
-                    is_sample,
-                    value: sampled.cell,
-                });
-            }
-        }
-    }
-
-    replay
 }
 
 #[derive(Clone, Debug)]
@@ -619,6 +401,48 @@ pub struct TranscriptReplay {
     pub events: Vec<AssignedTranscriptEvent>,
     pub observes: Vec<AssignedValue<Fr>>,
     pub samples: Vec<AssignedValue<Fr>>,
+}
+
+pub fn constrain_transcript_events(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    events: &[TranscriptEvent],
+) -> TranscriptReplay {
+    let baby_bear = BabyBearChip::new(range);
+    let gate = range.gate();
+    let mut transcript = TranscriptGadget::new(ctx);
+    let mut replay = TranscriptReplay {
+        events: Vec::with_capacity(events.len()),
+        observes: Vec::new(),
+        samples: Vec::new(),
+    };
+
+    for event in events {
+        match event {
+            TranscriptEvent::Observe(value) => {
+                let observed = baby_bear.load_witness(ctx, NativeF::from_u64(*value));
+                transcript.observe(ctx, range, &baby_bear, &observed);
+                let is_sample = ctx.load_zero();
+                replay.observes.push(observed.0);
+                replay.events.push(AssignedTranscriptEvent {
+                    is_sample,
+                    value: observed.0,
+                });
+            }
+            TranscriptEvent::Sample(expected) => {
+                let sampled = transcript.sample(ctx, range, &baby_bear);
+                gate.assert_is_const(ctx, &sampled.0, &Fr::from(*expected));
+                let is_sample = ctx.load_constant(Fr::ONE);
+                replay.samples.push(sampled.0);
+                replay.events.push(AssignedTranscriptEvent {
+                    is_sample,
+                    value: sampled.0,
+                });
+            }
+        }
+    }
+
+    replay
 }
 
 #[cfg(test)]
