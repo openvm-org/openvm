@@ -6,7 +6,7 @@ use halo2_base::{
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2CpuEngine, EF as NativeEF},
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
     openvm_stark_backend::{
         p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
         test_utils::{test_system_params_small, InteractionsFixture11, TestFixture},
@@ -19,17 +19,18 @@ use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
+    ChildEF, ChildF,
 };
 
-fn ext_to_coeffs(value: NativeEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
+fn ext_to_coeffs(value: ChildEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
     core::array::from_fn(|i| {
-        <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value)[i]
+        <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value)[i]
             .as_canonical_u64()
     })
 }
 
-fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
+fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> ChildEF {
+    ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(coeffs[i]))
 }
 
 fn make_ext_chip(range: &RangeChip<Fr>) -> BabyBearExtChip<'_> {
@@ -156,8 +157,8 @@ fn stacked_constraints_reject_trailing_padded_q_coeff_width() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut actual = derive_stacked_reduction_intermediates(engine.config(), &vk, &proof)
         .expect("native stacked reduction must pass");
-    actual.q_coeffs[0].push(NativeEF::ZERO);
-    actual.stacking_openings[0].push(NativeEF::ZERO);
+    actual.q_coeffs[0].push(ChildEF::ZERO);
+    actual.stacking_openings[0].push(ChildEF::ZERO);
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -184,12 +185,12 @@ fn stacked_constraints_fail_on_coordinated_q_coeff_forgery() {
         actual.q_coeffs[0][0] = coeffs_to_ext(coeffs);
     }
     let opening = actual.stacking_openings[0][0];
-    let delta = NativeEF::ONE * opening;
+    let delta = ChildEF::ONE * opening;
     let forged_final_sum = actual.final_sum + delta;
     let forged_final_claim = actual.final_claim + delta;
     actual.final_sum = forged_final_sum;
     actual.final_claim = forged_final_claim;
-    actual.final_residual = NativeEF::ZERO;
+    actual.final_residual = ChildEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -221,7 +222,7 @@ fn stacked_constraints_fail_on_coordinated_sumcheck_claim_chain_forgery() {
         actual.sumcheck_round_polys[0][0] = coeffs_to_ext(coeffs);
     }
     actual.final_claim = actual.final_sum;
-    actual.final_residual = NativeEF::ZERO;
+    actual.final_residual = ChildEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -236,7 +237,7 @@ fn stacked_rejects_s0_mismatch() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.stacking_proof.univariate_round_coeffs[0] += NativeEF::ONE;
+    proof.stacking_proof.univariate_round_coeffs[0] += ChildEF::ONE;
 
     let err = derive_stacked_reduction_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered univariate round should fail stacked s0 check");
@@ -251,7 +252,7 @@ fn stacked_rejects_final_sum_mismatch() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.stacking_proof.stacking_openings[0][0] += NativeEF::ONE;
+    proof.stacking_proof.stacking_openings[0][0] += ChildEF::ONE;
 
     let err = derive_stacked_reduction_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered stacking opening should fail stacked final-sum check");

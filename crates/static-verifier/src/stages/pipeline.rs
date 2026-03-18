@@ -1,7 +1,6 @@
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest, EF as NativeEF,
-        F as NativeF,
+        BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest,
     },
     openvm_stark_backend::{
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
@@ -21,15 +20,16 @@ use super::{
     },
     proof_shape::derive_proof_shape_rules,
 };
+use crate::{ChildEF, ChildF};
 
 #[derive(Clone, Debug)]
 pub(crate) struct PreparedPipelineInputs {
     pub trace_id_to_air_id: Vec<usize>,
     pub layouts: Vec<StackedLayout>,
     pub l_skip: usize,
-    pub omega_skip_pows: Vec<NativeF>,
+    pub omega_skip_pows: Vec<ChildF>,
     pub batch: BatchIntermediates,
-    pub r: Vec<NativeEF>,
+    pub r: Vec<ChildEF>,
     pub need_rot_per_commit: Vec<Vec<bool>>,
 }
 
@@ -101,9 +101,9 @@ pub(crate) fn collect_trace_commitments(
 }
 
 pub(crate) fn derive_u_cube_from_prism(
-    u_prism: &[NativeEF],
+    u_prism: &[ChildEF],
     l_skip: usize,
-) -> Result<Vec<NativeEF>, BatchConstraintError> {
+) -> Result<Vec<ChildEF>, BatchConstraintError> {
     let (&u0, u_rest) = u_prism
         .split_first()
         .ok_or(BatchConstraintError::MissingStackedChallenges)?;
@@ -134,7 +134,7 @@ pub(crate) fn prepare_pipeline_inputs<TS: FiatShamirTranscript<NativeConfig>>(
     let l_skip = mvk0.params.l_skip;
     let n_per_trace = derive_n_per_trace(proof, &trace_id_to_air_id, l_skip)?;
 
-    let omega_skip = NativeF::two_adic_generator(l_skip);
+    let omega_skip = ChildF::two_adic_generator(l_skip);
     let omega_skip_pows: Vec<_> = omega_skip.powers().take(1 << l_skip).collect();
 
     let batch = derive_batch_intermediates_with_inputs(

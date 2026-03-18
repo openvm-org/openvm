@@ -8,7 +8,6 @@ use halo2_base::{
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Digest as NativeDigest,
-        EF as NativeEF, F as NativeF,
     },
     openvm_stark_backend::{
         air_builders::symbolic::{
@@ -39,7 +38,7 @@ use crate::{
     },
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
     utils::usize_to_u64,
-    Fr,
+    ChildEF, ChildF, Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -63,7 +62,7 @@ pub enum BatchConstraintError {
     },
     MissingStackedChallenges,
     ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<NativeEF>),
+    BatchConstraint(NativeBatchConstraintError<ChildEF>),
 }
 
 impl From<ProofShapeError> for BatchConstraintError {
@@ -72,8 +71,8 @@ impl From<ProofShapeError> for BatchConstraintError {
     }
 }
 
-impl From<NativeBatchConstraintError<NativeEF>> for BatchConstraintError {
-    fn from(value: NativeBatchConstraintError<NativeEF>) -> Self {
+impl From<NativeBatchConstraintError<ChildEF>> for BatchConstraintError {
+    fn from(value: NativeBatchConstraintError<ChildEF>) -> Self {
         Self::BatchConstraint(value)
     }
 }
@@ -88,40 +87,40 @@ pub struct BatchIntermediates {
     pub n_max: usize,
     pub batch_degree: usize,
     pub trace_has_preprocessed: Vec<bool>,
-    pub trace_constraint_nodes: Vec<Vec<SymbolicExpressionNode<NativeF>>>,
+    pub trace_constraint_nodes: Vec<Vec<SymbolicExpressionNode<ChildF>>>,
     pub trace_constraint_indices: Vec<Vec<usize>>,
     pub trace_interactions: Vec<Vec<Interaction<usize>>>,
-    pub public_values: Vec<Vec<NativeF>>,
+    pub public_values: Vec<Vec<ChildF>>,
     pub logup_pow_bits: usize,
-    pub logup_pow_witness: NativeF,
+    pub logup_pow_witness: ChildF,
     pub logup_pow_sampled_bits: u64,
     pub logup_pow_witness_ok: bool,
-    pub gkr_q0_claim: Option<NativeEF>,
-    pub gkr_claims_per_layer: Vec<[NativeEF; 4]>,
-    pub gkr_sumcheck_polys: Vec<Vec<NativeEF>>,
-    pub numerator_term_per_air: Vec<NativeEF>,
-    pub denominator_term_per_air: Vec<NativeEF>,
-    pub univariate_round_coeffs: Vec<NativeEF>,
-    pub sumcheck_round_polys: Vec<Vec<NativeEF>>,
-    pub column_openings: Vec<Vec<Vec<NativeEF>>>,
+    pub gkr_q0_claim: Option<ChildEF>,
+    pub gkr_claims_per_layer: Vec<[ChildEF; 4]>,
+    pub gkr_sumcheck_polys: Vec<Vec<ChildEF>>,
+    pub numerator_term_per_air: Vec<ChildEF>,
+    pub denominator_term_per_air: Vec<ChildEF>,
+    pub univariate_round_coeffs: Vec<ChildEF>,
+    pub sumcheck_round_polys: Vec<Vec<ChildEF>>,
+    pub column_openings: Vec<Vec<Vec<ChildEF>>>,
     pub column_openings_need_rot: Vec<Vec<bool>>,
     pub column_opening_expected_widths: Vec<Vec<usize>>,
-    pub gkr_numerator_residual: NativeEF,
-    pub gkr_denominator_residual: NativeEF,
-    pub gkr_denominator_claim: NativeEF,
-    pub alpha_logup: NativeEF,
-    pub beta_logup: NativeEF,
-    pub gkr_non_xi_samples: Vec<NativeEF>,
-    pub gkr_xi_sample_order: Vec<NativeEF>,
-    pub xi: Vec<NativeEF>,
-    pub lambda: NativeEF,
-    pub mu: NativeEF,
-    pub sum_claim: NativeEF,
-    pub sum_univ_domain_s_0: NativeEF,
-    pub consistency_lhs: NativeEF,
-    pub consistency_rhs: NativeEF,
-    pub consistency_residual: NativeEF,
-    pub r: Vec<NativeEF>,
+    pub gkr_numerator_residual: ChildEF,
+    pub gkr_denominator_residual: ChildEF,
+    pub gkr_denominator_claim: ChildEF,
+    pub alpha_logup: ChildEF,
+    pub beta_logup: ChildEF,
+    pub gkr_non_xi_samples: Vec<ChildEF>,
+    pub gkr_xi_sample_order: Vec<ChildEF>,
+    pub xi: Vec<ChildEF>,
+    pub lambda: ChildEF,
+    pub mu: ChildEF,
+    pub sum_claim: ChildEF,
+    pub sum_univ_domain_s_0: ChildEF,
+    pub consistency_lhs: ChildEF,
+    pub consistency_rhs: ChildEF,
+    pub consistency_residual: ChildEF,
+    pub r: Vec<ChildEF>,
 }
 
 #[derive(Clone, Debug)]
@@ -194,31 +193,31 @@ where
 }
 
 struct VerifierConstraintEvaluator<'a> {
-    preprocessed: Option<ViewPair<'a, NativeEF>>,
-    partitioned_main: &'a [ViewPair<'a, NativeEF>],
-    is_first_row: NativeEF,
-    is_last_row: NativeEF,
-    public_values: &'a [NativeF],
+    preprocessed: Option<ViewPair<'a, ChildEF>>,
+    partitioned_main: &'a [ViewPair<'a, ChildEF>],
+    is_first_row: ChildEF,
+    is_last_row: ChildEF,
+    public_values: &'a [ChildF],
 }
 
 impl<'a> VerifierConstraintEvaluator<'a> {
     fn new(
-        preprocessed: Option<ViewPair<'a, NativeEF>>,
-        partitioned_main: &'a [ViewPair<'a, NativeEF>],
-        public_values: &'a [NativeF],
-        rs: &'a [NativeEF],
+        preprocessed: Option<ViewPair<'a, ChildEF>>,
+        partitioned_main: &'a [ViewPair<'a, ChildEF>],
+        public_values: &'a [ChildF],
+        rs: &'a [ChildEF],
         l_skip: usize,
     ) -> Self {
-        let omega = NativeF::two_adic_generator(l_skip);
-        let inv = NativeEF::from(NativeF::from_usize(1 << l_skip).inverse());
+        let omega = ChildF::two_adic_generator(l_skip);
+        let inv = ChildEF::from(ChildF::from_usize(1 << l_skip).inverse());
         let is_first_row = inv
             * progression_exp_2(rs[0], l_skip)
             * rs[1..]
                 .iter()
-                .fold(NativeEF::ONE, |acc, &x| acc * (NativeEF::ONE - x));
+                .fold(ChildEF::ONE, |acc, &x| acc * (ChildEF::ONE - x));
         let is_last_row = inv
             * progression_exp_2(rs[0] * omega, l_skip)
-            * rs[1..].iter().fold(NativeEF::ONE, |acc, &x| acc * x);
+            * rs[1..].iter().fold(ChildEF::ONE, |acc, &x| acc * x);
 
         Self {
             preprocessed,
@@ -241,10 +240,10 @@ fn symbolic_entry_tag(entry: &Entry) -> &'static str {
 
 fn validate_symbolic_nodes(
     air_id: usize,
-    nodes: &[SymbolicExpressionNode<NativeF>],
-    preprocessed: Option<ViewPair<'_, NativeEF>>,
-    partitioned_main: &[ViewPair<'_, NativeEF>],
-    public_values: &[NativeF],
+    nodes: &[SymbolicExpressionNode<ChildF>],
+    preprocessed: Option<ViewPair<'_, ChildEF>>,
+    partitioned_main: &[ViewPair<'_, ChildEF>],
+    public_values: &[ChildF],
 ) -> Result<(), BatchConstraintError> {
     for node in nodes {
         let SymbolicExpressionNode::Variable(var) = node else {
@@ -298,45 +297,45 @@ fn validate_symbolic_nodes(
     Ok(())
 }
 
-impl SymbolicEvaluator<NativeF, NativeEF> for VerifierConstraintEvaluator<'_> {
-    fn eval_const(&self, c: NativeF) -> NativeEF {
-        NativeEF::from(c)
+impl SymbolicEvaluator<ChildF, ChildEF> for VerifierConstraintEvaluator<'_> {
+    fn eval_const(&self, c: ChildF) -> ChildEF {
+        ChildEF::from(c)
     }
 
-    fn eval_var(&self, symbolic_var: SymbolicVariable<NativeF>) -> NativeEF {
+    fn eval_var(&self, symbolic_var: SymbolicVariable<ChildF>) -> ChildEF {
         let index = symbolic_var.index;
         match symbolic_var.entry {
             Entry::Preprocessed { offset } => self
                 .preprocessed
                 .and_then(|vp| vp.get(index).copied())
                 .map(|value| if offset == 0 { value.0 } else { value.1 })
-                .unwrap_or(NativeEF::ZERO),
+                .unwrap_or(ChildEF::ZERO),
             Entry::Main { part_index, offset } => self
                 .partitioned_main
                 .get(part_index)
                 .and_then(|vp| vp.get(index).copied())
                 .map(|value| if offset == 0 { value.0 } else { value.1 })
-                .unwrap_or(NativeEF::ZERO),
+                .unwrap_or(ChildEF::ZERO),
             Entry::Public => self
                 .public_values
                 .get(index)
                 .copied()
-                .map(NativeEF::from)
-                .unwrap_or(NativeEF::ZERO),
-            _ => NativeEF::ZERO,
+                .map(ChildEF::from)
+                .unwrap_or(ChildEF::ZERO),
+            _ => ChildEF::ZERO,
         }
     }
 
-    fn eval_is_first_row(&self) -> NativeEF {
+    fn eval_is_first_row(&self) -> ChildEF {
         self.is_first_row
     }
 
-    fn eval_is_last_row(&self) -> NativeEF {
+    fn eval_is_last_row(&self) -> ChildEF {
         self.is_last_row
     }
 
-    fn eval_is_transition(&self) -> NativeEF {
-        NativeEF::ONE - self.is_last_row
+    fn eval_is_transition(&self) -> ChildEF {
+        ChildEF::ONE - self.is_last_row
     }
 }
 
@@ -405,13 +404,13 @@ pub(crate) fn observe_preamble<TS: FiatShamirTranscript<NativeConfig>>(
         let is_air_present = trace_vdata.is_some();
 
         if !avk.is_required {
-            transcript.observe(NativeF::from_bool(is_air_present));
+            transcript.observe(ChildF::from_bool(is_air_present));
         }
         if let Some(trace_vdata) = trace_vdata {
             if let Some(pdata) = avk.preprocessed_data.as_ref() {
                 transcript.observe_commit(pdata.commit);
             } else {
-                transcript.observe(NativeF::from_usize(trace_vdata.log_height));
+                transcript.observe(ChildF::from_usize(trace_vdata.log_height));
             }
             for commit in &trace_vdata.cached_commitments {
                 transcript.observe_commit(*commit);
@@ -426,7 +425,7 @@ pub(crate) fn observe_preamble<TS: FiatShamirTranscript<NativeConfig>>(
 fn check_witness_with_sample_bits<TS: FiatShamirTranscript<NativeConfig>>(
     transcript: &mut TS,
     bits: usize,
-    witness: NativeF,
+    witness: ChildF,
 ) -> (bool, u64) {
     if bits == 0 {
         return (true, 0);
@@ -458,11 +457,11 @@ impl<TS: FiatShamirTranscript<NativeConfig>> SampleLoggingTranscript<TS> {
 impl<TS: FiatShamirTranscript<NativeConfig>> FiatShamirTranscript<NativeConfig>
     for SampleLoggingTranscript<TS>
 {
-    fn observe(&mut self, value: NativeF) {
+    fn observe(&mut self, value: ChildF) {
         self.inner.observe(value);
     }
 
-    fn sample(&mut self) -> NativeF {
+    fn sample(&mut self) -> ChildF {
         let sampled = self.inner.sample();
         self.sampled.push(sampled.as_canonical_u64());
         sampled
@@ -477,13 +476,13 @@ impl<TS: FiatShamirTranscript<NativeConfig>> FiatShamirTranscript<NativeConfig>
 pub(crate) fn derive_batch_intermediates_with_inputs(
     transcript: &mut impl FiatShamirTranscript<NativeConfig>,
     mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
-    public_values: &[Vec<NativeF>],
+    public_values: &[Vec<ChildF>],
     gkr_proof: &GkrProof<NativeConfig>,
     batch_proof: &BatchConstraintProof<NativeConfig>,
     trace_id_to_air_id: &[usize],
     n_per_trace: &[isize],
-    omega_skip_pows: &[NativeF],
-) -> Result<BatchIntermediates, NativeBatchConstraintError<NativeEF>> {
+    omega_skip_pows: &[ChildF],
+) -> Result<BatchIntermediates, NativeBatchConstraintError<ChildEF>> {
     let l_skip = mvk0.params.l_skip;
     let BatchConstraintProof {
         numerator_term_per_air,
@@ -518,7 +517,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
     let mut xi = Vec::new();
     let mut gkr_non_xi_samples = Vec::new();
     let mut gkr_xi_sample_order = Vec::new();
-    let mut p_xi_claim = NativeEF::ZERO;
+    let mut p_xi_claim = ChildEF::ZERO;
     let mut q_xi_claim = alpha_logup;
     if total_interactions > 0 {
         let mut logging_transcript = SampleLoggingTranscript::new(transcript.clone());
@@ -528,7 +527,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         let sampled_ext = logging_transcript
             .into_sampled()
             .chunks_exact(BABY_BEAR_EXT_DEGREE)
-            .map(|chunk| NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(chunk[i])))
+            .map(|chunk| ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(chunk[i])))
             .collect::<Vec<_>>();
         let gkr_xi_samples = xi.len();
         assert!(
@@ -557,7 +556,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
 
     let gkr_numerator_residual = p_xi_claim;
     let gkr_denominator_residual = q_xi_claim - alpha_logup;
-    if gkr_numerator_residual != NativeEF::ZERO {
+    if gkr_numerator_residual != ChildEF::ZERO {
         return Err(NativeBatchConstraintError::GkrNumeratorMismatch {
             claim: gkr_numerator_residual,
         });
@@ -568,8 +567,8 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
 
     let mu = transcript.sample_ext();
 
-    let mut sum_claim = NativeEF::ZERO;
-    let mut cur_mu_pow = NativeEF::ONE;
+    let mut sum_claim = ChildEF::ZERO;
+    let mut cur_mu_pow = ChildEF::ONE;
     for (&sum_claim_p, &sum_claim_q) in zip(numerator_term_per_air, denominator_term_per_air) {
         sum_claim += sum_claim_p * cur_mu_pow;
         cur_mu_pow *= mu;
@@ -587,8 +586,8 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         .iter()
         .step_by(1 << l_skip)
         .copied()
-        .sum::<NativeEF>()
-        * NativeEF::from_usize(1 << l_skip);
+        .sum::<ChildEF>()
+        * ChildEF::from_usize(1 << l_skip);
     if sum_claim != sum_univ_domain_s_0 {
         return Err(NativeBatchConstraintError::SumClaimMismatch {
             sum_claim,
@@ -607,18 +606,18 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         let s_1 = batch_s_evals[0];
         let s_0 = cur_sum - s_1;
 
-        let mut factorials = vec![NativeF::ONE; batch_degree + 1];
+        let mut factorials = vec![ChildF::ONE; batch_degree + 1];
         for i in 1..=batch_degree {
-            factorials[i] = factorials[i - 1] * NativeF::from_usize(i);
+            factorials[i] = factorials[i - 1] * ChildF::from_usize(i);
         }
         let invfact = batch_multiplicative_inverse(&factorials);
 
         let r = transcript.sample_ext();
-        let mut pref_product = vec![NativeEF::ONE; batch_degree + 1];
-        let mut suf_product = vec![NativeEF::ONE; batch_degree + 1];
+        let mut pref_product = vec![ChildEF::ONE; batch_degree + 1];
+        let mut suf_product = vec![ChildEF::ONE; batch_degree + 1];
         for i in 0..batch_degree {
-            pref_product[i + 1] = pref_product[i] * (r - NativeEF::from_usize(i));
-            suf_product[i + 1] = suf_product[i] * (NativeEF::from_usize(batch_degree - i) - r);
+            pref_product[i + 1] = pref_product[i] * (r - ChildEF::from_usize(i));
+            suf_product[i + 1] = suf_product[i] * (ChildEF::from_usize(batch_degree - i) - r);
         }
 
         cur_sum = (0..=batch_degree)
@@ -630,7 +629,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
                     * invfact[i]
                     * invfact[batch_degree - i]
             })
-            .sum::<NativeEF>();
+            .sum::<ChildEF>();
 
         rs.push(r);
     }
@@ -646,12 +645,12 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         }
 
         let n_lift = n.max(0) as usize;
-        let mut b_vec = vec![NativeF::ZERO; n_logup - n_lift];
+        let mut b_vec = vec![ChildF::ZERO; n_logup - n_lift];
         let mut eq_3b = Vec::with_capacity(interactions.len());
         for _ in 0..interactions.len() {
             let mut b_int = stacked_idx >> (l_skip + n_lift);
             for b in &mut b_vec {
-                *b = NativeF::from_bool((b_int & 1) == 1);
+                *b = ChildF::from_bool((b_int & 1) == 1);
                 b_int >>= 1;
             }
             stacked_idx += 1 << (l_skip + n_lift);
@@ -660,8 +659,8 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         eq_3b_per_trace.push(eq_3b);
     }
 
-    let mut eq_ns = vec![NativeEF::ONE; n_max + 1];
-    let mut eq_sharp_ns = vec![NativeEF::ONE; n_max + 1];
+    let mut eq_ns = vec![ChildEF::ONE; n_max + 1];
+    let mut eq_sharp_ns = vec![ChildEF::ONE; n_max + 1];
     eq_ns[0] = eval_eq_uni(l_skip, xi[0], r_0);
     eq_sharp_ns[0] = eval_eq_sharp_uni(omega_skip_pows, &xi[..l_skip], r_0);
     for (i, r) in rs.iter().enumerate().skip(1) {
@@ -724,10 +723,10 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
             (
                 l_skip.wrapping_add_signed(n),
                 &[rs[0].exp_power_of_2((-n) as usize)] as &[_],
-                NativeF::from_usize(1usize << n.unsigned_abs()).inverse(),
+                ChildF::from_usize(1usize << n.unsigned_abs()).inverse(),
             )
         } else {
-            (l_skip, &rs[..=n_lift], NativeF::ONE)
+            (l_skip, &rs[..=n_lift], ChildF::ONE)
         };
 
         let evaluator = VerifierConstraintEvaluator::new(
@@ -756,7 +755,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
             .constraint_idx
             .iter()
             .zip(lambda.powers())
-            .fold(NativeEF::ZERO, |acc, (&idx, lambda_pow)| {
+            .fold(ChildEF::ZERO, |acc, (&idx, lambda_pow)| {
                 acc + nodes[idx] * lambda_pow
             });
         constraints_evals.push(eq_ns[n_lift] * expr);
@@ -770,17 +769,17 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
                 .message
                 .iter()
                 .map(|expr| evaluator.eval_expr(expr))
-                .chain(core::iter::once(NativeEF::from_u16(
+                .chain(core::iter::once(ChildEF::from_u16(
                     interaction.bus_index + 1,
                 )))
                 .zip(beta_logup.powers())
-                .fold(NativeEF::ZERO, |acc, (x, y)| acc + x * y);
+                .fold(ChildEF::ZERO, |acc, (x, y)| acc + x * y);
             cur_interactions_evals.push((num, denom));
         }
 
         let eq_3bs = &eq_3b_per_trace[trace_idx];
-        let mut num = NativeEF::ZERO;
-        let mut denom = NativeEF::ZERO;
+        let mut num = ChildEF::ZERO;
+        let mut denom = ChildEF::ZERO;
         for (&eq_3b, (n_eval, d_eval)) in eq_3bs.iter().zip(cur_interactions_evals.iter()) {
             num += eq_3b * *n_eval;
             denom += eq_3b * *d_eval;
@@ -795,7 +794,7 @@ pub(crate) fn derive_batch_intermediates_with_inputs(
         .chain(constraints_evals.iter())
         .zip(mu.powers())
         .map(|(x, y)| *x * y)
-        .sum::<NativeEF>();
+        .sum::<ChildEF>();
     let consistency_residual = cur_sum - evaluated_claim;
     if cur_sum != evaluated_claim {
         return Err(NativeBatchConstraintError::InconsistentClaims);
@@ -942,7 +941,7 @@ pub fn derive_batch_intermediates(
         })
         .collect::<Result<Vec<_>, BatchConstraintError>>()?;
 
-    let omega_skip = NativeF::two_adic_generator(l_skip);
+    let omega_skip = ChildF::two_adic_generator(l_skip);
     let omega_skip_pows: Vec<_> = omega_skip.powers().take(1 << l_skip).collect();
 
     derive_batch_intermediates_with_inputs(
@@ -981,20 +980,20 @@ fn eval_lagrange_on_integer_grid(
     let n = evals.len().saturating_sub(1);
     let mut acc = ext_chip.zero(ctx);
     for (i, eval_i) in evals.iter().enumerate() {
-        let mut basis = ext_chip.from_base_const(ctx, NativeF::ONE);
-        let mut denom = NativeF::ONE;
+        let mut basis = ext_chip.from_base_const(ctx, ChildF::ONE);
+        let mut denom = ChildF::ONE;
         for j in 0..=n {
             if i == j {
                 continue;
             }
-            let x_j = ext_chip.from_base_const(ctx, NativeF::from_u64(j as u64));
+            let x_j = ext_chip.from_base_const(ctx, ChildF::from_u64(j as u64));
             let x_minus_j = ext_chip.sub(ctx, point, &x_j);
             basis = ext_chip.mul(ctx, &basis, &x_minus_j);
 
             let diff = if i >= j {
-                NativeF::from_usize(i - j)
+                ChildF::from_usize(i - j)
             } else {
-                -NativeF::from_usize(j - i)
+                -ChildF::from_usize(j - i)
             };
             denom *= diff;
         }
@@ -1013,8 +1012,8 @@ fn progression_exp_2_assigned(
     l: usize,
 ) -> BabyBearExtWire {
     let mut pow = *m;
-    let mut sum = ext_chip.from_base_const(ctx, NativeF::ONE);
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut sum = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     for _ in 0..l {
         let one_plus_pow = ext_chip.add(ctx, &one, &pow);
         sum = ext_chip.mul(ctx, &sum, &one_plus_pow);
@@ -1030,11 +1029,11 @@ pub(crate) fn eval_eq_mle_assigned(
     y: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
     assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut acc = one;
     for (x_i, y_i) in x.iter().zip(y.iter()) {
         let xy = ext_chip.mul(ctx, x_i, y_i);
-        let two_xy = ext_chip.mul_base_const(ctx, &xy, NativeF::TWO);
+        let two_xy = ext_chip.mul_base_const(ctx, &xy, ChildF::TWO);
         let one_minus_y = ext_chip.sub(ctx, &one, y_i);
         let one_minus_y_minus_x = ext_chip.sub(ctx, &one_minus_y, x_i);
         let factor = ext_chip.add(ctx, &one_minus_y_minus_x, &two_xy);
@@ -1054,7 +1053,7 @@ pub(crate) fn eval_eq_mle_binary_assigned(
         y_bits.len(),
         "eq_mle binary vector length mismatch",
     );
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut acc = one;
     for (x_i, bit) in x.iter().zip(y_bits.iter().copied()) {
         let factor = if bit {
@@ -1074,7 +1073,7 @@ pub(crate) fn eval_eq_uni_assigned(
     x: &BabyBearExtWire,
     y: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut res = one;
     let mut x_pow = *x;
     let mut y_pow = *y;
@@ -1088,7 +1087,7 @@ pub(crate) fn eval_eq_uni_assigned(
         x_pow = ext_chip.mul(ctx, &x_pow, &x_pow);
         y_pow = ext_chip.mul(ctx, &y_pow, &y_pow);
     }
-    let half_pow_l = NativeF::ONE.halve().exp_u64(l_skip as u64);
+    let half_pow_l = ChildF::ONE.halve().exp_u64(l_skip as u64);
     ext_chip.mul_base_const(ctx, &res, half_pow_l)
 }
 
@@ -1098,7 +1097,7 @@ pub(crate) fn eval_eq_uni_at_one_assigned(
     l_skip: usize,
     x: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut res = one;
     let mut x_pow = *x;
     for _ in 0..l_skip {
@@ -1106,18 +1105,18 @@ pub(crate) fn eval_eq_uni_at_one_assigned(
         res = ext_chip.mul(ctx, &res, &x_plus_one);
         x_pow = ext_chip.mul(ctx, &x_pow, &x_pow);
     }
-    let half_pow_l = NativeF::ONE.halve().exp_u64(l_skip as u64);
+    let half_pow_l = ChildF::ONE.halve().exp_u64(l_skip as u64);
     ext_chip.mul_base_const(ctx, &res, half_pow_l)
 }
 
 fn eval_eq_sharp_uni_assigned(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
-    omega_skip_pows: &[NativeF],
+    omega_skip_pows: &[ChildF],
     xi_1: &[BabyBearExtWire],
     z: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut eq_xi_evals = vec![ext_chip.zero(ctx); 1usize << xi_1.len()];
     eq_xi_evals[0] = one;
 
@@ -1175,7 +1174,7 @@ fn eval_eq_rot_cube_assigned(
     y: &[BabyBearExtWire],
 ) -> (BabyBearExtWire, BabyBearExtWire) {
     assert_eq!(x.len(), y.len(), "eq_rot_cube vector length mismatch");
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut rot = one;
     let mut eq = one;
     for i in (0..x.len()).rev() {
@@ -1206,7 +1205,7 @@ pub(crate) fn eval_rot_kernel_prism_assigned(
         !x.is_empty() && !y.is_empty(),
         "rot-kernel vectors must be non-empty",
     );
-    let omega = NativeF::two_adic_generator(l_skip);
+    let omega = ChildF::two_adic_generator(l_skip);
     let y0_omega = ext_chip.mul_base_const(ctx, &y[0], omega);
     let eq_uni_rot = eval_eq_uni_assigned(ctx, ext_chip, l_skip, &x[0], &y0_omega);
     let (eq_cube, rot_cube) = eval_eq_rot_cube_assigned(ctx, ext_chip, &x[1..], &y[1..]);
@@ -1238,18 +1237,18 @@ fn interpolate_cubic_at_0123_assigned(
     evals: [&BabyBearExtWire; 4],
     x: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let inv6 = NativeF::from_u64(6).inverse();
+    let inv6 = ChildF::from_u64(6).inverse();
     let s1 = ext_chip.sub(ctx, evals[1], evals[0]);
     let s2 = ext_chip.sub(ctx, evals[2], evals[0]);
     let s3 = ext_chip.sub(ctx, evals[3], evals[0]);
 
     let s2_minus_s1 = ext_chip.sub(ctx, &s2, &s1);
-    let triple = ext_chip.mul_base_const(ctx, &s2_minus_s1, NativeF::from_u64(3));
+    let triple = ext_chip.mul_base_const(ctx, &s2_minus_s1, ChildF::from_u64(3));
     let d3 = ext_chip.sub(ctx, &s3, &triple);
 
     let p = ext_chip.mul_base_const(ctx, &d3, inv6);
     let s2_minus_d3 = ext_chip.sub(ctx, &s2, &d3);
-    let half = NativeF::ONE.halve();
+    let half = ChildF::ONE.halve();
     let q_half = ext_chip.mul_base_const(ctx, &s2_minus_d3, half);
     let q = ext_chip.sub(ctx, &q_half, &s1);
     let p_plus_q = ext_chip.add(ctx, &p, &q);
@@ -1284,7 +1283,7 @@ impl AssignedConstraintEvaluator<'_> {
         ext_chip: &BabyBearExtChip<'_>,
     ) -> BabyBearExtWire {
         let zero = ext_chip.zero(ctx);
-        let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+        let one = ext_chip.from_base_const(ctx, ChildF::ONE);
         ext_chip.assert_equal(ctx, &zero, &one);
         zero
     }
@@ -1293,7 +1292,7 @@ impl AssignedConstraintEvaluator<'_> {
         &self,
         ctx: &mut Context<Fr>,
         ext_chip: &BabyBearExtChip<'_>,
-        symbolic_var: SymbolicVariable<NativeF>,
+        symbolic_var: SymbolicVariable<ChildF>,
     ) -> BabyBearExtWire {
         let index = symbolic_var.index;
         match symbolic_var.entry {
@@ -1338,9 +1337,9 @@ fn eval_symbolic_nodes_assigned(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
     evaluator: &AssignedConstraintEvaluator<'_>,
-    nodes: &[SymbolicExpressionNode<NativeF>],
+    nodes: &[SymbolicExpressionNode<ChildF>],
 ) -> Vec<BabyBearExtWire> {
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut exprs: Vec<BabyBearExtWire> = Vec::with_capacity(nodes.len());
     for node in nodes {
         let expr = match node {
@@ -1651,7 +1650,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .collect::<Vec<_>>();
 
     let zero = ext_chip.zero(ctx);
-    let one = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut gkr_sample_stream =
         Vec::with_capacity(gkr_non_xi_samples.len() + gkr_xi_sample_order.len());
     gkr_sample_stream.extend(gkr_non_xi_samples.iter().copied());
@@ -1853,7 +1852,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 
     let sum_claim = ext_chip.load_witness(ctx, actual.sum_claim);
     let mut derived_sum_claim = ext_chip.zero(ctx);
-    let mut cur_mu_pow = ext_chip.from_base_const(ctx, NativeF::ONE);
+    let mut cur_mu_pow = ext_chip.from_base_const(ctx, ChildF::ONE);
     for (num_term, den_term) in numerator_term_per_air
         .iter()
         .zip(denominator_term_per_air.iter())
@@ -1875,7 +1874,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         derived_univ_sum = ext_chip.add(ctx, &derived_univ_sum, coeff);
     }
     let derived_univ_sum =
-        ext_chip.mul_base_const(ctx, &derived_univ_sum, NativeF::from_u64(stride as u64));
+        ext_chip.mul_base_const(ctx, &derived_univ_sum, ChildF::from_u64(stride as u64));
     ext_chip.assert_equal(ctx, &sum_univ_domain_s_0, &derived_univ_sum);
     ext_chip.assert_equal(ctx, &sum_claim, &sum_univ_domain_s_0);
 
@@ -1902,7 +1901,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         required_xi_len,
         usize_to_u64(xi.len()).saturating_add(1),
     );
-    let omega_skip = NativeF::two_adic_generator(actual.l_skip);
+    let omega_skip = ChildF::two_adic_generator(actual.l_skip);
     let omega_skip_pows = omega_skip.powers().take(1usize << actual.l_skip).collect();
 
     let mut eq_3b_per_trace = Vec::with_capacity(actual.n_per_trace.len());
@@ -2010,13 +2009,13 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             (
                 actual.l_skip.wrapping_add_signed(n),
                 vec![ext_chip.pow_power_of_two(ctx, &r[0], n.unsigned_abs())],
-                NativeF::from_usize(1usize << n.unsigned_abs()).inverse(),
+                ChildF::from_usize(1usize << n.unsigned_abs()).inverse(),
             )
         } else {
-            (actual.l_skip, r[..=n_lift].to_vec(), NativeF::ONE)
+            (actual.l_skip, r[..=n_lift].to_vec(), ChildF::ONE)
         };
 
-        let inv_l = NativeF::from_usize(1usize << l).inverse();
+        let inv_l = ChildF::from_usize(1usize << l).inverse();
         let mut is_first_row = progression_exp_2_assigned(ctx, &ext_chip, &rs_n[0], l);
         is_first_row = ext_chip.mul_base_const(ctx, &is_first_row, inv_l);
         for x in rs_n.iter().skip(1) {
@@ -2024,7 +2023,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             is_first_row = ext_chip.mul(ctx, &is_first_row, &one_minus_x);
         }
 
-        let omega = NativeF::two_adic_generator(l);
+        let omega = ChildF::two_adic_generator(l);
         let rs0_omega = ext_chip.mul_base_const(ctx, &rs_n[0], omega);
         let mut is_last_row = progression_exp_2_assigned(ctx, &ext_chip, &rs0_omega, l);
         is_last_row = ext_chip.mul_base_const(ctx, &is_last_row, inv_l);
@@ -2078,7 +2077,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
                 beta_pow = ext_chip.mul(ctx, &beta_pow, &beta_logup);
             }
             let bus_const = ext_chip
-                .from_base_const(ctx, NativeF::from_u64(u64::from(interaction.bus_index) + 1));
+                .from_base_const(ctx, ChildF::from_u64(u64::from(interaction.bus_index) + 1));
             let bus_term = ext_chip.mul(ctx, &bus_const, &beta_pow);
             denom_eval = ext_chip.add(ctx, &denom_eval, &bus_term);
 
@@ -2149,8 +2148,8 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     }
 }
 
-pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
+pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> ChildEF {
+    ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(coeffs[i]))
 }
 
 #[cfg(test)]

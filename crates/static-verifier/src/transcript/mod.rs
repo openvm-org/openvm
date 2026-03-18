@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
-        Digest as NativeDigest, Transcript as NativeTranscript, F as NativeF,
+        Digest as NativeDigest, Transcript as NativeTranscript,
     },
     openvm_stark_backend::{
         p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField64},
@@ -28,7 +28,7 @@ use crate::{
         POSEIDON2_WIDTH,
     },
     utils::bits_for_u64,
-    Fr,
+    ChildF, Fr,
 };
 
 pub(crate) const NUM_SPLIT_LIMBS: usize = 3;
@@ -76,13 +76,13 @@ impl LoggedTranscript {
 }
 
 impl FiatShamirTranscript<NativeConfig> for LoggedTranscript {
-    fn observe(&mut self, value: NativeF) {
+    fn observe(&mut self, value: ChildF) {
         self.events
             .push(TranscriptEvent::Observe(value.as_canonical_u64()));
         self.inner.observe(value);
     }
 
-    fn sample(&mut self) -> NativeF {
+    fn sample(&mut self) -> ChildF {
         let sampled = self.inner.sample();
         self.events
             .push(TranscriptEvent::Sample(sampled.as_canonical_u64()));
@@ -114,7 +114,7 @@ fn split_bn254_to_babybear_u64(value: Bn254Scalar) -> [u64; NUM_SPLIT_LIMBS] {
     let digits = value.as_canonical_biguint().to_u64_digits();
     core::array::from_fn(|i| {
         let limb = digits.get(i).copied().unwrap_or(0);
-        NativeF::from_u64(limb).as_canonical_u64()
+        ChildF::from_u64(limb).as_canonical_u64()
     })
 }
 
@@ -186,7 +186,7 @@ fn reduce_assigned_limb_to_babybear(
     let quotient = limb_u64 / BABY_BEAR_MODULUS_U64;
     let remainder = limb_u64 % BABY_BEAR_MODULUS_U64;
 
-    let remainder_var = baby_bear.load_witness(ctx, NativeF::from_u64(remainder));
+    let remainder_var = baby_bear.load_witness(ctx, ChildF::from_u64(remainder));
     let quotient_cell = ctx.load_witness(Fr::from(quotient));
     range.check_less_than_safe(ctx, quotient_cell, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
 
@@ -420,7 +420,7 @@ pub fn constrain_transcript_events(
     for event in events {
         match event {
             TranscriptEvent::Observe(value) => {
-                let observed = baby_bear.load_witness(ctx, NativeF::from_u64(*value));
+                let observed = baby_bear.load_witness(ctx, ChildF::from_u64(*value));
                 transcript.observe(ctx, range, &baby_bear, &observed);
                 let is_sample = ctx.load_zero();
                 replay.observes.push(observed.0);

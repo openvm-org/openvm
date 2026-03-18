@@ -3,7 +3,7 @@ use halo2_base::{
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2CpuEngine, F as NativeF},
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
     openvm_stark_backend::{
         p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField64},
         test_utils::{test_system_params_small, InteractionsFixture11, TestFixture},
@@ -16,6 +16,7 @@ use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
+    ChildF,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -272,14 +273,14 @@ fn whir_constraints_fail_on_tampered_intermediate_final_claim() {
         derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
     {
-        let coeffs = <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(
+        let coeffs = <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(
             &actual.final_residual,
         );
         let mut new_coeffs: [u64; BABY_BEAR_EXT_DEGREE] =
             core::array::from_fn(|i| coeffs[i].as_canonical_u64());
         new_coeffs[0] = (new_coeffs[0] + 1) % BABY_BEAR_MODULUS_U64;
         actual.final_residual =
-            NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(new_coeffs[i]));
+            ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(new_coeffs[i]));
     }
 
     run_mock(false, move |builder| {
@@ -298,25 +299,24 @@ fn whir_constraints_fail_on_coordinated_final_claim_forgery() {
         derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
     {
-        let claim_coeffs = <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(
-            &actual.final_claim,
-        );
+        let claim_coeffs =
+            <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&actual.final_claim);
         let mut new_claim: [u64; BABY_BEAR_EXT_DEGREE] =
             core::array::from_fn(|i| claim_coeffs[i].as_canonical_u64());
         new_claim[0] = (new_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
         actual.final_claim =
-            NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(new_claim[i]));
+            ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(new_claim[i]));
     }
     {
         let acc_coeffs =
-            <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&actual.final_acc);
+            <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&actual.final_acc);
         let mut new_acc: [u64; BABY_BEAR_EXT_DEGREE] =
             core::array::from_fn(|i| acc_coeffs[i].as_canonical_u64());
         new_acc[0] = (new_acc[0] + 1) % BABY_BEAR_MODULUS_U64;
-        actual.final_acc = NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(new_acc[i]));
+        actual.final_acc = ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(new_acc[i]));
     }
     // Keep residual mirror at zero so legacy residual-only checks would accept.
-    actual.final_residual = NativeEF::ZERO;
+    actual.final_residual = ChildEF::ZERO;
 
     run_mock(false, move |builder| {
         let range = builder.range_chip();
@@ -475,7 +475,7 @@ fn whir_rejects_tampered_merkle_opening() {
     let engine = test_engine();
     let (vk, mut proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
-    proof.whir_proof.initial_round_opened_rows[0][0][0][0] += NativeF::ONE;
+    proof.whir_proof.initial_round_opened_rows[0][0][0][0] += ChildF::ONE;
 
     let err = derive_whir_intermediates(engine.config(), &vk, &proof)
         .expect_err("tampered initial opened row should fail merkle verification");
@@ -493,7 +493,7 @@ fn whir_rejects_invalid_mu_pow_witness() {
     let old = proof.whir_proof.mu_pow_witness.as_canonical_u64();
     let mut found_invalid = false;
     for delta in 1..=4096u64 {
-        proof.whir_proof.mu_pow_witness = NativeF::from_u64((old + delta) % BABY_BEAR_MODULUS_U64);
+        proof.whir_proof.mu_pow_witness = ChildF::from_u64((old + delta) % BABY_BEAR_MODULUS_U64);
         let result = derive_whir_intermediates(engine.config(), &vk, &proof);
         if matches!(result, Err(WhirError::Whir(VerifyWhirError::MuPoWInvalid))) {
             found_invalid = true;
@@ -519,7 +519,7 @@ fn whir_rejects_tampered_final_poly_constraint_input() {
     } = prepare_whir_inputs(engine.config(), &vk, &proof)
         .expect("setup should succeed before direct whir constraint check");
 
-    u_cube[0] += NativeEF::ONE;
+    u_cube[0] += ChildEF::ONE;
 
     let err = derive_whir_intermediates_with_inputs(
         &mut transcript,

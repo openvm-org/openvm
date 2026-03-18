@@ -4,14 +4,11 @@ use halo2_base::{
     AssignedValue, Context,
     QuantumCell::Constant,
 };
-use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::F as NativeF,
-    openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField64},
-};
+use openvm_stark_sdk::openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField64};
 
 use crate::{
     utils::{bits_for_u64, usize_to_u64},
-    Fr,
+    ChildF, Fr,
 };
 
 pub const BABY_BEAR_MODULUS_U64: u64 = 0x7800_0001;
@@ -27,8 +24,8 @@ impl BabyBearWire {
         self.0.value().get_lower_64()
     }
 
-    pub fn value(&self) -> NativeF {
-        NativeF::from_u64(self.0.value().get_lower_64())
+    pub fn value(&self) -> ChildF {
+        ChildF::from_u64(self.0.value().get_lower_64())
     }
 }
 
@@ -61,7 +58,7 @@ impl<'a> BabyBearChip<'a> {
         );
     }
 
-    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: NativeF) -> BabyBearWire {
+    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: ChildF) -> BabyBearWire {
         let value_u64 = value.as_canonical_u64();
         Self::assert_canonical(value_u64);
         let cell = ctx.load_witness(Fr::from(value_u64));
@@ -70,7 +67,7 @@ impl<'a> BabyBearChip<'a> {
         BabyBearWire(cell)
     }
 
-    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: NativeF) -> BabyBearWire {
+    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: ChildF) -> BabyBearWire {
         let value_u64 = value.as_canonical_u64();
         Self::assert_canonical(value_u64);
         let cell = ctx.load_constant(Fr::from(value_u64));
@@ -78,11 +75,11 @@ impl<'a> BabyBearChip<'a> {
     }
 
     pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearWire {
-        self.load_constant(ctx, NativeF::ZERO)
+        self.load_constant(ctx, ChildF::ZERO)
     }
 
     pub fn one(&self, ctx: &mut Context<Fr>) -> BabyBearWire {
-        self.load_constant(ctx, NativeF::ONE)
+        self.load_constant(ctx, ChildF::ONE)
     }
 
     pub fn add(&self, ctx: &mut Context<Fr>, a: &BabyBearWire, b: &BabyBearWire) -> BabyBearWire {
@@ -91,7 +88,7 @@ impl<'a> BabyBearChip<'a> {
         let out_u64 = sum % BABY_BEAR_MODULUS_U64;
 
         debug_assert!(q_u64 <= 1);
-        let out = self.load_witness(ctx, NativeF::from_u64(out_u64));
+        let out = self.load_witness(ctx, ChildF::from_u64(out_u64));
         let q = ctx.load_witness(Fr::from(q_u64));
         self.range.gate().assert_bit(ctx, q);
 
@@ -110,7 +107,7 @@ impl<'a> BabyBearChip<'a> {
             (1, a.as_u64() + BABY_BEAR_MODULUS_U64 - b.as_u64())
         };
 
-        let out = self.load_witness(ctx, NativeF::from_u64(out_u64));
+        let out = self.load_witness(ctx, ChildF::from_u64(out_u64));
         let q = ctx.load_witness(Fr::from(q_u64));
         self.range.gate().assert_bit(ctx, q);
 
@@ -128,7 +125,7 @@ impl<'a> BabyBearChip<'a> {
         let q_u64 = (prod / modulus) as u64;
         let out_u64 = (prod % modulus) as u64;
 
-        let out = self.load_witness(ctx, NativeF::from_u64(out_u64));
+        let out = self.load_witness(ctx, ChildF::from_u64(out_u64));
         let q = ctx.load_witness(Fr::from(q_u64));
         self.range
             .check_less_than_safe(ctx, q, BABY_BEAR_MODULUS_U64);
@@ -145,7 +142,7 @@ impl<'a> BabyBearChip<'a> {
         &self,
         ctx: &mut Context<Fr>,
         a: &BabyBearWire,
-        constant: NativeF,
+        constant: ChildF,
     ) -> BabyBearWire {
         let constant_u64 = constant.as_canonical_u64() % BABY_BEAR_MODULUS_U64;
         let prod = (a.as_u64() as u128) * (constant_u64 as u128);
@@ -153,7 +150,7 @@ impl<'a> BabyBearChip<'a> {
         let q_u64 = (prod / modulus) as u64;
         let out_u64 = (prod % modulus) as u64;
 
-        let out = self.load_witness(ctx, NativeF::from_u64(out_u64));
+        let out = self.load_witness(ctx, ChildF::from_u64(out_u64));
         let q = ctx.load_witness(Fr::from(q_u64));
         self.range
             .check_less_than_safe(ctx, q, BABY_BEAR_MODULUS_U64);

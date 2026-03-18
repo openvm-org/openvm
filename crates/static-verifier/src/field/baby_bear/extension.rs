@@ -6,13 +6,10 @@ use halo2_base::AssignedValue;
 use halo2_base::{gates::range::RangeChip, Context};
 #[cfg(test)]
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField64;
-use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{EF as NativeEF, F as NativeF},
-    openvm_stark_backend::p3_field::{BasedVectorSpace, PrimeCharacteristicRing},
-};
+use openvm_stark_sdk::openvm_stark_backend::p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 
 use super::base::{BabyBearChip, BabyBearWire, BABY_BEAR_EXT_DEGREE, BABY_BEAR_EXT_W_U64};
-use crate::Fr;
+use crate::{ChildEF, ChildF, Fr};
 
 #[derive(Copy, Clone, Debug)]
 pub struct BabyBearExtWire(pub [BabyBearWire; BABY_BEAR_EXT_DEGREE]);
@@ -22,8 +19,8 @@ impl BabyBearExtWire {
         core::array::from_fn(|i| self.0[i].as_u64())
     }
 
-    pub fn value(&self) -> NativeEF {
-        NativeEF::from_basis_coefficients_fn(|i| self.0[i].value())
+    pub fn value(&self) -> ChildEF {
+        ChildEF::from_basis_coefficients_fn(|i| self.0[i].value())
     }
 }
 
@@ -67,26 +64,26 @@ impl<'a> BabyBearExtChip<'a> {
         self.base.range()
     }
 
-    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: NativeEF) -> BabyBearExtWire {
-        let coeffs = <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value);
+    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: ChildEF) -> BabyBearExtWire {
+        let coeffs = <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value);
         BabyBearExtWire(core::array::from_fn(|i| {
             self.base.load_witness(ctx, coeffs[i])
         }))
     }
 
-    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: NativeEF) -> BabyBearExtWire {
-        let coeffs = <NativeEF as BasedVectorSpace<NativeF>>::as_basis_coefficients_slice(&value);
+    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: ChildEF) -> BabyBearExtWire {
+        let coeffs = <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value);
         BabyBearExtWire(core::array::from_fn(|i| {
             self.base.load_constant(ctx, coeffs[i])
         }))
     }
 
     pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearExtWire {
-        self.load_constant(ctx, NativeEF::ZERO)
+        self.load_constant(ctx, ChildEF::ZERO)
     }
 
     pub fn one(&self, ctx: &mut Context<Fr>) -> BabyBearExtWire {
-        self.load_constant(ctx, NativeEF::ONE)
+        self.load_constant(ctx, ChildEF::ONE)
     }
 
     pub fn add(
@@ -154,7 +151,7 @@ impl<'a> BabyBearExtChip<'a> {
 
         let t6 = self.base.mul(ctx, &a3, &b3);
 
-        let w = NativeF::from_u64(BABY_BEAR_EXT_W_U64);
+        let w = ChildF::from_u64(BABY_BEAR_EXT_W_U64);
         let wt4 = self.base.mul_const(ctx, &t4, w);
         let wt5 = self.base.mul_const(ctx, &t5, w);
         let wt6 = self.base.mul_const(ctx, &t6, w);
@@ -187,7 +184,7 @@ impl<'a> BabyBearExtChip<'a> {
         }
     }
 
-    pub fn from_base_const(&self, ctx: &mut Context<Fr>, constant: NativeF) -> BabyBearExtWire {
+    pub fn from_base_const(&self, ctx: &mut Context<Fr>, constant: ChildF) -> BabyBearExtWire {
         let c0 = self.base.load_constant(ctx, constant);
         #[cfg(test)]
         RECORDED_EXT_BASE_CONSTS.with(|records| {
@@ -209,7 +206,7 @@ impl<'a> BabyBearExtChip<'a> {
         &self,
         ctx: &mut Context<Fr>,
         value: &BabyBearExtWire,
-        constant: NativeF,
+        constant: ChildF,
     ) -> BabyBearExtWire {
         BabyBearExtWire(core::array::from_fn(|idx| {
             self.base.mul_const(ctx, &value.0[idx], constant)

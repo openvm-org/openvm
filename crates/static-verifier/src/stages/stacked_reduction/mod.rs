@@ -3,8 +3,7 @@ use std::iter::zip;
 use halo2_base::Context;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, EF as NativeEF,
-        F as NativeF,
+        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig,
     },
     openvm_stark_backend::{
         keygen::types::MultiStarkVerifyingKey,
@@ -36,7 +35,7 @@ use crate::{
             interpolate_quadratic_at_012_assigned,
         },
     },
-    Fr,
+    ChildEF, ChildF, Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -44,8 +43,8 @@ pub enum StackedReductionConstraintError {
     SystemParamsMismatch,
     TraceHeightsTooLarge,
     ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<NativeEF>),
-    StackedReduction(StackedReductionError<NativeEF>),
+    BatchConstraint(NativeBatchConstraintError<ChildEF>),
+    StackedReduction(StackedReductionError<ChildEF>),
     BatchSetup(BatchConstraintError),
 }
 
@@ -55,14 +54,14 @@ impl From<ProofShapeError> for StackedReductionConstraintError {
     }
 }
 
-impl From<NativeBatchConstraintError<NativeEF>> for StackedReductionConstraintError {
-    fn from(value: NativeBatchConstraintError<NativeEF>) -> Self {
+impl From<NativeBatchConstraintError<ChildEF>> for StackedReductionConstraintError {
+    fn from(value: NativeBatchConstraintError<ChildEF>) -> Self {
         Self::BatchConstraint(value)
     }
 }
 
-impl From<StackedReductionError<NativeEF>> for StackedReductionConstraintError {
-    fn from(value: StackedReductionError<NativeEF>) -> Self {
+impl From<StackedReductionError<ChildEF>> for StackedReductionConstraintError {
+    fn from(value: StackedReductionError<ChildEF>) -> Self {
         Self::StackedReduction(value)
     }
 }
@@ -92,23 +91,23 @@ pub struct QCoeffAccumulationTerm {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StackedReductionIntermediates {
     pub l_skip: usize,
-    pub lambda: NativeEF,
-    pub batch_column_openings: Vec<Vec<Vec<NativeEF>>>,
+    pub lambda: ChildEF,
+    pub batch_column_openings: Vec<Vec<Vec<ChildEF>>>,
     pub batch_column_openings_need_rot: Vec<Vec<bool>>,
     pub q_coeff_terms: Vec<QCoeffAccumulationTerm>,
-    pub r: Vec<NativeEF>,
-    pub univariate_round_coeffs: Vec<NativeEF>,
-    pub sumcheck_round_polys: Vec<Vec<NativeEF>>,
-    pub stacking_openings: Vec<Vec<NativeEF>>,
-    pub q_coeffs: Vec<Vec<NativeEF>>,
+    pub r: Vec<ChildEF>,
+    pub univariate_round_coeffs: Vec<ChildEF>,
+    pub sumcheck_round_polys: Vec<Vec<ChildEF>>,
+    pub stacking_openings: Vec<Vec<ChildEF>>,
+    pub q_coeffs: Vec<Vec<ChildEF>>,
     pub stacking_matrix_expected_widths: Vec<usize>,
-    pub s_0: NativeEF,
-    pub s_0_sum_eval: NativeEF,
-    pub s_0_residual: NativeEF,
-    pub final_claim: NativeEF,
-    pub final_sum: NativeEF,
-    pub final_residual: NativeEF,
-    pub u: Vec<NativeEF>,
+    pub s_0: ChildEF,
+    pub s_0_sum_eval: ChildEF,
+    pub s_0_residual: ChildEF,
+    pub final_claim: ChildEF,
+    pub final_sum: ChildEF,
+    pub final_residual: ChildEF,
+    pub u: Vec<ChildEF>,
 }
 
 #[derive(Clone, Debug)]
@@ -153,12 +152,12 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
     need_rot_per_commit: &[Vec<bool>],
     l_skip: usize,
     n_stack: usize,
-    column_openings: &Vec<Vec<Vec<NativeEF>>>,
-    r: &[NativeEF],
-    omega_shift_pows: &[NativeF],
-) -> Result<StackedReductionIntermediates, StackedReductionError<NativeEF>> {
+    column_openings: &Vec<Vec<Vec<ChildEF>>>,
+    r: &[ChildEF],
+    omega_shift_pows: &[ChildF],
+) -> Result<StackedReductionIntermediates, StackedReductionError<ChildEF>> {
     let omega_order = omega_shift_pows.len();
-    let omega_order_f = NativeF::from_usize(omega_order);
+    let omega_order_f = ChildF::from_usize(omega_order);
 
     let mut lambda_idx = 0usize;
     let lambda_indices_per_layout: Vec<Vec<(usize, bool)>> = layouts
@@ -200,17 +199,17 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
 
     let s_0 = zip(&t_claims, &lambda_sqr_powers)
         .map(|(&t_i, &lambda_i)| (t_i.0 + t_i.1 * lambda) * lambda_i)
-        .sum::<NativeEF>();
+        .sum::<ChildEF>();
     let s_0_sum_eval = proof
         .univariate_round_coeffs
         .iter()
         .step_by(omega_order)
         .copied()
-        .sum::<NativeEF>()
+        .sum::<ChildEF>()
         * omega_order_f;
 
     let s_0_residual = s_0 - s_0_sum_eval;
-    if s_0_residual != NativeEF::ZERO {
+    if s_0_residual != ChildEF::ZERO {
         return Err(StackedReductionError::S0Mismatch { s_0, s_0_sum_eval });
     }
 
@@ -218,7 +217,7 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
         transcript.observe_ext(*coeff);
     }
 
-    let mut u = vec![NativeEF::ZERO; n_stack + 1];
+    let mut u = vec![ChildEF::ZERO; n_stack + 1];
     u[0] = transcript.sample_ext();
 
     let mut s_j_0 = s_0;
@@ -234,10 +233,10 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
         claim = interpolate_quadratic_at_012(&[s_j_0, s_j_1, s_j_2], *u_j);
     });
 
-    let mut q_coeffs: Vec<Vec<NativeEF>> = proof
+    let mut q_coeffs: Vec<Vec<ChildEF>> = proof
         .stacking_openings
         .iter()
-        .map(|vec| vec![NativeEF::ZERO; vec.len()])
+        .map(|vec| vec![ChildEF::ZERO; vec.len()])
         .collect();
     let mut q_coeff_terms = Vec::new();
 
@@ -256,7 +255,7 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
                     let n = s.log_height() as isize - l_skip as isize;
                     let n_lift = n.max(0) as usize;
                     let b: Vec<_> = (l_skip + n_lift..l_skip + n_stack)
-                        .map(|j| NativeF::from_bool((s.row_idx >> j) & 1 == 1))
+                        .map(|j| ChildF::from_bool((s.row_idx >> j) & 1 == 1))
                         .collect();
                     let b_bits = (l_skip + n_lift..l_skip + n_stack)
                         .map(|j| ((s.row_idx >> j) & 1) == 1)
@@ -290,10 +289,10 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
         });
 
     let final_sum = q_coeffs.iter().zip(proof.stacking_openings.iter()).fold(
-        NativeEF::ZERO,
+        ChildEF::ZERO,
         |acc, (q_coeff_vec, q_j_vec)| {
             acc + q_coeff_vec.iter().zip(q_j_vec.iter()).fold(
-                NativeEF::ZERO,
+                ChildEF::ZERO,
                 |acc, (&q_coeff, &q_j)| {
                     transcript.observe_ext(q_j);
                     acc + (q_coeff * q_j)
@@ -303,7 +302,7 @@ pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
     );
 
     let final_residual = claim - final_sum;
-    if final_residual != NativeEF::ZERO {
+    if final_residual != ChildEF::ZERO {
         return Err(StackedReductionError::FinalSumMismatch { claim, final_sum });
     }
 
@@ -367,7 +366,7 @@ pub fn derive_stacked_reduction_intermediates(
 fn assign_ext(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
-    value: NativeEF,
+    value: ChildEF,
 ) -> BabyBearExtWire {
     ext_chip.load_witness(ctx, value)
 }
@@ -383,7 +382,7 @@ fn eval_in_uni_assigned(
         let z_pow = ext_chip.pow_power_of_two(ctx, z, l_skip.wrapping_add_signed(n));
         eval_eq_uni_at_one_assigned(ctx, ext_chip, n.unsigned_abs(), &z_pow)
     } else {
-        ext_chip.from_base_const(ctx, NativeF::from_u64(1))
+        ext_chip.from_base_const(ctx, ChildF::from_u64(1))
     }
 }
 
@@ -520,7 +519,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
 
     let lambda_sqr = ext_chip.mul(ctx, &lambda, &lambda);
     let mut lambda_sqr_powers = Vec::with_capacity(t_claims.len());
-    let mut cur_lambda_sqr = ext_chip.from_base_const(ctx, NativeF::from_u64(1));
+    let mut cur_lambda_sqr = ext_chip.from_base_const(ctx, ChildF::from_u64(1));
     for _ in 0..t_claims.len() {
         lambda_sqr_powers.push(cur_lambda_sqr);
         cur_lambda_sqr = ext_chip.mul(ctx, &cur_lambda_sqr, &lambda_sqr);
@@ -541,7 +540,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         derived_s_0_sum_eval = ext_chip.add(ctx, &derived_s_0_sum_eval, coeff);
     }
     let derived_s_0_sum_eval =
-        ext_chip.mul_base_const(ctx, &derived_s_0_sum_eval, NativeF::from_u64(stride as u64));
+        ext_chip.mul_base_const(ctx, &derived_s_0_sum_eval, ChildF::from_u64(stride as u64));
     ext_chip.assert_equal(ctx, &derived_s_0_sum_eval, &s_0_sum_eval);
 
     let s_0_residual = assign_ext(ctx, ext_chip, actual.s_0_residual);
@@ -671,8 +670,8 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
     }
 }
 
-pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
-    NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
+pub fn coeffs_to_native_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> ChildEF {
+    ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(coeffs[i]))
 }
 
 #[cfg(test)]
