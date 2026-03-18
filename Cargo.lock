@@ -4213,6 +4213,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-static-verifier"
+version = "2.0.0-alpha"
+dependencies = [
+ "halo2-base",
+ "num-bigint 0.4.6",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand_chacha 0.3.1",
+ "zkhash",
+]
+
+[[package]]
 name = "openvm-toolchain-tests"
 version = "2.0.0-alpha"
 dependencies = [
@@ -5845,18 +5857,6 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
-
-[[package]]
-name = "static-verifier"
-version = "2.0.0-alpha"
-dependencies = [
- "halo2-base",
- "num-bigint 0.4.6",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "rand_chacha 0.3.1",
- "zkhash",
-]
 
 [[package]]
 name = "static_assertions"

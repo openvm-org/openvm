@@ -302,21 +302,15 @@ fn add_delta_to_whir_stacking_opening(
 }
 
 fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessState) {
-    let lambda =
-        stacked_coeffs_to_native_ext(raw.intermediates.batch_and_stacked.stacked_reduction.lambda);
+    let lambda = stacked_coeffs_to_native_ext(raw.intermediates.stacked_reduction.lambda);
     let lambda_sqr = lambda * lambda;
 
     let need_rot_schedule = raw
         .intermediates
-        .batch_and_stacked
         .stacked_reduction
         .batch_column_openings_need_rot
         .clone();
-    let openings = &mut raw
-        .intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .batch_column_openings;
+    let openings = &mut raw.intermediates.stacked_reduction.batch_column_openings;
 
     #[derive(Clone, Copy)]
     struct TermLoc {
@@ -438,7 +432,7 @@ fn tamper_whir_stacking_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
 }
 
 fn tamper_stacked_claim_chain_payload_preserving_residual(raw: &mut RawPipelineWitnessState) {
-    let stacked = &mut raw.intermediates.batch_and_stacked.stacked_reduction;
+    let stacked = &mut raw.intermediates.stacked_reduction;
     assert!(
         !stacked.sumcheck_round_polys.is_empty(),
         "fixture must include stacked sumcheck rounds",
@@ -507,8 +501,7 @@ fn pipeline_constraints_fail_when_batch_challenge_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch_and_stacked.batch.r[0][0] =
-        (raw.intermediates.batch_and_stacked.batch.r[0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    raw.intermediates.batch.r[0][0] = (raw.intermediates.batch.r[0][0] + 1) % BABY_BEAR_MODULUS_U64;
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
     run_mock(false, &public_inputs, |builder| {
@@ -581,8 +574,8 @@ fn pipeline_constraints_fail_when_stacked_r_is_decoupled_from_batch_r() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch_and_stacked.stacked_reduction.r[0][0] =
-        (raw.intermediates.batch_and_stacked.stacked_reduction.r[0][0] + 1) % BABY_BEAR_MODULUS_U64;
+    raw.intermediates.stacked_reduction.r[0][0] =
+        (raw.intermediates.stacked_reduction.r[0][0] + 1) % BABY_BEAR_MODULUS_U64;
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
 
     run_mock(false, &public_inputs, |builder| {
@@ -621,27 +614,15 @@ fn pipeline_constraints_fail_when_batch_opening_family_width_is_padded() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates
-            .batch_and_stacked
-            .batch
-            .column_openings
-            .is_empty()
-            && !raw.intermediates.batch_and_stacked.batch.column_openings[0].is_empty(),
+        !raw.intermediates.batch.column_openings.is_empty()
+            && !raw.intermediates.batch.column_openings[0].is_empty(),
         "fixture must include at least one batch opening family",
     );
 
-    raw.intermediates.batch_and_stacked.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates.batch_and_stacked.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .batch_column_openings[0][0]
-        .push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .batch_column_openings[0][0]
-        .push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.batch.column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -663,30 +644,17 @@ fn pipeline_constraints_fail_when_stacked_opening_family_width_is_padded() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates
-            .batch_and_stacked
-            .stacked_reduction
-            .q_coeffs
-            .is_empty()
+        !raw.intermediates.stacked_reduction.q_coeffs.is_empty()
             && !raw
                 .intermediates
-                .batch_and_stacked
                 .stacked_reduction
                 .stacking_openings
                 .is_empty(),
         "fixture must include stacked opening families",
     );
 
-    raw.intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .q_coeffs[0]
-        .push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .stacking_openings[0]
-        .push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.q_coeffs[0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
     raw.intermediates.whir.stacking_openings[0].push([0; BABY_BEAR_EXT_DEGREE]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
@@ -729,28 +697,14 @@ fn pipeline_constraints_fail_when_batch_ref_to_stacked_coupling_has_trailing_suf
         .expect("native pipeline witness derivation must pass");
     assert!(
         !raw.intermediates
-            .batch_and_stacked
             .stacked_reduction
             .batch_column_openings
             .is_empty()
-            && !raw
-                .intermediates
-                .batch_and_stacked
-                .stacked_reduction
-                .batch_column_openings[0]
-                .is_empty(),
+            && !raw.intermediates.stacked_reduction.batch_column_openings[0].is_empty(),
         "fixture must include stacked batch-opening families",
     );
-    raw.intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .batch_column_openings[0][0]
-        .push([0; BABY_BEAR_EXT_DEGREE]);
-    raw.intermediates
-        .batch_and_stacked
-        .stacked_reduction
-        .batch_column_openings[0][0]
-        .push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
+    raw.intermediates.stacked_reduction.batch_column_openings[0][0].push([0; BABY_BEAR_EXT_DEGREE]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -899,7 +853,7 @@ fn pipeline_constraints_fail_on_coordinated_preamble_stage_log_height_tamper() {
             };
             preamble_idx += 3 * raw.intermediates.proof_shape.air_cached_commitment_lens[prior_air];
         }
-        preamble_idx += raw.intermediates.batch_and_stacked.batch.public_values[prior_air].len();
+        preamble_idx += raw.intermediates.batch.public_values[prior_air].len();
     }
     if !raw.schedule.air_is_required[air_idx] {
         preamble_idx += 1;
@@ -1063,12 +1017,8 @@ fn pipeline_constraints_fail_when_schedule_metadata_is_tampered() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
 
-    raw.intermediates.batch_and_stacked.batch.logup_pow_bits = raw
-        .intermediates
-        .batch_and_stacked
-        .batch
-        .logup_pow_bits
-        .saturating_add(1);
+    raw.intermediates.batch.logup_pow_bits =
+        raw.intermediates.batch.logup_pow_bits.saturating_add(1);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1188,18 +1138,10 @@ fn pipeline_constraints_fail_when_batch_term_cardinality_is_tampered() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates
-            .batch_and_stacked
-            .batch
-            .denominator_term_per_air
-            .is_empty(),
+        !raw.intermediates.batch.denominator_term_per_air.is_empty(),
         "fixture must include denominator terms",
     );
-    raw.intermediates
-        .batch_and_stacked
-        .batch
-        .denominator_term_per_air
-        .pop();
+    raw.intermediates.batch.denominator_term_per_air.pop();
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1220,14 +1162,10 @@ fn pipeline_constraints_fail_when_batch_sumcheck_arity_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates
-        .batch_and_stacked
-        .batch
-        .sumcheck_round_polys
-        .push(vec![
-            [0; BABY_BEAR_EXT_DEGREE];
-            raw.intermediates.batch_and_stacked.batch.batch_degree
-        ]);
+    raw.intermediates.batch.sumcheck_round_polys.push(vec![
+        [0; BABY_BEAR_EXT_DEGREE];
+        raw.intermediates.batch.batch_degree
+    ]);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1249,7 +1187,6 @@ fn pipeline_constraints_fail_when_batch_univariate_arity_is_tampered() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     raw.intermediates
-        .batch_and_stacked
         .batch
         .univariate_round_coeffs
         .push([0; BABY_BEAR_EXT_DEGREE]);
@@ -1276,24 +1213,22 @@ fn pipeline_constraints_fail_when_batch_ref_metadata_is_tampered() {
 
     let trace_idx = raw
         .intermediates
-        .batch_and_stacked
         .batch
         .n_per_trace
         .iter()
         .position(|&n| n > 0)
         .expect("fixture must include at least one positive lift trace");
-    raw.intermediates.batch_and_stacked.batch.n_per_trace[trace_idx] -= 1;
+    raw.intermediates.batch.n_per_trace[trace_idx] -= 1;
 
     let selector_trace_idx = raw
         .intermediates
-        .batch_and_stacked
         .batch
         .trace_interactions
         .iter()
         .position(|interactions| !interactions.is_empty())
         .expect("fixture must include interaction-selector metadata");
-    raw.intermediates.batch_and_stacked.batch.trace_interactions[selector_trace_idx][0].bus_index =
-        raw.intermediates.batch_and_stacked.batch.trace_interactions[selector_trace_idx][0]
+    raw.intermediates.batch.trace_interactions[selector_trace_idx][0].bus_index =
+        raw.intermediates.batch.trace_interactions[selector_trace_idx][0]
             .bus_index
             .wrapping_add(1);
 
@@ -1316,17 +1251,12 @@ fn pipeline_constraints_fail_when_metadata_row_has_trailing_suffix_width() {
         .expect("native pipeline witness derivation must pass");
     assert!(
         !raw.intermediates
-            .batch_and_stacked
             .batch
             .column_opening_expected_widths
             .is_empty(),
         "fixture must include column-opening width metadata",
     );
-    raw.intermediates
-        .batch_and_stacked
-        .batch
-        .column_opening_expected_widths[0]
-        .push(0);
+    raw.intermediates.batch.column_opening_expected_widths[0].push(0);
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     assert_rejected_without_host_panic(|| {
@@ -1387,17 +1317,12 @@ fn pipeline_constraints_fail_when_symbolic_node_table_ownership_is_tampered() {
 
     let trace_idx = raw
         .intermediates
-        .batch_and_stacked
         .batch
         .trace_constraint_nodes
         .iter()
         .position(|nodes| !nodes.is_empty())
         .expect("fixture must include symbolic node metadata");
-    let node = &mut raw
-        .intermediates
-        .batch_and_stacked
-        .batch
-        .trace_constraint_nodes[trace_idx][0];
+    let node = &mut raw.intermediates.batch.trace_constraint_nodes[trace_idx][0];
     *node = match node {
         SymbolicExpressionNode::IsFirstRow => SymbolicExpressionNode::IsLastRow,
         _ => SymbolicExpressionNode::IsFirstRow,
@@ -1507,7 +1432,6 @@ fn pipeline_constraints_fail_when_stacked_q_term_schedule_is_tampered() {
         .expect("native pipeline witness derivation must pass");
     let first_term = raw
         .intermediates
-        .batch_and_stacked
         .stacked_reduction
         .q_coeff_terms
         .first_mut()
@@ -1582,16 +1506,11 @@ fn pipeline_constraints_fail_when_gkr_non_xi_challenge_is_tampered() {
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        !raw.intermediates
-            .batch_and_stacked
-            .batch
-            .gkr_non_xi_samples
-            .is_empty(),
+        !raw.intermediates.batch.gkr_non_xi_samples.is_empty(),
         "fixture should produce non-xi GKR challenges",
     );
-    raw.intermediates.batch_and_stacked.batch.gkr_non_xi_samples[0][0] =
-        (raw.intermediates.batch_and_stacked.batch.gkr_non_xi_samples[0][0] + 1)
-            % BABY_BEAR_MODULUS_U64;
+    raw.intermediates.batch.gkr_non_xi_samples[0][0] =
+        (raw.intermediates.batch.gkr_non_xi_samples[0][0] + 1) % BABY_BEAR_MODULUS_U64;
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
@@ -1670,12 +1589,11 @@ fn pipeline_constraints_fail_when_stage_payload_observe_stream_is_inconsistent()
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
     assert!(
-        raw.intermediates.batch_and_stacked.batch.total_interactions > 0,
+        raw.intermediates.batch.total_interactions > 0,
         "fixture should include non-empty GKR observe payloads",
     );
     let gkr_q0_claim = raw
         .intermediates
-        .batch_and_stacked
         .batch
         .gkr_q0_claim
         .as_mut()
@@ -1699,8 +1617,8 @@ fn pipeline_constraints_fail_when_logup_pow_mirror_witness_is_tampered() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
     let mut raw = derive_raw_pipeline_witness_state(engine.config(), &vk, &proof)
         .expect("native pipeline witness derivation must pass");
-    raw.intermediates.batch_and_stacked.batch.logup_pow_witness =
-        (raw.intermediates.batch_and_stacked.batch.logup_pow_witness + 1) % BABY_BEAR_MODULUS_U64;
+    raw.intermediates.batch.logup_pow_witness =
+        (raw.intermediates.batch.logup_pow_witness + 1) % BABY_BEAR_MODULUS_U64;
 
     let public_inputs = derive_pipeline_public_inputs(engine.config(), &vk, &proof);
     run_mock(false, &public_inputs, |builder| {
