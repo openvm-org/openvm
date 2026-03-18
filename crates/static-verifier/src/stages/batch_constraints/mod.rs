@@ -443,7 +443,7 @@ fn check_witness_with_sample_bits<TS: FiatShamirTranscript<NativeConfig>>(
         return (true, 0);
     }
     transcript.observe(witness);
-    let sampled_bits = transcript.sample_bits(bits) as u64;
+    let sampled_bits = transcript.sample_bits(bits);
     (sampled_bits == 0, sampled_bits)
 }
 
@@ -484,6 +484,7 @@ impl<TS: FiatShamirTranscript<NativeConfig>> FiatShamirTranscript<NativeConfig>
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn derive_batch_intermediates_with_inputs(
     transcript: &mut impl FiatShamirTranscript<NativeConfig>,
     mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
@@ -1607,10 +1608,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     let trace_id_to_air_id = actual
         .trace_id_to_air_id
         .iter()
-        .map(|&actual_air_id| {
-            let air_id = assign_and_range_usize(ctx, range, actual_air_id);
-            air_id
-        })
+        .map(|&actual_air_id| assign_and_range_usize(ctx, range, actual_air_id))
         .collect();
 
     let total_interactions = assign_and_range_u64(ctx, range, actual.total_interactions);
@@ -1892,7 +1890,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
 
             let mut gkr_r_prime = Vec::with_capacity(round);
             let mut eq = one.clone();
-            for subround in 0..round {
+            for (subround, xi_prev) in gkr_r.iter().enumerate().take(round) {
                 let ev1 = round_polys
                     .get(subround * 3)
                     .cloned()
@@ -1920,8 +1918,6 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
                     [&ev0, &ev1, &ev2, &ev3],
                     &ri,
                 );
-
-                let xi_prev = &gkr_r[subround];
                 let xi_ri = baby_bear.ext_mul(ctx, range, xi_prev, &ri);
                 let one_minus_xi = baby_bear.ext_sub(ctx, range, &one, xi_prev);
                 let one_minus_ri = baby_bear.ext_sub(ctx, range, &one, &ri);

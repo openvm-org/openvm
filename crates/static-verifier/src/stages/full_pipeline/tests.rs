@@ -363,8 +363,8 @@ fn tamper_stacked_batch_openings_claim_preserving(raw: &mut RawPipelineWitnessSt
     }
 
     let mut commit_idx = 1usize;
-    for trace_idx in 0..openings.len() {
-        for part_idx in 1..openings[trace_idx].len() {
+    for (trace_idx, trace_openings) in openings.iter().enumerate() {
+        for part_idx in 1..trace_openings.len() {
             let need_rot = *need_rot_schedule[commit_idx]
                 .first()
                 .expect("non-common commit need-rotation metadata must be singleton");
