@@ -62,20 +62,18 @@ fn run_mock(
         .use_lookup_bits(END_TO_END_LOOKUP_BITS)
         .use_instance_columns(1);
 
-    // Build-time assertions (e.g. deterministic metadata checks) may panic for
-    // tampered inputs.  When `expect_satisfied == false` a build-time panic is
-    // an acceptable rejection mechanism, equivalent to a circuit constraint
-    // violation.
-    let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    if expect_satisfied {
         build(&mut builder);
-    }));
-    if !expect_satisfied {
+    } else {
+        // Disable guarded debug assertions in BabyBearChip, and catch host-side
+        // panics (e.g. deterministic metadata shape checks) that fire before the
+        // MockProver can verify constraints.
+        let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            crate::utils::with_debug_asserts_disabled(|| build(&mut builder));
+        }));
         if build_result.is_err() {
-            // Build-time assertion caught the tampered input.
             return;
         }
-    } else {
-        build_result.expect("circuit build should not panic for valid inputs");
     }
 
     let params = builder.calculate_params(Some(END_TO_END_MIN_ROWS));
