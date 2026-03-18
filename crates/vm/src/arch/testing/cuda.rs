@@ -148,14 +148,6 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.execution.execute(initial_state, final_state);
     }
 
-    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.read::<1>(address_space, pointer)[0]
-    }
-
-    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.write(address_space, pointer, [value]);
-    }
-
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
         self.memory.read(address_space, pointer)
     }
@@ -565,24 +557,28 @@ impl GpuChipTester {
     }
 
     pub fn finalize(mut self) -> Self {
-        if let Some(mut memory_tester) = self.memory.take() {
-            let touched_memory = memory_tester.memory.finalize::<F>();
-            let memory_bridge = memory_tester.memory_bridge();
-
-            for chip in memory_tester.chip_for_block.into_values() {
-                self = self.load_periphery(chip.0.air, chip);
-            }
+        if let Some(memory_tester) = self.memory.take() {
+            let DeviceMemoryTester {
+                chip,
+                mut memory,
+                mut inventory,
+                hasher_chip,
+                config,
+                mem_bus,
+                range_bus,
+            } = memory_tester;
+            let touched_memory = memory.finalize::<F>();
+            let memory_bridge = MemoryBridge::new(mem_bus, config.timestamp_max_bits, range_bus);
+            self = self.load_periphery(chip.0.air, chip);
 
             let airs = MemoryAirInventory::new(
                 memory_bridge,
-                &memory_tester.config,
+                &config,
                 PermutationCheckBus::new(MEMORY_MERKLE_BUS),
                 PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             )
             .into_airs();
-            let ctxs = memory_tester
-                .inventory
-                .generate_proving_ctxs(touched_memory);
+            let ctxs = inventory.generate_proving_ctxs(touched_memory);
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)
@@ -591,7 +587,7 @@ impl GpuChipTester {
                 self = self.load_air_proving_ctx(air, ctx);
             }
 
-            if let Some(hasher_chip) = memory_tester.hasher_chip {
+            if let Some(hasher_chip) = hasher_chip {
                 let air: AirRef<SC> = match hasher_chip.as_ref() {
                     Poseidon2PeripheryChipGPU::Register0(_) => {
                         let config = Poseidon2Config::default();
