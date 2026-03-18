@@ -23,6 +23,41 @@ use crate::{
     gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
 };
 
+fn derive_and_constrain_batch(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    config: &NativeConfig,
+    mvk: &MultiStarkVerifyingKey<NativeConfig>,
+    proof: &Proof<NativeConfig>,
+) -> Result<AssignedBatchIntermediates, BatchConstraintError> {
+    let raw = derive_raw_batch_witness_state(config, mvk, proof)?;
+    Ok(constrain_checked_batch_witness_state(ctx, range, &raw).assigned)
+}
+
+fn derive_raw_batch_witness_state(
+    config: &NativeConfig,
+    mvk: &MultiStarkVerifyingKey<NativeConfig>,
+    proof: &Proof<NativeConfig>,
+) -> Result<RawBatchWitnessState, BatchConstraintError> {
+    Ok(RawBatchWitnessState {
+        intermediates: derive_batch_intermediates(config, mvk, proof)?,
+    })
+}
+
+fn constrain_checked_batch_witness_state(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    raw: &RawBatchWitnessState,
+) -> CheckedBatchWitnessState {
+    let assigned = constrain_batch_intermediates_unchecked(ctx, range, &raw.intermediates);
+    let derived = DerivedBatchState {
+        sum_claim: assigned.sum_claim.clone(),
+        sum_univ_domain_s_0: assigned.sum_univ_domain_s_0.clone(),
+        consistency_residual: assigned.consistency_residual.clone(),
+    };
+    CheckedBatchWitnessState { assigned, derived }
+}
+
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     const BATCH_K: u32 = 22;
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
