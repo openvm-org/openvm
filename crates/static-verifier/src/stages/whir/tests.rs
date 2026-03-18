@@ -1,24 +1,22 @@
-
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
+    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2CpuEngine, F as NativeF},
     openvm_stark_backend::{
-        StarkEngine,
         p3_field::{PrimeCharacteristicRing, PrimeField64},
-        test_utils::{InteractionsFixture11, TestFixture, test_system_params_small},
+        test_utils::{test_system_params_small, InteractionsFixture11, TestFixture},
         verifier::whir::VerifyWhirError,
+        StarkEngine,
     },
 };
 
+use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
     gadgets::baby_bear::BABY_BEAR_MODULUS_U64,
 };
-
-use super::*;
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     const MOCK_K: u32 = 22;
@@ -109,8 +107,8 @@ fn whir_strict_constraints_reject_forged_standalone_metadata() {
 fn whir_constraints_fail_on_tampered_intermediate_final_claim() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
     actual.final_residual[0] = (actual.final_residual[0] + 1) % BABY_BEAR_MODULUS_U64;
 
@@ -125,8 +123,8 @@ fn whir_constraints_fail_on_tampered_intermediate_final_claim() {
 fn whir_constraints_fail_on_coordinated_final_claim_forgery() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
     actual.final_claim[0] = (actual.final_claim[0] + 1) % BABY_BEAR_MODULUS_U64;
     actual.final_acc[0] = (actual.final_acc[0] + 1) % BABY_BEAR_MODULUS_U64;
@@ -144,8 +142,8 @@ fn whir_constraints_fail_on_coordinated_final_claim_forgery() {
 fn whir_constraints_fail_on_tampered_pow_sample_bits() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     actual.mu_pow_sampled_bits = 1;
     actual.mu_pow_witness_ok = true;
 
@@ -160,8 +158,8 @@ fn whir_constraints_fail_on_tampered_pow_sample_bits() {
 fn whir_constraints_ignore_tampered_pow_witness_mirrors() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
 
     actual.mu_pow_witness = (actual.mu_pow_witness + 1) % BABY_BEAR_MODULUS_U64;
     if let Some(first) = actual.folding_pow_witnesses.first_mut() {
@@ -182,8 +180,8 @@ fn whir_constraints_ignore_tampered_pow_witness_mirrors() {
 fn whir_constraints_fail_on_tampered_query_index() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     actual.query_indices[0] += 1;
 
     run_mock(false, move |builder| {
@@ -197,8 +195,8 @@ fn whir_constraints_fail_on_tampered_query_index() {
 fn whir_constraints_fail_on_tampered_merkle_path() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     actual.merkle_paths[0].siblings[0] += Fr::from(1u64);
 
     run_mock(false, move |builder| {
@@ -212,8 +210,8 @@ fn whir_constraints_fail_on_tampered_merkle_path() {
 fn whir_constraints_fail_on_merkle_depth_query_bit_mismatch() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     let path = actual
         .merkle_paths
         .first_mut()
@@ -231,8 +229,8 @@ fn whir_constraints_fail_on_merkle_depth_query_bit_mismatch() {
 fn whir_constraints_fail_on_missing_coverage_tuple() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     assert!(
         actual.merkle_paths.len() >= 2,
         "fixture should produce at least two Merkle paths"
@@ -250,8 +248,8 @@ fn whir_constraints_fail_on_missing_coverage_tuple() {
 fn whir_constraints_fail_on_wrong_root_binding() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     actual.initial_commitment_roots[0] += Fr::from(1u64);
 
     run_mock(false, move |builder| {
@@ -265,8 +263,8 @@ fn whir_constraints_fail_on_wrong_root_binding() {
 fn whir_constraints_fail_on_tampered_final_poly_len() {
     let engine = test_engine();
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut actual = derive_whir_intermediates(engine.config(), &vk, &proof)
-        .expect("native whir must pass");
+    let mut actual =
+        derive_whir_intermediates(engine.config(), &vk, &proof).expect("native whir must pass");
     actual.final_poly_len += 1;
 
     run_mock(false, move |builder| {
@@ -301,10 +299,7 @@ fn whir_rejects_invalid_mu_pow_witness() {
     for delta in 1..=4096u64 {
         proof.whir_proof.mu_pow_witness = NativeF::from_u64((old + delta) % BABY_BEAR_MODULUS_U64);
         let result = derive_whir_intermediates(engine.config(), &vk, &proof);
-        if matches!(
-            result,
-            Err(WhirError::Whir(VerifyWhirError::MuPoWInvalid))
-        ) {
+        if matches!(result, Err(WhirError::Whir(VerifyWhirError::MuPoWInvalid))) {
             found_invalid = true;
             break;
         }

@@ -1,13 +1,13 @@
-use core::cmp::{Reverse, max};
+use core::cmp::{max, Reverse};
 
 use halo2_base::{
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
     AssignedValue, Context,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
     openvm_stark_backend::{
-        StarkProtocolConfig, calculate_n_logup,
+        calculate_n_logup,
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
         proof::Proof,
         prover::stacked_pcs::StackedLayout,
@@ -15,6 +15,7 @@ use openvm_stark_sdk::{
             BatchProofShapeError, GkrProofShapeError, ProofShapeError, ProofShapeVDataError,
             StackingProofShapeError, WhirProofShapeError,
         },
+        StarkProtocolConfig,
     },
 };
 
@@ -899,16 +900,6 @@ pub fn derive_proof_shape_ownership_schedule(
     })
 }
 
-fn assign_and_range_bool(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    value: bool,
-) -> AssignedValue<Fr> {
-    let bit = ctx.load_witness(Fr::from(value as u64));
-    range.gate().assert_bit(ctx, bit);
-    bit
-}
-
 pub(crate) fn constrain_proof_shape_intermediates(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -1043,7 +1034,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
         .air_presence_flags
         .iter()
         .map(|&actual_flag| {
-            let flag = assign_and_range_bool(ctx, range, actual_flag);
+            let flag = ctx.load_constant(Fr::from(actual_flag as u64));
             flag
         })
         .collect();
@@ -1051,7 +1042,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     let air_required_flags = actual
         .air_required_flags
         .iter()
-        .map(|&actual_flag| assign_and_range_bool(ctx, range, actual_flag))
+        .map(|&actual_flag| ctx.load_constant(Fr::from(actual_flag as u64)))
         .collect::<Vec<_>>();
 
     let air_public_value_lens = actual
@@ -1244,10 +1235,13 @@ pub fn derive_and_constrain_proof_shape(
 ) -> Result<AssignedProofShapeIntermediates, ProofShapePreambleError> {
     let raw = derive_raw_proof_shape_witness_state(config, mvk, proof)?;
     let ownership = derive_proof_shape_ownership_schedule(mvk, proof)?;
-    Ok(
-        constrain_checked_proof_shape_witness_state_with_ownership(ctx, range, &raw, Some(&ownership))
-            .assigned,
+    Ok(constrain_checked_proof_shape_witness_state_with_ownership(
+        ctx,
+        range,
+        &raw,
+        Some(&ownership),
     )
+    .assigned)
 }
 
 pub(crate) fn derive_raw_proof_shape_witness_state(
