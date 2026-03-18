@@ -24,9 +24,9 @@ use crate::{
         BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
         BABY_BEAR_MODULUS_U64,
     },
-    hash::poseidon2::{
-        poseidon2_permute_bn254_state, reduce_32_cells, DIGEST_WIDTH, POSEIDON2_RATE,
-        POSEIDON2_WIDTH,
+    hash::{
+        poseidon2::{Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
+        POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
     utils::bits_for_u64,
     ChildF, Fr,
@@ -230,7 +230,10 @@ impl TranscriptGadget {
     }
 
     fn permute_state(&mut self, ctx: &mut Context<Fr>, range: &RangeChip<Fr>) {
-        self.sponge_state = poseidon2_permute_bn254_state(ctx, range, self.sponge_state);
+        let gate = range.gate();
+        let mut state = Poseidon2State::new(self.sponge_state);
+        state.permutation(ctx, gate, &POSEIDON2_PARAMS);
+        self.sponge_state = state.s;
     }
 
     fn reduce_32(
@@ -239,8 +242,16 @@ impl TranscriptGadget {
         range: &RangeChip<Fr>,
         values: &[BabyBearWire],
     ) -> AssignedValue<Fr> {
-        let cells = values.iter().map(|value| value.value).collect::<Vec<_>>();
-        reduce_32_cells(ctx, range, &cells)
+        let gate = range.gate();
+        let base = Fr::from(1u64 << 32);
+        let mut power = Fr::from(1u64);
+        let mut acc = ctx.load_constant(Fr::from(0u64));
+
+        for value in values {
+            acc = gate.mul_add(ctx, value.value, Constant(power), acc);
+            power *= base;
+        }
+        acc
     }
 
     fn split_state_to_babybear(
@@ -368,7 +379,12 @@ impl TranscriptGadget {
             return ctx.load_constant(Fr::from(0u64));
         }
 
-        let (_, rem) = range.div_mod(ctx, sampled.value, BigUint::from(1u64) << bits, BABY_BEAR_BITS);
+        let (_, rem) = range.div_mod(
+            ctx,
+            sampled.value,
+            BigUint::from(1u64) << bits,
+            BABY_BEAR_BITS,
+        );
         range.range_check(ctx, rem, bits);
         rem
     }
