@@ -212,34 +212,34 @@ fn test_two_segments_leaf_aggregation() -> Result<()> {
     Ok(())
 }
 
-#[test_case(false ; "def_hook_commit not set")]
-#[test_case(true ; "def_hook_commit set")]
-fn test_internal_recursive_vk_stabilization(def_hook_commit_set: bool) -> Result<()> {
+#[test_case(false ; "def_hook_cached_commit not set")]
+#[test_case(true ; "def_hook_cached_commit set")]
+fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let config = test_rv32im_config();
 
     let engine = Engine::new(app_system_params());
     let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
-    let def_hook_commit = def_hook_commit_set.then_some([F::ZERO; DIGEST_SIZE]);
+    let def_hook_cached_commit = def_hook_cached_commit_set.then_some([F::ZERO; DIGEST_SIZE]);
 
     const MAX_LEAF_NUM_PROOFS: usize = 3;
     let leaf_prover = InnerProver::<MAX_LEAF_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_vk),
         leaf_system_params(),
         false,
-        def_hook_commit,
+        def_hook_cached_commit,
     );
     let internal_0_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
-        def_hook_commit,
+        def_hook_cached_commit,
     );
     let internal_1_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_0_prover.get_vk(),
         internal_system_params(),
         false,
-        def_hook_commit,
+        def_hook_cached_commit,
     );
 
     // The internal vk should stabilize at the second internal layer
@@ -247,7 +247,7 @@ fn test_internal_recursive_vk_stabilization(def_hook_commit_set: bool) -> Result
         internal_1_prover.get_vk(),
         internal_system_params(),
         true,
-        def_hook_commit,
+        def_hook_cached_commit,
     );
     assert_eq!(
         test_prover.get_dag_commit(false),

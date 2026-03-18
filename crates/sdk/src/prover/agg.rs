@@ -48,7 +48,7 @@ impl AggProver {
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_config: AggregationConfig,
         agg_tree_config: AggregationTreeConfig,
-        def_hook_commit: Option<Digest>,
+        def_hook_cached_commit: Option<Digest>,
     ) -> Self {
         assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
         assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
@@ -56,19 +56,19 @@ impl AggProver {
             app_or_def_vk,
             agg_config.params.leaf.clone(),
             false,
-            def_hook_commit,
+            def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             false,
-            def_hook_commit,
+            def_hook_cached_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             true,
-            def_hook_commit,
+            def_hook_cached_commit,
         );
         Self {
             leaf_prover,
@@ -82,25 +82,25 @@ impl AggProver {
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
-        def_hook_commit: Option<Digest>,
+        def_hook_cached_commit: Option<Digest>,
     ) -> Self {
         let leaf_prover = InnerAggregationProver::from_pk::<E>(
             app_or_def_vk,
             agg_pk.leaf_pk,
             false,
-            def_hook_commit,
+            def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
             agg_pk.internal_for_leaf_pk,
             false,
-            def_hook_commit,
+            def_hook_cached_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_pk.internal_recursive_pk,
             true,
-            def_hook_commit,
+            def_hook_cached_commit,
         );
         Self {
             leaf_prover,
