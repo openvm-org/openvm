@@ -158,6 +158,7 @@ fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> NativeEF {
     NativeEF::from_basis_coefficients_fn(|i| NativeF::from_u64(coeffs[i]))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn derive_stacked_reduction_intermediates_with_inputs(
     transcript: &mut impl FiatShamirTranscript<NativeConfig>,
     proof: &StackingProof<NativeConfig>,
