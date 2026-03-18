@@ -587,7 +587,7 @@ impl VerifierPvsAir {
 
         // constrain def_hook_vk_commit = hash_slice(vk_commit_components) when
         // internal_flag is 2 and deferral_flag is 1
-        let compute_def_hook_commit = internal_flag.into()
+        let compute_def_hook_vk_commit = internal_flag.into()
             * (internal_flag.into() - AB::Expr::ONE)
             * deferral_flag.into()
             * (AB::Expr::TWO - deferral_flag.into())
@@ -605,7 +605,7 @@ impl VerifierPvsAir {
                     .map(|v| v.map(Into::into))
                     .as_slice(),
                 result: &def_hook_vk_commit.map(Into::into),
-                enabled: &compute_def_hook_commit,
+                enabled: &compute_def_hook_vk_commit,
             },
         );
 

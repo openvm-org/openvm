@@ -102,7 +102,7 @@ impl<
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         system_params: SystemParams,
         is_self_recursive: bool,
-        def_hook_commit: Option<Digest>,
+        def_hook_cached_commit: Option<Digest>,
     ) -> Self {
         let verifier_circuit = S::new(
             child_vk.clone(),
@@ -115,7 +115,7 @@ impl<
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
-            def_hook_commit.map(|d| d.into()),
+            def_hook_cached_commit.map(|d| d.into()),
         ));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
@@ -124,7 +124,7 @@ impl<
         } else {
             None
         };
-        let agg_node_tracegen = InnerTraceGen::new(def_hook_commit.is_some());
+        let agg_node_tracegen = InnerTraceGen::new(def_hook_cached_commit.is_some());
         Self {
             pk: Arc::new(pk),
             d_pk,
@@ -141,7 +141,7 @@ impl<
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
-        def_hook_commit: Option<Digest>,
+        def_hook_cached_commit: Option<Digest>,
     ) -> Self {
         let verifier_circuit = S::new(
             child_vk.clone(),
@@ -154,7 +154,7 @@ impl<
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
-            def_hook_commit.map(|d| d.into()),
+            def_hook_cached_commit.map(|d| d.into()),
         ));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);
@@ -163,7 +163,7 @@ impl<
         } else {
             None
         };
-        let agg_node_tracegen = InnerTraceGen::new(def_hook_commit.is_some());
+        let agg_node_tracegen = InnerTraceGen::new(def_hook_cached_commit.is_some());
         Self {
             pk,
             d_pk,
@@ -189,7 +189,7 @@ impl<
     }
 
     pub fn deferral_enabled(&self) -> bool {
-        self.circuit.def_hook_commit.is_some()
+        self.circuit.def_hook_cached_commit.is_some()
     }
 
     pub fn get_dag_commit(&self, is_self_recursive: bool) -> DagCommit<PB::Val> {
