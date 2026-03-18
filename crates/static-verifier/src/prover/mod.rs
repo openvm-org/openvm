@@ -1,6 +1,3 @@
-#[cfg(feature = "evm-prove")]
-pub mod evm;
-
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
@@ -10,7 +7,7 @@ use halo2_base::{
     halo2_proofs::{
         dev::MockProver,
         halo2curves::bn256::{Bn256, Fr, G1Affine},
-        plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, ProvingKey, VerifyingKey},
+        plonk::{create_proof, verify_proof, ProvingKey, VerifyingKey},
         poly::{
             commitment::ParamsProver,
             kzg::{
@@ -81,6 +78,8 @@ pub struct StaticVerifierInput<'a> {
 ///
 /// All methods are associated functions (no `self`). This mirrors the
 /// `Halo2Prover` pattern from `openvm-native-recursion`.
+///
+/// Keygen is provided separately in [`crate::keygen`].
 pub struct Halo2Prover;
 
 impl Halo2Prover {
@@ -138,34 +137,6 @@ impl Halo2Prover {
         let prover = MockProver::run(shape.k as u32, &builder, vec![public_inputs])
             .expect("MockProver should initialize");
         prover.assert_satisfied();
-    }
-
-    /// Run keygen to produce a [`Halo2ProvingPinning`].
-    ///
-    /// The `input` is used as a representative witness for keygen; any valid
-    /// input for the target circuit shape will do.
-    pub fn keygen(
-        params: &Halo2Params,
-        shape: &StaticVerifierShape,
-        input: &StaticVerifierInput<'_>,
-    ) -> Halo2ProvingPinning {
-        let mut builder = Self::builder(CircuitBuilderStage::Keygen, shape);
-        let public_inputs = Self::populate(&mut builder, input);
-
-        let config_params = builder.calculate_params(Some(shape.minimum_rows));
-
-        let vk = keygen_vk(params, &builder).expect("keygen_vk should succeed");
-        let pk = keygen_pk(params, vk, &builder).expect("keygen_pk should succeed");
-        let break_points = builder.break_points();
-
-        Halo2ProvingPinning {
-            pk,
-            metadata: Halo2ProvingMetadata {
-                config_params,
-                break_points,
-                num_pvs: vec![public_inputs.len()],
-            },
-        }
     }
 
     /// Generate a Halo2 proof using a previously computed [`Halo2ProvingPinning`].
@@ -241,41 +212,5 @@ impl Halo2ProvingPinning {
     pub fn pk_to_bytes(&self) -> Vec<u8> {
         use halo2_base::halo2_proofs::SerdeFormat;
         self.pk.to_bytes(SerdeFormat::RawBytes)
-    }
-}
-
-/// High-level proving key that owns a [`Halo2ProvingPinning`] together with
-/// the [`StaticVerifierShape`] needed to reconstruct prover builders.
-///
-/// This is analogous to `Halo2WrapperProvingKey` from `openvm-native-recursion`.
-pub struct StaticVerifierProvingKey {
-    pub pinning: Halo2ProvingPinning,
-    pub shape: StaticVerifierShape,
-}
-
-impl StaticVerifierProvingKey {
-    /// Run keygen and return a proving key that can be reused for multiple
-    /// proofs.
-    pub fn keygen(
-        params: &Halo2Params,
-        shape: StaticVerifierShape,
-        input: &StaticVerifierInput<'_>,
-    ) -> Self {
-        let pinning = Halo2Prover::keygen(params, &shape, input);
-        Self { pinning, shape }
-    }
-
-    /// Generate a proof using the stored pinning and shape.
-    pub fn prove(
-        &self,
-        params: &Halo2Params,
-        input: &StaticVerifierInput<'_>,
-    ) -> StaticVerifierProof {
-        Halo2Prover::prove(params, &self.pinning, &self.shape, input)
-    }
-
-    /// Verify a proof against this proving key's verifying key.
-    pub fn verify(&self, params: &Halo2Params, proof: &StaticVerifierProof) -> bool {
-        Halo2Prover::verify(params, self.pinning.pk.get_vk(), proof)
     }
 }
