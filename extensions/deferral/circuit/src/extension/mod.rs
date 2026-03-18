@@ -118,7 +118,9 @@ where
                 air.bus
             }
         };
+
         let base_num_airs = inventory.num_airs();
+        let address_bits = inventory.pointer_max_bits();
 
         inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
 
@@ -127,7 +129,7 @@ where
 
         assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
-            DeferralCallAdapterAir::new(execution_bridge, memory_bridge),
+            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, bitwise_bus, address_bits),
             DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
         ));
 
@@ -138,6 +140,7 @@ where
             count_bus,
             poseidon2_bus,
             bitwise_bus,
+            address_bits,
         ));
 
         Ok(())
@@ -161,6 +164,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
+        let address_bits = inventory.airs().pointer_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
@@ -187,17 +191,23 @@ where
         inventory.next_air::<DeferralCallAir>()?;
         inventory.add_executor_chip(DeferralCallChip::new(
             DeferralCallCoreFiller::new(
-                DeferralCallAdapterFiller::new(),
+                DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
                 count_chip.clone(),
                 poseidon2_chip.clone(),
                 bitwise_lu.clone(),
+                address_bits,
             ),
             mem_helper.clone(),
         ));
 
         inventory.next_air::<DeferralOutputAir>()?;
         inventory.add_executor_chip(DeferralOutputChip::new(
-            DeferralOutputFiller::new(count_chip.clone(), poseidon2_chip.clone(), bitwise_lu),
+            DeferralOutputFiller::new(
+                count_chip.clone(),
+                poseidon2_chip.clone(),
+                bitwise_lu,
+                address_bits,
+            ),
             mem_helper,
         ));
 

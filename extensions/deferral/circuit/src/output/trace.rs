@@ -148,6 +148,7 @@ pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    address_bits: usize,
 }
 
 impl<F, RA> PreflightExecutor<F, RA> for DeferralOutputExecutor
@@ -330,6 +331,19 @@ where
                 cols.rs_val = header.rs_val.map(F::from_u8);
 
                 if row_idx == 0 {
+                    debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+                    let limb_shift_bits =
+                        RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+
+                    self.bitwise_lookup_chip.request_range(
+                        (header.rd_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                        (header.rs_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                    );
+                    self.bitwise_lookup_chip.request_range(
+                        (output_len_bytes[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                        0,
+                    );
+
                     mem_helper.fill(
                         header.rd_aux.prev_timestamp,
                         header.from_timestamp,
@@ -402,9 +416,6 @@ where
                 cols.output_commit = output_commit;
             }
             let cols: &mut DeferralOutputCols<F> = section_chunk[..width].borrow_mut();
-            let rc =
-                CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_lt_aux);
-            self.bitwise_lookup_chip.request_range(rc, 0);
             let output_commit_rcs = output_commit
                 .chunks_exact(F_NUM_BYTES)
                 .zip(cols.output_commit_lt_aux.iter_mut())
