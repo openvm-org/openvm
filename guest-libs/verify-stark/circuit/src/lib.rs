@@ -36,7 +36,7 @@ pub mod prover;
 mod trace;
 pub use trace::*;
 
-#[cfg(all(test, feature = "cuda"))]
+#[cfg(test)]
 mod tests;
 
 #[derive(derive_new::new, Clone)]
@@ -46,6 +46,7 @@ pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
     def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
+    pub(crate) def_idx: usize,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
@@ -96,10 +97,11 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             self.num_user_pvs,
         );
         let output_commit_air = DeferralOutputCommitAir {
-            poseidon2_bus: bus_inventory.poseidon2_compress_bus,
+            poseidon2_bus: bus_inventory.poseidon2_permute_bus,
             range_bus: bus_inventory.range_checker_bus,
             output_val_bus,
             output_commit_bus,
+            def_idx: self.def_idx,
         };
 
         let acc_paths_air = self.def_hook_commit.map(|_| {

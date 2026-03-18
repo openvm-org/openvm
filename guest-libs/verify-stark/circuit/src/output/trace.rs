@@ -3,9 +3,10 @@ use std::{array::from_fn, borrow::BorrowMut};
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_continuations::utils::digests_to_poseidon2_input;
 use openvm_cpu_backend::CpuBackend;
+use openvm_poseidon2_air::Permutation;
 use openvm_stark_backend::prover::{AirProvingContext, ProverBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+    poseidon2_perm, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
@@ -23,56 +24,67 @@ pub fn generate_proving_ctx(
     app_exe_commit: [F; DIGEST_SIZE],
     app_vk_commit: [F; DIGEST_SIZE],
     user_pvs: Vec<F>,
+    def_idx: usize,
 ) -> DeferralOutputCtx<CpuBackend<BabyBearPoseidon2Config>> {
     debug_assert!(DIGEST_SIZE.is_multiple_of(F_NUM_BYTES));
     debug_assert!(DIGEST_SIZE.is_multiple_of(VALS_IN_DIGEST));
     debug_assert!(user_pvs.len().is_multiple_of(VALS_IN_DIGEST));
 
-    let mut next_f_rows = values_to_rows(&app_exe_commit);
-    next_f_rows.extend(values_to_rows(&app_vk_commit));
-    next_f_rows.extend(values_to_rows(&user_pvs));
-    debug_assert!(!next_f_rows.is_empty());
+    let mut input_val_rows = values_to_rows(&app_exe_commit);
+    input_val_rows.extend(values_to_rows(&app_vk_commit));
+    input_val_rows.extend(values_to_rows(&user_pvs));
 
-    // One trailing invalid row is required so OutputCommitBus can receive the final state
-    let min_height = next_f_rows.len() + 1;
-    let height = min_height.next_power_of_two();
+    let num_rows = input_val_rows.len() + 1;
+    let height = num_rows.next_power_of_two();
     let width = DeferralOutputCommitCols::<u8>::width();
     let mut trace = vec![F::ZERO; height * width];
     let mut chunks = trace.chunks_exact_mut(width);
 
-    let mut poseidon2_compress_inputs = Vec::with_capacity(next_f_rows.len().saturating_sub(1));
-    let mut range_inputs = Vec::with_capacity(next_f_rows.len() * DIGEST_SIZE);
-    let mut state = [F::ZERO; DIGEST_SIZE];
+    let mut poseidon2_permute_inputs = Vec::with_capacity(num_rows);
+    let mut range_inputs = Vec::with_capacity(input_val_rows.len() * DIGEST_SIZE);
+    let output_len = input_val_rows.len() * DIGEST_SIZE;
+    let mut input_capacity = [F::ZERO; DIGEST_SIZE];
+    let mut output_commit = [F::ZERO; DIGEST_SIZE];
+    let perm = poseidon2_perm();
 
-    for (row_idx, next_f) in next_f_rows.iter().copied().enumerate() {
+    for row_idx in 0..height {
         let row = chunks.next().unwrap();
         let cols: &mut DeferralOutputCommitCols<F> = row.borrow_mut();
-        cols.is_valid = F::ONE;
-        cols.is_first = F::from_bool(row_idx == 0);
-        cols.next_f = next_f;
-        cols.next_f_idx = F::from_usize(row_idx);
-        cols.next_bytes = next_f_to_digest(next_f);
-        range_inputs.extend_from_slice(&cols.next_bytes.map(|b| b.as_canonical_u32() as usize));
+        cols.row_idx = F::from_usize(row_idx);
+        if row_idx < num_rows {
+            cols.is_valid = F::ONE;
+            cols.is_first = F::from_bool(row_idx == 0);
+            cols.output_len = F::from_usize(output_len);
 
-        cols.state = state;
-        poseidon2_compress_inputs.push(digests_to_poseidon2_input(state, cols.next_bytes));
-        state = poseidon2_compress_with_capacity(state, cols.next_bytes).0;
-    }
+            cols.input_vals = if row_idx == 0 {
+                let mut input = [F::ZERO; DIGEST_SIZE];
+                input[0] = F::from_usize(def_idx);
+                input[1] = F::from_usize(output_len);
+                input
+            } else {
+                let next_f = input_val_rows[row_idx - 1];
+                let input_vals = next_f_to_digest(next_f);
+                range_inputs.extend(input_vals.map(|b| b.as_canonical_u32() as usize));
+                input_vals
+            };
 
-    for row_idx in next_f_rows.len()..height {
-        let row = chunks.next().unwrap();
-        let cols: &mut DeferralOutputCommitCols<F> = row.borrow_mut();
-        cols.next_f_idx = F::from_usize(row_idx);
-        if row_idx == next_f_rows.len() {
-            cols.state = state;
+            let perm_input = digests_to_poseidon2_input(cols.input_vals, input_capacity);
+            poseidon2_permute_inputs.push(perm_input);
+
+            let perm_output = perm.permute(perm_input);
+            cols.res_left = perm_output[..DIGEST_SIZE].try_into().unwrap();
+            cols.res_right = perm_output[DIGEST_SIZE..].try_into().unwrap();
+
+            input_capacity = cols.res_right;
+            output_commit = cols.res_left;
         }
     }
 
     DeferralOutputCtx {
         proving_ctx: AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width)),
-        poseidon2_inputs: poseidon2_compress_inputs,
+        poseidon2_inputs: poseidon2_permute_inputs,
         range_inputs,
-        output_commit: state,
+        output_commit,
     }
 }
 

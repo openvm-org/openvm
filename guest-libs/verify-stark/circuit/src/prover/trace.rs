@@ -52,6 +52,7 @@ where
             &proof,
             user_pvs_proof,
             self.circuit.memory_dimensions,
+            self.circuit.def_idx,
             deferral_merkle_proofs,
         );
 
