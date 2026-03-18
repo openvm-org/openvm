@@ -29,7 +29,7 @@ use crate::{
             eval_eq_mle_binary_assigned, eval_eq_prism_assigned, eval_eq_uni_at_one_assigned,
             eval_rot_kernel_prism_assigned, BatchConstraintError,
         },
-        pipeline::prepare_pipeline_inputs,
+        full_pipeline::witness::prepare_pipeline_inputs,
         shared_math::{
             column_openings_by_rot_assigned, horner_eval_ext_poly_assigned,
             interpolate_quadratic_at_012_assigned,
