@@ -43,6 +43,7 @@ use crate::{
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
         stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
     },
+    transcript::{DigestWire, TranscriptGadget},
     utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
@@ -827,12 +828,14 @@ fn tree_compress_assigned_digests(
         .expect("tree_compress must output one digest for non-empty inputs")
 }
 
+#[allow(dead_code)]
 struct AssignedMerklePathPayload {
     leaf_values: Vec<Vec<BabyBearWire>>,
     query_bits: Vec<AssignedValue<Fr>>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+#[allow(dead_code)]
 pub(crate) struct SharedWhirWitnessInputs<'a> {
     pub stacking_openings: Option<&'a [Vec<BabyBearExtWire>]>,
     pub initial_commitment_roots: Option<&'a [AssignedValue<Fr>]>,
@@ -895,6 +898,446 @@ fn constrain_merkle_path(
     }
 }
 
+fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
+    DigestWire {
+        elems: core::array::from_fn(|_| root),
+    }
+}
+
+fn sample_witness_bits_assigned(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
+    transcript: &mut TranscriptGadget,
+    bits: usize,
+    witness: BabyBearWire,
+) -> (AssignedValue<Fr>, AssignedValue<Fr>) {
+    if bits == 0 {
+        return (
+            ctx.load_constant(Fr::from(0u64)),
+            ctx.load_constant(Fr::from(1u64)),
+        );
+    }
+
+    transcript.observe(ctx, ext_chip.range(), ext_chip.base(), &witness);
+    let sampled_bits = transcript.sample_bits(ctx, ext_chip.range(), ext_chip.base(), bits);
+    let witness_ok = ext_chip.range().gate().is_zero(ctx, sampled_bits);
+    (sampled_bits, witness_ok)
+}
+
+pub(crate) fn constrain_whir_from_proof_inputs(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip<'_>,
+    transcript: &mut TranscriptGadget,
+    config: &NativeConfig,
+    whir_proof: &WhirProof<NativeConfig>,
+    stacking_openings: &[Vec<BabyBearExtWire>],
+    initial_commitment_roots: &[AssignedValue<Fr>],
+    u_cube: &[BabyBearExtWire],
+) -> AssignedWhirIntermediates {
+    let gate = ext_chip.range().gate();
+    let params = config.params();
+    let k_whir = params.k_whir();
+    let num_whir_rounds = params.num_whir_rounds();
+
+    let mu_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, params.whir.mu_pow_bits);
+    let mu_pow_witness = ext_chip.base().load_witness(
+        ctx,
+        ChildF::from_u64(whir_proof.mu_pow_witness.as_canonical_u64()),
+    );
+    let (mu_pow_sampled_bits, mu_pow_witness_ok) = sample_witness_bits_assigned(
+        ctx,
+        ext_chip,
+        transcript,
+        params.whir.mu_pow_bits,
+        mu_pow_witness,
+    );
+    gate.assert_is_const(ctx, &mu_pow_witness_ok, &Fr::from(1u64));
+    let mu_challenge = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+
+    let folding_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, params.whir.folding_pow_bits);
+    let query_phase_pow_bits = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, params.whir.query_phase_pow_bits);
+
+    let folding_pow_witnesses = whir_proof
+        .folding_pow_witnesses
+        .iter()
+        .map(|&witness| {
+            ext_chip
+                .base()
+                .load_witness(ctx, ChildF::from_u64(witness.as_canonical_u64()))
+        })
+        .collect::<Vec<_>>();
+    let query_phase_pow_witnesses = whir_proof
+        .query_phase_pow_witnesses
+        .iter()
+        .map(|&witness| {
+            ext_chip
+                .base()
+                .load_witness(ctx, ChildF::from_u64(witness.as_canonical_u64()))
+        })
+        .collect::<Vec<_>>();
+    let whir_sumcheck_polys = whir_proof
+        .whir_sumcheck_polys
+        .iter()
+        .map(|poly| {
+            poly.iter()
+                .map(|&value| assign_ext(ctx, ext_chip, value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let ood_values = whir_proof
+        .ood_values
+        .iter()
+        .map(|&value| assign_ext(ctx, ext_chip, value))
+        .collect::<Vec<_>>();
+    let final_poly = whir_proof
+        .final_poly
+        .iter()
+        .map(|&value| assign_ext(ctx, ext_chip, value))
+        .collect::<Vec<_>>();
+    let expected_final_poly_len = 1usize << params.log_final_poly_len();
+    let final_poly_len = ext_chip
+        .base()
+        .assign_and_range_usize(ctx, whir_proof.final_poly.len());
+    gate.assert_is_const(
+        ctx,
+        &final_poly_len,
+        &Fr::from(usize_to_u64(expected_final_poly_len)),
+    );
+
+    let codeword_commitment_roots = whir_proof
+        .codeword_commits
+        .iter()
+        .map(|&digest| ctx.load_witness(digest_to_fr(digest)))
+        .collect::<Vec<_>>();
+    let codeword_commitment_digests = codeword_commitment_roots
+        .iter()
+        .copied()
+        .map(digest_wire_from_root)
+        .collect::<Vec<_>>();
+
+    let total_width = stacking_openings.iter().map(Vec::len).sum::<usize>();
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let mut mu_pows = Vec::with_capacity(total_width);
+    let mut mu_pow = one;
+    for _ in 0..total_width {
+        mu_pows.push(mu_pow);
+        mu_pow = ext_chip.mul(ctx, &mu_pow, &mu_challenge);
+    }
+
+    let mut final_claim = ext_chip.zero(ctx);
+    let mut mu_idx = 0usize;
+    for commit_openings in stacking_openings {
+        for opening in commit_openings {
+            let weighted = ext_chip.mul(ctx, opening, &mu_pows[mu_idx]);
+            final_claim = ext_chip.add(ctx, &final_claim, &weighted);
+            mu_idx += 1;
+        }
+    }
+
+    let mut folding_pow_sampled_bits = Vec::with_capacity(folding_pow_witnesses.len());
+    let mut folding_pow_witness_ok = Vec::with_capacity(folding_pow_witnesses.len());
+    let mut folding_alphas = Vec::new();
+    let mut z0_challenges = Vec::new();
+    let mut query_phase_pow_sampled_bits = Vec::with_capacity(query_phase_pow_witnesses.len());
+    let mut query_phase_pow_witness_ok = Vec::with_capacity(query_phase_pow_witnesses.len());
+    let mut gammas = Vec::with_capacity(num_whir_rounds);
+    let mut query_indices = Vec::new();
+    let mut folding_counts_per_round = Vec::with_capacity(num_whir_rounds);
+    let mut query_counts_per_round = Vec::with_capacity(num_whir_rounds);
+    let mut query_index_bits = Vec::new();
+    let mut zs_per_round = Vec::with_capacity(num_whir_rounds);
+
+    let mut sumcheck_cursor = 0usize;
+    let mut folding_pow_cursor = 0usize;
+    let mut log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
+    let _initial_log_rs_domain_size = log_rs_domain_size;
+
+    for (round_idx, round_params) in params.whir.rounds.iter().enumerate() {
+        let is_initial_round = round_idx == 0;
+        let is_final_round = round_idx + 1 == num_whir_rounds;
+        let mut alphas_round = Vec::new();
+
+        for _ in 0..k_whir {
+            if let Some(evals) = whir_sumcheck_polys.get(sumcheck_cursor) {
+                let ev1 = evals[0];
+                let ev2 = evals[1];
+                transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &ev1);
+                transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &ev2);
+
+                let pow_witness = folding_pow_witnesses[folding_pow_cursor];
+                folding_pow_cursor += 1;
+                let (sampled_bits, witness_ok) = sample_witness_bits_assigned(
+                    ctx,
+                    ext_chip,
+                    transcript,
+                    params.whir.folding_pow_bits,
+                    pow_witness,
+                );
+                gate.assert_is_const(ctx, &witness_ok, &Fr::from(1u64));
+                folding_pow_sampled_bits.push(sampled_bits);
+                folding_pow_witness_ok.push(witness_ok);
+
+                let alpha = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+                alphas_round.push(alpha);
+                folding_alphas.push(alpha);
+
+                let ev0 = ext_chip.sub(ctx, &final_claim, &ev1);
+                final_claim = interpolate_quadratic_at_012_assigned(
+                    ctx,
+                    ext_chip,
+                    [&ev0, &ev1, &ev2],
+                    &alpha,
+                );
+                sumcheck_cursor += 1;
+            }
+        }
+        folding_counts_per_round.push(alphas_round.len());
+
+        let y0 = if is_final_round {
+            for coeff in &final_poly {
+                transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), coeff);
+            }
+            None
+        } else {
+            transcript.observe_commit(
+                ctx,
+                ext_chip.range(),
+                ext_chip.base(),
+                &codeword_commitment_digests[round_idx],
+            );
+            let z0 = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+            z0_challenges.push(z0);
+
+            let y0 = ood_values[round_idx];
+            transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &y0);
+            Some(y0)
+        };
+
+        let (query_pow_sampled, query_pow_ok) = sample_witness_bits_assigned(
+            ctx,
+            ext_chip,
+            transcript,
+            params.whir.query_phase_pow_bits,
+            query_phase_pow_witnesses[round_idx],
+        );
+        gate.assert_is_const(ctx, &query_pow_ok, &Fr::from(1u64));
+        query_phase_pow_sampled_bits.push(query_pow_sampled);
+        query_phase_pow_witness_ok.push(query_pow_ok);
+
+        let query_bits = log_rs_domain_size - k_whir;
+        let num_queries = round_params.num_queries;
+        query_counts_per_round.push(num_queries);
+
+        let mut ys_round = Vec::with_capacity(num_queries);
+        let mut zs_round = Vec::with_capacity(num_queries);
+
+        for query_idx in 0..num_queries {
+            let query_index =
+                transcript.sample_bits(ctx, ext_chip.range(), ext_chip.base(), query_bits);
+            query_index_bits.push(query_bits);
+            query_indices.push(query_index);
+            let query_bits_vec = if query_bits == 0 {
+                Vec::new()
+            } else {
+                gate.num_to_bits(ctx, query_index, query_bits)
+            };
+            let zi_root_base =
+                query_root_from_bits_assigned(ctx, ext_chip, &query_bits_vec, log_rs_domain_size);
+            let zi_root_ext = ext_chip.from_base_var(ctx, &zi_root_base);
+            let zi = ext_chip.pow_power_of_two(ctx, &zi_root_ext, k_whir);
+
+            let yi = if is_initial_round {
+                let mut codeword_vals = vec![ext_chip.zero(ctx); 1usize << k_whir];
+                let mut mu_power_idx = 0usize;
+                for (commit_idx, commit_openings) in stacking_openings.iter().enumerate() {
+                    let opened_rows = &whir_proof.initial_round_opened_rows[commit_idx][query_idx];
+                    let siblings = whir_proof.initial_round_merkle_proofs[commit_idx][query_idx]
+                        .iter()
+                        .copied()
+                        .map(digest_to_fr)
+                        .collect::<Vec<_>>();
+                    let leaf_inputs = opened_rows
+                        .iter()
+                        .map(|row| base_slice_to_u64_vec(row))
+                        .collect::<Vec<_>>();
+                    let payload = constrain_merkle_path(
+                        ctx,
+                        ext_chip,
+                        &query_bits_vec,
+                        &leaf_inputs,
+                        &siblings,
+                        initial_commitment_roots[commit_idx],
+                    );
+                    for col_idx in 0..commit_openings.len() {
+                        let mu_pow = &mu_pows[mu_power_idx];
+                        for (row_idx, row) in payload.leaf_values.iter().enumerate() {
+                            let opened_base = row[col_idx];
+                            let opened_ext = ext_chip.from_base_var(ctx, &opened_base);
+                            let weighted = ext_chip.mul(ctx, &opened_ext, mu_pow);
+                            codeword_vals[row_idx] =
+                                ext_chip.add(ctx, &codeword_vals[row_idx], &weighted);
+                        }
+                        mu_power_idx += 1;
+                    }
+                }
+                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, &zi_root_base)
+            } else {
+                let opened_values = &whir_proof.codeword_opened_values[round_idx - 1][query_idx];
+                let siblings = whir_proof.codeword_merkle_proofs[round_idx - 1][query_idx]
+                    .iter()
+                    .copied()
+                    .map(digest_to_fr)
+                    .collect::<Vec<_>>();
+                let leaf_inputs = opened_values
+                    .iter()
+                    .map(|value| ext_to_u64_vec(*value))
+                    .collect::<Vec<_>>();
+                let payload = constrain_merkle_path(
+                    ctx,
+                    ext_chip,
+                    &query_bits_vec,
+                    &leaf_inputs,
+                    &siblings,
+                    codeword_commitment_roots[round_idx - 1],
+                );
+                let opened_values = payload
+                    .leaf_values
+                    .iter()
+                    .map(|row| BabyBearExtWire(core::array::from_fn(|idx| row[idx])))
+                    .collect::<Vec<_>>();
+                binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, &zi_root_base)
+            };
+
+            zs_round.push(zi);
+            ys_round.push(yi);
+        }
+
+        let gamma = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+        if let Some(y0) = y0 {
+            let y0_term = ext_chip.mul(ctx, &y0, &gamma);
+            final_claim = ext_chip.add(ctx, &final_claim, &y0_term);
+        }
+        let mut gamma_pow = ext_chip.mul(ctx, &gamma, &gamma);
+        for yi in &ys_round {
+            let term = ext_chip.mul(ctx, yi, &gamma_pow);
+            final_claim = ext_chip.add(ctx, &final_claim, &term);
+            gamma_pow = ext_chip.mul(ctx, &gamma_pow, &gamma);
+        }
+
+        gammas.push(gamma);
+        zs_per_round.push(zs_round);
+        log_rs_domain_size = log_rs_domain_size.saturating_sub(1);
+    }
+
+    let rounds = query_counts_per_round.len();
+    let t = k_whir * rounds;
+    let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
+    let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
+    let mut final_acc = ext_chip.mul(ctx, &prefix, &suffix);
+
+    let mut alpha_offset = k_whir;
+    for round_idx in 0..rounds {
+        let gamma = &gammas[round_idx];
+        let alpha_slc = &folding_alphas[alpha_offset..t];
+        let slc_len = (t - alpha_offset) + 1;
+
+        if round_idx + 1 != rounds {
+            let z0 = &z0_challenges[round_idx];
+            let mut z0_pows = Vec::with_capacity(slc_len);
+            z0_pows.push(*z0);
+            for _ in 1..slc_len {
+                let next = ext_chip.mul(
+                    ctx,
+                    z0_pows.last().expect("z0 power sequence is non-empty"),
+                    z0_pows.last().expect("z0 power sequence is non-empty"),
+                );
+                z0_pows.push(next);
+            }
+            let z0_max = *z0_pows.last().expect("z0 power sequence is non-empty");
+            let eq = eval_eq_mle_assigned(
+                ctx,
+                ext_chip,
+                alpha_slc,
+                &z0_pows[..z0_pows.len().saturating_sub(1)],
+            );
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &z0_max);
+            let term = ext_chip.mul(ctx, gamma, &eq);
+            let term = ext_chip.mul(ctx, &term, &poly_eval);
+            final_acc = ext_chip.add(ctx, &final_acc, &term);
+        }
+
+        let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
+        for zi in &zs_per_round[round_idx] {
+            let mut zi_pows = Vec::with_capacity(slc_len);
+            zi_pows.push(*zi);
+            for _ in 1..slc_len {
+                let next = ext_chip.mul(
+                    ctx,
+                    zi_pows.last().expect("zi power sequence is non-empty"),
+                    zi_pows.last().expect("zi power sequence is non-empty"),
+                );
+                zi_pows.push(next);
+            }
+            let zi_max = *zi_pows.last().expect("zi power sequence is non-empty");
+            let eq = eval_eq_mle_assigned(
+                ctx,
+                ext_chip,
+                alpha_slc,
+                &zi_pows[..zi_pows.len().saturating_sub(1)],
+            );
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &zi_max);
+            let term = ext_chip.mul(ctx, &gamma_pow, &eq);
+            let term = ext_chip.mul(ctx, &term, &poly_eval);
+            final_acc = ext_chip.add(ctx, &final_acc, &term);
+            gamma_pow = ext_chip.mul(ctx, &gamma_pow, gamma);
+        }
+
+        alpha_offset += k_whir;
+    }
+
+    let final_residual = ext_chip.sub(ctx, &final_acc, &final_claim);
+    let zero = ext_chip.zero(ctx);
+    ext_chip.assert_equal(ctx, &final_residual, &zero);
+
+    AssignedWhirIntermediates {
+        mu_pow_bits,
+        mu_pow_witness,
+        mu_pow_sampled_bits,
+        mu_pow_witness_ok,
+        mu_challenge,
+        folding_pow_bits,
+        folding_pow_witnesses,
+        folding_pow_sampled_bits,
+        folding_pow_witness_ok,
+        folding_alphas,
+        z0_challenges,
+        query_phase_pow_bits,
+        query_phase_pow_witnesses,
+        query_phase_pow_sampled_bits,
+        query_phase_pow_witness_ok,
+        gammas,
+        query_indices,
+        whir_sumcheck_polys,
+        stacking_openings: stacking_openings.to_vec(),
+        initial_commitment_roots: initial_commitment_roots.to_vec(),
+        codeword_commitment_roots,
+        ood_values,
+        final_poly,
+        final_poly_len,
+        u_cube: u_cube.to_vec(),
+        final_claim,
+        final_acc,
+        final_residual,
+    }
+}
+
+#[allow(dead_code)]
 pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
@@ -1772,6 +2215,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn constrain_checked_whir_witness_state_with_shared_inputs(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,

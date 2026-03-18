@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub(crate) mod witness;
 
 use core::iter::{once, zip};
@@ -26,11 +28,12 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExtChip, BabyBearExtWire, BABY_BEAR_BITS, BABY_BEAR_EXT_DEGREE,
-        BABY_BEAR_MODULUS_U64,
+        BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
+        BABY_BEAR_EXT_DEGREE, BABY_BEAR_MODULUS_U64,
     },
     stages::{
         batch_constraints::{
+            compute_trace_id_to_air_id, constrain_batch_from_proof_inputs,
             constrain_batch_intermediates_with_shared_trace_ids, AssignedBatchIntermediates,
             BatchConstraintError, BatchIntermediates,
         },
@@ -40,11 +43,13 @@ use crate::{
         },
         proof_shape::{
             constrain_checked_proof_shape_witness_state_with_ownership,
-            derive_proof_shape_intermediates, derive_proof_shape_ownership_schedule,
-            derive_proof_shape_rules, AssignedProofShapeIntermediates, ProofShapeIntermediates,
-            ProofShapeOwnershipSchedule, ProofShapePreambleError, RawProofShapeWitnessState,
+            derive_and_constrain_proof_shape, derive_proof_shape_intermediates,
+            derive_proof_shape_ownership_schedule, derive_proof_shape_rules,
+            AssignedProofShapeIntermediates, ProofShapeIntermediates, ProofShapeOwnershipSchedule,
+            ProofShapePreambleError, RawProofShapeWitnessState,
         },
         stacked_reduction::{
+            constrain_stacked_reduction_from_proof_inputs,
             constrain_stacked_reduction_intermediates_with_shared_inputs,
             derive_stacked_reduction_intermediates_with_inputs,
             AssignedStackedReductionIntermediates, QCoeffAccumulationTerm,
@@ -52,13 +57,15 @@ use crate::{
         },
         whir::{
             constrain_checked_whir_witness_state_with_shared_inputs,
-            derive_whir_intermediates_with_inputs, AssignedWhirIntermediates, RawWhirWitnessState,
-            SharedWhirWitnessInputs, WhirError, WhirIntermediates,
+            constrain_whir_from_proof_inputs, derive_whir_intermediates_with_inputs,
+            AssignedWhirIntermediates, RawWhirWitnessState, SharedWhirWitnessInputs, WhirError,
+            WhirIntermediates,
         },
     },
     transcript::{
         constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
-        AssignedTranscriptEvent, LoggedTranscript, TranscriptEvent, NUM_SPLIT_LIMBS,
+        AssignedTranscriptEvent, DigestWire, LoggedTranscript, TranscriptEvent, TranscriptGadget,
+        NUM_SPLIT_LIMBS,
     },
     utils::usize_to_u64,
     ChildF, Fr,
@@ -177,6 +184,12 @@ pub struct DerivedPipelineState {
     pub consumed_non_preamble_observes: usize,
 }
 
+#[derive(Clone, Debug)]
+struct AssignedPreambleState {
+    statement_public_inputs: [AssignedValue<Fr>; 2],
+    public_values: Vec<Vec<BabyBearWire>>,
+}
+
 const BN254_DIGEST_BABYBEAR_LIMBS: usize = NUM_SPLIT_LIMBS;
 
 fn derive_non_preamble_observes(events: &[TranscriptEvent], preamble_observes: usize) -> Vec<u64> {
@@ -245,6 +258,123 @@ pub fn derive_pipeline_intermediates(
 
 fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
+}
+
+fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
+    DigestWire {
+        elems: core::array::from_fn(|_| root),
+    }
+}
+
+fn observe_preamble_assigned(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    transcript: &mut TranscriptGadget,
+    mvk: &MultiStarkVerifyingKey<NativeConfig>,
+    proof: &Proof<NativeConfig>,
+    proof_shape: &AssignedProofShapeIntermediates,
+) -> AssignedPreambleState {
+    let base_chip = BabyBearChip::new(range);
+    let statement_public_inputs = [
+        ctx.load_witness(digest_scalar_to_fr(mvk.pre_hash[0])),
+        ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
+    ];
+
+    transcript.observe_commit(
+        ctx,
+        range,
+        &base_chip,
+        &digest_wire_from_root(statement_public_inputs[0]),
+    );
+    transcript.observe_commit(
+        ctx,
+        range,
+        &base_chip,
+        &digest_wire_from_root(statement_public_inputs[1]),
+    );
+
+    let public_values = proof
+        .public_values
+        .iter()
+        .enumerate()
+        .map(|(air_idx, values)| {
+            if !mvk.inner.per_air[air_idx].is_required {
+                transcript.observe(
+                    ctx,
+                    range,
+                    &base_chip,
+                    &BabyBearWire(proof_shape.air_presence_flags[air_idx]),
+                );
+            }
+
+            if proof.trace_vdata[air_idx].is_some() {
+                if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
+                    let preprocessed_root =
+                        ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
+                    transcript.observe_commit(
+                        ctx,
+                        range,
+                        &base_chip,
+                        &digest_wire_from_root(preprocessed_root),
+                    );
+                } else {
+                    transcript.observe(
+                        ctx,
+                        range,
+                        &base_chip,
+                        &BabyBearWire(proof_shape.air_log_heights[air_idx]),
+                    );
+                }
+
+                for commit in &proof.trace_vdata[air_idx]
+                    .as_ref()
+                    .expect("present air must include trace vdata")
+                    .cached_commitments
+                {
+                    let root = ctx.load_witness(digest_scalar_to_fr(commit[0]));
+                    transcript.observe_commit(ctx, range, &base_chip, &digest_wire_from_root(root));
+                }
+            }
+
+            values
+                .iter()
+                .map(|&value| {
+                    let value = base_chip.load_witness(ctx, value);
+                    transcript.observe(ctx, range, &base_chip, &value);
+                    value
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    AssignedPreambleState {
+        statement_public_inputs,
+        public_values,
+    }
+}
+
+fn collect_initial_commitment_roots_assigned(
+    ctx: &mut Context<Fr>,
+    mvk: &MultiStarkVerifyingKey<NativeConfig>,
+    proof: &Proof<NativeConfig>,
+    trace_id_to_air_id: &[usize],
+    common_main_root: AssignedValue<Fr>,
+) -> Vec<AssignedValue<Fr>> {
+    let mut commits = vec![common_main_root];
+    for &air_id in trace_id_to_air_id {
+        if let Some(preprocessed) = &mvk.inner.per_air[air_id].preprocessed_data {
+            commits.push(ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
+        }
+        commits.extend(
+            proof.trace_vdata[air_id]
+                .as_ref()
+                .expect("trace-id schedule must reference present airs")
+                .cached_commitments
+                .iter()
+                .map(|commit| ctx.load_witness(digest_scalar_to_fr(commit[0]))),
+        );
+    }
+    commits
 }
 
 fn derive_pipeline_statement_witness(
@@ -2247,8 +2377,72 @@ pub fn derive_and_constrain_pipeline(
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     proof: &Proof<NativeConfig>,
 ) -> Result<AssignedPipelineIntermediates, PipelineError> {
-    let raw = derive_raw_pipeline_witness_state(config, mvk, proof)?;
-    Ok(constrain_checked_pipeline_witness_state(ctx, range, &raw).assigned)
+    let base_chip = BabyBearChip::new(range);
+    let ext_chip = BabyBearExtChip::new(base_chip);
+    let proof_shape = derive_and_constrain_proof_shape(ctx, ext_chip.base(), config, mvk, proof)?;
+    let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
+
+    let mut transcript = TranscriptGadget::new(ctx);
+    let preamble = observe_preamble_assigned(ctx, range, &mut transcript, mvk, proof, &proof_shape);
+
+    let batch = constrain_batch_from_proof_inputs(
+        ctx,
+        range,
+        &mut transcript,
+        &mvk.inner,
+        proof,
+        &trace_id_to_air_id,
+        &proof_shape.trace_id_to_air_id,
+        preamble.public_values,
+    )?;
+
+    let layouts = derive_proof_shape_rules(&mvk.inner, proof)
+        .map_err(|err| PipelineError::ProofShape(ProofShapePreambleError::ProofShape(err)))?
+        .layouts;
+    let need_rot_per_commit = derive_need_rot_per_commit(&mvk.inner, proof, &trace_id_to_air_id)?;
+    let stacked_reduction = constrain_stacked_reduction_from_proof_inputs(
+        ctx,
+        &ext_chip,
+        &mut transcript,
+        &proof.stacking_proof,
+        &layouts,
+        &need_rot_per_commit,
+        mvk.inner.params.l_skip,
+        mvk.inner.params.n_stack,
+        &batch.column_openings,
+        &batch.r,
+    );
+    let u_cube = derive_u_cube_from_stacked_assigned(
+        ctx,
+        &ext_chip,
+        mvk.inner.params.l_skip,
+        &stacked_reduction.u,
+    );
+    let initial_commitment_roots = collect_initial_commitment_roots_assigned(
+        ctx,
+        mvk,
+        proof,
+        &trace_id_to_air_id,
+        preamble.statement_public_inputs[1],
+    );
+    let whir = constrain_whir_from_proof_inputs(
+        ctx,
+        &ext_chip,
+        &mut transcript,
+        config,
+        &proof.whir_proof,
+        &stacked_reduction.stacking_openings,
+        &initial_commitment_roots,
+        &u_cube,
+    );
+
+    Ok(AssignedPipelineIntermediates {
+        proof_shape,
+        batch,
+        stacked_reduction,
+        whir,
+        statement_public_inputs: preamble.statement_public_inputs,
+    })
 }
 
 #[cfg(test)]

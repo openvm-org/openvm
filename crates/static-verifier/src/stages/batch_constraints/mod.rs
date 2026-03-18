@@ -37,6 +37,7 @@ use crate::{
         BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE,
     },
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
+    transcript::TranscriptGadget,
     utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
@@ -1383,6 +1384,635 @@ fn column_openings_by_rot_assigned(
         .collect::<Vec<_>>()
 }
 
+fn observe_layer_claims_assigned(
+    ctx: &mut Context<Fr>,
+    range: &halo2_base::gates::range::RangeChip<Fr>,
+    transcript: &mut TranscriptGadget,
+    baby_bear: &BabyBearChip<'_>,
+    claims: &[BabyBearExtWire],
+) {
+    for claim in claims {
+        transcript.observe_ext(ctx, range, baby_bear, claim);
+    }
+}
+
+fn sample_witness_bits_assigned(
+    ctx: &mut Context<Fr>,
+    range: &halo2_base::gates::range::RangeChip<Fr>,
+    transcript: &mut TranscriptGadget,
+    baby_bear: &BabyBearChip<'_>,
+    bits: usize,
+    witness: BabyBearWire,
+) -> (AssignedValue<Fr>, AssignedValue<Fr>) {
+    if bits == 0 {
+        return (
+            ctx.load_constant(Fr::from(0u64)),
+            ctx.load_constant(Fr::from(1u64)),
+        );
+    }
+
+    transcript.observe(ctx, range, baby_bear, &witness);
+    let sampled_bits = transcript.sample_bits(ctx, range, baby_bear, bits);
+    let witness_ok = range.gate().is_zero(ctx, sampled_bits);
+    (sampled_bits, witness_ok)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn constrain_batch_from_proof_inputs(
+    ctx: &mut Context<Fr>,
+    range: &halo2_base::gates::range::RangeChip<Fr>,
+    transcript: &mut TranscriptGadget,
+    mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
+    proof: &Proof<NativeConfig>,
+    trace_id_to_air_id: &[usize],
+    shared_trace_id_to_air_id: &[AssignedValue<Fr>],
+    public_values: Vec<Vec<BabyBearWire>>,
+) -> Result<AssignedBatchIntermediates, BatchConstraintError> {
+    let base_chip = BabyBearChip::new(range);
+    let ext_chip = BabyBearExtChip::new(base_chip);
+    let baby_bear = ext_chip.base();
+    let gate = range.gate();
+
+    let l_skip = mvk0.params.l_skip;
+    let n_per_trace = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| {
+            Ok(proof.trace_vdata[air_id]
+                .as_ref()
+                .ok_or(BatchConstraintError::MissingTraceVData { air_id })?
+                .log_height as isize
+                - l_skip as isize)
+        })
+        .collect::<Result<Vec<_>, BatchConstraintError>>()?;
+
+    let trace_id_to_air_id_host = trace_id_to_air_id.to_vec();
+    let total_interactions_host = zip(trace_id_to_air_id, &n_per_trace)
+        .map(|(&air_idx, &n)| {
+            let n_lift = n.max(0) as usize;
+            let num_interactions = mvk0.per_air[air_idx]
+                .symbolic_constraints
+                .interactions
+                .len();
+            (num_interactions as u64) << (l_skip + n_lift)
+        })
+        .sum::<u64>();
+    let n_logup_host = calculate_n_logup(l_skip, total_interactions_host);
+    let n_max_host = n_per_trace.iter().copied().max().unwrap_or(0).max(0) as usize;
+    let n_global_host = n_max_host.max(n_logup_host);
+    let batch_degree_host = mvk0.params.max_constraint_degree + 1;
+    let omega_skip = ChildF::two_adic_generator(l_skip);
+    let omega_skip_pows: Vec<_> = omega_skip.powers().take(1usize << l_skip).collect();
+
+    let trace_has_preprocessed = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| mvk0.per_air[air_id].preprocessed_data.is_some())
+        .collect::<Vec<_>>();
+    let trace_constraint_nodes = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| {
+            mvk0.per_air[air_id]
+                .symbolic_constraints
+                .constraints
+                .nodes
+                .clone()
+        })
+        .collect::<Vec<_>>();
+    let trace_constraint_indices = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| {
+            mvk0.per_air[air_id]
+                .symbolic_constraints
+                .constraints
+                .constraint_idx
+                .clone()
+        })
+        .collect::<Vec<_>>();
+    let trace_interactions = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| {
+            mvk0.per_air[air_id]
+                .symbolic_constraints
+                .interactions
+                .clone()
+        })
+        .collect::<Vec<_>>();
+    let column_openings_need_rot = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| {
+            let need_rot = mvk0.per_air[air_id].params.need_rot;
+            vec![need_rot; mvk0.per_air[air_id].num_parts()]
+        })
+        .collect::<Vec<_>>();
+
+    let trace_id_to_air_id = shared_trace_id_to_air_id.to_vec();
+    let total_interactions = baby_bear.assign_and_range_u64(ctx, total_interactions_host);
+    let n_logup = baby_bear.assign_and_range_usize(ctx, n_logup_host);
+    let n_max = baby_bear.assign_and_range_usize(ctx, n_max_host);
+    let batch_degree = baby_bear.assign_and_range_usize(ctx, batch_degree_host);
+
+    let logup_pow_bits = mvk0.params.logup.pow_bits;
+    let logup_pow_bits = baby_bear.assign_and_range_usize(ctx, logup_pow_bits);
+    let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
+    let (logup_pow_sampled_bits, logup_pow_witness_ok) = sample_witness_bits_assigned(
+        ctx,
+        range,
+        transcript,
+        baby_bear,
+        mvk0.params.logup.pow_bits,
+        logup_pow_witness,
+    );
+    gate.assert_is_const(ctx, &logup_pow_witness_ok, &Fr::from(1u64));
+
+    let alpha_logup = transcript.sample_ext(ctx, range, baby_bear);
+    let beta_logup = transcript.sample_ext(ctx, range, baby_bear);
+
+    let gkr_q0_claim = (total_interactions_host != 0)
+        .then(|| ext_chip.load_witness(ctx, proof.gkr_proof.q0_claim));
+    let gkr_claims_per_layer = proof
+        .gkr_proof
+        .claims_per_layer
+        .iter()
+        .map(|claims| {
+            vec![
+                ext_chip.load_witness(ctx, claims.p_xi_0),
+                ext_chip.load_witness(ctx, claims.q_xi_0),
+                ext_chip.load_witness(ctx, claims.p_xi_1),
+                ext_chip.load_witness(ctx, claims.q_xi_1),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let gkr_sumcheck_polys = proof
+        .gkr_proof
+        .sumcheck_polys
+        .iter()
+        .map(|poly| {
+            let mut assigned = Vec::with_capacity(poly.len() * 3);
+            for evals in poly {
+                for &value in evals {
+                    assigned.push(ext_chip.load_witness(ctx, value));
+                }
+            }
+            assigned
+        })
+        .collect::<Vec<_>>();
+
+    let zero = ext_chip.zero(ctx);
+    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let total_gkr_rounds = l_skip + n_logup_host;
+    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, gkr_sample_stream) =
+        if total_interactions_host == 0 {
+            let q0_claim = ext_chip.load_witness(ctx, proof.gkr_proof.q0_claim);
+            ext_chip.assert_equal(ctx, &q0_claim, &one);
+            (zero, alpha_logup, Vec::new(), Vec::new())
+        } else {
+            let q0_claim = gkr_q0_claim
+                .as_ref()
+                .expect("non-zero interaction branch must include q0 claim witness");
+            transcript.observe_ext(ctx, range, baby_bear, q0_claim);
+
+            let layer0 = &gkr_claims_per_layer[0];
+            observe_layer_claims_assigned(ctx, range, transcript, baby_bear, layer0);
+
+            let p0_q1 = ext_chip.mul(ctx, &layer0[0], &layer0[3]);
+            let p1_q0 = ext_chip.mul(ctx, &layer0[2], &layer0[1]);
+            let p_cross = ext_chip.add(ctx, &p0_q1, &p1_q0);
+            let q_cross = ext_chip.mul(ctx, &layer0[1], &layer0[3]);
+            ext_chip.assert_equal(ctx, &p_cross, &zero);
+            ext_chip.assert_equal(ctx, &q_cross, q0_claim);
+
+            let mu0 = transcript.sample_ext(ctx, range, baby_bear);
+            let mut gkr_sample_stream = vec![mu0];
+            let mut numer_claim =
+                interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[0], &layer0[2], &mu0);
+            let mut denom_claim =
+                interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[1], &layer0[3], &mu0);
+            let mut gkr_r = vec![mu0];
+
+            for round in 1..total_gkr_rounds {
+                let lambda_round = transcript.sample_ext(ctx, range, baby_bear);
+                gkr_sample_stream.push(lambda_round);
+
+                let lambda_denom = ext_chip.mul(ctx, &lambda_round, &denom_claim);
+                let mut claim = ext_chip.add(ctx, &numer_claim, &lambda_denom);
+                let round_polys = &gkr_sumcheck_polys[round - 1];
+                let mut gkr_r_prime = Vec::with_capacity(round);
+                let mut eq = one;
+
+                for (subround, xi_prev) in gkr_r.iter().enumerate().take(round) {
+                    let ev1 = round_polys[subround * 3];
+                    let ev2 = round_polys[subround * 3 + 1];
+                    let ev3 = round_polys[subround * 3 + 2];
+                    transcript.observe_ext(ctx, range, baby_bear, &ev1);
+                    transcript.observe_ext(ctx, range, baby_bear, &ev2);
+                    transcript.observe_ext(ctx, range, baby_bear, &ev3);
+
+                    let ri = transcript.sample_ext(ctx, range, baby_bear);
+                    gkr_sample_stream.push(ri);
+                    gkr_r_prime.push(ri);
+
+                    let ev0 = ext_chip.sub(ctx, &claim, &ev1);
+                    claim = interpolate_cubic_at_0123_assigned(
+                        ctx,
+                        &ext_chip,
+                        [&ev0, &ev1, &ev2, &ev3],
+                        &ri,
+                    );
+                    let xi_ri = ext_chip.mul(ctx, xi_prev, &ri);
+                    let one_minus_xi = ext_chip.sub(ctx, &one, xi_prev);
+                    let one_minus_ri = ext_chip.sub(ctx, &one, &ri);
+                    let one_minus_term = ext_chip.mul(ctx, &one_minus_xi, &one_minus_ri);
+                    let eq_factor = ext_chip.add(ctx, &xi_ri, &one_minus_term);
+                    eq = ext_chip.mul(ctx, &eq, &eq_factor);
+                }
+
+                let layer_claims = &gkr_claims_per_layer[round];
+                observe_layer_claims_assigned(ctx, range, transcript, baby_bear, layer_claims);
+
+                let p0_q1 = ext_chip.mul(ctx, &layer_claims[0], &layer_claims[3]);
+                let p1_q0 = ext_chip.mul(ctx, &layer_claims[2], &layer_claims[1]);
+                let p_cross = ext_chip.add(ctx, &p0_q1, &p1_q0);
+                let q_cross = ext_chip.mul(ctx, &layer_claims[1], &layer_claims[3]);
+                let lambda_q_cross = ext_chip.mul(ctx, &lambda_round, &q_cross);
+                let claim_sum = ext_chip.add(ctx, &p_cross, &lambda_q_cross);
+                let expected_claim = ext_chip.mul(ctx, &claim_sum, &eq);
+                ext_chip.assert_equal(ctx, &expected_claim, &claim);
+
+                let mu_round = transcript.sample_ext(ctx, range, baby_bear);
+                gkr_sample_stream.push(mu_round);
+                numer_claim = interpolate_linear_at_01_assigned(
+                    ctx,
+                    &ext_chip,
+                    &layer_claims[0],
+                    &layer_claims[2],
+                    &mu_round,
+                );
+                denom_claim = interpolate_linear_at_01_assigned(
+                    ctx,
+                    &ext_chip,
+                    &layer_claims[1],
+                    &layer_claims[3],
+                    &mu_round,
+                );
+                gkr_r = core::iter::once(mu_round)
+                    .chain(gkr_r_prime.into_iter())
+                    .collect();
+            }
+
+            (numer_claim, denom_claim, gkr_r, gkr_sample_stream)
+        };
+
+    let gkr_xi_sample_split = gkr_sample_stream.len().saturating_sub(gkr_xi_claims.len());
+    let gkr_non_xi_samples = gkr_sample_stream[..gkr_xi_sample_split].to_vec();
+    let gkr_xi_sample_order = gkr_sample_stream[gkr_xi_sample_split..].to_vec();
+
+    let mut xi = gkr_xi_claims;
+    while xi.len() != l_skip + n_global_host {
+        xi.push(transcript.sample_ext(ctx, range, baby_bear));
+    }
+
+    let lambda = transcript.sample_ext(ctx, range, baby_bear);
+
+    let numerator_term_per_air = proof
+        .batch_constraint_proof
+        .numerator_term_per_air
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let denominator_term_per_air = proof
+        .batch_constraint_proof
+        .denominator_term_per_air
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    for (num_term, den_term) in numerator_term_per_air
+        .iter()
+        .zip(denominator_term_per_air.iter())
+    {
+        gkr_p_xi_claim = ext_chip.sub(ctx, &gkr_p_xi_claim, num_term);
+        gkr_q_xi_claim = ext_chip.sub(ctx, &gkr_q_xi_claim, den_term);
+        transcript.observe_ext(ctx, range, baby_bear, num_term);
+        transcript.observe_ext(ctx, range, baby_bear, den_term);
+    }
+    let gkr_numerator_residual = gkr_p_xi_claim;
+    let gkr_denominator_claim = gkr_q_xi_claim;
+    let gkr_denominator_residual = ext_chip.sub(ctx, &gkr_denominator_claim, &alpha_logup);
+    ext_chip.assert_equal(ctx, &gkr_numerator_residual, &zero);
+    ext_chip.assert_equal(ctx, &gkr_denominator_residual, &zero);
+
+    let mu = transcript.sample_ext(ctx, range, baby_bear);
+
+    let mut sum_claim = ext_chip.zero(ctx);
+    let mut cur_mu_pow = one;
+    for (num_term, den_term) in numerator_term_per_air
+        .iter()
+        .zip(denominator_term_per_air.iter())
+    {
+        let num_weighted = ext_chip.mul(ctx, num_term, &cur_mu_pow);
+        sum_claim = ext_chip.add(ctx, &sum_claim, &num_weighted);
+        cur_mu_pow = ext_chip.mul(ctx, &cur_mu_pow, &mu);
+
+        let den_weighted = ext_chip.mul(ctx, den_term, &cur_mu_pow);
+        sum_claim = ext_chip.add(ctx, &sum_claim, &den_weighted);
+        cur_mu_pow = ext_chip.mul(ctx, &cur_mu_pow, &mu);
+    }
+
+    let univariate_round_coeffs = proof
+        .batch_constraint_proof
+        .univariate_round_coeffs
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    for coeff in &univariate_round_coeffs {
+        transcript.observe_ext(ctx, range, baby_bear, coeff);
+    }
+    let mut r = vec![transcript.sample_ext(ctx, range, baby_bear)];
+
+    let stride = 1usize << l_skip;
+    let mut sum_univ_domain_s_0 = ext_chip.zero(ctx);
+    for coeff in univariate_round_coeffs.iter().step_by(stride) {
+        sum_univ_domain_s_0 = ext_chip.add(ctx, &sum_univ_domain_s_0, coeff);
+    }
+    let sum_univ_domain_s_0 =
+        ext_chip.mul_base_const(ctx, &sum_univ_domain_s_0, ChildF::from_u64(stride as u64));
+    ext_chip.assert_equal(ctx, &sum_claim, &sum_univ_domain_s_0);
+
+    let sumcheck_round_polys = proof
+        .batch_constraint_proof
+        .sumcheck_round_polys
+        .iter()
+        .map(|poly| {
+            poly.iter()
+                .map(|&value| ext_chip.load_witness(ctx, value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let mut consistency_lhs = eval_ext_poly_horner(ctx, &ext_chip, &univariate_round_coeffs, &r[0]);
+    for round_evals in &sumcheck_round_polys {
+        for eval in round_evals {
+            transcript.observe_ext(ctx, range, baby_bear, eval);
+        }
+
+        let s_1 = round_evals[0];
+        let s_0 = ext_chip.sub(ctx, &consistency_lhs, &s_1);
+        let mut interpolation_evals = Vec::with_capacity(round_evals.len() + 1);
+        interpolation_evals.push(s_0);
+        interpolation_evals.extend(round_evals.iter().copied());
+        let next_r = transcript.sample_ext(ctx, range, baby_bear);
+        consistency_lhs =
+            eval_lagrange_on_integer_grid(ctx, &ext_chip, &next_r, &interpolation_evals);
+        r.push(next_r);
+    }
+
+    let column_openings = proof
+        .batch_constraint_proof
+        .column_openings
+        .iter()
+        .map(|per_air| {
+            per_air
+                .iter()
+                .map(|part| {
+                    part.iter()
+                        .map(|&value| ext_chip.load_witness(ctx, value))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    for (trace_idx, air_openings) in column_openings.iter().enumerate() {
+        let need_rot = column_openings_need_rot[trace_idx][0];
+        for claim in column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[0], need_rot) {
+            transcript.observe_ext(ctx, range, baby_bear, &claim.local);
+            transcript.observe_ext(ctx, range, baby_bear, &claim.next);
+        }
+    }
+
+    for (trace_idx, air_openings) in column_openings.iter().enumerate() {
+        for (part_idx, claims) in air_openings.iter().enumerate().skip(1) {
+            let need_rot = column_openings_need_rot[trace_idx][part_idx];
+            for claim in column_openings_by_rot_assigned(ctx, &ext_chip, claims, need_rot) {
+                transcript.observe_ext(ctx, range, baby_bear, &claim.local);
+                transcript.observe_ext(ctx, range, baby_bear, &claim.next);
+            }
+        }
+    }
+
+    let mut eq_3b_per_trace = Vec::with_capacity(n_per_trace.len());
+    let mut stacked_idx = 0usize;
+    for (trace_idx, &n) in n_per_trace.iter().enumerate() {
+        let n_lift = n.max(0) as usize;
+        let interactions = &trace_interactions[trace_idx];
+        if interactions.is_empty() {
+            eq_3b_per_trace.push(Vec::new());
+            continue;
+        }
+
+        let mut eq_3b = Vec::with_capacity(interactions.len());
+        for _ in 0..interactions.len() {
+            let mut b_int = stacked_idx >> (l_skip + n_lift);
+            let mut b_vec = Vec::with_capacity(n_logup_host.saturating_sub(n_lift));
+            for _ in 0..n_logup_host.saturating_sub(n_lift) {
+                b_vec.push((b_int & 1) == 1);
+                b_int >>= 1;
+            }
+            stacked_idx += 1 << (l_skip + n_lift);
+            let eq = eval_eq_mle_binary_assigned(
+                ctx,
+                &ext_chip,
+                &xi[l_skip + n_lift..l_skip + n_logup_host],
+                &b_vec,
+            );
+            eq_3b.push(eq);
+        }
+        eq_3b_per_trace.push(eq_3b);
+    }
+
+    let mut eq_ns = vec![one; n_max_host + 1];
+    let mut eq_sharp_ns = vec![one; n_max_host + 1];
+    eq_ns[0] = eval_eq_uni_assigned(ctx, &ext_chip, l_skip, &xi[0], &r[0]);
+    eq_sharp_ns[0] =
+        eval_eq_sharp_uni_assigned(ctx, &ext_chip, &omega_skip_pows, &xi[..l_skip], &r[0]);
+    for (i, r_i) in r.iter().enumerate().skip(1) {
+        let eq_mle = eval_eq_mle_assigned(
+            ctx,
+            &ext_chip,
+            &[xi[l_skip + i - 1]],
+            core::slice::from_ref(r_i),
+        );
+        eq_ns[i] = ext_chip.mul(ctx, &eq_ns[i - 1], &eq_mle);
+        eq_sharp_ns[i] = ext_chip.mul(ctx, &eq_sharp_ns[i - 1], &eq_mle);
+    }
+    if n_max_host > 0 {
+        let n_max_usize = n_max_host;
+        let mut r_rev_prod = r[n_max_usize];
+        for i in (0..n_max_usize).rev() {
+            eq_ns[i] = ext_chip.mul(ctx, &eq_ns[i], &r_rev_prod);
+            eq_sharp_ns[i] = ext_chip.mul(ctx, &eq_sharp_ns[i], &r_rev_prod);
+            r_rev_prod = ext_chip.mul(ctx, &r_rev_prod, &r[i]);
+        }
+    }
+
+    let mut interactions_evals = Vec::new();
+    let mut constraints_evals = Vec::new();
+    for (trace_idx, air_openings) in column_openings.iter().enumerate() {
+        let air_idx = trace_id_to_air_id_host[trace_idx];
+        let n = n_per_trace[trace_idx];
+        let n_lift = n.max(0) as usize;
+
+        let need_rot_flags = &column_openings_need_rot[trace_idx];
+        let common_main =
+            column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[0], need_rot_flags[0]);
+        let has_preprocessed = trace_has_preprocessed[trace_idx];
+        let preprocessed = has_preprocessed.then(|| {
+            column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[1], need_rot_flags[1])
+        });
+        let cached_idx = 1 + has_preprocessed as usize;
+        let mut partitioned_main = air_openings[cached_idx..]
+            .iter()
+            .enumerate()
+            .map(|(part_offset, opening)| {
+                column_openings_by_rot_assigned(
+                    ctx,
+                    &ext_chip,
+                    opening,
+                    need_rot_flags[cached_idx + part_offset],
+                )
+            })
+            .collect::<Vec<_>>();
+        partitioned_main.push(common_main);
+
+        let (l, rs_n, norm_factor) = if n.is_negative() {
+            (
+                l_skip.wrapping_add_signed(n),
+                vec![ext_chip.pow_power_of_two(ctx, &r[0], n.unsigned_abs())],
+                ChildF::from_usize(1usize << n.unsigned_abs()).inverse(),
+            )
+        } else {
+            (l_skip, r[..=n_lift].to_vec(), ChildF::ONE)
+        };
+
+        let inv_l = ChildF::from_usize(1usize << l).inverse();
+        let mut is_first_row = progression_exp_2_assigned(ctx, &ext_chip, &rs_n[0], l);
+        is_first_row = ext_chip.mul_base_const(ctx, &is_first_row, inv_l);
+        for x in rs_n.iter().skip(1) {
+            let one_minus_x = ext_chip.sub(ctx, &one, x);
+            is_first_row = ext_chip.mul(ctx, &is_first_row, &one_minus_x);
+        }
+
+        let omega = ChildF::two_adic_generator(l);
+        let rs0_omega = ext_chip.mul_base_const(ctx, &rs_n[0], omega);
+        let mut is_last_row = progression_exp_2_assigned(ctx, &ext_chip, &rs0_omega, l);
+        is_last_row = ext_chip.mul_base_const(ctx, &is_last_row, inv_l);
+        for x in rs_n.iter().skip(1) {
+            is_last_row = ext_chip.mul(ctx, &is_last_row, x);
+        }
+
+        let evaluator = AssignedConstraintEvaluator {
+            preprocessed: preprocessed.as_deref(),
+            partitioned_main: &partitioned_main,
+            is_first_row,
+            is_last_row,
+            public_values: public_values[air_idx].as_slice(),
+        };
+
+        let node_values = eval_symbolic_nodes_assigned(
+            ctx,
+            &ext_chip,
+            &evaluator,
+            &trace_constraint_nodes[trace_idx],
+        );
+
+        let mut expr = ext_chip.zero(ctx);
+        let mut lambda_pow = one;
+        for &constraint_idx in &trace_constraint_indices[trace_idx] {
+            let term = ext_chip.mul(ctx, &node_values[constraint_idx], &lambda_pow);
+            expr = ext_chip.add(ctx, &expr, &term);
+            lambda_pow = ext_chip.mul(ctx, &lambda_pow, &lambda);
+        }
+        constraints_evals.push(ext_chip.mul(ctx, &eq_ns[n_lift], &expr));
+
+        let interactions = &trace_interactions[trace_idx];
+        let eq_3bs = &eq_3b_per_trace[trace_idx];
+        let mut num = ext_chip.zero(ctx);
+        let mut denom = ext_chip.zero(ctx);
+        for (eq_3b, interaction) in eq_3bs.iter().zip(interactions.iter()) {
+            let count_eval = node_values[interaction.count];
+            let mut denom_eval = ext_chip.zero(ctx);
+            let mut beta_pow = one;
+            for &msg_idx in &interaction.message {
+                let term = ext_chip.mul(ctx, &node_values[msg_idx], &beta_pow);
+                denom_eval = ext_chip.add(ctx, &denom_eval, &term);
+                beta_pow = ext_chip.mul(ctx, &beta_pow, &beta_logup);
+            }
+            let bus_const = ext_chip
+                .from_base_const(ctx, ChildF::from_u64(u64::from(interaction.bus_index) + 1));
+            let bus_term = ext_chip.mul(ctx, &bus_const, &beta_pow);
+            denom_eval = ext_chip.add(ctx, &denom_eval, &bus_term);
+
+            let eq_times_count = ext_chip.mul(ctx, eq_3b, &count_eval);
+            num = ext_chip.add(ctx, &num, &eq_times_count);
+            let eq_times_denom = ext_chip.mul(ctx, eq_3b, &denom_eval);
+            denom = ext_chip.add(ctx, &denom, &eq_times_denom);
+        }
+
+        let norm = ext_chip.from_base_const(ctx, norm_factor);
+        let num_norm = ext_chip.mul(ctx, &num, &norm);
+        let num_scaled = ext_chip.mul(ctx, &num_norm, &eq_sharp_ns[n_lift]);
+        let denom_scaled = ext_chip.mul(ctx, &denom, &eq_sharp_ns[n_lift]);
+        interactions_evals.push(num_scaled);
+        interactions_evals.push(denom_scaled);
+    }
+
+    let mut consistency_rhs = ext_chip.zero(ctx);
+    let mut cur_mu_pow = one;
+    for term in interactions_evals.iter().chain(constraints_evals.iter()) {
+        let weighted_term = ext_chip.mul(ctx, term, &cur_mu_pow);
+        consistency_rhs = ext_chip.add(ctx, &consistency_rhs, &weighted_term);
+        cur_mu_pow = ext_chip.mul(ctx, &cur_mu_pow, &mu);
+    }
+    let consistency_residual = ext_chip.sub(ctx, &consistency_lhs, &consistency_rhs);
+    ext_chip.assert_equal(ctx, &consistency_residual, &zero);
+
+    Ok(AssignedBatchIntermediates {
+        trace_id_to_air_id,
+        public_values,
+        total_interactions,
+        n_logup,
+        n_max,
+        batch_degree,
+        logup_pow_witness,
+        logup_pow_bits,
+        logup_pow_sampled_bits,
+        logup_pow_witness_ok,
+        gkr_q0_claim,
+        gkr_claims_per_layer,
+        gkr_sumcheck_polys,
+        numerator_term_per_air,
+        denominator_term_per_air,
+        univariate_round_coeffs,
+        sumcheck_round_polys,
+        column_openings,
+        column_openings_need_rot,
+        gkr_numerator_residual,
+        gkr_denominator_residual,
+        gkr_denominator_claim,
+        alpha_logup,
+        beta_logup,
+        gkr_non_xi_samples,
+        gkr_xi_sample_order,
+        xi,
+        lambda,
+        mu,
+        sum_claim,
+        sum_univ_domain_s_0,
+        consistency_lhs,
+        consistency_rhs,
+        consistency_residual,
+        r,
+    })
+}
+
+#[allow(dead_code)]
 pub(crate) fn constrain_batch_intermediates_with_shared_trace_ids(
     ctx: &mut Context<Fr>,
     range: &halo2_base::gates::range::RangeChip<Fr>,
