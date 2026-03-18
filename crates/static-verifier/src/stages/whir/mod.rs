@@ -37,7 +37,9 @@ use crate::{
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     stages::{
         batch_constraints::{eval_eq_mle_assigned, BatchConstraintError},
-        pipeline::{collect_trace_commitments, derive_u_cube_from_prism, prepare_pipeline_inputs},
+        full_pipeline::witness::{
+            collect_trace_commitments, derive_u_cube_from_prism, prepare_pipeline_inputs,
+        },
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
         stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
     },
