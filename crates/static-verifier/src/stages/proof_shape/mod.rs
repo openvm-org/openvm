@@ -472,7 +472,8 @@ pub(crate) fn derive_proof_shape_rules(
             .iter()
             .map(|(_, vk, vdata)| (vk.params.width.common_main, vdata.log_height))
             .collect::<Vec<_>>(),
-    );
+    )
+    .unwrap();
     let other_layouts = per_trace
         .iter()
         .flat_map(|(_, vk, vdata)| {
@@ -485,7 +486,9 @@ pub(crate) fn derive_proof_shape_rules(
                 .map(|width| (width, vdata.log_height))
                 .collect::<Vec<_>>()
         })
-        .map(|sorted| StackedLayout::new(l_skip, mvk0.params.n_stack + l_skip, vec![sorted]))
+        .map(|sorted| {
+            StackedLayout::new(l_skip, mvk0.params.n_stack + l_skip, vec![sorted]).unwrap()
+        })
         .collect::<Vec<_>>();
     let layouts = core::iter::once(common_main_layout)
         .chain(other_layouts)
