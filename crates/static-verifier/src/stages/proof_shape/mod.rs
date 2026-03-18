@@ -20,8 +20,8 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    circuit::Fr,
     utils::{assign_and_range_u64, assign_and_range_usize, bits_for_u64, usize_to_u64},
+    Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]

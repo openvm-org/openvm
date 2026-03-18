@@ -24,7 +24,6 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    circuit::Fr,
     gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_EXT_DEGREE},
     stages::{
         batch_constraints::{
@@ -39,6 +38,7 @@ use crate::{
         },
     },
     utils::assign_and_range_usize,
+    Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]

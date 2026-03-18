@@ -36,10 +36,10 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    circuit::Fr,
     gadgets::baby_bear::{BabyBearArithmeticGadgets, BabyBearExtVar, BABY_BEAR_EXT_DEGREE},
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
     utils::{assign_and_range_u64, assign_and_range_usize, usize_to_u64},
+    Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]
