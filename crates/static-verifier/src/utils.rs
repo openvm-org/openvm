@@ -3,7 +3,7 @@ use halo2_base::{
     AssignedValue, Context,
 };
 
-use crate::circuit::Fr;
+use crate::Fr;
 
 #[inline]
 pub(crate) fn bits_for_u64(value: u64) -> usize {

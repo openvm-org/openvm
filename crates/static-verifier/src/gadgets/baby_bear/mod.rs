@@ -5,7 +5,7 @@ use halo2_base::{
     QuantumCell::Constant,
 };
 
-use crate::circuit::Fr;
+use crate::Fr;
 
 pub const BABY_BEAR_MODULUS_U64: u64 = 0x7800_0001;
 pub const BABY_BEAR_BITS: usize = 31;
