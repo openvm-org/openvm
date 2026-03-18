@@ -19,7 +19,7 @@ pub(crate) fn column_openings_by_rot_assigned(
 ) -> Vec<(BabyBearExtVar, BabyBearExtVar)> {
     if need_rot {
         assert!(
-            openings.len() % 2 == 0,
+            openings.len().is_multiple_of(2),
             "rotated opening vector must be even",
         );
         openings

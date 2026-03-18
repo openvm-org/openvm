@@ -759,11 +759,9 @@ fn bind_sample_bits(
         "sample_bits requires (1 << bits) < modulus: bits={bits}",
     );
     if bits == 0 {
-        if consume_on_zero_bits {
-            if cursor.consume().is_none() {
-                let missing_sample = ctx.load_witness(Fr::from(0u64));
-                gate.assert_is_const(ctx, &missing_sample, &Fr::from(1u64));
-            }
+        if consume_on_zero_bits && cursor.consume().is_none() {
+            let missing_sample = ctx.load_witness(Fr::from(0u64));
+            gate.assert_is_const(ctx, &missing_sample, &Fr::from(1u64));
         }
         gate.assert_is_const(ctx, &target_bits, &Fr::from(0u64));
         return;
@@ -994,7 +992,7 @@ fn derive_stage_payload_observe_cells(
                 .whir_sumcheck_polys
                 .get(sumcheck_cursor)
                 .unwrap_or(&default_whir_round);
-            let ev1 = round_poly.get(0).unwrap_or(&zero_ext);
+            let ev1 = round_poly.first().unwrap_or(&zero_ext);
             let ev2 = round_poly.get(1).unwrap_or(&zero_ext);
             push_ext_observe_cells(&mut observes, ev1);
             push_ext_observe_cells(&mut observes, ev2);
@@ -1339,8 +1337,8 @@ fn bind_batch_to_stacked_inputs(
     assert_eq!(stacked_need_rot.len(), expected_stacked_rows);
     let stacked_common_row_width = stacked_need_rot.first().map_or(0usize, Vec::len);
     assert_eq!(stacked_common_row_width, batch_need_rot.len());
-    for trace_idx in 0..batch_need_rot.len() {
-        let batch_common = batch_need_rot[trace_idx].first().copied().unwrap_or(false);
+    for (trace_idx, batch_rot_row) in batch_need_rot.iter().enumerate() {
+        let batch_common = batch_rot_row.first().copied().unwrap_or(false);
         let stacked_common = stacked_need_rot
             .first()
             .and_then(|row| row.get(trace_idx))
@@ -1394,6 +1392,7 @@ fn bind_stacked_openings_to_whir(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn map_initial_commitment_roots_by_air(
     ctx: &mut Context<Fr>,
     initial_commitment_roots: &[AssignedValue<Fr>],
@@ -1442,6 +1441,7 @@ fn map_initial_commitment_roots_by_air(
     (preprocessed_roots, cached_roots)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn derive_preamble_observe_cells_from_stage(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
