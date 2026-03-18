@@ -21,7 +21,7 @@ The final internal-recursive proof will expose the following public values:
 - `initial_root`: Merkle root of VM memory at the start of app execution
 - `final_root`: Merkle root of VM memory after app execution
 - `internal_flag`: Internal aggregation layer indicator (0, 1, or 2)
-- `recursion_flag`: Internal aggregation recursive layer indicator (0, 1, or 2)
+- `recursion_flag`: Internal aggregation recursive layer indicator (0, 1, or 2). For the final proof verified by this crate, it should be 1 or 2.
 - `app_dag_commit`, `leaf_dag_commit`, `internal_for_leaf_dag_commit`, `internal_recursive_dag_commit`: Each is a `DagCommit` containing a `cached_commit` (PCS commitment of the parent verifier circuit's cached trace) and a `vk_pre_hash` (field pre-hash of the child `MultiStarkVerifyingKey`), for the app, leaf, internal-for-leaf, and internal-recursive layers respectively
 
 ## Verification Checks
@@ -32,10 +32,13 @@ The final internal-recursive STARK proof is verified using the internal-recursiv
 
 **Baseline Artifact Checks:**
 
-Given a fixed VM and executable, we must certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
+Given a fixed VM and executable, we must check certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
 
 - `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
-- `app_dag_commit`, `leaf_dag_commit`, `internal_for_leaf_dag_commit`, and `internal_recursive_dag_commit` (each containing both `cached_commit` and `vk_pre_hash`) are compared against pre-computed baselines
+- `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` (each containing both `cached_commit` and `vk_pre_hash`) are compared against pre-computed baselines
+- `internal_recursive_dag_commit` is checked conditionally:
+  - if `recursion_flag == 2`, it is compared against the pre-computed baseline
+  - if `recursion_flag == 1`, it must be unset (all zeros)
 
 **Other Public Values Validation:**
 
@@ -43,5 +46,6 @@ The other public values are checked for completeness.
 
 - `exit_code` is checked to be 0 (success) and `is_terminate` is checked to be true.
 - `internal_flag` is checked to be 2, i.e. the final layer must be internal-recursive
+- `recursion_flag` is checked to be 1 or 2
 
 Note there is no expected value for `final_pc`, and thus it is left unchecked.

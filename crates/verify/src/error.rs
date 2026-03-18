@@ -27,11 +27,15 @@ pub enum VerifyStarkError {
     InternalRecursiveDagCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal recursive vk pre-hash: expected {expected:?}, actual {actual:?}")]
     InternalRecursiveDagPreHashMismatch { expected: Digest, actual: Digest },
+    #[error("Internal recursive cached commit should be unset, actual {actual:?}")]
+    InternalRecursiveDagCachedCommitSet { actual: Digest },
+    #[error("Internal recursive vk pre-hash should be unset, actual {actual:?}")]
+    InternalRecursiveDagPreHashSet { actual: Digest },
     #[error("Program execution did not terminate successfully, exit_code: {0}")]
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be 2")]
     InvalidInternalFlag(F),
-    #[error("Invalid recursion flag {0}, should be 2")]
+    #[error("Invalid recursion flag {0}, should be 1 or 2")]
     InvalidRecursionFlag(F),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
