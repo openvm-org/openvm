@@ -1,20 +1,18 @@
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, builder::BaseCircuitBuilder},
+    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
     openvm_stark_backend::p3_field::{
-        BasedVectorSpace, PrimeCharacteristicRing, PrimeField64,
-        extension::BinomialExtensionField,
+        extension::BinomialExtensionField, BasedVectorSpace, PrimeCharacteristicRing, PrimeField64,
     },
     p3_baby_bear::BabyBear,
 };
 
+use super::*;
 use crate::config::{
     STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
 };
-
-use super::*;
 
 fn run_mock(build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)

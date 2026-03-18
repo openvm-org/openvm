@@ -1,6 +1,6 @@
 use halo2_base::{
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
     Context,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
@@ -11,13 +11,13 @@ use crate::{
     circuit::Fr,
     stages::{
         batch_constraints::{
-            AssignedBatchIntermediates, BatchConstraintError, BatchIntermediates,
             constrain_batch_intermediates_unchecked, derive_batch_intermediates,
+            AssignedBatchIntermediates, BatchConstraintError, BatchIntermediates,
         },
         stacked_reduction::{
+            constrain_stacked_reduction_intermediates, derive_stacked_reduction_intermediates,
             AssignedStackedReductionIntermediates, StackedReductionConstraintError,
-            StackedReductionIntermediates, constrain_stacked_reduction_intermediates,
-            derive_stacked_reduction_intermediates,
+            StackedReductionIntermediates,
         },
     },
 };
@@ -168,14 +168,10 @@ fn constrain_batch_and_stacked_strict_metadata(
         &Fr::from(ownership.batch_degree as u64),
     );
 
-    let batch_l_skip = ctx.load_witness(Fr::from(raw.intermediates.batch.l_skip as u64));
-    gate.assert_is_const(ctx, &batch_l_skip, &Fr::from(ownership.batch_l_skip as u64));
-    let stacked_l_skip =
-        ctx.load_witness(Fr::from(raw.intermediates.stacked_reduction.l_skip as u64));
-    gate.assert_is_const(
-        ctx,
-        &stacked_l_skip,
-        &Fr::from(ownership.stacked_l_skip as u64),
+    assert_eq!(raw.intermediates.batch.l_skip, ownership.batch_l_skip);
+    assert_eq!(
+        raw.intermediates.stacked_reduction.l_skip,
+        ownership.stacked_l_skip
     );
 }
 
@@ -190,7 +186,10 @@ pub(crate) fn derive_and_constrain_batch_and_stacked(
 ) -> Result<AssignedBatchAndStackedIntermediates, BatchAndStackedError> {
     let raw = derive_raw_batch_and_stacked_witness_state(config, mvk, proof)?;
     let ownership = derive_batch_and_stacked_strict_ownership(config, mvk, proof)?;
-    Ok(constrain_checked_batch_and_stacked_witness_state_strict(ctx, range, &raw, &ownership).assigned)
+    Ok(
+        constrain_checked_batch_and_stacked_witness_state_strict(ctx, range, &raw, &ownership)
+            .assigned,
+    )
 }
 
 pub(crate) fn derive_raw_batch_and_stacked_witness_state(
@@ -209,7 +208,8 @@ pub(crate) fn constrain_checked_batch_and_stacked_witness_state_unchecked(
     range: &RangeChip<Fr>,
     raw: &RawBatchAndStackedWitnessState,
 ) -> CheckedBatchAndStackedWitnessState {
-    let assigned = constrain_batch_and_stacked_intermediates_unchecked(ctx, range, &raw.intermediates);
+    let assigned =
+        constrain_batch_and_stacked_intermediates_unchecked(ctx, range, &raw.intermediates);
     let derived = DerivedBatchAndStackedState {
         batch_consistency_residual: assigned.batch.consistency_residual.clone(),
         stacked_final_residual: assigned.stacked_reduction.final_residual.clone(),

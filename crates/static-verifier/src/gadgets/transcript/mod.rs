@@ -1,20 +1,21 @@
 use std::sync::OnceLock;
 
 use halo2_base::{
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
+    halo2_proofs::arithmetic::Field,
+    utils::{biguint_to_fe, fe_to_biguint},
     AssignedValue, Context,
     QuantumCell::Constant,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
-    utils::{biguint_to_fe, fe_to_biguint},
 };
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar, Digest as NativeDigest,
-        F as NativeF, Transcript as NativeTranscript, default_transcript,
+        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
+        Digest as NativeDigest, Transcript as NativeTranscript, F as NativeF,
     },
     openvm_stark_backend::{
-        FiatShamirTranscript,
         p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField64},
+        FiatShamirTranscript,
     },
 };
 use zkhash::{
@@ -23,11 +24,10 @@ use zkhash::{
     poseidon2::poseidon2_instance_bn256::{MAT_DIAG3_M_1, RC3},
 };
 
-use crate::{circuit::Fr, utils::bits_for_u64};
-
 use super::baby_bear::{
-    BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64, BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar,
+    BabyBearArithmeticGadgets, BabyBearExtVar, BabyBearVar, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
 };
+use crate::{circuit::Fr, utils::bits_for_u64};
 
 const DIGEST_WIDTH: usize = 1;
 const POSEIDON2_WIDTH: usize = 3;
@@ -130,6 +130,7 @@ fn split_bn254_to_babybear_u64(value: Bn254Scalar) -> [u64; NUM_SPLIT_LIMBS] {
     })
 }
 
+// TODO: re-expose from stark-sdk
 fn poseidon2_params() -> &'static Poseidon2Params {
     static PARAMS: OnceLock<Poseidon2Params> = OnceLock::new();
     PARAMS.get_or_init(|| {
@@ -195,7 +196,7 @@ fn decompose_packed_bn254_to_split_limbs(
     let digits = packed_big.to_u64_digits();
 
     let limb_vals = [
-        digits.get(0).copied().unwrap_or(0),
+        digits.first().copied().unwrap_or(0),
         digits.get(1).copied().unwrap_or(0),
         digits.get(2).copied().unwrap_or(0),
     ];
@@ -563,7 +564,6 @@ impl TranscriptGadget {
         let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
         range.gate().is_zero(ctx, sampled_bits)
     }
-
 }
 
 pub fn constrain_transcript_events(
@@ -574,8 +574,6 @@ pub fn constrain_transcript_events(
     let baby_bear = BabyBearArithmeticGadgets;
     let gate = range.gate();
     let mut transcript = TranscriptGadget::new(ctx);
-    let zero = ctx.load_constant(Fr::from(0u64));
-    let one = ctx.load_constant(Fr::from(1u64));
     let mut replay = TranscriptReplay {
         events: Vec::with_capacity(events.len()),
         observes: Vec::new(),
@@ -587,9 +585,7 @@ pub fn constrain_transcript_events(
             TranscriptEvent::Observe(value) => {
                 let observed = baby_bear.load_witness(ctx, range, *value);
                 transcript.observe(ctx, range, &baby_bear, &observed);
-                let is_sample = ctx.load_witness(Fr::from(0u64));
-                gate.assert_bit(ctx, is_sample);
-                ctx.constrain_equal(&is_sample, &zero);
+                let is_sample = ctx.load_zero();
                 replay.observes.push(observed.cell);
                 replay.events.push(AssignedTranscriptEvent {
                     is_sample,
@@ -599,9 +595,7 @@ pub fn constrain_transcript_events(
             TranscriptEvent::Sample(expected) => {
                 let sampled = transcript.sample(ctx, range, &baby_bear);
                 gate.assert_is_const(ctx, &sampled.cell, &Fr::from(*expected));
-                let is_sample = ctx.load_witness(Fr::from(1u64));
-                gate.assert_bit(ctx, is_sample);
-                ctx.constrain_equal(&is_sample, &one);
+                let is_sample = ctx.load_constant(Fr::ONE);
                 replay.samples.push(sampled.cell);
                 replay.events.push(AssignedTranscriptEvent {
                     is_sample,

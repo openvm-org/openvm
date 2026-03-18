@@ -1,8 +1,8 @@
 use halo2_base::{
+    gates::{range::RangeChip, GateInstructions, RangeInstructions},
+    utils::ScalarField,
     AssignedValue, Context,
     QuantumCell::Constant,
-    gates::{GateInstructions, RangeInstructions, range::RangeChip},
-    utils::ScalarField,
 };
 
 use crate::circuit::Fr;
@@ -61,24 +61,18 @@ impl BabyBearArithmeticGadgets {
         BabyBearVar { cell }
     }
 
-    pub fn load_constant(
-        &self,
-        ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
-        value: u64,
-    ) -> BabyBearVar {
+    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: u64) -> BabyBearVar {
         Self::assert_canonical(value);
         let cell = ctx.load_constant(Fr::from(value));
-        range.check_less_than_safe(ctx, cell, BABY_BEAR_MODULUS_U64);
         BabyBearVar { cell }
     }
 
-    pub fn zero(&self, ctx: &mut Context<Fr>, range: &RangeChip<Fr>) -> BabyBearVar {
-        self.load_constant(ctx, range, 0)
+    pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearVar {
+        self.load_constant(ctx, 0)
     }
 
-    pub fn one(&self, ctx: &mut Context<Fr>, range: &RangeChip<Fr>) -> BabyBearVar {
-        self.load_constant(ctx, range, 1)
+    pub fn one(&self, ctx: &mut Context<Fr>) -> BabyBearVar {
+        self.load_constant(ctx, 1)
     }
 
     pub fn load_ext_witness(
@@ -95,20 +89,19 @@ impl BabyBearArithmeticGadgets {
     pub fn load_ext_constant(
         &self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         coeffs: [u64; BABY_BEAR_EXT_DEGREE],
     ) -> BabyBearExtVar {
         BabyBearExtVar {
-            coeffs: coeffs.map(|coeff| self.load_constant(ctx, range, coeff)),
+            coeffs: coeffs.map(|coeff| self.load_constant(ctx, coeff)),
         }
     }
 
-    pub fn ext_zero(&self, ctx: &mut Context<Fr>, range: &RangeChip<Fr>) -> BabyBearExtVar {
-        self.load_ext_constant(ctx, range, [0; BABY_BEAR_EXT_DEGREE])
+    pub fn ext_zero(&self, ctx: &mut Context<Fr>, _range: &RangeChip<Fr>) -> BabyBearExtVar {
+        self.load_ext_constant(ctx, [0; BABY_BEAR_EXT_DEGREE])
     }
 
-    pub fn ext_one(&self, ctx: &mut Context<Fr>, range: &RangeChip<Fr>) -> BabyBearExtVar {
-        self.load_ext_constant(ctx, range, [1, 0, 0, 0])
+    pub fn ext_one(&self, ctx: &mut Context<Fr>, _range: &RangeChip<Fr>) -> BabyBearExtVar {
+        self.load_ext_constant(ctx, [1, 0, 0, 0])
     }
 
     pub fn assert_equal(&self, ctx: &mut Context<Fr>, lhs: &BabyBearVar, rhs: &BabyBearVar) {
@@ -140,7 +133,7 @@ impl BabyBearArithmeticGadgets {
         debug_assert!(q_u64 <= 1);
         let out = self.load_witness(ctx, range, out_u64);
         let q = ctx.load_witness(Fr::from(q_u64));
-        range.range_check(ctx, q, 1);
+        range.gate().assert_bit(ctx, q);
 
         let gate = range.gate();
         let lhs = gate.add(ctx, a.cell, b.cell);
@@ -165,7 +158,7 @@ impl BabyBearArithmeticGadgets {
 
         let out = self.load_witness(ctx, range, out_u64);
         let q = ctx.load_witness(Fr::from(q_u64));
-        range.range_check(ctx, q, 1);
+        range.gate().assert_bit(ctx, q);
 
         let gate = range.gate();
         let lhs = gate.mul_add(ctx, q, Constant(Self::modulus_fe()), a.cell);
@@ -239,7 +232,7 @@ impl BabyBearArithmeticGadgets {
         range: &RangeChip<Fr>,
         a: &BabyBearVar,
     ) -> BabyBearVar {
-        let zero = self.zero(ctx, range);
+        let zero = self.zero(ctx);
         self.sub(ctx, range, &zero, a)
     }
 
@@ -367,7 +360,6 @@ impl BabyBearArithmeticGadgets {
     ) -> BabyBearExtVar {
         self.ext_mul(ctx, range, a, a)
     }
-
 }
 
 #[cfg(test)]

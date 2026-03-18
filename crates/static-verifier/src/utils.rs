@@ -1,6 +1,6 @@
 use halo2_base::{
+    gates::{range::RangeChip, RangeInstructions},
     AssignedValue, Context,
-    gates::{RangeInstructions, range::RangeChip},
 };
 
 use crate::circuit::Fr;

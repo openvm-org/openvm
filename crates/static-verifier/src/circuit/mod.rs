@@ -1,12 +1,12 @@
 use halo2_base::gates::{
-    circuit::{BaseCircuitParams, CircuitBuilderStage, builder::BaseCircuitBuilder},
+    circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
     range::RangeInstructions,
 };
 pub use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 
 use crate::config::{
-    STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
-    StaticVerifierShape,
+    StaticVerifierShape, STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0,
+    STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -27,8 +27,8 @@ impl StaticVerifierCircuit {
         {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let witness = ctx.load_witness(Fr::from(7u64));
-            range.range_check(ctx, witness, 4);
+            let constant = ctx.load_constant(Fr::from(7u64));
+            range.range_check(ctx, constant, 4);
         }
         let params = builder.calculate_params(Some(self.shape.minimum_rows));
         (builder, params)
