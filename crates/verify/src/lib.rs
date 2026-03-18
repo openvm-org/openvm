@@ -226,26 +226,6 @@ pub fn verify_vm_stark_proof_pvs(
             def_hook_vk_commit,
         } = verifier_def_pvs_slice.borrow();
 
-        let flag = deferral_flag.as_canonical_u32();
-        if flag != 0 && flag != 2 {
-            return Err(VerifyStarkError::InvalidDeferralFlag(deferral_flag));
-        }
-        if flag == 0 {
-            return Err(VerifyStarkError::DeferralFlagNotSet);
-        }
-
-        if def_hook_vk_commit != expected_def_vk_commit {
-            return Err(VerifyStarkError::DefHookVkCommitMismatch {
-                expected: expected_def_vk_commit,
-                actual: def_hook_vk_commit,
-            });
-        }
-
-        let deferral_merkle_proofs = proof
-            .deferral_merkle_proofs
-            .as_ref()
-            .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
-
         let &DeferralPvs {
             initial_acc_hash,
             final_acc_hash,
@@ -254,20 +234,54 @@ pub fn verify_vm_stark_proof_pvs(
             .as_slice()
             .borrow();
 
-        deferral_merkle_proofs.verify(
-            vk.baseline.memory_dimensions,
-            initial_root,
-            final_root,
-            initial_acc_hash,
-            final_acc_hash,
-            depth.as_canonical_u32() as usize,
-        )?;
+        if deferral_flag == F::ZERO {
+            if !is_unset(&def_hook_vk_commit) {
+                return Err(VerifyStarkError::DefHookVkCommitSet {
+                    actual: def_hook_vk_commit,
+                });
+            } else if !is_unset(&initial_acc_hash) {
+                return Err(VerifyStarkError::DefInitialAccHashCommitSet {
+                    actual: initial_acc_hash,
+                });
+            } else if !is_unset(&final_acc_hash) {
+                return Err(VerifyStarkError::DefFinalAccHashCommitSet {
+                    actual: final_acc_hash,
+                });
+            } else if depth != F::ZERO {
+                return Err(VerifyStarkError::DefDepthSet { actual: depth });
+            }
+        } else if deferral_flag == F::TWO {
+            if def_hook_vk_commit != expected_def_vk_commit {
+                return Err(VerifyStarkError::DefHookVkCommitMismatch {
+                    expected: expected_def_vk_commit,
+                    actual: def_hook_vk_commit,
+                });
+            }
+            let deferral_merkle_proofs = proof
+                .deferral_merkle_proofs
+                .as_ref()
+                .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
+            deferral_merkle_proofs.verify(
+                vk.baseline.memory_dimensions,
+                initial_root,
+                final_root,
+                initial_acc_hash,
+                final_acc_hash,
+                depth.as_canonical_u32() as usize,
+            )?;
+        } else {
+            return Err(VerifyStarkError::InvalidDeferralFlag(deferral_flag));
+        }
     } else if !verifier_def_pvs_slice.is_empty()
         || !proof.inner.public_values[DEF_PVS_AIR_ID].is_empty()
         || proof.deferral_merkle_proofs.is_some()
     {
-        return Err(VerifyStarkError::UnexpectedDeferral);
+        return Err(VerifyStarkError::UnexpectedDeferralDisabled);
     }
 
     Ok(())
+}
+
+fn is_unset(slice: &[F]) -> bool {
+    slice.iter().all(|&f| f == F::ZERO)
 }

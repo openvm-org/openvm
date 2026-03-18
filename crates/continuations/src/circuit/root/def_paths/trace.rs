@@ -144,7 +144,7 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         cols.is_valid = if row_idx == 0 { F::TWO } else { F::ONE };
         cols.depth = F::from_usize(row_idx);
         cols.is_skip = F::from_bool(row_idx < skip_depth);
-        cols.is_within_deferral_as = F::from_bool(row_idx <= untouched_cut);
+        cols.is_within_deferral_as = F::from_bool(row_idx < untouched_cut);
         cols.is_unset = F::from_bool(is_unset);
 
         cols.is_right_child = F::from_bool(is_right_child_bits[row_idx]);
