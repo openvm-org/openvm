@@ -1,6 +1,6 @@
 pub(crate) mod witness;
 
-use core::iter::zip;
+use core::iter::{once, zip};
 
 use halo2_base::{
     gates::{range::RangeChip, GateInstructions, RangeInstructions},
@@ -31,7 +31,7 @@ use crate::{
     },
     stages::{
         batch_constraints::{
-            constrain_batch_intermediates_unchecked, AssignedBatchIntermediates,
+            constrain_batch_intermediates_with_shared_trace_ids, AssignedBatchIntermediates,
             BatchConstraintError, BatchIntermediates,
         },
         full_pipeline::witness::{
@@ -45,14 +45,15 @@ use crate::{
             ProofShapeOwnershipSchedule, ProofShapePreambleError, RawProofShapeWitnessState,
         },
         stacked_reduction::{
-            constrain_stacked_reduction_intermediates,
+            constrain_stacked_reduction_intermediates_with_shared_inputs,
             derive_stacked_reduction_intermediates_with_inputs,
             AssignedStackedReductionIntermediates, QCoeffAccumulationTerm,
             StackedReductionConstraintError, StackedReductionIntermediates,
         },
         whir::{
-            constrain_checked_whir_witness_state_unchecked, derive_whir_intermediates_with_inputs,
-            AssignedWhirIntermediates, RawWhirWitnessState, WhirError, WhirIntermediates,
+            constrain_checked_whir_witness_state_with_shared_inputs,
+            derive_whir_intermediates_with_inputs, AssignedWhirIntermediates, RawWhirWitnessState,
+            SharedWhirWitnessInputs, WhirError, WhirIntermediates,
         },
     },
     transcript::{
@@ -785,13 +786,12 @@ fn bind_sample_ext(ctx: &mut Context<Fr>, cursor: &mut SampleCursor<'_>, target:
     }
 }
 
-fn bind_u_cube_from_stacked(
+fn derive_u_cube_from_stacked_assigned(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
     l_skip: usize,
     stacked_u: &[BabyBearExtWire],
-    whir_u_cube: &[BabyBearExtWire],
-) {
+) -> Vec<BabyBearExtWire> {
     assert!(!stacked_u.is_empty());
     let zero_ext = ext_chip.zero(ctx);
 
@@ -802,12 +802,7 @@ fn bind_u_cube_from_stacked(
         power = ext_chip.square(ctx, &power);
     }
     derived_u_cube.extend(stacked_u.iter().skip(1).copied());
-
-    assert_eq!(derived_u_cube.len(), whir_u_cube.len());
-    for (idx, derived) in derived_u_cube.iter().enumerate() {
-        let actual = whir_u_cube.get(idx).copied().unwrap_or(zero_ext);
-        ext_chip.assert_equal(ctx, derived, &actual);
-    }
+    derived_u_cube
 }
 
 fn push_ext_observe_cells(observes: &mut Vec<AssignedValue<Fr>>, value: &BabyBearExtWire) {
@@ -840,7 +835,6 @@ fn push_column_claim_observe_cells(
 fn derive_stage_payload_observe_cells(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
-    actual: &PipelineIntermediates,
     batch: &AssignedBatchIntermediates,
     stacked_reduction: &AssignedStackedReductionIntermediates,
     whir: &AssignedWhirIntermediates,
@@ -848,13 +842,10 @@ fn derive_stage_payload_observe_cells(
 ) -> Vec<AssignedValue<Fr>> {
     let mut observes = Vec::new();
     let zero = ctx.load_constant(Fr::from(0u64));
-    let base_chip = BabyBearChip::new(range);
-    let ext_chip = BabyBearExtChip::new(base_chip);
+    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(range));
     let zero_ext = ext_chip.zero(ctx);
     if schedule.logup_pow_bits > 0 {
-        observes.push(
-            base_chip.assign_and_range_u64(ctx, actual.batch.logup_pow_witness.as_canonical_u64()),
-        );
+        observes.push(batch.logup_pow_witness.0);
     }
 
     if schedule.has_gkr_observe_payload {
@@ -967,7 +958,7 @@ fn derive_stage_payload_observe_cells(
     }
 
     if schedule.mu_pow_bits > 0 {
-        observes.push(base_chip.assign_and_range_u64(ctx, actual.whir.mu_pow_witness));
+        observes.push(whir.mu_pow_witness.0);
     }
     let mut sumcheck_cursor = 0usize;
     let mut folding_pow_cursor = 0usize;
@@ -988,13 +979,12 @@ fn derive_stage_payload_observe_cells(
             push_ext_observe_cells(&mut observes, ev1);
             push_ext_observe_cells(&mut observes, ev2);
             if schedule.folding_pow_bits > 0 {
-                let pow_witness = actual
-                    .whir
+                let pow_witness = whir
                     .folding_pow_witnesses
                     .get(folding_pow_cursor)
                     .copied()
-                    .unwrap_or(0);
-                observes.push(base_chip.assign_and_range_u64(ctx, pow_witness));
+                    .unwrap_or(ext_chip.base().zero(ctx));
+                observes.push(pow_witness.0);
             }
             sumcheck_cursor += 1;
             folding_pow_cursor += 1;
@@ -1020,18 +1010,17 @@ fn derive_stage_payload_observe_cells(
         }
 
         if schedule.query_phase_pow_bits > 0 {
-            let pow_witness = actual
-                .whir
+            let pow_witness = whir
                 .query_phase_pow_witnesses
                 .get(round_idx)
                 .copied()
-                .unwrap_or(0);
-            observes.push(base_chip.assign_and_range_u64(ctx, pow_witness));
+                .unwrap_or(ext_chip.base().zero(ctx));
+            observes.push(pow_witness.0);
         }
     }
 
     assert_eq!(sumcheck_cursor, whir.whir_sumcheck_polys.len());
-    assert_eq!(folding_pow_cursor, actual.whir.folding_pow_witnesses.len());
+    assert_eq!(folding_pow_cursor, whir.folding_pow_witnesses.len());
 
     observes
 }
@@ -1274,16 +1263,11 @@ fn constrain_post_preamble_event_kinds(
 }
 
 fn bind_batch_to_stacked_inputs(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
     actual: &PipelineIntermediates,
     batch: &AssignedBatchIntermediates,
     stacked_reduction: &AssignedStackedReductionIntermediates,
 ) {
     assert_eq!(batch.r.len(), stacked_reduction.r.len());
-    for (batch_r, stacked_r) in batch.r.iter().zip(&stacked_reduction.r) {
-        ext_chip.assert_equal(ctx, batch_r, stacked_r);
-    }
 
     assert_eq!(
         batch.column_openings.len(),
@@ -1297,9 +1281,6 @@ fn bind_batch_to_stacked_inputs(
         assert_eq!(batch_trace.len(), stacked_trace.len());
         for (batch_part, stacked_part) in batch_trace.iter().zip(stacked_trace) {
             assert_eq!(batch_part.len(), stacked_part.len());
-            for (batch_opening, stacked_opening) in batch_part.iter().zip(stacked_part) {
-                ext_chip.assert_equal(ctx, batch_opening, stacked_opening);
-            }
         }
     }
 
@@ -1321,9 +1302,6 @@ fn bind_batch_to_stacked_inputs(
             .copied()
             .unwrap_or(false);
         assert_eq!(batch_common, stacked_common);
-        let batch_cell = ctx.load_constant(Fr::from(batch_common as u64));
-        let stacked_cell = ctx.load_constant(Fr::from(stacked_common as u64));
-        ctx.constrain_equal(&batch_cell, &stacked_cell);
     }
 
     let mut commit_idx = 1usize;
@@ -1336,35 +1314,10 @@ fn bind_batch_to_stacked_inputs(
                 .copied()
                 .unwrap_or(false);
             assert_eq!(batch_part, stacked_part);
-            let batch_cell = ctx.load_constant(Fr::from(batch_part as u64));
-            let stacked_cell = ctx.load_constant(Fr::from(stacked_part as u64));
-            ctx.constrain_equal(&batch_cell, &stacked_cell);
             commit_idx += 1;
         }
     }
     assert_eq!(commit_idx, stacked_need_rot.len());
-}
-
-fn bind_stacked_openings_to_whir(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
-    stacked_reduction: &AssignedStackedReductionIntermediates,
-    whir: &AssignedWhirIntermediates,
-) {
-    assert_eq!(
-        stacked_reduction.stacking_openings.len(),
-        whir.stacking_openings.len(),
-    );
-    for (stacked_commit, whir_commit) in stacked_reduction
-        .stacking_openings
-        .iter()
-        .zip(&whir.stacking_openings)
-    {
-        assert_eq!(stacked_commit.len(), whir_commit.len());
-        for (stacked_opening, whir_opening) in stacked_commit.iter().zip(whir_commit) {
-            ext_chip.assert_equal(ctx, stacked_opening, whir_opening);
-        }
-    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -1450,12 +1403,6 @@ fn derive_preamble_observe_cells_from_stage(
     for limb in common_main_commit_limbs {
         observes.push(limb.0);
     }
-    let first_initial_commitment_root = whir
-        .initial_commitment_roots
-        .first()
-        .copied()
-        .unwrap_or(statement_public_inputs[1]);
-    ctx.constrain_equal(&first_initial_commitment_root, &statement_public_inputs[1]);
 
     let (preprocessed_roots_by_air, cached_roots_by_air) = map_initial_commitment_roots_by_air(
         ctx,
@@ -1478,8 +1425,7 @@ fn derive_preamble_observe_cells_from_stage(
                     .unwrap_or_else(|| ctx.load_constant(Fr::from(0u64)));
                 let expected_root =
                     schedule.air_preprocessed_commit_roots[air_idx].unwrap_or(Fr::from(0u64));
-                let expected_root_cell = ctx.load_constant(expected_root);
-                ctx.constrain_equal(&root, &expected_root_cell);
+                range.gate().assert_is_const(ctx, &root, &expected_root);
 
                 let root_limbs = split_assigned_bn254_to_babybear_limbs(ctx, range, root);
                 for limb in root_limbs {
@@ -1622,14 +1568,17 @@ fn constrain_metadata_ownership(
         assert!(shifted >= 0);
         assert!(shifted_expected >= 0);
         assert_eq!(shifted.max(0) as u64, shifted_expected.max(0) as u64);
-        let shifted_cell = ctx.load_constant(Fr::from(shifted_expected.max(0) as u64));
         assert!(air_idx < proof_shape.air_log_heights.len());
         let air_log_height = proof_shape
             .air_log_heights
             .get(air_idx)
             .copied()
             .unwrap_or(default_air_log_height);
-        ctx.constrain_equal(&shifted_cell, &air_log_height);
+        gate.assert_is_const(
+            ctx,
+            &air_log_height,
+            &Fr::from(shifted_expected.max(0) as u64),
+        );
     }
 
     assert_eq!(actual.batch.l_skip as u64, schedule.l_skip as u64);
@@ -1829,6 +1778,10 @@ pub(crate) fn constrain_pipeline_intermediates(
         schedule.proof_shape_ownership.trace_height_thresholds.len(),
     );
 
+    let statement_public_inputs = [
+        ctx.load_witness(statement.mvk_pre_hash),
+        ctx.load_witness(statement.proof_common_main_commit),
+    ];
     let proof_shape = constrain_checked_proof_shape_witness_state_with_ownership(
         ctx,
         &base_chip,
@@ -1840,26 +1793,52 @@ pub(crate) fn constrain_pipeline_intermediates(
     .assigned;
     let mut batch_with_owned_nodes = actual.batch.clone();
     batch_with_owned_nodes.trace_constraint_nodes = schedule.batch_trace_constraint_nodes.clone();
-    let batch = constrain_batch_intermediates_unchecked(ctx, range, &batch_with_owned_nodes);
-    let stacked_reduction =
-        constrain_stacked_reduction_intermediates(ctx, &ext_chip, &actual.stacked_reduction);
-    let whir = constrain_checked_whir_witness_state_unchecked(
+    let batch = constrain_batch_intermediates_with_shared_trace_ids(
+        ctx,
+        range,
+        &batch_with_owned_nodes,
+        Some(&proof_shape.trace_id_to_air_id),
+    );
+    let stacked_reduction = constrain_stacked_reduction_intermediates_with_shared_inputs(
+        ctx,
+        &ext_chip,
+        &actual.stacked_reduction,
+        Some(&batch.column_openings),
+        Some(&batch.r),
+    );
+    let shared_u_cube =
+        derive_u_cube_from_stacked_assigned(ctx, &ext_chip, schedule.l_skip, &stacked_reduction.u);
+    assert_eq!(shared_u_cube.len(), actual.whir.u_cube.len());
+    let shared_initial_commitment_roots = if actual.whir.initial_commitment_roots.is_empty() {
+        Vec::new()
+    } else {
+        once(statement_public_inputs[1])
+            .chain(
+                actual
+                    .whir
+                    .initial_commitment_roots
+                    .iter()
+                    .skip(1)
+                    .map(|&root| ctx.load_witness(root)),
+            )
+            .collect::<Vec<_>>()
+    };
+    let whir = constrain_checked_whir_witness_state_with_shared_inputs(
         ctx,
         &ext_chip,
         &RawWhirWitnessState {
             intermediates: actual.whir.clone(),
         },
+        SharedWhirWitnessInputs {
+            stacking_openings: Some(&stacked_reduction.stacking_openings),
+            initial_commitment_roots: Some(&shared_initial_commitment_roots),
+            u_cube: Some(&shared_u_cube),
+        },
     )
     .assigned;
     constrain_metadata_ownership(ctx, gate, actual, &proof_shape, &batch, schedule);
-    bind_batch_to_stacked_inputs(ctx, &ext_chip, actual, &batch, &stacked_reduction);
-    bind_stacked_openings_to_whir(ctx, &ext_chip, &stacked_reduction, &whir);
+    bind_batch_to_stacked_inputs(actual, &batch, &stacked_reduction);
     let transcript_replay = constrain_transcript_events(ctx, range, &actual.transcript_events);
-
-    let statement_public_inputs = [
-        ctx.load_witness(statement.mvk_pre_hash),
-        ctx.load_witness(statement.proof_common_main_commit),
-    ];
     let preamble_observe_cells = derive_preamble_observe_cells_from_stage(
         ctx,
         range,
@@ -1889,15 +1868,8 @@ pub(crate) fn constrain_pipeline_intermediates(
         schedule,
     );
 
-    let stage_payload_observe_cells = derive_stage_payload_observe_cells(
-        ctx,
-        range,
-        actual,
-        &batch,
-        &stacked_reduction,
-        &whir,
-        schedule,
-    );
+    let stage_payload_observe_cells =
+        derive_stage_payload_observe_cells(ctx, range, &batch, &stacked_reduction, &whir, schedule);
     let mut non_preamble_observe_cells = Vec::with_capacity(stage_payload_observe_cells.len());
     for payload_cell in stage_payload_observe_cells {
         let observed_cell = event_cursor.consume_next_observe(ctx, gate);
@@ -2114,13 +2086,6 @@ pub(crate) fn constrain_pipeline_intermediates(
         batch.trace_id_to_air_id.len(),
         proof_shape.trace_id_to_air_id.len(),
     );
-    for (batch_air, proof_shape_air) in batch
-        .trace_id_to_air_id
-        .iter()
-        .zip(&proof_shape.trace_id_to_air_id)
-    {
-        ctx.constrain_equal(batch_air, proof_shape_air);
-    }
 
     let mut sample_cursor = SampleCursor::new(&transcript_replay.samples);
 
@@ -2280,14 +2245,6 @@ pub(crate) fn constrain_pipeline_intermediates(
     assert_eq!(z0_idx, whir.z0_challenges.len());
     assert_eq!(gamma_idx, whir.gammas.len());
     assert_eq!(sample_cursor.cursor, transcript_replay.samples.len());
-
-    bind_u_cube_from_stacked(
-        ctx,
-        &ext_chip,
-        schedule.l_skip,
-        &stacked_reduction.u,
-        &whir.u_cube,
-    );
 
     AssignedPipelineIntermediates {
         proof_shape,

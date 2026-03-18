@@ -131,6 +131,7 @@ pub struct AssignedBatchIntermediates {
     pub n_logup: AssignedValue<Fr>,
     pub n_max: AssignedValue<Fr>,
     pub batch_degree: AssignedValue<Fr>,
+    pub logup_pow_witness: BabyBearWire,
     pub logup_pow_bits: AssignedValue<Fr>,
     pub logup_pow_sampled_bits: AssignedValue<Fr>,
     pub logup_pow_witness_ok: AssignedValue<Fr>,
@@ -1382,11 +1383,11 @@ fn column_openings_by_rot_assigned(
         .collect::<Vec<_>>()
 }
 
-// Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
-pub(crate) fn constrain_batch_intermediates_unchecked(
+pub(crate) fn constrain_batch_intermediates_with_shared_trace_ids(
     ctx: &mut Context<Fr>,
     range: &halo2_base::gates::range::RangeChip<Fr>,
     actual: &BatchIntermediates,
+    shared_trace_id_to_air_id: Option<&[AssignedValue<Fr>]>,
 ) -> AssignedBatchIntermediates {
     assert!(!actual.r.is_empty(), "batch challenges must be non-empty");
     assert_eq!(
@@ -1419,11 +1420,23 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     let ext_chip = BabyBearExtChip::new(base_chip);
     let gate = ext_chip.range().gate();
 
-    let trace_id_to_air_id = actual
-        .trace_id_to_air_id
-        .iter()
-        .map(|&actual_air_id| ext_chip.base().assign_and_range_usize(ctx, actual_air_id))
-        .collect();
+    let trace_id_to_air_id = shared_trace_id_to_air_id.map_or_else(
+        || {
+            actual
+                .trace_id_to_air_id
+                .iter()
+                .map(|&actual_air_id| ext_chip.base().assign_and_range_usize(ctx, actual_air_id))
+                .collect::<Vec<_>>()
+        },
+        |shared| {
+            assert_eq!(
+                shared.len(),
+                actual.trace_id_to_air_id.len(),
+                "shared trace-id wires must align with trace count",
+            );
+            shared.to_vec()
+        },
+    );
 
     let total_interactions = ext_chip
         .base()
@@ -1444,6 +1457,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     let logup_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, actual.logup_pow_bits);
+    let logup_pow_witness = ext_chip.base().load_witness(ctx, actual.logup_pow_witness);
     let logup_pow_sampled_bits = ext_chip
         .base()
         .assign_and_range_u64(ctx, actual.logup_pow_sampled_bits);
@@ -1455,9 +1469,12 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         gate.assert_is_const(ctx, &logup_pow_sampled_bits, &Fr::from(0u64));
     }
 
-    let logup_pow_witness_ok = ctx.load_constant(Fr::from(actual.logup_pow_witness_ok as u64));
-    let logup_pow_is_zero = gate.is_zero(ctx, logup_pow_sampled_bits);
-    ctx.constrain_equal(&logup_pow_witness_ok, &logup_pow_is_zero);
+    let logup_pow_witness_ok = gate.is_zero(ctx, logup_pow_sampled_bits);
+    gate.assert_is_const(
+        ctx,
+        &logup_pow_witness_ok,
+        &Fr::from(actual.logup_pow_witness_ok as u64),
+    );
     gate.assert_is_const(ctx, &logup_pow_witness_ok, &Fr::from(1u64));
     let gkr_q0_claim = if actual.total_interactions == 0 {
         assert!(
@@ -1540,10 +1557,11 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
     let univariate_len = ext_chip
         .base()
         .assign_and_range_usize(ctx, univariate_round_coeffs.len());
-    let expected_univariate_len_cell = ext_chip
-        .base()
-        .assign_and_range_usize(ctx, expected_univariate_len);
-    ctx.constrain_equal(&univariate_len, &expected_univariate_len_cell);
+    gate.assert_is_const(
+        ctx,
+        &univariate_len,
+        &Fr::from(usize_to_u64(expected_univariate_len)),
+    );
 
     let sumcheck_round_count = ext_chip
         .base()
@@ -1584,10 +1602,11 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         .enumerate()
     {
         let part_count = ext_chip.base().assign_and_range_usize(ctx, openings.len());
-        let expected_part_count = ext_chip
-            .base()
-            .assign_and_range_usize(ctx, expected_widths.len());
-        ctx.constrain_equal(&part_count, &expected_part_count);
+        gate.assert_is_const(
+            ctx,
+            &part_count,
+            &Fr::from(usize_to_u64(expected_widths.len())),
+        );
 
         for (part_idx, (part_openings, &expected_width)) in
             openings.iter().zip(expected_widths.iter()).enumerate()
@@ -1595,8 +1614,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
             let opening_width = ext_chip
                 .base()
                 .assign_and_range_usize(ctx, part_openings.len());
-            let expected_width_cell = ext_chip.base().assign_and_range_usize(ctx, expected_width);
-            ctx.constrain_equal(&opening_width, &expected_width_cell);
+            gate.assert_is_const(ctx, &opening_width, &Fr::from(usize_to_u64(expected_width)));
 
             let need_rot = *actual.column_openings_need_rot[trace_idx]
                 .get(part_idx)
@@ -2117,6 +2135,7 @@ pub(crate) fn constrain_batch_intermediates_unchecked(
         n_logup,
         n_max,
         batch_degree,
+        logup_pow_witness,
         logup_pow_bits,
         logup_pow_sampled_bits,
         logup_pow_witness_ok,

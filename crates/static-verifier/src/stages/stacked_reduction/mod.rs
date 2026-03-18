@@ -1,6 +1,9 @@
 use std::iter::zip;
 
-use halo2_base::Context;
+use halo2_base::{
+    gates::{GateInstructions, RangeInstructions},
+    Context,
+};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         default_transcript, BabyBearBn254Poseidon2Config as NativeConfig,
@@ -386,10 +389,12 @@ fn eval_in_uni_assigned(
     }
 }
 
-pub(crate) fn constrain_stacked_reduction_intermediates(
+pub(crate) fn constrain_stacked_reduction_intermediates_with_shared_inputs(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip<'_>,
     actual: &StackedReductionIntermediates,
+    shared_batch_column_openings: Option<&[Vec<Vec<BabyBearExtWire>>]>,
+    shared_r: Option<&[BabyBearExtWire]>,
 ) -> AssignedStackedReductionIntermediates {
     assert!(!actual.u.is_empty(), "stacked challenges must be non-empty");
     assert_eq!(
@@ -438,25 +443,49 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    let batch_column_openings = actual
-        .batch_column_openings
-        .iter()
-        .map(|per_air| {
-            per_air
+    let batch_column_openings = shared_batch_column_openings.map_or_else(
+        || {
+            actual
+                .batch_column_openings
                 .iter()
-                .map(|part| {
-                    part.iter()
-                        .map(|&value| assign_ext(ctx, ext_chip, value))
+                .map(|per_air| {
+                    per_air
+                        .iter()
+                        .map(|part| {
+                            part.iter()
+                                .map(|&value| assign_ext(ctx, ext_chip, value))
+                                .collect::<Vec<_>>()
+                        })
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    let r = actual
-        .r
-        .iter()
-        .map(|&value| assign_ext(ctx, ext_chip, value))
-        .collect::<Vec<_>>();
+        },
+        |shared| {
+            assert_eq!(
+                shared.len(),
+                actual.batch_column_openings.len(),
+                "shared batch openings must align with trace count",
+            );
+            shared.to_vec()
+        },
+    );
+    let r = shared_r.map_or_else(
+        || {
+            actual
+                .r
+                .iter()
+                .map(|&value| assign_ext(ctx, ext_chip, value))
+                .collect::<Vec<_>>()
+        },
+        |shared| {
+            assert_eq!(
+                shared.len(),
+                actual.r.len(),
+                "shared challenge wires must align with stacked challenge count",
+            );
+            shared.to_vec()
+        },
+    );
     let q_coeffs = actual
         .q_coeffs
         .iter()
@@ -479,9 +508,16 @@ pub(crate) fn constrain_stacked_reduction_intermediates(
         let q_coeff_width = ext_chip
             .base()
             .assign_and_range_usize(ctx, q_coeff_row.len());
-        let expected_width_cell = ext_chip.base().assign_and_range_usize(ctx, expected_width);
-        ctx.constrain_equal(&opening_width, &expected_width_cell);
-        ctx.constrain_equal(&q_coeff_width, &expected_width_cell);
+        ext_chip.range().gate().assert_is_const(
+            ctx,
+            &opening_width,
+            &Fr::from(expected_width as u64),
+        );
+        ext_chip.range().gate().assert_is_const(
+            ctx,
+            &q_coeff_width,
+            &Fr::from(expected_width as u64),
+        );
     }
     let s_0 = assign_ext(ctx, ext_chip, actual.s_0);
 
