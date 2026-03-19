@@ -6,7 +6,6 @@ use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 use openvm_verify_stark_host::pvs::{DeferralPvs, VmPvs, DEF_PVS_AIR_ID, VM_PVS_AIR_ID};
 
 use crate::{
-    bn254::CommitBytes,
     circuit::{
         inner::{
             bus::PvsAirConsistencyBus,
@@ -17,6 +16,7 @@ use crate::{
         subair::HashSliceSubAir,
         Circuit,
     },
+    CommitBytes,
 };
 
 pub mod app {

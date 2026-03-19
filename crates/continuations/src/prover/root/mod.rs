@@ -15,13 +15,12 @@ use p3_field::{Field, PrimeField32};
 use tracing::instrument;
 
 use crate::{
-    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
     },
     prover::trace_heights_tracing_info,
-    RootSC, SC,
+    CommitBytes, DagCommitBytes, RootSC, SC,
 };
 
 mod trace;

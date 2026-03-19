@@ -5,11 +5,11 @@ use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 
 use crate::{
-    bn254::DagCommitBytes,
     circuit::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
         Circuit,
     },
+    DagCommitBytes,
 };
 
 pub mod bus;

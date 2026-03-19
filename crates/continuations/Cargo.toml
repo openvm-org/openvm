@@ -7,14 +7,14 @@ description = "Continuation AIRs and utilities"
 
 [dependencies]
 p3-air = { workspace = true }
-p3-bn254 = { workspace = true }
+p3-bn254 = { workspace = true, optional = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
 openvm-recursion-circuit = { workspace = true }
 openvm-recursion-circuit-derive = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2", "cpu-backend"] }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cpu-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -28,7 +28,7 @@ cfg-if.workspace = true
 num-bigint.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
-openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-cuda-backend = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
@@ -45,6 +45,11 @@ openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
+root-prover = [
+    "dep:p3-bn254",
+    "openvm-stark-sdk/baby-bear-bn254-poseidon2",
+    "openvm-cuda-backend?/baby-bear-bn254-poseidon2",
+]
 parallel = ["openvm-circuit/parallel", "openvm-recursion-circuit/parallel"]
 metrics = ["openvm-circuit/metrics"]
 
@@ -56,7 +61,6 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
     "openvm-recursion-circuit/cuda",
-    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
 touchemall = [
     "cuda",
