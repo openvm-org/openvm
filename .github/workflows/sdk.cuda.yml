@@ -7,8 +7,6 @@ on:
     branches: ["**"]
     paths:
       - "crates/sdk/**"
-      - "crates/continuations/**"
-      - "crates/recursion/**"
       - ".github/workflows/sdk.cuda.yml"
 
 concurrency:
