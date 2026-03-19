@@ -10,9 +10,9 @@ OpenVM is a modular framework to co-design and build a custom zkVM, ISA, and sup
 - Programming language support is provided using Rust as the language frontend. Support for Rust relies on compilation to a 32-bit RISC-V ELF binary which is then transpiled to OpenVM assembly. VM extensions can specify additional instructions which are either (1) **intrinsics**, which can read from and write to RISC-V registers and memory in address spaces 1 and 2 or (2) **kernels**, which can operate over arbitrary address spaces, including address spaces 1 and 2.
   - Intrinsics are supported in the Rust frontend by inserting custom RISC-V directives to be passed through LLVM into the RISC-V ELF. The [RISC-V custom instructions](/specs/reference/riscv-custom-code) specification explains the custom instruction format in the RISC-V ELF for each default VM extension.
   - Each VM extension with intrinsics specifies an extensible [transpiler](/specs/reference/transpiler) component to convert its instructions in the RISC-V ELF into OpenVM assembly. The transpiler comes with support for RV32IM and the set of default extensions, and it is extensible for new VM extensions.
-  - VM extensions with kernels compile directly to OpenVM assembly and may be used outside of the Rust frontend, or called from within Rust via procedural macros. At present, a standalone Rust eDSL is supported for the native VM extension.
-- We provide a general recursion library written in a standalone Rust eDSL which compiles to the native VM extension for OpenVM. The library supports inner aggregation of arbitrary STARK proofs, outer aggregation using Halo2-based SNARKs, and on-chain EVM verification of the aggregated SNARK proofs.
+  - VM extensions with kernels compile directly to OpenVM assembly and may be used outside of the Rust frontend, or called from within Rust via procedural macros.
 - All VMs within our framework support parallel proving of programs with unbounded cycle count using continuations and proof aggregation. Our [continuations design](/specs/architecture/continuations) maximizes proving parallelism and does not rely on interactive communication between continuation segments.
+- The [deferral framework](/specs/architecture/deferral) allows guest programs to offload expensive computations (such as STARK proof verification) to the proof aggregation phase. During app execution, the guest commits to the inputs and receives a commitment to the outputs. The deferred computation is executed and verified during aggregation.
 
 ## VM Extensions
 
@@ -40,4 +40,5 @@ More details about OpenVM are provided in the specific pages below.
 - [RISC-V custom instructions](/specs/reference/riscv-custom-code)
 - [Transpiler from RISC-V ELF to OpenVM assembly](/specs/reference/transpiler)
 - [Continuations](/specs/architecture/continuations)
+- [Deferral Framework](/specs/architecture/deferral)
 - [Memory Architecture](/specs/architecture/memory)

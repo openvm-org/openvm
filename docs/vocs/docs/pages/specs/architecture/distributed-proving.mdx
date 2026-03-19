@@ -52,5 +52,4 @@ The proving key is generated upon circuit creation independently of any runtime 
 
 The sequence of App proofs, one per segment, is aggregated using distributed proof aggregation following our [continuation design](/specs/architecture/continuations). Proof aggregation proceeds using an aggregation tree, where each node in the same layer of the tree can be proven in parallel.
 
-Presently, each aggregation proof is generated as the proof of execution of an Agg VM program, and the design requires that the entire execution fits into a single segment. Since aggregation proofs are necessarily of single segments, metered execution is not required.
-Instead, preflight execution is run directly on the single segment without pure or metered execution. Then trace generation and STARK backend proving proceed on device as described above.
+Each aggregation proof is generated directly via trace generation and STARK backend proving for the corresponding aggregation circuit — no VM execution is involved. Trace generation and STARK backend proving proceed on device as described above.
