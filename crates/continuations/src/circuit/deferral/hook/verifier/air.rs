@@ -19,7 +19,6 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 
 use crate::{
-    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         deferral::{
             hook::bus::{DefVkCommitBus, DefVkCommitMessage, OnionResultBus, OnionResultMessage},
@@ -31,6 +30,7 @@ use crate::{
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
+    CommitBytes, DagCommitBytes,
 };
 
 #[repr(C)]

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{
-    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         root::{
             bus::{DeferralAccPathBus, DeferralMerkleRootsBus, MemoryMerkleCommitBus},
@@ -12,6 +11,7 @@ use openvm_continuations::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
         Circuit,
     },
+    CommitBytes, DagCommitBytes,
 };
 use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
