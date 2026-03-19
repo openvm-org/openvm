@@ -11,7 +11,9 @@ use openvm_stark_sdk::{
     },
     utils::setup_tracing,
 };
-use openvm_static_verifier::{StaticVerifierCircuit, StaticVerifierShape};
+use openvm_static_verifier::{
+    log_heights_per_air_from_proof, StaticVerifierCircuit, StaticVerifierShape,
+};
 
 const MIN_ROWS: usize = 20;
 
@@ -57,7 +59,9 @@ fn real_prover_keygen_prove_verify_roundtrip() {
     let (vk, proof_keygen) = FibFixture::new(0, 1, 1 << 5).keygen_and_prove(&engine);
     let (_vk_prove, proof_prove) = FibFixture::new(1, 1, 1 << 5).keygen_and_prove(&engine);
 
-    let circuit = StaticVerifierCircuit::try_new(vk, &proof_keygen).expect("static circuit params");
+    let log_heights_per_air = log_heights_per_air_from_proof(&proof_keygen);
+    let circuit =
+        StaticVerifierCircuit::try_new(vk, &log_heights_per_air).expect("static circuit params");
 
     // Auto-tune k to the smallest value that fits in 1 advice column
     let k = select_k(&circuit, &proof_keygen);

@@ -19,6 +19,7 @@ use crate::{
             constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
             load_gkr_proof_wire, BatchConstraintProofWire, GkrProofWire,
         },
+        proof_shape::log_heights_per_air_from_proof,
         stacked_reduction::{
             constrain_stacked_reduction, load_stacking_proof_wire, StackingProofWire,
         },
@@ -47,33 +48,19 @@ pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
 }
 
 /// Load proof data into Halo2 cells. `log_heights_per_air` must match this circuit's fixed heights;
-/// host-side asserts enforce that every `proof.trace_vdata[air_id].log_height` agrees.
+/// host-side asserts that per-AIR log heights extracted from the proof match `log_heights_per_air`.
 pub fn load_proof_wire(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     proof: &Proof<RootConfig>,
     log_heights_per_air: &[usize],
 ) -> ProofWire {
+    let from_proof = log_heights_per_air_from_proof(proof);
     assert_eq!(
-        proof.trace_vdata.len(),
-        log_heights_per_air.len(),
-        "proof.trace_vdata length must match log_heights_per_air"
+        from_proof.as_slice(),
+        log_heights_per_air,
+        "per-AIR log heights from proof must match this circuit's fixed log_heights_per_air"
     );
-    for (air_id, (tv, &expected_log_height)) in proof
-        .trace_vdata
-        .iter()
-        .zip(log_heights_per_air.iter())
-        .enumerate()
-    {
-        let Some(vd) = tv.as_ref() else {
-            panic!("static verifier proof must include trace_vdata for air_id {air_id}");
-        };
-        assert_eq!(
-            vd.log_height, expected_log_height,
-            "trace log_height mismatch for air_id {air_id}: proof has {}, circuit expects {}",
-            vd.log_height, expected_log_height
-        );
-    }
 
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip.clone());

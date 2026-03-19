@@ -24,7 +24,7 @@ use crate::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
     },
-    stages::proof_shape::compute_trace_id_to_air_id,
+    stages::proof_shape::{log_heights_per_air_from_proof, trace_id_order_from_static_heights},
     RootF, StaticVerifierCircuit,
 };
 
@@ -106,7 +106,9 @@ where
 {
     let (vk, proof) = fixture.keygen_and_prove(engine);
     let public_inputs = pipeline_public_inputs(&vk, &proof);
-    let circuit = StaticVerifierCircuit::try_new(vk, &proof).expect("static circuit params");
+    let log_heights_per_air = log_heights_per_air_from_proof(&proof);
+    let circuit =
+        StaticVerifierCircuit::try_new(vk, &log_heights_per_air).expect("static circuit params");
 
     run_mock(true, &public_inputs, |builder| {
         circuit.populate(builder, &proof);
@@ -184,16 +186,8 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     ];
 
     let public_inputs = pipeline_public_inputs(&vk, &proof);
-    let trace_id_to_air_id = compute_trace_id_to_air_id(&vk.inner, &proof);
-    let log_heights_per_air: Vec<usize> = proof
-        .trace_vdata
-        .iter()
-        .map(|v| {
-            v.as_ref()
-                .expect("fixture proof has full trace_vdata")
-                .log_height
-        })
-        .collect();
+    let log_heights_per_air = log_heights_per_air_from_proof(&proof);
+    let trace_id_to_air_id = trace_id_order_from_static_heights(&vk.inner, &log_heights_per_air);
     let stacked_layouts = build_stacked_layouts_for_static_vk(&vk.inner, &log_heights_per_air);
     run_mock(false, &public_inputs, move |builder| {
         let range = builder.range_chip();
@@ -230,7 +224,9 @@ fn pipeline_constraints_fail_when_public_inputs_are_tampered() {
     let mut tampered_public_inputs = pipeline_public_inputs(&vk, &proof);
     tampered_public_inputs[0] += Fr::from(1u64);
 
-    let circuit = StaticVerifierCircuit::try_new(vk, &proof).expect("static circuit params");
+    let log_heights_per_air = log_heights_per_air_from_proof(&proof);
+    let circuit =
+        StaticVerifierCircuit::try_new(vk, &log_heights_per_air).expect("static circuit params");
     run_mock(false, &tampered_public_inputs, |builder| {
         circuit.populate(builder, &proof);
     });
