@@ -82,54 +82,6 @@ impl From<BatchConstraintError> for WhirError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct WhirIntermediates {
-    pub k_whir: usize,
-    pub initial_log_rs_domain_size: usize,
-    pub mu_pow_bits: usize,
-    pub mu_pow_witness: u64,
-    pub mu_pow_sampled_bits: u64,
-    pub mu_pow_witness_ok: bool,
-    pub mu_challenge: ChildEF,
-    pub folding_pow_bits: usize,
-    pub folding_pow_witnesses: Vec<u64>,
-    pub folding_pow_sampled_bits: Vec<u64>,
-    pub folding_pow_witness_ok: Vec<bool>,
-    pub folding_alphas: Vec<ChildEF>,
-    pub z0_challenges: Vec<ChildEF>,
-    pub query_phase_pow_bits: usize,
-    pub query_phase_pow_witnesses: Vec<u64>,
-    pub query_phase_pow_sampled_bits: Vec<u64>,
-    pub query_phase_pow_witness_ok: Vec<bool>,
-    pub gammas: Vec<ChildEF>,
-    pub folding_counts_per_round: Vec<usize>,
-    pub query_counts_per_round: Vec<usize>,
-    pub query_index_bits: Vec<usize>,
-    pub query_indices: Vec<u64>,
-    pub initial_commitment_roots: Vec<Fr>,
-    pub codeword_commitment_roots: Vec<Fr>,
-    pub merkle_paths: Vec<MerklePathIntermediates>,
-    pub final_poly_len: usize,
-    pub expected_final_poly_len: usize,
-    pub stacking_openings: Vec<Vec<ChildEF>>,
-    pub whir_sumcheck_polys: Vec<Vec<ChildEF>>,
-    pub ood_values: Vec<ChildEF>,
-    pub final_poly: Vec<ChildEF>,
-    pub u_cube: Vec<ChildEF>,
-    pub final_claim: ChildEF,
-    pub final_acc: ChildEF,
-    pub final_residual: ChildEF,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MerklePathIntermediates {
-    pub query_position: usize,
-    pub query_index_bits: usize,
-    pub leaf_inputs: Vec<Vec<u64>>,
-    pub root_digest: Fr,
-    pub siblings: Vec<Fr>,
-}
-
 pub(crate) fn ext_to_coeffs(value: ChildEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
     core::array::from_fn(|i| {
         <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value)[i]
