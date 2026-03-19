@@ -1,12 +1,7 @@
-use core::cmp::Reverse;
-
 use halo2_base::Context;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
-    openvm_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey0, p3_field::PrimeCharacteristicRing, proof::Proof,
-        prover::stacked_pcs::StackedLayout,
-    },
+    openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::stacked_pcs::StackedLayout},
 };
 
 use crate::{
@@ -24,53 +19,6 @@ use crate::{
     transcript::TranscriptGadget,
     Fr, RootF,
 };
-
-/// Stacked PCS layouts for the trace commitments present in `proof`, derived from the VK widths
-/// and per-air trace heights. Caller must ensure `proof` matches the static circuit shape.
-pub(crate) fn stacked_reduction_layouts(
-    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
-    proof: &Proof<RootConfig>,
-) -> Vec<StackedLayout> {
-    let l_skip = mvk0.params.l_skip;
-    let mut per_trace = mvk0
-        .per_air
-        .iter()
-        .zip(&proof.trace_vdata)
-        .enumerate()
-        .filter_map(|(air_idx, (vk, vdata))| vdata.as_ref().map(|vdata| (air_idx, vk, vdata)))
-        .collect::<Vec<_>>();
-    per_trace.sort_by_key(|(_, _, vdata)| Reverse(vdata.log_height));
-
-    let common_main_layout = StackedLayout::new(
-        l_skip,
-        mvk0.params.n_stack + l_skip,
-        per_trace
-            .iter()
-            .map(|(_, vk, vdata)| (vk.params.width.common_main, vdata.log_height))
-            .collect::<Vec<_>>(),
-    )
-    .expect("stacked layout for common main");
-    let other_layouts = per_trace
-        .iter()
-        .flat_map(|(_, vk, vdata)| {
-            vk.params
-                .width
-                .preprocessed
-                .iter()
-                .chain(&vk.params.width.cached_mains)
-                .copied()
-                .map(|width| (width, vdata.log_height))
-                .collect::<Vec<_>>()
-        })
-        .map(|sorted| {
-            StackedLayout::new(l_skip, mvk0.params.n_stack + l_skip, vec![sorted])
-                .expect("stacked layout for auxiliary column")
-        })
-        .collect::<Vec<_>>();
-    core::iter::once(common_main_layout)
-        .chain(other_layouts)
-        .collect::<Vec<_>>()
-}
 
 #[derive(Clone, Debug)]
 pub struct StackedReductionIntermediatesWire {
