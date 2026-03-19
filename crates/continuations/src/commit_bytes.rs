@@ -107,7 +107,7 @@ fn u32_digest_to_bytes(digest: &[u32; DIGEST_SIZE]) -> [u8; COMMIT_NUM_BYTES] {
 }
 
 #[cfg(feature = "root-prover")]
-pub mod bn254 {
+mod bn254 {
     use p3_bn254::Bn254;
     use p3_field::PrimeField;
 
