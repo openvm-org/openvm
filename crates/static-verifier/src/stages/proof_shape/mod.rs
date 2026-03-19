@@ -1,11 +1,7 @@
 use core::cmp::{max, Reverse};
 
-use halo2_base::{
-    gates::{GateInstructions, RangeInstructions},
-    AssignedValue, Context,
-};
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
         calculate_n_logup,
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
@@ -17,12 +13,6 @@ use openvm_stark_sdk::{
         },
         StarkProtocolConfig,
     },
-};
-
-use crate::{
-    field::baby_bear::BabyBearChip,
-    utils::{bits_for_u64, usize_to_u64},
-    Fr,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -64,50 +54,9 @@ pub struct ProofShapeIntermediates {
     pub proof_shape_upper_bound_checks: Vec<(usize, usize)>,
 }
 
-#[derive(Clone, Debug)]
-pub struct AssignedProofShapeIntermediates {
-    pub num_airs: AssignedValue<Fr>,
-    pub num_traces: AssignedValue<Fr>,
-    pub trace_id_to_air_id: Vec<AssignedValue<Fr>>,
-    pub trace_height_sums: Vec<AssignedValue<Fr>>,
-    pub air_presence_flags: Vec<AssignedValue<Fr>>,
-    pub air_required_flags: Vec<AssignedValue<Fr>>,
-    pub air_public_value_lens: Vec<AssignedValue<Fr>>,
-    pub air_expected_public_value_lens: Vec<AssignedValue<Fr>>,
-    pub air_cached_commitment_lens: Vec<AssignedValue<Fr>>,
-    pub air_expected_cached_commitment_lens: Vec<AssignedValue<Fr>>,
-    pub air_log_heights: Vec<AssignedValue<Fr>>,
-    pub max_log_height_allowed: AssignedValue<Fr>,
-    pub num_airs_present: AssignedValue<Fr>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RawProofShapeWitnessState {
-    pub intermediates: ProofShapeIntermediates,
-}
-
-#[derive(Clone, Debug)]
-pub struct DerivedProofShapeState {
-    pub trace_height_sums: Vec<AssignedValue<Fr>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct CheckedProofShapeWitnessState {
-    pub assigned: AssignedProofShapeIntermediates,
-    pub derived: DerivedProofShapeState,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProofShapeOwnershipSchedule {
-    pub trace_height_coefficients: Vec<Vec<u64>>,
-    pub trace_height_thresholds: Vec<u64>,
-    pub proof_shape_count_checks: Vec<(usize, usize)>,
-    pub proof_shape_upper_bound_checks: Vec<(usize, usize)>,
-}
-
 fn compute_trace_id_to_air_id(
-    mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Vec<usize> {
     let num_airs = mvk0.per_air.len();
     let mut trace_id_to_air_id: Vec<usize> = (0..num_airs).collect();
@@ -141,8 +90,8 @@ pub(crate) struct ProofShapeRuleDerivation {
 }
 
 pub(crate) fn derive_proof_shape_rules(
-    mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<ProofShapeRuleDerivation, ProofShapeError> {
     let num_airs = mvk0.per_air.len();
     let l_skip = mvk0.params.l_skip;
@@ -788,9 +737,9 @@ pub(crate) fn derive_proof_shape_rules(
 }
 
 pub fn derive_proof_shape_intermediates(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    config: &RootConfig,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<ProofShapeIntermediates, ProofShapePreambleError> {
     if config.params() != &mvk.inner.params {
         return Err(ProofShapePreambleError::SystemParamsMismatch);
@@ -870,395 +819,6 @@ pub fn derive_proof_shape_intermediates(
         proof_shape_count_checks: shape_rules.count_checks,
         proof_shape_upper_bound_checks: shape_rules.upper_bound_checks,
     })
-}
-
-pub fn derive_proof_shape_ownership_schedule(
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<ProofShapeOwnershipSchedule, ProofShapePreambleError> {
-    let shape_rules = derive_proof_shape_rules(&mvk.inner, proof)?;
-    Ok(ProofShapeOwnershipSchedule {
-        trace_height_coefficients: mvk
-            .inner
-            .trace_height_constraints
-            .iter()
-            .map(|constraint| {
-                constraint
-                    .coefficients
-                    .iter()
-                    .map(|&coeff| coeff as u64)
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>(),
-        trace_height_thresholds: mvk
-            .inner
-            .trace_height_constraints
-            .iter()
-            .map(|constraint| constraint.threshold as u64)
-            .collect::<Vec<_>>(),
-        proof_shape_count_checks: shape_rules.count_checks,
-        proof_shape_upper_bound_checks: shape_rules.upper_bound_checks,
-    })
-}
-
-pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
-    ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip,
-    actual: &ProofShapeIntermediates,
-    ownership_schedule: Option<&ProofShapeOwnershipSchedule>,
-) -> AssignedProofShapeIntermediates {
-    let owned_trace_height_coefficients = ownership_schedule
-        .map(|schedule| schedule.trace_height_coefficients.as_slice())
-        .unwrap_or(actual.trace_height_coefficients.as_slice());
-    let owned_trace_height_thresholds = ownership_schedule
-        .map(|schedule| schedule.trace_height_thresholds.as_slice())
-        .unwrap_or(actual.trace_height_thresholds.as_slice());
-
-    assert!(
-        actual.max_log_height_allowed < 64,
-        "trace-height recomputation requires <=63-bit shift domain",
-    );
-    assert_eq!(
-        actual.trace_height_sums.len(),
-        actual.trace_height_thresholds.len()
-    );
-    assert_eq!(
-        actual.trace_height_sums.len(),
-        owned_trace_height_thresholds.len(),
-        "trace-height sum vector must align with ownership schedule thresholds",
-    );
-    assert_eq!(
-        actual.trace_height_coefficients.len(),
-        actual.trace_height_thresholds.len()
-    );
-    assert_eq!(
-        owned_trace_height_coefficients.len(),
-        owned_trace_height_thresholds.len(),
-        "trace-height coefficient schedule length must match ownership thresholds",
-    );
-    for coeffs in owned_trace_height_coefficients {
-        assert_eq!(
-            coeffs.len(),
-            actual.num_airs,
-            "trace-height coefficient vector must match num_airs",
-        );
-    }
-    assert_eq!(
-        actual.air_presence_flags.len(),
-        actual.air_required_flags.len()
-    );
-    assert_eq!(
-        actual.air_presence_flags.len(),
-        actual.air_public_value_lens.len()
-    );
-    assert_eq!(
-        actual.air_presence_flags.len(),
-        actual.air_expected_public_value_lens.len()
-    );
-    assert_eq!(
-        actual.air_presence_flags.len(),
-        actual.air_cached_commitment_lens.len()
-    );
-    assert_eq!(
-        actual.air_presence_flags.len(),
-        actual.air_expected_cached_commitment_lens.len()
-    );
-    assert_eq!(
-        actual.air_presence_flags.len(),
-        actual.air_log_heights.len()
-    );
-    let gate = base_chip.gate();
-
-    if let Some(schedule) = ownership_schedule {
-        assert_eq!(
-            actual.trace_height_coefficients.len(),
-            schedule.trace_height_coefficients.len(),
-            "trace-height coefficient witness/schedule length mismatch",
-        );
-        for (actual_coeffs, owned_coeffs) in actual
-            .trace_height_coefficients
-            .iter()
-            .zip(&schedule.trace_height_coefficients)
-        {
-            assert_eq!(
-                actual_coeffs.len(),
-                owned_coeffs.len(),
-                "trace-height coefficient row witness/schedule width mismatch",
-            );
-            for (&actual_coeff, &owned_coeff) in actual_coeffs.iter().zip(owned_coeffs) {
-                let coeff_cell = base_chip.assign_and_range_u64(ctx, actual_coeff);
-                gate.assert_is_const(ctx, &coeff_cell, &Fr::from(owned_coeff));
-            }
-        }
-    }
-
-    let num_airs = base_chip.assign_and_range_usize(ctx, actual.num_airs);
-    gate.assert_is_const(
-        ctx,
-        &num_airs,
-        &Fr::from(usize_to_u64(actual.air_presence_flags.len())),
-    );
-
-    let num_traces = base_chip.assign_and_range_usize(ctx, actual.num_traces);
-    gate.assert_is_const(
-        ctx,
-        &num_traces,
-        &Fr::from(usize_to_u64(actual.trace_id_to_air_id.len())),
-    );
-
-    let trace_id_to_air_id = actual
-        .trace_id_to_air_id
-        .iter()
-        .map(|&actual_air_id| {
-            let air_id = base_chip.assign_and_range_usize(ctx, actual_air_id);
-            base_chip
-                .range()
-                .check_less_than_safe(ctx, air_id, usize_to_u64(actual.num_airs));
-            air_id
-        })
-        .collect::<Vec<_>>();
-    for i in 0..trace_id_to_air_id.len() {
-        for j in (i + 1)..trace_id_to_air_id.len() {
-            let diff = gate.sub(ctx, trace_id_to_air_id[i], trace_id_to_air_id[j]);
-            let equal = gate.is_zero(ctx, diff);
-            gate.assert_is_const(ctx, &equal, &Fr::from(0u64));
-        }
-    }
-
-    let air_required_flags = actual
-        .air_required_flags
-        .iter()
-        .map(|&actual_flag| ctx.load_constant(Fr::from(actual_flag as u64)))
-        .collect::<Vec<_>>();
-
-    let air_public_value_lens = actual
-        .air_public_value_lens
-        .iter()
-        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
-        .collect::<Vec<_>>();
-    for (actual_len, &expected_len) in air_public_value_lens
-        .iter()
-        .zip(actual.air_expected_public_value_lens.iter())
-    {
-        gate.assert_is_const(ctx, actual_len, &Fr::from(usize_to_u64(expected_len)));
-    }
-    let air_expected_public_value_lens = air_public_value_lens.clone();
-
-    let air_cached_commitment_lens = actual
-        .air_cached_commitment_lens
-        .iter()
-        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
-        .collect::<Vec<_>>();
-    for (actual_len, &expected_len) in air_cached_commitment_lens
-        .iter()
-        .zip(actual.air_expected_cached_commitment_lens.iter())
-    {
-        gate.assert_is_const(ctx, actual_len, &Fr::from(usize_to_u64(expected_len)));
-    }
-    let air_expected_cached_commitment_lens = air_cached_commitment_lens.clone();
-
-    let max_log_height_allowed =
-        base_chip.assign_and_range_usize(ctx, actual.max_log_height_allowed);
-    let air_log_heights = actual
-        .air_log_heights
-        .iter()
-        .map(|&actual_log_height| {
-            let log_height = base_chip.assign_and_range_usize(ctx, actual_log_height);
-            base_chip.range().check_less_than_safe(
-                ctx,
-                log_height,
-                usize_to_u64(actual.max_log_height_allowed).saturating_add(1),
-            );
-            log_height
-        })
-        .collect::<Vec<_>>();
-
-    let air_index_consts = (0..actual.num_airs)
-        .map(|air_idx| ctx.load_constant(Fr::from(usize_to_u64(air_idx))))
-        .collect::<Vec<_>>();
-
-    let mut air_presence_flags = Vec::with_capacity(actual.num_airs);
-    for (air_idx, &air_const) in air_index_consts.iter().enumerate() {
-        let mut trace_count = ctx.load_constant(Fr::from(0u64));
-        for &trace_air in &trace_id_to_air_id {
-            let diff = gate.sub(ctx, trace_air, air_const);
-            let is_match = gate.is_zero(ctx, diff);
-            trace_count = gate.add(ctx, trace_count, is_match);
-        }
-        gate.assert_bit(ctx, trace_count);
-        gate.assert_is_const(
-            ctx,
-            &trace_count,
-            &Fr::from(actual.air_presence_flags[air_idx] as u64),
-        );
-        air_presence_flags.push(trace_count);
-    }
-
-    let mut trace_log_heights = Vec::with_capacity(trace_id_to_air_id.len());
-    for &trace_air in &trace_id_to_air_id {
-        let mut selected_presence = ctx.load_constant(Fr::from(0u64));
-        let mut selected_log_height = ctx.load_constant(Fr::from(0u64));
-        for (air_idx, &air_const) in air_index_consts.iter().enumerate() {
-            let diff = gate.sub(ctx, trace_air, air_const);
-            let is_match = gate.is_zero(ctx, diff);
-            let presence_term = gate.mul(ctx, is_match, air_presence_flags[air_idx]);
-            selected_presence = gate.add(ctx, selected_presence, presence_term);
-            let log_height_term = gate.mul(ctx, is_match, air_log_heights[air_idx]);
-            selected_log_height = gate.add(ctx, selected_log_height, log_height_term);
-        }
-        gate.assert_is_const(ctx, &selected_presence, &Fr::from(1u64));
-        trace_log_heights.push(selected_log_height);
-    }
-
-    for i in 0..trace_log_heights.len().saturating_sub(1) {
-        let log_diff = gate.sub(ctx, trace_log_heights[i], trace_log_heights[i + 1]);
-        base_chip.range().range_check(
-            ctx,
-            log_diff,
-            bits_for_u64(usize_to_u64(actual.max_log_height_allowed)),
-        );
-
-        let logs_equal = gate.is_zero(ctx, log_diff);
-        let id_diff = gate.sub(ctx, trace_id_to_air_id[i + 1], trace_id_to_air_id[i]);
-        let tied_id_diff = gate.mul(ctx, logs_equal, id_diff);
-        base_chip.range().range_check(
-            ctx,
-            tied_id_diff,
-            bits_for_u64(usize_to_u64(actual.num_airs)),
-        );
-        let tied_id_diff_is_zero = gate.is_zero(ctx, tied_id_diff);
-        let tie_break_violation = gate.mul(ctx, logs_equal, tied_id_diff_is_zero);
-        gate.assert_is_const(ctx, &tie_break_violation, &Fr::from(0u64));
-    }
-
-    let trace_height_sums = owned_trace_height_thresholds
-        .iter()
-        .enumerate()
-        .map(|(constraint_idx, &threshold)| {
-            let mut sum = ctx.load_constant(Fr::from(0u64));
-            let coeffs = &owned_trace_height_coefficients[constraint_idx];
-            for (&trace_air, &trace_log_height) in trace_id_to_air_id.iter().zip(&trace_log_heights)
-            {
-                let mut coeff_for_trace = ctx.load_constant(Fr::from(0u64));
-                for (air_idx, &air_const) in air_index_consts.iter().enumerate() {
-                    let diff = gate.sub(ctx, trace_air, air_const);
-                    let is_match = gate.is_zero(ctx, diff);
-                    let coeff_const = ctx.load_constant(Fr::from(coeffs[air_idx]));
-                    let weighted = gate.mul(ctx, is_match, coeff_const);
-                    coeff_for_trace = gate.add(ctx, coeff_for_trace, weighted);
-                }
-
-                let mut trace_pow = ctx.load_constant(Fr::from(0u64));
-                for log_height in 0..=actual.max_log_height_allowed {
-                    let log_const = ctx.load_constant(Fr::from(usize_to_u64(log_height)));
-                    let log_diff = gate.sub(ctx, trace_log_height, log_const);
-                    let is_log = gate.is_zero(ctx, log_diff);
-                    let pow = 1u64 << (max(log_height, actual.l_skip) as u32);
-                    let pow_const = ctx.load_constant(Fr::from(pow));
-                    let weighted = gate.mul(ctx, is_log, pow_const);
-                    trace_pow = gate.add(ctx, trace_pow, weighted);
-                }
-
-                let contribution = gate.mul(ctx, coeff_for_trace, trace_pow);
-                sum = gate.add(ctx, sum, contribution);
-            }
-
-            base_chip.range().check_less_than_safe(ctx, sum, threshold);
-            gate.assert_is_const(
-                ctx,
-                &sum,
-                &Fr::from(actual.trace_height_sums[constraint_idx]),
-            );
-            sum
-        })
-        .collect::<Vec<_>>();
-
-    let one = ctx.load_constant(Fr::from(1u64));
-    for (presence, required) in air_presence_flags.iter().zip(air_required_flags.iter()) {
-        let one_minus_presence = gate.sub(ctx, one, *presence);
-        let required_without_presence = gate.mul(ctx, *required, one_minus_presence);
-        gate.assert_is_const(ctx, &required_without_presence, &Fr::from(0u64));
-    }
-    for (presence, log_height) in air_presence_flags.iter().zip(air_log_heights.iter()) {
-        let one_minus_presence = gate.sub(ctx, one, *presence);
-        let absent_log_height = gate.mul(ctx, *log_height, one_minus_presence);
-        gate.assert_is_const(ctx, &absent_log_height, &Fr::from(0u64));
-    }
-
-    let presence_sum = gate.sum(ctx, air_presence_flags.iter().copied());
-    let num_airs_present = presence_sum;
-    gate.assert_is_const(
-        ctx,
-        &num_airs_present,
-        &Fr::from(usize_to_u64(actual.trace_id_to_air_id.len())),
-    );
-    gate.assert_is_const(
-        ctx,
-        &num_airs_present,
-        &Fr::from(usize_to_u64(actual.num_airs_present)),
-    );
-
-    AssignedProofShapeIntermediates {
-        num_airs,
-        num_traces,
-        trace_id_to_air_id,
-        trace_height_sums,
-        air_presence_flags,
-        air_required_flags,
-        air_public_value_lens,
-        air_expected_public_value_lens,
-        air_cached_commitment_lens,
-        air_expected_cached_commitment_lens,
-        air_log_heights,
-        max_log_height_allowed,
-        num_airs_present,
-    }
-}
-
-pub fn derive_and_constrain_proof_shape(
-    ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip,
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<AssignedProofShapeIntermediates, ProofShapePreambleError> {
-    let raw = derive_raw_proof_shape_witness_state(config, mvk, proof)?;
-    let ownership = derive_proof_shape_ownership_schedule(mvk, proof)?;
-    Ok(constrain_checked_proof_shape_witness_state_with_ownership(
-        ctx,
-        base_chip,
-        &raw,
-        Some(&ownership),
-    )
-    .assigned)
-}
-
-pub(crate) fn derive_raw_proof_shape_witness_state(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> Result<RawProofShapeWitnessState, ProofShapePreambleError> {
-    Ok(RawProofShapeWitnessState {
-        intermediates: derive_proof_shape_intermediates(config, mvk, proof)?,
-    })
-}
-
-pub(crate) fn constrain_checked_proof_shape_witness_state_with_ownership(
-    ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip,
-    raw: &RawProofShapeWitnessState,
-    ownership_schedule: Option<&ProofShapeOwnershipSchedule>,
-) -> CheckedProofShapeWitnessState {
-    let assigned = constrain_proof_shape_intermediates_with_ownership(
-        ctx,
-        base_chip,
-        &raw.intermediates,
-        ownership_schedule,
-    );
-    let derived = DerivedProofShapeState {
-        trace_height_sums: assigned.trace_height_sums.clone(),
-    };
-    CheckedProofShapeWitnessState { assigned, derived }
 }
 
 #[cfg(test)]

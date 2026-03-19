@@ -2,7 +2,6 @@ use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
         flex_gate::MultiPhaseThreadBreakPoints,
-        GateInstructions, RangeInstructions,
     },
     halo2_proofs::{
         dev::MockProver,
@@ -21,17 +20,15 @@ use halo2_base::{
         },
     },
 };
+use itertools::Itertools;
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof},
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::StaticVerifierShape,
-    stages::full_pipeline::{derive_and_constrain_pipeline, derive_pipeline_public_inputs},
-};
+use crate::{config::StaticVerifierShape, stages::full_pipeline::constrained_verify};
 
 /// KZG parameters for the Halo2 BN256 proving system.
 pub type Halo2Params = ParamsKZG<Bn256>;
@@ -69,9 +66,9 @@ pub struct StaticVerifierProof {
 /// Bundles the three inputs that always travel together when interacting with
 /// the static verifier circuit.
 pub struct StaticVerifierInput<'a> {
-    pub config: &'a NativeConfig,
-    pub mvk: &'a MultiStarkVerifyingKey<NativeConfig>,
-    pub proof: &'a Proof<NativeConfig>,
+    pub config: &'a RootConfig,
+    pub mvk: &'a MultiStarkVerifyingKey<RootConfig>,
+    pub proof: &'a Proof<RootConfig>,
 }
 
 /// Stateless helper for the static verifier Halo2 circuit.
@@ -102,24 +99,15 @@ impl StaticVerifierCircuit {
         let range = builder.range_chip();
         let public_input_cells = {
             let ctx = builder.main(0);
-            let assigned =
-                derive_and_constrain_pipeline(ctx, &range, input.config, input.mvk, input.proof)
-                    .expect("pipeline derive+constrain should succeed");
-
-            range
-                .gate()
-                .assert_is_const(ctx, &assigned.whir.mu_pow_witness_ok, &Fr::from(1u64));
+            let assigned = constrained_verify(ctx, &range, input.config, input.mvk, input.proof)
+                .expect("pipeline constrained verify should succeed");
 
             assigned.statement_public_inputs.to_vec()
         };
+        let pis = public_input_cells.iter().map(|c| *c.value()).collect_vec();
         builder.assigned_instances[0].extend(public_input_cells);
 
-        derive_pipeline_public_inputs(input.config, input.mvk, input.proof)
-    }
-
-    /// Compute the public inputs without building any circuit constraints.
-    pub fn public_inputs(input: &StaticVerifierInput<'_>) -> Vec<Fr> {
-        derive_pipeline_public_inputs(input.config, input.mvk, input.proof)
+        pis
     }
 
     /// Run the [`MockProver`] and panic if any constraint is unsatisfied.
