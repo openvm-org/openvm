@@ -55,7 +55,6 @@ fn real_prover_keygen_prove_verify_roundtrip() {
     let (_vk_prove, proof_prove) = FibFixture::new(1, 1, 1 << 5).keygen_and_prove(&engine);
 
     let keygen_input = StaticVerifierInput {
-        config: engine.config(),
         mvk: &vk,
         proof: &proof_keygen,
     };
@@ -75,7 +74,6 @@ fn real_prover_keygen_prove_verify_roundtrip() {
 
     // Prove with second (different) proof
     let prove_input = StaticVerifierInput {
-        config: engine.config(),
         mvk: &vk,
         proof: &proof_prove,
     };

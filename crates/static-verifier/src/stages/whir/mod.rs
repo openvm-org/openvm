@@ -8,6 +8,7 @@ use openvm_stark_sdk::{
         BabyBearBn254Poseidon2Config as RootConfig, Digest as RootDigest,
     },
     openvm_stark_backend::{
+        keygen::types::MultiStarkVerifyingKey0,
         p3_field::{
             BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField, PrimeField64,
             TwoAdicField,
@@ -18,7 +19,6 @@ use openvm_stark_sdk::{
             proof_shape::ProofShapeError, stacked_reduction::StackedReductionError,
             whir::VerifyWhirError,
         },
-        StarkProtocolConfig,
     },
 };
 
@@ -329,7 +329,7 @@ pub(crate) fn constrain_whir_verification(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
-    config: &RootConfig,
+    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     whir_proof: &WhirProof<RootConfig>,
     stacking_openings: &[Vec<BabyBearExtWire>],
     initial_commitment_roots: &[AssignedValue<Fr>],
@@ -337,17 +337,12 @@ pub(crate) fn constrain_whir_verification(
 ) {
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
-    let params = config.params();
+    let params = &mvk0.params;
     let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
 
     let mu_pow_witness = ext_chip.base().load_witness(ctx, whir_proof.mu_pow_witness);
-    transcript.check_witness(
-        ctx,
-        base_chip,
-        params.whir.mu_pow_bits,
-        &mu_pow_witness,
-    );
+    transcript.check_witness(ctx, base_chip, params.whir.mu_pow_bits, &mu_pow_witness);
     let mu_challenge = transcript.sample_ext(ctx, ext_chip.base());
 
     let folding_pow_witnesses = whir_proof
@@ -501,8 +496,7 @@ pub(crate) fn constrain_whir_verification(
         let mut zs_round = Vec::with_capacity(num_queries);
 
         for query_idx in 0..num_queries {
-            let query_index =
-                transcript.sample_bits(ctx, ext_chip.base(), query_bits);
+            let query_index = transcript.sample_bits(ctx, ext_chip.base(), query_bits);
             query_index_bits.push(query_bits);
             query_indices.push(query_index);
             let query_bits_vec = if query_bits == 0 {
