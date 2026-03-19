@@ -205,10 +205,6 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
             phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
         )?;
-        inventory.add_phantom_sub_executor(
-            phantom::Rv32HintLoadByKeySubEx,
-            PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
-        )?;
 
         Ok(())
     }
@@ -746,7 +742,6 @@ mod phantom {
     pub struct Rv32HintInputSubEx;
     pub struct Rv32HintRandomSubEx;
     pub struct Rv32PrintStrSubEx;
-    pub struct Rv32HintLoadByKeySubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
@@ -825,57 +820,5 @@ mod phantom {
             print!("{peeked_str}");
             Ok(())
         }
-    }
-
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintLoadByKeySubEx {
-        fn phantom_execute(
-            &self,
-            memory: &GuestMemory,
-            streams: &mut Streams<F>,
-            _: &mut StdRng,
-            _: PhantomDiscriminant,
-            a: u32,
-            b: u32,
-            _: u16,
-        ) -> eyre::Result<()> {
-            let ptr = read_rv32_register(memory, a);
-            let len = read_rv32_register(memory, b);
-            let key: Vec<u8> = (0..len)
-                .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
-                .collect();
-            if let Some(val) = streams.kv_store.get(&key) {
-                let to_push = hint_load_by_key_decode::<F>(val);
-                for input in to_push.into_iter().rev() {
-                    streams.input_stream.push_front(input);
-                }
-            } else {
-                bail!("Rv32HintLoadByKey: key not found");
-            }
-            Ok(())
-        }
-    }
-
-    pub fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
-        let mut offset = 0;
-        let len = extract_u32(value, offset) as usize;
-        offset += 4;
-        let mut ret = Vec::with_capacity(len);
-        for _ in 0..len {
-            let v_len = extract_u32(value, offset) as usize;
-            offset += 4;
-            let v = (0..v_len)
-                .map(|_| {
-                    let ret = F::from_u32(extract_u32(value, offset));
-                    offset += 4;
-                    ret
-                })
-                .collect();
-            ret.push(v);
-        }
-        ret
-    }
-
-    fn extract_u32(value: &[u8], offset: usize) -> u32 {
-        u32::from_le_bytes(value[offset..offset + 4].try_into().unwrap())
     }
 }

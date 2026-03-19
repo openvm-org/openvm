@@ -241,7 +241,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
     pub local_opcode: u8,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
-    // Note: `prev_data` can be from native address space, so we need to use u32
+    // Note: `prev_data` can be a field, so we need to use u32
     pub prev_data: [u32; NUM_CELLS],
 }
 

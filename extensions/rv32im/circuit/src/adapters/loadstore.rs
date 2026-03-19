@@ -37,10 +37,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{
-    memory_read, memory_read_deferral, timed_write, timed_write_deferral, tracing_read,
-    RV32_CELL_BITS,
-};
+use crate::adapters::{memory_read, timed_write, tracing_read, RV32_CELL_BITS};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store
@@ -410,6 +407,7 @@ where
                 let e = e.as_canonical_u32();
                 debug_assert_ne!(e, RV32_IMM_AS);
                 debug_assert_ne!(e, RV32_REGISTER_AS);
+                debug_assert_ne!(e, DEFERRAL_AS);
                 record.mem_as = e as u8;
                 let read_data = tracing_read(
                     memory,
@@ -417,11 +415,7 @@ where
                     a.as_canonical_u32(),
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = if e == DEFERRAL_AS {
-                    memory_read_deferral(memory.data(), ptr_val).map(|x: F| x.as_canonical_u32())
-                } else {
-                    memory_read(memory.data(), e, ptr_val).map(u32::from)
-                };
+                let prev_data = memory_read(memory.data(), e, ptr_val).map(u32::from);
                 (read_data, prev_data)
             }
         };
@@ -449,6 +443,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_ne!(e.as_canonical_u32(), RV32_IMM_AS);
         debug_assert_ne!(e.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_ne!(e.as_canonical_u32(), DEFERRAL_AS);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
@@ -461,12 +456,7 @@ where
                 STOREW | STOREH | STOREB => {
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
-
-                    if record.mem_as == 4 {
-                        timed_write_deferral(memory, ptr, data.map(F::from_u32)).0
-                    } else {
-                        timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
-                    }
+                    timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                     timed_write(

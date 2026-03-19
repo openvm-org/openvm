@@ -47,7 +47,7 @@ pub struct DeferralCallReads<B, F> {
     // Commit to a specific deferral input, passed in by the user as a pointer
     pub input_commit: [B; COMMIT_NUM_BYTES],
 
-    // Native address space accumulators immediately prior to the current deferral call
+    // Deferral address space accumulators immediately prior to the current deferral call
     pub old_input_acc: [F; DIGEST_SIZE],
     pub old_output_acc: [F; DIGEST_SIZE],
 }
@@ -61,7 +61,7 @@ pub struct DeferralCallWrites<B, F> {
     pub output_commit: [B; COMMIT_NUM_BYTES],
     pub output_len: [B; F_NUM_BYTES],
 
-    // Native address space accumulators after incorporating the current deferral call
+    // Deferral address space accumulators after incorporating the current deferral call
     pub new_input_acc: [F; DIGEST_SIZE],
     pub new_output_acc: [F; DIGEST_SIZE],
 }
@@ -313,9 +313,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
-        // Accumulators are read then updated in the native address space, using
-        // deferral_idx (instruction immediate / operand c) to determine the
-        // accumulator memory address.
+        // Accumulators are read then updated in the deferral address space,
+        // using deferral_idx (instruction immediate / operand c) to determine
+        // the accumulator memory address.
         let input_ptr = bytes_to_f(&cols.rs_val);
         let output_ptr = bytes_to_f(&cols.rd_val);
 
