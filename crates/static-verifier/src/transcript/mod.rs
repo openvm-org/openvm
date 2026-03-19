@@ -9,8 +9,8 @@ use halo2_base::{
 use itertools::Itertools;
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{Bn254Scalar, Digest as NativeDigest},
-    openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField},
+    config::baby_bear_bn254_poseidon2::{Bn254Scalar, Digest as RootDigest},
+    openvm_stark_backend::p3_field::PrimeField,
 };
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
         poseidon2::{reduce_32_cells, Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
         POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
-    ChildF, Fr,
+    Fr,
 };
 
 pub(crate) const NUM_SPLIT_LIMBS: usize = 3;
@@ -38,12 +38,6 @@ pub fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
     DigestWire {
         elems: core::array::from_fn(|_| root),
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TranscriptEvent {
-    Observe(u64),
-    Sample(u64),
 }
 
 #[derive(Clone, Debug)]
@@ -119,7 +113,7 @@ impl TranscriptGadget {
         }
     }
 
-    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: NativeDigest) -> DigestWire {
+    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: RootDigest) -> DigestWire {
         DigestWire {
             elems: core::array::from_fn(|i| ctx.load_witness(bn254_to_halo2(digest[i]))),
         }
@@ -298,61 +292,6 @@ impl TranscriptGadget {
         let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
         range.gate().assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct AssignedTranscriptEvent {
-    pub is_sample: AssignedValue<Fr>,
-    pub value: AssignedValue<Fr>,
-}
-
-#[derive(Clone, Debug)]
-pub struct TranscriptReplay {
-    pub events: Vec<AssignedTranscriptEvent>,
-    pub observes: Vec<AssignedValue<Fr>>,
-    pub samples: Vec<AssignedValue<Fr>>,
-}
-
-pub fn constrain_transcript_events(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    events: &[TranscriptEvent],
-) -> TranscriptReplay {
-    let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
-    let mut transcript = TranscriptGadget::new(ctx);
-    let mut replay = TranscriptReplay {
-        events: Vec::with_capacity(events.len()),
-        observes: Vec::new(),
-        samples: Vec::new(),
-    };
-
-    for event in events {
-        match event {
-            TranscriptEvent::Observe(value) => {
-                let observed = baby_bear.load_witness(ctx, ChildF::from_u64(*value));
-                transcript.observe(ctx, range, &baby_bear, &observed);
-                let is_sample = ctx.load_zero();
-                replay.observes.push(observed.value);
-                replay.events.push(AssignedTranscriptEvent {
-                    is_sample,
-                    value: observed.value,
-                });
-            }
-            TranscriptEvent::Sample(expected) => {
-                let sampled = transcript.sample(ctx, range, &baby_bear);
-                let expected_sample = baby_bear.load_witness(ctx, ChildF::from_u64(*expected));
-                ctx.constrain_equal(&sampled.value, &expected_sample.value);
-                let is_sample = ctx.load_constant(Fr::ONE);
-                replay.samples.push(expected_sample.value);
-                replay.events.push(AssignedTranscriptEvent {
-                    is_sample,
-                    value: expected_sample.value,
-                });
-            }
-        }
-    }
-
-    replay
 }
 
 #[cfg(test)]

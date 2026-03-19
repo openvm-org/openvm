@@ -22,7 +22,7 @@ use halo2_base::{
 };
 use itertools::Itertools;
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof},
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
@@ -66,9 +66,9 @@ pub struct StaticVerifierProof {
 /// Bundles the three inputs that always travel together when interacting with
 /// the static verifier circuit.
 pub struct StaticVerifierInput<'a> {
-    pub config: &'a NativeConfig,
-    pub mvk: &'a MultiStarkVerifyingKey<NativeConfig>,
-    pub proof: &'a Proof<NativeConfig>,
+    pub config: &'a RootConfig,
+    pub mvk: &'a MultiStarkVerifyingKey<RootConfig>,
+    pub proof: &'a Proof<RootConfig>,
 }
 
 /// Stateless helper for the static verifier Halo2 circuit.

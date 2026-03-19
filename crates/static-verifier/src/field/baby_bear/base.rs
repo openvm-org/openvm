@@ -9,7 +9,6 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, BigPrimeField},
     AssignedValue, Context, QuantumCell,
 };
-use crate::utils::{guarded_debug_assert, guarded_debug_assert_eq};
 use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
@@ -17,6 +16,8 @@ use openvm_stark_sdk::{
     openvm_stark_backend::p3_field::{Field, PrimeCharacteristicRing, PrimeField32, PrimeField64},
     p3_baby_bear::BabyBear,
 };
+
+use crate::utils::{guarded_debug_assert, guarded_debug_assert_eq};
 
 pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
 // bits reserved so that if we do lazy range checking, we still have a valid result
@@ -369,12 +370,7 @@ impl BabyBearChip {
         self.load_constant(ctx, BabyBear::ONE)
     }
 
-    pub fn mul_const(
-        &self,
-        ctx: &mut Context<Fr>,
-        a: BabyBearWire,
-        c: BabyBear,
-    ) -> BabyBearWire {
+    pub fn mul_const(&self, ctx: &mut Context<Fr>, a: BabyBearWire, c: BabyBear) -> BabyBearWire {
         let c_wire = self.load_constant(ctx, c);
         self.mul(ctx, a, c_wire)
     }
@@ -383,22 +379,14 @@ impl BabyBearChip {
         self.mul(ctx, a, a)
     }
 
-    pub fn assign_and_range_usize(
-        &self,
-        ctx: &mut Context<Fr>,
-        value: usize,
-    ) -> AssignedValue<Fr> {
+    pub fn assign_and_range_usize(&self, ctx: &mut Context<Fr>, value: usize) -> AssignedValue<Fr> {
         let cell = ctx.load_witness(Fr::from(value as u64));
         let bits = bit_length(value as u64).max(1);
         self.range.range_check(ctx, cell, bits);
         cell
     }
 
-    pub fn assign_and_range_u64(
-        &self,
-        ctx: &mut Context<Fr>,
-        value: u64,
-    ) -> AssignedValue<Fr> {
+    pub fn assign_and_range_u64(&self, ctx: &mut Context<Fr>, value: u64) -> AssignedValue<Fr> {
         let cell = ctx.load_witness(Fr::from(value));
         let bits = bit_length(value).max(1);
         self.range.range_check(ctx, cell, bits);

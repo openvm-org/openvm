@@ -5,7 +5,7 @@ use halo2_base::{
     AssignedValue, Context,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
         calculate_n_logup,
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
@@ -106,8 +106,8 @@ pub struct ProofShapeOwnershipSchedule {
 }
 
 fn compute_trace_id_to_air_id(
-    mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Vec<usize> {
     let num_airs = mvk0.per_air.len();
     let mut trace_id_to_air_id: Vec<usize> = (0..num_airs).collect();
@@ -141,8 +141,8 @@ pub(crate) struct ProofShapeRuleDerivation {
 }
 
 pub(crate) fn derive_proof_shape_rules(
-    mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<ProofShapeRuleDerivation, ProofShapeError> {
     let num_airs = mvk0.per_air.len();
     let l_skip = mvk0.params.l_skip;
@@ -788,9 +788,9 @@ pub(crate) fn derive_proof_shape_rules(
 }
 
 pub fn derive_proof_shape_intermediates(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    config: &RootConfig,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<ProofShapeIntermediates, ProofShapePreambleError> {
     if config.params() != &mvk.inner.params {
         return Err(ProofShapePreambleError::SystemParamsMismatch);
@@ -873,8 +873,8 @@ pub fn derive_proof_shape_intermediates(
 }
 
 pub fn derive_proof_shape_ownership_schedule(
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<ProofShapeOwnershipSchedule, ProofShapePreambleError> {
     let shape_rules = derive_proof_shape_rules(&mvk.inner, proof)?;
     Ok(ProofShapeOwnershipSchedule {
@@ -1217,9 +1217,9 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
 pub fn derive_and_constrain_proof_shape(
     ctx: &mut Context<Fr>,
     base_chip: &BabyBearChip,
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    config: &RootConfig,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<AssignedProofShapeIntermediates, ProofShapePreambleError> {
     let raw = derive_raw_proof_shape_witness_state(config, mvk, proof)?;
     let ownership = derive_proof_shape_ownership_schedule(mvk, proof)?;
@@ -1233,9 +1233,9 @@ pub fn derive_and_constrain_proof_shape(
 }
 
 pub(crate) fn derive_raw_proof_shape_witness_state(
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    config: &RootConfig,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<RawProofShapeWitnessState, ProofShapePreambleError> {
     Ok(RawProofShapeWitnessState {
         intermediates: derive_proof_shape_intermediates(config, mvk, proof)?,

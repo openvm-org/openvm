@@ -4,11 +4,8 @@ use std::sync::Arc;
 
 use halo2_base::{gates::range::RangeChip, utils::biguint_to_fe, AssignedValue, Context};
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
-    },
+    config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2Config as RootConfig, Bn254Scalar},
     openvm_stark_backend::{
-        air_builders::symbolic::SymbolicExpressionNode, interaction::Interaction,
         keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField, proof::Proof,
     },
 };
@@ -18,25 +15,21 @@ use crate::{
     stages::{
         batch_constraints::{
             compute_trace_id_to_air_id, constrain_batch_from_proof_inputs,
-            AssignedBatchIntermediates, BatchConstraintError, BatchIntermediates,
+            AssignedBatchIntermediates, BatchConstraintError,
         },
         full_pipeline::witness::get_need_rot_per_commit,
         proof_shape::{
             derive_and_constrain_proof_shape, derive_proof_shape_rules,
-            AssignedProofShapeIntermediates, ProofShapeIntermediates, ProofShapeOwnershipSchedule,
-            ProofShapePreambleError,
+            AssignedProofShapeIntermediates, ProofShapePreambleError,
         },
         stacked_reduction::{
             constrain_stacked_reduction_from_proof_inputs, AssignedStackedReductionIntermediates,
-            QCoeffAccumulationTerm, StackedReductionConstraintError, StackedReductionIntermediates,
+            StackedReductionConstraintError,
         },
-        whir::{
-            constrain_whir_from_proof_inputs, AssignedWhirIntermediates, WhirError,
-            WhirIntermediates,
-        },
+        whir::{constrain_whir_from_proof_inputs, AssignedWhirIntermediates, WhirError},
     },
-    transcript::{digest_wire_from_root, TranscriptEvent, TranscriptGadget},
-    ChildF, Fr,
+    transcript::{digest_wire_from_root, TranscriptGadget},
+    Fr,
 };
 
 #[cfg(test)]
@@ -74,67 +67,6 @@ impl From<WhirError> for PipelineError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PipelineIntermediates {
-    pub proof_shape: ProofShapeIntermediates,
-    pub batch: BatchIntermediates,
-    pub stacked_reduction: StackedReductionIntermediates,
-    pub whir: WhirIntermediates,
-    pub transcript_events: Vec<TranscriptEvent>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PipelineStatementWitness {
-    pub mvk_pre_hash: Fr,
-    pub proof_common_main_commit: Fr,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PipelineTranscriptSchedule {
-    pub raw_preamble_observe_count: usize,
-    pub non_preamble_observe_count: usize,
-    pub air_is_required: Vec<bool>,
-    pub air_has_preprocessed: Vec<bool>,
-    pub air_num_public_values: Vec<usize>,
-    pub air_num_cached_mains: Vec<usize>,
-    pub air_preprocessed_commit_roots: Vec<Option<Fr>>,
-    pub batch_total_interactions: u64,
-    pub has_gkr_observe_payload: bool,
-    pub l_skip: usize,
-    pub batch_n_per_trace: Vec<isize>,
-    pub batch_n_logup: usize,
-    pub batch_n_max: usize,
-    pub batch_degree: usize,
-    pub batch_univariate_coeffs_len: usize,
-    pub batch_trace_has_preprocessed: Vec<bool>,
-    pub batch_column_openings_need_rot: Vec<Vec<bool>>,
-    pub batch_column_opening_expected_widths: Vec<Vec<usize>>,
-    pub batch_trace_constraint_nodes: Vec<Vec<SymbolicExpressionNode<ChildF>>>,
-    pub batch_trace_constraint_indices: Vec<Vec<usize>>,
-    pub batch_trace_interactions: Vec<Vec<Interaction<usize>>>,
-    pub stacked_q_coeff_terms: Vec<QCoeffAccumulationTerm>,
-    pub stacked_matrix_expected_widths: Vec<usize>,
-    pub proof_shape_ownership: ProofShapeOwnershipSchedule,
-    pub proof_shape_max_log_height_allowed: usize,
-    pub logup_pow_bits: usize,
-    pub mu_pow_bits: usize,
-    pub folding_pow_bits: usize,
-    pub query_phase_pow_bits: usize,
-    pub folding_counts_per_round: Vec<usize>,
-    pub query_counts_per_round: Vec<usize>,
-    pub query_index_bits: Vec<usize>,
-    pub whir_k_whir: usize,
-    pub whir_initial_log_rs_domain_size: usize,
-    pub whir_expected_final_poly_len: usize,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RawPipelineWitnessState {
-    pub statement: PipelineStatementWitness,
-    pub schedule: PipelineTranscriptSchedule,
-    pub intermediates: PipelineIntermediates,
-}
-
 #[derive(Clone, Debug)]
 pub struct AssignedPipelineIntermediates {
     pub proof_shape: AssignedProofShapeIntermediates,
@@ -142,17 +74,6 @@ pub struct AssignedPipelineIntermediates {
     pub stacked_reduction: AssignedStackedReductionIntermediates,
     pub whir: AssignedWhirIntermediates,
     pub statement_public_inputs: [AssignedValue<Fr>; 2],
-}
-
-#[derive(Clone, Debug)]
-pub struct CheckedPipelineWitnessState {
-    pub assigned: AssignedPipelineIntermediates,
-    pub derived: DerivedPipelineState,
-}
-
-#[derive(Clone, Debug)]
-pub struct DerivedPipelineState {
-    pub consumed_non_preamble_observes: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -169,8 +90,8 @@ fn observe_preamble_assigned(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
     proof_shape: &AssignedProofShapeIntermediates,
 ) -> AssignedPreambleState {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
@@ -258,22 +179,12 @@ fn observe_preamble_assigned(
     }
 }
 
-fn derive_pipeline_statement_witness(
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
-) -> PipelineStatementWitness {
-    PipelineStatementWitness {
-        mvk_pre_hash: digest_scalar_to_fr(mvk.pre_hash[0]),
-        proof_common_main_commit: digest_scalar_to_fr(proof.common_main_commit[0]),
-    }
-}
-
 pub fn constrained_verify(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
-    config: &NativeConfig,
-    mvk: &MultiStarkVerifyingKey<NativeConfig>,
-    proof: &Proof<NativeConfig>,
+    config: &RootConfig,
+    mvk: &MultiStarkVerifyingKey<RootConfig>,
+    proof: &Proof<RootConfig>,
 ) -> Result<AssignedPipelineIntermediates, PipelineError> {
     let l_skip = mvk.inner.params.l_skip;
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));

@@ -10,7 +10,7 @@ use halo2_base::{
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as NativeConfig, BabyBearBn254Poseidon2CpuEngine,
+        BabyBearBn254Poseidon2Config as RootConfig, BabyBearBn254Poseidon2CpuEngine,
     },
     openvm_stark_backend::{
         keygen::types::LinearConstraint,
@@ -81,7 +81,7 @@ fn test_engine() -> BabyBearBn254Poseidon2CpuEngine {
 
 fn assert_fixture_matches_native<Fx>(engine: &BabyBearBn254Poseidon2CpuEngine, fixture: Fx)
 where
-    Fx: TestFixture<NativeConfig>,
+    Fx: TestFixture<RootConfig>,
 {
     let (vk, proof) = fixture.keygen_and_prove(engine);
     let actual = derive_proof_shape_intermediates(engine.config(), &vk, &proof)
