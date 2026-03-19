@@ -33,6 +33,7 @@ jobs:
           - { names: "sha2 keccak256" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
+          - { names: "verify-stark" }
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/family=g6.*+g5+g6e
 
@@ -76,6 +77,10 @@ jobs:
               - "extensions/ecc/**"
               - "extensions/pairing/**"
               - "guest-libs/pairing/**"
+            verify-stark:
+              - "crates/recursion/**"
+              - "crates/continuations/**"
+              - "guest-libs/verify-stark/**"
 
       - name: Skip if no changes
         env:
@@ -128,7 +133,11 @@ jobs:
 
               # Run guest library tests
               if [ -d "guest-libs/$crate" ]; then
-                pushd guest-libs/$crate
+                TEST_DIR="guest-libs/$crate"
+                if [[ "$crate" == "verify-stark" ]]; then
+                  TEST_DIR="guest-libs/$crate/circuit"
+                fi
+                pushd $TEST_DIR
 
                 # Handle special feature args for pairing crate
                 SPECIAL_ARGS=""

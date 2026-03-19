@@ -35,6 +35,7 @@ jobs:
           - { name: "algebra", path: "algebra", aot: false }
           - { name: "ecc", path: "ecc", aot: false }
           - { name: "pairing", path: "pairing", aot: false }
+          - { name: "deferral", path: "deferral", aot: false }
           - { name: "rv32im", path: "rv32im", aot: true }
           - { name: "keccak256", path: "keccak256", aot: true }
           - { name: "sha256", path: "sha256", aot: true }
@@ -42,6 +43,7 @@ jobs:
           - { name: "algebra", path: "algebra", aot: true }
           - { name: "ecc", path: "ecc", aot: true }
           - { name: "pairing", path: "pairing", aot: true }
+          - { name: "deferral", path: "deferral", aot: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails

@@ -1,0 +1,59 @@
+name: CUDA SDK Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/sdk/**"
+      - "crates/continuations/**"
+      - "crates/recursion/**"
+      - ".github/workflows/sdk.cuda.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cuda-backend:
+    name: sdk cuda tests
+    runs-on:
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/family=g6.*+g5+g6e
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/rust-cache-cuda
+      - uses: taiki-e/install-action@nextest
+      - name: Verify GPU setup
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+
+      - name: Setup CUDA environment
+        run: |
+          # Find the actual CUDA library location
+          CUDART_PATH=$(find /usr/local -name "libcudart.so" | head -1)
+          if [ -n "$CUDART_PATH" ]; then
+            CUDA_LIB_DIR=$(dirname "$CUDART_PATH")
+            echo "CUDA libraries found at: $CUDA_LIB_DIR"
+            echo "CUDA_LIB_DIR=$CUDA_LIB_DIR" >> $GITHUB_ENV
+          else
+            echo "CUDA libraries not found!"
+            exit 1
+          fi
+
+      - name: Run SDK CUDA tests
+        working-directory: crates/sdk
+        run: |
+          rustup component add rust-src --toolchain nightly-2025-08-02
+          cargo nextest run --features cuda --profile=heavy --test-threads=1
