@@ -6,6 +6,8 @@ use halo2_base::{
     gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, AssignedValue, Context,
 };
 use itertools::Itertools;
+#[cfg(test)]
+use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField64;
 use openvm_stark_sdk::{
     openvm_stark_backend::p3_field::{
         extension::{BinomialExtensionField, BinomiallyExtendable},
@@ -18,9 +20,6 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearWire},
     utils::guarded_debug_assert_eq,
 };
-
-#[cfg(test)]
-use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField64;
 
 #[cfg(test)]
 pub(crate) struct RecordedExtBaseConst {
