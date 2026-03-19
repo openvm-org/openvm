@@ -1,12 +1,12 @@
-pub(crate) mod witness;
-
 use std::sync::Arc;
 
 use halo2_base::{gates::range::RangeChip, utils::biguint_to_fe, AssignedValue, Context};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2Config as RootConfig, Bn254Scalar},
     openvm_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField, proof::Proof,
+        keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
+        p3_field::PrimeField,
+        proof::Proof,
     },
 };
 
@@ -14,7 +14,6 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
     stages::{
         batch_constraints::{constrain_batch_from_proof_inputs, BatchConstraintError},
-        full_pipeline::witness::get_need_rot_per_commit,
         proof_shape::{
             compute_trace_id_to_air_id, derive_proof_shape_intermediates, derive_proof_shape_rules,
             ProofShapeIntermediates, ProofShapePreambleError,
@@ -265,4 +264,32 @@ pub fn constrained_verify(
     );
 
     Ok(())
+}
+
+/// Helper function, purely on out-of-circuit values. `builder` is not involved and there are no
+/// cells.
+fn get_need_rot_per_commit(
+    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
+    proof: &Proof<RootConfig>,
+    trace_id_to_air_id: &[usize],
+) -> Result<Vec<Vec<bool>>, BatchConstraintError> {
+    let mut need_rot_per_commit = vec![trace_id_to_air_id
+        .iter()
+        .map(|&air_id| mvk0.per_air[air_id].params.need_rot)
+        .collect::<Vec<_>>()];
+    for &air_id in trace_id_to_air_id {
+        let need_rot = mvk0.per_air[air_id].params.need_rot;
+        if mvk0.per_air[air_id].preprocessed_data.is_some() {
+            need_rot_per_commit.push(vec![need_rot]);
+        }
+        let cached_len = proof.trace_vdata[air_id]
+            .as_ref()
+            .ok_or(BatchConstraintError::MissingTraceVData { air_id })?
+            .cached_commitments
+            .len();
+        for _ in 0..cached_len {
+            need_rot_per_commit.push(vec![need_rot]);
+        }
+    }
+    Ok(need_rot_per_commit)
 }
