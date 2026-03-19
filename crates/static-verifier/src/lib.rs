@@ -25,7 +25,7 @@ pub use config::{
 };
 pub use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 pub use keygen::StaticVerifierProvingKey;
-pub use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{EF as ChildEF, F as ChildF};
+pub use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{EF as RootEF, F as RootF};
 pub use prover::{
     Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit,
     StaticVerifierInput, StaticVerifierProof,
