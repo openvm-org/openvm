@@ -7,6 +7,7 @@
 - Formatting requires nightly rustfmt: `cargo +nightly fmt --all` (stable `cargo fmt` will fail due to unstable options in `rustfmt.toml`).
 - Run tests with nextest when available: `cargo nextest run --cargo-profile=fast -p <crate>`; fallback: `cargo test -p <crate>`.
 - Speed knobs for local runs: `OPENVM_FAST_TEST=1` and `OPENVM_SKIP_DEBUG=1` (see below).
+- After major code edits, run `./scripts/pre-push.sh` to check formatting, linting, and tests on changed crates before pushing.
 
 ## Project Overview
 
