@@ -68,16 +68,6 @@ impl From<BatchConstraintError> for StackedReductionConstraintError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct QCoeffAccumulationTerm {
-    pub commit_idx: usize,
-    pub target_col_idx: usize,
-    pub lambda_idx: usize,
-    pub need_rot: bool,
-    pub n: isize,
-    pub b_bits: Vec<bool>,
-}
-
 #[derive(Clone, Debug)]
 pub struct AssignedStackedReductionIntermediates {
     pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
