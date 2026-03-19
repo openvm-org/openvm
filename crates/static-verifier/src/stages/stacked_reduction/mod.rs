@@ -80,27 +80,8 @@ pub struct QCoeffAccumulationTerm {
 
 #[derive(Clone, Debug)]
 pub struct AssignedStackedReductionIntermediates {
-    pub lambda: BabyBearExtWire,
-    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
-    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
-    pub batch_column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
-    pub r: Vec<BabyBearExtWire>,
     pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
-    pub s_0: BabyBearExtWire,
-    pub s_0_sum_eval: BabyBearExtWire,
-    pub s_0_residual: BabyBearExtWire,
-    pub final_claim: BabyBearExtWire,
-    pub final_sum: BabyBearExtWire,
-    pub final_residual: BabyBearExtWire,
     pub u: Vec<BabyBearExtWire>,
-}
-
-fn assign_ext(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    value: ChildEF,
-) -> BabyBearExtWire {
-    ext_chip.load_witness(ctx, value)
 }
 
 fn eval_in_uni_assigned(
@@ -189,7 +170,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     let univariate_round_coeffs = proof
         .univariate_round_coeffs
         .iter()
-        .map(|&value| assign_ext(ctx, ext_chip, value))
+        .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     let mut s_0_sum_eval = ext_chip.zero(ctx);
     for coeff in univariate_round_coeffs.iter().step_by(omega_order) {
@@ -213,7 +194,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&value| assign_ext(ctx, ext_chip, value))
+                .map(|&value| ext_chip.load_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -291,7 +272,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
         .iter()
         .map(|row| {
             row.iter()
-                .map(|&value| assign_ext(ctx, ext_chip, value))
+                .map(|&value| ext_chip.load_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -308,18 +289,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     ext_chip.assert_equal(ctx, final_residual, zero);
 
     AssignedStackedReductionIntermediates {
-        lambda,
-        univariate_round_coeffs,
-        sumcheck_round_polys,
-        batch_column_openings: batch_column_openings.to_vec(),
-        r: r.to_vec(),
         stacking_openings,
-        s_0,
-        s_0_sum_eval,
-        s_0_residual,
-        final_claim,
-        final_sum,
-        final_residual,
         u,
     }
 }
