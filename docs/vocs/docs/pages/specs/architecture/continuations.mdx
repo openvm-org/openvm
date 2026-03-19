@@ -52,7 +52,7 @@ Each client-facing proof type requires a specific aggregation pipeline:
 | STARK | app → leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) |
 | EVM | app → leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) → root → static |
 
-![STARK Proof Diagram](/stark-proof-diagram.png)
+![STARK Proof Diagram](/base-aggregation-diagram.png)
 
 *Diagram of a potential STARK proof aggregation tree with 2:1 max leaf aggregation and 3:1 max internal aggregation.*
 
