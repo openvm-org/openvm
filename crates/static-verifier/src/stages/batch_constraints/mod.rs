@@ -65,32 +65,7 @@ impl From<NativeBatchConstraintError<ChildEF>> for BatchConstraintError {
 
 #[derive(Clone, Debug)]
 pub struct AssignedBatchIntermediates {
-    pub public_values: Vec<Vec<BabyBearWire>>,
-    pub logup_pow_witness: BabyBearWire,
-    pub gkr_q0_claim: Option<BabyBearExtWire>,
-    pub gkr_claims_per_layer: Vec<Vec<BabyBearExtWire>>,
-    pub gkr_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
-    pub numerator_term_per_air: Vec<BabyBearExtWire>,
-    pub denominator_term_per_air: Vec<BabyBearExtWire>,
-    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
-    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
     pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
-    pub column_openings_need_rot: Vec<Vec<bool>>,
-    pub gkr_numerator_residual: BabyBearExtWire,
-    pub gkr_denominator_residual: BabyBearExtWire,
-    pub gkr_denominator_claim: BabyBearExtWire,
-    pub alpha_logup: BabyBearExtWire,
-    pub beta_logup: BabyBearExtWire,
-    pub gkr_non_xi_samples: Vec<BabyBearExtWire>,
-    pub gkr_xi_sample_order: Vec<BabyBearExtWire>,
-    pub xi: Vec<BabyBearExtWire>,
-    pub lambda: BabyBearExtWire,
-    pub mu: BabyBearExtWire,
-    pub sum_claim: BabyBearExtWire,
-    pub sum_univ_domain_s_0: BabyBearExtWire,
-    pub consistency_lhs: BabyBearExtWire,
-    pub consistency_rhs: BabyBearExtWire,
-    pub consistency_residual: BabyBearExtWire,
     pub r: Vec<BabyBearExtWire>,
 }
 
@@ -676,7 +651,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
-    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, gkr_sample_stream) =
+    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, _gkr_sample_stream) =
         if total_interactions_host == 0 {
             let q0_claim = ext_chip.load_witness(ctx, proof.gkr_proof.q0_claim);
             ext_chip.assert_equal(ctx, q0_claim, one);
@@ -777,10 +752,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
 
             (numer_claim, denom_claim, gkr_r, gkr_sample_stream)
         };
-
-    let gkr_xi_sample_split = gkr_sample_stream.len().saturating_sub(gkr_xi_claims.len());
-    let gkr_non_xi_samples = gkr_sample_stream[..gkr_xi_sample_split].to_vec();
-    let gkr_xi_sample_order = gkr_sample_stream[gkr_xi_sample_split..].to_vec();
 
     let mut xi = gkr_xi_claims;
     while xi.len() != l_skip + n_global_host {
@@ -1091,32 +1062,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     ext_chip.assert_equal(ctx, consistency_residual, zero);
 
     Ok(AssignedBatchIntermediates {
-        public_values,
-        logup_pow_witness,
-        gkr_q0_claim,
-        gkr_claims_per_layer,
-        gkr_sumcheck_polys,
-        numerator_term_per_air,
-        denominator_term_per_air,
-        univariate_round_coeffs,
-        sumcheck_round_polys,
         column_openings,
-        column_openings_need_rot,
-        gkr_numerator_residual,
-        gkr_denominator_residual,
-        gkr_denominator_claim,
-        alpha_logup,
-        beta_logup,
-        gkr_non_xi_samples,
-        gkr_xi_sample_order,
-        xi,
-        lambda,
-        mu,
-        sum_claim,
-        sum_univ_domain_s_0,
-        consistency_lhs,
-        consistency_rhs,
-        consistency_residual,
         r,
     })
 }
