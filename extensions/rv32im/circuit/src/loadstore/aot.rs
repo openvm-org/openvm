@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -62,7 +62,6 @@ fn is_aot_supported_impl<F: PrimeField32>(
 ) -> bool {
     true
 }
-
 
 // arguments of `update_boundary_merkle_heights_f`:
 // address_space: u32,
