@@ -22,7 +22,8 @@ openvm = { workspace = true }
 openvm-sdk-config = { workspace = true }
 openvm-recursion-circuit = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
-openvm-continuations = { workspace = true }
+# TODO[INT-6957]: evm-prove should enable root-prover
+openvm-continuations = { workspace = true, features = ["root-prover"] }
 openvm-verify-stark-host = { workspace = true }
 
 bitcode = { workspace = true }
