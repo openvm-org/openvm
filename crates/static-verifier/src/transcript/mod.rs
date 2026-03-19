@@ -5,19 +5,12 @@ use halo2_base::{
     halo2_proofs::arithmetic::Field,
     utils::{biguint_to_fe, fe_to_biguint},
     AssignedValue, Context,
-    QuantumCell::Constant,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{
-        default_transcript, BabyBearBn254Poseidon2Config as NativeConfig, Bn254Scalar,
-        Digest as NativeDigest, Transcript as NativeTranscript,
-    },
-    openvm_stark_backend::{
-        p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField64},
-        FiatShamirTranscript,
-    },
+    config::baby_bear_bn254_poseidon2::{Bn254Scalar, Digest as RootDigest},
+    openvm_stark_backend::p3_field::PrimeField,
 };
 
 use crate::{
@@ -29,8 +22,7 @@ use crate::{
         poseidon2::{reduce_32_cells, Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
         POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
-    utils::bits_for_u64,
-    ChildF, Fr,
+    Fr,
 };
 
 pub(crate) const NUM_SPLIT_LIMBS: usize = 3;
@@ -42,62 +34,9 @@ pub struct DigestWire {
     pub elems: [AssignedValue<Fr>; DIGEST_WIDTH],
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TranscriptEvent {
-    Observe(u64),
-    Sample(u64),
-}
-
-#[derive(Clone, Debug)]
-pub struct LoggedTranscript {
-    inner: NativeTranscript,
-    events: Vec<TranscriptEvent>,
-}
-
-impl Default for LoggedTranscript {
-    fn default() -> Self {
-        Self {
-            inner: default_transcript(),
-            events: Vec::new(),
-        }
-    }
-}
-
-impl LoggedTranscript {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn events(&self) -> &[TranscriptEvent] {
-        &self.events
-    }
-
-    pub fn into_events(self) -> Vec<TranscriptEvent> {
-        self.events
-    }
-}
-
-impl FiatShamirTranscript<NativeConfig> for LoggedTranscript {
-    fn observe(&mut self, value: ChildF) {
-        self.events
-            .push(TranscriptEvent::Observe(value.as_canonical_u64()));
-        self.inner.observe(value);
-    }
-
-    fn sample(&mut self) -> ChildF {
-        let sampled = self.inner.sample();
-        self.events
-            .push(TranscriptEvent::Sample(sampled.as_canonical_u64()));
-        sampled
-    }
-
-    fn observe_commit(&mut self, digest: NativeDigest) {
-        self.inner.observe_commit(digest);
-        for packed in digest {
-            for limb in split_bn254_to_babybear_u64(packed) {
-                self.events.push(TranscriptEvent::Observe(limb));
-            }
-        }
+pub fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
+    DigestWire {
+        elems: core::array::from_fn(|_| root),
     }
 }
 
@@ -110,14 +49,6 @@ pub struct TranscriptGadget {
 
 fn bn254_to_halo2(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
-}
-
-fn split_bn254_to_babybear_u64(value: Bn254Scalar) -> [u64; NUM_SPLIT_LIMBS] {
-    let digits = value.as_canonical_biguint().to_u64_digits();
-    core::array::from_fn(|i| {
-        let limb = digits.get(i).copied().unwrap_or(0);
-        ChildF::from_u64(limb).as_canonical_u64()
-    })
 }
 
 fn split_high_bound() -> u64 {
@@ -136,42 +67,12 @@ fn decompose_packed_bn254_to_split_limbs(
     range: &RangeChip<Fr>,
     packed: AssignedValue<Fr>,
 ) -> [AssignedValue<Fr>; NUM_SPLIT_LIMBS] {
-    let packed_big = fe_to_biguint(packed.value());
-    let digits = packed_big.to_u64_digits();
-
-    let limb_vals = [
-        digits.first().copied().unwrap_or(0),
-        digits.get(1).copied().unwrap_or(0),
-        digits.get(2).copied().unwrap_or(0),
-    ];
-    let high_val_big = packed_big >> 192;
-    let high_val = u64::try_from(high_val_big)
-        .expect("packed BN254 high limb should fit in u64 under canonical decomposition");
-
-    let limbs = limb_vals.map(|limb| {
-        let cell = ctx.load_witness(Fr::from(limb));
-        range.range_check(ctx, cell, 64);
-        cell
-    });
-
-    let high = ctx.load_witness(Fr::from(high_val));
-    range.range_check(ctx, high, bits_for_u64(split_high_bound()));
+    let limb_base: BigUint = BigUint::from(1u64) << 64usize;
+    let (quot0, limb0) = range.div_mod(ctx, packed, limb_base.clone(), 254);
+    let (quot1, limb1) = range.div_mod(ctx, quot0, limb_base.clone(), 190);
+    let (high, limb2) = range.div_mod(ctx, quot1, limb_base, 126);
     range.check_less_than_safe(ctx, high, split_high_bound() + 1);
-
-    let gate = range.gate();
-    let pow_64 = biguint_to_fe(&(BigUint::from(1u64) << 64));
-    let pow_128 = biguint_to_fe(&(BigUint::from(1u64) << 128));
-    let pow_192 = biguint_to_fe(&(BigUint::from(1u64) << 192));
-
-    let limb1 = gate.mul(ctx, limbs[1], Constant(pow_64));
-    let limb2 = gate.mul(ctx, limbs[2], Constant(pow_128));
-    let high_scaled = gate.mul(ctx, high, Constant(pow_192));
-    let lower = gate.add(ctx, limbs[0], limb1);
-    let upper = gate.add(ctx, limb2, high_scaled);
-    let recomposed = gate.add(ctx, lower, upper);
-    ctx.constrain_equal(&packed, &recomposed);
-
-    limbs
+    [limb0, limb1, limb2]
 }
 
 fn reduce_assigned_limb_to_babybear(
@@ -180,28 +81,16 @@ fn reduce_assigned_limb_to_babybear(
     baby_bear: &BabyBearChip,
     limb: AssignedValue<Fr>,
 ) -> BabyBearWire {
-    let limb_u64 = fe_to_biguint(limb.value())
-        .to_u64_digits()
-        .first()
-        .copied()
-        .unwrap_or(0);
-    let quotient = limb_u64 / BABY_BEAR_MODULUS_U64;
-    let remainder = limb_u64 % BABY_BEAR_MODULUS_U64;
-
-    let remainder_var = baby_bear.load_witness(ctx, ChildF::from_u64(remainder));
-    let quotient_cell = ctx.load_witness(Fr::from(quotient));
-    range.check_less_than_safe(ctx, quotient_cell, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
-
-    let gate = range.gate();
-    let recomposed = gate.mul_add(
-        ctx,
-        quotient_cell,
-        Constant(Fr::from(BABY_BEAR_MODULUS_U64)),
-        remainder_var.value,
-    );
-    ctx.constrain_equal(&limb, &recomposed);
-
-    remainder_var
+    let (quotient, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
+    range.check_less_than_safe(ctx, quotient, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
+    let reduced = BabyBearWire {
+        value: remainder,
+        max_bits: BABY_BEAR_BITS,
+    };
+    baby_bear
+        .range()
+        .check_less_than_safe(ctx, reduced.value, BABY_BEAR_MODULUS_U64);
+    reduced
 }
 
 pub fn split_assigned_bn254_to_babybear_limbs(
@@ -224,7 +113,7 @@ impl TranscriptGadget {
         }
     }
 
-    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: NativeDigest) -> DigestWire {
+    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: RootDigest) -> DigestWire {
         DigestWire {
             elems: core::array::from_fn(|i| ctx.load_witness(bn254_to_halo2(digest[i]))),
         }
@@ -370,21 +259,23 @@ impl TranscriptGadget {
             "sample_bits requires (1 << bits) < modulus: bits={bits}"
         );
 
-        let sampled = self.sample(ctx, range, baby_bear);
         if bits == 0 {
             return ctx.load_constant(Fr::from(0u64));
         }
-
+        let sampled = self.sample(ctx, range, baby_bear);
+        // Reduce BabyBearWire so it is constrained to be less than BabyBear modulus
+        let sampled_reduced = baby_bear.reduce(ctx, sampled);
+        // PERF[jpw]: we could optimize this since the divisor is a power of 2
         let (_, rem) = range.div_mod(
             ctx,
-            sampled.value,
+            sampled_reduced.value,
             BigUint::from(1u64) << bits,
             BABY_BEAR_BITS,
         );
-        range.range_check(ctx, rem, bits);
         rem
     }
 
+    /// Asserts that the PoW witness must pass.
     pub fn check_witness(
         &mut self,
         ctx: &mut Context<Fr>,
@@ -392,71 +283,16 @@ impl TranscriptGadget {
         baby_bear: &BabyBearChip,
         bits: usize,
         witness: &BabyBearWire,
-    ) -> AssignedValue<Fr> {
+    ) {
         if bits == 0 {
-            return ctx.load_constant(Fr::from(1u64));
+            return;
         }
 
         self.observe(ctx, range, baby_bear, witness);
         let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
-        range.gate().is_zero(ctx, sampled_bits)
+        range.gate().assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct AssignedTranscriptEvent {
-    pub is_sample: AssignedValue<Fr>,
-    pub value: AssignedValue<Fr>,
-}
-
-#[derive(Clone, Debug)]
-pub struct TranscriptReplay {
-    pub events: Vec<AssignedTranscriptEvent>,
-    pub observes: Vec<AssignedValue<Fr>>,
-    pub samples: Vec<AssignedValue<Fr>>,
-}
-
-pub fn constrain_transcript_events(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    events: &[TranscriptEvent],
-) -> TranscriptReplay {
-    let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
-    let gate = range.gate();
-    let mut transcript = TranscriptGadget::new(ctx);
-    let mut replay = TranscriptReplay {
-        events: Vec::with_capacity(events.len()),
-        observes: Vec::new(),
-        samples: Vec::new(),
-    };
-
-    for event in events {
-        match event {
-            TranscriptEvent::Observe(value) => {
-                let observed = baby_bear.load_witness(ctx, ChildF::from_u64(*value));
-                transcript.observe(ctx, range, &baby_bear, &observed);
-                let is_sample = ctx.load_zero();
-                replay.observes.push(observed.value);
-                replay.events.push(AssignedTranscriptEvent {
-                    is_sample,
-                    value: observed.value,
-                });
-            }
-            TranscriptEvent::Sample(expected) => {
-                let sampled = transcript.sample(ctx, range, &baby_bear);
-                gate.assert_is_const(ctx, &sampled.value, &Fr::from(*expected));
-                let is_sample = ctx.load_constant(Fr::ONE);
-                replay.samples.push(sampled.value);
-                replay.events.push(AssignedTranscriptEvent {
-                    is_sample,
-                    value: sampled.value,
-                });
-            }
-        }
-    }
-
-    replay
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

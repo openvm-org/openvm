@@ -1,13 +1,3 @@
-#[inline]
-pub(crate) fn bits_for_u64(value: u64) -> usize {
-    (64 - value.leading_zeros() as usize).max(1)
-}
-
-#[inline]
-pub(crate) fn usize_to_u64(value: usize) -> u64 {
-    u64::try_from(value).expect("usize value does not fit in u64")
-}
-
 #[cfg(debug_assertions)]
 thread_local! {
     pub(crate) static DEBUG_ASSERTS_ENABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
