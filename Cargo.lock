@@ -4246,6 +4246,7 @@ dependencies = [
  "serde",
  "serde_with",
  "snark-verifier-sdk",
+ "tracing",
  "zkhash",
 ]
 
