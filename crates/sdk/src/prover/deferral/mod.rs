@@ -3,9 +3,8 @@ use std::sync::Arc;
 use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{
-    bn254::CommitBytes,
     prover::{DeferralChildVkKind, DeferralCircuitProver},
-    SC,
+    CommitBytes, SC,
 };
 use openvm_deferral_circuit::{DeferralExtension, DeferralFn};
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;

@@ -18,7 +18,6 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 
 use crate::{
-    bn254::CommitBytes,
     circuit::{
         root::bus::{
             DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
@@ -27,6 +26,7 @@ use crate::{
         subair::{MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext},
     },
     utils::zero_hash,
+    CommitBytes,
 };
 
 #[repr(C)]

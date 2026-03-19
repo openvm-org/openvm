@@ -5,10 +5,9 @@ use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
 };
 use openvm_continuations::{
-    bn254::{CommitBytes, DagCommitBytes},
     circuit::{deferral::DeferralMerkleProofs, Circuit},
     prover::{debug_constraints, DeferralCircuitProver},
-    SC,
+    CommitBytes, DagCommitBytes, SC,
 };
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]

@@ -10,7 +10,7 @@ use openvm_circuit::{
     },
     system::memory::dimensions::MemoryDimensions,
 };
-use openvm_continuations::{bn254::CommitBytes, RootSC, SC};
+use openvm_continuations::{CommitBytes, RootSC, SC};
 use openvm_sdk_config::SdkVmBuilder;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},

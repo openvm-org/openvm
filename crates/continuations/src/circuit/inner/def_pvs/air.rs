@@ -15,13 +15,13 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 
 use crate::{
-    bn254::CommitBytes,
     circuit::{
         deferral::DEF_HOOK_PVS_AIR_ID,
         inner::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::digests_to_poseidon2_input,
+    CommitBytes,
 };
 
 #[repr(C)]

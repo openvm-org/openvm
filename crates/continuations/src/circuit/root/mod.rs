@@ -8,12 +8,12 @@ use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
-    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         root::bus::{DeferralAccPathBus, DeferralMerkleRootsBus},
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
         Circuit,
     },
+    CommitBytes, DagCommitBytes,
 };
 
 pub mod bus;
