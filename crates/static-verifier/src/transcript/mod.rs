@@ -206,11 +206,7 @@ impl TranscriptGadget {
         }
     }
 
-    pub fn sample(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        baby_bear: &BabyBearChip,
-    ) -> BabyBearWire {
+    pub fn sample(&mut self, ctx: &mut Context<Fr>, baby_bear: &BabyBearChip) -> BabyBearWire {
         if !self.input_buffer.is_empty() || self.output_buffer.is_empty() {
             self.duplexing(ctx, baby_bear);
         }
@@ -275,7 +271,10 @@ impl TranscriptGadget {
 
         self.observe(ctx, baby_bear, witness);
         let sampled_bits = self.sample_bits(ctx, baby_bear, bits);
-        baby_bear.range().gate().assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
+        baby_bear
+            .range()
+            .gate()
+            .assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
     }
 }
 
