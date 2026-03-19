@@ -1,6 +1,6 @@
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, GpuBackend};
+use openvm_cuda_backend::GpuBackend;
 use openvm_recursion_circuit::system::VerifierSubCircuit;
 
 #[cfg(feature = "root-prover")]
@@ -36,7 +36,7 @@ pub type InnerGpuProver<const MAX_NUM_PROOFS: usize> =
 pub type RootCpuProver = RootProver<CpuBackend<RootSC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
 pub type RootGpuProver = RootProver<
-    <BabyBearBn254Poseidon2GpuEngine as openvm_stark_backend::StarkEngine>::PB,
+    <openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine as openvm_stark_backend::StarkEngine>::PB,
     VerifierSubCircuit<1>,
     RootTraceGenImpl,
 >;

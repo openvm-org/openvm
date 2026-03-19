@@ -35,36 +35,36 @@ use crate::{prover::ChildVkKind, SC};
 
 #[cfg(feature = "cuda")]
 mod dummy;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
 mod e2e;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use std::borrow::Borrow;
-        use crate::prover::InnerGpuProver as InnerProver;
-        use crate::prover::RootCpuProver as RootProver;
-        use crate::prover::{
-            DeferralInnerGpuProver as DeferralInnerProver,
-            DeferralHookGpuProver as DeferralHookProver,
-        };
-        use crate::circuit::{
-            deferral::{
-                DeferralAggregationPvs,
-                DeferralCircuitPvs,
-                DEF_AGG_PVS_AIR_ID,
+        use crate::{
+            circuit::deferral::{DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID},
+            prover::{
+                DeferralChildVkKind, DeferralInnerGpuProver as DeferralInnerProver,
+                InnerGpuProver as InnerProver,
             },
+            utils::zero_hash,
         };
+
+        #[cfg(feature = "root-prover")]
+        use {
+            crate::prover::{DeferralHookGpuProver as DeferralHookProver, RootCpuProver as RootProver},
+            openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
+            openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs},
+        };
+
         use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData};
-        use openvm_stark_sdk::config::{
-            baby_bear_poseidon2::{poseidon2_compress_with_capacity},
-            baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
-        };
-        use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity;
+        use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID};
         use p3_field::PrimeField32;
-        use crate::prover::DeferralChildVkKind;
-        use crate::utils::zero_hash;
+
+        #[cfg(feature = "root-prover")]
         type RootEngine = BabyBearBn254Poseidon2CpuEngine;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
@@ -90,7 +90,7 @@ pub(in crate::tests) fn internal_system_params() -> SystemParams {
     internal_params_with_100_bits_security()
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
 pub(in crate::tests) fn root_system_params() -> SystemParams {
     use openvm_stark_sdk::config::root_params_with_100_bits_security;
     root_params_with_100_bits_security()
@@ -267,7 +267,7 @@ fn test_internal_recursive_deep_layers() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
 #[test_case(0 ; "internal_recursive_dag_commit not set")]
 #[test_case(1 ; "internal_recursive_dag_commit set")]
 fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
@@ -299,7 +299,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
 #[test]
 fn test_root_prover_trace_heights() -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
@@ -594,7 +594,7 @@ fn test_deferral_internal_recursive_vk_stabilization() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
 #[test_case(1 ; "single def_circuit proof")]
 #[test_case(4 ; "full aggregation tree")]
 #[test_case(5 ; "partially empty aggregation tree")]

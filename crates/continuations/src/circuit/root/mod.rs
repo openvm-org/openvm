@@ -22,7 +22,9 @@ pub mod def_paths;
 pub mod memory;
 pub mod verifier;
 
+#[cfg(feature = "root-prover")]
 mod trace;
+#[cfg(feature = "root-prover")]
 pub use trace::*;
 
 pub const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
