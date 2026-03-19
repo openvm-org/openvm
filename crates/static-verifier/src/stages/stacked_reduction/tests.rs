@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
@@ -33,8 +35,8 @@ fn coeffs_to_ext(coeffs: [u64; BABY_BEAR_EXT_DEGREE]) -> ChildEF {
     ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64(coeffs[i]))
 }
 
-fn make_ext_chip(range: &RangeChip<Fr>) -> BabyBearExtChip<'_> {
-    BabyBearExtChip::new(BabyBearChip::new(range))
+fn make_ext_chip(range: &RangeChip<Fr>) -> BabyBearExtChip {
+    BabyBearExtChip::new(Arc::new(BabyBearChip::new(Arc::new(range.clone()))))
 }
 
 /// Standalone stacked-reduction derive+constrain wrapper is internal; external callers must use
@@ -63,7 +65,7 @@ fn derive_raw_stacked_witness_state(
 
 fn constrain_checked_stacked_witness_state(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     raw: &RawStackedWitnessState,
 ) -> CheckedStackedWitnessState {
     let assigned = constrain_stacked_reduction_intermediates_with_shared_inputs(
@@ -82,7 +84,7 @@ fn constrain_checked_stacked_witness_state(
 
 fn constrain_stacked_reduction_for_test(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     actual: &StackedReductionIntermediates,
 ) -> AssignedStackedReductionIntermediates {
     constrain_stacked_reduction_intermediates_with_shared_inputs(ctx, ext_chip, actual, None, None)
@@ -94,7 +96,12 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
         .use_k(MOCK_K as usize)
         .use_lookup_bits(8)
         .use_instance_columns(1);
-    build(&mut builder);
+
+    if expect_satisfied {
+        build(&mut builder);
+    } else {
+        crate::utils::with_debug_asserts_disabled(|| build(&mut builder));
+    }
 
     let params = builder.calculate_params(Some(32768));
     assert!(

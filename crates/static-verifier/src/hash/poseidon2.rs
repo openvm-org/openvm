@@ -1,157 +1,211 @@
-//! Bn254 Scalar Poseidon2 permutation halo2-base implementation
-use std::sync::OnceLock;
+//! Halo2 implementation of poseidon2 perm for Bn254
+//! sbox degree 5
 
 use halo2_base::{
     gates::{range::RangeChip, GateInstructions, RangeInstructions},
-    utils::biguint_to_fe,
+    safe_types::SafeBool,
+    utils::ScalarField,
     AssignedValue, Context,
-    QuantumCell::Constant,
-};
-use num_bigint::BigUint;
-use zkhash::{
-    ark_ff::{BigInteger as _, PrimeField as _},
-    fields::bn256::FpBN256 as ArkBn254,
-    poseidon2::poseidon2_instance_bn256::{MAT_DIAG3_M_1, RC3},
+    QuantumCell::{self, Constant},
 };
 
 use crate::{field::baby_bear::BabyBearWire, Fr};
 
-pub(crate) const POSEIDON2_WIDTH: usize = 3;
-pub(crate) const POSEIDON2_RATE: usize = 2;
-pub(crate) const POSEIDON2_ROUNDS_F: usize = 8;
-pub(crate) const POSEIDON2_ROUNDS_P: usize = 56;
-pub(crate) const MULTI_FIELD32_RATE: usize = 16;
-pub(crate) const MULTI_FIELD32_NUM_F_ELMS: usize = 8;
-pub(crate) const DIGEST_WIDTH: usize = 1;
-
 #[derive(Clone, Debug)]
-pub(crate) struct Poseidon2Params {
-    external_rc: Vec<[Fr; POSEIDON2_WIDTH]>,
-    internal_rc: Vec<Fr>,
-    mat_internal_diag_m_1: [Fr; POSEIDON2_WIDTH],
+pub struct Poseidon2State<F: ScalarField, const T: usize> {
+    pub s: [AssignedValue<F>; T],
 }
 
-// TODO: re-expose from stark-sdk
-pub(crate) fn poseidon2_params() -> &'static Poseidon2Params {
-    static PARAMS: OnceLock<Poseidon2Params> = OnceLock::new();
-    PARAMS.get_or_init(|| {
-        let mut round_constants: Vec<[Fr; POSEIDON2_WIDTH]> = RC3
-            .iter()
-            .map(|round| {
-                round
-                    .iter()
-                    .copied()
-                    .map(|value: ArkBn254| {
-                        let bytes = value.into_bigint().to_bytes_le();
-                        let big = BigUint::from_bytes_le(&bytes);
-                        biguint_to_fe(&big)
-                    })
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .expect("RC3 must have width-3 round constants")
-            })
-            .collect();
+#[derive(Debug, Clone)]
+pub struct Poseidon2Params<F: ScalarField, const T: usize> {
+    /// Number of full rounds
+    pub rounds_f: usize,
+    pub rounds_p: usize,
+    pub mat_internal_diag_m_1: [F; T],
+    pub external_rc: Vec<[F; T]>,
+    pub internal_rc: Vec<F>,
+}
 
-        let rounds_f_beginning = POSEIDON2_ROUNDS_F / 2;
-        let internal_end = rounds_f_beginning + POSEIDON2_ROUNDS_P;
-        let internal_rc = round_constants
-            .drain(rounds_f_beginning..internal_end)
-            .map(|round| round[0])
-            .collect::<Vec<_>>();
-
-        Poseidon2Params {
-            external_rc: round_constants,
+impl<F: ScalarField, const T: usize> Poseidon2Params<F, T> {
+    pub fn new(
+        rounds_f: usize,
+        rounds_p: usize,
+        mat_internal_diag_m_1: [F; T],
+        external_rc: Vec<[F; T]>,
+        internal_rc: Vec<F>,
+    ) -> Self {
+        Self {
+            rounds_f,
+            rounds_p,
+            mat_internal_diag_m_1,
+            external_rc,
             internal_rc,
-            mat_internal_diag_m_1: MAT_DIAG3_M_1
-                .iter()
-                .copied()
-                .map(|value| {
-                    let bytes = value.into_bigint().to_bytes_le();
-                    let big = BigUint::from_bytes_le(&bytes);
-                    biguint_to_fe(&big)
-                })
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("MAT_DIAG3_M_1 must contain exactly three constants"),
         }
-    })
-}
-
-fn poseidon2_x_pow5(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    value: AssignedValue<Fr>,
-) -> AssignedValue<Fr> {
-    let value_sq = gate.mul(ctx, value, value);
-    let value_4 = gate.mul(ctx, value_sq, value_sq);
-    gate.mul(ctx, value, value_4)
-}
-
-fn poseidon2_matmul_external(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    state: &mut [AssignedValue<Fr>; POSEIDON2_WIDTH],
-) {
-    let sum = gate.sum(ctx, state.iter().cloned());
-    for value in state.iter_mut() {
-        *value = gate.add(ctx, *value, sum);
     }
 }
 
-fn poseidon2_matmul_internal(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    state: &mut [AssignedValue<Fr>; POSEIDON2_WIDTH],
-    diag_m_1: [Fr; POSEIDON2_WIDTH],
-) {
-    let sum = gate.sum(ctx, state.iter().cloned());
-    for (idx, value) in state.iter_mut().enumerate() {
-        *value = gate.mul_add(ctx, *value, Constant(diag_m_1[idx]), sum);
+impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
+    pub fn new(state: [AssignedValue<F>; T]) -> Self {
+        Self { s: state }
     }
-}
+    /// Perform permutation on this state.
+    ///
+    /// ATTENTION: inputs.len() needs to be fixed at compile time.
+    pub fn permutation(
+        &mut self,
+        ctx: &mut Context<F>,
+        gate: &impl GateInstructions<F>,
+        params: &Poseidon2Params<F, T>,
+    ) {
+        let rounds_f_beginning = params.rounds_f / 2;
 
-pub(crate) fn poseidon2_permute_bn254_state(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    mut state: [AssignedValue<Fr>; POSEIDON2_WIDTH],
-) -> [AssignedValue<Fr>; POSEIDON2_WIDTH] {
-    let gate = range.gate();
-    let params = poseidon2_params();
-    let rounds_f_beginning = POSEIDON2_ROUNDS_F / 2;
-
-    poseidon2_matmul_external(ctx, gate, &mut state);
-
-    for round in 0..rounds_f_beginning {
-        for (idx, value) in state.iter_mut().enumerate() {
-            *value = gate.add(ctx, *value, Constant(params.external_rc[round][idx]));
-            *value = poseidon2_x_pow5(ctx, gate, *value);
+        // First half of the full round
+        self.matmul_external(ctx, gate);
+        for r in 0..rounds_f_beginning {
+            self.add_rc(ctx, gate, params.external_rc[r]);
+            self.sbox(ctx, gate);
+            self.matmul_external(ctx, gate);
         }
-        poseidon2_matmul_external(ctx, gate, &mut state);
-    }
 
-    for round in 0..POSEIDON2_ROUNDS_P {
-        state[0] = gate.add(ctx, state[0], Constant(params.internal_rc[round]));
-        state[0] = poseidon2_x_pow5(ctx, gate, state[0]);
-        poseidon2_matmul_internal(ctx, gate, &mut state, params.mat_internal_diag_m_1);
-    }
-
-    for round in rounds_f_beginning..POSEIDON2_ROUNDS_F {
-        for (idx, value) in state.iter_mut().enumerate() {
-            *value = gate.add(ctx, *value, Constant(params.external_rc[round][idx]));
-            *value = poseidon2_x_pow5(ctx, gate, *value);
+        for r in 0..params.rounds_p {
+            self.s[0] = gate.add(ctx, self.s[0], Constant(params.internal_rc[r]));
+            self.s[0] = Self::x_power5(ctx, gate, self.s[0]);
+            self.matmul_internal(ctx, gate, params.mat_internal_diag_m_1);
         }
-        poseidon2_matmul_external(ctx, gate, &mut state);
+
+        for r in rounds_f_beginning..params.rounds_f {
+            self.add_rc(ctx, gate, params.external_rc[r]);
+            self.sbox(ctx, gate);
+            self.matmul_external(ctx, gate);
+        }
     }
 
-    state
+    /// Constrains and set self to a specific state if `selector` is true.
+    pub fn select(
+        &mut self,
+        ctx: &mut Context<F>,
+        gate: &impl GateInstructions<F>,
+        selector: SafeBool<F>,
+        set_to: &Self,
+    ) {
+        for i in 0..T {
+            self.s[i] = gate.select(ctx, set_to.s[i], self.s[i], *selector.as_ref());
+        }
+    }
+
+    fn x_power5(
+        ctx: &mut Context<F>,
+        gate: &impl GateInstructions<F>,
+        x: AssignedValue<F>,
+    ) -> AssignedValue<F> {
+        let x2 = gate.mul(ctx, x, x);
+        let x4 = gate.mul(ctx, x2, x2);
+        gate.mul(ctx, x, x4)
+    }
+
+    fn sbox(&mut self, ctx: &mut Context<F>, gate: &impl GateInstructions<F>) {
+        for x in self.s.iter_mut() {
+            *x = Self::x_power5(ctx, gate, *x);
+        }
+    }
+
+    fn matmul_external(&mut self, ctx: &mut Context<F>, gate: &impl GateInstructions<F>) {
+        // Only doing T = 3 case
+        assert_eq!(T, 3);
+
+        // Matrix is circ(2, 1, 1)
+        let sum = gate.sum(ctx, self.s.iter().copied());
+        for (i, x) in self.s.iter_mut().enumerate() {
+            // This is the same as `*x = gate.add(ctx, *x, sum)` but we save a cell by reusing
+            // `sum`:
+            if i % 2 == 0 {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Witness(*x.value() + sum.value()),
+                        QuantumCell::Existing(*x),
+                        QuantumCell::Constant(-F::ONE),
+                        QuantumCell::Existing(sum),
+                    ],
+                    [0],
+                );
+                *x = ctx.get(-4);
+            } else {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Existing(*x),
+                        QuantumCell::Constant(F::ONE),
+                        QuantumCell::Witness(*x.value() + sum.value()),
+                    ],
+                    [-1],
+                );
+                *x = ctx.get(-1);
+            }
+        }
+    }
+
+    fn add_rc(
+        &mut self,
+        ctx: &mut Context<F>,
+        gate: &impl GateInstructions<F>,
+        round_constants: [F; T],
+    ) {
+        for (x, rc) in self.s.iter_mut().zip(round_constants.iter()) {
+            *x = gate.add(ctx, *x, Constant(*rc));
+        }
+    }
+
+    fn matmul_internal(
+        &mut self,
+        ctx: &mut Context<F>,
+        gate: &impl GateInstructions<F>,
+        mat_internal_diag_m_1: [F; T],
+    ) {
+        assert_eq!(T, 3);
+        let sum = gate.sum(ctx, self.s.iter().copied());
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..T {
+            // This is the same as `self.s[i] = gate.mul_add(ctx, self.s[i],
+            // Constant(mat_internal_diag_m_1[i]), sum)` but we save a cell by reusing `sum`.
+            if i % 2 == 0 {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Witness(
+                            *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value(),
+                        ),
+                        QuantumCell::Existing(self.s[i]),
+                        QuantumCell::Constant(-mat_internal_diag_m_1[i]),
+                        QuantumCell::Existing(sum),
+                    ],
+                    [0],
+                );
+                self.s[i] = ctx.get(-4);
+            } else {
+                ctx.assign_region(
+                    [
+                        QuantumCell::Existing(self.s[i]),
+                        QuantumCell::Constant(mat_internal_diag_m_1[i]),
+                        QuantumCell::Witness(
+                            *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value(),
+                        ),
+                    ],
+                    [-1],
+                );
+                self.s[i] = ctx.get(-1);
+            }
+        }
+    }
 }
+
+pub(crate) const POSEIDON2_RATE: usize = 2;
+pub(crate) const DIGEST_WIDTH: usize = 1;
+const MULTI_FIELD32_RATE: usize = 16;
+const MULTI_FIELD32_NUM_F_ELMS: usize = 8;
 
 pub(crate) fn reduce_32_cells(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    gate: &impl GateInstructions<Fr>,
     values: &[AssignedValue<Fr>],
 ) -> AssignedValue<Fr> {
-    let gate = range.gate();
     let base = Fr::from(1u64 << 32);
     let mut power = Fr::from(1u64);
     let mut acc = ctx.load_constant(Fr::from(0u64));
@@ -168,15 +222,18 @@ pub(crate) fn hash_babybear_slice_to_digest(
     range: &RangeChip<Fr>,
     values: &[BabyBearWire],
 ) -> AssignedValue<Fr> {
-    let mut state = core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64)));
+    let gate = range.gate();
+    let params = &*super::POSEIDON2_PARAMS;
+    let mut state =
+        Poseidon2State::new(core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64))));
     for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
         for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
-            let cells = chunk.iter().map(|value| value.0).collect::<Vec<_>>();
-            state[chunk_id] = reduce_32_cells(ctx, range, &cells);
+            let cells = chunk.iter().map(|value| value.value).collect::<Vec<_>>();
+            state.s[chunk_id] = reduce_32_cells(ctx, gate, &cells);
         }
-        state = poseidon2_permute_bn254_state(ctx, range, state);
+        state.permutation(ctx, gate, params);
     }
-    state[0]
+    state.s[0]
 }
 
 pub(crate) fn compress_bn254_digests(
@@ -185,7 +242,10 @@ pub(crate) fn compress_bn254_digests(
     left: AssignedValue<Fr>,
     right: AssignedValue<Fr>,
 ) -> AssignedValue<Fr> {
+    let gate = range.gate();
+    let params = &*super::POSEIDON2_PARAMS;
     let zero = ctx.load_constant(Fr::from(0u64));
-    let state = poseidon2_permute_bn254_state(ctx, range, [left, right, zero]);
-    state[0]
+    let mut state = Poseidon2State::new([left, right, zero]);
+    state.permutation(ctx, gate, params);
+    state.s[0]
 }

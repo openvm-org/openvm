@@ -204,7 +204,7 @@ p3-symmetric = { version = "=0.4.1", default-features = false }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
 snark-verifier = { version = "0.2.0", default-features = false }
-halo2-base = { version = "0.5.1", default-features = false }
+halo2-base = { version = "0.5.0", default-features = false }
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 
 forge-fmt = { git = "https://github.com/foundry-rs/foundry.git", tag = "v1.5.0" }

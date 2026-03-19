@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
@@ -32,7 +34,7 @@ fn constrain_proof_shape_intermediates(
     range: &RangeChip<Fr>,
     actual: &ProofShapeIntermediates,
 ) -> AssignedProofShapeIntermediates {
-    let base_chip = BabyBearChip::new(range);
+    let base_chip = BabyBearChip::new(Arc::new(range.clone()));
     constrain_proof_shape_intermediates_with_ownership(ctx, &base_chip, actual, None)
 }
 
@@ -88,7 +90,7 @@ where
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let base_chip = BabyBearChip::new(&range);
+        let base_chip = BabyBearChip::new(Arc::new(range.clone()));
         let assigned =
             derive_and_constrain_proof_shape(ctx, &base_chip, engine.config(), &vk, &proof)
                 .expect("proof-shape derive+constrain should succeed");

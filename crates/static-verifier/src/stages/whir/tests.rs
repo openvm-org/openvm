@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
@@ -35,7 +37,7 @@ struct WhirStrictOwnership {
 // Internal standalone whir wrapper for intra-crate composition/tests.
 fn derive_and_constrain_whir(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     proof: &Proof<NativeConfig>,
@@ -76,7 +78,7 @@ fn derive_whir_strict_ownership(
 
 fn constrain_whir_strict_metadata(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     raw: &RawWhirWitnessState,
     assigned: &AssignedWhirIntermediates,
     ownership: &WhirStrictOwnership,
@@ -163,7 +165,7 @@ fn constrain_whir_strict_metadata(
 
 fn constrain_checked_whir_witness_state_strict(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     raw: &RawWhirWitnessState,
     ownership: &WhirStrictOwnership,
 ) -> CheckedWhirWitnessState {
@@ -179,7 +181,7 @@ fn constrain_checked_whir_witness_state_strict(
 
 fn constrain_whir_intermediates_for_test(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     actual: &WhirIntermediates,
 ) -> AssignedWhirIntermediates {
     constrain_whir_intermediates_with_shared_inputs(
@@ -197,7 +199,12 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
         .use_k(MOCK_K as usize)
         .use_lookup_bits(8)
         .use_instance_columns(1);
-    build(&mut builder);
+
+    if expect_satisfied {
+        build(&mut builder);
+    } else {
+        crate::utils::with_debug_asserts_disabled(|| build(&mut builder));
+    }
 
     let params = builder.calculate_params(Some(MOCK_MIN_ROWS));
     assert!(
@@ -233,8 +240,8 @@ fn test_engine() -> BabyBearBn254Poseidon2CpuEngine {
     BabyBearBn254Poseidon2CpuEngine::new(test_system_params_small(2, 8, 3))
 }
 
-fn make_ext_chip(range: &halo2_base::gates::range::RangeChip<Fr>) -> BabyBearExtChip<'_> {
-    BabyBearExtChip::new(BabyBearChip::new(range))
+fn make_ext_chip(range: &halo2_base::gates::range::RangeChip<Fr>) -> BabyBearExtChip {
+    BabyBearExtChip::new(Arc::new(BabyBearChip::new(Arc::new(range.clone()))))
 }
 
 #[test]

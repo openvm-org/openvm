@@ -903,7 +903,7 @@ pub fn derive_proof_shape_ownership_schedule(
 
 pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip<'_>,
+    base_chip: &BabyBearChip,
     actual: &ProofShapeIntermediates,
     ownership_schedule: Option<&ProofShapeOwnershipSchedule>,
 ) -> AssignedProofShapeIntermediates {
@@ -1216,7 +1216,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
 
 pub fn derive_and_constrain_proof_shape(
     ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip<'_>,
+    base_chip: &BabyBearChip,
     config: &NativeConfig,
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     proof: &Proof<NativeConfig>,
@@ -1244,7 +1244,7 @@ pub(crate) fn derive_raw_proof_shape_witness_state(
 
 pub(crate) fn constrain_checked_proof_shape_witness_state_with_ownership(
     ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip<'_>,
+    base_chip: &BabyBearChip,
     raw: &RawProofShapeWitnessState,
     ownership_schedule: Option<&ProofShapeOwnershipSchedule>,
 ) -> CheckedProofShapeWitnessState {

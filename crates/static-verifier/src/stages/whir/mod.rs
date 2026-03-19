@@ -33,7 +33,9 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE},
+    field::baby_bear::{
+        BabyBearExt4Wire, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE,
+    },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     stages::{
         batch_constraints::{eval_eq_mle_assigned, BatchConstraintError},
@@ -662,7 +664,7 @@ pub fn derive_whir_intermediates(
 
 fn assign_ext(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     value: ChildEF,
 ) -> BabyBearExtWire {
     ext_chip.load_witness(ctx, value)
@@ -670,7 +672,7 @@ fn assign_ext(
 
 fn eval_mobius_eq_mle_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     u: &[BabyBearExtWire],
     x: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
@@ -678,20 +680,20 @@ fn eval_mobius_eq_mle_assigned(
     let one = ext_chip.from_base_const(ctx, ChildF::ONE);
     let mut acc = one;
     for (u_i, x_i) in u.iter().zip(x.iter()) {
-        let two_u = ext_chip.mul_base_const(ctx, u_i, ChildF::TWO);
-        let w0 = ext_chip.sub(ctx, &one, &two_u);
-        let one_minus_x = ext_chip.sub(ctx, &one, x_i);
-        let left = ext_chip.mul(ctx, &w0, &one_minus_x);
-        let right = ext_chip.mul(ctx, u_i, x_i);
-        let factor = ext_chip.add(ctx, &left, &right);
-        acc = ext_chip.mul(ctx, &acc, &factor);
+        let two_u = ext_chip.mul_base_const(ctx, *u_i, ChildF::TWO);
+        let w0 = ext_chip.sub(ctx, one, two_u);
+        let one_minus_x = ext_chip.sub(ctx, one, *x_i);
+        let left = ext_chip.mul(ctx, w0, one_minus_x);
+        let right = ext_chip.mul(ctx, *u_i, *x_i);
+        let factor = ext_chip.add(ctx, left, right);
+        acc = ext_chip.mul(ctx, acc, factor);
     }
     acc
 }
 
 fn eval_mle_evals_at_point_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     evals: &[BabyBearExtWire],
     x: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
@@ -705,13 +707,13 @@ fn eval_mle_evals_at_point_assigned(
     let mut len = values.len();
     for xj in x.iter().rev() {
         len >>= 1;
-        let one_minus_xj = ext_chip.sub(ctx, &one, xj);
+        let one_minus_xj = ext_chip.sub(ctx, one, *xj);
         for i in 0..len {
             let lo = values[i];
             let hi = values[i + len];
-            let lo_term = ext_chip.mul(ctx, &lo, &one_minus_xj);
-            let hi_term = ext_chip.mul(ctx, &hi, xj);
-            values[i] = ext_chip.add(ctx, &lo_term, &hi_term);
+            let lo_term = ext_chip.mul(ctx, lo, one_minus_xj);
+            let hi_term = ext_chip.mul(ctx, hi, *xj);
+            values[i] = ext_chip.add(ctx, lo_term, hi_term);
         }
     }
     values
@@ -722,15 +724,16 @@ fn eval_mle_evals_at_point_assigned(
 
 fn invert_base_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
-    value: &BabyBearWire,
+    ext_chip: &BabyBearExtChip,
+    value: BabyBearWire,
 ) -> BabyBearWire {
-    ext_chip.base().invert(ctx, value)
+    let one = ext_chip.base().one(ctx);
+    ext_chip.base().div(ctx, one, value)
 }
 
 fn query_root_from_bits_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     query_bits: &[AssignedValue<Fr>],
     log_rs_domain_size: usize,
 ) -> BabyBearWire {
@@ -744,18 +747,18 @@ fn query_root_from_bits_assigned(
         let bit_times_pow = gate.mul(ctx, bit, omega_pow_const);
         let one_minus_bit = gate.sub(ctx, one, bit);
         let rhs = gate.add(ctx, bit_times_pow, one_minus_bit);
-        let selected = BabyBearWire(rhs);
-        root = ext_chip.base().mul(ctx, &root, &selected);
+        let selected = BabyBearWire { value: rhs, max_bits: crate::field::baby_bear::BABYBEAR_MAX_BITS };
+        root = ext_chip.base().mul(ctx, root, selected);
     }
     root
 }
 
 fn binary_k_fold_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     mut values: Vec<BabyBearExtWire>,
     alphas: &[BabyBearExtWire],
-    x: &BabyBearWire,
+    x: BabyBearWire,
 ) -> BabyBearExtWire {
     let n = values.len();
     assert_eq!(
@@ -774,36 +777,36 @@ fn binary_k_fold_assigned(
     let inv_tw = omega_k_inv.powers().take(1usize << (k - 1)).collect();
     let half = ChildF::ONE.halve();
 
-    let mut x_pow = *x;
+    let mut x_pow = x;
     let x_inv = invert_base_assigned(ctx, ext_chip, x);
     let mut x_inv_pow = x_inv;
 
     for (j, alpha) in alphas.iter().enumerate() {
         let m = n >> (j + 1);
         for i in 0..m {
-            let t = ext_chip.base().mul_const(ctx, &x_pow, tw[i << j]);
-            let t_inv = ext_chip.base().mul_const(ctx, &x_inv_pow, inv_tw[i << j]);
-            let t_inv_half = ext_chip.base().mul_const(ctx, &t_inv, half);
+            let t = ext_chip.base().mul_const(ctx, x_pow, tw[i << j]);
+            let t_inv = ext_chip.base().mul_const(ctx, x_inv_pow, inv_tw[i << j]);
+            let t_inv_half = ext_chip.base().mul_const(ctx, t_inv, half);
 
             let lo = values[i];
             let hi = values[i + m];
-            let lo_minus_hi = ext_chip.sub(ctx, &lo, &hi);
-            let t_ext = ext_chip.from_base_var(ctx, &t);
-            let alpha_minus_t = ext_chip.sub(ctx, alpha, &t_ext);
-            let fold = ext_chip.mul(ctx, &alpha_minus_t, &lo_minus_hi);
-            let t_inv_half_ext = ext_chip.from_base_var(ctx, &t_inv_half);
-            let fold = ext_chip.mul(ctx, &fold, &t_inv_half_ext);
-            values[i] = ext_chip.add(ctx, &lo, &fold);
+            let lo_minus_hi = ext_chip.sub(ctx, lo, hi);
+            let t_ext = ext_chip.from_base_var(ctx, t);
+            let alpha_minus_t = ext_chip.sub(ctx, *alpha, t_ext);
+            let fold = ext_chip.mul(ctx, alpha_minus_t, lo_minus_hi);
+            let t_inv_half_ext = ext_chip.from_base_var(ctx, t_inv_half);
+            let fold = ext_chip.mul(ctx, fold, t_inv_half_ext);
+            values[i] = ext_chip.add(ctx, lo, fold);
         }
-        x_pow = ext_chip.base().square(ctx, &x_pow);
-        x_inv_pow = ext_chip.base().square(ctx, &x_inv_pow);
+        x_pow = ext_chip.base().square(ctx, x_pow);
+        x_inv_pow = ext_chip.base().square(ctx, x_inv_pow);
     }
     values[0]
 }
 
 fn tree_compress_assigned_digests(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     digests: Vec<AssignedValue<Fr>>,
 ) -> AssignedValue<Fr> {
     assert!(
@@ -844,7 +847,7 @@ pub(crate) struct SharedWhirWitnessInputs<'a> {
 
 fn constrain_merkle_path(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     query_bits: &[AssignedValue<Fr>],
     leaf_inputs: &[Vec<u64>],
     siblings: &[Fr],
@@ -906,7 +909,7 @@ fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
 
 fn sample_witness_bits_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
     bits: usize,
     witness: BabyBearWire,
@@ -926,7 +929,7 @@ fn sample_witness_bits_assigned(
 
 pub(crate) fn constrain_whir_from_proof_inputs(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
     config: &NativeConfig,
     whir_proof: &WhirProof<NativeConfig>,
@@ -1027,15 +1030,15 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     let mut mu_pow = one;
     for _ in 0..total_width {
         mu_pows.push(mu_pow);
-        mu_pow = ext_chip.mul(ctx, &mu_pow, &mu_challenge);
+        mu_pow = ext_chip.mul(ctx, mu_pow, mu_challenge);
     }
 
     let mut final_claim = ext_chip.zero(ctx);
     let mut mu_idx = 0usize;
     for commit_openings in stacking_openings {
         for opening in commit_openings {
-            let weighted = ext_chip.mul(ctx, opening, &mu_pows[mu_idx]);
-            final_claim = ext_chip.add(ctx, &final_claim, &weighted);
+            let weighted = ext_chip.mul(ctx, *opening, mu_pows[mu_idx]);
+            final_claim = ext_chip.add(ctx, final_claim, weighted);
             mu_idx += 1;
         }
     }
@@ -1087,7 +1090,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
                 alphas_round.push(alpha);
                 folding_alphas.push(alpha);
 
-                let ev0 = ext_chip.sub(ctx, &final_claim, &ev1);
+                let ev0 = ext_chip.sub(ctx, final_claim, ev1);
                 final_claim = interpolate_quadratic_at_012_assigned(
                     ctx,
                     ext_chip,
@@ -1149,8 +1152,8 @@ pub(crate) fn constrain_whir_from_proof_inputs(
             };
             let zi_root_base =
                 query_root_from_bits_assigned(ctx, ext_chip, &query_bits_vec, log_rs_domain_size);
-            let zi_root_ext = ext_chip.from_base_var(ctx, &zi_root_base);
-            let zi = ext_chip.pow_power_of_two(ctx, &zi_root_ext, k_whir);
+            let zi_root_ext = ext_chip.from_base_var(ctx, zi_root_base);
+            let zi = ext_chip.pow_power_of_two(ctx, zi_root_ext, k_whir);
 
             let yi = if is_initial_round {
                 let mut codeword_vals = vec![ext_chip.zero(ctx); 1usize << k_whir];
@@ -1175,18 +1178,18 @@ pub(crate) fn constrain_whir_from_proof_inputs(
                         initial_commitment_roots[commit_idx],
                     );
                     for col_idx in 0..commit_openings.len() {
-                        let mu_pow = &mu_pows[mu_power_idx];
+                        let mu_pow = mu_pows[mu_power_idx];
                         for (row_idx, row) in payload.leaf_values.iter().enumerate() {
                             let opened_base = row[col_idx];
-                            let opened_ext = ext_chip.from_base_var(ctx, &opened_base);
-                            let weighted = ext_chip.mul(ctx, &opened_ext, mu_pow);
+                            let opened_ext = ext_chip.from_base_var(ctx, opened_base);
+                            let weighted = ext_chip.mul(ctx, opened_ext, mu_pow);
                             codeword_vals[row_idx] =
-                                ext_chip.add(ctx, &codeword_vals[row_idx], &weighted);
+                                ext_chip.add(ctx, codeword_vals[row_idx], weighted);
                         }
                         mu_power_idx += 1;
                     }
                 }
-                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, &zi_root_base)
+                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, zi_root_base)
             } else {
                 let opened_values = &whir_proof.codeword_opened_values[round_idx - 1][query_idx];
                 let siblings = whir_proof.codeword_merkle_proofs[round_idx - 1][query_idx]
@@ -1209,9 +1212,9 @@ pub(crate) fn constrain_whir_from_proof_inputs(
                 let opened_values = payload
                     .leaf_values
                     .iter()
-                    .map(|row| BabyBearExtWire(core::array::from_fn(|idx| row[idx])))
+                    .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx])))
                     .collect::<Vec<_>>();
-                binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, &zi_root_base)
+                binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, zi_root_base)
             };
 
             zs_round.push(zi);
@@ -1220,14 +1223,14 @@ pub(crate) fn constrain_whir_from_proof_inputs(
 
         let gamma = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
         if let Some(y0) = y0 {
-            let y0_term = ext_chip.mul(ctx, &y0, &gamma);
-            final_claim = ext_chip.add(ctx, &final_claim, &y0_term);
+            let y0_term = ext_chip.mul(ctx, y0, gamma);
+            final_claim = ext_chip.add(ctx, final_claim, y0_term);
         }
-        let mut gamma_pow = ext_chip.mul(ctx, &gamma, &gamma);
+        let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
         for yi in &ys_round {
-            let term = ext_chip.mul(ctx, yi, &gamma_pow);
-            final_claim = ext_chip.add(ctx, &final_claim, &term);
-            gamma_pow = ext_chip.mul(ctx, &gamma_pow, &gamma);
+            let term = ext_chip.mul(ctx, *yi, gamma_pow);
+            final_claim = ext_chip.add(ctx, final_claim, term);
+            gamma_pow = ext_chip.mul(ctx, gamma_pow, gamma);
         }
 
         gammas.push(gamma);
@@ -1239,7 +1242,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     let t = k_whir * rounds;
     let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
     let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
-    let mut final_acc = ext_chip.mul(ctx, &prefix, &suffix);
+    let mut final_acc = ext_chip.mul(ctx, prefix, suffix);
 
     let mut alpha_offset = k_whir;
     for round_idx in 0..rounds {
@@ -1254,8 +1257,8 @@ pub(crate) fn constrain_whir_from_proof_inputs(
             for _ in 1..slc_len {
                 let next = ext_chip.mul(
                     ctx,
-                    z0_pows.last().expect("z0 power sequence is non-empty"),
-                    z0_pows.last().expect("z0 power sequence is non-empty"),
+                    *z0_pows.last().expect("z0 power sequence is non-empty"),
+                    *z0_pows.last().expect("z0 power sequence is non-empty"),
                 );
                 z0_pows.push(next);
             }
@@ -1267,20 +1270,20 @@ pub(crate) fn constrain_whir_from_proof_inputs(
                 &z0_pows[..z0_pows.len().saturating_sub(1)],
             );
             let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &z0_max);
-            let term = ext_chip.mul(ctx, gamma, &eq);
-            let term = ext_chip.mul(ctx, &term, &poly_eval);
-            final_acc = ext_chip.add(ctx, &final_acc, &term);
+            let term = ext_chip.mul(ctx, *gamma, eq);
+            let term = ext_chip.mul(ctx, term, poly_eval);
+            final_acc = ext_chip.add(ctx, final_acc, term);
         }
 
-        let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
+        let mut gamma_pow = ext_chip.mul(ctx, *gamma, *gamma);
         for zi in &zs_per_round[round_idx] {
             let mut zi_pows = Vec::with_capacity(slc_len);
             zi_pows.push(*zi);
             for _ in 1..slc_len {
                 let next = ext_chip.mul(
                     ctx,
-                    zi_pows.last().expect("zi power sequence is non-empty"),
-                    zi_pows.last().expect("zi power sequence is non-empty"),
+                    *zi_pows.last().expect("zi power sequence is non-empty"),
+                    *zi_pows.last().expect("zi power sequence is non-empty"),
                 );
                 zi_pows.push(next);
             }
@@ -1292,18 +1295,18 @@ pub(crate) fn constrain_whir_from_proof_inputs(
                 &zi_pows[..zi_pows.len().saturating_sub(1)],
             );
             let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &zi_max);
-            let term = ext_chip.mul(ctx, &gamma_pow, &eq);
-            let term = ext_chip.mul(ctx, &term, &poly_eval);
-            final_acc = ext_chip.add(ctx, &final_acc, &term);
-            gamma_pow = ext_chip.mul(ctx, &gamma_pow, gamma);
+            let term = ext_chip.mul(ctx, gamma_pow, eq);
+            let term = ext_chip.mul(ctx, term, poly_eval);
+            final_acc = ext_chip.add(ctx, final_acc, term);
+            gamma_pow = ext_chip.mul(ctx, gamma_pow, *gamma);
         }
 
         alpha_offset += k_whir;
     }
 
-    let final_residual = ext_chip.sub(ctx, &final_acc, &final_claim);
+    let final_residual = ext_chip.sub(ctx, final_acc, final_claim);
     let zero = ext_chip.zero(ctx);
-    ext_chip.assert_equal(ctx, &final_residual, &zero);
+    ext_chip.assert_equal(ctx, final_residual, zero);
 
     AssignedWhirIntermediates {
         mu_pow_bits,
@@ -1340,7 +1343,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
 #[allow(dead_code)]
 pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     actual: &WhirIntermediates,
     shared: SharedWhirWitnessInputs<'_>,
 ) -> AssignedWhirIntermediates {
@@ -1879,15 +1882,15 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
     let mut mu_pow = one;
     for _ in 0..total_width {
         mu_pows.push(mu_pow);
-        mu_pow = ext_chip.mul(ctx, &mu_pow, &mu_challenge);
+        mu_pow = ext_chip.mul(ctx, mu_pow, mu_challenge);
     }
 
     let mut derived_claim = ext_chip.zero(ctx);
     let mut mu_idx = 0usize;
     for commit_openings in &stacking_openings {
         for opening in commit_openings {
-            let weighted = ext_chip.mul(ctx, opening, &mu_pows[mu_idx]);
-            derived_claim = ext_chip.add(ctx, &derived_claim, &weighted);
+            let weighted = ext_chip.mul(ctx, *opening, mu_pows[mu_idx]);
+            derived_claim = ext_chip.add(ctx, derived_claim, weighted);
             mu_idx += 1;
         }
     }
@@ -1925,7 +1928,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                 .and_then(|round| round.get(1))
                 .copied()
                 .unwrap_or(zero);
-            let ev0 = ext_chip.sub(ctx, &derived_claim, &ev1);
+            let ev0 = ext_chip.sub(ctx, derived_claim, ev1);
             derived_claim =
                 interpolate_quadratic_at_012_assigned(ctx, ext_chip, [&ev0, &ev1, &ev2], alpha);
             sumcheck_cursor += 1;
@@ -1961,8 +1964,8 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                 &query_bit_source.query_bits,
                 log_rs_domain_size,
             );
-            let zi_root_ext = ext_chip.from_base_var(ctx, &zi_root_base);
-            let zi = ext_chip.pow_power_of_two(ctx, &zi_root_ext, actual.k_whir);
+            let zi_root_ext = ext_chip.from_base_var(ctx, zi_root_base);
+            let zi = ext_chip.pow_power_of_two(ctx, zi_root_ext, actual.k_whir);
             zs_round.push(zi);
 
             let yi = if round_idx == 0 {
@@ -2003,10 +2006,10 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                         let mu_pow = &mu_pows[mu_power_idx];
                         for (row_idx, row) in payload.leaf_values.iter().enumerate() {
                             let opened_base = row.get(col_idx).copied().unwrap_or(zero_base);
-                            let opened_ext = ext_chip.from_base_var(ctx, &opened_base);
-                            let weighted = ext_chip.mul(ctx, &opened_ext, mu_pow);
+                            let opened_ext = ext_chip.from_base_var(ctx, opened_base);
+                            let weighted = ext_chip.mul(ctx, opened_ext, *mu_pow);
                             codeword_vals[row_idx] =
-                                ext_chip.add(ctx, &codeword_vals[row_idx], &weighted);
+                                ext_chip.add(ctx, codeword_vals[row_idx], weighted);
                         }
                         mu_power_idx += 1;
                     }
@@ -2019,7 +2022,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                     &Fr::from(usize_to_u64(mu_pows.len())),
                 );
                 payload_cursor += stacking_openings.len();
-                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, alphas_round, &zi_root_base)
+                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, alphas_round, zi_root_base)
             } else {
                 let payload = merkle_payloads
                     .get(payload_cursor)
@@ -2043,12 +2046,12 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                             &row_width,
                             &Fr::from(usize_to_u64(BABY_BEAR_EXT_DEGREE)),
                         );
-                        BabyBearExtWire(core::array::from_fn(|idx| {
+                        BabyBearExt4Wire(core::array::from_fn(|idx| {
                             row.get(idx).copied().unwrap_or(zero_base)
                         }))
                     })
                     .collect::<Vec<_>>();
-                binary_k_fold_assigned(ctx, ext_chip, opened_values, alphas_round, &zi_root_base)
+                binary_k_fold_assigned(ctx, ext_chip, opened_values, alphas_round, zi_root_base)
             };
             ys_round.push(yi);
             query_cursor += 1;
@@ -2056,14 +2059,14 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
 
         let gamma = &gammas[round_idx];
         if round_idx + 1 != actual.query_counts_per_round.len() {
-            let y0_term = ext_chip.mul(ctx, &ood_values[round_idx], gamma);
-            derived_claim = ext_chip.add(ctx, &derived_claim, &y0_term);
+            let y0_term = ext_chip.mul(ctx, ood_values[round_idx], *gamma);
+            derived_claim = ext_chip.add(ctx, derived_claim, y0_term);
         }
-        let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
+        let mut gamma_pow = ext_chip.mul(ctx, *gamma, *gamma);
         for yi in &ys_round {
-            let term = ext_chip.mul(ctx, yi, &gamma_pow);
-            derived_claim = ext_chip.add(ctx, &derived_claim, &term);
-            gamma_pow = ext_chip.mul(ctx, &gamma_pow, gamma);
+            let term = ext_chip.mul(ctx, *yi, gamma_pow);
+            derived_claim = ext_chip.add(ctx, derived_claim, term);
+            gamma_pow = ext_chip.mul(ctx, gamma_pow, *gamma);
         }
 
         zs_per_round.push(zs_round);
@@ -2094,7 +2097,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
         &consumed_query_count,
         &Fr::from(usize_to_u64(query_indices.len())),
     );
-    ext_chip.assert_equal(ctx, &derived_claim, &final_claim);
+    ext_chip.assert_equal(ctx, derived_claim, final_claim);
 
     let rounds = actual.query_counts_per_round.len();
     let t = actual.k_whir * rounds;
@@ -2108,24 +2111,21 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
     );
     let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
     let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
-    let mut derived_final_acc = ext_chip.mul(ctx, &prefix, &suffix);
+    let mut derived_final_acc = ext_chip.mul(ctx, prefix, suffix);
 
     let mut alpha_offset = actual.k_whir;
     for round_idx in 0..rounds {
-        let gamma = &gammas[round_idx];
+        let gamma = gammas[round_idx];
         let alpha_slc = &folding_alphas[alpha_offset..t];
         let slc_len = (t - alpha_offset) + 1;
 
         if round_idx + 1 != rounds {
-            let z0 = &z0_challenges[round_idx];
+            let z0 = z0_challenges[round_idx];
             let mut z0_pows = Vec::with_capacity(slc_len);
-            z0_pows.push(*z0);
+            z0_pows.push(z0);
             for _ in 1..slc_len {
-                let next = ext_chip.mul(
-                    ctx,
-                    z0_pows.last().expect("z0 power sequence is non-empty"),
-                    z0_pows.last().expect("z0 power sequence is non-empty"),
-                );
+                let prev = *z0_pows.last().expect("z0 power sequence is non-empty");
+                let next = ext_chip.mul(ctx, prev, prev);
                 z0_pows.push(next);
             }
             let z0_max = z0_pows
@@ -2139,9 +2139,9 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                 &z0_pows[..z0_pows.len().saturating_sub(1)],
             );
             let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &z0_max);
-            let term = ext_chip.mul(ctx, gamma, &eq);
-            let term = ext_chip.mul(ctx, &term, &poly_eval);
-            derived_final_acc = ext_chip.add(ctx, &derived_final_acc, &term);
+            let term = ext_chip.mul(ctx, gamma, eq);
+            let term = ext_chip.mul(ctx, term, poly_eval);
+            derived_final_acc = ext_chip.add(ctx, derived_final_acc, term);
         }
 
         let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
@@ -2149,11 +2149,8 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
             let mut zi_pows = Vec::with_capacity(slc_len);
             zi_pows.push(*zi);
             for _ in 1..slc_len {
-                let next = ext_chip.mul(
-                    ctx,
-                    zi_pows.last().expect("zi power sequence is non-empty"),
-                    zi_pows.last().expect("zi power sequence is non-empty"),
-                );
+                let prev = *zi_pows.last().expect("zi power sequence is non-empty");
+                let next = ext_chip.mul(ctx, prev, prev);
                 zi_pows.push(next);
             }
             let zi_max = zi_pows
@@ -2167,21 +2164,21 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
                 &zi_pows[..zi_pows.len().saturating_sub(1)],
             );
             let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &zi_max);
-            let term = ext_chip.mul(ctx, &gamma_pow, &eq);
-            let term = ext_chip.mul(ctx, &term, &poly_eval);
-            derived_final_acc = ext_chip.add(ctx, &derived_final_acc, &term);
-            gamma_pow = ext_chip.mul(ctx, &gamma_pow, gamma);
+            let term = ext_chip.mul(ctx, gamma_pow, eq);
+            let term = ext_chip.mul(ctx, term, poly_eval);
+            derived_final_acc = ext_chip.add(ctx, derived_final_acc, term);
+            gamma_pow = ext_chip.mul(ctx, gamma_pow, gamma);
         }
 
         alpha_offset += actual.k_whir;
     }
-    ext_chip.assert_equal(ctx, &derived_final_acc, &final_acc);
+    ext_chip.assert_equal(ctx, derived_final_acc, final_acc);
 
     let final_residual = assign_ext(ctx, ext_chip, actual.final_residual);
-    let derived_final_residual = ext_chip.sub(ctx, &final_acc, &final_claim);
-    ext_chip.assert_equal(ctx, &derived_final_residual, &final_residual);
+    let derived_final_residual = ext_chip.sub(ctx, final_acc, final_claim);
+    ext_chip.assert_equal(ctx, derived_final_residual, final_residual);
 
-    ext_chip.assert_equal(ctx, &final_residual, &zero);
+    ext_chip.assert_equal(ctx, final_residual, zero);
 
     AssignedWhirIntermediates {
         mu_pow_bits,
@@ -2218,7 +2215,7 @@ pub(crate) fn constrain_whir_intermediates_with_shared_inputs(
 #[allow(dead_code)]
 pub(crate) fn constrain_checked_whir_witness_state_with_shared_inputs(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     raw: &RawWhirWitnessState,
     shared: SharedWhirWitnessInputs<'_>,
 ) -> CheckedWhirWitnessState {

@@ -8,12 +8,23 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-halo2-base = { workspace = true, features = ["halo2-axiom"] }
 openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
-num-bigint = { workspace = true }
 zkhash = { workspace = true }
+halo2-base = { workspace = true, features = ["halo2-axiom"] }
+snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
+
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+serde_with = { workspace = true, features = ["hex"], optional = true }
+itertools.workspace = true
+num-bigint = { workspace = true }
+num-integer.workspace = true
 
 [dev-dependencies]
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-rand_chacha = { workspace = true }
+
+[features]
+default = []
+evm-prove = ["dep:snark-verifier-sdk", "dep:serde_with"]
+evm-verify = ["evm-prove"]

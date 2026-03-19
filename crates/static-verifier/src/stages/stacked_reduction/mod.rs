@@ -369,7 +369,7 @@ pub fn derive_stacked_reduction_intermediates(
 
 fn assign_ext(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     value: ChildEF,
 ) -> BabyBearExtWire {
     ext_chip.load_witness(ctx, value)
@@ -377,10 +377,10 @@ fn assign_ext(
 
 fn eval_in_uni_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     l_skip: usize,
     n: isize,
-    z: &BabyBearExtWire,
+    z: BabyBearExtWire,
 ) -> BabyBearExtWire {
     if n.is_negative() {
         let z_pow = ext_chip.pow_power_of_two(ctx, z, l_skip.wrapping_add_signed(n));
@@ -393,7 +393,7 @@ fn eval_in_uni_assigned(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
     proof: &StackingProof<NativeConfig>,
     layouts: &[StackedLayout],
@@ -442,20 +442,20 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     }
 
     let lambda = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
-    let lambda_sqr = ext_chip.mul(ctx, &lambda, &lambda);
+    let lambda_sqr = ext_chip.mul(ctx, lambda, lambda);
     let mut lambda_sqr_powers = Vec::with_capacity(t_claims.len());
     let mut cur_lambda_sqr = one;
     for _ in 0..t_claims.len() {
         lambda_sqr_powers.push(cur_lambda_sqr);
-        cur_lambda_sqr = ext_chip.mul(ctx, &cur_lambda_sqr, &lambda_sqr);
+        cur_lambda_sqr = ext_chip.mul(ctx, cur_lambda_sqr, lambda_sqr);
     }
 
     let mut s_0 = ext_chip.zero(ctx);
     for ((claim, claim_rot), lambda_pow) in t_claims.iter().zip(lambda_sqr_powers.iter()) {
-        let claim_rot_lambda = ext_chip.mul(ctx, claim_rot, &lambda);
-        let batched_claim = ext_chip.add(ctx, claim, &claim_rot_lambda);
-        let term = ext_chip.mul(ctx, &batched_claim, lambda_pow);
-        s_0 = ext_chip.add(ctx, &s_0, &term);
+        let claim_rot_lambda = ext_chip.mul(ctx, *claim_rot, lambda);
+        let batched_claim = ext_chip.add(ctx, *claim, claim_rot_lambda);
+        let term = ext_chip.mul(ctx, batched_claim, *lambda_pow);
+        s_0 = ext_chip.add(ctx, s_0, term);
     }
 
     let univariate_round_coeffs = proof
@@ -465,13 +465,13 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
         .collect::<Vec<_>>();
     let mut s_0_sum_eval = ext_chip.zero(ctx);
     for coeff in univariate_round_coeffs.iter().step_by(omega_order) {
-        s_0_sum_eval = ext_chip.add(ctx, &s_0_sum_eval, coeff);
+        s_0_sum_eval = ext_chip.add(ctx, s_0_sum_eval, *coeff);
     }
     let s_0_sum_eval =
-        ext_chip.mul_base_const(ctx, &s_0_sum_eval, ChildF::from_u64(omega_order as u64));
-    let s_0_residual = ext_chip.sub(ctx, &s_0, &s_0_sum_eval);
+        ext_chip.mul_base_const(ctx, s_0_sum_eval, ChildF::from_u64(omega_order as u64));
+    let s_0_residual = ext_chip.sub(ctx, s_0, s_0_sum_eval);
     let zero = ext_chip.zero(ctx);
-    ext_chip.assert_equal(ctx, &s_0_residual, &zero);
+    ext_chip.assert_equal(ctx, s_0_residual, zero);
 
     for coeff in &univariate_round_coeffs {
         transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), coeff);
@@ -498,7 +498,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
         transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &s_j_1);
         transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &s_j_2);
         let u_j = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
-        let s_j_0 = ext_chip.sub(ctx, &final_claim, &s_j_1);
+        let s_j_0 = ext_chip.sub(ctx, final_claim, s_j_1);
         final_claim =
             interpolate_quadratic_at_012_assigned(ctx, ext_chip, [&s_j_0, &s_j_1, &s_j_2], &u_j);
         u.push(u_j);
@@ -533,27 +533,27 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
                 .map(|j| ((s.row_idx >> j) & 1) == 1)
                 .collect::<Vec<_>>();
             let eq_mle = eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &b_bits);
-            let ind = eval_in_uni_assigned(ctx, ext_chip, l_skip, n, &u[0]);
+            let ind = eval_in_uni_assigned(ctx, ext_chip, l_skip, n, u[0]);
             let (l, rs_n) = if n.is_negative() {
                 (
                     l_skip.wrapping_add_signed(n),
-                    vec![ext_chip.pow_power_of_two(ctx, &r[0], n.unsigned_abs())],
+                    vec![ext_chip.pow_power_of_two(ctx, r[0], n.unsigned_abs())],
                 )
             } else {
                 (l_skip, r[..=n_lift].to_vec())
             };
             let eq_prism = eval_eq_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
-            let mut batched = ext_chip.mul(ctx, &lambda_sqr_powers[lambda_idx], &eq_prism);
+            let mut batched = ext_chip.mul(ctx, lambda_sqr_powers[lambda_idx], eq_prism);
             if need_rot {
                 let rot_kernel =
                     eval_rot_kernel_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
-                let lambda_rot = ext_chip.mul(ctx, &lambda, &rot_kernel);
-                let rot_term = ext_chip.mul(ctx, &lambda_sqr_powers[lambda_idx], &lambda_rot);
-                batched = ext_chip.add(ctx, &batched, &rot_term);
+                let lambda_rot = ext_chip.mul(ctx, lambda, rot_kernel);
+                let rot_term = ext_chip.mul(ctx, lambda_sqr_powers[lambda_idx], lambda_rot);
+                batched = ext_chip.add(ctx, batched, rot_term);
             }
-            let batched_ind = ext_chip.mul(ctx, &batched, &ind);
-            let coeff = ext_chip.mul(ctx, &eq_mle, &batched_ind);
-            let updated = ext_chip.add(ctx, &derived_q_coeffs[commit_idx][s.col_idx], &coeff);
+            let batched_ind = ext_chip.mul(ctx, batched, ind);
+            let coeff = ext_chip.mul(ctx, eq_mle, batched_ind);
+            let updated = ext_chip.add(ctx, derived_q_coeffs[commit_idx][s.col_idx], coeff);
             derived_q_coeffs[commit_idx][s.col_idx] = updated;
         }
     }
@@ -571,13 +571,13 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     for (coeff_row, opening_row) in derived_q_coeffs.iter().zip(stacking_openings.iter()) {
         for (coeff, opening) in coeff_row.iter().zip(opening_row.iter()) {
             transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), opening);
-            let term = ext_chip.mul(ctx, coeff, opening);
-            final_sum = ext_chip.add(ctx, &final_sum, &term);
+            let term = ext_chip.mul(ctx, *coeff, *opening);
+            final_sum = ext_chip.add(ctx, final_sum, term);
         }
     }
 
-    let final_residual = ext_chip.sub(ctx, &final_claim, &final_sum);
-    ext_chip.assert_equal(ctx, &final_residual, &zero);
+    let final_residual = ext_chip.sub(ctx, final_claim, final_sum);
+    ext_chip.assert_equal(ctx, final_residual, zero);
 
     AssignedStackedReductionIntermediates {
         lambda,
@@ -599,7 +599,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
 #[allow(dead_code)]
 pub(crate) fn constrain_stacked_reduction_intermediates_with_shared_inputs(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip<'_>,
+    ext_chip: &BabyBearExtChip,
     actual: &StackedReductionIntermediates,
     shared_batch_column_openings: Option<&[Vec<Vec<BabyBearExtWire>>]>,
     shared_r: Option<&[BabyBearExtWire]>,
@@ -761,36 +761,36 @@ pub(crate) fn constrain_stacked_reduction_intermediates_with_shared_inputs(
         "all non-common commitments must be consumed when deriving t-claims",
     );
 
-    let lambda_sqr = ext_chip.mul(ctx, &lambda, &lambda);
+    let lambda_sqr = ext_chip.mul(ctx, lambda, lambda);
     let mut lambda_sqr_powers = Vec::with_capacity(t_claims.len());
     let mut cur_lambda_sqr = ext_chip.from_base_const(ctx, ChildF::from_u64(1));
     for _ in 0..t_claims.len() {
         lambda_sqr_powers.push(cur_lambda_sqr);
-        cur_lambda_sqr = ext_chip.mul(ctx, &cur_lambda_sqr, &lambda_sqr);
+        cur_lambda_sqr = ext_chip.mul(ctx, cur_lambda_sqr, lambda_sqr);
     }
     let mut derived_s_0 = ext_chip.zero(ctx);
     for ((claim, claim_rot), lambda_pow) in t_claims.iter().zip(lambda_sqr_powers.iter()) {
-        let claim_rot_lambda = ext_chip.mul(ctx, claim_rot, &lambda);
-        let batched_claim = ext_chip.add(ctx, claim, &claim_rot_lambda);
-        let term = ext_chip.mul(ctx, &batched_claim, lambda_pow);
-        derived_s_0 = ext_chip.add(ctx, &derived_s_0, &term);
+        let claim_rot_lambda = ext_chip.mul(ctx, *claim_rot, lambda);
+        let batched_claim = ext_chip.add(ctx, *claim, claim_rot_lambda);
+        let term = ext_chip.mul(ctx, batched_claim, *lambda_pow);
+        derived_s_0 = ext_chip.add(ctx, derived_s_0, term);
     }
-    ext_chip.assert_equal(ctx, &derived_s_0, &s_0);
+    ext_chip.assert_equal(ctx, derived_s_0, s_0);
 
     let s_0_sum_eval = assign_ext(ctx, ext_chip, actual.s_0_sum_eval);
     let stride = 1usize << actual.l_skip;
     let mut derived_s_0_sum_eval = ext_chip.zero(ctx);
     for coeff in univariate_round_coeffs.iter().step_by(stride) {
-        derived_s_0_sum_eval = ext_chip.add(ctx, &derived_s_0_sum_eval, coeff);
+        derived_s_0_sum_eval = ext_chip.add(ctx, derived_s_0_sum_eval, *coeff);
     }
     let derived_s_0_sum_eval =
-        ext_chip.mul_base_const(ctx, &derived_s_0_sum_eval, ChildF::from_u64(stride as u64));
-    ext_chip.assert_equal(ctx, &derived_s_0_sum_eval, &s_0_sum_eval);
+        ext_chip.mul_base_const(ctx, derived_s_0_sum_eval, ChildF::from_u64(stride as u64));
+    ext_chip.assert_equal(ctx, derived_s_0_sum_eval, s_0_sum_eval);
 
     let s_0_residual = assign_ext(ctx, ext_chip, actual.s_0_residual);
     // Equation-first check: s_0_residual = s_0 - s_0_sum_eval.
-    let derived_s_0_residual = ext_chip.sub(ctx, &s_0, &s_0_sum_eval);
-    ext_chip.assert_equal(ctx, &derived_s_0_residual, &s_0_residual);
+    let derived_s_0_residual = ext_chip.sub(ctx, s_0, s_0_sum_eval);
+    ext_chip.assert_equal(ctx, derived_s_0_residual, s_0_residual);
 
     assert!(
         !univariate_round_coeffs.is_empty(),
@@ -813,7 +813,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates_with_shared_inputs(
         );
         let s_j_1 = &round_poly[0];
         let s_j_2 = &round_poly[1];
-        let s_j_0 = ext_chip.sub(ctx, &derived_claim, s_j_1);
+        let s_j_0 = ext_chip.sub(ctx, derived_claim, *s_j_1);
         derived_claim = interpolate_quadratic_at_012_assigned(
             ctx,
             ext_chip,
@@ -821,7 +821,7 @@ pub(crate) fn constrain_stacked_reduction_intermediates_with_shared_inputs(
             &u[round_idx + 1],
         );
     }
-    ext_chip.assert_equal(ctx, &derived_claim, &final_claim);
+    ext_chip.assert_equal(ctx, derived_claim, final_claim);
 
     let final_sum = assign_ext(ctx, ext_chip, actual.final_sum);
     let mut derived_q_coeffs = actual
@@ -848,54 +848,54 @@ pub(crate) fn constrain_stacked_reduction_intermediates_with_shared_inputs(
             "q-coeff lambda index out of bounds",
         );
         let eq_mle = eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &term.b_bits);
-        let ind = eval_in_uni_assigned(ctx, ext_chip, actual.l_skip, term.n, &u[0]);
+        let ind = eval_in_uni_assigned(ctx, ext_chip, actual.l_skip, term.n, u[0]);
         let (l, rs_n) = if term.n.is_negative() {
             (
                 actual.l_skip.wrapping_add_signed(term.n),
-                vec![ext_chip.pow_power_of_two(ctx, &r[0], term.n.unsigned_abs())],
+                vec![ext_chip.pow_power_of_two(ctx, r[0], term.n.unsigned_abs())],
             )
         } else {
             (actual.l_skip, r[..=n_lift].to_vec())
         };
         let eq_prism = eval_eq_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
-        let mut batched = ext_chip.mul(ctx, &lambda_sqr_powers[term.lambda_idx], &eq_prism);
+        let mut batched = ext_chip.mul(ctx, lambda_sqr_powers[term.lambda_idx], eq_prism);
         if term.need_rot {
             let rot_kernel = eval_rot_kernel_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
-            let lambda_rot = ext_chip.mul(ctx, &lambda, &rot_kernel);
-            let rot_term = ext_chip.mul(ctx, &lambda_sqr_powers[term.lambda_idx], &lambda_rot);
-            batched = ext_chip.add(ctx, &batched, &rot_term);
+            let lambda_rot = ext_chip.mul(ctx, lambda, rot_kernel);
+            let rot_term = ext_chip.mul(ctx, lambda_sqr_powers[term.lambda_idx], lambda_rot);
+            batched = ext_chip.add(ctx, batched, rot_term);
         }
-        let batched_ind = ext_chip.mul(ctx, &batched, &ind);
-        let coeff = ext_chip.mul(ctx, &eq_mle, &batched_ind);
+        let batched_ind = ext_chip.mul(ctx, batched, ind);
+        let coeff = ext_chip.mul(ctx, eq_mle, batched_ind);
         let updated = ext_chip.add(
             ctx,
-            &derived_q_coeffs[term.commit_idx][term.target_col_idx],
-            &coeff,
+            derived_q_coeffs[term.commit_idx][term.target_col_idx],
+            coeff,
         );
         derived_q_coeffs[term.commit_idx][term.target_col_idx] = updated;
     }
     for (derived_row, assigned_row) in derived_q_coeffs.iter().zip(q_coeffs.iter()) {
         for (derived_coeff, assigned_coeff) in derived_row.iter().zip(assigned_row.iter()) {
-            ext_chip.assert_equal(ctx, derived_coeff, assigned_coeff);
+            ext_chip.assert_equal(ctx, *derived_coeff, *assigned_coeff);
         }
     }
     let mut derived_final_sum = ext_chip.zero(ctx);
     for (coeff_row, opening_row) in derived_q_coeffs.iter().zip(stacking_openings.iter()) {
         for (coeff, opening) in coeff_row.iter().zip(opening_row.iter()) {
-            let term = ext_chip.mul(ctx, coeff, opening);
-            derived_final_sum = ext_chip.add(ctx, &derived_final_sum, &term);
+            let term = ext_chip.mul(ctx, *coeff, *opening);
+            derived_final_sum = ext_chip.add(ctx, derived_final_sum, term);
         }
     }
-    ext_chip.assert_equal(ctx, &derived_final_sum, &final_sum);
+    ext_chip.assert_equal(ctx, derived_final_sum, final_sum);
 
     let final_residual = assign_ext(ctx, ext_chip, actual.final_residual);
     // Equation-first check: final_residual = final_claim - final_sum.
-    let derived_final_residual = ext_chip.sub(ctx, &final_claim, &final_sum);
-    ext_chip.assert_equal(ctx, &derived_final_residual, &final_residual);
+    let derived_final_residual = ext_chip.sub(ctx, final_claim, final_sum);
+    ext_chip.assert_equal(ctx, derived_final_residual, final_residual);
 
     let zero = ext_chip.zero(ctx);
-    ext_chip.assert_equal(ctx, &s_0_residual, &zero);
-    ext_chip.assert_equal(ctx, &final_residual, &zero);
+    ext_chip.assert_equal(ctx, s_0_residual, zero);
+    ext_chip.assert_equal(ctx, final_residual, zero);
 
     AssignedStackedReductionIntermediates {
         lambda,

@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use halo2_base::{
     gates::{range::RangeChip, GateInstructions, RangeInstructions},
@@ -6,6 +6,7 @@ use halo2_base::{
     utils::{biguint_to_fe, fe_to_biguint},
     AssignedValue, Context,
 };
+use itertools::Itertools;
 use num_bigint::BigUint;
 #[cfg(test)]
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField64;
@@ -16,11 +17,12 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
+        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
+        BABY_BEAR_MODULUS_U64,
     },
-    hash::poseidon2::{
-        poseidon2_permute_bn254_state, reduce_32_cells, DIGEST_WIDTH, POSEIDON2_RATE,
-        POSEIDON2_WIDTH,
+    hash::{
+        poseidon2::{reduce_32_cells, Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
+        POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
     ChildF, Fr,
 };
@@ -87,15 +89,19 @@ fn decompose_packed_bn254_to_split_limbs(
 fn reduce_assigned_limb_to_babybear(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
-    baby_bear: &BabyBearChip<'_>,
+    baby_bear: &BabyBearChip,
     limb: AssignedValue<Fr>,
 ) -> BabyBearWire {
-    let (quotient, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
+    let (quotient, remainder) =
+        range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
     range.check_less_than_safe(ctx, quotient, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
-    let reduced = BabyBearWire(remainder);
+    let reduced = BabyBearWire {
+        value: remainder,
+        max_bits: BABY_BEAR_BITS,
+    };
     baby_bear
         .range()
-        .check_less_than_safe(ctx, reduced.0, BABY_BEAR_MODULUS_U64);
+        .check_less_than_safe(ctx, reduced.value, BABY_BEAR_MODULUS_U64);
     reduced
 }
 
@@ -104,7 +110,7 @@ pub fn split_assigned_bn254_to_babybear_limbs(
     range: &RangeChip<Fr>,
     packed: AssignedValue<Fr>,
 ) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
-    let baby_bear = BabyBearChip::new(range);
+    let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
     let limbs = decompose_packed_bn254_to_split_limbs(ctx, range, packed);
     core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, range, &baby_bear, limbs[idx]))
 }
@@ -126,7 +132,10 @@ impl TranscriptGadget {
     }
 
     fn permute_state(&mut self, ctx: &mut Context<Fr>, range: &RangeChip<Fr>) {
-        self.sponge_state = poseidon2_permute_bn254_state(ctx, range, self.sponge_state);
+        let gate = range.gate();
+        let mut state = Poseidon2State::new(self.sponge_state);
+        state.permutation(ctx, gate, &POSEIDON2_PARAMS);
+        self.sponge_state = state.s;
     }
 
     fn reduce_32(
@@ -135,15 +144,18 @@ impl TranscriptGadget {
         range: &RangeChip<Fr>,
         values: &[BabyBearWire],
     ) -> AssignedValue<Fr> {
-        let cells = values.iter().map(|value| value.0).collect::<Vec<_>>();
-        reduce_32_cells(ctx, range, &cells)
+        reduce_32_cells(
+            ctx,
+            range.gate(),
+            &values.iter().map(|v| v.value).collect_vec(),
+        )
     }
 
     fn split_state_to_babybear(
         &self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
         packed: AssignedValue<Fr>,
     ) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
         let limbs = decompose_packed_bn254_to_split_limbs(ctx, range, packed);
@@ -156,7 +168,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
     ) {
         assert!(
             self.input_buffer.len() <= NUM_SPLIT_LIMBS * POSEIDON2_RATE,
@@ -181,7 +193,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
         value: &BabyBearWire,
     ) {
         self.output_buffer.clear();
@@ -195,7 +207,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
         value: &BabyBearExtWire,
     ) {
         for coeff in &value.0 {
@@ -207,7 +219,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
         digest: &DigestWire,
     ) {
         for packed in &digest.elems {
@@ -222,7 +234,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
     ) -> BabyBearWire {
         if !self.input_buffer.is_empty() || self.output_buffer.is_empty() {
             self.duplexing(ctx, range, baby_bear);
@@ -237,17 +249,17 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
     ) -> BabyBearExtWire {
         let coeffs = core::array::from_fn(|_| self.sample(ctx, range, baby_bear));
-        BabyBearExtWire(coeffs)
+        BabyBearExt4Wire(coeffs)
     }
 
     pub fn sample_bits(
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
         bits: usize,
     ) -> AssignedValue<Fr> {
         assert!(
@@ -264,7 +276,12 @@ impl TranscriptGadget {
             return ctx.load_constant(Fr::from(0u64));
         }
 
-        let (_, rem) = range.div_mod(ctx, sampled.0, BigUint::from(1u64) << bits, BABY_BEAR_BITS);
+        let (_, rem) = range.div_mod(
+            ctx,
+            sampled.value,
+            BigUint::from(1u64) << bits,
+            BABY_BEAR_BITS,
+        );
         range.range_check(ctx, rem, bits);
         rem
     }
@@ -273,7 +290,7 @@ impl TranscriptGadget {
         &mut self,
         ctx: &mut Context<Fr>,
         range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip<'_>,
+        baby_bear: &BabyBearChip,
         bits: usize,
         witness: &BabyBearWire,
     ) -> AssignedValue<Fr> {
@@ -305,7 +322,7 @@ pub fn constrain_transcript_events(
     range: &RangeChip<Fr>,
     events: &[TranscriptEvent],
 ) -> TranscriptReplay {
-    let baby_bear = BabyBearChip::new(range);
+    let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
     let mut transcript = TranscriptGadget::new(ctx);
     let mut replay = TranscriptReplay {
         events: Vec::with_capacity(events.len()),
@@ -319,21 +336,21 @@ pub fn constrain_transcript_events(
                 let observed = baby_bear.load_witness(ctx, ChildF::from_u64(*value));
                 transcript.observe(ctx, range, &baby_bear, &observed);
                 let is_sample = ctx.load_zero();
-                replay.observes.push(observed.0);
+                replay.observes.push(observed.value);
                 replay.events.push(AssignedTranscriptEvent {
                     is_sample,
-                    value: observed.0,
+                    value: observed.value,
                 });
             }
             TranscriptEvent::Sample(expected) => {
                 let sampled = transcript.sample(ctx, range, &baby_bear);
                 let expected_sample = baby_bear.load_witness(ctx, ChildF::from_u64(*expected));
-                ctx.constrain_equal(&sampled.0, &expected_sample.0);
+                ctx.constrain_equal(&sampled.value, &expected_sample.value);
                 let is_sample = ctx.load_constant(Fr::ONE);
-                replay.samples.push(expected_sample.0);
+                replay.samples.push(expected_sample.value);
                 replay.events.push(AssignedTranscriptEvent {
                     is_sample,
-                    value: expected_sample.0,
+                    value: expected_sample.value,
                 });
             }
         }
