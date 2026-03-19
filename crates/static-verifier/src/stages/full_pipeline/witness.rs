@@ -57,7 +57,9 @@ pub(crate) fn derive_n_per_trace(
         .collect::<Result<Vec<_>, _>>()
 }
 
-pub(crate) fn derive_need_rot_per_commit(
+/// Helper function, purely on out-of-circuit values. `builder` is not involved and there are no
+/// cells.
+pub(crate) fn get_need_rot_per_commit(
     mvk0: &MultiStarkVerifyingKey0<NativeConfig>,
     proof: &Proof<NativeConfig>,
     trace_id_to_air_id: &[usize],
@@ -151,7 +153,7 @@ pub(crate) fn prepare_pipeline_inputs<TS: FiatShamirTranscript<NativeConfig>>(
         &omega_skip_pows,
     )?;
     let r = batch.r.to_vec();
-    let need_rot_per_commit = derive_need_rot_per_commit(mvk0, proof, &trace_id_to_air_id)?;
+    let need_rot_per_commit = get_need_rot_per_commit(mvk0, proof, &trace_id_to_air_id)?;
 
     Ok(PreparedPipelineInputs {
         trace_id_to_air_id,

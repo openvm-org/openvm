@@ -2,7 +2,6 @@ use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
         flex_gate::MultiPhaseThreadBreakPoints,
-        GateInstructions, RangeInstructions,
     },
     halo2_proofs::{
         dev::MockProver,
@@ -21,6 +20,7 @@ use halo2_base::{
         },
     },
 };
+use itertools::Itertools;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as NativeConfig,
     openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof},
@@ -28,10 +28,7 @@ use openvm_stark_sdk::{
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::StaticVerifierShape,
-    stages::full_pipeline::{constrained_verify, derive_pipeline_public_inputs},
-};
+use crate::{config::StaticVerifierShape, stages::full_pipeline::constrained_verify};
 
 /// KZG parameters for the Halo2 BN256 proving system.
 pub type Halo2Params = ParamsKZG<Bn256>;
@@ -105,20 +102,12 @@ impl StaticVerifierCircuit {
             let assigned = constrained_verify(ctx, &range, input.config, input.mvk, input.proof)
                 .expect("pipeline constrained verify should succeed");
 
-            range
-                .gate()
-                .assert_is_const(ctx, &assigned.whir.mu_pow_witness_ok, &Fr::from(1u64));
-
             assigned.statement_public_inputs.to_vec()
         };
+        let pis = public_input_cells.iter().map(|c| *c.value()).collect_vec();
         builder.assigned_instances[0].extend(public_input_cells);
 
-        derive_pipeline_public_inputs(input.config, input.mvk, input.proof)
-    }
-
-    /// Compute the public inputs without building any circuit constraints.
-    pub fn public_inputs(input: &StaticVerifierInput<'_>) -> Vec<Fr> {
-        derive_pipeline_public_inputs(input.config, input.mvk, input.proof)
+        pis
     }
 
     /// Run the [`MockProver`] and panic if any constraint is unsatisfied.
