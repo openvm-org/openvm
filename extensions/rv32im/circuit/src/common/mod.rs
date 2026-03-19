@@ -148,7 +148,7 @@ mod aot {
         //     }
         // }
         // ```
-        // 
+        //
         // For a specific RV32 instruction, the variables can be treated as constants at AOT
         // compilation time:
         // - `address_space`: always a constant because it is derived from an Instruction
@@ -157,7 +157,7 @@ mod aot {
         // - `size_bits`: RV32 instruction always read 4 bytes(in the AIR level). So `size` is
         //   always 4 bytes. So `size_bits` is always 2.
         //
-        // If we ignore the Native address space, `min_block_size_bits`` is always
+        // If we ignore the deferral address space, `min_block_size_bits`` is always
         // `DEFAULT_U8_BLOCK_SIZE=4`. Therefore, `align_bits` is always 2. So the loop will
         // never be executed and we can leave the function empty.
         Ok("".to_string())
@@ -232,7 +232,7 @@ mod aot {
         //     }
         // }
         // ```
-        // 
+        //
         // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
         // Inputs:
         // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.

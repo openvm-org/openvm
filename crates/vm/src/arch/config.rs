@@ -115,7 +115,7 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
 /// alignment of 2 because the instructions are implemented by doing an access of block size 4.
 const DEFAULT_U8_BLOCK_SIZE: usize = 4;
-const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
+const DEFAULT_FIELD_BLOCK_SIZE: usize = 1;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
@@ -195,14 +195,11 @@ impl MemoryConfig {
     pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
         // All except address spaces 0..4 default to native 32-bit field.
         // By default only address spaces 1..=4 have non-empty cell counts.
-        let mut addr_spaces = vec![
-            AddressSpaceHostConfig::new(
-                0,
-                DEFAULT_NATIVE_BLOCK_SIZE,
-                MemoryCellType::native32()
-            );
-            num_addr_spaces
-        ];
+        let mut addr_spaces =
+            vec![
+                AddressSpaceHostConfig::new(0, DEFAULT_FIELD_BLOCK_SIZE, MemoryCellType::field32());
+                num_addr_spaces
+            ];
         addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
         addr_spaces[RV32_REGISTER_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
@@ -222,14 +219,6 @@ impl MemoryConfig {
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
 
         addr_spaces
-    }
-
-    /// Config for aggregation usage with only native address space.
-    pub fn aggregation() -> Self {
-        let mut addr_spaces =
-            Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
     }
 
     pub fn min_block_size_bits(&self) -> Vec<u8> {
@@ -433,14 +422,14 @@ pub enum MemoryCellType {
     /// Represented in little-endian format.
     U32,
     /// `size` is the size in bytes of the native field type. This should not exceed 8.
-    Native {
+    F {
         size: u8,
     },
 }
 
 impl MemoryCellType {
-    pub fn native32() -> Self {
-        Self::Native {
+    pub fn field32() -> Self {
+        Self::F {
             size: size_of::<u32>() as u8,
         }
     }
@@ -453,7 +442,7 @@ impl AddressSpaceHostLayout for MemoryCellType {
             Self::U8 => size_of::<u8>(),
             Self::U16 => size_of::<u16>(),
             Self::U32 => size_of::<u32>(),
-            Self::Native { size } => *size as usize,
+            Self::F { size } => *size as usize,
         }
     }
 
@@ -470,7 +459,7 @@ impl AddressSpaceHostLayout for MemoryCellType {
             Self::U8 => F::from_u8(*value.get_unchecked(0)),
             Self::U16 => F::from_u16(core::ptr::read(value.as_ptr() as *const u16)),
             Self::U32 => F::from_u32(core::ptr::read(value.as_ptr() as *const u32)),
-            Self::Native { .. } => core::ptr::read(value.as_ptr() as *const F),
+            Self::F { .. } => core::ptr::read(value.as_ptr() as *const F),
         }
     }
 }

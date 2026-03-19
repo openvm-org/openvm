@@ -25,7 +25,7 @@ template <size_t NUM_CELLS> struct LoadStoreCoreRecord {
     uint8_t local_opcode;
     uint8_t shift_amount;
     uint8_t read_data[NUM_CELLS];
-    // Note: `prev_data` can be from native address space, so we need to use u32
+    // Note: `prev_data` can be from deferral address space, so we need to use u32
     uint32_t prev_data[NUM_CELLS];
 };
 

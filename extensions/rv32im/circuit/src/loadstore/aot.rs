@@ -19,7 +19,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &openvm_instructions::instruction::Instruction<F>) -> bool {
-        is_aot_supported_impl(inst)
+        true
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
@@ -31,7 +31,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_metered_supported(&self, inst: &Instruction<F>) -> bool {
-        is_aot_supported_impl(inst)
+        true
     }
     fn generate_x86_metered_asm(
         &self,
@@ -86,24 +86,6 @@ where
     }
 }
 
-fn is_aot_supported_impl<F: PrimeField32>(
-    inst: &openvm_instructions::instruction::Instruction<F>,
-) -> bool {
-    let local_opcode = Rv32LoadStoreOpcode::from_usize(
-        inst.opcode
-            .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-    );
-    let e_u32 = inst.e.as_canonical_u32();
-    let is_native_store = e_u32 == DEFERRAL_AS;
-    // Writing into native address space is not supported in AOT.
-    match local_opcode {
-        Rv32LoadStoreOpcode::STOREW | Rv32LoadStoreOpcode::STOREH | Rv32LoadStoreOpcode::STOREB => {
-            !is_native_store
-        }
-        _ => true,
-    }
-}
-
 // arguments of `update_boundary_merkle_heights_f`:
 // address_space: u32,
 // pc: u32,
@@ -142,7 +124,7 @@ fn generate_x86_asm_impl<F: PrimeField32>(
     let imm_extended = (imm + imm_sign * 0xffff0000) as i32;
     assert_ne!(
         e_u32, DEFERRAL_AS,
-        "Storing into native address space should be handled by the fallback operation"
+        "Cannot store into the deferral address space"
     );
 
     let a = a.as_canonical_u32() as u8;

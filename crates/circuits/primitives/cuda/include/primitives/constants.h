@@ -15,13 +15,6 @@ inline constexpr size_t PC_BITS = 30;
 inline constexpr size_t DEFAULT_PC_STEP = 4;
 } // namespace program
 
-namespace native {
-inline constexpr size_t AS_IMMEDIATE = 0;
-inline constexpr size_t AS_NATIVE = 4;
-inline constexpr size_t EXT_DEG = 4;
-inline constexpr size_t BETA = 11;
-} // namespace native
-
 namespace poseidon2 {
 inline constexpr size_t CHUNK = 8;
 } // namespace poseidon2

@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
+use std::collections::VecDeque;
 
 use itertools::Itertools;
 use openvm_circuit::arch::{deferral::DeferralState, Streams};
@@ -14,7 +11,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct StdIn<F = crate::F> {
     pub buffer: VecDeque<Vec<F>>,
-    pub kv_store: HashMap<Vec<u8>, Vec<u8>>,
     pub deferrals: Vec<DeferralState>,
 }
 
@@ -43,9 +39,6 @@ impl<F: Field> StdIn<F> {
     pub fn write_field(&mut self, data: &[F]) {
         self.buffer.push_back(data.to_vec());
     }
-    pub fn add_key_value(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.kv_store.insert(key, value);
-    }
 }
 
 impl<F: Field> From<StdIn<F>> for Streams<F> {
@@ -55,7 +48,6 @@ impl<F: Field> From<StdIn<F>> for Streams<F> {
             data.push(input);
         }
         let mut ret = Streams::new(data);
-        ret.kv_store = Arc::new(std_in.kv_store);
         ret.deferrals = std_in.deferrals;
         ret
     }
