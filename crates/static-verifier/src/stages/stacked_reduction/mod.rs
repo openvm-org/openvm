@@ -73,7 +73,7 @@ pub(crate) fn stacked_reduction_layouts(
 }
 
 #[derive(Clone, Debug)]
-pub struct StackedReductionWire {
+pub struct StackedReductionIntermediatesWire {
     pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
     pub u: Vec<BabyBearExtWire>,
 }
@@ -147,7 +147,7 @@ pub(crate) fn constrain_stacked_reduction(
     n_stack: usize,
     batch_column_openings: &[Vec<Vec<BabyBearExtWire>>],
     r: &[BabyBearExtWire],
-) -> StackedReductionWire {
+) -> StackedReductionIntermediatesWire {
     let omega_order = 1usize << l_skip;
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
 
@@ -304,7 +304,7 @@ pub(crate) fn constrain_stacked_reduction(
     let final_residual = ext_chip.sub(ctx, final_claim, final_sum);
     ext_chip.assert_equal(ctx, final_residual, zero);
 
-    StackedReductionWire {
+    StackedReductionIntermediatesWire {
         stacking_openings: stacking_openings.clone(),
         u,
     }

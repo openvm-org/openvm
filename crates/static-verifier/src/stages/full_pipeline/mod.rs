@@ -14,7 +14,7 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
     stages::{
         batch_constraints::{
-            constrain_batch_from_proof_inputs, load_batch_constraint_proof_wire,
+            constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
             load_gkr_proof_wire, BatchConstraintProofWire, GkrProofWire,
         },
         proof_shape::compute_trace_id_to_air_id,
@@ -218,7 +218,7 @@ pub fn constrained_verify(
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
 
-    let batch = constrain_batch_from_proof_inputs(
+    let batch = constrain_batch_constraints_verification(
         ctx,
         range,
         &mut transcript,

@@ -22,7 +22,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct BatchConstraintWire {
+pub struct BatchConstraintIntermediatesWire {
     pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
     pub r: Vec<BabyBearExtWire>,
 }
@@ -551,7 +551,7 @@ fn observe_layer_claims_assigned(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn constrain_batch_from_proof_inputs(
+pub(crate) fn constrain_batch_constraints_verification(
     ctx: &mut Context<Fr>,
     range: &halo2_base::gates::range::RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
@@ -561,7 +561,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     n_per_trace: &[isize],
     trace_id_to_air_id: &[usize],
     public_values: Vec<Vec<BabyBearWire>>,
-) -> BatchConstraintWire {
+) -> BatchConstraintIntermediatesWire {
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
     let baby_bear = ext_chip.base();
@@ -1011,7 +1011,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
     ext_chip.assert_equal(ctx, consistency_residual, zero);
 
-    BatchConstraintWire {
+    BatchConstraintIntermediatesWire {
         column_openings: column_openings.clone(),
         r,
     }
