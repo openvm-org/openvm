@@ -1,24 +1,6 @@
 use halo2_base::{
     gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
-    halo2_proofs::{
-        dev::MockProver,
-        halo2curves::bn256::{Bn256, G1Affine},
-        plonk::{
-            create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey,
-        },
-        poly::{
-            commitment::ParamsProver,
-            kzg::{
-                commitment::{KZGCommitmentScheme, ParamsKZG},
-                multiopen::{ProverSHPLONK, VerifierSHPLONK},
-                strategy::SingleStrategy,
-            },
-        },
-        transcript::{
-            Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
-        },
-    },
-    utils::fs::gen_srs,
+    halo2_proofs::dev::MockProver,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
@@ -33,7 +15,6 @@ use openvm_stark_sdk::{
         StarkEngine,
     },
 };
-use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
 use super::*;
 use crate::{
@@ -42,6 +23,7 @@ use crate::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
     },
+    prover::{StaticVerifierCircuit, StaticVerifierInput},
     RootF,
 };
 
@@ -107,44 +89,6 @@ fn test_engine() -> BabyBearBn254Poseidon2CpuEngine {
     BabyBearBn254Poseidon2CpuEngine::new(test_system_params_small(2, 8, 3))
 }
 
-fn gen_halo2_proof(
-    srs: &ParamsKZG<Bn256>,
-    pk: &ProvingKey<G1Affine>,
-    circuit: impl Circuit<Fr>,
-    public_inputs: &[Fr],
-) -> Vec<u8> {
-    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-    let rng = ChaCha20Rng::seed_from_u64(42);
-    create_proof::<KZGCommitmentScheme<Bn256>, ProverSHPLONK<Bn256>, _, _, _, _>(
-        srs,
-        pk,
-        &[circuit],
-        &[&[public_inputs]],
-        rng,
-        &mut transcript,
-    )
-    .expect("proof generation should succeed for pipeline circuit");
-    transcript.finalize()
-}
-
-fn verify_halo2_proof(
-    srs: &ParamsKZG<Bn256>,
-    vk: &VerifyingKey<G1Affine>,
-    proof_bytes: &[u8],
-    public_inputs: &[Fr],
-) {
-    let strategy = SingleStrategy::new(srs);
-    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(proof_bytes);
-    verify_proof::<KZGCommitmentScheme<Bn256>, VerifierSHPLONK<Bn256>, _, _, _>(
-        srs.verifier_params(),
-        vk,
-        strategy,
-        &[&[public_inputs]],
-        &mut transcript,
-    )
-    .expect("halo2 proof verification should succeed for pipeline circuit");
-}
-
 fn pipeline_public_inputs(
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
@@ -155,23 +99,6 @@ fn pipeline_public_inputs(
     ]
 }
 
-fn build_end_to_end_constraints_from_proof(
-    builder: &mut BaseCircuitBuilder<Fr>,
-    config: &RootConfig,
-    vk: &MultiStarkVerifyingKey<RootConfig>,
-    proof: &Proof<RootConfig>,
-) {
-    let range = builder.range_chip();
-    let ctx = builder.main(0);
-    let statement_public_inputs = [
-        ctx.load_witness(digest_scalar_to_fr(vk.pre_hash[0])),
-        ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
-    ];
-    constrained_verify(ctx, &range, config, vk, proof, statement_public_inputs)
-        .expect("pipeline constrained verify should succeed");
-    builder.assigned_instances[0].extend(statement_public_inputs);
-}
-
 fn assert_fixture_matches_native<Fx>(engine: &BabyBearBn254Poseidon2CpuEngine, fixture: Fx)
 where
     Fx: TestFixture<RootConfig>,
@@ -180,7 +107,14 @@ where
     let public_inputs = pipeline_public_inputs(&vk, &proof);
 
     run_mock(true, &public_inputs, |builder| {
-        build_end_to_end_constraints_from_proof(builder, engine.config(), &vk, &proof);
+        StaticVerifierCircuit::populate(
+            builder,
+            &StaticVerifierInput {
+                config: engine.config(),
+                mvk: &vk,
+                proof: &proof,
+            },
+        );
     });
 }
 
@@ -294,50 +228,13 @@ fn pipeline_constraints_fail_when_public_inputs_are_tampered() {
     tampered_public_inputs[0] += Fr::from(1u64);
 
     run_mock(false, &tampered_public_inputs, |builder| {
-        build_end_to_end_constraints_from_proof(builder, engine.config(), &vk, &proof);
+        StaticVerifierCircuit::populate(
+            builder,
+            &StaticVerifierInput {
+                config: engine.config(),
+                mvk: &vk,
+                proof: &proof,
+            },
+        );
     });
-}
-
-#[test]
-fn pipeline_real_prover_keygen_prove_verify_roundtrip() {
-    let engine = test_engine();
-    let (vk, proof) = FibFixture::new(0, 1, 1 << 5).keygen_and_prove(&engine);
-    let public_inputs = pipeline_public_inputs(&vk, &proof);
-
-    let mut keygen_builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Keygen)
-        .use_k(END_TO_END_K as usize)
-        .use_lookup_bits(END_TO_END_LOOKUP_BITS)
-        .use_instance_columns(1);
-    build_end_to_end_constraints_from_proof(&mut keygen_builder, engine.config(), &vk, &proof);
-
-    let config_params = keygen_builder.calculate_params(Some(END_TO_END_MIN_ROWS));
-    assert!(
-        config_params
-            .num_advice_per_phase
-            .first()
-            .copied()
-            .unwrap_or_default()
-            >= STATIC_VERIFIER_NUM_ADVICE_COLS
-    );
-    assert!(
-        config_params
-            .num_lookup_advice_per_phase
-            .first()
-            .copied()
-            .unwrap_or_default()
-            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
-    );
-
-    let srs = gen_srs(END_TO_END_K);
-    let vk_halo2 =
-        keygen_vk(&srs, &keygen_builder).expect("keygen_vk should succeed for pipeline circuit");
-    let pk =
-        keygen_pk(&srs, vk_halo2, &keygen_builder).expect("keygen_pk should succeed for pipeline");
-    let break_points = keygen_builder.break_points();
-
-    let mut prover_builder = BaseCircuitBuilder::prover(config_params, break_points);
-    build_end_to_end_constraints_from_proof(&mut prover_builder, engine.config(), &vk, &proof);
-
-    let halo2_proof = gen_halo2_proof(&srs, &pk, prover_builder, &public_inputs);
-    verify_halo2_proof(&srs, pk.get_vk(), &halo2_proof, &public_inputs);
 }
