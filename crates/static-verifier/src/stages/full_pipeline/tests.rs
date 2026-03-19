@@ -191,13 +191,9 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     run_mock(false, &public_inputs, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let statement_public_inputs = [
-            ctx.load_witness(digest_scalar_to_fr(vk.pre_hash[0])),
-            ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
-        ];
+        let proof_wire = load_proof_wire(ctx, &range, &proof);
         clear_recorded_ext_base_consts();
-        constrained_verify(ctx, &range, &vk, &proof, statement_public_inputs)
-            .expect("pipeline constrained verify should succeed before ext-constant prank");
+        let statement_public_inputs = constrained_verify(ctx, &range, &vk, &proof, proof_wire);
         let records = take_recorded_ext_base_consts();
         for (family, constant) in base_families {
             prank_recorded_ext_constant(ctx, &records, family, constant);
