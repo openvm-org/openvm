@@ -19,7 +19,7 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 - `app_vk_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — public values revealed by the verified app
 
-`DEF_IDX` is the index of the corresponding `DeferralFn` in the `DeferralExtension.fns` list — for verify-stark, this is the index at which the `DeferredVerifyCircuit`'s function was registered.
+`DEF_IDX` must match the index of the corresponding `DeferralFn` in `DeferralExtension.fns`, as configured when building the VM extension.
 
 ### `verify_proof_output`
 
