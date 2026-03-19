@@ -80,46 +80,6 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | RV32IM | `Rv32Phantom::HintInput`      | Rv32HintInput |
 | RV32IM | `Rv32Phantom::PrintStr`       | Rv32PrintStr |
 | RV32IM | `Rv32Phantom::HintRandom`     | Rv32HintRandom |
-| RV32IM | `Rv32Phantom::HintLoadByKey` | Rv32HintLoadByKey |
-
-## Native Extension
-
-#### Instructions
-
-| VM Extension | `LocalOpcode` | ISA Instruction |
-| ------------- | ---------- | ------------- |
-| Native | `NativeLoadStoreOpcode::LOADW` | LOADW |
-| Native | `NativeLoadStoreOpcode::STOREW` | STOREW |
-| Native | `NativeLoadStore4Opcode::LOADW4` | LOADW4 |
-| Native | `NativeLoadStore4Opcode::STOREW4` | STOREW4 |
-| Native | `NativeJalOpcode::JAL` | JAL |
-| Native | `NativeRangeCheckOpcode::RANGE_CHECK` | RANGE_CHECK |
-| Native | `NativeBranchEqualOpcode::BEQ` | BEQ |
-| Native | `NativeBranchEqualOpcode::BNE` | BNE |
-| Native | `NativeLoadStoreOpcode::HINT_STOREW` | HINT_STOREW |
-| Native | `NativeLoadStore4Opcode::HINT_STOREW4` | HINT_STOREW4 |
-| Native | `CastfOpcode::CASTF` | CASTF |
-| Native | `FieldArithmeticOpcode::ADD` | ADDF |
-| Native | `FieldArithmeticOpcode::SUB` | SUBF |
-| Native | `FieldArithmeticOpcode::MUL` | MULF |
-| Native | `FieldArithmeticOpcode::DIV` | DIVF |
-| Native | `FieldExtensionOpcode::FE4ADD` | FE4ADD |
-| Native | `FieldExtensionOpcode::FE4SUB` | FE4SUB |
-| Native | `FieldExtensionOpcode::BBE4MUL` | BBE4MUL |
-| Native | `FieldExtensionOpcode::BBE4DIV` | BBE4DIV |
-| Native | `Poseidon2Opcode::COMP_POS2` | COMP_POS2 |
-| Native | `Poseidon2Opcode::PERM_POS2` | PERM_POS2 |
-| Native | `VerifyBatchOpcode::VERIFY_BATCH` | VERIFY_BATCH |
-| Native | `FriOpcode::FRI_REDUCED_OPENING` | FRI_REDUCED_OPENING |
-
-#### Phantom Sub-Instructions
-
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| Native | `NativePhantom::Print` | NativePrint |
-| Native | `NativePhantom::HintInput` | NativeHintInput |
-| Native | `NativePhantom::HintBits` | NativeHintBits |
-| Native | `NativePhantom::HintLoad` | NativeHintLoad |
 
 ## Keccak Extension
 
