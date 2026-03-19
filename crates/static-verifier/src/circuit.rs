@@ -18,7 +18,7 @@ use openvm_stark_sdk::{
 
 use crate::stages::{
     full_pipeline::{constrained_verify, load_proof_wire},
-    proof_shape::{compute_trace_id_to_air_id, trace_id_order_from_static_heights},
+    proof_shape::trace_id_order_from_static_heights,
 };
 
 /// Builds stacked PCS layouts for the static verifier from VK widths and fixed per-air log heights.
@@ -71,37 +71,19 @@ pub(crate) fn build_stacked_layouts_for_static_vk(
         .collect::<Vec<_>>()
 }
 
-/// Error building [`StaticVerifierCircuit`] from a template child proof.
+/// Error building [`StaticVerifierCircuit`] from fixed per-AIR log heights.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StaticCircuitParamsError {
-    TraceVdataLenMismatch {
-        expected: usize,
-        got: usize,
-    },
-    MissingTraceVData {
-        air_id: usize,
-    },
-    /// `compute_trace_id_to_air_id` disagrees with height-only ordering (should not happen for a
-    /// valid proof whose `trace_vdata` matches the extracted heights).
-    TraceOrderingMismatch,
+    LogHeightsLenMismatch { expected: usize, got: usize },
 }
 
 impl fmt::Display for StaticCircuitParamsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TraceVdataLenMismatch { expected, got } => {
+            Self::LogHeightsLenMismatch { expected, got } => {
                 write!(
                     f,
-                    "trace_vdata length {got} != VK per_air length {expected}"
-                )
-            }
-            Self::MissingTraceVData { air_id } => {
-                write!(f, "missing trace_vdata for air_id {air_id}")
-            }
-            Self::TraceOrderingMismatch => {
-                write!(
-                    f,
-                    "trace_id_to_air_id from proof does not match static height ordering"
+                    "log_heights_per_air length {got} != VK per_air length {expected}"
                 )
             }
         }
@@ -120,40 +102,31 @@ pub struct StaticVerifierCircuit {
 }
 
 impl StaticVerifierCircuit {
-    /// Build static parameters from a child VK and any valid root proof with the target shape.
+    /// Build static parameters from a child VK and the per-AIR trace log heights for this circuit.
     ///
-    /// Every AIR must have `trace_vdata` present. The stored permutation matches
-    /// [`compute_trace_id_to_air_id`] on the template proof.
+    /// `log_heights_per_air[i]` is the log₂ trace height for AIR `i` (same indexing as the child
+    /// VK's `per_air`). Trace IDs are ordered by descending height (tie-break: lower `air_id`
+    /// first).
     pub fn try_new(
         child_vk: MultiStarkVerifyingKey<RootConfig>,
-        template_proof: &Proof<RootConfig>,
+        log_heights_per_air: &[usize],
     ) -> Result<Self, StaticCircuitParamsError> {
         let n = child_vk.inner.per_air.len();
-        if template_proof.trace_vdata.len() != n {
-            return Err(StaticCircuitParamsError::TraceVdataLenMismatch {
+        if log_heights_per_air.len() != n {
+            return Err(StaticCircuitParamsError::LogHeightsLenMismatch {
                 expected: n,
-                got: template_proof.trace_vdata.len(),
+                got: log_heights_per_air.len(),
             });
         }
-        let mut log_heights_per_air = Vec::with_capacity(n);
-        for (air_id, tv) in template_proof.trace_vdata.iter().enumerate() {
-            let Some(vd) = tv.as_ref() else {
-                return Err(StaticCircuitParamsError::MissingTraceVData { air_id });
-            };
-            log_heights_per_air.push(vd.log_height);
-        }
-        let from_proof = compute_trace_id_to_air_id(&child_vk.inner, template_proof);
-        let from_heights =
+        let log_heights_per_air = log_heights_per_air.to_vec();
+        let trace_id_to_air_id =
             trace_id_order_from_static_heights(&child_vk.inner, &log_heights_per_air);
-        if from_proof != from_heights {
-            return Err(StaticCircuitParamsError::TraceOrderingMismatch);
-        }
         let stacked_layouts =
             build_stacked_layouts_for_static_vk(&child_vk.inner, &log_heights_per_air);
         Ok(Self {
             child_vk,
             log_heights_per_air,
-            trace_id_to_air_id: from_heights,
+            trace_id_to_air_id,
             stacked_layouts,
         })
     }
