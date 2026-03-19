@@ -20,7 +20,7 @@ use openvm_stark_sdk::{
 
 use super::*;
 use crate::{
-    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
     ChildEF, ChildF,
 };
@@ -92,7 +92,7 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_NUM_ADVICE_COLS
     );
     assert!(
         params
@@ -100,7 +100,7 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
     let prover = MockProver::run(BATCH_K, &builder, vec![vec![]])
@@ -175,7 +175,8 @@ fn ext_from_base_const_rejects_constant_family_pranks() {
         run_mock(false, move |builder| {
             let range = builder.range_chip();
             let ctx = builder.main(0);
-            let ext_chip = BabyBearExtChip::new(Arc::new(BabyBearChip::new(Arc::new(range.clone()))));
+            let ext_chip =
+                BabyBearExtChip::new(Arc::new(BabyBearChip::new(Arc::new(range.clone()))));
             let ext = ext_chip.from_base_const(ctx, ChildF::from_u64(constant));
             ext.0[0]
                 .value

@@ -1,8 +1,8 @@
 use halo2_base::gates::circuit::BaseCircuitParams;
 use serde::{Deserialize, Serialize};
 
-pub const STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0: usize = 1;
-pub const STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0: usize = 1;
+pub const STATIC_VERIFIER_NUM_ADVICE_COLS: usize = 1;
+pub const STATIC_VERIFIER_LOOKUP_ADVICE_COLS: usize = 1;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct StaticVerifierShape {
@@ -27,9 +27,9 @@ impl StaticVerifierShape {
     pub fn expected_phase0_params(&self) -> BaseCircuitParams {
         BaseCircuitParams {
             k: self.k,
-            num_advice_per_phase: vec![STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0],
+            num_advice_per_phase: vec![STATIC_VERIFIER_NUM_ADVICE_COLS],
             num_fixed: 1,
-            num_lookup_advice_per_phase: vec![STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0],
+            num_lookup_advice_per_phase: vec![STATIC_VERIFIER_LOOKUP_ADVICE_COLS],
             lookup_bits: Some(self.lookup_bits),
             num_instance_columns: self.instance_columns,
         }

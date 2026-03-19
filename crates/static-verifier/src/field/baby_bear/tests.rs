@@ -13,7 +13,7 @@ use openvm_stark_sdk::openvm_stark_backend::p3_field::{
 
 use super::*;
 use crate::{
-    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     ChildEF, ChildF, Fr,
 };
 
@@ -31,7 +31,7 @@ fn run_mock(build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
             .first()
             .copied()
             .unwrap_or_default(),
-        STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
+        STATIC_VERIFIER_NUM_ADVICE_COLS
     );
     assert_eq!(
         params
@@ -39,7 +39,7 @@ fn run_mock(build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
             .first()
             .copied()
             .unwrap_or_default(),
-        STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
+        STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
     MockProver::run(12, &builder, vec![vec![]])

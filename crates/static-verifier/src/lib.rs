@@ -10,8 +10,7 @@ pub mod transcript;
 mod utils;
 
 pub use config::{
-    StaticVerifierShape, STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0,
-    STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0,
+    StaticVerifierShape, STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS,
 };
 pub use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 pub use keygen::StaticVerifierProvingKey;

@@ -40,7 +40,7 @@ use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
 use super::*;
 use crate::{
-    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     field::baby_bear::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
@@ -83,7 +83,7 @@ fn run_mock(
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_NUM_ADVICE_COLS
     );
     assert!(
         params
@@ -91,7 +91,7 @@ fn run_mock(
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
     let prover = MockProver::run(END_TO_END_K, &builder, vec![public_inputs.to_vec()])
@@ -1802,7 +1802,7 @@ fn pipeline_real_prover_keygen_prove_verify_roundtrip() {
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_NUM_ADVICE_COLS
     );
     assert!(
         config_params
@@ -1810,7 +1810,7 @@ fn pipeline_real_prover_keygen_prove_verify_roundtrip() {
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
     let srs = gen_srs(END_TO_END_K);

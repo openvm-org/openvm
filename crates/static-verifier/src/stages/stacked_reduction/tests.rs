@@ -19,7 +19,7 @@ use openvm_stark_sdk::{
 
 use super::*;
 use crate::{
-    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0, STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0},
+    config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BABY_BEAR_MODULUS_U64},
     ChildEF, ChildF,
 };
@@ -110,7 +110,7 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_NUM_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_NUM_ADVICE_COLS
     );
     assert!(
         params
@@ -118,7 +118,7 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
             .first()
             .copied()
             .unwrap_or_default()
-            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS_PHASE0
+            >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
     let prover = MockProver::run(MOCK_K, &builder, vec![vec![]])
