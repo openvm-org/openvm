@@ -609,6 +609,11 @@ impl Sha256VmFiller {
                     control_cols.padding_occurred =
                         F::from_bool((row_idx as i32) >= first_padding_row);
                 }
+                control_cols.padding_spills = F::from_bool(
+                    row_idx as i32 == first_padding_row
+                        && row_idx == 3
+                        && message_left - row_idx * SHA256_READ_SIZE >= 8,
+                );
             });
 
         // Fill in the inner trace when the `buffer_or_carry` is filled in

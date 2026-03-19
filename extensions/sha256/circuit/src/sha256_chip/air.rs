@@ -173,6 +173,7 @@ impl Sha256VmAir {
         // first 4 rows of some block.
 
         builder.assert_bool(local.control.padding_occurred);
+        builder.assert_bool(local.control.padding_spills);
         // Last round row in the last block has padding_occurred = 1
         // This is the end of the suffix
         builder
@@ -270,6 +271,11 @@ impl Sha256VmAir {
             .row_idx_encoder
             .contains_flag::<AB>(&next.inner.flags.row_idx, &[3]);
 
+        let is_next_fp8_15 = self.padding_encoder.contains_flag_range::<AB>(
+            &next.control.pad_flags,
+            FirstPadding8 as usize..=FirstPadding15 as usize,
+        );
+
         // `pad_flags` is `NotConsidered` on all rows except the first 4 rows of a block
         builder.assert_eq(
             not(next.inner.flags.is_first_4_rows),
@@ -286,13 +292,34 @@ impl Sha256VmAir {
         // padding
         builder.when(next.inner.flags.is_first_4_rows).assert_eq(
             not(local.control.padding_occurred) * next.control.padding_occurred,
-            is_next_first_padding,
+            is_next_first_padding.clone(),
         );
 
         // `pad_flags` is `NotPadding` if current row is not padding
         builder
             .when(next.inner.flags.is_first_4_rows)
             .assert_eq(not(next.control.padding_occurred), is_next_not_padding);
+
+        // `padding_spills` marks the unique first-padding row where the SHA-256 length suffix
+        // spills into the next block.
+        builder.assert_zero(
+            next.control.padding_spills * (AB::Expr::ONE - is_next_first_padding.clone()),
+        );
+        builder
+            .assert_zero(next.control.padding_spills * (AB::Expr::ONE - is_next_4th_row.clone()));
+        builder.assert_zero(next.control.padding_spills * (AB::Expr::ONE - is_next_fp8_15));
+
+        // On the first padding row, the current block is terminal unless the spill bit is set.
+        builder.when(is_next_first_padding.clone()).assert_eq(
+            next.inner.flags.is_last_block + next.control.padding_spills,
+            AB::Expr::ONE,
+        );
+
+        // If a new block starts with padding already active, that block must be the unique spill
+        // block's successor and therefore terminal.
+        builder
+            .when(local.inner.flags.is_digest_row * next.control.padding_occurred)
+            .assert_one(next.inner.flags.is_last_block);
 
         // `pad_flags` is `*LastRow` iff this is row 3 of the last block of the message.
         builder.assert_eq(
