@@ -13,12 +13,16 @@ use openvm_stark_sdk::{
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
     stages::{
-        batch_constraints::{constrain_batch_from_proof_inputs, BatchConstraintError},
+        batch_constraints::{
+            constrain_batch_from_proof_inputs, load_batch_constraint_proof_wire,
+            load_gkr_proof_wire, BatchConstraintProofWire, GkrProofWire,
+        },
         proof_shape::compute_trace_id_to_air_id,
         stacked_reduction::{
-            constrain_stacked_reduction, stacked_reduction_layouts, StackedReductionConstraintError,
+            constrain_stacked_reduction, load_stacking_proof_wire, stacked_reduction_layouts,
+            StackingProofWire,
         },
-        whir::{constrain_whir_verification, WhirError},
+        whir::{constrain_whir_verification, load_whir_proof_wire, WhirProofWire},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr,
@@ -27,54 +31,82 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum PipelineError {
-    Batch(BatchConstraintError),
-    StackedReduction(StackedReductionConstraintError),
-    Whir(WhirError),
-}
-
-impl From<BatchConstraintError> for PipelineError {
-    fn from(value: BatchConstraintError) -> Self {
-        Self::Batch(value)
-    }
-}
-
-impl From<StackedReductionConstraintError> for PipelineError {
-    fn from(value: StackedReductionConstraintError) -> Self {
-        Self::StackedReduction(value)
-    }
-}
-
-impl From<WhirError> for PipelineError {
-    fn from(value: WhirError) -> Self {
-        Self::Whir(value)
-    }
-}
-
 #[derive(Clone, Debug)]
-struct PreambleWire {
+struct ProofWire {
     public_values: Vec<Vec<BabyBearWire>>,
-    /// Per-air cached commitment roots loaded as witness cells during transcript observation.
-    /// Indexed by air_id (sparse: `None` for airs without cached commitments).
     cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
+    gkr: GkrProofWire,
+    batch: BatchConstraintProofWire,
+    stacking: StackingProofWire,
+    whir: WhirProofWire,
 }
 
 pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
+fn load_proof_wire(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    proof: &Proof<RootConfig>,
+) -> ProofWire {
+    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
+    let ext_chip = BabyBearExtChip::new(base_chip.clone());
+
+    let public_values = proof
+        .public_values
+        .iter()
+        .map(|values| {
+            values
+                .iter()
+                .map(|&value| base_chip.load_witness(ctx, value))
+                .collect()
+        })
+        .collect();
+
+    let cached_commitment_roots = proof
+        .trace_vdata
+        .iter()
+        .map(|vdata| {
+            if let Some(vdata) = vdata {
+                vdata
+                    .cached_commitments
+                    .iter()
+                    .map(|commit| ctx.load_witness(digest_scalar_to_fr(commit[0])))
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
+
+    let gkr = load_gkr_proof_wire(ctx, &base_chip, &ext_chip, &proof.gkr_proof);
+    let batch = load_batch_constraint_proof_wire(ctx, &ext_chip, &proof.batch_constraint_proof);
+    let stacking = load_stacking_proof_wire(ctx, &ext_chip, &proof.stacking_proof);
+    let whir = load_whir_proof_wire(ctx, &base_chip, &ext_chip, &proof.whir_proof);
+
+    ProofWire {
+        public_values,
+        cached_commitment_roots,
+        gkr,
+        batch,
+        stacking,
+        whir,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn observe_preamble(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
+    public_values: &[Vec<BabyBearWire>],
+    cached_commitment_roots: &[Vec<AssignedValue<Fr>>],
     statement_public_inputs: [AssignedValue<Fr>; 2],
-) -> PreambleWire {
+) {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
-    let num_airs = mvk.inner.per_air.len();
-    let mut cached_commitment_roots = Vec::with_capacity(num_airs);
 
     transcript.observe_commit(
         ctx,
@@ -87,79 +119,54 @@ fn observe_preamble(
         &digest_wire_from_root(statement_public_inputs[1]),
     );
 
-    let public_values = proof
-        .public_values
-        .iter()
-        .enumerate()
-        .map(|(air_idx, values)| {
-            if !mvk.inner.per_air[air_idx].is_required {
-                let presence_flag =
-                    ctx.load_constant(Fr::from(proof.trace_vdata[air_idx].is_some() as u64));
+    for air_idx in 0..mvk.inner.per_air.len() {
+        if !mvk.inner.per_air[air_idx].is_required {
+            let presence_flag =
+                ctx.load_constant(Fr::from(proof.trace_vdata[air_idx].is_some() as u64));
+            transcript.observe(
+                ctx,
+                &base_chip,
+                &BabyBearWire {
+                    value: presence_flag,
+                    max_bits: 1,
+                },
+            );
+        }
+
+        if proof.trace_vdata[air_idx].is_some() {
+            if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
+                let preprocessed_root =
+                    ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
+                transcript.observe_commit(
+                    ctx,
+                    &base_chip,
+                    &digest_wire_from_root(preprocessed_root),
+                );
+            } else {
+                let log_height = ctx.load_constant(Fr::from(
+                    proof.trace_vdata[air_idx]
+                        .as_ref()
+                        .expect("present air must include trace vdata")
+                        .log_height as u64,
+                ));
                 transcript.observe(
                     ctx,
                     &base_chip,
                     &BabyBearWire {
-                        value: presence_flag,
-                        max_bits: 1,
+                        value: log_height,
+                        max_bits: BABY_BEAR_BITS,
                     },
                 );
             }
 
-            if proof.trace_vdata[air_idx].is_some() {
-                if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
-                    let preprocessed_root =
-                        ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
-                    transcript.observe_commit(
-                        ctx,
-                        &base_chip,
-                        &digest_wire_from_root(preprocessed_root),
-                    );
-                } else {
-                    let log_height = ctx.load_constant(Fr::from(
-                        proof.trace_vdata[air_idx]
-                            .as_ref()
-                            .expect("present air must include trace vdata")
-                            .log_height as u64,
-                    ));
-                    transcript.observe(
-                        ctx,
-                        &base_chip,
-                        &BabyBearWire {
-                            value: log_height,
-                            max_bits: BABY_BEAR_BITS,
-                        },
-                    );
-                }
-
-                let mut air_cached_roots = Vec::new();
-                for commit in &proof.trace_vdata[air_idx]
-                    .as_ref()
-                    .expect("present air must include trace vdata")
-                    .cached_commitments
-                {
-                    let root = ctx.load_witness(digest_scalar_to_fr(commit[0]));
-                    transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(root));
-                    air_cached_roots.push(root);
-                }
-                cached_commitment_roots.push(air_cached_roots);
-            } else {
-                cached_commitment_roots.push(Vec::new());
+            for root in &cached_commitment_roots[air_idx] {
+                transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(*root));
             }
+        }
 
-            values
-                .iter()
-                .map(|&value| {
-                    let value = base_chip.load_witness(ctx, value);
-                    transcript.observe(ctx, &base_chip, &value);
-                    value
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-
-    PreambleWire {
-        public_values,
-        cached_commitment_roots,
+        for value in &public_values[air_idx] {
+            transcript.observe(ctx, &base_chip, value);
+        }
     }
 }
 
@@ -169,39 +176,58 @@ pub fn constrained_verify(
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
     statement_public_inputs: [AssignedValue<Fr>; 2],
-) -> Result<(), PipelineError> {
+) {
     let l_skip = mvk.inner.params.l_skip;
-    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
-    let ext_chip = BabyBearExtChip::new(base_chip);
     let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
+    // Load ALL witness data upfront
+    let proof_wire = load_proof_wire(ctx, range, proof);
+
+    let n_per_trace: Vec<isize> = trace_id_to_air_id
+        .iter()
+        .map(|&air_id| {
+            proof.trace_vdata[air_id]
+                .as_ref()
+                .expect("present air must have trace vdata")
+                .log_height as isize
+                - l_skip as isize
+        })
+        .collect();
+
     let mut transcript = TranscriptGadget::new(ctx);
-    let preamble = observe_preamble(
+    observe_preamble(
         ctx,
         range,
         &mut transcript,
         mvk,
         proof,
+        &proof_wire.public_values,
+        &proof_wire.cached_commitment_roots,
         statement_public_inputs,
     );
+
+    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
+    let ext_chip = BabyBearExtChip::new(base_chip);
 
     let batch = constrain_batch_from_proof_inputs(
         ctx,
         range,
         &mut transcript,
         &mvk.inner,
-        proof,
+        &proof_wire.gkr,
+        &proof_wire.batch,
+        &n_per_trace,
         &trace_id_to_air_id,
-        preamble.public_values,
-    )?;
+        proof_wire.public_values,
+    );
 
     let layouts = stacked_reduction_layouts(&mvk.inner, proof);
-    let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, proof, &trace_id_to_air_id)?;
+    let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, proof, &trace_id_to_air_id);
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
         &ext_chip,
         &mut transcript,
-        &proof.stacking_proof,
+        &proof_wire.stacking,
         &layouts,
         &need_rot_per_commit,
         l_skip,
@@ -230,7 +256,7 @@ pub fn constrained_verify(
             if let Some(preprocessed) = &mvk.inner.per_air[air_id].preprocessed_data {
                 commits.push(ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
             }
-            commits.extend(preamble.cached_commitment_roots[air_id].iter().copied());
+            commits.extend(proof_wire.cached_commitment_roots[air_id].iter().copied());
         }
         commits
     };
@@ -240,22 +266,19 @@ pub fn constrained_verify(
         &ext_chip,
         &mut transcript,
         &mvk.inner,
-        &proof.whir_proof,
+        &proof_wire.whir,
         &stacked_reduction.stacking_openings,
         &initial_commitment_roots,
         &u_cube,
     );
-
-    Ok(())
 }
 
-/// Helper function, purely on out-of-circuit values. `builder` is not involved and there are no
-/// cells.
+/// Helper function, purely on out-of-circuit values.
 fn get_need_rot_per_commit(
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     proof: &Proof<RootConfig>,
     trace_id_to_air_id: &[usize],
-) -> Result<Vec<Vec<bool>>, BatchConstraintError> {
+) -> Vec<Vec<bool>> {
     let mut need_rot_per_commit = vec![trace_id_to_air_id
         .iter()
         .map(|&air_id| mvk0.per_air[air_id].params.need_rot)
@@ -267,12 +290,12 @@ fn get_need_rot_per_commit(
         }
         let cached_len = proof.trace_vdata[air_id]
             .as_ref()
-            .ok_or(BatchConstraintError::MissingTraceVData { air_id })?
+            .expect("present air must have trace vdata")
             .cached_commitments
             .len();
         for _ in 0..cached_len {
             need_rot_per_commit.push(vec![need_rot]);
         }
     }
-    Ok(need_rot_per_commit)
+    need_rot_per_commit
 }

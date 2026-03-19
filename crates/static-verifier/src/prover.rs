@@ -104,8 +104,7 @@ impl StaticVerifierCircuit {
             ctx.load_witness(digest_scalar_to_fr(input.mvk.pre_hash[0])),
             ctx.load_witness(digest_scalar_to_fr(input.proof.common_main_commit[0])),
         ];
-        constrained_verify(ctx, &range, input.mvk, input.proof, statement_public_inputs)
-            .expect("pipeline constrained verify should succeed");
+        constrained_verify(ctx, &range, input.mvk, input.proof, statement_public_inputs);
         let pis = statement_public_inputs
             .iter()
             .map(|c| *c.value())

@@ -11,11 +11,6 @@ use openvm_stark_sdk::{
         calculate_n_logup,
         keygen::types::MultiStarkVerifyingKey0,
         p3_field::{Field, PrimeCharacteristicRing, TwoAdicField},
-        proof::Proof,
-        verifier::{
-            batch_constraints::BatchConstraintError as NativeBatchConstraintError,
-            proof_shape::ProofShapeError,
-        },
     },
 };
 
@@ -23,49 +18,123 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire},
     stages::shared_math,
     transcript::TranscriptGadget,
-    Fr, RootEF, RootF,
+    Fr, RootF,
 };
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum BatchConstraintError {
-    SystemParamsMismatch,
-    TraceHeightsTooLarge,
-    MissingTraceVData {
-        air_id: usize,
-    },
-    MissingPreprocessedView {
-        air_id: usize,
-    },
-    UnsupportedSymbolicVariableEntry {
-        air_id: usize,
-        entry: &'static str,
-    },
-    SymbolicVariableOutOfBounds {
-        air_id: usize,
-        entry: &'static str,
-        index: usize,
-    },
-    MissingStackedChallenges,
-    ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<RootEF>),
-}
-
-impl From<ProofShapeError> for BatchConstraintError {
-    fn from(value: ProofShapeError) -> Self {
-        Self::ProofShape(value)
-    }
-}
-
-impl From<NativeBatchConstraintError<RootEF>> for BatchConstraintError {
-    fn from(value: NativeBatchConstraintError<RootEF>) -> Self {
-        Self::BatchConstraint(value)
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct BatchConstraintWire {
     pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
     pub r: Vec<BabyBearExtWire>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GkrProofWire {
+    pub logup_pow_witness: BabyBearWire,
+    pub q0_claim: BabyBearExtWire,
+    pub claims_per_layer: Vec<Vec<BabyBearExtWire>>,
+    pub sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct BatchConstraintProofWire {
+    pub numerator_term_per_air: Vec<BabyBearExtWire>,
+    pub denominator_term_per_air: Vec<BabyBearExtWire>,
+    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
+    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
+    pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
+}
+
+pub(crate) fn load_gkr_proof_wire(
+    ctx: &mut Context<Fr>,
+    base_chip: &BabyBearChip,
+    ext_chip: &BabyBearExtChip,
+    gkr_proof: &openvm_stark_sdk::openvm_stark_backend::proof::GkrProof<RootConfig>,
+) -> GkrProofWire {
+    let logup_pow_witness = base_chip.load_witness(ctx, gkr_proof.logup_pow_witness);
+    let q0_claim = ext_chip.load_witness(ctx, gkr_proof.q0_claim);
+    let claims_per_layer = gkr_proof
+        .claims_per_layer
+        .iter()
+        .map(|claims| {
+            vec![
+                ext_chip.load_witness(ctx, claims.p_xi_0),
+                ext_chip.load_witness(ctx, claims.q_xi_0),
+                ext_chip.load_witness(ctx, claims.p_xi_1),
+                ext_chip.load_witness(ctx, claims.q_xi_1),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let sumcheck_polys = gkr_proof
+        .sumcheck_polys
+        .iter()
+        .map(|poly| {
+            let mut assigned = Vec::with_capacity(poly.len() * 3);
+            for evals in poly {
+                for &value in evals {
+                    assigned.push(ext_chip.load_witness(ctx, value));
+                }
+            }
+            assigned
+        })
+        .collect::<Vec<_>>();
+    GkrProofWire {
+        logup_pow_witness,
+        q0_claim,
+        claims_per_layer,
+        sumcheck_polys,
+    }
+}
+
+pub(crate) fn load_batch_constraint_proof_wire(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip,
+    batch_proof: &openvm_stark_sdk::openvm_stark_backend::proof::BatchConstraintProof<RootConfig>,
+) -> BatchConstraintProofWire {
+    let numerator_term_per_air = batch_proof
+        .numerator_term_per_air
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let denominator_term_per_air = batch_proof
+        .denominator_term_per_air
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let univariate_round_coeffs = batch_proof
+        .univariate_round_coeffs
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let sumcheck_round_polys = batch_proof
+        .sumcheck_round_polys
+        .iter()
+        .map(|poly| {
+            poly.iter()
+                .map(|&value| ext_chip.load_witness(ctx, value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let column_openings = batch_proof
+        .column_openings
+        .iter()
+        .map(|per_air| {
+            per_air
+                .iter()
+                .map(|part| {
+                    part.iter()
+                        .map(|&value| ext_chip.load_witness(ctx, value))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    BatchConstraintProofWire {
+        numerator_term_per_air,
+        denominator_term_per_air,
+        univariate_round_coeffs,
+        sumcheck_round_polys,
+        column_openings,
+    }
 }
 
 fn eval_ext_poly_horner(
@@ -487,28 +556,20 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     range: &halo2_base::gates::range::RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
-    proof: &Proof<RootConfig>,
+    gkr_wire: &GkrProofWire,
+    batch_wire: &BatchConstraintProofWire,
+    n_per_trace: &[isize],
     trace_id_to_air_id: &[usize],
     public_values: Vec<Vec<BabyBearWire>>,
-) -> Result<BatchConstraintWire, BatchConstraintError> {
+) -> BatchConstraintWire {
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
     let baby_bear = ext_chip.base();
 
     let l_skip = mvk0.params.l_skip;
-    let n_per_trace = trace_id_to_air_id
-        .iter()
-        .map(|&air_id| {
-            Ok(proof.trace_vdata[air_id]
-                .as_ref()
-                .ok_or(BatchConstraintError::MissingTraceVData { air_id })?
-                .log_height as isize
-                - l_skip as isize)
-        })
-        .collect::<Result<Vec<_>, BatchConstraintError>>()?;
 
     let trace_id_to_air_id_host = trace_id_to_air_id.to_vec();
-    let total_interactions_host = zip(trace_id_to_air_id, &n_per_trace)
+    let total_interactions_host = zip(trace_id_to_air_id, n_per_trace)
         .map(|(&air_idx, &n)| {
             let n_lift = n.max(0) as usize;
             let num_interactions = mvk0.per_air[air_idx]
@@ -566,55 +627,28 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         .collect::<Vec<_>>();
 
     let logup_pow_bits = mvk0.params.logup.pow_bits;
-    let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
+    let logup_pow_witness = gkr_wire.logup_pow_witness;
     transcript.check_witness(ctx, baby_bear, logup_pow_bits, &logup_pow_witness);
 
     let alpha_logup = transcript.sample_ext(ctx, baby_bear);
     let beta_logup = transcript.sample_ext(ctx, baby_bear);
 
-    let gkr_q0_claim = (total_interactions_host != 0)
-        .then(|| ext_chip.load_witness(ctx, proof.gkr_proof.q0_claim));
-    let gkr_claims_per_layer = proof
-        .gkr_proof
-        .claims_per_layer
-        .iter()
-        .map(|claims| {
-            vec![
-                ext_chip.load_witness(ctx, claims.p_xi_0),
-                ext_chip.load_witness(ctx, claims.q_xi_0),
-                ext_chip.load_witness(ctx, claims.p_xi_1),
-                ext_chip.load_witness(ctx, claims.q_xi_1),
-            ]
-        })
-        .collect::<Vec<_>>();
-    let gkr_sumcheck_polys = proof
-        .gkr_proof
-        .sumcheck_polys
-        .iter()
-        .map(|poly| {
-            let mut assigned = Vec::with_capacity(poly.len() * 3);
-            for evals in poly {
-                for &value in evals {
-                    assigned.push(ext_chip.load_witness(ctx, value));
-                }
-            }
-            assigned
-        })
-        .collect::<Vec<_>>();
+    let gkr_q0_claim = (total_interactions_host != 0).then_some(gkr_wire.q0_claim);
+    let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
+    let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
 
     let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, _gkr_sample_stream) =
         if total_interactions_host == 0 {
-            let q0_claim = ext_chip.load_witness(ctx, proof.gkr_proof.q0_claim);
+            let q0_claim = gkr_wire.q0_claim;
             ext_chip.assert_equal(ctx, q0_claim, one);
             (zero, alpha_logup, Vec::new(), Vec::new())
         } else {
-            let q0_claim = gkr_q0_claim
-                .as_ref()
-                .expect("non-zero interaction branch must include q0 claim witness");
-            transcript.observe_ext(ctx, baby_bear, q0_claim);
+            let q0_claim =
+                gkr_q0_claim.expect("non-zero interaction branch must include q0 claim witness");
+            transcript.observe_ext(ctx, baby_bear, &q0_claim);
 
             let layer0 = &gkr_claims_per_layer[0];
             observe_layer_claims_assigned(ctx, transcript, baby_bear, layer0);
@@ -624,7 +658,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
             let q_cross = ext_chip.mul(ctx, layer0[1], layer0[3]);
             ext_chip.assert_equal(ctx, p_cross, zero);
-            ext_chip.assert_equal(ctx, q_cross, *q0_claim);
+            ext_chip.assert_equal(ctx, q_cross, q0_claim);
 
             let mu0 = transcript.sample_ext(ctx, baby_bear);
             let mut gkr_sample_stream = vec![mu0];
@@ -714,18 +748,8 @@ pub(crate) fn constrain_batch_from_proof_inputs(
 
     let lambda = transcript.sample_ext(ctx, baby_bear);
 
-    let numerator_term_per_air = proof
-        .batch_constraint_proof
-        .numerator_term_per_air
-        .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
-        .collect::<Vec<_>>();
-    let denominator_term_per_air = proof
-        .batch_constraint_proof
-        .denominator_term_per_air
-        .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
-        .collect::<Vec<_>>();
+    let numerator_term_per_air = &batch_wire.numerator_term_per_air;
+    let denominator_term_per_air = &batch_wire.denominator_term_per_air;
     for (num_term, den_term) in numerator_term_per_air
         .iter()
         .zip(denominator_term_per_air.iter())
@@ -758,13 +782,8 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         cur_mu_pow = ext_chip.mul(ctx, cur_mu_pow, mu);
     }
 
-    let univariate_round_coeffs = proof
-        .batch_constraint_proof
-        .univariate_round_coeffs
-        .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
-        .collect::<Vec<_>>();
-    for coeff in &univariate_round_coeffs {
+    let univariate_round_coeffs = &batch_wire.univariate_round_coeffs;
+    for coeff in univariate_round_coeffs {
         transcript.observe_ext(ctx, baby_bear, coeff);
     }
     let mut r = vec![transcript.sample_ext(ctx, baby_bear)];
@@ -778,18 +797,9 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         ext_chip.mul_base_const(ctx, sum_univ_domain_s_0, RootF::from_u64(stride as u64));
     ext_chip.assert_equal(ctx, sum_claim, sum_univ_domain_s_0);
 
-    let sumcheck_round_polys = proof
-        .batch_constraint_proof
-        .sumcheck_round_polys
-        .iter()
-        .map(|poly| {
-            poly.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    let mut consistency_lhs = eval_ext_poly_horner(ctx, &ext_chip, &univariate_round_coeffs, &r[0]);
-    for round_evals in &sumcheck_round_polys {
+    let sumcheck_round_polys = &batch_wire.sumcheck_round_polys;
+    let mut consistency_lhs = eval_ext_poly_horner(ctx, &ext_chip, univariate_round_coeffs, &r[0]);
+    for round_evals in sumcheck_round_polys {
         for eval in round_evals {
             transcript.observe_ext(ctx, baby_bear, eval);
         }
@@ -805,21 +815,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         r.push(next_r);
     }
 
-    let column_openings = proof
-        .batch_constraint_proof
-        .column_openings
-        .iter()
-        .map(|per_air| {
-            per_air
-                .iter()
-                .map(|part| {
-                    part.iter()
-                        .map(|&value| ext_chip.load_witness(ctx, value))
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+    let column_openings = &batch_wire.column_openings;
 
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         let need_rot = column_openings_need_rot[trace_idx][0];
@@ -1015,5 +1011,8 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
     ext_chip.assert_equal(ctx, consistency_residual, zero);
 
-    Ok(BatchConstraintWire { column_openings, r })
+    BatchConstraintWire {
+        column_openings: column_openings.clone(),
+        r,
+    }
 }

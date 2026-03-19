@@ -4,14 +4,8 @@ use halo2_base::Context;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey0,
-        p3_field::PrimeCharacteristicRing,
-        proof::{Proof, StackingProof},
+        keygen::types::MultiStarkVerifyingKey0, p3_field::PrimeCharacteristicRing, proof::Proof,
         prover::stacked_pcs::StackedLayout,
-        verifier::{
-            batch_constraints::BatchConstraintError as NativeBatchConstraintError,
-            proof_shape::ProofShapeError, stacked_reduction::StackedReductionError,
-        },
     },
 };
 
@@ -20,7 +14,7 @@ use crate::{
     stages::{
         batch_constraints::{
             eval_eq_mle_binary_assigned, eval_eq_prism_assigned, eval_eq_uni_at_one_assigned,
-            eval_rot_kernel_prism_assigned, BatchConstraintError,
+            eval_rot_kernel_prism_assigned,
         },
         shared_math::{
             column_openings_by_rot_assigned, horner_eval_ext_poly_assigned,
@@ -28,7 +22,7 @@ use crate::{
         },
     },
     transcript::TranscriptGadget,
-    Fr, RootEF, RootF,
+    Fr, RootF,
 };
 
 /// Stacked PCS layouts for the trace commitments present in `proof`, derived from the VK widths
@@ -78,50 +72,52 @@ pub(crate) fn stacked_reduction_layouts(
         .collect::<Vec<_>>()
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum StackedReductionConstraintError {
-    SystemParamsMismatch,
-    TraceHeightsTooLarge,
-    ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<RootEF>),
-    StackedReduction(StackedReductionError<RootEF>),
-    BatchSetup(BatchConstraintError),
-}
-
-impl From<ProofShapeError> for StackedReductionConstraintError {
-    fn from(value: ProofShapeError) -> Self {
-        Self::ProofShape(value)
-    }
-}
-
-impl From<NativeBatchConstraintError<RootEF>> for StackedReductionConstraintError {
-    fn from(value: NativeBatchConstraintError<RootEF>) -> Self {
-        Self::BatchConstraint(value)
-    }
-}
-
-impl From<StackedReductionError<RootEF>> for StackedReductionConstraintError {
-    fn from(value: StackedReductionError<RootEF>) -> Self {
-        Self::StackedReduction(value)
-    }
-}
-
-impl From<BatchConstraintError> for StackedReductionConstraintError {
-    fn from(value: BatchConstraintError) -> Self {
-        match value {
-            BatchConstraintError::SystemParamsMismatch => Self::SystemParamsMismatch,
-            BatchConstraintError::TraceHeightsTooLarge => Self::TraceHeightsTooLarge,
-            BatchConstraintError::ProofShape(err) => Self::ProofShape(err),
-            BatchConstraintError::BatchConstraint(err) => Self::BatchConstraint(err),
-            _ => Self::BatchSetup(value),
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct StackedReductionWire {
     pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
     pub u: Vec<BabyBearExtWire>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct StackingProofWire {
+    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
+    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
+    pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
+}
+
+pub(crate) fn load_stacking_proof_wire(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip,
+    stacking_proof: &openvm_stark_sdk::openvm_stark_backend::proof::StackingProof<RootConfig>,
+) -> StackingProofWire {
+    let univariate_round_coeffs = stacking_proof
+        .univariate_round_coeffs
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let sumcheck_round_polys = stacking_proof
+        .sumcheck_round_polys
+        .iter()
+        .map(|poly| {
+            poly.iter()
+                .map(|&value| ext_chip.load_witness(ctx, value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let stacking_openings = stacking_proof
+        .stacking_openings
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&value| ext_chip.load_witness(ctx, value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    StackingProofWire {
+        univariate_round_coeffs,
+        sumcheck_round_polys,
+        stacking_openings,
+    }
 }
 
 fn eval_in_uni_assigned(
@@ -144,7 +140,7 @@ pub(crate) fn constrain_stacked_reduction(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
-    proof: &StackingProof<RootConfig>,
+    stacking_wire: &StackingProofWire,
     layouts: &[StackedLayout],
     need_rot_per_commit: &[Vec<bool>],
     l_skip: usize,
@@ -207,11 +203,7 @@ pub(crate) fn constrain_stacked_reduction(
         s_0 = ext_chip.add(ctx, s_0, term);
     }
 
-    let univariate_round_coeffs = proof
-        .univariate_round_coeffs
-        .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
-        .collect::<Vec<_>>();
+    let univariate_round_coeffs = &stacking_wire.univariate_round_coeffs;
     let mut s_0_sum_eval = ext_chip.zero(ctx);
     for coeff in univariate_round_coeffs.iter().step_by(omega_order) {
         s_0_sum_eval = ext_chip.add(ctx, s_0_sum_eval, *coeff);
@@ -222,26 +214,18 @@ pub(crate) fn constrain_stacked_reduction(
     let zero = ext_chip.zero(ctx);
     ext_chip.assert_equal(ctx, s_0_residual, zero);
 
-    for coeff in &univariate_round_coeffs {
+    for coeff in univariate_round_coeffs {
         transcript.observe_ext(ctx, ext_chip.base(), coeff);
     }
 
     let mut u = Vec::with_capacity(n_stack + 1);
     u.push(transcript.sample_ext(ctx, ext_chip.base()));
 
-    let sumcheck_round_polys = proof
-        .sumcheck_round_polys
-        .iter()
-        .map(|poly| {
-            poly.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+    let sumcheck_round_polys = &stacking_wire.sumcheck_round_polys;
 
     let mut final_claim =
-        horner_eval_ext_poly_assigned(ctx, ext_chip, &univariate_round_coeffs, &u[0]);
-    for round_poly in &sumcheck_round_polys {
+        horner_eval_ext_poly_assigned(ctx, ext_chip, univariate_round_coeffs, &u[0]);
+    for round_poly in sumcheck_round_polys {
         let s_j_1 = round_poly[0];
         let s_j_2 = round_poly[1];
         transcript.observe_ext(ctx, ext_chip.base(), &s_j_1);
@@ -307,15 +291,7 @@ pub(crate) fn constrain_stacked_reduction(
         }
     }
 
-    let stacking_openings = proof
-        .stacking_openings
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+    let stacking_openings = &stacking_wire.stacking_openings;
     let mut final_sum = ext_chip.zero(ctx);
     for (coeff_row, opening_row) in derived_q_coeffs.iter().zip(stacking_openings.iter()) {
         for (coeff, opening) in coeff_row.iter().zip(opening_row.iter()) {
@@ -329,7 +305,7 @@ pub(crate) fn constrain_stacked_reduction(
     ext_chip.assert_equal(ctx, final_residual, zero);
 
     StackedReductionWire {
-        stacking_openings,
+        stacking_openings: stacking_openings.clone(),
         u,
     }
 }
