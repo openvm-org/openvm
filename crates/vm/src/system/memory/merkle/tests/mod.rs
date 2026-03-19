@@ -197,12 +197,12 @@ fn random_test(
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::F { size: 4 },
             },
         ],
         height + 3,
@@ -290,12 +290,12 @@ fn expand_test_no_accesses() {
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::F { size: 4 },
             },
         ],
         height + 3,
@@ -339,12 +339,12 @@ fn expand_test_negative() {
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::F { size: 4 },
             },
         ],
         height + 3,

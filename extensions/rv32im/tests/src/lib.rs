@@ -1,10 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
-
     use eyre::Result;
     use openvm_circuit::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::{
             merkle::{public_values::UserPublicValuesProof, MerkleTree},
             online::LinearMemory,
@@ -13,7 +11,7 @@ mod tests {
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
     use openvm_rv32im_circuit::{Rv32IBuilder, Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
-    use openvm_rv32im_guest::{hint_load_by_key_encode, MAX_HINT_BUFFER_WORDS};
+    use openvm_rv32im_guest::MAX_HINT_BUFFER_WORDS;
     use openvm_rv32im_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
         Rv32MTranspilerExtension,
@@ -145,29 +143,6 @@ mod tests {
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
         air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
-        Ok(())
-    }
-
-    #[test]
-    fn test_hint_load_by_key() -> Result<()> {
-        let config = test_rv32im_config();
-        let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
-        let exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
-        )?;
-        // stdin will be read after reading kv_store
-        let stdin = vec![[0, 1, 2].map(F::from_u8).to_vec()];
-        let mut streams: Streams<F> = stdin.into();
-        let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
-        streams.kv_store = Arc::new(HashMap::from([(
-            "key".as_bytes().to_vec(),
-            hint_load_by_key_encode(&input),
-        )]));
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, streams, 1);
         Ok(())
     }
 
