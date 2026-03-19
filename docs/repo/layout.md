@@ -10,13 +10,14 @@ The main components of the repository are:
   - [CLI](#cli)
   - [SDK](#sdk)
   - [Toolchain](#toolchain)
-  - [Continuations](#continuations)
   - [Circuit Framework](#circuit-framework)
   - [Circuit Foundations](#circuit-foundations)
+  - [Recursion](#recursion)
+  - [Continuations](#continuations)
   - [Examples](#examples)
   - [Extensions](#extensions)
     - [RV32IM](#rv32im)
-    - [Native Recursion](#native-recursion)
+    - [Deferral](#deferral)
     - [Keccak256](#keccak256)
     - [Big Integers](#big-integers)
     - [Algebra (Modular Arithmetic)](#algebra-modular-arithmetic)
@@ -59,9 +60,6 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 32-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
 - [`openvm-custom-insn`](../../crates/toolchain/custom_insn): Custom instruction macros for use in guest programs.
 
-### Continuations
-- [`openvm-continuations`](../../crates/continuations): The OpenVM aggregation programs, written using [Native Recursion](#native-recursion), to support continuations for all VMs in the framework.
-
 ### Circuit Framework
 
 - [`openvm-circuit`](../../crates/vm): The VM circuit framework. It includes the struct and trait definitions used throughout the architecture, as well as the system chips.
@@ -73,6 +71,12 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-circuit-primitives-derive`](../../crates/circuits/primitives/derive): Procedural macros for use in circuit to derive traits.
 - [`openvm-poseidon2-air`](../../crates/circuits/poseidon2-air): Standalone poseidon2 AIR implementation which is configurable based on the desired maximum constraint degree.
 - [`openvm-mod-circuit-builder`](../../crates/circuits/mod-builder): General builder for generating a chip for any modular arithmetic expression for a modulus known at compile time.
+
+### Recursion
+- [`openvm-recursion-circuit`](../../crates/recursion): Sub-circuit used to verify child STARK proofs.
+
+### Continuations
+- [`openvm-continuations`](../../crates/continuations): Continuation-specific AIRs and utilities for aggregating segment proofs for all VMs in the framework.
 
 ### Examples
 
@@ -96,11 +100,12 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-rv32-adapters`](../../extensions/rv32-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 32-bit architecture.
 - [`openvm-rv32im-tests`](../../extensions/rv32im/tests): Integration tests for the RV32IM extension.
 
-#### Native Recursion
+#### Deferral
 
-- [`openvm-native-circuit`](../../extensions/native/circuit/): Circuit extension for native instructions operating on field elements.
-- [`openvm-native-compiler`](../../extensions/native/compiler/): Implementation of compiler from a Rust embedded DSL to OpenVM assembly targeting the native kernel extension. The eDSL also has a static mode to support compilation to a Halo2 circuit.
-- [`openvm-native-recursion`](../../extensions/native/recursion): Library written in the native eDSL with functions to verify arbitrary STARK proofs. The library also supports compilation to a Halo2 circuit.
+- [`openvm-deferral-circuit`](../../extensions/deferral/circuit): Circuit extension for deferred computation. Provides chips for deferral calls and outputs.
+- [`openvm-deferral-transpiler`](../../extensions/deferral/transpiler): Transpiler extension for deferral instructions.
+- [`openvm-deferral-guest`](../../extensions/deferral/guest): Guest library with deferral instruction definitions and types.
+- [`openvm-deferral-tests`](../../extensions/deferral/tests): Integration tests for the deferral extension.
 
 #### Keccak256
 
