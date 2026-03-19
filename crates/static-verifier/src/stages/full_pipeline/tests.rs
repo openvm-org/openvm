@@ -42,7 +42,7 @@ use crate::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
     },
-    ChildF,
+    RootF,
 };
 
 const END_TO_END_K: u32 = 22;
@@ -231,7 +231,7 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
 
     let l_skip = vk.inner.params.l_skip;
-    let subgroup_root = ChildF::two_adic_generator(l_skip).as_canonical_u64();
+    let subgroup_root = RootF::two_adic_generator(l_skip).as_canonical_u64();
     let bus_constant = vk
         .inner
         .per_air
@@ -243,7 +243,7 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let normalization_family_constants = (1..=31usize)
         .map(|pow| {
             (0..pow)
-                .fold(ChildF::ONE, |acc, _| acc.halve())
+                .fold(RootF::ONE, |acc, _| acc.halve())
                 .as_canonical_u64()
         })
         .collect::<Vec<_>>();
@@ -263,8 +263,15 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
             ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
         ];
         clear_recorded_ext_base_consts();
-        constrained_verify(ctx, &range, engine.config(), &vk, &proof, statement_public_inputs)
-            .expect("pipeline constrained verify should succeed before ext-constant prank");
+        constrained_verify(
+            ctx,
+            &range,
+            engine.config(),
+            &vk,
+            &proof,
+            statement_public_inputs,
+        )
+        .expect("pipeline constrained verify should succeed before ext-constant prank");
         let records = take_recorded_ext_base_consts();
         for (family, constant) in base_families {
             prank_recorded_ext_constant(ctx, &records, family, constant);

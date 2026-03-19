@@ -32,7 +32,7 @@ use crate::{
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
-    ChildEF, ChildF, Fr,
+    Fr, RootEF, RootF,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -40,8 +40,8 @@ pub enum WhirError {
     SystemParamsMismatch,
     TraceHeightsTooLarge,
     ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<ChildEF>),
-    StackedReduction(StackedReductionError<ChildEF>),
+    BatchConstraint(NativeBatchConstraintError<RootEF>),
+    StackedReduction(StackedReductionError<RootEF>),
     Whir(VerifyWhirError),
     BatchSetup(BatchConstraintError),
 }
@@ -52,14 +52,14 @@ impl From<ProofShapeError> for WhirError {
     }
 }
 
-impl From<NativeBatchConstraintError<ChildEF>> for WhirError {
-    fn from(value: NativeBatchConstraintError<ChildEF>) -> Self {
+impl From<NativeBatchConstraintError<RootEF>> for WhirError {
+    fn from(value: NativeBatchConstraintError<RootEF>) -> Self {
         Self::BatchConstraint(value)
     }
 }
 
-impl From<StackedReductionError<ChildEF>> for WhirError {
-    fn from(value: StackedReductionError<ChildEF>) -> Self {
+impl From<StackedReductionError<RootEF>> for WhirError {
+    fn from(value: StackedReductionError<RootEF>) -> Self {
         Self::StackedReduction(value)
     }
 }
@@ -82,9 +82,9 @@ impl From<BatchConstraintError> for WhirError {
     }
 }
 
-pub(crate) fn ext_to_coeffs(value: ChildEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
+pub(crate) fn ext_to_coeffs(value: RootEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
     core::array::from_fn(|i| {
-        <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value)[i]
+        <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&value)[i]
             .as_canonical_u64()
     })
 }
@@ -93,14 +93,14 @@ fn digest_to_fr(digest: RootDigest) -> Fr {
     biguint_to_fe(&digest[0].as_canonical_biguint())
 }
 
-fn base_slice_to_u64_vec(values: &[ChildF]) -> Vec<u64> {
+fn base_slice_to_u64_vec(values: &[RootF]) -> Vec<u64> {
     values
         .iter()
         .map(|value| value.as_canonical_u64())
         .collect::<Vec<_>>()
 }
 
-fn ext_to_u64_vec(value: ChildEF) -> Vec<u64> {
+fn ext_to_u64_vec(value: RootEF) -> Vec<u64> {
     ext_to_coeffs(value).to_vec()
 }
 
@@ -111,10 +111,10 @@ fn eval_mobius_eq_mle_assigned(
     x: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
     assert_eq!(u.len(), x.len(), "mobius-eq arity mismatch");
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut acc = one;
     for (u_i, x_i) in u.iter().zip(x.iter()) {
-        let two_u = ext_chip.mul_base_const(ctx, *u_i, ChildF::TWO);
+        let two_u = ext_chip.mul_base_const(ctx, *u_i, RootF::TWO);
         let w0 = ext_chip.sub(ctx, one, two_u);
         let one_minus_x = ext_chip.sub(ctx, one, *x_i);
         let left = ext_chip.mul(ctx, w0, one_minus_x);
@@ -136,7 +136,7 @@ fn eval_mle_evals_at_point_assigned(
         1usize << x.len(),
         "MLE table length must be 2^arity",
     );
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut values = evals.to_vec();
     let mut len = values.len();
     for xj in x.iter().rev() {
@@ -173,7 +173,7 @@ fn query_root_from_bits_assigned(
 ) -> BabyBearWire {
     let gate = ext_chip.range().gate();
     let one = ctx.load_constant(Fr::from(1u64));
-    let omega = ChildF::two_adic_generator(log_rs_domain_size);
+    let omega = RootF::two_adic_generator(log_rs_domain_size);
     let mut root = ext_chip.base().one(ctx);
     for (bit_idx, &bit) in query_bits.iter().enumerate() {
         let omega_pow = omega.exp_u64(1u64 << bit_idx).as_canonical_u64();
@@ -208,11 +208,11 @@ fn binary_k_fold_assigned(
     }
 
     let k = alphas.len();
-    let omega_k = ChildF::two_adic_generator(k);
+    let omega_k = RootF::two_adic_generator(k);
     let omega_k_inv = omega_k.inverse();
     let tw = omega_k.powers().take(1usize << (k - 1)).collect();
     let inv_tw = omega_k_inv.powers().take(1usize << (k - 1)).collect();
-    let half = ChildF::ONE.halve();
+    let half = RootF::ONE.halve();
 
     let mut x_pow = x;
     let x_inv = invert_base_assigned(ctx, ext_chip, x);
@@ -298,7 +298,7 @@ fn constrain_merkle_path(
         .iter()
         .map(|leaf| {
             leaf.iter()
-                .map(|&value| ext_chip.base().load_witness(ctx, ChildF::from_u64(value)))
+                .map(|&value| ext_chip.base().load_witness(ctx, RootF::from_u64(value)))
                 .collect::<Vec<BabyBearWire>>()
         })
         .collect::<Vec<_>>();
@@ -358,7 +358,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
         .map(|&witness| {
             ext_chip
                 .base()
-                .load_witness(ctx, ChildF::from_u64(witness.as_canonical_u64()))
+                .load_witness(ctx, RootF::from_u64(witness.as_canonical_u64()))
         })
         .collect::<Vec<_>>();
     let query_phase_pow_witnesses = whir_proof
@@ -367,7 +367,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
         .map(|&witness| {
             ext_chip
                 .base()
-                .load_witness(ctx, ChildF::from_u64(witness.as_canonical_u64()))
+                .load_witness(ctx, RootF::from_u64(witness.as_canonical_u64()))
         })
         .collect::<Vec<_>>();
     let whir_sumcheck_polys = whir_proof
@@ -401,7 +401,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
         .collect::<Vec<_>>();
 
     let total_width = stacking_openings.iter().map(Vec::len).sum::<usize>();
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut mu_pows = Vec::with_capacity(total_width);
     let mut mu_pow = one;
     for _ in 0..total_width {
