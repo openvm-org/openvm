@@ -69,7 +69,6 @@ pub struct StaticVerifierProof {
 /// Bundles the three inputs that always travel together when interacting with
 /// the static verifier circuit.
 pub struct StaticVerifierInput<'a> {
-    pub config: &'a RootConfig,
     pub mvk: &'a MultiStarkVerifyingKey<RootConfig>,
     pub proof: &'a Proof<RootConfig>,
 }
@@ -105,15 +104,8 @@ impl StaticVerifierCircuit {
             ctx.load_witness(digest_scalar_to_fr(input.mvk.pre_hash[0])),
             ctx.load_witness(digest_scalar_to_fr(input.proof.common_main_commit[0])),
         ];
-        constrained_verify(
-            ctx,
-            &range,
-            input.config,
-            input.mvk,
-            input.proof,
-            statement_public_inputs,
-        )
-        .expect("pipeline constrained verify should succeed");
+        constrained_verify(ctx, &range, input.mvk, input.proof, statement_public_inputs)
+            .expect("pipeline constrained verify should succeed");
         let pis = statement_public_inputs
             .iter()
             .map(|c| *c.value())
