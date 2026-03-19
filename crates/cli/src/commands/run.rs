@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
-use openvm_sdk::{config::SdkVmConfig, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F};
+use openvm_sdk::{
+    config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
+};
+use openvm_sdk_config::SdkVmConfig;
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
@@ -276,7 +279,7 @@ impl RunCmd {
         let inputs = read_to_stdin(&self.run_args.input)?;
 
         // Create SDK
-        let sdk = Sdk::new(app_config)?;
+        let sdk = Sdk::new(app_config, AggregationSystemParams::default())?;
 
         // For metered modes, load existing app pk from disk or generate it
         if matches!(
