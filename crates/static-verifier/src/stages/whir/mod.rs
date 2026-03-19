@@ -14,11 +14,6 @@ use openvm_stark_sdk::{
             TwoAdicField,
         },
         proof::WhirProof,
-        verifier::{
-            batch_constraints::BatchConstraintError as NativeBatchConstraintError,
-            proof_shape::ProofShapeError, stacked_reduction::StackedReductionError,
-            whir::VerifyWhirError,
-        },
     },
 };
 
@@ -28,57 +23,145 @@ use crate::{
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     stages::{
-        batch_constraints::{eval_eq_mle_assigned, BatchConstraintError},
+        batch_constraints::eval_eq_mle_assigned,
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr, RootEF, RootF,
 };
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum WhirError {
-    SystemParamsMismatch,
-    TraceHeightsTooLarge,
-    ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<RootEF>),
-    StackedReduction(StackedReductionError<RootEF>),
-    Whir(VerifyWhirError),
-    BatchSetup(BatchConstraintError),
+#[derive(Clone, Debug)]
+pub struct MerklePathWire {
+    pub leaf_values: Vec<Vec<BabyBearWire>>,
+    pub siblings: Vec<AssignedValue<Fr>>,
 }
 
-impl From<ProofShapeError> for WhirError {
-    fn from(value: ProofShapeError) -> Self {
-        Self::ProofShape(value)
-    }
+#[derive(Clone, Debug)]
+pub struct WhirProofWire {
+    pub mu_pow_witness: BabyBearWire,
+    pub folding_pow_witnesses: Vec<BabyBearWire>,
+    pub query_phase_pow_witnesses: Vec<BabyBearWire>,
+    pub whir_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
+    pub ood_values: Vec<BabyBearExtWire>,
+    pub final_poly: Vec<BabyBearExtWire>,
+    pub codeword_commitment_roots: Vec<AssignedValue<Fr>>,
+    pub initial_round_merkle_paths: Vec<Vec<MerklePathWire>>,
+    pub codeword_merkle_paths: Vec<Vec<MerklePathWire>>,
 }
 
-impl From<NativeBatchConstraintError<RootEF>> for WhirError {
-    fn from(value: NativeBatchConstraintError<RootEF>) -> Self {
-        Self::BatchConstraint(value)
-    }
-}
+pub(crate) fn load_whir_proof_wire(
+    ctx: &mut Context<Fr>,
+    base_chip: &crate::field::baby_bear::BabyBearChip,
+    ext_chip: &BabyBearExtChip,
+    whir_proof: &WhirProof<RootConfig>,
+) -> WhirProofWire {
+    let mu_pow_witness = base_chip.load_witness(ctx, whir_proof.mu_pow_witness);
+    let folding_pow_witnesses = whir_proof
+        .folding_pow_witnesses
+        .iter()
+        .map(|&witness| base_chip.load_witness(ctx, RootF::from_u64(witness.as_canonical_u64())))
+        .collect::<Vec<_>>();
+    let query_phase_pow_witnesses = whir_proof
+        .query_phase_pow_witnesses
+        .iter()
+        .map(|&witness| base_chip.load_witness(ctx, RootF::from_u64(witness.as_canonical_u64())))
+        .collect::<Vec<_>>();
+    let whir_sumcheck_polys = whir_proof
+        .whir_sumcheck_polys
+        .iter()
+        .map(|poly| {
+            poly.iter()
+                .map(|&value| ext_chip.load_witness(ctx, value))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let ood_values = whir_proof
+        .ood_values
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let final_poly = whir_proof
+        .final_poly
+        .iter()
+        .map(|&value| ext_chip.load_witness(ctx, value))
+        .collect::<Vec<_>>();
+    let codeword_commitment_roots = whir_proof
+        .codeword_commits
+        .iter()
+        .map(|&digest| ctx.load_witness(digest_to_fr(digest)))
+        .collect::<Vec<_>>();
 
-impl From<StackedReductionError<RootEF>> for WhirError {
-    fn from(value: StackedReductionError<RootEF>) -> Self {
-        Self::StackedReduction(value)
-    }
-}
+    let initial_round_merkle_paths = whir_proof
+        .initial_round_opened_rows
+        .iter()
+        .zip(whir_proof.initial_round_merkle_proofs.iter())
+        .map(|(rows_per_query, proofs_per_query)| {
+            rows_per_query
+                .iter()
+                .zip(proofs_per_query.iter())
+                .map(|(opened_rows, merkle_proof)| {
+                    let leaf_values = opened_rows
+                        .iter()
+                        .map(|row| {
+                            row.iter()
+                                .map(|&value| base_chip.load_witness(ctx, value))
+                                .collect::<Vec<BabyBearWire>>()
+                        })
+                        .collect::<Vec<_>>();
+                    let siblings = merkle_proof
+                        .iter()
+                        .map(|&digest| ctx.load_witness(digest_to_fr(digest)))
+                        .collect::<Vec<_>>();
+                    MerklePathWire {
+                        leaf_values,
+                        siblings,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
-impl From<VerifyWhirError> for WhirError {
-    fn from(value: VerifyWhirError) -> Self {
-        Self::Whir(value)
-    }
-}
+    let codeword_merkle_paths = whir_proof
+        .codeword_opened_values
+        .iter()
+        .zip(whir_proof.codeword_merkle_proofs.iter())
+        .map(|(values_per_query, proofs_per_query)| {
+            values_per_query
+                .iter()
+                .zip(proofs_per_query.iter())
+                .map(|(opened_values, merkle_proof)| {
+                    let leaf_values = opened_values
+                        .iter()
+                        .map(|value| {
+                            ext_to_coeffs(*value)
+                                .iter()
+                                .map(|&coeff| base_chip.load_witness(ctx, RootF::from_u64(coeff)))
+                                .collect::<Vec<BabyBearWire>>()
+                        })
+                        .collect::<Vec<_>>();
+                    let siblings = merkle_proof
+                        .iter()
+                        .map(|&digest| ctx.load_witness(digest_to_fr(digest)))
+                        .collect::<Vec<_>>();
+                    MerklePathWire {
+                        leaf_values,
+                        siblings,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
-impl From<BatchConstraintError> for WhirError {
-    fn from(value: BatchConstraintError) -> Self {
-        match value {
-            BatchConstraintError::SystemParamsMismatch => Self::SystemParamsMismatch,
-            BatchConstraintError::TraceHeightsTooLarge => Self::TraceHeightsTooLarge,
-            BatchConstraintError::ProofShape(err) => Self::ProofShape(err),
-            BatchConstraintError::BatchConstraint(err) => Self::BatchConstraint(err),
-            _ => Self::BatchSetup(value),
-        }
+    WhirProofWire {
+        mu_pow_witness,
+        folding_pow_witnesses,
+        query_phase_pow_witnesses,
+        whir_sumcheck_polys,
+        ood_values,
+        final_poly,
+        codeword_commitment_roots,
+        initial_round_merkle_paths,
+        codeword_merkle_paths,
     }
 }
 
@@ -91,17 +174,6 @@ pub(crate) fn ext_to_coeffs(value: RootEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
 
 fn digest_to_fr(digest: RootDigest) -> Fr {
     biguint_to_fe(&digest[0].as_canonical_biguint())
-}
-
-fn base_slice_to_u64_vec(values: &[RootF]) -> Vec<u64> {
-    values
-        .iter()
-        .map(|value| value.as_canonical_u64())
-        .collect::<Vec<_>>()
-}
-
-fn ext_to_u64_vec(value: RootEF) -> Vec<u64> {
-    ext_to_coeffs(value).to_vec()
 }
 
 fn eval_mobius_eq_mle_assigned(
@@ -268,20 +340,15 @@ fn tree_compress_assigned_digests(
         .expect("tree_compress must output one digest for non-empty inputs")
 }
 
-struct MerkleWire {
-    leaf_values: Vec<Vec<BabyBearWire>>,
-}
-
 fn constrain_merkle_path(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
     query_bits: &[AssignedValue<Fr>],
-    leaf_inputs: &[Vec<u64>],
-    siblings: &[Fr],
+    merkle_path: &MerklePathWire,
     root_digest: AssignedValue<Fr>,
-) -> MerkleWire {
+) {
     assert!(
-        leaf_inputs.len().is_power_of_two(),
+        merkle_path.leaf_values.len().is_power_of_two(),
         "leaf input count must be power of two"
     );
 
@@ -289,20 +356,13 @@ fn constrain_merkle_path(
     let one = ctx.load_constant(Fr::from(1u64));
 
     assert_eq!(
-        siblings.len(),
+        merkle_path.siblings.len(),
         query_bits.len(),
         "merkle path depth must match query bits",
     );
 
-    let leaf_values = leaf_inputs
-        .iter()
-        .map(|leaf| {
-            leaf.iter()
-                .map(|&value| ext_chip.base().load_witness(ctx, RootF::from_u64(value)))
-                .collect::<Vec<BabyBearWire>>()
-        })
-        .collect::<Vec<_>>();
-    let leaf_hashes = leaf_values
+    let leaf_hashes = merkle_path
+        .leaf_values
         .iter()
         .map(|leaf| hash_babybear_slice_to_digest(ctx, ext_chip.range(), leaf))
         .collect::<Vec<_>>();
@@ -310,8 +370,7 @@ fn constrain_merkle_path(
     let mut cur = tree_compress_assigned_digests(ctx, ext_chip, leaf_hashes);
     let query_bits = query_bits.to_vec();
 
-    for (bit, sibling_digest) in query_bits.iter().zip(siblings.iter()) {
-        let sibling = ctx.load_witness(*sibling_digest);
+    for (bit, &sibling) in query_bits.iter().zip(merkle_path.siblings.iter()) {
         let left_right = compress_bn254_digests(ctx, ext_chip.range(), cur, sibling);
         let right_left = compress_bn254_digests(ctx, ext_chip.range(), sibling, cur);
         let one_minus_bit = gate.sub(ctx, one, *bit);
@@ -321,7 +380,6 @@ fn constrain_merkle_path(
     }
 
     ctx.constrain_equal(&cur, &root_digest);
-    MerkleWire { leaf_values }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -330,7 +388,7 @@ pub(crate) fn constrain_whir_verification(
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
-    whir_proof: &WhirProof<RootConfig>,
+    whir_wire: &WhirProofWire,
     stacking_openings: &[Vec<BabyBearExtWire>],
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
@@ -341,52 +399,16 @@ pub(crate) fn constrain_whir_verification(
     let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
 
-    let mu_pow_witness = ext_chip.base().load_witness(ctx, whir_proof.mu_pow_witness);
+    let mu_pow_witness = whir_wire.mu_pow_witness;
     transcript.check_witness(ctx, base_chip, params.whir.mu_pow_bits, &mu_pow_witness);
     let mu_challenge = transcript.sample_ext(ctx, ext_chip.base());
 
-    let folding_pow_witnesses = whir_proof
-        .folding_pow_witnesses
-        .iter()
-        .map(|&witness| {
-            ext_chip
-                .base()
-                .load_witness(ctx, RootF::from_u64(witness.as_canonical_u64()))
-        })
-        .collect::<Vec<_>>();
-    let query_phase_pow_witnesses = whir_proof
-        .query_phase_pow_witnesses
-        .iter()
-        .map(|&witness| {
-            ext_chip
-                .base()
-                .load_witness(ctx, RootF::from_u64(witness.as_canonical_u64()))
-        })
-        .collect::<Vec<_>>();
-    let whir_sumcheck_polys = whir_proof
-        .whir_sumcheck_polys
-        .iter()
-        .map(|poly| {
-            poly.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    let ood_values = whir_proof
-        .ood_values
-        .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
-        .collect::<Vec<_>>();
-    let final_poly = whir_proof
-        .final_poly
-        .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
-        .collect::<Vec<_>>();
-    let codeword_commitment_roots = whir_proof
-        .codeword_commits
-        .iter()
-        .map(|&digest| ctx.load_witness(digest_to_fr(digest)))
-        .collect::<Vec<_>>();
+    let folding_pow_witnesses = &whir_wire.folding_pow_witnesses;
+    let query_phase_pow_witnesses = &whir_wire.query_phase_pow_witnesses;
+    let whir_sumcheck_polys = &whir_wire.whir_sumcheck_polys;
+    let ood_values = &whir_wire.ood_values;
+    let final_poly = &whir_wire.final_poly;
+    let codeword_commitment_roots = &whir_wire.codeword_commitment_roots;
     let codeword_commitment_digests = codeword_commitment_roots
         .iter()
         .copied()
@@ -463,7 +485,7 @@ pub(crate) fn constrain_whir_verification(
         folding_counts_per_round.push(alphas_round.len());
 
         let y0 = if is_final_round {
-            for coeff in &final_poly {
+            for coeff in final_poly {
                 transcript.observe_ext(ctx, ext_chip.base(), coeff);
             }
             None
@@ -513,27 +535,17 @@ pub(crate) fn constrain_whir_verification(
                 let mut codeword_vals = vec![ext_chip.zero(ctx); 1usize << k_whir];
                 let mut mu_power_idx = 0usize;
                 for (commit_idx, commit_openings) in stacking_openings.iter().enumerate() {
-                    let opened_rows = &whir_proof.initial_round_opened_rows[commit_idx][query_idx];
-                    let siblings = whir_proof.initial_round_merkle_proofs[commit_idx][query_idx]
-                        .iter()
-                        .copied()
-                        .map(digest_to_fr)
-                        .collect::<Vec<_>>();
-                    let leaf_inputs = opened_rows
-                        .iter()
-                        .map(|row| base_slice_to_u64_vec(row))
-                        .collect::<Vec<_>>();
-                    let payload = constrain_merkle_path(
+                    let merkle_path = &whir_wire.initial_round_merkle_paths[commit_idx][query_idx];
+                    constrain_merkle_path(
                         ctx,
                         ext_chip,
                         &query_bits_vec,
-                        &leaf_inputs,
-                        &siblings,
+                        merkle_path,
                         initial_commitment_roots[commit_idx],
                     );
                     for col_idx in 0..commit_openings.len() {
                         let mu_pow = mu_pows[mu_power_idx];
-                        for (row_idx, row) in payload.leaf_values.iter().enumerate() {
+                        for (row_idx, row) in merkle_path.leaf_values.iter().enumerate() {
                             let opened_base = row[col_idx];
                             let opened_ext = ext_chip.from_base_var(ctx, opened_base);
                             let weighted = ext_chip.mul(ctx, opened_ext, mu_pow);
@@ -545,25 +557,15 @@ pub(crate) fn constrain_whir_verification(
                 }
                 binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, zi_root_base)
             } else {
-                let opened_values = &whir_proof.codeword_opened_values[round_idx - 1][query_idx];
-                let siblings = whir_proof.codeword_merkle_proofs[round_idx - 1][query_idx]
-                    .iter()
-                    .copied()
-                    .map(digest_to_fr)
-                    .collect::<Vec<_>>();
-                let leaf_inputs = opened_values
-                    .iter()
-                    .map(|value| ext_to_u64_vec(*value))
-                    .collect::<Vec<_>>();
-                let payload = constrain_merkle_path(
+                let merkle_path = &whir_wire.codeword_merkle_paths[round_idx - 1][query_idx];
+                constrain_merkle_path(
                     ctx,
                     ext_chip,
                     &query_bits_vec,
-                    &leaf_inputs,
-                    &siblings,
+                    merkle_path,
                     codeword_commitment_roots[round_idx - 1],
                 );
-                let opened_values = payload
+                let opened_values = merkle_path
                     .leaf_values
                     .iter()
                     .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx])))
@@ -595,7 +597,7 @@ pub(crate) fn constrain_whir_verification(
     let rounds = query_counts_per_round.len();
     let t = k_whir * rounds;
     let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
-    let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
+    let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, final_poly, &u_cube[t..]);
     let mut final_acc = ext_chip.mul(ctx, prefix, suffix);
 
     let mut alpha_offset = k_whir;
@@ -623,7 +625,7 @@ pub(crate) fn constrain_whir_verification(
                 alpha_slc,
                 &z0_pows[..z0_pows.len().saturating_sub(1)],
             );
-            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &z0_max);
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, final_poly, &z0_max);
             let term = ext_chip.mul(ctx, *gamma, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);
@@ -648,7 +650,7 @@ pub(crate) fn constrain_whir_verification(
                 alpha_slc,
                 &zi_pows[..zi_pows.len().saturating_sub(1)],
             );
-            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &zi_max);
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, final_poly, &zi_max);
             let term = ext_chip.mul(ctx, gamma_pow, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);
