@@ -6,7 +6,7 @@ use std::{
 use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
-use openvm_sdk::{fs::write_to_file_json, Sdk};
+use openvm_sdk::{config::AggregationSystemParams, fs::write_to_file_json, Sdk};
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
@@ -78,11 +78,12 @@ impl CommitCmd {
             mode: ExecutionMode::Pure,
         };
         let (exe, target_name_stem) = load_or_build_exe(&run_args, &self.cargo_args)?;
-        let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);
+        let sdk =
+            Sdk::new(app_pk.app_config(), AggregationSystemParams::default())?.with_app_pk(app_pk);
 
-        let app_commit = sdk.app_prover(exe)?.app_commit();
-        println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());
-        println!("vm commit: {:?}", app_commit.app_vm_commit.to_bn254());
+        // TODO: restore vm_commit and .to_bn254() formatting when available
+        let app_exe_commit = sdk.app_prover(exe)?.app_exe_commit();
+        println!("exe commit: {:?}", app_exe_commit);
 
         let (manifest_path, _) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
@@ -94,7 +95,7 @@ impl CommitCmd {
         let commit_path = get_app_commit_path(&target_output_dir, target_name);
 
         println!("Writing app commit to {}", commit_path.display());
-        write_to_file_json(&commit_path, app_commit)?;
+        write_to_file_json(&commit_path, app_exe_commit)?;
         if let Some(output_dir) = &self.output_dir {
             create_dir_all(output_dir)?;
             let commit_name = commit_path.file_name().unwrap();

@@ -5,9 +5,10 @@ use std::{
 
 use eyre::Result;
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
-use openvm_sdk::config::{AppConfig, SdkVmConfig};
+use openvm_sdk::config::AppConfig;
 #[cfg(feature = "evm-prove")]
 use openvm_sdk::keygen::{AggProvingKey, Halo2ProvingKey};
+use openvm_sdk_config::SdkVmConfig;
 use serde::de::DeserializeOwned;
 
 use crate::{
