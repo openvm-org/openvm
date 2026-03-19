@@ -162,13 +162,14 @@ fn build_end_to_end_constraints_from_proof(
     proof: &Proof<RootConfig>,
 ) {
     let range = builder.range_chip();
-    let public_input_cells = {
-        let ctx = builder.main(0);
-        let assigned = constrained_verify(ctx, &range, config, vk, proof)
-            .expect("pipeline constrained verify should succeed");
-        assigned.statement_public_inputs.to_vec()
-    };
-    builder.assigned_instances[0].extend(public_input_cells);
+    let ctx = builder.main(0);
+    let statement_public_inputs = [
+        ctx.load_witness(digest_scalar_to_fr(vk.pre_hash[0])),
+        ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
+    ];
+    constrained_verify(ctx, &range, config, vk, proof, statement_public_inputs)
+        .expect("pipeline constrained verify should succeed");
+    builder.assigned_instances[0].extend(statement_public_inputs);
 }
 
 fn assert_fixture_matches_native<Fx>(engine: &BabyBearBn254Poseidon2CpuEngine, fixture: Fx)
@@ -256,24 +257,25 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let public_inputs = pipeline_public_inputs(&vk, &proof);
     run_mock(false, &public_inputs, move |builder| {
         let range = builder.range_chip();
-        let public_input_cells = {
-            let ctx = builder.main(0);
-            clear_recorded_ext_base_consts();
-            let assigned = constrained_verify(ctx, &range, engine.config(), &vk, &proof)
-                .expect("pipeline constrained verify should succeed before ext-constant prank");
-            let records = take_recorded_ext_base_consts();
-            for (family, constant) in base_families {
-                prank_recorded_ext_constant(ctx, &records, family, constant);
-            }
-            let normalization_constant = records
-                .iter()
-                .find(|record| normalization_family_constants.contains(&record.constant))
-                .map(|record| record.constant)
-                .unwrap_or(1);
-            prank_recorded_ext_constant(ctx, &records, "normalization", normalization_constant);
-            assigned.statement_public_inputs.to_vec()
-        };
-        builder.assigned_instances[0].extend(public_input_cells);
+        let ctx = builder.main(0);
+        let statement_public_inputs = [
+            ctx.load_witness(digest_scalar_to_fr(vk.pre_hash[0])),
+            ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
+        ];
+        clear_recorded_ext_base_consts();
+        constrained_verify(ctx, &range, engine.config(), &vk, &proof, statement_public_inputs)
+            .expect("pipeline constrained verify should succeed before ext-constant prank");
+        let records = take_recorded_ext_base_consts();
+        for (family, constant) in base_families {
+            prank_recorded_ext_constant(ctx, &records, family, constant);
+        }
+        let normalization_constant = records
+            .iter()
+            .find(|record| normalization_family_constants.contains(&record.constant))
+            .map(|record| record.constant)
+            .unwrap_or(1);
+        prank_recorded_ext_constant(ctx, &records, "normalization", normalization_constant);
+        builder.assigned_instances[0].extend(statement_public_inputs);
     });
 }
 

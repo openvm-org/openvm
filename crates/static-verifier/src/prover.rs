@@ -28,7 +28,10 @@ use openvm_stark_sdk::{
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::{config::StaticVerifierShape, stages::full_pipeline::constrained_verify};
+use crate::{
+    config::StaticVerifierShape,
+    stages::full_pipeline::{constrained_verify, digest_scalar_to_fr},
+};
 
 /// KZG parameters for the Halo2 BN256 proving system.
 pub type Halo2Params = ParamsKZG<Bn256>;
@@ -97,15 +100,25 @@ impl StaticVerifierCircuit {
         input: &StaticVerifierInput<'_>,
     ) -> Vec<Fr> {
         let range = builder.range_chip();
-        let public_input_cells = {
-            let ctx = builder.main(0);
-            let assigned = constrained_verify(ctx, &range, input.config, input.mvk, input.proof)
-                .expect("pipeline constrained verify should succeed");
-
-            assigned.statement_public_inputs.to_vec()
-        };
-        let pis = public_input_cells.iter().map(|c| *c.value()).collect_vec();
-        builder.assigned_instances[0].extend(public_input_cells);
+        let ctx = builder.main(0);
+        let statement_public_inputs = [
+            ctx.load_witness(digest_scalar_to_fr(input.mvk.pre_hash[0])),
+            ctx.load_witness(digest_scalar_to_fr(input.proof.common_main_commit[0])),
+        ];
+        constrained_verify(
+            ctx,
+            &range,
+            input.config,
+            input.mvk,
+            input.proof,
+            statement_public_inputs,
+        )
+        .expect("pipeline constrained verify should succeed");
+        let pis = statement_public_inputs
+            .iter()
+            .map(|c| *c.value())
+            .collect_vec();
+        builder.assigned_instances[0].extend(statement_public_inputs);
 
         pis
     }
