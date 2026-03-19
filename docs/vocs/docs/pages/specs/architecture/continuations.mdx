@@ -266,3 +266,56 @@ The root subcircuit also constrains its own public values:
     - Constraining that a Merkle proof (where the path to the root depends on the `MemoryDimensions`) exists between `user_pvs_commit` and `final_root`
 - `app_exe_commit` is computed as specified above
 - `app_vk_commit` is computed from the child proof's `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` (using all 6 `cached_commit` and `vk_pre_hash` components) as specified above
+
+## Deferral Integration
+
+When the VM uses the [deferral framework](/specs/architecture/deferral), deferral circuit proofs must be incorporated into the main aggregation tree. This section describes how deferral hook proofs join the continuation pipeline at the internal-recursive level.
+
+### Deferral Aggregation Overview
+
+Each deferral circuit `C_i` produces its own proofs, which are aggregated through a **separate** per-circuit aggregation tree (leaf → internal-for-leaf → internal-recursive) using a deferral-specific inner aggregation subcircuit. This subcircuit builds Merkle trees of the input and output commits and propagates deferral DAG commits.
+
+The final internal-recursive proof for each `C_i` is then passed to a **deferral hook** layer, which:
+
+1. Verifies the child proof
+2. Converts the input and output commit Merkle roots into **onion hashes** (the hash-onion accumulators used by the VM)
+3. Exposes `initial_acc_hash` and `final_acc_hash` — the initial and final deferral accumulator values as memory subtree Merkle leaves
+4. Computes and exposes a `def_hook_vk_commit` from the deferral circuit's DAG commits
+
+### Combined VM-Deferral Tree
+
+Deferral hook proofs are incorporated into the main aggregation tree at the internal-recursive level. The inner aggregation subcircuit supports a `deferral_flag` that indicates the type of child proofs:
+
+| `deferral_flag` | Child proof type |
+|-----------------|-----------------|
+| `0` | VM-only — child has VM public values (`VmPvs`) but no deferral public values |
+| `1` | Deferral-only — child has deferral public values (`DeferralPvs`) but no VM public values |
+| `2` | Combined — child has both VM and deferral public values |
+
+At the leaf and early internal layers, VM segment proofs (`deferral_flag=0`) and deferral hook proofs (`deferral_flag=1`) are aggregated separately. When proofs of both types are combined in the same internal-recursive layer, the output proof has `deferral_flag=2`.
+
+The `DeferralPvs` propagated through the tree contain:
+
+- `initial_acc_hash: Digest` — Merkle root of all initial deferral accumulators aggregated so far
+- `final_acc_hash: Digest` — Merkle root of all final deferral accumulators aggregated so far
+- `depth: F` — depth of the Merkle subtrees above
+
+When multiple deferral hook proofs are combined, the inner subcircuit Merklizes their `initial_acc_hash` and `final_acc_hash` values together, incrementing the depth.
+
+![Combined Aggregation Diagram](/combined-aggregation-diagram.png)
+
+### Root Verifier Deferral Constraints
+
+The inner aggregation subcircuit also computes and propagates a `def_hook_vk_commit` — a commitment to the deferral hook verifying key, derived by hashing the DAG commit components of deferral-only child proofs. This is computed at the internal-for-leaf layer (when `internal_flag == 2`) and propagated unchanged through subsequent layers. The `def_hook_vk_commit` ensures that the correct deferral circuits were used.
+
+When deferral is enabled, the root subcircuit additionally constrains:
+
+- The child proof's `def_hook_vk_commit` matches a pre-generated constant
+- The child proof's `initial_acc_hash` was present in the **initial** memory state at the deferral address space region
+- The child proof's `final_acc_hash` was present in the **final** memory state at the deferral address space region
+
+This binds the deferral accumulators observed during VM execution to the deferral proofs aggregated in the combined tree, ensuring end-to-end consistency.
+
+:::info
+When no deferral circuits are configured, the deferral integration is disabled and the aggregation pipeline operates exactly as described in the preceding sections.
+:::

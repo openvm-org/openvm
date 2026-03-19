@@ -106,7 +106,7 @@ The final internal-recursive layer is passed to a **deferral hook** layer, which
 
 ![Deferral Aggregation Diagram](/deferral-aggregation-diagram.png)
 
-Each deferral hook proof is aggregated using the **combined VM-deferral tree**, which recursively exposes `π(initial_acc_hash_0, initial_acc_hash_1)` and `π(final_acc_hash_0, final_acc_hash_1)`. The root verifier constrains that the final `initial_acc_hash` and `final_acc_hash` were present in the initial and final memory state respectively.
+Each deferral hook proof is aggregated using the [**combined VM-deferral tree**](/specs/architecture/continuations#combined-vm-deferral-tree), which recursively exposes `π(initial_acc_hash_0, initial_acc_hash_1)` and `π(final_acc_hash_0, final_acc_hash_1)`. The root verifier constrains that the final `initial_acc_hash` and `final_acc_hash` were present in the initial and final memory state respectively.
 
 :::info
 Deferral circuits that are not used are still included in the Merklization of accumulators, but in this case we constrain that `initial_acc_hash = final_acc_hash` (i.e. that those accumulators were left untouched).
