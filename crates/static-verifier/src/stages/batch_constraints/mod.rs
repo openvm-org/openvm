@@ -37,7 +37,7 @@ use crate::{
         BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE,
     },
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
-    transcript::{sample_witness_bits_assigned, TranscriptGadget},
+    transcript::TranscriptGadget,
     utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
@@ -133,9 +133,6 @@ pub struct AssignedBatchIntermediates {
     pub n_max: AssignedValue<Fr>,
     pub batch_degree: AssignedValue<Fr>,
     pub logup_pow_witness: BabyBearWire,
-    pub logup_pow_bits: AssignedValue<Fr>,
-    pub logup_pow_sampled_bits: AssignedValue<Fr>,
-    pub logup_pow_witness_ok: AssignedValue<Fr>,
     pub gkr_q0_claim: Option<BabyBearExtWire>,
     pub gkr_claims_per_layer: Vec<Vec<BabyBearExtWire>>,
     pub gkr_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
@@ -1491,25 +1488,15 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let n_max = baby_bear.assign_and_range_usize(ctx, n_max_host);
     gate.assert_is_const(ctx, &n_max, &Fr::from(usize_to_u64(n_max_host)));
     let batch_degree = baby_bear.assign_and_range_usize(ctx, batch_degree_host);
-    gate.assert_is_const(ctx, &batch_degree, &Fr::from(usize_to_u64(batch_degree_host)));
-
-    let logup_pow_bits = mvk0.params.logup.pow_bits;
-    let logup_pow_bits = baby_bear.assign_and_range_usize(ctx, logup_pow_bits);
     gate.assert_is_const(
         ctx,
-        &logup_pow_bits,
-        &Fr::from(usize_to_u64(mvk0.params.logup.pow_bits)),
+        &batch_degree,
+        &Fr::from(usize_to_u64(batch_degree_host)),
     );
+
+    let logup_pow_bits = mvk0.params.logup.pow_bits;
     let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
-    let (logup_pow_sampled_bits, logup_pow_witness_ok) = sample_witness_bits_assigned(
-        ctx,
-        range,
-        transcript,
-        baby_bear,
-        mvk0.params.logup.pow_bits,
-        logup_pow_witness,
-    );
-    gate.assert_is_const(ctx, &logup_pow_witness_ok, &Fr::from(1u64));
+    transcript.check_witness(ctx, range, baby_bear, logup_pow_bits, &logup_pow_witness);
 
     let alpha_logup = transcript.sample_ext(ctx, range, baby_bear);
     let beta_logup = transcript.sample_ext(ctx, range, baby_bear);
@@ -1969,9 +1956,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         n_max,
         batch_degree,
         logup_pow_witness,
-        logup_pow_bits,
-        logup_pow_sampled_bits,
-        logup_pow_witness_ok,
         gkr_q0_claim,
         gkr_claims_per_layer,
         gkr_sumcheck_polys,
@@ -2330,8 +2314,7 @@ pub(crate) fn constrain_batch_intermediates_with_shared_trace_ids(
         ext_chip.assert_equal(
             ctx,
             q_cross,
-            gkr_q0_claim
-                .expect("non-zero interaction branch must include GKR q0 claim witness"),
+            gkr_q0_claim.expect("non-zero interaction branch must include GKR q0 claim witness"),
         );
 
         let mu0 = gkr_sample_stream
@@ -2466,11 +2449,7 @@ pub(crate) fn constrain_batch_intermediates_with_shared_trace_ids(
     let derived_gkr_denominator_claim = gkr_q_xi_claim;
     let derived_gkr_denominator_residual =
         ext_chip.sub(ctx, derived_gkr_denominator_claim, alpha_logup);
-    ext_chip.assert_equal(
-        ctx,
-        derived_gkr_numerator_residual,
-        gkr_numerator_residual,
-    );
+    ext_chip.assert_equal(ctx, derived_gkr_numerator_residual, gkr_numerator_residual);
     ext_chip.assert_equal(ctx, derived_gkr_denominator_claim, gkr_denominator_claim);
     ext_chip.assert_equal(
         ctx,
@@ -2748,9 +2727,7 @@ pub(crate) fn constrain_batch_intermediates_with_shared_trace_ids(
         n_max,
         batch_degree,
         logup_pow_witness,
-        logup_pow_bits,
-        logup_pow_sampled_bits,
-        logup_pow_witness_ok,
+
         gkr_q0_claim,
         gkr_claims_per_layer,
         gkr_sumcheck_polys,

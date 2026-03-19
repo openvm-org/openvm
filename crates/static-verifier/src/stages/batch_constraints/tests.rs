@@ -135,12 +135,8 @@ fn batch_intermediates_match_native_for_interactions_fixture() {
     run_mock(true, move |builder| {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let assigned = derive_and_constrain_batch(ctx, &range, engine.config(), &vk, &proof)
+        derive_and_constrain_batch(ctx, &range, engine.config(), &vk, &proof)
             .expect("batch derive+constrain should succeed");
-
-        range
-            .gate()
-            .assert_is_const(ctx, &assigned.logup_pow_witness_ok, &Fr::from(1u64));
     });
 }
 

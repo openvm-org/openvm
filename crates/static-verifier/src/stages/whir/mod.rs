@@ -45,7 +45,7 @@ use crate::{
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
         stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
     },
-    transcript::{digest_wire_from_root, sample_witness_bits_assigned, TranscriptGadget},
+    transcript::{digest_wire_from_root, TranscriptGadget},
     utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
@@ -147,21 +147,12 @@ pub struct MerklePathIntermediates {
 
 #[derive(Clone, Debug)]
 pub struct AssignedWhirIntermediates {
-    pub mu_pow_bits: AssignedValue<Fr>,
     pub mu_pow_witness: BabyBearWire,
-    pub mu_pow_sampled_bits: AssignedValue<Fr>,
-    pub mu_pow_witness_ok: AssignedValue<Fr>,
     pub mu_challenge: BabyBearExtWire,
-    pub folding_pow_bits: AssignedValue<Fr>,
     pub folding_pow_witnesses: Vec<BabyBearWire>,
-    pub folding_pow_sampled_bits: Vec<AssignedValue<Fr>>,
-    pub folding_pow_witness_ok: Vec<AssignedValue<Fr>>,
     pub folding_alphas: Vec<BabyBearExtWire>,
     pub z0_challenges: Vec<BabyBearExtWire>,
-    pub query_phase_pow_bits: AssignedValue<Fr>,
     pub query_phase_pow_witnesses: Vec<BabyBearWire>,
-    pub query_phase_pow_sampled_bits: Vec<AssignedValue<Fr>>,
-    pub query_phase_pow_witness_ok: Vec<AssignedValue<Fr>>,
     pub gammas: Vec<BabyBearExtWire>,
     pub query_indices: Vec<AssignedValue<Fr>>,
     pub whir_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
@@ -747,7 +738,10 @@ fn query_root_from_bits_assigned(
         let bit_times_pow = gate.mul(ctx, bit, omega_pow_const);
         let one_minus_bit = gate.sub(ctx, one, bit);
         let rhs = gate.add(ctx, bit_times_pow, one_minus_bit);
-        let selected = BabyBearWire { value: rhs, max_bits: crate::field::baby_bear::BABYBEAR_MAX_BITS };
+        let selected = BabyBearWire {
+            value: rhs,
+            max_bits: crate::field::baby_bear::BABYBEAR_MAX_BITS,
+        };
         root = ext_chip.base().mul(ctx, root, selected);
     }
     root
@@ -911,32 +905,21 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
 ) -> AssignedWhirIntermediates {
+    let range = ext_chip.range();
     let gate = ext_chip.range().gate();
+    let base_chip = ext_chip.base();
     let params = config.params();
     let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
 
-    let mu_pow_bits = ext_chip
-        .base()
-        .assign_and_range_usize(ctx, params.whir.mu_pow_bits);
-    gate.assert_is_const(
+    let mu_pow_witness = ext_chip.base().load_witness(ctx, whir_proof.mu_pow_witness);
+    transcript.check_witness(
         ctx,
-        &mu_pow_bits,
-        &Fr::from(usize_to_u64(params.whir.mu_pow_bits)),
-    );
-    let mu_pow_witness = ext_chip.base().load_witness(
-        ctx,
-        ChildF::from_u64(whir_proof.mu_pow_witness.as_canonical_u64()),
-    );
-    let (mu_pow_sampled_bits, mu_pow_witness_ok) = sample_witness_bits_assigned(
-        ctx,
-        ext_chip.range(),
-        transcript,
-        ext_chip.base(),
+        range,
+        base_chip,
         params.whir.mu_pow_bits,
-        mu_pow_witness,
+        &mu_pow_witness,
     );
-    gate.assert_is_const(ctx, &mu_pow_witness_ok, &Fr::from(1u64));
     let mu_challenge = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
 
     let folding_pow_bits = ext_chip
@@ -1033,12 +1016,8 @@ pub(crate) fn constrain_whir_from_proof_inputs(
         }
     }
 
-    let mut folding_pow_sampled_bits = Vec::with_capacity(folding_pow_witnesses.len());
-    let mut folding_pow_witness_ok = Vec::with_capacity(folding_pow_witnesses.len());
     let mut folding_alphas = Vec::new();
     let mut z0_challenges = Vec::new();
-    let mut query_phase_pow_sampled_bits = Vec::with_capacity(query_phase_pow_witnesses.len());
-    let mut query_phase_pow_witness_ok = Vec::with_capacity(query_phase_pow_witnesses.len());
     let mut gammas = Vec::with_capacity(num_whir_rounds);
     let mut query_indices = Vec::new();
     let mut folding_counts_per_round = Vec::with_capacity(num_whir_rounds);
@@ -1065,17 +1044,13 @@ pub(crate) fn constrain_whir_from_proof_inputs(
 
                 let pow_witness = folding_pow_witnesses[folding_pow_cursor];
                 folding_pow_cursor += 1;
-                let (sampled_bits, witness_ok) = sample_witness_bits_assigned(
+                transcript.check_witness(
                     ctx,
-                    ext_chip.range(),
-                    transcript,
-                    ext_chip.base(),
+                    range,
+                    base_chip,
                     params.whir.folding_pow_bits,
-                    pow_witness,
+                    &pow_witness,
                 );
-                gate.assert_is_const(ctx, &witness_ok, &Fr::from(1u64));
-                folding_pow_sampled_bits.push(sampled_bits);
-                folding_pow_witness_ok.push(witness_ok);
 
                 let alpha = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
                 alphas_round.push(alpha);
@@ -1113,17 +1088,13 @@ pub(crate) fn constrain_whir_from_proof_inputs(
             Some(y0)
         };
 
-        let (query_pow_sampled, query_pow_ok) = sample_witness_bits_assigned(
+        transcript.check_witness(
             ctx,
-            ext_chip.range(),
-            transcript,
-            ext_chip.base(),
+            range,
+            base_chip,
             params.whir.query_phase_pow_bits,
-            query_phase_pow_witnesses[round_idx],
+            &query_phase_pow_witnesses[round_idx],
         );
-        gate.assert_is_const(ctx, &query_pow_ok, &Fr::from(1u64));
-        query_phase_pow_sampled_bits.push(query_pow_sampled);
-        query_phase_pow_witness_ok.push(query_pow_ok);
 
         let query_bits = log_rs_domain_size - k_whir;
         let num_queries = round_params.num_queries;
@@ -1301,21 +1272,12 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     ext_chip.assert_equal(ctx, final_residual, zero);
 
     AssignedWhirIntermediates {
-        mu_pow_bits,
         mu_pow_witness,
-        mu_pow_sampled_bits,
-        mu_pow_witness_ok,
         mu_challenge,
-        folding_pow_bits,
         folding_pow_witnesses,
-        folding_pow_sampled_bits,
-        folding_pow_witness_ok,
         folding_alphas,
         z0_challenges,
-        query_phase_pow_bits,
         query_phase_pow_witnesses,
-        query_phase_pow_sampled_bits,
-        query_phase_pow_witness_ok,
         gammas,
         query_indices,
         whir_sumcheck_polys,

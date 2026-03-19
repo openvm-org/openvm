@@ -8,8 +8,6 @@ use halo2_base::{
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
-#[cfg(test)]
-use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField64;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{Bn254Scalar, Digest as NativeDigest},
     openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField},
@@ -59,15 +57,6 @@ fn bn254_to_halo2(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
-#[cfg(test)]
-fn split_bn254_to_babybear_u64(value: Bn254Scalar) -> [u64; NUM_SPLIT_LIMBS] {
-    let digits = value.as_canonical_biguint().to_u64_digits();
-    core::array::from_fn(|i| {
-        let limb = digits.get(i).copied().unwrap_or(0);
-        ChildF::from_u64(limb).as_canonical_u64()
-    })
-}
-
 fn split_high_bound() -> u64 {
     static SPLIT_HIGH_BOUND: OnceLock<u64> = OnceLock::new();
     *SPLIT_HIGH_BOUND.get_or_init(|| {
@@ -98,8 +87,7 @@ fn reduce_assigned_limb_to_babybear(
     baby_bear: &BabyBearChip,
     limb: AssignedValue<Fr>,
 ) -> BabyBearWire {
-    let (quotient, remainder) =
-        range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
+    let (quotient, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
     range.check_less_than_safe(ctx, quotient, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
     let reduced = BabyBearWire {
         value: remainder,
@@ -277,21 +265,23 @@ impl TranscriptGadget {
             "sample_bits requires (1 << bits) < modulus: bits={bits}"
         );
 
-        let sampled = self.sample(ctx, range, baby_bear);
         if bits == 0 {
             return ctx.load_constant(Fr::from(0u64));
         }
-
+        let sampled = self.sample(ctx, range, baby_bear);
+        // Reduce BabyBearWire so it is constrained to be less than BabyBear modulus
+        let sampled_reduced = baby_bear.reduce(ctx, sampled);
+        // PERF[jpw]: we could optimize this since the divisor is a power of 2
         let (_, rem) = range.div_mod(
             ctx,
-            sampled.value,
+            sampled_reduced.value,
             BigUint::from(1u64) << bits,
             BABY_BEAR_BITS,
         );
-        range.range_check(ctx, rem, bits);
         rem
     }
 
+    /// Asserts that the PoW witness must pass.
     pub fn check_witness(
         &mut self,
         ctx: &mut Context<Fr>,
@@ -299,36 +289,15 @@ impl TranscriptGadget {
         baby_bear: &BabyBearChip,
         bits: usize,
         witness: &BabyBearWire,
-    ) -> AssignedValue<Fr> {
+    ) {
         if bits == 0 {
-            return ctx.load_constant(Fr::from(1u64));
+            return;
         }
 
         self.observe(ctx, range, baby_bear, witness);
         let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
-        range.gate().is_zero(ctx, sampled_bits)
+        range.gate().assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
     }
-}
-
-pub fn sample_witness_bits_assigned(
-    ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    transcript: &mut TranscriptGadget,
-    baby_bear: &BabyBearChip,
-    bits: usize,
-    witness: BabyBearWire,
-) -> (AssignedValue<Fr>, AssignedValue<Fr>) {
-    if bits == 0 {
-        return (
-            ctx.load_constant(Fr::from(0u64)),
-            ctx.load_constant(Fr::from(1u64)),
-        );
-    }
-
-    transcript.observe(ctx, range, baby_bear, &witness);
-    let sampled_bits = transcript.sample_bits(ctx, range, baby_bear, bits);
-    let witness_ok = range.gate().is_zero(ctx, sampled_bits);
-    (sampled_bits, witness_ok)
 }
 
 #[derive(Clone, Debug)]
