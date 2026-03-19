@@ -23,7 +23,7 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire},
     stages::shared_math,
     transcript::TranscriptGadget,
-    ChildEF, ChildF, Fr,
+    Fr, RootEF, RootF,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -47,7 +47,7 @@ pub enum BatchConstraintError {
     },
     MissingStackedChallenges,
     ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<ChildEF>),
+    BatchConstraint(NativeBatchConstraintError<RootEF>),
 }
 
 impl From<ProofShapeError> for BatchConstraintError {
@@ -56,8 +56,8 @@ impl From<ProofShapeError> for BatchConstraintError {
     }
 }
 
-impl From<NativeBatchConstraintError<ChildEF>> for BatchConstraintError {
-    fn from(value: NativeBatchConstraintError<ChildEF>) -> Self {
+impl From<NativeBatchConstraintError<RootEF>> for BatchConstraintError {
+    fn from(value: NativeBatchConstraintError<RootEF>) -> Self {
         Self::BatchConstraint(value)
     }
 }
@@ -91,20 +91,20 @@ fn eval_lagrange_on_integer_grid(
     let n = evals.len().saturating_sub(1);
     let mut acc = ext_chip.zero(ctx);
     for (i, eval_i) in evals.iter().enumerate() {
-        let mut basis = ext_chip.from_base_const(ctx, ChildF::ONE);
-        let mut denom = ChildF::ONE;
+        let mut basis = ext_chip.from_base_const(ctx, RootF::ONE);
+        let mut denom = RootF::ONE;
         for j in 0..=n {
             if i == j {
                 continue;
             }
-            let x_j = ext_chip.from_base_const(ctx, ChildF::from_u64(j as u64));
+            let x_j = ext_chip.from_base_const(ctx, RootF::from_u64(j as u64));
             let x_minus_j = ext_chip.sub(ctx, *point, x_j);
             basis = ext_chip.mul(ctx, basis, x_minus_j);
 
             let diff = if i >= j {
-                ChildF::from_usize(i - j)
+                RootF::from_usize(i - j)
             } else {
-                -ChildF::from_usize(j - i)
+                -RootF::from_usize(j - i)
             };
             denom *= diff;
         }
@@ -123,8 +123,8 @@ fn progression_exp_2_assigned(
     l: usize,
 ) -> BabyBearExtWire {
     let mut pow = *m;
-    let mut sum = ext_chip.from_base_const(ctx, ChildF::ONE);
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let mut sum = ext_chip.from_base_const(ctx, RootF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     for _ in 0..l {
         let one_plus_pow = ext_chip.add(ctx, one, pow);
         sum = ext_chip.mul(ctx, sum, one_plus_pow);
@@ -140,11 +140,11 @@ pub(crate) fn eval_eq_mle_assigned(
     y: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
     assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut acc = one;
     for (x_i, y_i) in x.iter().zip(y.iter()) {
         let xy = ext_chip.mul(ctx, *x_i, *y_i);
-        let two_xy = ext_chip.mul_base_const(ctx, xy, ChildF::TWO);
+        let two_xy = ext_chip.mul_base_const(ctx, xy, RootF::TWO);
         let one_minus_y = ext_chip.sub(ctx, one, *y_i);
         let one_minus_y_minus_x = ext_chip.sub(ctx, one_minus_y, *x_i);
         let factor = ext_chip.add(ctx, one_minus_y_minus_x, two_xy);
@@ -164,7 +164,7 @@ pub(crate) fn eval_eq_mle_binary_assigned(
         y_bits.len(),
         "eq_mle binary vector length mismatch",
     );
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut acc = one;
     for (x_i, bit) in x.iter().zip(y_bits.iter().copied()) {
         let factor = if bit {
@@ -184,7 +184,7 @@ pub(crate) fn eval_eq_uni_assigned(
     x: &BabyBearExtWire,
     y: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut res = one;
     let mut x_pow = *x;
     let mut y_pow = *y;
@@ -198,7 +198,7 @@ pub(crate) fn eval_eq_uni_assigned(
         x_pow = ext_chip.mul(ctx, x_pow, x_pow);
         y_pow = ext_chip.mul(ctx, y_pow, y_pow);
     }
-    let half_pow_l = ChildF::ONE.halve().exp_u64(l_skip as u64);
+    let half_pow_l = RootF::ONE.halve().exp_u64(l_skip as u64);
     ext_chip.mul_base_const(ctx, res, half_pow_l)
 }
 
@@ -208,7 +208,7 @@ pub(crate) fn eval_eq_uni_at_one_assigned(
     l_skip: usize,
     x: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut res = one;
     let mut x_pow = *x;
     for _ in 0..l_skip {
@@ -216,18 +216,18 @@ pub(crate) fn eval_eq_uni_at_one_assigned(
         res = ext_chip.mul(ctx, res, x_plus_one);
         x_pow = ext_chip.mul(ctx, x_pow, x_pow);
     }
-    let half_pow_l = ChildF::ONE.halve().exp_u64(l_skip as u64);
+    let half_pow_l = RootF::ONE.halve().exp_u64(l_skip as u64);
     ext_chip.mul_base_const(ctx, res, half_pow_l)
 }
 
 fn eval_eq_sharp_uni_assigned(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
-    omega_skip_pows: &[ChildF],
+    omega_skip_pows: &[RootF],
     xi_1: &[BabyBearExtWire],
     z: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut eq_xi_evals = vec![ext_chip.zero(ctx); 1usize << xi_1.len()];
     eq_xi_evals[0] = one;
 
@@ -285,7 +285,7 @@ fn eval_eq_rot_cube_assigned(
     y: &[BabyBearExtWire],
 ) -> (BabyBearExtWire, BabyBearExtWire) {
     assert_eq!(x.len(), y.len(), "eq_rot_cube vector length mismatch");
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut rot = one;
     let mut eq = one;
     for i in (0..x.len()).rev() {
@@ -316,7 +316,7 @@ pub(crate) fn eval_rot_kernel_prism_assigned(
         !x.is_empty() && !y.is_empty(),
         "rot-kernel vectors must be non-empty",
     );
-    let omega = ChildF::two_adic_generator(l_skip);
+    let omega = RootF::two_adic_generator(l_skip);
     let y0_omega = ext_chip.mul_base_const(ctx, y[0], omega);
     let eq_uni_rot = eval_eq_uni_assigned(ctx, ext_chip, l_skip, &x[0], &y0_omega);
     let (eq_cube, rot_cube) = eval_eq_rot_cube_assigned(ctx, ext_chip, &x[1..], &y[1..]);
@@ -348,18 +348,18 @@ fn interpolate_cubic_at_0123_assigned(
     evals: [&BabyBearExtWire; 4],
     x: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let inv6 = ChildF::from_u64(6).inverse();
+    let inv6 = RootF::from_u64(6).inverse();
     let s1 = ext_chip.sub(ctx, *evals[1], *evals[0]);
     let s2 = ext_chip.sub(ctx, *evals[2], *evals[0]);
     let s3 = ext_chip.sub(ctx, *evals[3], *evals[0]);
 
     let s2_minus_s1 = ext_chip.sub(ctx, s2, s1);
-    let triple = ext_chip.mul_base_const(ctx, s2_minus_s1, ChildF::from_u64(3));
+    let triple = ext_chip.mul_base_const(ctx, s2_minus_s1, RootF::from_u64(3));
     let d3 = ext_chip.sub(ctx, s3, triple);
 
     let p = ext_chip.mul_base_const(ctx, d3, inv6);
     let s2_minus_d3 = ext_chip.sub(ctx, s2, d3);
-    let half = ChildF::ONE.halve();
+    let half = RootF::ONE.halve();
     let q_half = ext_chip.mul_base_const(ctx, s2_minus_d3, half);
     let q = ext_chip.sub(ctx, q_half, s1);
     let p_plus_q = ext_chip.add(ctx, p, q);
@@ -394,7 +394,7 @@ impl AssignedConstraintEvaluator<'_> {
         ext_chip: &BabyBearExtChip,
     ) -> BabyBearExtWire {
         let zero = ext_chip.zero(ctx);
-        let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+        let one = ext_chip.from_base_const(ctx, RootF::ONE);
         ext_chip.assert_equal(ctx, zero, one);
         zero
     }
@@ -403,7 +403,7 @@ impl AssignedConstraintEvaluator<'_> {
         &self,
         ctx: &mut Context<Fr>,
         ext_chip: &BabyBearExtChip,
-        symbolic_var: SymbolicVariable<ChildF>,
+        symbolic_var: SymbolicVariable<RootF>,
     ) -> BabyBearExtWire {
         let index = symbolic_var.index;
         match symbolic_var.entry {
@@ -448,9 +448,9 @@ fn eval_symbolic_nodes_assigned(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
     evaluator: &AssignedConstraintEvaluator<'_>,
-    nodes: &[SymbolicExpressionNode<ChildF>],
+    nodes: &[SymbolicExpressionNode<RootF>],
 ) -> Vec<BabyBearExtWire> {
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut exprs: Vec<BabyBearExtWire> = Vec::with_capacity(nodes.len());
     for node in nodes {
         let expr = match node {
@@ -545,7 +545,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let n_logup_host = calculate_n_logup(l_skip, total_interactions_host);
     let n_max_host = n_per_trace.iter().copied().max().unwrap_or(0).max(0) as usize;
     let n_global_host = n_max_host.max(n_logup_host);
-    let omega_skip = ChildF::two_adic_generator(l_skip);
+    let omega_skip = RootF::two_adic_generator(l_skip);
     let omega_skip_pows: Vec<_> = omega_skip.powers().take(1usize << l_skip).collect();
 
     let trace_has_preprocessed = trace_id_to_air_id
@@ -627,7 +627,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         .collect::<Vec<_>>();
 
     let zero = ext_chip.zero(ctx);
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, _gkr_sample_stream) =
         if total_interactions_host == 0 {
@@ -799,7 +799,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         sum_univ_domain_s_0 = ext_chip.add(ctx, sum_univ_domain_s_0, *coeff);
     }
     let sum_univ_domain_s_0 =
-        ext_chip.mul_base_const(ctx, sum_univ_domain_s_0, ChildF::from_u64(stride as u64));
+        ext_chip.mul_base_const(ctx, sum_univ_domain_s_0, RootF::from_u64(stride as u64));
     ext_chip.assert_equal(ctx, sum_claim, sum_univ_domain_s_0);
 
     let sumcheck_round_polys = proof
@@ -951,13 +951,13 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             (
                 l_skip.wrapping_add_signed(n),
                 vec![ext_chip.pow_power_of_two(ctx, r[0], n.unsigned_abs())],
-                ChildF::from_usize(1usize << n.unsigned_abs()).inverse(),
+                RootF::from_usize(1usize << n.unsigned_abs()).inverse(),
             )
         } else {
-            (l_skip, r[..=n_lift].to_vec(), ChildF::ONE)
+            (l_skip, r[..=n_lift].to_vec(), RootF::ONE)
         };
 
-        let inv_l = ChildF::from_usize(1usize << l).inverse();
+        let inv_l = RootF::from_usize(1usize << l).inverse();
         let mut is_first_row = progression_exp_2_assigned(ctx, &ext_chip, &rs_n[0], l);
         is_first_row = ext_chip.mul_base_const(ctx, is_first_row, inv_l);
         for x in rs_n.iter().skip(1) {
@@ -965,7 +965,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             is_first_row = ext_chip.mul(ctx, is_first_row, one_minus_x);
         }
 
-        let omega = ChildF::two_adic_generator(l);
+        let omega = RootF::two_adic_generator(l);
         let rs0_omega = ext_chip.mul_base_const(ctx, rs_n[0], omega);
         let mut is_last_row = progression_exp_2_assigned(ctx, &ext_chip, &rs0_omega, l);
         is_last_row = ext_chip.mul_base_const(ctx, is_last_row, inv_l);
@@ -1011,7 +1011,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
                 beta_pow = ext_chip.mul(ctx, beta_pow, beta_logup);
             }
             let bus_const = ext_chip
-                .from_base_const(ctx, ChildF::from_u64(u64::from(interaction.bus_index) + 1));
+                .from_base_const(ctx, RootF::from_u64(u64::from(interaction.bus_index) + 1));
             let bus_term = ext_chip.mul(ctx, bus_const, beta_pow);
             denom_eval = ext_chip.add(ctx, denom_eval, bus_term);
 

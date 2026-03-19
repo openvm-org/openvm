@@ -1,7 +1,7 @@
 use halo2_base::Context;
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
-use crate::{field::baby_bear::BabyBearExtChip, ChildF, Fr};
+use crate::{field::baby_bear::BabyBearExtChip, Fr, RootF};
 
 pub(crate) type BabyBearExtWire = crate::field::baby_bear::BabyBearExtWire;
 
@@ -49,9 +49,9 @@ pub(crate) fn interpolate_quadratic_at_012_assigned(
     evals: [&BabyBearExtWire; 3],
     x: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
-    let two = ext_chip.from_base_const(ctx, ChildF::TWO);
-    let inv_two = ChildF::ONE.halve();
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
+    let two = ext_chip.from_base_const(ctx, RootF::TWO);
+    let inv_two = RootF::ONE.halve();
 
     let x_minus_one = ext_chip.sub(ctx, *x, one);
     let x_minus_two = ext_chip.sub(ctx, *x, two);
