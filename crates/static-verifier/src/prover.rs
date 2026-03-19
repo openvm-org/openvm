@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::StaticVerifierShape,
-    stages::full_pipeline::{constrained_verify, digest_scalar_to_fr},
+    stages::full_pipeline::{constrained_verify, load_proof_wire},
 };
 
 /// KZG parameters for the Halo2 BN256 proving system.
@@ -100,11 +100,9 @@ impl StaticVerifierCircuit {
     ) -> Vec<Fr> {
         let range = builder.range_chip();
         let ctx = builder.main(0);
-        let statement_public_inputs = [
-            ctx.load_witness(digest_scalar_to_fr(input.mvk.pre_hash[0])),
-            ctx.load_witness(digest_scalar_to_fr(input.proof.common_main_commit[0])),
-        ];
-        constrained_verify(ctx, &range, input.mvk, input.proof, statement_public_inputs);
+        let proof_wire = load_proof_wire(ctx, &range, input.proof);
+        let statement_public_inputs =
+            constrained_verify(ctx, &range, input.mvk, input.proof, proof_wire);
         let pis = statement_public_inputs
             .iter()
             .map(|c| *c.value())

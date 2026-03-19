@@ -79,7 +79,7 @@ pub struct StackedReductionWire {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct StackingProofWire {
+pub struct StackingProofWire {
     pub univariate_round_coeffs: Vec<BabyBearExtWire>,
     pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
     pub stacking_openings: Vec<Vec<BabyBearExtWire>>,

@@ -32,26 +32,30 @@ use crate::{
 mod tests;
 
 #[derive(Clone, Debug)]
-struct ProofWire {
-    public_values: Vec<Vec<BabyBearWire>>,
-    cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
-    gkr: GkrProofWire,
-    batch: BatchConstraintProofWire,
-    stacking: StackingProofWire,
-    whir: WhirProofWire,
+pub struct ProofWire {
+    pub common_main_commit_root: AssignedValue<Fr>,
+    pub public_values: Vec<Vec<BabyBearWire>>,
+    pub cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
+    pub gkr: GkrProofWire,
+    pub batch: BatchConstraintProofWire,
+    pub stacking: StackingProofWire,
+    pub whir: WhirProofWire,
 }
 
 pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
-fn load_proof_wire(
+pub fn load_proof_wire(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     proof: &Proof<RootConfig>,
 ) -> ProofWire {
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip.clone());
+
+    let common_main_commit_root =
+        ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0]));
 
     let public_values = proof
         .public_values
@@ -86,6 +90,7 @@ fn load_proof_wire(
     let whir = load_whir_proof_wire(ctx, &base_chip, &ext_chip, &proof.whir_proof);
 
     ProofWire {
+        common_main_commit_root,
         public_values,
         cached_commitment_roots,
         gkr,
@@ -170,18 +175,22 @@ fn observe_preamble(
     }
 }
 
+/// Run the full static verifier pipeline on pre-loaded witness data.
+///
+/// Returns the two statement public inputs as assigned cells:
+/// `[mvk_pre_hash_root, common_main_commit_root]`.
 pub fn constrained_verify(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
-    statement_public_inputs: [AssignedValue<Fr>; 2],
-) {
+    proof_wire: ProofWire,
+) -> [AssignedValue<Fr>; 2] {
     let l_skip = mvk.inner.params.l_skip;
     let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
-    // Load ALL witness data upfront
-    let proof_wire = load_proof_wire(ctx, range, proof);
+    let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(mvk.pre_hash[0]));
+    let statement_public_inputs = [mvk_pre_hash_root, proof_wire.common_main_commit_root];
 
     let n_per_trace: Vec<isize> = trace_id_to_air_id
         .iter()
@@ -271,6 +280,8 @@ pub fn constrained_verify(
         &initial_commitment_roots,
         &u_cube,
     );
+
+    statement_public_inputs
 }
 
 /// Helper function, purely on out-of-circuit values.

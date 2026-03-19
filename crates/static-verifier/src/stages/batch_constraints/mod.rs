@@ -28,7 +28,7 @@ pub struct BatchConstraintWire {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct GkrProofWire {
+pub struct GkrProofWire {
     pub logup_pow_witness: BabyBearWire,
     pub q0_claim: BabyBearExtWire,
     pub claims_per_layer: Vec<Vec<BabyBearExtWire>>,
@@ -36,7 +36,7 @@ pub(crate) struct GkrProofWire {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct BatchConstraintProofWire {
+pub struct BatchConstraintProofWire {
     pub numerator_term_per_air: Vec<BabyBearExtWire>,
     pub denominator_term_per_air: Vec<BabyBearExtWire>,
     pub univariate_round_coeffs: Vec<BabyBearExtWire>,

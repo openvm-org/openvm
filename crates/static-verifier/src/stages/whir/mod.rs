@@ -31,13 +31,13 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct MerklePathWire {
+pub struct MerklePathWire {
     pub leaf_values: Vec<Vec<BabyBearWire>>,
     pub siblings: Vec<AssignedValue<Fr>>,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct WhirProofWire {
+pub struct WhirProofWire {
     pub mu_pow_witness: BabyBearWire,
     pub folding_pow_witnesses: Vec<BabyBearWire>,
     pub query_phase_pow_witnesses: Vec<BabyBearWire>,
