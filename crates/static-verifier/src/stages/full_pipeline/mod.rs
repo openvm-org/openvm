@@ -5,14 +5,15 @@ use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2Config as RootConfig, Bn254Scalar},
     openvm_stark_backend::{
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
-        p3_field::PrimeField,
+        p3_field::{PrimeCharacteristicRing, PrimeField},
         proof::Proof,
         prover::stacked_pcs::StackedLayout,
     },
+    p3_baby_bear::BabyBear,
 };
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
+    field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire},
     stages::{
         batch_constraints::{
             constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
@@ -166,15 +167,10 @@ fn observe_preamble(
             transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(preprocessed_root));
         } else {
             // Fixed circuit parameter (not loaded from the proof witness).
-            let log_height = ctx.load_constant(Fr::from(log_heights_per_air[air_idx] as u64));
-            transcript.observe(
-                ctx,
-                &base_chip,
-                &BabyBearWire {
-                    value: log_height,
-                    max_bits: BABY_BEAR_BITS,
-                },
-            );
+            let lh = u32::try_from(log_heights_per_air[air_idx])
+                .expect("log_height must fit in u32 for BabyBear constant");
+            let log_height = base_chip.load_constant(ctx, BabyBear::from_u32(lh));
+            transcript.observe(ctx, &base_chip, &log_height);
         }
 
         for root in &cached_commitment_roots[air_idx] {
