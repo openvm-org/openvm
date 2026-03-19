@@ -17,11 +17,6 @@
 # To bypass the hook for a single push:  git push --no-verify
 set -euo pipefail
 
-if ((BASH_VERSINFO[0] < 4)); then
-    echo "Error: Bash 4+ required (found ${BASH_VERSION}). On macOS: brew install bash" >&2
-    exit 1
-fi
-
 TARGET="${1:-develop-v2.0.0-beta}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
@@ -68,7 +63,8 @@ if [ "$TOTAL" -gt 20 ]; then
 fi
 
 # --- Map changed files to crate directories ---
-declare -A CRATE_DIRS
+# Use simple arrays instead of associative arrays for Bash 3.x compatibility (macOS)
+CRATE_DIR_LIST=""
 while IFS= read -r file; do
     dir="$file"
     while true; do
@@ -78,22 +74,31 @@ while IFS= read -r file; do
         fi
         toml="$dir/Cargo.toml"
         if [ -f "$toml" ] && grep -q '^\[package\]' "$toml"; then
-            CRATE_DIRS["$dir"]=1
+            # Deduplicate: only add if not already present
+            case "$CRATE_DIR_LIST" in
+                *"|$dir|"*) ;;
+                *) CRATE_DIR_LIST="${CRATE_DIR_LIST}|$dir|" ;;
+            esac
             break
         fi
     done
 done <<< "$CHANGED_FILES"
 
-if [ ${#CRATE_DIRS[@]} -eq 0 ]; then
+if [ -z "$CRATE_DIR_LIST" ]; then
     info "No Rust crates changed (only non-crate files modified) — nothing to check."
     exit 0
 fi
 
 # --- Extract crate names and filter ---
-declare -A CRATES       # name -> dir
-declare -A HEAVY_CRATES # crates needing --profile=heavy
+# Parallel arrays: CRATE_NAMES[i] and CRATE_DIRS[i]
+CRATE_NAMES=()
+CRATE_DIRS=()
+HEAVY_CRATE_LIST="" # "|name1|name2|" for membership checks
 
-for dir in "${!CRATE_DIRS[@]}"; do
+# Parse unique dirs from CRATE_DIR_LIST
+IFS='|' read -ra _raw_dirs <<< "$CRATE_DIR_LIST"
+for dir in "${_raw_dirs[@]}"; do
+    [ -z "$dir" ] && continue
     # Skip benchmarks and guest programs (need nightly + rust-src)
     if [[ "$dir" == benchmarks/* ]] || [[ "$dir" == */programs/* ]] || [[ "$dir" == */programs ]]; then
         warn "Skipping $dir (benchmark or guest program)"
@@ -101,25 +106,29 @@ for dir in "${!CRATE_DIRS[@]}"; do
     fi
     name=$(grep '^name\s*=' "$dir/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
     if [ -n "$name" ]; then
-        CRATES["$name"]="$dir"
+        CRATE_NAMES+=("$name")
+        CRATE_DIRS+=("$dir")
         # Integration test crates and guest-lib crates get heavy profile (CI runs these with limited threads)
         if [[ "$dir" == extensions/*/tests ]] || [[ "$dir" == guest-libs/*/tests ]] \
             || [[ "$dir" == guest-libs/* ]]; then
-            HEAVY_CRATES["$name"]=1
+            HEAVY_CRATE_LIST="${HEAVY_CRATE_LIST}|$name|"
         fi
     fi
 done
 
-if [ ${#CRATES[@]} -eq 0 ]; then
+if [ ${#CRATE_NAMES[@]} -eq 0 ]; then
     info "All changed crates were skipped — nothing to check."
     exit 0
 fi
 
-info "Changed crates (${#CRATES[@]}):"
-for name in "${!CRATES[@]}"; do
+# Helper: check if a crate is heavy
+is_heavy() { case "$HEAVY_CRATE_LIST" in *"|$1|"*) return 0 ;; *) return 1 ;; esac; }
+
+info "Changed crates (${#CRATE_NAMES[@]}):"
+for i in "${!CRATE_NAMES[@]}"; do
     extra=""
-    [ "${HEAVY_CRATES[$name]+x}" ] && extra=" (heavy)"
-    echo "  $name  [${CRATES[$name]}]$extra"
+    is_heavy "${CRATE_NAMES[$i]}" && extra=" (heavy)"
+    echo "  ${CRATE_NAMES[$i]}  [${CRATE_DIRS[$i]}]$extra"
 done
 
 # --- Helper: compute features for a crate ---
@@ -155,8 +164,9 @@ fi
 
 # --- Step 2: Clippy on changed crates ---
 info "Step 2/3: clippy on changed crates"
-for name in "${!CRATES[@]}"; do
-    dir="${CRATES[$name]}"
+for i in "${!CRATE_NAMES[@]}"; do
+    name="${CRATE_NAMES[$i]}"
+    dir="${CRATE_DIRS[$i]}"
     feats="$(crate_features "$dir")"
     feat_args=()
     [ -n "$feats" ] && feat_args=(--features "$feats")
@@ -182,8 +192,9 @@ else
     USE_NEXTEST=0
 fi
 
-for name in "${!CRATES[@]}"; do
-    dir="${CRATES[$name]}"
+for i in "${!CRATE_NAMES[@]}"; do
+    name="${CRATE_NAMES[$i]}"
+    dir="${CRATE_DIRS[$i]}"
     feats="$(crate_features "$dir")"
     feat_args=()
     [ -n "$feats" ] && feat_args=(--features "$feats")
@@ -193,7 +204,7 @@ for name in "${!CRATES[@]}"; do
 
     if [ "$USE_NEXTEST" -eq 1 ]; then
         profile_args=()
-        if [ "${HEAVY_CRATES[$name]+x}" ]; then
+        if is_heavy "$name"; then
             profile_args=(--profile=heavy)
             echo -n "(heavy) "
         fi
