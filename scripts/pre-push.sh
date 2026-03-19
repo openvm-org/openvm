@@ -17,9 +17,18 @@
 # To bypass the hook for a single push:  git push --no-verify
 set -euo pipefail
 
+if ((BASH_VERSINFO[0] < 4)); then
+    echo "Error: Bash 4+ required (found ${BASH_VERSION}). On macOS: brew install bash" >&2
+    exit 1
+fi
+
 TARGET="${1:-develop-v2.0.0-beta}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
+
+# Match CI environment variables for faster test runs
+export OPENVM_FAST_TEST="${OPENVM_FAST_TEST:-1}"
+export OPENVM_SKIP_DEBUG="${OPENVM_SKIP_DEBUG:-1}"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -45,7 +54,7 @@ fi
 
 # --- Find merge base and changed files ---
 MERGE_BASE="$(git merge-base HEAD "$TARGET")"
-CHANGED_FILES="$(git diff --name-only "$MERGE_BASE"...HEAD)"
+CHANGED_FILES="$(git diff --name-only "$MERGE_BASE" HEAD)"
 
 if [ -z "$CHANGED_FILES" ]; then
     info "No files changed vs $TARGET — nothing to check."
@@ -93,8 +102,9 @@ for dir in "${!CRATE_DIRS[@]}"; do
     name=$(grep '^name\s*=' "$dir/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
     if [ -n "$name" ]; then
         CRATES["$name"]="$dir"
-        # Integration test crates get heavy profile
-        if [[ "$dir" == extensions/*/tests ]] || [[ "$dir" == guest-libs/*/tests ]]; then
+        # Integration test crates and guest-lib crates get heavy profile (CI runs these with limited threads)
+        if [[ "$dir" == extensions/*/tests ]] || [[ "$dir" == guest-libs/*/tests ]] \
+            || [[ "$dir" == guest-libs/* ]]; then
             HEAVY_CRATES["$name"]=1
         fi
     fi
@@ -148,12 +158,12 @@ info "Step 2/3: clippy on changed crates"
 for name in "${!CRATES[@]}"; do
     dir="${CRATES[$name]}"
     feats="$(crate_features "$dir")"
-    feat_flag=""
-    [ -n "$feats" ] && feat_flag="--features $feats"
+    feat_args=()
+    [ -n "$feats" ] && feat_args=(--features "$feats")
 
     echo -n "  clippy $name "
     [ -n "$feats" ] && echo -n "(+$feats) "
-    if cargo clippy -p "$name" --all-targets --tests $feat_flag -- -D warnings 2>&1; then
+    if cargo clippy -p "$name" --all-targets --tests "${feat_args[@]}" -- -D warnings; then
         pass ""
     else
         fail ""
@@ -175,26 +185,26 @@ fi
 for name in "${!CRATES[@]}"; do
     dir="${CRATES[$name]}"
     feats="$(crate_features "$dir")"
-    feat_flag=""
-    [ -n "$feats" ] && feat_flag="--features $feats"
+    feat_args=()
+    [ -n "$feats" ] && feat_args=(--features "$feats")
 
     echo -n "  test $name "
     [ -n "$feats" ] && echo -n "(+$feats) "
 
     if [ "$USE_NEXTEST" -eq 1 ]; then
-        profile_flag=""
+        profile_args=()
         if [ "${HEAVY_CRATES[$name]+x}" ]; then
-            profile_flag="--profile=heavy"
+            profile_args=(--profile=heavy)
             echo -n "(heavy) "
         fi
-        if cargo nextest run --cargo-profile=fast -p "$name" $feat_flag $profile_flag 2>&1; then
+        if cargo nextest run --cargo-profile=fast -p "$name" "${feat_args[@]}" "${profile_args[@]}"; then
             pass ""
         else
             fail ""
             ERRORS=$((ERRORS + 1))
         fi
     else
-        if cargo test --profile fast -p "$name" $feat_flag 2>&1; then
+        if cargo test --profile fast -p "$name" "${feat_args[@]}"; then
             pass ""
         else
             fail ""
