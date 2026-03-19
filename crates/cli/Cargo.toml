@@ -23,6 +23,7 @@ openvm-sdk = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-circuit = { workspace = true }
+openvm-sdk-config = { workspace = true }
 
 aws-sdk-s3 = { version = "=1.119.0", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
 aws-config = { version = "=1.8.12", default-features = false, features = ["default-https-client", "rt-tokio"] }
@@ -42,7 +43,8 @@ include_dir = "0.7"
 static_assertions.workspace = true
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify", "metrics"]
+# TODO: restore "evm-verify" when evm deps compile on this branch
+default = ["parallel", "jemalloc", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
