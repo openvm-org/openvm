@@ -112,7 +112,7 @@ fn generate_x86_asm_impl<F: PrimeField32>(
 
     let e_u32 = e.as_canonical_u32();
 
-    if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
+    if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS || e_u32 == DEFERRAL_AS {
         return Err(AotError::InvalidInstruction);
     }
 
@@ -122,10 +122,6 @@ fn generate_x86_asm_impl<F: PrimeField32>(
     let imm = c.as_canonical_u32();
     let imm_sign = g.as_canonical_u32();
     let imm_extended = (imm + imm_sign * 0xffff0000) as i32;
-    assert_ne!(
-        e_u32, DEFERRAL_AS,
-        "Cannot store into the deferral address space"
-    );
 
     let a = a.as_canonical_u32() as u8;
     let b = b.as_canonical_u32() as u8;
