@@ -63,7 +63,7 @@ impl From<NativeBatchConstraintError<RootEF>> for BatchConstraintError {
 }
 
 #[derive(Clone, Debug)]
-pub struct AssignedBatchIntermediates {
+pub struct BatchConstraintWire {
     pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
     pub r: Vec<BabyBearExtWire>,
 }
@@ -374,31 +374,20 @@ fn interpolate_cubic_at_0123_assigned(
 }
 
 #[derive(Clone)]
-struct AssignedViewPair {
+struct ViewPairWire {
     local: BabyBearExtWire,
     next: BabyBearExtWire,
 }
 
-struct AssignedConstraintEvaluator<'a> {
-    preprocessed: Option<&'a [AssignedViewPair]>,
-    partitioned_main: &'a [Vec<AssignedViewPair>],
+struct ConstraintEvaluatorWire<'a> {
+    preprocessed: Option<&'a [ViewPairWire]>,
+    partitioned_main: &'a [Vec<ViewPairWire>],
     is_first_row: BabyBearExtWire,
     is_last_row: BabyBearExtWire,
     public_values: &'a [BabyBearWire],
 }
 
-impl AssignedConstraintEvaluator<'_> {
-    fn reject_malformed_symbolic_var(
-        &self,
-        ctx: &mut Context<Fr>,
-        ext_chip: &BabyBearExtChip,
-    ) -> BabyBearExtWire {
-        let zero = ext_chip.zero(ctx);
-        let one = ext_chip.from_base_const(ctx, RootF::ONE);
-        ext_chip.assert_equal(ctx, zero, one);
-        zero
-    }
-
+impl ConstraintEvaluatorWire<'_> {
     fn eval_var(
         &self,
         ctx: &mut Context<Fr>,
@@ -408,12 +397,7 @@ impl AssignedConstraintEvaluator<'_> {
         let index = symbolic_var.index;
         match symbolic_var.entry {
             Entry::Preprocessed { offset } => {
-                let Some(vp) = self.preprocessed else {
-                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
-                };
-                let Some(value) = vp.get(index) else {
-                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
-                };
+                let value = &self.preprocessed.unwrap()[index];
                 if offset == 0 {
                     value.local
                 } else {
@@ -421,12 +405,7 @@ impl AssignedConstraintEvaluator<'_> {
                 }
             }
             Entry::Main { part_index, offset } => {
-                let Some(vp) = self.partitioned_main.get(part_index) else {
-                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
-                };
-                let Some(value) = vp.get(index) else {
-                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
-                };
+                let value = &self.partitioned_main[part_index][index];
                 if offset == 0 {
                     value.local
                 } else {
@@ -434,12 +413,10 @@ impl AssignedConstraintEvaluator<'_> {
                 }
             }
             Entry::Public => {
-                let Some(value) = self.public_values.get(index) else {
-                    return self.reject_malformed_symbolic_var(ctx, ext_chip);
-                };
-                ext_chip.from_base_var(ctx, *value)
+                let value = self.public_values[index];
+                ext_chip.from_base_var(ctx, value)
             }
-            _ => self.reject_malformed_symbolic_var(ctx, ext_chip),
+            _ => panic!("invalid constraint"),
         }
     }
 }
@@ -447,7 +424,7 @@ impl AssignedConstraintEvaluator<'_> {
 fn eval_symbolic_nodes_assigned(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
-    evaluator: &AssignedConstraintEvaluator<'_>,
+    evaluator: &ConstraintEvaluatorWire<'_>,
     nodes: &[SymbolicExpressionNode<RootF>],
 ) -> Vec<BabyBearExtWire> {
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
@@ -486,10 +463,10 @@ fn column_openings_by_rot_assigned(
     ext_chip: &BabyBearExtChip,
     openings: &[BabyBearExtWire],
     need_rot: bool,
-) -> Vec<AssignedViewPair> {
+) -> Vec<ViewPairWire> {
     shared_math::column_openings_by_rot_assigned(ctx, ext_chip, openings, need_rot)
         .into_iter()
-        .map(|(local, next)| AssignedViewPair { local, next })
+        .map(|(local, next)| ViewPairWire { local, next })
         .collect::<Vec<_>>()
 }
 
@@ -514,7 +491,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     proof: &Proof<RootConfig>,
     trace_id_to_air_id: &[usize],
     public_values: Vec<Vec<BabyBearWire>>,
-) -> Result<AssignedBatchIntermediates, BatchConstraintError> {
+) -> Result<BatchConstraintWire, BatchConstraintError> {
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
     let baby_bear = ext_chip.base();
@@ -973,7 +950,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             is_last_row = ext_chip.mul(ctx, is_last_row, *x);
         }
 
-        let evaluator = AssignedConstraintEvaluator {
+        let evaluator = ConstraintEvaluatorWire {
             preprocessed: preprocessed.as_deref(),
             partitioned_main: &partitioned_main,
             is_first_row,
@@ -1039,5 +1016,5 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
     ext_chip.assert_equal(ctx, consistency_residual, zero);
 
-    Ok(AssignedBatchIntermediates { column_openings, r })
+    Ok(BatchConstraintWire { column_openings, r })
 }

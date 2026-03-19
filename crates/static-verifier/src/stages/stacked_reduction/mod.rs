@@ -69,7 +69,7 @@ impl From<BatchConstraintError> for StackedReductionConstraintError {
 }
 
 #[derive(Clone, Debug)]
-pub struct AssignedStackedReductionIntermediates {
+pub struct StackedReductionWire {
     pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
     pub u: Vec<BabyBearExtWire>,
 }
@@ -90,7 +90,7 @@ fn eval_in_uni_assigned(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
+pub(crate) fn constrain_stacked_reduction(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
@@ -101,7 +101,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     n_stack: usize,
     batch_column_openings: &[Vec<Vec<BabyBearExtWire>>],
     r: &[BabyBearExtWire],
-) -> AssignedStackedReductionIntermediates {
+) -> StackedReductionWire {
     let omega_order = 1usize << l_skip;
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
 
@@ -278,7 +278,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     let final_residual = ext_chip.sub(ctx, final_claim, final_sum);
     ext_chip.assert_equal(ctx, final_residual, zero);
 
-    AssignedStackedReductionIntermediates {
+    StackedReductionWire {
         stacking_openings,
         u,
     }

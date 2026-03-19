@@ -18,10 +18,8 @@ use crate::{
             compute_trace_id_to_air_id, derive_proof_shape_intermediates, derive_proof_shape_rules,
             ProofShapeIntermediates, ProofShapePreambleError,
         },
-        stacked_reduction::{
-            constrain_stacked_reduction_from_proof_inputs, StackedReductionConstraintError,
-        },
-        whir::{constrain_whir_from_proof_inputs, WhirError},
+        stacked_reduction::{constrain_stacked_reduction, StackedReductionConstraintError},
+        whir::{constrain_whir_verification, WhirError},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr,
@@ -63,7 +61,7 @@ impl From<WhirError> for PipelineError {
 }
 
 #[derive(Clone, Debug)]
-struct AssignedPreambleState {
+struct PreambleWire {
     public_values: Vec<Vec<BabyBearWire>>,
     /// Per-air cached commitment roots loaded as witness cells during transcript observation.
     /// Indexed by air_id (sparse: `None` for airs without cached commitments).
@@ -82,7 +80,7 @@ fn observe_preamble(
     proof: &Proof<RootConfig>,
     proof_shape: &ProofShapeIntermediates,
     statement_public_inputs: [AssignedValue<Fr>; 2],
-) -> AssignedPreambleState {
+) -> PreambleWire {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
     let num_airs = mvk.inner.per_air.len();
     let mut cached_commitment_roots = Vec::with_capacity(num_airs);
@@ -169,7 +167,7 @@ fn observe_preamble(
         })
         .collect::<Vec<_>>();
 
-    AssignedPreambleState {
+    PreambleWire {
         public_values,
         cached_commitment_roots,
     }
@@ -214,7 +212,7 @@ pub fn constrained_verify(
         .map_err(|err| PipelineError::ProofShape(ProofShapePreambleError::ProofShape(err)))?
         .layouts;
     let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, proof, &trace_id_to_air_id)?;
-    let stacked_reduction = constrain_stacked_reduction_from_proof_inputs(
+    let stacked_reduction = constrain_stacked_reduction(
         ctx,
         &ext_chip,
         &mut transcript,
@@ -252,7 +250,7 @@ pub fn constrained_verify(
         commits
     };
 
-    constrain_whir_from_proof_inputs(
+    constrain_whir_verification(
         ctx,
         &ext_chip,
         &mut transcript,
