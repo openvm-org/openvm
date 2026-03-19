@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-continuations = { workspace = true, features = ["root-prover"] }
 zkhash = { workspace = true }
 halo2-base = { workspace = true, features = ["halo2-axiom"] }
 snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
