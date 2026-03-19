@@ -13,12 +13,13 @@ zkhash = { workspace = true }
 halo2-base = { workspace = true, features = ["halo2-axiom"] }
 snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
 
-rand_chacha = { workspace = true }
-serde = { workspace = true }
+rand_chacha.workspace = true
+serde.workspace = true
 serde_with = { workspace = true, features = ["hex"], optional = true }
 itertools.workspace = true
-num-bigint = { workspace = true }
+num-bigint.workspace = true
 num-integer.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
