@@ -14,8 +14,7 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
     stages::{
         batch_constraints::{
-            compute_trace_id_to_air_id, constrain_batch_from_proof_inputs,
-            AssignedBatchIntermediates, BatchConstraintError,
+            compute_trace_id_to_air_id, constrain_batch_from_proof_inputs, BatchConstraintError,
         },
         full_pipeline::witness::get_need_rot_per_commit,
         proof_shape::{
@@ -23,10 +22,9 @@ use crate::{
             ProofShapePreambleError,
         },
         stacked_reduction::{
-            constrain_stacked_reduction_from_proof_inputs, AssignedStackedReductionIntermediates,
-            StackedReductionConstraintError,
+            constrain_stacked_reduction_from_proof_inputs, StackedReductionConstraintError,
         },
-        whir::{constrain_whir_from_proof_inputs, AssignedWhirIntermediates, WhirError},
+        whir::{constrain_whir_from_proof_inputs, WhirError},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr,
@@ -68,23 +66,14 @@ impl From<WhirError> for PipelineError {
 }
 
 #[derive(Clone, Debug)]
-pub struct AssignedPipelineIntermediates {
-    pub batch: AssignedBatchIntermediates,
-    pub stacked_reduction: AssignedStackedReductionIntermediates,
-    pub whir: AssignedWhirIntermediates,
-    pub statement_public_inputs: [AssignedValue<Fr>; 2],
-}
-
-#[derive(Clone, Debug)]
 struct AssignedPreambleState {
-    statement_public_inputs: [AssignedValue<Fr>; 2],
     public_values: Vec<Vec<BabyBearWire>>,
     /// Per-air cached commitment roots loaded as witness cells during transcript observation.
     /// Indexed by air_id (sparse: `None` for airs without cached commitments).
     cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
 }
 
-fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
+pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
@@ -95,14 +84,11 @@ fn observe_preamble(
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
     proof_shape: &ProofShapeIntermediates,
+    statement_public_inputs: [AssignedValue<Fr>; 2],
 ) -> AssignedPreambleState {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
     let num_airs = mvk.inner.per_air.len();
     let mut cached_commitment_roots = Vec::with_capacity(num_airs);
-    let statement_public_inputs = [
-        ctx.load_witness(digest_scalar_to_fr(mvk.pre_hash[0])),
-        ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
-    ];
 
     transcript.observe_commit(
         ctx,
@@ -187,7 +173,6 @@ fn observe_preamble(
         .collect::<Vec<_>>();
 
     AssignedPreambleState {
-        statement_public_inputs,
         public_values,
         cached_commitment_roots,
     }
@@ -199,7 +184,8 @@ pub fn constrained_verify(
     config: &RootConfig,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
-) -> Result<AssignedPipelineIntermediates, PipelineError> {
+    statement_public_inputs: [AssignedValue<Fr>; 2],
+) -> Result<(), PipelineError> {
     let l_skip = mvk.inner.params.l_skip;
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
@@ -207,7 +193,15 @@ pub fn constrained_verify(
     let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
     let mut transcript = TranscriptGadget::new(ctx);
-    let preamble = observe_preamble(ctx, range, &mut transcript, mvk, proof, &proof_shape);
+    let preamble = observe_preamble(
+        ctx,
+        range,
+        &mut transcript,
+        mvk,
+        proof,
+        &proof_shape,
+        statement_public_inputs,
+    );
 
     let batch = constrain_batch_from_proof_inputs(
         ctx,
@@ -250,7 +244,7 @@ pub fn constrained_verify(
     };
 
     let initial_commitment_roots = {
-        let common_main_root = preamble.statement_public_inputs[1];
+        let common_main_root = statement_public_inputs[1];
         let mut commits = vec![common_main_root];
         for &air_id in &trace_id_to_air_id {
             if let Some(preprocessed) = &mvk.inner.per_air[air_id].preprocessed_data {
@@ -261,7 +255,7 @@ pub fn constrained_verify(
         commits
     };
 
-    let whir = constrain_whir_from_proof_inputs(
+    constrain_whir_from_proof_inputs(
         ctx,
         &ext_chip,
         &mut transcript,
@@ -272,10 +266,5 @@ pub fn constrained_verify(
         &u_cube,
     );
 
-    Ok(AssignedPipelineIntermediates {
-        batch,
-        stacked_reduction,
-        whir,
-        statement_public_inputs: preamble.statement_public_inputs,
-    })
+    Ok(())
 }

@@ -130,28 +130,6 @@ pub struct MerklePathIntermediates {
     pub siblings: Vec<Fr>,
 }
 
-#[derive(Clone, Debug)]
-pub struct AssignedWhirIntermediates {
-    pub mu_pow_witness: BabyBearWire,
-    pub mu_challenge: BabyBearExtWire,
-    pub folding_pow_witnesses: Vec<BabyBearWire>,
-    pub folding_alphas: Vec<BabyBearExtWire>,
-    pub z0_challenges: Vec<BabyBearExtWire>,
-    pub query_phase_pow_witnesses: Vec<BabyBearWire>,
-    pub gammas: Vec<BabyBearExtWire>,
-    pub query_indices: Vec<AssignedValue<Fr>>,
-    pub whir_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
-    pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
-    pub initial_commitment_roots: Vec<AssignedValue<Fr>>,
-    pub codeword_commitment_roots: Vec<AssignedValue<Fr>>,
-    pub ood_values: Vec<BabyBearExtWire>,
-    pub final_poly: Vec<BabyBearExtWire>,
-    pub u_cube: Vec<BabyBearExtWire>,
-    pub final_claim: BabyBearExtWire,
-    pub final_acc: BabyBearExtWire,
-    pub final_residual: BabyBearExtWire,
-}
-
 pub(crate) fn ext_to_coeffs(value: ChildEF) -> [u64; BABY_BEAR_EXT_DEGREE] {
     core::array::from_fn(|i| {
         <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&value)[i]
@@ -404,7 +382,7 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     stacking_openings: &[Vec<BabyBearExtWire>],
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
-) -> AssignedWhirIntermediates {
+) {
     let range = ext_chip.range();
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
@@ -742,25 +720,4 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     let final_residual = ext_chip.sub(ctx, final_acc, final_claim);
     let zero = ext_chip.zero(ctx);
     ext_chip.assert_equal(ctx, final_residual, zero);
-
-    AssignedWhirIntermediates {
-        mu_pow_witness,
-        mu_challenge,
-        folding_pow_witnesses,
-        folding_alphas,
-        z0_challenges,
-        query_phase_pow_witnesses,
-        gammas,
-        query_indices,
-        whir_sumcheck_polys,
-        stacking_openings: stacking_openings.to_vec(),
-        initial_commitment_roots: initial_commitment_roots.to_vec(),
-        codeword_commitment_roots,
-        ood_values,
-        final_poly,
-        u_cube: u_cube.to_vec(),
-        final_claim,
-        final_acc,
-        final_residual,
-    }
 }
