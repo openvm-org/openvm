@@ -110,7 +110,6 @@ where
         StaticVerifierCircuit::populate(
             builder,
             &StaticVerifierInput {
-                config: engine.config(),
                 mvk: &vk,
                 proof: &proof,
             },
@@ -197,15 +196,8 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
             ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
         ];
         clear_recorded_ext_base_consts();
-        constrained_verify(
-            ctx,
-            &range,
-            engine.config(),
-            &vk,
-            &proof,
-            statement_public_inputs,
-        )
-        .expect("pipeline constrained verify should succeed before ext-constant prank");
+        constrained_verify(ctx, &range, &vk, &proof, statement_public_inputs)
+            .expect("pipeline constrained verify should succeed before ext-constant prank");
         let records = take_recorded_ext_base_consts();
         for (family, constant) in base_families {
             prank_recorded_ext_constant(ctx, &records, family, constant);
@@ -231,7 +223,6 @@ fn pipeline_constraints_fail_when_public_inputs_are_tampered() {
         StaticVerifierCircuit::populate(
             builder,
             &StaticVerifierInput {
-                config: engine.config(),
                 mvk: &vk,
                 proof: &proof,
             },

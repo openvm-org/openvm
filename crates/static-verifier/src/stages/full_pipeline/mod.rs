@@ -14,11 +14,10 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
     stages::{
         batch_constraints::{constrain_batch_from_proof_inputs, BatchConstraintError},
-        proof_shape::{
-            compute_trace_id_to_air_id, derive_proof_shape_intermediates, derive_proof_shape_rules,
-            ProofShapeIntermediates, ProofShapePreambleError,
+        proof_shape::compute_trace_id_to_air_id,
+        stacked_reduction::{
+            constrain_stacked_reduction, stacked_reduction_layouts, StackedReductionConstraintError,
         },
-        stacked_reduction::{constrain_stacked_reduction, StackedReductionConstraintError},
         whir::{constrain_whir_verification, WhirError},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
@@ -30,16 +29,9 @@ mod tests;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PipelineError {
-    ProofShape(ProofShapePreambleError),
     Batch(BatchConstraintError),
     StackedReduction(StackedReductionConstraintError),
     Whir(WhirError),
-}
-
-impl From<ProofShapePreambleError> for PipelineError {
-    fn from(value: ProofShapePreambleError) -> Self {
-        Self::ProofShape(value)
-    }
 }
 
 impl From<BatchConstraintError> for PipelineError {
@@ -78,7 +70,6 @@ fn observe_preamble(
     transcript: &mut TranscriptGadget,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
-    proof_shape: &ProofShapeIntermediates,
     statement_public_inputs: [AssignedValue<Fr>; 2],
 ) -> PreambleWire {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
@@ -103,7 +94,7 @@ fn observe_preamble(
         .map(|(air_idx, values)| {
             if !mvk.inner.per_air[air_idx].is_required {
                 let presence_flag =
-                    ctx.load_constant(Fr::from(proof_shape.air_presence_flags[air_idx] as u64));
+                    ctx.load_constant(Fr::from(proof.trace_vdata[air_idx].is_some() as u64));
                 transcript.observe(
                     ctx,
                     &base_chip,
@@ -124,8 +115,12 @@ fn observe_preamble(
                         &digest_wire_from_root(preprocessed_root),
                     );
                 } else {
-                    let log_height =
-                        ctx.load_constant(Fr::from(proof_shape.air_log_heights[air_idx] as u64));
+                    let log_height = ctx.load_constant(Fr::from(
+                        proof.trace_vdata[air_idx]
+                            .as_ref()
+                            .expect("present air must include trace vdata")
+                            .log_height as u64,
+                    ));
                     transcript.observe(
                         ctx,
                         &base_chip,
@@ -171,7 +166,6 @@ fn observe_preamble(
 pub fn constrained_verify(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
-    config: &RootConfig,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
     statement_public_inputs: [AssignedValue<Fr>; 2],
@@ -179,7 +173,6 @@ pub fn constrained_verify(
     let l_skip = mvk.inner.params.l_skip;
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
-    let proof_shape = derive_proof_shape_intermediates(config, mvk, proof)?;
     let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
     let mut transcript = TranscriptGadget::new(ctx);
@@ -189,7 +182,6 @@ pub fn constrained_verify(
         &mut transcript,
         mvk,
         proof,
-        &proof_shape,
         statement_public_inputs,
     );
 
@@ -203,9 +195,7 @@ pub fn constrained_verify(
         preamble.public_values,
     )?;
 
-    let layouts = derive_proof_shape_rules(&mvk.inner, proof)
-        .map_err(|err| PipelineError::ProofShape(ProofShapePreambleError::ProofShape(err)))?
-        .layouts;
+    let layouts = stacked_reduction_layouts(&mvk.inner, proof);
     let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, proof, &trace_id_to_air_id)?;
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
@@ -249,7 +239,7 @@ pub fn constrained_verify(
         ctx,
         &ext_chip,
         &mut transcript,
-        config,
+        &mvk.inner,
         &proof.whir_proof,
         &stacked_reduction.stacking_openings,
         &initial_commitment_roots,
