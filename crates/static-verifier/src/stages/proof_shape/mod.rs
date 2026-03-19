@@ -54,7 +54,8 @@ pub struct ProofShapeIntermediates {
     pub proof_shape_upper_bound_checks: Vec<(usize, usize)>,
 }
 
-fn compute_trace_id_to_air_id(
+// TODO: circuit should store this instead of computing on the fly
+pub(crate) fn compute_trace_id_to_air_id(
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     proof: &Proof<RootConfig>,
 ) -> Vec<usize> {
