@@ -72,6 +72,15 @@ the guest must take care to validate all data and account for behavior in cases 
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
 | hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from a fixed-seed RNG (`rand::rngs::StdRng`) on the host.                                                                                      |
 
+## Deferral Extension
+
+Deferral instructions use the _custom-1_ opcode prefix (`0101011`) and `funct3 = 0b111`. The 12-bit immediate encodes a deferral index and sub-opcode as `[def_idx(10 bits) | opcode(2 bits)]`.
+
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[1:0] | RISC-V description and notes |
+| ----------- | --- | ----------- | ------ | -------- | ---------------------------------------------------------------- |
+| def_call    | I   | 0101011     | 111    | 0x0      | Deferred call: reads 32-byte input commitment from `[rs1]`, writes 40-byte `OutputKey` to `[rd]`. `imm[11:2]` = deferral index. |
+| def_output  | I   | 0101011     | 111    | 0x1      | Retrieve deferred output: reads 40-byte `OutputKey` from `[rs1]`, writes output bytes to `[rd]`. `imm[11:2]` = deferral index. |
+
 ## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |

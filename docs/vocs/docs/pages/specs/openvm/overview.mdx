@@ -12,6 +12,7 @@ OpenVM is a modular framework to co-design and build a custom zkVM, ISA, and sup
   - Each VM extension with intrinsics specifies an extensible [transpiler](/specs/reference/transpiler) component to convert its instructions in the RISC-V ELF into OpenVM assembly. The transpiler comes with support for RV32IM and the set of default extensions, and it is extensible for new VM extensions.
   - VM extensions with kernels compile directly to OpenVM assembly and may be used outside of the Rust frontend, or called from within Rust via procedural macros.
 - All VMs within our framework support parallel proving of programs with unbounded cycle count using continuations and proof aggregation. Our [continuations design](/specs/architecture/continuations) maximizes proving parallelism and does not rely on interactive communication between continuation segments.
+- The [deferral framework](/specs/architecture/deferral) allows guest programs to offload expensive computations (such as STARK proof verification) to the proof aggregation phase. During app execution, the guest commits to the inputs and receives a commitment to the outputs. The deferred computation is executed and verified during aggregation.
 
 ## VM Extensions
 
@@ -39,4 +40,5 @@ More details about OpenVM are provided in the specific pages below.
 - [RISC-V custom instructions](/specs/reference/riscv-custom-code)
 - [Transpiler from RISC-V ELF to OpenVM assembly](/specs/reference/transpiler)
 - [Continuations](/specs/architecture/continuations)
+- [Deferral Framework](/specs/architecture/deferral)
 - [Memory Architecture](/specs/architecture/memory)

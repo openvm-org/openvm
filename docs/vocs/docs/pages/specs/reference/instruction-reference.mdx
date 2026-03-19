@@ -81,6 +81,15 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | RV32IM | `Rv32Phantom::PrintStr`       | Rv32PrintStr |
 | RV32IM | `Rv32Phantom::HintRandom`     | Rv32HintRandom |
 
+## Deferral Extension
+
+#### Instructions
+
+| VM Extension | `LocalOpcode` | ISA Instruction |
+| ------------- | ---------- | ------------- |
+| Deferral | `DeferralOpcode::CALL` | CALL |
+| Deferral | `DeferralOpcode::OUTPUT` | OUTPUT |
+
 ## Keccak Extension
 
 #### Instructions

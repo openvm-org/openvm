@@ -15,6 +15,7 @@ This specification describes the overall architecture and default VM extensions 
   multiplication. This extension respects the RISC-V memory format.
 - [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254
   and BLS12-381 curves. This extension respects the RISC-V memory format.
+- [Deferral](#deferral-extension): An extension for deferred computation, where results are committed during app execution and verified during proof aggregation.
 
 In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM
 extensions. For reader convenience, we provide a mapping between the code-level representation of opcodes in OpenVM and
@@ -432,6 +433,19 @@ The RV32IM extension defines the following phantom sub-instructions.
 | Rv32HintInput     | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                             |
 | Rv32PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
 | Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                                 |
+
+### Deferral Extension
+
+The deferral extension enables guest programs to defer expensive computations to the proof aggregation phase. During app execution, the guest provides an input commitment and receives back a commitment to the output. The actual computation is performed later during aggregation and verified by a [deferral hook circuit](/specs/architecture/deferral).
+
+Each deferral instruction encodes a **deferral index** (`def_idx`) identifying which deferred function to invoke. The index and sub-opcode are packed into a 12-bit immediate as `[def_idx(10 bits) | opcode(2 bits)]`, supporting up to 1024 deferral circuits.
+
+The extension operates on address spaces `1` (registers) and `2` (user memory) and uses address space `4` (deferral) for accumulator state.
+
+| Name   | Operands          | Description |
+|--------|-------------------|-------------|
+| CALL   | `a,b,def_idx,1,2` | Executes a deferred call for deferral index `def_idx`. Reads a 32-byte input commitment from `[r32{0}(b):32]_2`. Writes an `OutputKey` (32-byte output commitment followed by an 8-byte output length) to `[r32{0}(a):40]_2`. Also updates the input and output accumulators in address space `4`. |
+| OUTPUT | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes the output bytes to `[r32{0}(a):output_len]_2`. |
 
 ### Keccak Extension
 

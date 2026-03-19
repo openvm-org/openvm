@@ -30,6 +30,10 @@ export const specsSidebar: SidebarItem[] = [
                 link: "/specs/architecture/continuations"
             },
             {
+                text: "Deferral Framework",
+                link: "/specs/architecture/deferral"
+            },
+            {
                 text: "Distributed Proving",
                 link: "/specs/architecture/distributed-proving"
             }
