@@ -30,10 +30,9 @@ jobs:
     strategy:
       matrix:
         crates: # group crates on the same runner based on test time
-          - { names: "sha2 keccak256" }
+          - { names: "sha2 keccak256 verify-stark" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
-          - { names: "verify-stark" }
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/family=g6.*+g5+g6e
 
@@ -92,7 +91,7 @@ jobs:
           # Check if any crate in the current matrix group changed
           ANY_CRATE_CHANGED=false
           for crate in ${{ matrix.crates.names }}; do
-            crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)
+            crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')
             if [[ "$crate_changed" == "true" ]]; then
               ANY_CRATE_CHANGED=true
               break
@@ -127,7 +126,7 @@ jobs:
           rustup component add rust-src --toolchain nightly-2025-08-02
 
           for crate in ${{ matrix.crates.names }}; do
-            crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)
+            crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')
             if [[ "$COMMON_CHANGED" == "true" || "$crate_changed" == "true" ]]; then
               echo "::group::Running tests for $crate"
 
