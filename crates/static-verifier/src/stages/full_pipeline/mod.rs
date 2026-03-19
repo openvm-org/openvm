@@ -206,12 +206,6 @@ pub fn constrained_verify(
     let proof_shape = derive_proof_shape_intermediates(config, mvk, proof)?;
     let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
-    let assigned_trace_id_to_air_id = proof_shape
-        .trace_id_to_air_id
-        .iter()
-        .map(|&air_id| ctx.load_constant(Fr::from(air_id as u64)))
-        .collect::<Vec<_>>();
-
     let mut transcript = TranscriptGadget::new(ctx);
     let preamble = observe_preamble(ctx, range, &mut transcript, mvk, proof, &proof_shape);
 
@@ -222,7 +216,6 @@ pub fn constrained_verify(
         &mvk.inner,
         proof,
         &trace_id_to_air_id,
-        &assigned_trace_id_to_air_id,
         preamble.public_values,
     )?;
 

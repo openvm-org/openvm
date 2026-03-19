@@ -1,7 +1,7 @@
 use core::cmp::Reverse;
 use std::{iter::zip, sync::Arc};
 
-use halo2_base::{AssignedValue, Context};
+use halo2_base::Context;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
@@ -65,7 +65,6 @@ impl From<NativeBatchConstraintError<ChildEF>> for BatchConstraintError {
 
 #[derive(Clone, Debug)]
 pub struct AssignedBatchIntermediates {
-    pub trace_id_to_air_id: Vec<AssignedValue<Fr>>,
     pub public_values: Vec<Vec<BabyBearWire>>,
     pub logup_pow_witness: BabyBearWire,
     pub gkr_q0_claim: Option<BabyBearExtWire>,
@@ -561,7 +560,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     proof: &Proof<RootConfig>,
     trace_id_to_air_id: &[usize],
-    shared_trace_id_to_air_id: &[AssignedValue<Fr>],
     public_values: Vec<Vec<BabyBearWire>>,
 ) -> Result<AssignedBatchIntermediates, BatchConstraintError> {
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
@@ -638,7 +636,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         })
         .collect::<Vec<_>>();
 
-    let trace_id_to_air_id = shared_trace_id_to_air_id.to_vec();
     let logup_pow_bits = mvk0.params.logup.pow_bits;
     let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
     transcript.check_witness(ctx, range, baby_bear, logup_pow_bits, &logup_pow_witness);
@@ -1094,7 +1091,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     ext_chip.assert_equal(ctx, consistency_residual, zero);
 
     Ok(AssignedBatchIntermediates {
-        trace_id_to_air_id,
         public_values,
         logup_pow_witness,
         gkr_q0_claim,
