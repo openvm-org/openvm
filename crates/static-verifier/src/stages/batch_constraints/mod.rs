@@ -1,10 +1,7 @@
 use core::cmp::Reverse;
 use std::{iter::zip, sync::Arc};
 
-use halo2_base::{
-    gates::{GateInstructions, RangeInstructions},
-    AssignedValue, Context,
-};
+use halo2_base::{AssignedValue, Context};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
@@ -27,7 +24,6 @@ use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire},
     stages::shared_math,
     transcript::TranscriptGadget,
-    utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
 
@@ -71,10 +67,6 @@ impl From<NativeBatchConstraintError<ChildEF>> for BatchConstraintError {
 pub struct AssignedBatchIntermediates {
     pub trace_id_to_air_id: Vec<AssignedValue<Fr>>,
     pub public_values: Vec<Vec<BabyBearWire>>,
-    pub total_interactions: AssignedValue<Fr>,
-    pub n_logup: AssignedValue<Fr>,
-    pub n_max: AssignedValue<Fr>,
-    pub batch_degree: AssignedValue<Fr>,
     pub logup_pow_witness: BabyBearWire,
     pub gkr_q0_claim: Option<BabyBearExtWire>,
     pub gkr_claims_per_layer: Vec<Vec<BabyBearExtWire>>,
@@ -575,7 +567,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
     let baby_bear = ext_chip.base();
-    let gate = range.gate();
 
     let l_skip = mvk0.params.l_skip;
     let n_per_trace = trace_id_to_air_id
@@ -603,7 +594,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let n_logup_host = calculate_n_logup(l_skip, total_interactions_host);
     let n_max_host = n_per_trace.iter().copied().max().unwrap_or(0).max(0) as usize;
     let n_global_host = n_max_host.max(n_logup_host);
-    let batch_degree_host = mvk0.params.max_constraint_degree + 1;
     let omega_skip = ChildF::two_adic_generator(l_skip);
     let omega_skip_pows: Vec<_> = omega_skip.powers().take(1usize << l_skip).collect();
 
@@ -649,19 +639,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         .collect::<Vec<_>>();
 
     let trace_id_to_air_id = shared_trace_id_to_air_id.to_vec();
-    let total_interactions = baby_bear.assign_and_range_u64(ctx, total_interactions_host);
-    gate.assert_is_const(ctx, &total_interactions, &Fr::from(total_interactions_host));
-    let n_logup = baby_bear.assign_and_range_usize(ctx, n_logup_host);
-    gate.assert_is_const(ctx, &n_logup, &Fr::from(usize_to_u64(n_logup_host)));
-    let n_max = baby_bear.assign_and_range_usize(ctx, n_max_host);
-    gate.assert_is_const(ctx, &n_max, &Fr::from(usize_to_u64(n_max_host)));
-    let batch_degree = baby_bear.assign_and_range_usize(ctx, batch_degree_host);
-    gate.assert_is_const(
-        ctx,
-        &batch_degree,
-        &Fr::from(usize_to_u64(batch_degree_host)),
-    );
-
     let logup_pow_bits = mvk0.params.logup.pow_bits;
     let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
     transcript.check_witness(ctx, range, baby_bear, logup_pow_bits, &logup_pow_witness);
@@ -1119,10 +1096,6 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     Ok(AssignedBatchIntermediates {
         trace_id_to_air_id,
         public_values,
-        total_interactions,
-        n_logup,
-        n_max,
-        batch_degree,
         logup_pow_witness,
         gkr_q0_claim,
         gkr_claims_per_layer,

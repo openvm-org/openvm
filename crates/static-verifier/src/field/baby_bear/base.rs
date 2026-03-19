@@ -378,20 +378,6 @@ impl BabyBearChip {
     pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
         self.mul(ctx, a, a)
     }
-
-    pub fn assign_and_range_usize(&self, ctx: &mut Context<Fr>, value: usize) -> AssignedValue<Fr> {
-        let cell = ctx.load_witness(Fr::from(value as u64));
-        let bits = bit_length(value as u64).max(1);
-        self.range.range_check(ctx, cell, bits);
-        cell
-    }
-
-    pub fn assign_and_range_u64(&self, ctx: &mut Context<Fr>, value: u64) -> AssignedValue<Fr> {
-        let cell = ctx.load_witness(Fr::from(value));
-        let bits = bit_length(value).max(1);
-        self.range.range_check(ctx, cell, bits);
-        cell
-    }
 }
 
 /// Constrains and returns `(c, r)` such that `a = BabyBear::ORDER_U32 * c + r`.

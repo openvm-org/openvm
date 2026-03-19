@@ -986,31 +986,33 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
                 "trace-height coefficient row witness/schedule width mismatch",
             );
             for (&actual_coeff, &owned_coeff) in actual_coeffs.iter().zip(owned_coeffs) {
-                let coeff_cell = base_chip.assign_and_range_u64(ctx, actual_coeff);
-                gate.assert_is_const(ctx, &coeff_cell, &Fr::from(owned_coeff));
+                assert_eq!(
+                    actual_coeff, owned_coeff,
+                    "trace-height coefficient witness/schedule mismatch",
+                );
             }
         }
     }
 
-    let num_airs = base_chip.assign_and_range_usize(ctx, actual.num_airs);
-    gate.assert_is_const(
-        ctx,
-        &num_airs,
-        &Fr::from(usize_to_u64(actual.air_presence_flags.len())),
+    assert_eq!(
+        actual.num_airs,
+        actual.air_presence_flags.len(),
+        "num_airs must match air_presence_flags length",
     );
+    let num_airs = ctx.load_constant(Fr::from(usize_to_u64(actual.num_airs)));
 
-    let num_traces = base_chip.assign_and_range_usize(ctx, actual.num_traces);
-    gate.assert_is_const(
-        ctx,
-        &num_traces,
-        &Fr::from(usize_to_u64(actual.trace_id_to_air_id.len())),
+    assert_eq!(
+        actual.num_traces,
+        actual.trace_id_to_air_id.len(),
+        "num_traces must match trace_id_to_air_id length",
     );
+    let num_traces = ctx.load_constant(Fr::from(usize_to_u64(actual.num_traces)));
 
     let trace_id_to_air_id = actual
         .trace_id_to_air_id
         .iter()
         .map(|&actual_air_id| {
-            let air_id = base_chip.assign_and_range_usize(ctx, actual_air_id);
+            let air_id = ctx.load_constant(Fr::from(usize_to_u64(actual_air_id)));
             base_chip
                 .range()
                 .check_less_than_safe(ctx, air_id, usize_to_u64(actual.num_airs));
@@ -1034,54 +1036,58 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     let air_presence_flags = actual
         .air_presence_flags
         .iter()
-        .map(|&actual_flag| {
-            let flag = base_chip.assign_and_range_u64(ctx, actual_flag as u64);
-            gate.assert_bit(ctx, flag);
-            flag
-        })
+        .map(|&actual_flag| ctx.load_constant(Fr::from(actual_flag as u64)))
         .collect::<Vec<_>>();
 
+    for (&actual_len, &expected_len) in actual
+        .air_public_value_lens
+        .iter()
+        .zip(actual.air_expected_public_value_lens.iter())
+    {
+        assert_eq!(
+            actual_len, expected_len,
+            "public value length must match expected length",
+        );
+    }
     let air_public_value_lens = actual
         .air_public_value_lens
         .iter()
-        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
+        .map(|&actual_len| ctx.load_constant(Fr::from(usize_to_u64(actual_len))))
         .collect::<Vec<_>>();
     let air_expected_public_value_lens = actual
         .air_expected_public_value_lens
         .iter()
-        .map(|&expected_len| base_chip.assign_and_range_usize(ctx, expected_len))
+        .map(|&expected_len| ctx.load_constant(Fr::from(usize_to_u64(expected_len))))
         .collect::<Vec<_>>();
-    for (actual_len, expected_len) in air_public_value_lens
-        .iter()
-        .zip(air_expected_public_value_lens.iter())
-    {
-        ctx.constrain_equal(actual_len, expected_len);
-    }
 
+    for (&actual_len, &expected_len) in actual
+        .air_cached_commitment_lens
+        .iter()
+        .zip(actual.air_expected_cached_commitment_lens.iter())
+    {
+        assert_eq!(
+            actual_len, expected_len,
+            "cached commitment length must match expected length",
+        );
+    }
     let air_cached_commitment_lens = actual
         .air_cached_commitment_lens
         .iter()
-        .map(|&actual_len| base_chip.assign_and_range_usize(ctx, actual_len))
+        .map(|&actual_len| ctx.load_constant(Fr::from(usize_to_u64(actual_len))))
         .collect::<Vec<_>>();
     let air_expected_cached_commitment_lens = actual
         .air_expected_cached_commitment_lens
         .iter()
-        .map(|&expected_len| base_chip.assign_and_range_usize(ctx, expected_len))
+        .map(|&expected_len| ctx.load_constant(Fr::from(usize_to_u64(expected_len))))
         .collect::<Vec<_>>();
-    for (actual_len, expected_len) in air_cached_commitment_lens
-        .iter()
-        .zip(air_expected_cached_commitment_lens.iter())
-    {
-        ctx.constrain_equal(actual_len, expected_len);
-    }
 
     let max_log_height_allowed =
-        base_chip.assign_and_range_usize(ctx, actual.max_log_height_allowed);
+        ctx.load_constant(Fr::from(usize_to_u64(actual.max_log_height_allowed)));
     let air_log_heights = actual
         .air_log_heights
         .iter()
         .map(|&actual_log_height| {
-            let log_height = base_chip.assign_and_range_usize(ctx, actual_log_height);
+            let log_height = ctx.load_constant(Fr::from(usize_to_u64(actual_log_height)));
             base_chip.range().check_less_than_safe(
                 ctx,
                 log_height,
@@ -1146,7 +1152,7 @@ pub(crate) fn constrain_proof_shape_intermediates_with_ownership(
     let trace_height_sums = actual
         .trace_height_sums
         .iter()
-        .map(|&sum| base_chip.assign_and_range_u64(ctx, sum))
+        .map(|&sum| ctx.load_constant(Fr::from(sum)))
         .collect::<Vec<_>>();
     assert_eq!(trace_height_sums.len(), owned_trace_height_thresholds.len());
     for (constraint_idx, &threshold) in owned_trace_height_thresholds.iter().enumerate() {

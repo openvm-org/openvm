@@ -32,7 +32,6 @@ use crate::{
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
-    utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
 
@@ -359,11 +358,10 @@ fn constrain_merkle_path(
     let gate = ext_chip.range().gate();
     let one = ctx.load_constant(Fr::from(1u64));
 
-    let merkle_depth = ext_chip.base().assign_and_range_usize(ctx, siblings.len());
-    gate.assert_is_const(
-        ctx,
-        &merkle_depth,
-        &Fr::from(usize_to_u64(query_bits.len())),
+    assert_eq!(
+        siblings.len(),
+        query_bits.len(),
+        "merkle path depth must match query bits",
     );
 
     let leaf_values = leaf_inputs
