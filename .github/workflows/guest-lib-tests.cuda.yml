@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         crates: # group crates on the same runner based on test time
-          - { names: "sha2 keccak256" }
+          - { names: "sha2 keccak256 verify-stark" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
@@ -76,6 +76,10 @@ jobs:
               - "extensions/ecc/**"
               - "extensions/pairing/**"
               - "guest-libs/pairing/**"
+            verify-stark:
+              - "crates/recursion/**"
+              - "crates/continuations/**"
+              - "guest-libs/verify-stark/**"
 
       - name: Skip if no changes
         env:
@@ -87,7 +91,7 @@ jobs:
           # Check if any crate in the current matrix group changed
           ANY_CRATE_CHANGED=false
           for crate in ${{ matrix.crates.names }}; do
-            crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)
+            crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')
             if [[ "$crate_changed" == "true" ]]; then
               ANY_CRATE_CHANGED=true
               break
@@ -122,13 +126,17 @@ jobs:
           rustup component add rust-src --toolchain nightly-2025-08-02
 
           for crate in ${{ matrix.crates.names }}; do
-            crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)
+            crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')
             if [[ "$COMMON_CHANGED" == "true" || "$crate_changed" == "true" ]]; then
               echo "::group::Running tests for $crate"
 
               # Run guest library tests
               if [ -d "guest-libs/$crate" ]; then
-                pushd guest-libs/$crate
+                TEST_DIR="guest-libs/$crate"
+                if [[ "$crate" == "verify-stark" ]]; then
+                  TEST_DIR="guest-libs/$crate/circuit"
+                fi
+                pushd $TEST_DIR
 
                 # Handle special feature args for pairing crate
                 SPECIAL_ARGS=""
