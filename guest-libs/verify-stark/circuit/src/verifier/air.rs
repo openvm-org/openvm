@@ -3,7 +3,6 @@ use std::{array::from_fn, borrow::Borrow};
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
 use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_continuations::{
-    bn254::{CommitBytes, DagCommitBytes},
     circuit::{
         deferral::DeferralCircuitPvs,
         root::{
@@ -18,6 +17,7 @@ use openvm_continuations::{
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
+    CommitBytes, DagCommitBytes,
 };
 use openvm_recursion_circuit::{
     bus::{
