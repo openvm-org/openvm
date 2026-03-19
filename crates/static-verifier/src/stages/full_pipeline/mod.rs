@@ -7,6 +7,7 @@ use openvm_stark_sdk::{
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
         p3_field::PrimeField,
         proof::Proof,
+        prover::stacked_pcs::StackedLayout,
     },
 };
 
@@ -17,10 +18,8 @@ use crate::{
             constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
             load_gkr_proof_wire, BatchConstraintProofWire, GkrProofWire,
         },
-        proof_shape::compute_trace_id_to_air_id,
         stacked_reduction::{
-            constrain_stacked_reduction, load_stacking_proof_wire, stacked_reduction_layouts,
-            StackingProofWire,
+            constrain_stacked_reduction, load_stacking_proof_wire, StackingProofWire,
         },
         whir::{constrain_whir_verification, load_whir_proof_wire, WhirProofWire},
     },
@@ -46,11 +45,35 @@ pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
+/// Load proof data into Halo2 cells. `log_heights_per_air` must match this circuit's fixed heights;
+/// host-side asserts enforce that every `proof.trace_vdata[air_id].log_height` agrees.
 pub fn load_proof_wire(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     proof: &Proof<RootConfig>,
+    log_heights_per_air: &[usize],
 ) -> ProofWire {
+    assert_eq!(
+        proof.trace_vdata.len(),
+        log_heights_per_air.len(),
+        "proof.trace_vdata length must match log_heights_per_air"
+    );
+    for (air_id, (tv, &expected_log_height)) in proof
+        .trace_vdata
+        .iter()
+        .zip(log_heights_per_air.iter())
+        .enumerate()
+    {
+        let Some(vd) = tv.as_ref() else {
+            panic!("static verifier proof must include trace_vdata for air_id {air_id}");
+        };
+        assert_eq!(
+            vd.log_height, expected_log_height,
+            "trace log_height mismatch for air_id {air_id}: proof has {}, circuit expects {}",
+            vd.log_height, expected_log_height
+        );
+    }
+
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip.clone());
 
@@ -106,7 +129,7 @@ fn observe_preamble(
     range: &RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
-    proof: &Proof<RootConfig>,
+    log_heights_per_air: &[usize],
     public_values: &[Vec<BabyBearWire>],
     cached_commitment_roots: &[Vec<AssignedValue<Fr>>],
     statement_public_inputs: [AssignedValue<Fr>; 2],
@@ -126,8 +149,8 @@ fn observe_preamble(
 
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
-            let presence_flag =
-                ctx.load_constant(Fr::from(proof.trace_vdata[air_idx].is_some() as u64));
+            // Static verifier: every AIR in the child VK has a trace (see crate `lib.rs`).
+            let presence_flag = ctx.load_constant(Fr::one());
             transcript.observe(
                 ctx,
                 &base_chip,
@@ -138,35 +161,24 @@ fn observe_preamble(
             );
         }
 
-        if proof.trace_vdata[air_idx].is_some() {
-            if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
-                let preprocessed_root =
-                    ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
-                transcript.observe_commit(
-                    ctx,
-                    &base_chip,
-                    &digest_wire_from_root(preprocessed_root),
-                );
-            } else {
-                let log_height = ctx.load_constant(Fr::from(
-                    proof.trace_vdata[air_idx]
-                        .as_ref()
-                        .expect("present air must include trace vdata")
-                        .log_height as u64,
-                ));
-                transcript.observe(
-                    ctx,
-                    &base_chip,
-                    &BabyBearWire {
-                        value: log_height,
-                        max_bits: BABY_BEAR_BITS,
-                    },
-                );
-            }
+        if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
+            let preprocessed_root = ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
+            transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(preprocessed_root));
+        } else {
+            // Fixed circuit parameter (not loaded from the proof witness).
+            let log_height = ctx.load_constant(Fr::from(log_heights_per_air[air_idx] as u64));
+            transcript.observe(
+                ctx,
+                &base_chip,
+                &BabyBearWire {
+                    value: log_height,
+                    max_bits: BABY_BEAR_BITS,
+                },
+            );
+        }
 
-            for root in &cached_commitment_roots[air_idx] {
-                transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(*root));
-            }
+        for root in &cached_commitment_roots[air_idx] {
+            transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(*root));
         }
 
         for value in &public_values[air_idx] {
@@ -177,30 +189,38 @@ fn observe_preamble(
 
 /// Run the full static verifier pipeline on pre-loaded witness data.
 ///
+/// `trace_id_to_air_id` and `log_heights_per_air` are fixed for this circuit (host-side). They must
+/// match the child proof shape: `log_heights_per_air.len() == mvk.inner.per_air.len()`, and
+/// `trace_id_to_air_id` must list every `air_id` exactly once in descending-`log_height` order
+/// (tie-break: ascending `air_id`).
+///
+/// `stacked_layouts` must be the layout vector fixed for this circuit (same as stored on
+/// [`crate::StaticVerifierCircuit`]).
+///
 /// Returns the two statement public inputs as assigned cells:
 /// `[mvk_pre_hash_root, common_main_commit_root]`.
 pub fn constrained_verify(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
-    proof: &Proof<RootConfig>,
     proof_wire: ProofWire,
+    trace_id_to_air_id: &[usize],
+    log_heights_per_air: &[usize],
+    stacked_layouts: &[StackedLayout],
 ) -> [AssignedValue<Fr>; 2] {
+    assert_eq!(
+        log_heights_per_air.len(),
+        mvk.inner.per_air.len(),
+        "log_heights_per_air must match VK per_air count"
+    );
     let l_skip = mvk.inner.params.l_skip;
-    let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
     let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(mvk.pre_hash[0]));
     let statement_public_inputs = [mvk_pre_hash_root, proof_wire.common_main_commit_root];
 
     let n_per_trace: Vec<isize> = trace_id_to_air_id
         .iter()
-        .map(|&air_id| {
-            proof.trace_vdata[air_id]
-                .as_ref()
-                .expect("present air must have trace vdata")
-                .log_height as isize
-                - l_skip as isize
-        })
+        .map(|&air_id| log_heights_per_air[air_id] as isize - l_skip as isize)
         .collect();
 
     let mut transcript = TranscriptGadget::new(ctx);
@@ -209,7 +229,7 @@ pub fn constrained_verify(
         range,
         &mut transcript,
         mvk,
-        proof,
+        log_heights_per_air,
         &proof_wire.public_values,
         &proof_wire.cached_commitment_roots,
         statement_public_inputs,
@@ -226,18 +246,17 @@ pub fn constrained_verify(
         &proof_wire.gkr,
         &proof_wire.batch,
         &n_per_trace,
-        &trace_id_to_air_id,
+        trace_id_to_air_id,
         proof_wire.public_values,
     );
 
-    let layouts = stacked_reduction_layouts(&mvk.inner, proof);
-    let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, proof, &trace_id_to_air_id);
+    let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, trace_id_to_air_id);
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
         &ext_chip,
         &mut transcript,
         &proof_wire.stacking,
-        &layouts,
+        stacked_layouts,
         &need_rot_per_commit,
         l_skip,
         mvk.inner.params.n_stack,
@@ -261,7 +280,7 @@ pub fn constrained_verify(
     let initial_commitment_roots = {
         let common_main_root = statement_public_inputs[1];
         let mut commits = vec![common_main_root];
-        for &air_id in &trace_id_to_air_id {
+        for &air_id in trace_id_to_air_id {
             if let Some(preprocessed) = &mvk.inner.per_air[air_id].preprocessed_data {
                 commits.push(ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
             }
@@ -287,7 +306,6 @@ pub fn constrained_verify(
 /// Helper function, purely on out-of-circuit values.
 fn get_need_rot_per_commit(
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
-    proof: &Proof<RootConfig>,
     trace_id_to_air_id: &[usize],
 ) -> Vec<Vec<bool>> {
     let mut need_rot_per_commit = vec![trace_id_to_air_id
@@ -299,11 +317,7 @@ fn get_need_rot_per_commit(
         if mvk0.per_air[air_id].preprocessed_data.is_some() {
             need_rot_per_commit.push(vec![need_rot]);
         }
-        let cached_len = proof.trace_vdata[air_id]
-            .as_ref()
-            .expect("present air must have trace vdata")
-            .cached_commitments
-            .len();
+        let cached_len = mvk0.per_air[air_id].params.width.cached_mains.len();
         for _ in 0..cached_len {
             need_rot_per_commit.push(vec![need_rot]);
         }

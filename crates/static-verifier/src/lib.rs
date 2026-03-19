@@ -11,6 +11,7 @@
 //!   verifying key is optional.
 #![forbid(unsafe_code)]
 
+mod circuit;
 pub mod config;
 pub mod field;
 pub mod hash;
@@ -20,13 +21,11 @@ pub mod stages;
 pub mod transcript;
 mod utils;
 
+pub use circuit::{StaticCircuitParamsError, StaticVerifierCircuit};
 pub use config::{
     StaticVerifierShape, STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS,
 };
 pub use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 pub use keygen::StaticVerifierProvingKey;
 pub use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{EF as RootEF, F as RootF};
-pub use prover::{
-    Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit,
-    StaticVerifierInput, StaticVerifierProof,
-};
+pub use prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof};
