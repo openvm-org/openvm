@@ -268,7 +268,7 @@ fn tree_compress_assigned_digests(
         .expect("tree_compress must output one digest for non-empty inputs")
 }
 
-struct AssignedMerklePathPayload {
+struct MerkleWire {
     leaf_values: Vec<Vec<BabyBearWire>>,
 }
 
@@ -279,7 +279,7 @@ fn constrain_merkle_path(
     leaf_inputs: &[Vec<u64>],
     siblings: &[Fr],
     root_digest: AssignedValue<Fr>,
-) -> AssignedMerklePathPayload {
+) -> MerkleWire {
     assert!(
         leaf_inputs.len().is_power_of_two(),
         "leaf input count must be power of two"
@@ -321,11 +321,11 @@ fn constrain_merkle_path(
     }
 
     ctx.constrain_equal(&cur, &root_digest);
-    AssignedMerklePathPayload { leaf_values }
+    MerkleWire { leaf_values }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn constrain_whir_from_proof_inputs(
+pub(crate) fn constrain_whir_verification(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
