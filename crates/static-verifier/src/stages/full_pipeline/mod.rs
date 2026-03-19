@@ -87,13 +87,11 @@ fn observe_preamble(
 
     transcript.observe_commit(
         ctx,
-        range,
         &base_chip,
         &digest_wire_from_root(statement_public_inputs[0]),
     );
     transcript.observe_commit(
         ctx,
-        range,
         &base_chip,
         &digest_wire_from_root(statement_public_inputs[1]),
     );
@@ -108,7 +106,6 @@ fn observe_preamble(
                     ctx.load_constant(Fr::from(proof_shape.air_presence_flags[air_idx] as u64));
                 transcript.observe(
                     ctx,
-                    range,
                     &base_chip,
                     &BabyBearWire {
                         value: presence_flag,
@@ -123,7 +120,6 @@ fn observe_preamble(
                         ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
                     transcript.observe_commit(
                         ctx,
-                        range,
                         &base_chip,
                         &digest_wire_from_root(preprocessed_root),
                     );
@@ -132,7 +128,6 @@ fn observe_preamble(
                         ctx.load_constant(Fr::from(proof_shape.air_log_heights[air_idx] as u64));
                     transcript.observe(
                         ctx,
-                        range,
                         &base_chip,
                         &BabyBearWire {
                             value: log_height,
@@ -148,7 +143,7 @@ fn observe_preamble(
                     .cached_commitments
                 {
                     let root = ctx.load_witness(digest_scalar_to_fr(commit[0]));
-                    transcript.observe_commit(ctx, range, &base_chip, &digest_wire_from_root(root));
+                    transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(root));
                     air_cached_roots.push(root);
                 }
                 cached_commitment_roots.push(air_cached_roots);
@@ -160,7 +155,7 @@ fn observe_preamble(
                 .iter()
                 .map(|&value| {
                     let value = base_chip.load_witness(ctx, value);
-                    transcript.observe(ctx, range, &base_chip, &value);
+                    transcript.observe(ctx, &base_chip, &value);
                     value
                 })
                 .collect::<Vec<_>>()

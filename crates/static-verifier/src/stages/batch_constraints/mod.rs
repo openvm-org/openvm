@@ -472,13 +472,12 @@ fn column_openings_by_rot_assigned(
 
 fn observe_layer_claims_assigned(
     ctx: &mut Context<Fr>,
-    range: &halo2_base::gates::range::RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
     baby_bear: &BabyBearChip,
     claims: &[BabyBearExtWire],
 ) {
     for claim in claims {
-        transcript.observe_ext(ctx, range, baby_bear, claim);
+        transcript.observe_ext(ctx, baby_bear, claim);
     }
 }
 
@@ -568,10 +567,10 @@ pub(crate) fn constrain_batch_from_proof_inputs(
 
     let logup_pow_bits = mvk0.params.logup.pow_bits;
     let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
-    transcript.check_witness(ctx, range, baby_bear, logup_pow_bits, &logup_pow_witness);
+    transcript.check_witness(ctx, baby_bear, logup_pow_bits, &logup_pow_witness);
 
-    let alpha_logup = transcript.sample_ext(ctx, range, baby_bear);
-    let beta_logup = transcript.sample_ext(ctx, range, baby_bear);
+    let alpha_logup = transcript.sample_ext(ctx, baby_bear);
+    let beta_logup = transcript.sample_ext(ctx, baby_bear);
 
     let gkr_q0_claim = (total_interactions_host != 0)
         .then(|| ext_chip.load_witness(ctx, proof.gkr_proof.q0_claim));
@@ -615,10 +614,10 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             let q0_claim = gkr_q0_claim
                 .as_ref()
                 .expect("non-zero interaction branch must include q0 claim witness");
-            transcript.observe_ext(ctx, range, baby_bear, q0_claim);
+            transcript.observe_ext(ctx, baby_bear, q0_claim);
 
             let layer0 = &gkr_claims_per_layer[0];
-            observe_layer_claims_assigned(ctx, range, transcript, baby_bear, layer0);
+            observe_layer_claims_assigned(ctx, transcript, baby_bear, layer0);
 
             let p0_q1 = ext_chip.mul(ctx, layer0[0], layer0[3]);
             let p1_q0 = ext_chip.mul(ctx, layer0[2], layer0[1]);
@@ -627,7 +626,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             ext_chip.assert_equal(ctx, p_cross, zero);
             ext_chip.assert_equal(ctx, q_cross, *q0_claim);
 
-            let mu0 = transcript.sample_ext(ctx, range, baby_bear);
+            let mu0 = transcript.sample_ext(ctx, baby_bear);
             let mut gkr_sample_stream = vec![mu0];
             let mut numer_claim =
                 interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[0], &layer0[2], &mu0);
@@ -636,7 +635,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
             let mut gkr_r = vec![mu0];
 
             for round in 1..total_gkr_rounds {
-                let lambda_round = transcript.sample_ext(ctx, range, baby_bear);
+                let lambda_round = transcript.sample_ext(ctx, baby_bear);
                 gkr_sample_stream.push(lambda_round);
 
                 let lambda_denom = ext_chip.mul(ctx, lambda_round, denom_claim);
@@ -649,11 +648,11 @@ pub(crate) fn constrain_batch_from_proof_inputs(
                     let ev1 = round_polys[subround * 3];
                     let ev2 = round_polys[subround * 3 + 1];
                     let ev3 = round_polys[subround * 3 + 2];
-                    transcript.observe_ext(ctx, range, baby_bear, &ev1);
-                    transcript.observe_ext(ctx, range, baby_bear, &ev2);
-                    transcript.observe_ext(ctx, range, baby_bear, &ev3);
+                    transcript.observe_ext(ctx, baby_bear, &ev1);
+                    transcript.observe_ext(ctx, baby_bear, &ev2);
+                    transcript.observe_ext(ctx, baby_bear, &ev3);
 
-                    let ri = transcript.sample_ext(ctx, range, baby_bear);
+                    let ri = transcript.sample_ext(ctx, baby_bear);
                     gkr_sample_stream.push(ri);
                     gkr_r_prime.push(ri);
 
@@ -673,7 +672,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
                 }
 
                 let layer_claims = &gkr_claims_per_layer[round];
-                observe_layer_claims_assigned(ctx, range, transcript, baby_bear, layer_claims);
+                observe_layer_claims_assigned(ctx, transcript, baby_bear, layer_claims);
 
                 let p0_q1 = ext_chip.mul(ctx, layer_claims[0], layer_claims[3]);
                 let p1_q0 = ext_chip.mul(ctx, layer_claims[2], layer_claims[1]);
@@ -684,7 +683,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
                 let expected_claim = ext_chip.mul(ctx, claim_sum, eq);
                 ext_chip.assert_equal(ctx, expected_claim, claim);
 
-                let mu_round = transcript.sample_ext(ctx, range, baby_bear);
+                let mu_round = transcript.sample_ext(ctx, baby_bear);
                 gkr_sample_stream.push(mu_round);
                 numer_claim = interpolate_linear_at_01_assigned(
                     ctx,
@@ -710,10 +709,10 @@ pub(crate) fn constrain_batch_from_proof_inputs(
 
     let mut xi = gkr_xi_claims;
     while xi.len() != l_skip + n_global_host {
-        xi.push(transcript.sample_ext(ctx, range, baby_bear));
+        xi.push(transcript.sample_ext(ctx, baby_bear));
     }
 
-    let lambda = transcript.sample_ext(ctx, range, baby_bear);
+    let lambda = transcript.sample_ext(ctx, baby_bear);
 
     let numerator_term_per_air = proof
         .batch_constraint_proof
@@ -733,8 +732,8 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     {
         gkr_p_xi_claim = ext_chip.sub(ctx, gkr_p_xi_claim, *num_term);
         gkr_q_xi_claim = ext_chip.sub(ctx, gkr_q_xi_claim, *den_term);
-        transcript.observe_ext(ctx, range, baby_bear, num_term);
-        transcript.observe_ext(ctx, range, baby_bear, den_term);
+        transcript.observe_ext(ctx, baby_bear, num_term);
+        transcript.observe_ext(ctx, baby_bear, den_term);
     }
     let gkr_numerator_residual = gkr_p_xi_claim;
     let gkr_denominator_claim = gkr_q_xi_claim;
@@ -742,7 +741,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     ext_chip.assert_equal(ctx, gkr_numerator_residual, zero);
     ext_chip.assert_equal(ctx, gkr_denominator_residual, zero);
 
-    let mu = transcript.sample_ext(ctx, range, baby_bear);
+    let mu = transcript.sample_ext(ctx, baby_bear);
 
     let mut sum_claim = ext_chip.zero(ctx);
     let mut cur_mu_pow = one;
@@ -766,9 +765,9 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
     for coeff in &univariate_round_coeffs {
-        transcript.observe_ext(ctx, range, baby_bear, coeff);
+        transcript.observe_ext(ctx, baby_bear, coeff);
     }
-    let mut r = vec![transcript.sample_ext(ctx, range, baby_bear)];
+    let mut r = vec![transcript.sample_ext(ctx, baby_bear)];
 
     let stride = 1usize << l_skip;
     let mut sum_univ_domain_s_0 = ext_chip.zero(ctx);
@@ -792,7 +791,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let mut consistency_lhs = eval_ext_poly_horner(ctx, &ext_chip, &univariate_round_coeffs, &r[0]);
     for round_evals in &sumcheck_round_polys {
         for eval in round_evals {
-            transcript.observe_ext(ctx, range, baby_bear, eval);
+            transcript.observe_ext(ctx, baby_bear, eval);
         }
 
         let s_1 = round_evals[0];
@@ -800,7 +799,7 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         let mut interpolation_evals = Vec::with_capacity(round_evals.len() + 1);
         interpolation_evals.push(s_0);
         interpolation_evals.extend(round_evals.iter().copied());
-        let next_r = transcript.sample_ext(ctx, range, baby_bear);
+        let next_r = transcript.sample_ext(ctx, baby_bear);
         consistency_lhs =
             eval_lagrange_on_integer_grid(ctx, &ext_chip, &next_r, &interpolation_evals);
         r.push(next_r);
@@ -825,8 +824,8 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         let need_rot = column_openings_need_rot[trace_idx][0];
         for claim in column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[0], need_rot) {
-            transcript.observe_ext(ctx, range, baby_bear, &claim.local);
-            transcript.observe_ext(ctx, range, baby_bear, &claim.next);
+            transcript.observe_ext(ctx, baby_bear, &claim.local);
+            transcript.observe_ext(ctx, baby_bear, &claim.next);
         }
     }
 
@@ -834,8 +833,8 @@ pub(crate) fn constrain_batch_from_proof_inputs(
         for (part_idx, claims) in air_openings.iter().enumerate().skip(1) {
             let need_rot = column_openings_need_rot[trace_idx][part_idx];
             for claim in column_openings_by_rot_assigned(ctx, &ext_chip, claims, need_rot) {
-                transcript.observe_ext(ctx, range, baby_bear, &claim.local);
-                transcript.observe_ext(ctx, range, baby_bear, &claim.next);
+                transcript.observe_ext(ctx, baby_bear, &claim.local);
+                transcript.observe_ext(ctx, baby_bear, &claim.next);
             }
         }
     }

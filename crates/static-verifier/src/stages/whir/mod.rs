@@ -335,7 +335,6 @@ pub(crate) fn constrain_whir_verification(
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
 ) {
-    let range = ext_chip.range();
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
     let params = config.params();
@@ -345,12 +344,11 @@ pub(crate) fn constrain_whir_verification(
     let mu_pow_witness = ext_chip.base().load_witness(ctx, whir_proof.mu_pow_witness);
     transcript.check_witness(
         ctx,
-        range,
         base_chip,
         params.whir.mu_pow_bits,
         &mu_pow_witness,
     );
-    let mu_challenge = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+    let mu_challenge = transcript.sample_ext(ctx, ext_chip.base());
 
     let folding_pow_witnesses = whir_proof
         .folding_pow_witnesses
@@ -441,20 +439,19 @@ pub(crate) fn constrain_whir_verification(
             if let Some(evals) = whir_sumcheck_polys.get(sumcheck_cursor) {
                 let ev1 = evals[0];
                 let ev2 = evals[1];
-                transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &ev1);
-                transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &ev2);
+                transcript.observe_ext(ctx, ext_chip.base(), &ev1);
+                transcript.observe_ext(ctx, ext_chip.base(), &ev2);
 
                 let pow_witness = folding_pow_witnesses[folding_pow_cursor];
                 folding_pow_cursor += 1;
                 transcript.check_witness(
                     ctx,
-                    range,
                     base_chip,
                     params.whir.folding_pow_bits,
                     &pow_witness,
                 );
 
-                let alpha = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+                let alpha = transcript.sample_ext(ctx, ext_chip.base());
                 alphas_round.push(alpha);
                 folding_alphas.push(alpha);
 
@@ -472,27 +469,25 @@ pub(crate) fn constrain_whir_verification(
 
         let y0 = if is_final_round {
             for coeff in &final_poly {
-                transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), coeff);
+                transcript.observe_ext(ctx, ext_chip.base(), coeff);
             }
             None
         } else {
             transcript.observe_commit(
                 ctx,
-                ext_chip.range(),
                 ext_chip.base(),
                 &codeword_commitment_digests[round_idx],
             );
-            let z0 = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+            let z0 = transcript.sample_ext(ctx, ext_chip.base());
             z0_challenges.push(z0);
 
             let y0 = ood_values[round_idx];
-            transcript.observe_ext(ctx, ext_chip.range(), ext_chip.base(), &y0);
+            transcript.observe_ext(ctx, ext_chip.base(), &y0);
             Some(y0)
         };
 
         transcript.check_witness(
             ctx,
-            range,
             base_chip,
             params.whir.query_phase_pow_bits,
             &query_phase_pow_witnesses[round_idx],
@@ -507,7 +502,7 @@ pub(crate) fn constrain_whir_verification(
 
         for query_idx in 0..num_queries {
             let query_index =
-                transcript.sample_bits(ctx, ext_chip.range(), ext_chip.base(), query_bits);
+                transcript.sample_bits(ctx, ext_chip.base(), query_bits);
             query_index_bits.push(query_bits);
             query_indices.push(query_index);
             let query_bits_vec = if query_bits == 0 {
@@ -586,7 +581,7 @@ pub(crate) fn constrain_whir_verification(
             ys_round.push(yi);
         }
 
-        let gamma = transcript.sample_ext(ctx, ext_chip.range(), ext_chip.base());
+        let gamma = transcript.sample_ext(ctx, ext_chip.base());
         if let Some(y0) = y0 {
             let y0_term = ext_chip.mul(ctx, y0, gamma);
             final_claim = ext_chip.add(ctx, final_claim, y0_term);
