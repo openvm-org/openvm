@@ -54,6 +54,10 @@ pub struct Sha256VmControlCols<T> {
     pub pad_flags: [T; 6],
     /// A boolean flag that indicates whether a padding already occurred
     pub padding_occurred: T,
+    /// A boolean flag that is true when `row_idx == 3`, the row is the first padding row,
+    /// and the padding offset is >= 8, meaning the 8-byte length suffix spills into the
+    /// next block.
+    pub padding_spills: T,
 }
 
 /// Width of the Sha256VmControlCols

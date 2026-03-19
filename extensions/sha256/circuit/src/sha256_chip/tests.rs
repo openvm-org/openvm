@@ -563,6 +563,240 @@ fn test_row_local_last_block_can_omit_length_row() {
     );
 }
 
+// Audit finding: the padding constraints must tie the terminal `is_last_block` position to `len`,
+// otherwise a malicious prover can keep extra all-padding blocks after padding already started.
+//
+// Execute a 57-byte message (honestly 2 blocks), then prank the trace to claim len=5 with padding
+// starting at byte 5 of block 0. The trace still keeps 2 message blocks (`is_last_block` stays on
+// block 1), even though len=5 should terminate in block 0. The inner SHA trace is regenerated
+// with exploit block data so `w` values are consistent with the forged padding layout, while
+// `carry_or_buffer` (memory reads) stays honest.
+//
+// Before the fix this style of exploit could delay `is_last_block`; after the fix the forged
+// 2-block trace must be rejected.
+#[test]
+fn test_extra_block_padding_rejected() {
+    use std::cell::Cell;
+
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, (bitwise_air, bitwise_chip)) =
+        create_harness::<MatrixRecordArena<F>>(&mut tester);
+
+    // 57-byte message honestly needs 2 blocks for SHA-256 padding.
+    let message = [0xab_u8; 57];
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        SHA256,
+        Some(&message),
+        None,
+    );
+
+    let address_bits = tester.address_bits();
+    let sha_helper = Sha256FillerHelper::new();
+
+    // Exploit block data: claim len=5 with padding at byte 5 of block 0.
+    let exploit_block0: [u8; SHA256_BLOCK_U8S] = {
+        let mut b = [0u8; SHA256_BLOCK_U8S];
+        b[..5].copy_from_slice(&message[..5]);
+        b[5] = 1 << (RV32_CELL_BITS - 1);
+        b
+    };
+    let exploit_block1: [u8; SHA256_BLOCK_U8S] = {
+        let mut b = [0u8; SHA256_BLOCK_U8S];
+        b[63] = 40; // 5 * 8 = 40 bits
+        b
+    };
+    let to_words = |block: &[u8; SHA256_BLOCK_U8S]| -> [u32; SHA256_BLOCK_WORDS] {
+        array::from_fn(|i| u32::from_be_bytes(block[i * 4..(i + 1) * 4].try_into().unwrap()))
+    };
+    let block0_words = to_words(&exploit_block0);
+    let block1_words = to_words(&exploit_block1);
+
+    let hash_after_block0 = Sha256FillerHelper::get_block_hash(&SHA256_H, exploit_block0);
+    let exploit_hash_words = Sha256FillerHelper::get_block_hash(&hash_after_block0, exploit_block1);
+
+    let honest_5_hash = sha256_solve(&message[..5]);
+    let exploit_hash_bytes: [u8; 32] =
+        array::from_fn(|i| ((exploit_hash_words[i / 4] >> (8 * (3 - i % 4))) & 0xFF) as u8);
+    assert_ne!(
+        exploit_hash_bytes, honest_5_hash,
+        "Exploit must produce a different hash than honest SHA-256 of 5 bytes",
+    );
+
+    let orig_len_data_cell: Cell<[F; 4]> = Cell::new([F::ZERO; 4]);
+    let rs2_ptr_cell: Cell<u32> = Cell::new(0);
+    let dst_ptr_cell: Cell<u32> = Cell::new(0);
+    let src_ptr_cell: Cell<u32> = Cell::new(0);
+    let prev_ts_cell: Cell<u32> = Cell::new(0);
+    let read_ts_cell: Cell<u32> = Cell::new(0);
+    let from_ts_cell: Cell<u32> = Cell::new(0);
+    let orig_final_hash_cell: Cell<[[F; SHA256_WORD_U8S]; SHA256_HASH_WORDS]> =
+        Cell::new([[F::ZERO; SHA256_WORD_U8S]; SHA256_HASH_WORDS]);
+
+    let modify_trace = |trace: &mut RowMajorMatrix<F>| {
+        let width = trace.width();
+
+        // Capture values from the digest row of block 1, where the forged trace still marks the
+        // message as ending.
+        for row_idx in 0..trace.height() {
+            let row = &trace.values[row_idx * width..(row_idx + 1) * width];
+            let digest: &Sha256VmDigestCols<F> = row[..SHA256VM_DIGEST_WIDTH].borrow();
+            if digest.inner.flags.is_digest_row.is_one()
+                && digest.inner.flags.is_last_block.is_one()
+            {
+                orig_len_data_cell.set(digest.len_data);
+                rs2_ptr_cell.set(digest.rs2_ptr.as_canonical_u32());
+                dst_ptr_cell.set(u32::from_le_bytes(
+                    digest.dst_ptr.map(|x| x.as_canonical_u32() as u8),
+                ));
+                src_ptr_cell.set(u32::from_le_bytes(
+                    digest.src_ptr.map(|x| x.as_canonical_u32() as u8),
+                ));
+                let from_ts = digest.from_state.timestamp.as_canonical_u32();
+                from_ts_cell.set(from_ts);
+                read_ts_cell.set(from_ts + 2);
+                prev_ts_cell.set(
+                    digest.register_reads_aux[2]
+                        .get_base()
+                        .prev_timestamp
+                        .as_canonical_u32(),
+                );
+                orig_final_hash_cell.set(digest.inner.final_hash);
+
+                let row_mut = &mut trace.values[row_idx * width..(row_idx + 1) * width];
+                let digest_mut: &mut Sha256VmDigestCols<F> =
+                    row_mut[..SHA256VM_DIGEST_WIDTH].borrow_mut();
+                digest_mut.len_data = [F::from_u8(5), F::ZERO, F::ZERO, F::ZERO];
+                break;
+            }
+        }
+
+        let padding_encoder = Encoder::new(PaddingFlags::COUNT, 2, false);
+
+        // Set len=5 on all real rows and clear the honest spill witness: the forged layout claims
+        // padding starts immediately on row 0, so there is no spill block.
+        for row_idx in 0..2 * SHA256_ROWS_PER_BLOCK {
+            let row = &mut trace.values[row_idx * width..(row_idx + 1) * width];
+            let control: &mut Sha256VmControlCols<F> = row[..SHA256VM_CONTROL_WIDTH].borrow_mut();
+            control.len = F::from_u32(5);
+            control.padding_spills = F::ZERO;
+        }
+
+        // Block 0 padding flags: FirstPadding5 on row 0, EntirePadding on rows 1-3.
+        for row_in_block in 0..4 {
+            let row = &mut trace.values[row_in_block * width..(row_in_block + 1) * width];
+            let control: &mut Sha256VmControlCols<F> = row[..SHA256VM_CONTROL_WIDTH].borrow_mut();
+            let flag = if row_in_block == 0 {
+                PaddingFlags::FirstPadding5 as usize
+            } else {
+                PaddingFlags::EntirePadding as usize
+            };
+            control.pad_flags = get_flag_pt_array(&padding_encoder, flag).map(F::from_u32);
+        }
+
+        // Block 0 claims padding has already started on every row.
+        for row_idx in 0..SHA256_ROWS_PER_BLOCK {
+            let row = &mut trace.values[row_idx * width..(row_idx + 1) * width];
+            let control: &mut Sha256VmControlCols<F> = row[..SHA256VM_CONTROL_WIDTH].borrow_mut();
+            control.padding_occurred = F::ONE;
+        }
+
+        // Regenerate the inner SHA traces with the forged block contents. This only rewrites the
+        // shared SHA256 columns, so the control-column prank above stays in place.
+        bitwise_chip.clear();
+        sha_helper.generate_block_trace(
+            &mut trace.values[..SHA256_ROWS_PER_BLOCK * width],
+            width,
+            SHA256VM_CONTROL_WIDTH,
+            &block0_words,
+            bitwise_chip.as_ref(),
+            &SHA256_H,
+            false,
+            1,
+            0,
+        );
+        sha_helper.generate_block_trace(
+            &mut trace.values[SHA256_ROWS_PER_BLOCK * width..2 * SHA256_ROWS_PER_BLOCK * width],
+            width,
+            SHA256VM_CONTROL_WIDTH,
+            &block1_words,
+            bitwise_chip.as_ref(),
+            &hash_after_block0,
+            true,
+            2,
+            1,
+        );
+
+        // Regenerate the overlapping helper rows for both blocks.
+        sha_helper.generate_missing_cells(
+            &mut trace.values[width..(SHA256_ROWS_PER_BLOCK + 1) * width],
+            width,
+            SHA256VM_CONTROL_WIDTH,
+        );
+        sha_helper.generate_missing_cells(
+            &mut trace.values
+                [(SHA256_ROWS_PER_BLOCK + 1) * width..(2 * SHA256_ROWS_PER_BLOCK + 1) * width],
+            width,
+            SHA256VM_CONTROL_WIDTH,
+        );
+
+        let msl_rshift = ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS) as u32;
+        let msl_lshift = (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - address_bits) as u32;
+        bitwise_chip.request_range(
+            (dst_ptr_cell.get() >> msl_rshift) << msl_lshift,
+            (src_ptr_cell.get() >> msl_rshift) << msl_lshift,
+        );
+        bitwise_chip.request_range(0, 0);
+    };
+
+    disable_debug_builder();
+    let mut tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery((bitwise_air, bitwise_chip));
+
+    // Compensate memory bus for the forged rs2 register read.
+    let orig_data = orig_len_data_cell.get();
+    let pranked_data: [F; 4] = [F::from_u8(5), F::ZERO, F::ZERO, F::ZERO];
+    let rs2_ptr = rs2_ptr_cell.get();
+    let prev_ts = prev_ts_cell.get();
+    let read_ts = read_ts_cell.get();
+
+    let memory = tester.memory.as_mut().unwrap();
+    let chip4 = memory.chip_for_block.get_mut(&4).unwrap();
+    chip4.receive(1, rs2_ptr, &orig_data, prev_ts);
+    chip4.send(1, rs2_ptr, &orig_data, read_ts);
+    chip4.send(1, rs2_ptr, &pranked_data, prev_ts);
+    chip4.receive(1, rs2_ptr, &pranked_data, read_ts);
+
+    // Compensate memory bus for the forged hash write.
+    let write_ts = from_ts_cell.get() + 3 + 8;
+    let dst_ptr = dst_ptr_cell.get();
+
+    let orig_final_hash = orig_final_hash_cell.get();
+    let honest_hash_flat: [F; 32] = array::from_fn(|i| {
+        orig_final_hash[i / SHA256_WORD_U8S][SHA256_WORD_U8S - 1 - i % SHA256_WORD_U8S]
+    });
+    let exploit_hash_flat: [F; 32] = array::from_fn(|i| {
+        F::from_u8(((exploit_hash_words[i / 4] >> (8 * (3 - i % 4))) & 0xFF) as u8)
+    });
+
+    let chip32 = memory.chip_for_block.get_mut(&32).unwrap();
+    chip32.send(RV32_MEMORY_AS, dst_ptr, &honest_hash_flat, write_ts);
+    chip32.receive(RV32_MEMORY_AS, dst_ptr, &exploit_hash_flat, write_ts);
+
+    let tester = tester.finalize();
+    let result = tester.simple_test();
+    assert!(
+        result.is_err(),
+        "Exploit 2-block trace for len=5 should be rejected by padding constraints",
+    );
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///

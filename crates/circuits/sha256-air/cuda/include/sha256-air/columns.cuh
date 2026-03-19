@@ -57,6 +57,7 @@ template <typename T> struct Sha256VmControlCols {
     T read_ptr;
     T pad_flags[6];
     T padding_occurred;
+    T padding_spills;
 };
 
 template <typename T> struct Sha256VmRoundCols {

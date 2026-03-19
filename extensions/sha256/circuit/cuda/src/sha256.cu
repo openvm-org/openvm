@@ -328,6 +328,15 @@ __global__ __noinline__ void sha256_first_pass_tracegen(
                 row, control.padding_occurred, (int32_t)row_in_block >= first_padding_row
             );
         }
+
+        SHA256_WRITE_ROUND(
+            row,
+            control.padding_spills,
+            ((int32_t)row_in_block == first_padding_row && row_in_block == 3 &&
+             message_left - row_in_block * SHA256_READ_SIZE >= 8)
+                ? Fp::one()
+                : Fp::zero()
+        );
     }
 
     Fp *inner_trace_start = trace + (SHA256_INNER_COLUMN_OFFSET * trace_height) + trace_start_row;
