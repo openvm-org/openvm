@@ -19,8 +19,8 @@ use crate::{
         },
         full_pipeline::witness::get_need_rot_per_commit,
         proof_shape::{
-            derive_and_constrain_proof_shape, derive_proof_shape_rules,
-            AssignedProofShapeIntermediates, ProofShapePreambleError,
+            derive_proof_shape_intermediates, derive_proof_shape_rules, ProofShapeIntermediates,
+            ProofShapePreambleError,
         },
         stacked_reduction::{
             constrain_stacked_reduction_from_proof_inputs, AssignedStackedReductionIntermediates,
@@ -69,7 +69,6 @@ impl From<WhirError> for PipelineError {
 
 #[derive(Clone, Debug)]
 pub struct AssignedPipelineIntermediates {
-    pub proof_shape: AssignedProofShapeIntermediates,
     pub batch: AssignedBatchIntermediates,
     pub stacked_reduction: AssignedStackedReductionIntermediates,
     pub whir: AssignedWhirIntermediates,
@@ -89,13 +88,13 @@ fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
-fn observe_preamble_assigned(
+fn observe_preamble(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
     transcript: &mut TranscriptGadget,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     proof: &Proof<RootConfig>,
-    proof_shape: &AssignedProofShapeIntermediates,
+    proof_shape: &ProofShapeIntermediates,
 ) -> AssignedPreambleState {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
     let num_airs = mvk.inner.per_air.len();
@@ -124,12 +123,14 @@ fn observe_preamble_assigned(
         .enumerate()
         .map(|(air_idx, values)| {
             if !mvk.inner.per_air[air_idx].is_required {
+                let presence_flag =
+                    ctx.load_constant(Fr::from(proof_shape.air_presence_flags[air_idx] as u64));
                 transcript.observe(
                     ctx,
                     range,
                     &base_chip,
                     &BabyBearWire {
-                        value: proof_shape.air_presence_flags[air_idx],
+                        value: presence_flag,
                         max_bits: 1,
                     },
                 );
@@ -146,12 +147,14 @@ fn observe_preamble_assigned(
                         &digest_wire_from_root(preprocessed_root),
                     );
                 } else {
+                    let log_height =
+                        ctx.load_constant(Fr::from(proof_shape.air_log_heights[air_idx] as u64));
                     transcript.observe(
                         ctx,
                         range,
                         &base_chip,
                         &BabyBearWire {
-                            value: proof_shape.air_log_heights[air_idx],
+                            value: log_height,
                             max_bits: BABY_BEAR_BITS,
                         },
                     );
@@ -200,11 +203,17 @@ pub fn constrained_verify(
     let l_skip = mvk.inner.params.l_skip;
     let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
     let ext_chip = BabyBearExtChip::new(base_chip);
-    let proof_shape = derive_and_constrain_proof_shape(ctx, ext_chip.base(), config, mvk, proof)?;
+    let proof_shape = derive_proof_shape_intermediates(config, mvk, proof)?;
     let trace_id_to_air_id = compute_trace_id_to_air_id(&mvk.inner, proof);
 
+    let assigned_trace_id_to_air_id = proof_shape
+        .trace_id_to_air_id
+        .iter()
+        .map(|&air_id| ctx.load_constant(Fr::from(air_id as u64)))
+        .collect::<Vec<_>>();
+
     let mut transcript = TranscriptGadget::new(ctx);
-    let preamble = observe_preamble_assigned(ctx, range, &mut transcript, mvk, proof, &proof_shape);
+    let preamble = observe_preamble(ctx, range, &mut transcript, mvk, proof, &proof_shape);
 
     let batch = constrain_batch_from_proof_inputs(
         ctx,
@@ -213,7 +222,7 @@ pub fn constrained_verify(
         &mvk.inner,
         proof,
         &trace_id_to_air_id,
-        &proof_shape.trace_id_to_air_id,
+        &assigned_trace_id_to_air_id,
         preamble.public_values,
     )?;
 
@@ -271,7 +280,6 @@ pub fn constrained_verify(
     );
 
     Ok(AssignedPipelineIntermediates {
-        proof_shape,
         batch,
         stacked_reduction,
         whir,
