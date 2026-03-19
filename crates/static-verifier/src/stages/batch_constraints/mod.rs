@@ -37,7 +37,7 @@ use crate::{
         BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE,
     },
     stages::{proof_shape::derive_proof_shape_rules, shared_math},
-    transcript::TranscriptGadget,
+    transcript::{sample_witness_bits_assigned, TranscriptGadget},
     utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
@@ -1396,27 +1396,6 @@ fn observe_layer_claims_assigned(
     }
 }
 
-fn sample_witness_bits_assigned(
-    ctx: &mut Context<Fr>,
-    range: &halo2_base::gates::range::RangeChip<Fr>,
-    transcript: &mut TranscriptGadget,
-    baby_bear: &BabyBearChip,
-    bits: usize,
-    witness: BabyBearWire,
-) -> (AssignedValue<Fr>, AssignedValue<Fr>) {
-    if bits == 0 {
-        return (
-            ctx.load_constant(Fr::from(0u64)),
-            ctx.load_constant(Fr::from(1u64)),
-        );
-    }
-
-    transcript.observe(ctx, range, baby_bear, &witness);
-    let sampled_bits = transcript.sample_bits(ctx, range, baby_bear, bits);
-    let witness_ok = range.gate().is_zero(ctx, sampled_bits);
-    (sampled_bits, witness_ok)
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn constrain_batch_from_proof_inputs(
     ctx: &mut Context<Fr>,
@@ -1506,12 +1485,21 @@ pub(crate) fn constrain_batch_from_proof_inputs(
 
     let trace_id_to_air_id = shared_trace_id_to_air_id.to_vec();
     let total_interactions = baby_bear.assign_and_range_u64(ctx, total_interactions_host);
+    gate.assert_is_const(ctx, &total_interactions, &Fr::from(total_interactions_host));
     let n_logup = baby_bear.assign_and_range_usize(ctx, n_logup_host);
+    gate.assert_is_const(ctx, &n_logup, &Fr::from(usize_to_u64(n_logup_host)));
     let n_max = baby_bear.assign_and_range_usize(ctx, n_max_host);
+    gate.assert_is_const(ctx, &n_max, &Fr::from(usize_to_u64(n_max_host)));
     let batch_degree = baby_bear.assign_and_range_usize(ctx, batch_degree_host);
+    gate.assert_is_const(ctx, &batch_degree, &Fr::from(usize_to_u64(batch_degree_host)));
 
     let logup_pow_bits = mvk0.params.logup.pow_bits;
     let logup_pow_bits = baby_bear.assign_and_range_usize(ctx, logup_pow_bits);
+    gate.assert_is_const(
+        ctx,
+        &logup_pow_bits,
+        &Fr::from(usize_to_u64(mvk0.params.logup.pow_bits)),
+    );
     let logup_pow_witness = baby_bear.load_witness(ctx, proof.gkr_proof.logup_pow_witness);
     let (logup_pow_sampled_bits, logup_pow_witness_ok) = sample_witness_bits_assigned(
         ctx,

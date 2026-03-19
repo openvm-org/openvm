@@ -30,6 +30,7 @@ pub(crate) struct PreparedPipelineInputs {
     pub layouts: Vec<StackedLayout>,
     pub l_skip: usize,
     pub omega_skip_pows: Vec<ChildF>,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub batch: BatchIntermediates,
     pub r: Vec<ChildEF>,
     pub need_rot_per_commit: Vec<Vec<bool>>,

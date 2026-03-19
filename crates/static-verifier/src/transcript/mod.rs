@@ -36,6 +36,12 @@ pub struct DigestWire {
     pub elems: [AssignedValue<Fr>; DIGEST_WIDTH],
 }
 
+pub fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
+    DigestWire {
+        elems: core::array::from_fn(|_| root),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TranscriptEvent {
     Observe(u64),
@@ -302,6 +308,27 @@ impl TranscriptGadget {
         let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
         range.gate().is_zero(ctx, sampled_bits)
     }
+}
+
+pub fn sample_witness_bits_assigned(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    transcript: &mut TranscriptGadget,
+    baby_bear: &BabyBearChip,
+    bits: usize,
+    witness: BabyBearWire,
+) -> (AssignedValue<Fr>, AssignedValue<Fr>) {
+    if bits == 0 {
+        return (
+            ctx.load_constant(Fr::from(0u64)),
+            ctx.load_constant(Fr::from(1u64)),
+        );
+    }
+
+    transcript.observe(ctx, range, baby_bear, &witness);
+    let sampled_bits = transcript.sample_bits(ctx, range, baby_bear, bits);
+    let witness_ok = range.gate().is_zero(ctx, sampled_bits);
+    (sampled_bits, witness_ok)
 }
 
 #[derive(Clone, Debug)]

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub(crate) mod witness;
 
 use std::sync::Arc;
@@ -73,8 +71,9 @@ use crate::{
         },
     },
     transcript::{
-        constrain_transcript_events, split_assigned_bn254_to_babybear_limbs,
-        AssignedTranscriptEvent, DigestWire, TranscriptEvent, TranscriptGadget, NUM_SPLIT_LIMBS,
+        constrain_transcript_events, digest_wire_from_root,
+        split_assigned_bn254_to_babybear_limbs, AssignedTranscriptEvent, TranscriptEvent,
+        TranscriptGadget, NUM_SPLIT_LIMBS,
     },
     utils::usize_to_u64,
     ChildF, Fr,
@@ -199,8 +198,10 @@ struct AssignedPreambleState {
     public_values: Vec<Vec<BabyBearWire>>,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 const BN254_DIGEST_BABYBEAR_LIMBS: usize = NUM_SPLIT_LIMBS;
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_non_preamble_observes(events: &[TranscriptEvent], preamble_observes: usize) -> Vec<u64> {
     events
         .iter()
@@ -268,12 +269,6 @@ pub fn derive_pipeline_intermediates(
 
 fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
-}
-
-fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
-    DigestWire {
-        elems: core::array::from_fn(|_| root),
-    }
 }
 
 fn observe_preamble_assigned(
@@ -403,6 +398,7 @@ fn derive_pipeline_statement_witness(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_query_index_bits(params: &SystemParams) -> Vec<usize> {
     let mut log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
     let k_whir = params.k_whir();
@@ -415,11 +411,13 @@ fn derive_query_index_bits(params: &SystemParams) -> Vec<usize> {
     query_index_bits
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_folding_counts_per_round(params: &SystemParams) -> Vec<usize> {
     let k_whir = params.k_whir();
     vec![k_whir; params.num_whir_rounds()]
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_batch_n_per_trace(
     trace_id_to_air_id: &[usize],
     air_log_heights: &[usize],
@@ -431,6 +429,7 @@ fn derive_batch_n_per_trace(
         .collect::<Vec<_>>()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_batch_total_interactions(
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     trace_id_to_air_id: &[usize],
@@ -449,6 +448,7 @@ fn derive_batch_total_interactions(
         .sum::<u64>()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_batch_column_openings_need_rot(
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     trace_id_to_air_id: &[usize],
@@ -462,6 +462,7 @@ fn derive_batch_column_openings_need_rot(
         .collect::<Vec<_>>()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_batch_column_opening_expected_widths(
     mvk: &MultiStarkVerifyingKey<NativeConfig>,
     trace_id_to_air_id: &[usize],
@@ -488,6 +489,7 @@ fn derive_batch_column_opening_expected_widths(
         .collect::<Vec<_>>()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_stacked_q_coeff_term_schedule(
     layouts: &[StackedLayout],
     need_rot_per_commit: &[Vec<bool>],
@@ -534,6 +536,7 @@ fn derive_stacked_q_coeff_term_schedule(
     q_coeff_terms
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_stacked_matrix_expected_widths(layouts: &[StackedLayout]) -> Vec<usize> {
     layouts
         .iter()
@@ -547,10 +550,12 @@ fn derive_stacked_matrix_expected_widths(layouts: &[StackedLayout]) -> Vec<usize
         .collect::<Vec<_>>()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_initial_log_rs_domain_size(params: &SystemParams) -> usize {
     params.l_skip + params.n_stack + params.log_blowup
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_preamble_observe_count(
     proof_shape: &ProofShapeIntermediates,
     batch: &BatchIntermediates,
@@ -794,11 +799,13 @@ pub fn derive_pipeline_public_inputs(
     vec![statement.mvk_pre_hash, statement.proof_common_main_commit]
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 struct SampleCursor<'a> {
     samples: &'a [AssignedValue<Fr>],
     cursor: usize,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 impl<'a> SampleCursor<'a> {
     fn new(samples: &'a [AssignedValue<Fr>]) -> Self {
         Self { samples, cursor: 0 }
@@ -813,6 +820,7 @@ impl<'a> SampleCursor<'a> {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn sampled_bits_from_sample(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -836,6 +844,7 @@ fn sampled_bits_from_sample(
     rem
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn bind_sample_bits(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -870,6 +879,7 @@ fn bind_sample_bits(
     ctx.constrain_equal(&sampled_bits, &target_bits);
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn bind_sample_ext(ctx: &mut Context<Fr>, cursor: &mut SampleCursor<'_>, target: &BabyBearExtWire) {
     for coeff in &target.0 {
         let sampled = cursor.consume().unwrap_or_else(|| {
@@ -901,12 +911,14 @@ fn derive_u_cube_from_stacked_assigned(
     derived_u_cube
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn push_ext_observe_cells(observes: &mut Vec<AssignedValue<Fr>>, value: &BabyBearExtWire) {
     for coeff in &value.0 {
         observes.push(coeff.value);
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn push_column_claim_observe_cells(
     observes: &mut Vec<AssignedValue<Fr>>,
     claims: &[BabyBearExtWire],
@@ -928,6 +940,7 @@ fn push_column_claim_observe_cells(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_stage_payload_observe_cells(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -1121,12 +1134,14 @@ fn derive_stage_payload_observe_cells(
     observes
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn push_event_kinds(target: &mut Vec<bool>, is_sample: bool, count: usize) {
     for _ in 0..count {
         target.push(is_sample);
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn count_column_claim_observe_events(claim_count: usize, need_rot: bool) -> usize {
     if need_rot {
         claim_count * BABY_BEAR_EXT_DEGREE
@@ -1135,6 +1150,7 @@ fn count_column_claim_observe_events(claim_count: usize, need_rot: bool) -> usiz
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_post_preamble_event_kind_schedule(
     actual: &PipelineIntermediates,
     schedule: &PipelineTranscriptSchedule,
@@ -1340,6 +1356,7 @@ fn derive_post_preamble_event_kind_schedule(
     kinds
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn constrain_post_preamble_event_kinds(
     ctx: &mut Context<Fr>,
     gate: &impl GateInstructions<Fr>,
@@ -1358,6 +1375,7 @@ fn constrain_post_preamble_event_kinds(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn bind_batch_to_stacked_inputs(
     actual: &PipelineIntermediates,
     batch: &AssignedBatchIntermediates,
@@ -1417,6 +1435,7 @@ fn bind_batch_to_stacked_inputs(
 }
 
 #[allow(clippy::type_complexity)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn map_initial_commitment_roots_by_air(
     ctx: &mut Context<Fr>,
     initial_commitment_roots: &[AssignedValue<Fr>],
@@ -1466,6 +1485,7 @@ fn map_initial_commitment_roots_by_air(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn derive_preamble_observe_cells_from_stage(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
@@ -1547,6 +1567,7 @@ fn derive_preamble_observe_cells_from_stage(
     observes
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn encode_symbolic_entry(entry: Entry) -> (u64, u64, u64) {
     match entry {
         Entry::Preprocessed { offset } => (0, offset as u64, 0),
@@ -1558,6 +1579,7 @@ fn encode_symbolic_entry(entry: Entry) -> (u64, u64, u64) {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn encode_symbolic_node(node: &SymbolicExpressionNode<ChildF>) -> [u64; 7] {
     match node {
         SymbolicExpressionNode::Variable(var) => {
@@ -1614,6 +1636,7 @@ fn encode_symbolic_node(node: &SymbolicExpressionNode<ChildF>) -> [u64; 7] {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn constrain_symbolic_node_ownership(
     actual_nodes: &[SymbolicExpressionNode<ChildF>],
     owned_nodes: &[SymbolicExpressionNode<ChildF>],
@@ -1628,6 +1651,7 @@ fn constrain_symbolic_node_ownership(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn constrain_metadata_ownership(
     ctx: &mut Context<Fr>,
     gate: &impl GateInstructions<Fr>,
@@ -1841,6 +1865,7 @@ fn constrain_metadata_ownership(
 }
 
 // Unchecked/internal assignment path. External callers should use strict derive+constrain APIs.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn constrain_pipeline_intermediates(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,

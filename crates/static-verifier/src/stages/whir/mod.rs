@@ -45,7 +45,7 @@ use crate::{
         shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
         stacked_reduction::derive_stacked_reduction_intermediates_with_inputs,
     },
-    transcript::{DigestWire, TranscriptGadget},
+    transcript::{digest_wire_from_root, sample_witness_bits_assigned, TranscriptGadget},
     utils::usize_to_u64,
     ChildEF, ChildF, Fr,
 };
@@ -901,32 +901,6 @@ fn constrain_merkle_path(
     }
 }
 
-fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
-    DigestWire {
-        elems: core::array::from_fn(|_| root),
-    }
-}
-
-fn sample_witness_bits_assigned(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    transcript: &mut TranscriptGadget,
-    bits: usize,
-    witness: BabyBearWire,
-) -> (AssignedValue<Fr>, AssignedValue<Fr>) {
-    if bits == 0 {
-        return (
-            ctx.load_constant(Fr::from(0u64)),
-            ctx.load_constant(Fr::from(1u64)),
-        );
-    }
-
-    transcript.observe(ctx, ext_chip.range(), ext_chip.base(), &witness);
-    let sampled_bits = transcript.sample_bits(ctx, ext_chip.range(), ext_chip.base(), bits);
-    let witness_ok = ext_chip.range().gate().is_zero(ctx, sampled_bits);
-    (sampled_bits, witness_ok)
-}
-
 pub(crate) fn constrain_whir_from_proof_inputs(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
@@ -945,14 +919,20 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     let mu_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, params.whir.mu_pow_bits);
+    gate.assert_is_const(
+        ctx,
+        &mu_pow_bits,
+        &Fr::from(usize_to_u64(params.whir.mu_pow_bits)),
+    );
     let mu_pow_witness = ext_chip.base().load_witness(
         ctx,
         ChildF::from_u64(whir_proof.mu_pow_witness.as_canonical_u64()),
     );
     let (mu_pow_sampled_bits, mu_pow_witness_ok) = sample_witness_bits_assigned(
         ctx,
-        ext_chip,
+        ext_chip.range(),
         transcript,
+        ext_chip.base(),
         params.whir.mu_pow_bits,
         mu_pow_witness,
     );
@@ -962,9 +942,19 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     let folding_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, params.whir.folding_pow_bits);
+    gate.assert_is_const(
+        ctx,
+        &folding_pow_bits,
+        &Fr::from(usize_to_u64(params.whir.folding_pow_bits)),
+    );
     let query_phase_pow_bits = ext_chip
         .base()
         .assign_and_range_usize(ctx, params.whir.query_phase_pow_bits);
+    gate.assert_is_const(
+        ctx,
+        &query_phase_pow_bits,
+        &Fr::from(usize_to_u64(params.whir.query_phase_pow_bits)),
+    );
 
     let folding_pow_witnesses = whir_proof
         .folding_pow_witnesses
@@ -1077,8 +1067,9 @@ pub(crate) fn constrain_whir_from_proof_inputs(
                 folding_pow_cursor += 1;
                 let (sampled_bits, witness_ok) = sample_witness_bits_assigned(
                     ctx,
-                    ext_chip,
+                    ext_chip.range(),
                     transcript,
+                    ext_chip.base(),
                     params.whir.folding_pow_bits,
                     pow_witness,
                 );
@@ -1124,8 +1115,9 @@ pub(crate) fn constrain_whir_from_proof_inputs(
 
         let (query_pow_sampled, query_pow_ok) = sample_witness_bits_assigned(
             ctx,
-            ext_chip,
+            ext_chip.range(),
             transcript,
+            ext_chip.base(),
             params.whir.query_phase_pow_bits,
             query_phase_pow_witnesses[round_idx],
         );
