@@ -14,7 +14,7 @@ use openvm_stark_sdk::openvm_stark_backend::p3_field::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
-    ChildEF, ChildF, Fr,
+    Fr, RootEF, RootF,
 };
 
 fn run_mock(build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -64,8 +64,8 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
         ];
 
         for (a_u64, b_u64) in cases {
-            let a = chip.load_witness(ctx, ChildF::from_u64(a_u64));
-            let b = chip.load_witness(ctx, ChildF::from_u64(b_u64));
+            let a = chip.load_witness(ctx, RootF::from_u64(a_u64));
+            let b = chip.load_witness(ctx, RootF::from_u64(b_u64));
 
             // Reduce results to canonical form before comparing, since the new
             // BabyBearChip uses lazy reduction and wire values may be unreduced.
@@ -77,7 +77,7 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
             let prod = chip.reduce(ctx, prod);
             let neg = chip.neg(ctx, a);
             let neg = chip.reduce(ctx, neg);
-            let by_const = chip.mul_const(ctx, a, ChildF::from_u64(11));
+            let by_const = chip.mul_const(ctx, a, RootF::from_u64(11));
             let by_const = chip.reduce(ctx, by_const);
 
             let expected_sum = (a_u64 + b_u64) % BABY_BEAR_MODULUS_U64;
@@ -110,9 +110,8 @@ fn baby_bear_ext_mul_matches_native_binomial_extension() {
         let ctx = builder.main(0);
         let gate = range.gate();
 
-        let lhs_native =
-            ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64([3, 5, 7, 11][i]));
-        let rhs_native = ChildEF::from_basis_coefficients_fn(|i| ChildF::from_u64([2, 4, 6, 8][i]));
+        let lhs_native = RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([3, 5, 7, 11][i]));
+        let rhs_native = RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([2, 4, 6, 8][i]));
 
         let lhs = ext_chip.load_witness(ctx, lhs_native);
         let rhs = ext_chip.load_witness(ctx, rhs_native);
@@ -132,19 +131,19 @@ fn baby_bear_ext_mul_matches_native_binomial_extension() {
         let sqr_native = lhs_native * lhs_native;
 
         let expected_sum = core::array::from_fn::<_, 4, _>(|i| {
-            <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&sum_native)[i]
+            <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&sum_native)[i]
                 .as_canonical_u64()
         });
         let expected_diff = core::array::from_fn::<_, 4, _>(|i| {
-            <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&diff_native)[i]
+            <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&diff_native)[i]
                 .as_canonical_u64()
         });
         let expected_prod = core::array::from_fn::<_, 4, _>(|i| {
-            <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&prod_native)[i]
+            <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&prod_native)[i]
                 .as_canonical_u64()
         });
         let expected_sqr = core::array::from_fn::<_, 4, _>(|i| {
-            <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&sqr_native)[i]
+            <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&sqr_native)[i]
                 .as_canonical_u64()
         });
 

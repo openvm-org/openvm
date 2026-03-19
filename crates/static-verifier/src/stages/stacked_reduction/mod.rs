@@ -25,7 +25,7 @@ use crate::{
         },
     },
     transcript::TranscriptGadget,
-    ChildEF, ChildF, Fr,
+    Fr, RootEF, RootF,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,8 +33,8 @@ pub enum StackedReductionConstraintError {
     SystemParamsMismatch,
     TraceHeightsTooLarge,
     ProofShape(ProofShapeError),
-    BatchConstraint(NativeBatchConstraintError<ChildEF>),
-    StackedReduction(StackedReductionError<ChildEF>),
+    BatchConstraint(NativeBatchConstraintError<RootEF>),
+    StackedReduction(StackedReductionError<RootEF>),
     BatchSetup(BatchConstraintError),
 }
 
@@ -44,14 +44,14 @@ impl From<ProofShapeError> for StackedReductionConstraintError {
     }
 }
 
-impl From<NativeBatchConstraintError<ChildEF>> for StackedReductionConstraintError {
-    fn from(value: NativeBatchConstraintError<ChildEF>) -> Self {
+impl From<NativeBatchConstraintError<RootEF>> for StackedReductionConstraintError {
+    fn from(value: NativeBatchConstraintError<RootEF>) -> Self {
         Self::BatchConstraint(value)
     }
 }
 
-impl From<StackedReductionError<ChildEF>> for StackedReductionConstraintError {
-    fn from(value: StackedReductionError<ChildEF>) -> Self {
+impl From<StackedReductionError<RootEF>> for StackedReductionConstraintError {
+    fn from(value: StackedReductionError<RootEF>) -> Self {
         Self::StackedReduction(value)
     }
 }
@@ -85,7 +85,7 @@ fn eval_in_uni_assigned(
         let z_pow = ext_chip.pow_power_of_two(ctx, z, l_skip.wrapping_add_signed(n));
         eval_eq_uni_at_one_assigned(ctx, ext_chip, n.unsigned_abs(), &z_pow)
     } else {
-        ext_chip.from_base_const(ctx, ChildF::from_u64(1))
+        ext_chip.from_base_const(ctx, RootF::from_u64(1))
     }
 }
 
@@ -103,7 +103,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
     r: &[BabyBearExtWire],
 ) -> AssignedStackedReductionIntermediates {
     let omega_order = 1usize << l_skip;
-    let one = ext_chip.from_base_const(ctx, ChildF::ONE);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
 
     let mut lambda_idx = 0usize;
     let lambda_indices_per_layout = layouts
@@ -167,7 +167,7 @@ pub(crate) fn constrain_stacked_reduction_from_proof_inputs(
         s_0_sum_eval = ext_chip.add(ctx, s_0_sum_eval, *coeff);
     }
     let s_0_sum_eval =
-        ext_chip.mul_base_const(ctx, s_0_sum_eval, ChildF::from_u64(omega_order as u64));
+        ext_chip.mul_base_const(ctx, s_0_sum_eval, RootF::from_u64(omega_order as u64));
     let s_0_residual = ext_chip.sub(ctx, s_0, s_0_sum_eval);
     let zero = ext_chip.zero(ctx);
     ext_chip.assert_equal(ctx, s_0_residual, zero);

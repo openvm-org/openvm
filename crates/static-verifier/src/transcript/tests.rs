@@ -22,7 +22,7 @@ use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     field::baby_bear::{BabyBearChip, BabyBearExt4Wire},
-    ChildEF, ChildF,
+    RootEF, RootF,
 };
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
@@ -62,10 +62,9 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
     }
 }
 
-fn ext_to_u64(ext: ChildEF) -> [u64; NATIVE_EF_DEGREE] {
+fn ext_to_u64(ext: RootEF) -> [u64; NATIVE_EF_DEGREE] {
     core::array::from_fn(|i| {
-        <ChildEF as BasedVectorSpace<ChildF>>::as_basis_coefficients_slice(&ext)[i]
-            .as_canonical_u64()
+        <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&ext)[i].as_canonical_u64()
     })
 }
 
@@ -77,11 +76,11 @@ fn transcript_outputs_match_native_interleaved_flow() {
     // Build transcript state up to the PoW check, then grind for a valid witness.
     let build_transcript_before_pow = || {
         let mut t = default_transcript();
-        t.observe(ChildF::from_u64(1));
-        t.observe(ChildF::from_u64(2));
-        t.observe(ChildF::from_u64(3));
-        t.observe_ext(ChildEF::from_basis_coefficients_fn(|i| {
-            ChildF::from_u64(observed_ext_coeffs[i])
+        t.observe(RootF::from_u64(1));
+        t.observe(RootF::from_u64(2));
+        t.observe(RootF::from_u64(3));
+        t.observe_ext(RootEF::from_basis_coefficients_fn(|i| {
+            RootF::from_u64(observed_ext_coeffs[i])
         }));
         t.observe_commit(digest);
         let _ = t.sample();
@@ -92,23 +91,23 @@ fn transcript_outputs_match_native_interleaved_flow() {
     let witness_for_pow = (0u64..)
         .find(|&w| {
             let mut t = build_transcript_before_pow();
-            t.check_witness(9, ChildF::from_u64(w))
+            t.check_witness(9, RootF::from_u64(w))
         })
         .expect("should find a valid PoW witness by grinding");
 
     let mut native = default_transcript();
-    native.observe(ChildF::from_u64(1));
-    native.observe(ChildF::from_u64(2));
-    native.observe(ChildF::from_u64(3));
-    native.observe_ext(ChildEF::from_basis_coefficients_fn(|i| {
-        ChildF::from_u64(observed_ext_coeffs[i])
+    native.observe(RootF::from_u64(1));
+    native.observe(RootF::from_u64(2));
+    native.observe(RootF::from_u64(3));
+    native.observe_ext(RootEF::from_basis_coefficients_fn(|i| {
+        RootF::from_u64(observed_ext_coeffs[i])
     }));
     native.observe_commit(digest);
 
     let expected_sample = native.sample().as_canonical_u64();
     let expected_ext = ext_to_u64(FiatShamirTranscript::<RootConfig>::sample_ext(&mut native));
     let expected_bits = native.sample_bits(17) as u64;
-    assert!(native.check_witness(9, ChildF::from_u64(witness_for_pow)));
+    assert!(native.check_witness(9, RootF::from_u64(witness_for_pow)));
     let expected_followup = native.sample().as_canonical_u64();
 
     run_mock(true, |builder| {
@@ -120,15 +119,15 @@ fn transcript_outputs_match_native_interleaved_flow() {
 
         let mut transcript = TranscriptGadget::new(ctx);
 
-        let one = baby_bear.load_witness(ctx, ChildF::from_u64(1));
-        let two = baby_bear.load_witness(ctx, ChildF::from_u64(2));
-        let three = baby_bear.load_witness(ctx, ChildF::from_u64(3));
+        let one = baby_bear.load_witness(ctx, RootF::from_u64(1));
+        let two = baby_bear.load_witness(ctx, RootF::from_u64(2));
+        let three = baby_bear.load_witness(ctx, RootF::from_u64(3));
         transcript.observe(ctx, &range, &baby_bear, &one);
         transcript.observe(ctx, &range, &baby_bear, &two);
         transcript.observe(ctx, &range, &baby_bear, &three);
 
         let observed_ext = BabyBearExt4Wire(core::array::from_fn(|i| {
-            baby_bear.load_witness(ctx, ChildF::from_u64(observed_ext_coeffs[i]))
+            baby_bear.load_witness(ctx, RootF::from_u64(observed_ext_coeffs[i]))
         }));
         transcript.observe_ext(ctx, &range, &baby_bear, &observed_ext);
 
@@ -146,7 +145,7 @@ fn transcript_outputs_match_native_interleaved_flow() {
         let sampled_bits = transcript.sample_bits(ctx, &range, &baby_bear, 17);
         gate.assert_is_const(ctx, &sampled_bits, &Fr::from(expected_bits));
 
-        let pow_witness = baby_bear.load_witness(ctx, ChildF::from_u64(witness_for_pow));
+        let pow_witness = baby_bear.load_witness(ctx, RootF::from_u64(witness_for_pow));
         // check_witness now returns () and asserts internally
         transcript.check_witness(ctx, &range, &baby_bear, 9, &pow_witness);
 
@@ -158,10 +157,10 @@ fn transcript_outputs_match_native_interleaved_flow() {
 #[test]
 fn transcript_check_witness_zero_bits_matches_native() {
     let mut native = default_transcript();
-    native.observe(ChildF::from_u64(99));
+    native.observe(RootF::from_u64(99));
     let expected_first = native.sample().as_canonical_u64();
     // check_witness now asserts internally; just call it for its side effect on the transcript
-    let _ = native.check_witness(0, ChildF::from_u64(7));
+    let _ = native.check_witness(0, RootF::from_u64(7));
     let expected_second = native.sample().as_canonical_u64();
 
     run_mock(true, |builder| {
@@ -173,13 +172,13 @@ fn transcript_check_witness_zero_bits_matches_native() {
 
         let mut transcript = TranscriptGadget::new(ctx);
 
-        let obs = baby_bear.load_witness(ctx, ChildF::from_u64(99));
+        let obs = baby_bear.load_witness(ctx, RootF::from_u64(99));
         transcript.observe(ctx, &range, &baby_bear, &obs);
 
         let first = transcript.sample(ctx, &range, &baby_bear);
         gate.assert_is_const(ctx, &first.value, &Fr::from(expected_first));
 
-        let witness = baby_bear.load_witness(ctx, ChildF::from_u64(7));
+        let witness = baby_bear.load_witness(ctx, RootF::from_u64(7));
         // check_witness now returns () and asserts internally
         transcript.check_witness(ctx, &range, &baby_bear, 0, &witness);
 
