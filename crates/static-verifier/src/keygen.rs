@@ -2,27 +2,30 @@ use halo2_base::{
     gates::circuit::CircuitBuilderStage,
     halo2_proofs::plonk::{keygen_pk, keygen_vk},
 };
+use openvm_stark_sdk::{
+    config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
+    openvm_stark_backend::proof::Proof,
+};
 
 use crate::{
+    circuit::StaticVerifierCircuit,
     config::StaticVerifierShape,
-    prover::{
-        Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit,
-        StaticVerifierInput, StaticVerifierProof,
-    },
+    prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof},
 };
 
 impl StaticVerifierCircuit {
     /// Run keygen to produce a [`Halo2ProvingPinning`].
     ///
-    /// The `input` is used as a representative witness for keygen; any valid
-    /// input for the target circuit shape will do.
+    /// The `representative_proof` is used as a witness for keygen; any valid proof for this static
+    /// circuit shape will do.
     pub fn keygen(
+        &self,
         params: &Halo2Params,
         shape: &StaticVerifierShape,
-        input: &StaticVerifierInput<'_>,
+        representative_proof: &Proof<RootConfig>,
     ) -> Halo2ProvingPinning {
         let mut builder = Self::builder(CircuitBuilderStage::Keygen, shape);
-        let public_inputs = Self::populate(&mut builder, input);
+        let public_inputs = self.populate(&mut builder, representative_proof);
 
         let config_params = builder.calculate_params(Some(shape.minimum_rows));
 
@@ -41,32 +44,34 @@ impl StaticVerifierCircuit {
     }
 }
 
-/// High-level proving key that owns a [`Halo2ProvingPinning`] together with
-/// the [`StaticVerifierShape`] needed to reconstruct prover builders.
+/// High-level proving key that owns a [`StaticVerifierCircuit`], [`Halo2ProvingPinning`], and
+/// [`StaticVerifierShape`].
 pub struct StaticVerifierProvingKey {
+    pub circuit: StaticVerifierCircuit,
     pub pinning: Halo2ProvingPinning,
     pub shape: StaticVerifierShape,
 }
 
 impl StaticVerifierProvingKey {
-    /// Run keygen and return a proving key that can be reused for multiple
-    /// proofs.
+    /// Run keygen and return a proving key that can be reused for multiple proofs.
     pub fn keygen(
         params: &Halo2Params,
         shape: StaticVerifierShape,
-        input: &StaticVerifierInput<'_>,
+        circuit: StaticVerifierCircuit,
+        representative_proof: &Proof<RootConfig>,
     ) -> Self {
-        let pinning = StaticVerifierCircuit::keygen(params, &shape, input);
-        Self { pinning, shape }
+        let pinning = circuit.keygen(params, &shape, representative_proof);
+        Self {
+            circuit,
+            pinning,
+            shape,
+        }
     }
 
     /// Generate a proof using the stored pinning and shape.
-    pub fn prove(
-        &self,
-        params: &Halo2Params,
-        input: &StaticVerifierInput<'_>,
-    ) -> StaticVerifierProof {
-        StaticVerifierCircuit::prove(params, &self.pinning, &self.shape, input)
+    pub fn prove(&self, params: &Halo2Params, proof: &Proof<RootConfig>) -> StaticVerifierProof {
+        self.circuit
+            .prove(params, &self.pinning, &self.shape, proof)
     }
 
     /// Verify a proof against this proving key's verifying key.
@@ -130,18 +135,14 @@ impl StaticVerifierProvingKey {
     }
 
     /// Generate an EVM-compatible proof.
-    pub fn prove_for_evm(
-        &self,
-        params: &Halo2Params,
-        input: &StaticVerifierInput<'_>,
-    ) -> RawEvmProof {
+    pub fn prove_for_evm(&self, params: &Halo2Params, proof: &Proof<RootConfig>) -> RawEvmProof {
         let mut builder = BaseCircuitBuilder::prover(
             self.pinning.metadata.config_params.clone(),
             self.pinning.metadata.break_points.clone(),
         )
         .use_instance_columns(self.shape.instance_columns);
 
-        let public_inputs = StaticVerifierCircuit::populate(&mut builder, input);
+        let public_inputs = self.circuit.populate(&mut builder, proof);
 
         let snark = gen_evm_proof_shplonk(
             params,

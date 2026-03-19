@@ -20,18 +20,14 @@ use halo2_base::{
         },
     },
 };
-use itertools::Itertools;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
-    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof},
+    openvm_stark_backend::proof::Proof,
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::StaticVerifierShape,
-    stages::full_pipeline::{constrained_verify, load_proof_wire},
-};
+use crate::{circuit::StaticVerifierCircuit, config::StaticVerifierShape};
 
 /// KZG parameters for the Halo2 BN256 proving system.
 pub type Halo2Params = ParamsKZG<Bn256>;
@@ -66,19 +62,6 @@ pub struct StaticVerifierProof {
     pub public_inputs: Vec<Fr>,
 }
 
-/// Bundles the three inputs that always travel together when interacting with
-/// the static verifier circuit.
-pub struct StaticVerifierInput<'a> {
-    pub mvk: &'a MultiStarkVerifyingKey<RootConfig>,
-    pub proof: &'a Proof<RootConfig>,
-}
-
-/// Stateless helper for the static verifier Halo2 circuit.
-///
-/// Provides circuit-building utilities (`builder`, `populate`), mock proving,
-/// real proving, and verification. Keygen is in [`crate::keygen`].
-pub struct StaticVerifierCircuit;
-
 impl StaticVerifierCircuit {
     /// Create a [`BaseCircuitBuilder`] configured for the given `stage` and
     /// `shape`.
@@ -92,30 +75,10 @@ impl StaticVerifierCircuit {
             .use_instance_columns(shape.instance_columns)
     }
 
-    /// Populate a builder with the static verifier constraints and return the
-    /// public inputs.
-    pub fn populate(
-        builder: &mut BaseCircuitBuilder<Fr>,
-        input: &StaticVerifierInput<'_>,
-    ) -> Vec<Fr> {
-        let range = builder.range_chip();
-        let ctx = builder.main(0);
-        let proof_wire = load_proof_wire(ctx, &range, input.proof);
-        let statement_public_inputs =
-            constrained_verify(ctx, &range, input.mvk, input.proof, proof_wire);
-        let pis = statement_public_inputs
-            .iter()
-            .map(|c| *c.value())
-            .collect_vec();
-        builder.assigned_instances[0].extend(statement_public_inputs);
-
-        pis
-    }
-
     /// Run the [`MockProver`] and panic if any constraint is unsatisfied.
-    pub fn mock(shape: &StaticVerifierShape, input: &StaticVerifierInput<'_>) {
+    pub fn mock(&self, shape: &StaticVerifierShape, proof: &Proof<RootConfig>) {
         let mut builder = Self::builder(CircuitBuilderStage::Mock, shape);
-        let public_inputs = Self::populate(&mut builder, input);
+        let public_inputs = self.populate(&mut builder, proof);
 
         let _ = builder.calculate_params(Some(shape.minimum_rows));
 
@@ -126,10 +89,11 @@ impl StaticVerifierCircuit {
 
     /// Generate a Halo2 proof using a previously computed [`Halo2ProvingPinning`].
     pub fn prove(
+        &self,
         params: &Halo2Params,
         pinning: &Halo2ProvingPinning,
         shape: &StaticVerifierShape,
-        input: &StaticVerifierInput<'_>,
+        proof: &Proof<RootConfig>,
     ) -> StaticVerifierProof {
         let mut builder = BaseCircuitBuilder::prover(
             pinning.metadata.config_params.clone(),
@@ -137,7 +101,7 @@ impl StaticVerifierCircuit {
         );
         builder = builder.use_instance_columns(shape.instance_columns);
 
-        let public_inputs = Self::populate(&mut builder, input);
+        let public_inputs = self.populate(&mut builder, proof);
 
         let rng = ChaCha20Rng::from_seed(Default::default());
         let instances: &[&[Fr]] = &[&public_inputs];
