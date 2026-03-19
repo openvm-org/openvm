@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use eyre::Result;
-use openvm_sdk::{fs::write_object_to_file, Sdk};
+use openvm_sdk::{config::AggregationSystemParams, fs::write_object_to_file, Sdk};
 
 use crate::{
     default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
@@ -90,7 +90,7 @@ pub(crate) fn keygen(
     output_dir: Option<impl AsRef<Path>>,
 ) -> Result<()> {
     let app_config = read_config_toml_or_default(config)?;
-    let (app_pk, app_vk) = Sdk::new(app_config)?.app_keygen();
+    let (app_pk, app_vk) = Sdk::new(app_config, AggregationSystemParams::default())?.app_keygen();
     write_object_to_file(&app_vk_path, app_vk)?;
     write_object_to_file(&app_pk_path, app_pk)?;
 

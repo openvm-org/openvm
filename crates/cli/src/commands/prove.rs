@@ -9,12 +9,13 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe,
 };
 use openvm_sdk::{
-    config::{AggregationTreeConfig, AppConfig, SdkVmConfig},
-    fs::{encode_to_file, read_object_from_file, write_to_file_json},
+    config::{AggregationSystemParams, AggregationTreeConfig, AppConfig},
+    fs::{read_object_from_file, write_object_to_file, write_to_file_json},
     keygen::AppProvingKey,
-    types::VersionedVmStarkProof,
+    types::VersionedNonRootStarkProof,
     Sdk, F,
 };
+use openvm_sdk_config::SdkVmConfig;
 
 use super::{RunArgs, RunCargoArgs};
 #[cfg(feature = "evm-prove")]
@@ -163,7 +164,8 @@ impl ProveCmd {
             } => {
                 let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = Sdk::new(app_config)?.with_app_pk(app_pk);
+                let sdk =
+                    Sdk::new(app_config, AggregationSystemParams::default())?.with_app_pk(app_pk);
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let app_proof = sdk
@@ -179,7 +181,7 @@ impl ProveCmd {
                     "App proof completed! Writing App proof to {}",
                     proof_path.display()
                 );
-                encode_to_file(proof_path, app_proof)?;
+                write_object_to_file(proof_path, app_proof)?;
             }
             ProveSubCommand::Stark {
                 app_pk,
@@ -193,24 +195,22 @@ impl ProveCmd {
                 let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
-                let agg_pk_path = agg_pk
+                let _agg_pk_path = agg_pk
                     .clone()
                     .unwrap_or_else(|| PathBuf::from(default_agg_stark_pk_path()));
-                let agg_pk = read_object_from_file(agg_pk_path).map_err(|e| {
-                    eyre::eyre!("Failed to read aggregation proving key: {e}\nPlease run 'cargo openvm setup' first")
-                })?;
+                // TODO: SDK v2 computes aggregation internally; restore loading
+                // external agg_pk when the SDK supports it again.
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = Sdk::new(app_config)?
+                let sdk = Sdk::new(app_config, AggregationSystemParams::default())?
                     .with_agg_tree_config(*agg_tree_config)
-                    .with_app_pk(app_pk)
-                    .with_agg_pk(agg_pk);
+                    .with_app_pk(app_pk);
                 let mut prover = sdk.prover(exe)?;
-                let app_commit = prover.app_commit();
-                println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());
-                println!("vm commit: {:?}", app_commit.app_vm_commit.to_bn254());
+                let baseline = prover.generate_baseline();
+                println!("exe commit: {:?}", baseline.app_exe_commit);
 
-                let stark_proof = prover.prove(read_to_stdin(&run_args.input)?)?;
-                let stark_proof_bytes = VersionedVmStarkProof::new(stark_proof)?;
+                let (stark_proof, _metadata) =
+                    prover.prove(read_to_stdin(&run_args.input)?, &[])?;
+                let stark_proof_bytes = VersionedNonRootStarkProof::new(stark_proof)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
@@ -236,20 +236,20 @@ impl ProveCmd {
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
-                let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk().map_err(|e| {
+                // Pre-flight check: ensure keys exist before starting expensive proving.
+                // TODO: SDK v2 computes aggregation internally; restore passing
+                // external agg_pk/halo2_pk when the SDK supports it again.
+                let (_agg_pk, _halo2_pk) = read_default_agg_and_halo2_pk().map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = Sdk::new(app_config)?
+                let sdk = Sdk::new(app_config, AggregationSystemParams::default())?
                     .with_agg_tree_config(*agg_tree_config)
-                    .with_app_pk(app_pk)
-                    .with_agg_pk(agg_pk)
-                    .with_halo2_pk(halo2_pk);
+                    .with_app_pk(app_pk);
                 let mut prover = sdk.evm_prover(exe)?;
-                let app_commit = prover.stark_prover.app_commit();
-                println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());
-                println!("vm commit: {:?}", app_commit.app_vm_commit.to_bn254());
-                let evm_proof = prover.prove_evm(read_to_stdin(&run_args.input)?)?;
+                let exe_commit = prover.stark_prover.app_prover.app_exe_commit();
+                println!("exe commit: {:?}", exe_commit);
+                let evm_proof = prover.prove(read_to_stdin(&run_args.input)?, &[])?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
