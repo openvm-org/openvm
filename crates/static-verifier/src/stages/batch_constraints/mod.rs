@@ -1,4 +1,3 @@
-use core::cmp::Reverse;
 use std::{iter::zip, sync::Arc};
 
 use halo2_base::Context;
@@ -67,27 +66,6 @@ impl From<NativeBatchConstraintError<ChildEF>> for BatchConstraintError {
 pub struct AssignedBatchIntermediates {
     pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
     pub r: Vec<BabyBearExtWire>,
-}
-
-pub(crate) fn compute_trace_id_to_air_id(
-    mvk0: &MultiStarkVerifyingKey0<RootConfig>,
-    proof: &Proof<RootConfig>,
-) -> Vec<usize> {
-    let num_airs = mvk0.per_air.len();
-    let mut trace_id_to_air_id: Vec<usize> = (0..num_airs).collect();
-    trace_id_to_air_id.sort_by_key(|&air_id| {
-        (
-            proof.trace_vdata[air_id].is_none(),
-            proof.trace_vdata[air_id]
-                .as_ref()
-                .map(|vdata| Reverse(vdata.log_height)),
-            air_id,
-        )
-    });
-
-    let num_traces = proof.trace_vdata.iter().flatten().count();
-    trace_id_to_air_id.truncate(num_traces);
-    trace_id_to_air_id
 }
 
 fn eval_ext_poly_horner(
@@ -1061,8 +1039,5 @@ pub(crate) fn constrain_batch_from_proof_inputs(
     let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
     ext_chip.assert_equal(ctx, consistency_residual, zero);
 
-    Ok(AssignedBatchIntermediates {
-        column_openings,
-        r,
-    })
+    Ok(AssignedBatchIntermediates { column_openings, r })
 }

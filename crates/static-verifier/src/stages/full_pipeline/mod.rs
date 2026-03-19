@@ -13,13 +13,11 @@ use openvm_stark_sdk::{
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire, BABY_BEAR_BITS},
     stages::{
-        batch_constraints::{
-            compute_trace_id_to_air_id, constrain_batch_from_proof_inputs, BatchConstraintError,
-        },
+        batch_constraints::{constrain_batch_from_proof_inputs, BatchConstraintError},
         full_pipeline::witness::get_need_rot_per_commit,
         proof_shape::{
-            derive_proof_shape_intermediates, derive_proof_shape_rules, ProofShapeIntermediates,
-            ProofShapePreambleError,
+            compute_trace_id_to_air_id, derive_proof_shape_intermediates, derive_proof_shape_rules,
+            ProofShapeIntermediates, ProofShapePreambleError,
         },
         stacked_reduction::{
             constrain_stacked_reduction_from_proof_inputs, StackedReductionConstraintError,
