@@ -459,8 +459,6 @@ pub(crate) fn constrain_whir_from_proof_inputs(
         .iter()
         .map(|&value| ext_chip.load_witness(ctx, value))
         .collect::<Vec<_>>();
-    let _final_poly_len = 1usize << params.log_final_poly_len();
-
     let codeword_commitment_roots = whir_proof
         .codeword_commits
         .iter()
@@ -503,7 +501,6 @@ pub(crate) fn constrain_whir_from_proof_inputs(
     let mut sumcheck_cursor = 0usize;
     let mut folding_pow_cursor = 0usize;
     let mut log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
-    let _initial_log_rs_domain_size = log_rs_domain_size;
 
     for (round_idx, round_params) in params.whir.rounds.iter().enumerate() {
         let is_initial_round = round_idx == 0;

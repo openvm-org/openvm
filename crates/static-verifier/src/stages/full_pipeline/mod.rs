@@ -80,6 +80,9 @@ pub struct AssignedPipelineIntermediates {
 struct AssignedPreambleState {
     statement_public_inputs: [AssignedValue<Fr>; 2],
     public_values: Vec<Vec<BabyBearWire>>,
+    /// Per-air cached commitment roots loaded as witness cells during transcript observation.
+    /// Indexed by air_id (sparse: `None` for airs without cached commitments).
+    cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
 }
 
 fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
@@ -95,6 +98,8 @@ fn observe_preamble_assigned(
     proof_shape: &AssignedProofShapeIntermediates,
 ) -> AssignedPreambleState {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
+    let num_airs = mvk.inner.per_air.len();
+    let mut cached_commitment_roots = Vec::with_capacity(num_airs);
     let statement_public_inputs = [
         ctx.load_witness(digest_scalar_to_fr(mvk.pre_hash[0])),
         ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0])),
@@ -152,6 +157,7 @@ fn observe_preamble_assigned(
                     );
                 }
 
+                let mut air_cached_roots = Vec::new();
                 for commit in &proof.trace_vdata[air_idx]
                     .as_ref()
                     .expect("present air must include trace vdata")
@@ -159,7 +165,11 @@ fn observe_preamble_assigned(
                 {
                     let root = ctx.load_witness(digest_scalar_to_fr(commit[0]));
                     transcript.observe_commit(ctx, range, &base_chip, &digest_wire_from_root(root));
+                    air_cached_roots.push(root);
                 }
+                cached_commitment_roots.push(air_cached_roots);
+            } else {
+                cached_commitment_roots.push(Vec::new());
             }
 
             values
@@ -176,6 +186,7 @@ fn observe_preamble_assigned(
     AssignedPreambleState {
         statement_public_inputs,
         public_values,
+        cached_commitment_roots,
     }
 }
 
@@ -243,14 +254,7 @@ pub fn constrained_verify(
             if let Some(preprocessed) = &mvk.inner.per_air[air_id].preprocessed_data {
                 commits.push(ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
             }
-            commits.extend(
-                proof.trace_vdata[air_id]
-                    .as_ref()
-                    .expect("trace-id schedule must reference present airs")
-                    .cached_commitments
-                    .iter()
-                    .map(|commit| ctx.load_witness(digest_scalar_to_fr(commit[0]))),
-            );
+            commits.extend(preamble.cached_commitment_roots[air_id].iter().copied());
         }
         commits
     };
