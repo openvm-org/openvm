@@ -383,7 +383,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         // SAFETY: values will be a slice of the cell type
         unsafe {
             match addr_space_layout {
-                MemoryCellType::Native { .. } => {
+                MemoryCellType::F { .. } => {
                     copy_nonoverlapping(
                         values.as_ptr(),
                         row.values.as_mut_ptr() as *mut u8,

@@ -495,7 +495,7 @@ mod tests {
                             );
                         }
                     }
-                    MemoryCellType::Native { .. } => {
+                    MemoryCellType::F { .. } => {
                         for i in 0..space.num_cells {
                             initial_memory.write::<F, 1>(
                                 idx as u32,

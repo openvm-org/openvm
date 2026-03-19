@@ -6,13 +6,7 @@
 //!
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
-use std::{
-    any::TypeId,
-    borrow::Borrow,
-    collections::{HashMap, VecDeque},
-    marker::PhantomData,
-    sync::Arc,
-};
+use std::{any::TypeId, borrow::Borrow, collections::VecDeque, marker::PhantomData, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
@@ -105,25 +99,11 @@ pub enum GenerationError {
     },
 }
 
-/// A trait for key-value store for `Streams`.
-pub trait KvStore: Send + Sync {
-    fn get(&self, key: &[u8]) -> Option<&[u8]>;
-}
-
-impl KvStore for HashMap<Vec<u8>, Vec<u8>> {
-    fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.get(key).map(|v| v.as_slice())
-    }
-}
-
 #[derive(Clone)]
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub hint_space: Vec<Vec<F>>,
-    /// The key-value store for hints. Both key and value are byte arrays. Executors which
-    /// read `kv_store` need to encode the key and decode the value.
-    pub kv_store: Arc<dyn KvStore>,
     /// Stores cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
@@ -135,7 +115,6 @@ impl<F> Streams<F> {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             hint_space: Vec::default(),
-            kv_store: Arc::new(HashMap::new()),
             deferrals: Vec::default(),
         }
     }
