@@ -2,7 +2,7 @@
 
 A guest library for recursive verification of OpenVM STARK proofs. The library uses the [deferral framework](/specs/architecture/deferral) to offload proof verification to the aggregation phase, making recursive verification efficient within guest programs.
 
-You can find an example of using the library for recursive verification [here](https://github.com/openvm-org/openvm/tree/main/guest-libs/verify-stark/tests).
+You can find the library source code [here](https://github.com/openvm-org/openvm/tree/main/guest-libs/verify-stark).
 
 ## Guest
 
@@ -15,10 +15,11 @@ pub fn get_proof_output<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutpu
 ```
 
 Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit` (a 32-byte commitment identifying the proof). Returns a `ProofOutput` containing:
-
 - `app_exe_commit: Commit` — commitment to the app executable whose execution is being verified
 - `app_vk_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — public values revealed by the verified app
+
+`DEF_IDX` is the index of the corresponding `DeferralFn` in the `DeferralExtension.fns` list — for verify-stark, this is the index at which the `DeferredVerifyCircuit`'s function was registered.
 
 ### `verify_proof_output`
 
