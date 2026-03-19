@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use eyre::{Context, Result};
 use openvm_sdk::{
-    fs::{decode_from_file, read_from_file_json, read_object_from_file},
+    fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof,
-    types::VersionedVmStarkProof,
+    types::VersionedNonRootStarkProof,
     Sdk, OPENVM_VERSION,
 };
 
@@ -151,7 +151,8 @@ impl VerifyCmd {
                     let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     get_app_vk_path(&target_dir)
                 };
-                let app_vk = read_object_from_file(app_vk_path)?;
+                let app_vk: openvm_sdk::keygen::AppVerifyingKey =
+                    read_object_from_file(app_vk_path)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
@@ -165,8 +166,12 @@ impl VerifyCmd {
                     files[0].clone()
                 };
                 println!("Verifying application proof at {}", proof_path.display());
-                let app_proof = decode_from_file(proof_path)?;
-                verify_app_proof(&app_vk, &app_proof)?;
+                let app_proof = read_object_from_file(proof_path)?;
+                let _exe_commit = verify_app_proof::<openvm_sdk::DefaultStarkEngine>(
+                    &app_vk.vk,
+                    app_vk.memory_dimensions,
+                    &app_proof,
+                )?;
             }
             VerifySubCommand::Stark {
                 app_commit,
@@ -207,14 +212,14 @@ impl VerifyCmd {
                     files[0].clone()
                 };
                 println!("Verifying STARK proof at {}", proof_path.display());
-                let stark_proof: VersionedVmStarkProof = read_from_file_json(proof_path)
+                let stark_proof: VersionedNonRootStarkProof = read_from_file_json(proof_path)
                     .with_context(|| {
                         format!("Proof needs to be compatible with openvm v{OPENVM_VERSION}",)
                     })?;
                 if stark_proof.version != format!("v{OPENVM_VERSION}") {
                     eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", stark_proof.version);
                 }
-                Sdk::verify_proof(&agg_vk, expected_app_commit, &stark_proof.try_into()?)?;
+                Sdk::verify_proof(agg_vk, expected_app_commit, &stark_proof.try_into()?)?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm { proof } => {

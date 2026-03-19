@@ -13,7 +13,7 @@ members = [
     # "benchmarks/execute",
     # "benchmarks/prove",
     "crates/prof",
-    # "crates/cli",
+    "crates/cli",
     "crates/sdk",
     "crates/sdk-config",
     "crates/circuits/mod-builder",

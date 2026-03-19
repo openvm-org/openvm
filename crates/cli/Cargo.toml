@@ -23,9 +23,11 @@ openvm-sdk = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-circuit = { workspace = true }
+openvm-sdk-config = { workspace = true }
 
-aws-sdk-s3 = "1.119.0"
-aws-config = "1.8.12"
+# TODO: update requires MSRV update (currently pinned for rustc 1.90.0 compat)
+aws-sdk-s3 = "=1.119.0"
+aws-config = "=1.8.12"
 tokio = { version = "1.46.1", features = ["rt", "rt-multi-thread", "macros"] }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
@@ -42,7 +44,8 @@ include_dir = "0.7"
 static_assertions.workspace = true
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify", "metrics"]
+# TODO: restore "evm-verify" when evm deps compile on this branch
+default = ["parallel", "jemalloc", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
