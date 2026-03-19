@@ -77,19 +77,17 @@ fn decompose_packed_bn254_to_split_limbs(
 
 fn reduce_assigned_limb_to_babybear(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
     baby_bear: &BabyBearChip,
     limb: AssignedValue<Fr>,
 ) -> BabyBearWire {
+    let range = baby_bear.range();
     let (quotient, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
     range.check_less_than_safe(ctx, quotient, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
     let reduced = BabyBearWire {
         value: remainder,
         max_bits: BABY_BEAR_BITS,
     };
-    baby_bear
-        .range()
-        .check_less_than_safe(ctx, reduced.value, BABY_BEAR_MODULUS_U64);
+    range.check_less_than_safe(ctx, reduced.value, BABY_BEAR_MODULUS_U64);
     reduced
 }
 
@@ -100,7 +98,7 @@ pub fn split_assigned_bn254_to_babybear_limbs(
 ) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
     let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
     let limbs = decompose_packed_bn254_to_split_limbs(ctx, range, packed);
-    core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, range, &baby_bear, limbs[idx]))
+    core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, &baby_bear, limbs[idx]))
 }
 
 impl TranscriptGadget {
@@ -142,27 +140,20 @@ impl TranscriptGadget {
     fn split_state_to_babybear(
         &self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
         packed: AssignedValue<Fr>,
     ) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
-        let limbs = decompose_packed_bn254_to_split_limbs(ctx, range, packed);
-        core::array::from_fn(|idx| {
-            reduce_assigned_limb_to_babybear(ctx, range, baby_bear, limbs[idx])
-        })
+        let limbs = decompose_packed_bn254_to_split_limbs(ctx, baby_bear.range(), packed);
+        core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, baby_bear, limbs[idx]))
     }
 
-    fn duplexing(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
-        baby_bear: &BabyBearChip,
-    ) {
+    fn duplexing(&mut self, ctx: &mut Context<Fr>, baby_bear: &BabyBearChip) {
         assert!(
             self.input_buffer.len() <= NUM_SPLIT_LIMBS * POSEIDON2_RATE,
             "input buffer exceeds transcript absorb rate"
         );
 
+        let range = baby_bear.range();
         for (idx, chunk) in self.input_buffer.chunks(NUM_SPLIT_LIMBS).enumerate() {
             self.sponge_state[idx] = self.reduce_32(ctx, range, chunk);
         }
@@ -172,7 +163,7 @@ impl TranscriptGadget {
 
         self.output_buffer.clear();
         for packed in self.sponge_state {
-            let parts = self.split_state_to_babybear(ctx, range, baby_bear, packed);
+            let parts = self.split_state_to_babybear(ctx, baby_bear, packed);
             self.output_buffer.extend(parts);
         }
     }
@@ -180,40 +171,37 @@ impl TranscriptGadget {
     pub fn observe(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
         value: &BabyBearWire,
     ) {
         self.output_buffer.clear();
         self.input_buffer.push(*value);
         if self.input_buffer.len() == NUM_SPLIT_LIMBS * POSEIDON2_RATE {
-            self.duplexing(ctx, range, baby_bear);
+            self.duplexing(ctx, baby_bear);
         }
     }
 
     pub fn observe_ext(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
         value: &BabyBearExtWire,
     ) {
         for coeff in &value.0 {
-            self.observe(ctx, range, baby_bear, coeff);
+            self.observe(ctx, baby_bear, coeff);
         }
     }
 
     pub fn observe_commit(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
         digest: &DigestWire,
     ) {
         for packed in &digest.elems {
-            let limbs = self.split_state_to_babybear(ctx, range, baby_bear, *packed);
+            let limbs = self.split_state_to_babybear(ctx, baby_bear, *packed);
             for limb in &limbs {
-                self.observe(ctx, range, baby_bear, limb);
+                self.observe(ctx, baby_bear, limb);
             }
         }
     }
@@ -221,11 +209,10 @@ impl TranscriptGadget {
     pub fn sample(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
     ) -> BabyBearWire {
         if !self.input_buffer.is_empty() || self.output_buffer.is_empty() {
-            self.duplexing(ctx, range, baby_bear);
+            self.duplexing(ctx, baby_bear);
         }
 
         self.output_buffer
@@ -236,17 +223,15 @@ impl TranscriptGadget {
     pub fn sample_ext(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
     ) -> BabyBearExtWire {
-        let coeffs = core::array::from_fn(|_| self.sample(ctx, range, baby_bear));
+        let coeffs = core::array::from_fn(|_| self.sample(ctx, baby_bear));
         BabyBearExt4Wire(coeffs)
     }
 
     pub fn sample_bits(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
         bits: usize,
     ) -> AssignedValue<Fr> {
@@ -262,10 +247,11 @@ impl TranscriptGadget {
         if bits == 0 {
             return ctx.load_constant(Fr::from(0u64));
         }
-        let sampled = self.sample(ctx, range, baby_bear);
+        let sampled = self.sample(ctx, baby_bear);
         // Reduce BabyBearWire so it is constrained to be less than BabyBear modulus
         let sampled_reduced = baby_bear.reduce(ctx, sampled);
         // PERF[jpw]: we could optimize this since the divisor is a power of 2
+        let range = baby_bear.range();
         let (_, rem) = range.div_mod(
             ctx,
             sampled_reduced.value,
@@ -279,7 +265,6 @@ impl TranscriptGadget {
     pub fn check_witness(
         &mut self,
         ctx: &mut Context<Fr>,
-        range: &RangeChip<Fr>,
         baby_bear: &BabyBearChip,
         bits: usize,
         witness: &BabyBearWire,
@@ -288,9 +273,9 @@ impl TranscriptGadget {
             return;
         }
 
-        self.observe(ctx, range, baby_bear, witness);
-        let sampled_bits = self.sample_bits(ctx, range, baby_bear, bits);
-        range.gate().assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
+        self.observe(ctx, baby_bear, witness);
+        let sampled_bits = self.sample_bits(ctx, baby_bear, bits);
+        baby_bear.range().gate().assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
     }
 }
 
