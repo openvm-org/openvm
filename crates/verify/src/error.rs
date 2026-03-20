@@ -31,6 +31,12 @@ pub enum VerifyStarkError {
     InternalRecursiveDagCachedCommitSet { actual: Digest },
     #[error("Internal recursive vk pre-hash should be unset, actual {actual:?}")]
     InternalRecursiveDagPreHashSet { actual: Digest },
+    #[error("Invalid proof cached commit: expected {expected:?}, actual {actual:?}")]
+    ProofCachedCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Missing constraint-eval trace vdata, expected at AIR idx {air_idx}")]
+    MissingConstraintEvalTraceVdata { air_idx: usize },
+    #[error("Missing constraint-eval cached trace at AIR idx {air_idx} cached idx {cached_idx}")]
+    MissingConstraintEvalCachedTrace { air_idx: usize, cached_idx: usize },
     #[error("Program execution did not terminate successfully, exit_code: {0}")]
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be 2")]
