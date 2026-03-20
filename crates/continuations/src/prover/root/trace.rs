@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
 use openvm_recursion_circuit::system::{
-    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use openvm_stark_backend::{
     proof::Proof,
@@ -71,7 +71,7 @@ where
 
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs(
             &self.child_vk,
-            self.child_vk_pcs_data.clone(),
+            CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone()),
             &[proof],
             &mut external_data,
             default_duplex_sponge_recorder(),

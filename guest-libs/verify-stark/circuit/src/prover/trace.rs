@@ -6,7 +6,7 @@ use openvm_circuit::{
 };
 use openvm_continuations::{circuit::deferral::DeferralMerkleProofs, SC};
 use openvm_recursion_circuit::system::{
-    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use openvm_stark_backend::{
     proof::Proof,
@@ -71,7 +71,7 @@ where
             .verifier_circuit
             .generate_proving_ctxs(
                 &self.child_vk,
-                self.child_vk_pcs_data.clone(),
+                CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone()),
                 proof_slice,
                 &mut external_data,
                 default_duplex_sponge_recorder(),

@@ -31,7 +31,7 @@ use crate::{
             EqSharpUniAir, EqSharpUniBlob, EqSharpUniReceiverAir, EqUniAir,
         },
         expr_eval::{
-            CachedTraceRecord, ConstraintsFoldingAir, ConstraintsFoldingBlob,
+            CachedTraceRecord, ConstraintsFoldingAir, ConstraintsFoldingBlob, DagCommitSubAir,
             InteractionsFoldingAir, InteractionsFoldingBlob, SymbolicExpressionAir,
         },
         expression_claim::{
@@ -120,6 +120,7 @@ pub struct BatchConstraintModule {
     max_constraint_degree: usize,
 
     max_num_proofs: usize,
+    pub(crate) has_cached: bool,
 }
 
 impl BatchConstraintModule {
@@ -128,6 +129,7 @@ impl BatchConstraintModule {
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         max_num_proofs: usize,
+        has_cached: bool,
     ) -> Self {
         let l_skip = child_vk.inner.params.l_skip;
         let max_constraint_degree = child_vk.max_constraint_degree();
@@ -171,6 +173,7 @@ impl BatchConstraintModule {
             l_skip,
             max_constraint_degree,
             max_num_proofs,
+            has_cached,
         }
     }
 
@@ -312,7 +315,7 @@ impl AirModule for BatchConstraintModule {
     fn airs<SC: StarkProtocolConfig<F = BabyBear>>(&self) -> Vec<AirRef<SC>> {
         let l_skip = self.l_skip;
 
-        let symbolic_expression_air = SymbolicExpressionAir {
+        let symbolic_expression_air = SymbolicExpressionAir::<BabyBear> {
             expr_bus: self.symbolic_expression_bus,
             air_shape_bus: self.air_shape_bus,
             air_presence_bus: self.air_presence_bus,
@@ -324,6 +327,7 @@ impl AirModule for BatchConstraintModule {
             sel_hypercube_bus: self.sel_hypercube_bus,
             sel_uni_bus: self.sel_uni_bus,
             cnt_proofs: self.max_num_proofs,
+            dag_commit_subair: (!self.has_cached).then_some(Arc::new(DagCommitSubAir::new())),
         };
         let fraction_folder_air = FractionsFolderAir {
             transcript_bus: self.transcript_bus,
@@ -678,7 +682,10 @@ impl BatchConstraintBlobCpu {
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>>
     for BatchConstraintModule
 {
-    type ModuleSpecificCtx<'a> = Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>;
+    type ModuleSpecificCtx<'a> = (
+        Option<&'a CachedTraceRecord>,
+        Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+    );
 
     /// **Note**: This generates all common main traces but leaves the cached trace for
     /// `SymbolicExpressionAir` unset. The cached trace must be loaded **after** calling this
@@ -689,10 +696,11 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        pow_checker: &Self::ModuleSpecificCtx<'_>,
+        ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let blob = BatchConstraintBlobCpu::new(child_vk, proofs, preflights);
+        let pow_checker = ctx.1.clone();
         let ctx = (
             StandardTracegenCtx {
                 vk: child_vk,
@@ -700,11 +708,13 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
                 preflights: &preflights.iter().collect_vec(),
             },
             blob,
+            ctx.0,
         );
 
         let chips = [
             BatchConstraintModuleChip::SymbolicExpression {
                 max_num_proofs: self.max_num_proofs,
+                has_cached: self.has_cached,
             },
             BatchConstraintModuleChip::FractionsFolder,
             BatchConstraintModuleChip::SumcheckUni,
@@ -714,9 +724,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
             BatchConstraintModuleChip::EqSharpUni,
             BatchConstraintModuleChip::EqSharpUniReceiver,
             BatchConstraintModuleChip::EqUni,
-            BatchConstraintModuleChip::ExpressionClaim {
-                pow_checker: pow_checker.clone(),
-            },
+            BatchConstraintModuleChip::ExpressionClaim { pow_checker },
             BatchConstraintModuleChip::InteractionsFolding,
             BatchConstraintModuleChip::ConstraintsFolding,
             BatchConstraintModuleChip::EqNeg,
@@ -743,7 +751,7 @@ impl BatchConstraintModule {
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> CachedTraceRecord {
-        expr_eval::build_cached_trace_record(child_vk)
+        expr_eval::build_cached_trace_record(child_vk, self.has_cached)
     }
 
     /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
@@ -774,6 +782,7 @@ impl BatchConstraintModule {
 enum BatchConstraintModuleChip {
     SymbolicExpression {
         max_num_proofs: usize,
+        has_cached: bool,
     },
     FractionsFolder,
     SumcheckUni,
@@ -798,7 +807,11 @@ impl BatchConstraintModuleChip {
 }
 
 impl RowMajorChip<F> for BatchConstraintModuleChip {
-    type Ctx<'a> = (StandardTracegenCtx<'a>, BatchConstraintBlobCpu);
+    type Ctx<'a> = (
+        StandardTracegenCtx<'a>,
+        BatchConstraintBlobCpu,
+        Option<&'a CachedTraceRecord>,
+    );
 
     #[tracing::instrument(
         name = "wrapper.generate_trace",
@@ -816,6 +829,7 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
         let proofs = ctx.0.proofs;
         let preflights = ctx.0.preflights;
         let blob = &ctx.1;
+        let cached_trace_record = ctx.2;
         match self {
             FractionsFolder => {
                 FractionsFolderTraceGenerator.generate_trace(&ctx.0, required_height)
@@ -841,14 +855,19 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
                 required_height,
             ),
             EqUni => eq_airs::EqUniTraceGenerator.generate_trace(&ctx.0, required_height),
-            SymbolicExpression { max_num_proofs } => expr_eval::SymbolicExpressionTraceGenerator {
+            SymbolicExpression {
+                max_num_proofs,
+                has_cached,
+            } => expr_eval::SymbolicExpressionTraceGenerator {
                 max_num_proofs: *max_num_proofs,
+                has_cached: *has_cached,
             }
             .generate_trace(
                 &expr_eval::SymbolicExpressionCtx {
                     vk: child_vk,
                     preflights,
                     expr_evals: &blob.common_blob.expr_evals,
+                    cached_trace_record: &cached_trace_record,
                 },
                 required_height,
             ),
@@ -890,7 +909,11 @@ pub mod cuda_tracegen {
     };
 
     impl ModuleChip<GpuBackend> for BatchConstraintModuleChip {
-        type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a BatchConstraintBlobGpu);
+        type Ctx<'a> = (
+            StandardTracegenGpuCtx<'a>,
+            &'a BatchConstraintBlobGpu,
+            Option<&'a CachedTraceRecord>,
+        );
 
         fn generate_proving_ctx(
             &self,
@@ -902,25 +925,29 @@ pub mod cuda_tracegen {
             let proofs = ctx.0.proofs;
             let preflights = ctx.0.preflights;
             let blob = ctx.1;
+            let cached_trace_record = ctx.2;
             match self {
                 Eq3b => eq_airs::Eq3bTraceGenerator.generate_proving_ctx(
                     &(&child_vk.cpu, &blob.common_blob.eq_3b_blob, preflights),
                     required_height,
                 ),
-                SymbolicExpression { max_num_proofs } => {
-                    expr_eval::SymbolicExpressionTraceGenerator {
-                        max_num_proofs: *max_num_proofs,
-                    }
-                    .generate_proving_ctx(
-                        &expr_eval::symbolic_expression::cuda::SymbolicExpressionGpuCtx {
-                            vk: &child_vk.cpu,
-                            proofs,
-                            preflights,
-                            expr_evals: &blob.common_blob.expr_evals,
-                        },
-                        required_height,
-                    )
+                SymbolicExpression {
+                    max_num_proofs,
+                    has_cached,
+                } => expr_eval::SymbolicExpressionTraceGenerator {
+                    max_num_proofs: *max_num_proofs,
+                    has_cached: *has_cached,
                 }
+                .generate_proving_ctx(
+                    &expr_eval::symbolic_expression::cuda::SymbolicExpressionGpuCtx {
+                        vk: &child_vk.cpu,
+                        proofs,
+                        preflights,
+                        expr_evals: &blob.common_blob.expr_evals,
+                        cached_trace_record: &cached_trace_record,
+                    },
+                    required_height,
+                ),
                 InteractionsFolding => expr_eval::InteractionsFoldingTraceGenerator
                     .generate_proving_ctx(&(child_vk, preflights, &blob.if_blob), required_height),
                 ConstraintsFolding => expr_eval::ConstraintsFoldingTraceGenerator
@@ -967,7 +994,10 @@ pub mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for BatchConstraintModule {
-        type ModuleSpecificCtx<'a> = Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>;
+        type ModuleSpecificCtx<'a> = (
+            Option<&'a CachedTraceRecord>,
+            Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+        );
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -975,9 +1005,11 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            pow_checker: &Self::ModuleSpecificCtx<'_>,
+            module_ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
+            let cached_trace_record = module_ctx.0;
+            let pow_checker = module_ctx.1.clone();
             let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights);
             let ctx = (
                 StandardTracegenGpuCtx {
@@ -986,12 +1018,14 @@ pub mod cuda_tracegen {
                     preflights,
                 },
                 &blob,
+                cached_trace_record,
             );
 
             // Chips with cuda kernels for tracegen
             let gpu_chips = [
                 BatchConstraintModuleChip::SymbolicExpression {
                     max_num_proofs: self.max_num_proofs,
+                    has_cached: self.has_cached,
                 },
                 BatchConstraintModuleChip::Eq3b,
                 BatchConstraintModuleChip::ConstraintsFolding,
@@ -1006,9 +1040,7 @@ pub mod cuda_tracegen {
                 BatchConstraintModuleChip::EqSharpUni,
                 BatchConstraintModuleChip::EqSharpUniReceiver,
                 BatchConstraintModuleChip::EqUni,
-                BatchConstraintModuleChip::ExpressionClaim {
-                    pow_checker: pow_checker.clone(),
-                },
+                BatchConstraintModuleChip::ExpressionClaim { pow_checker },
                 BatchConstraintModuleChip::EqNeg,
             ];
             let span = tracing::Span::current();
@@ -1044,6 +1076,7 @@ pub mod cuda_tracegen {
                     preflights: &cpu_preflights,
                 },
                 blob,
+                cached_trace_record,
             );
 
             // We parallelize the CPU trace generation
@@ -1088,7 +1121,7 @@ pub mod cuda_tracegen {
                 Matrix = openvm_cuda_backend::base::DeviceMatrix<F>,
             >,
         {
-            let cached_trace_record = build_cached_trace_record(child_vk);
+            let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
             let d_cached_trace = transport_matrix_h2d_row(&cached_trace).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();

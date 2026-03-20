@@ -2,7 +2,7 @@ use std::iter::once;
 
 use itertools::Itertools;
 use openvm_recursion_circuit::system::{
-    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use openvm_stark_backend::{
     proof::Proof,
@@ -85,7 +85,7 @@ where
             .verifier_circuit
             .generate_proving_ctxs(
                 child_vk,
-                child_vk_pcs_data,
+                CachedTraceCtx::PcsData(child_vk_pcs_data),
                 proofs,
                 &mut external_data,
                 default_duplex_sponge_recorder(),
