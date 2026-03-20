@@ -26,12 +26,12 @@ cfg_if::cfg_if! {
         use openvm_verify_stark_circuit::prover::DeferredVerifyGpuProver as VerifyProver;
         use openvm_verify_stark_circuit::prover::DeferredVerifyGpuCircuitProver as VerifyCircuitProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
-        type RootE = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
+        type RootVerifyE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
     } else {
         use openvm_verify_stark_circuit::prover::DeferredVerifyCpuProver as VerifyProver;
         use openvm_verify_stark_circuit::prover::DeferredVerifyCpuCircuitProver as VerifyCircuitProver;
         type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
-        type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+        type RootVerifyE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
     }
 }
 
@@ -56,7 +56,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
 
     let proof = evm_prover.prove(stdin, &[])?;
     let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
+    let engine = RootVerifyE::new(vk.inner.params.clone());
     engine.verify(&vk, &proof)?;
 
     Ok(())
@@ -167,7 +167,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let vs_proof = evm_prover.prove(vs_stdin, &[def_input])?;
 
     let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
+    let engine = RootVerifyE::new(vk.inner.params.clone());
     engine.verify(&vk, &vs_proof)?;
 
     Ok(())
@@ -225,7 +225,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
 
     // ---- Step 3: Verify the final result ----
     let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
+    let engine = RootVerifyE::new(vk.inner.params.clone());
     engine.verify(&vk, &proof)?;
 
     Ok(())
