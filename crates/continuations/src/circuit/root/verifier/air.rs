@@ -16,7 +16,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use openvm_verify_stark_host::pvs::{
     DagCommit, DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID,
-    DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
+    CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
@@ -33,7 +33,6 @@ use crate::{
         },
         subair::{HashSliceCtx, HashSliceSubAir},
         utils::{assert_dag_commit_eq, assert_dag_commit_unset, vk_commit_components},
-        CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
     CommitBytes, DagCommitBytes,
