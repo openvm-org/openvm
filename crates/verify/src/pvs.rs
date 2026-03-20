@@ -7,6 +7,8 @@ pub const VM_PVS_AIR_ID: usize = 1;
 pub const DEF_PVS_AIR_ID: usize = 2;
 pub const CONSTRAINT_EVAL_AIR_ID: usize = 3;
 
+pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
+
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct DagCommit<F> {

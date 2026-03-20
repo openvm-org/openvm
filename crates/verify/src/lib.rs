@@ -21,8 +21,8 @@ use crate::{
     deferral::DeferralMerkleProofs,
     error::VerifyStarkError,
     pvs::{
-        DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
-        VM_PVS_AIR_ID,
+        DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID,
+        CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
     },
     vk::NonRootStarkVerifyingKey,
 };
@@ -192,6 +192,19 @@ pub fn verify_vm_stark_proof_pvs(
         return Err(VerifyStarkError::InternalForLeafDagPreHashMismatch {
             expected: vk.baseline.internal_for_leaf_dag_commit.vk_pre_hash,
             actual: internal_for_leaf_dag_commit.vk_pre_hash,
+        });
+    }
+
+    // Check the proof's cached commit is the internal-recursive one.
+    let proof_cached_commit = proof.inner.trace_vdata[CONSTRAINT_EVAL_AIR_ID]
+        .as_ref()
+        .unwrap()
+        .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
+
+    if proof_cached_commit != vk.baseline.internal_recursive_dag_commit.cached_commit {
+        return Err(VerifyStarkError::ProofCachedCommitMismatch {
+            expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
+            actual: proof_cached_commit,
         });
     }
 

@@ -31,6 +31,8 @@ pub enum VerifyStarkError {
     InternalRecursiveDagCachedCommitSet { actual: Digest },
     #[error("Internal recursive vk pre-hash should be unset, actual {actual:?}")]
     InternalRecursiveDagPreHashSet { actual: Digest },
+    #[error("Proof cached commit should be internal recursive: expected {expected:?}, actual {actual:?}")]
+    ProofCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Program execution did not terminate successfully, exit_code: {0}")]
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be 2")]
