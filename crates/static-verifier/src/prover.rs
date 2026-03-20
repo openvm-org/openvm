@@ -76,18 +76,75 @@ impl StaticVerifierCircuit {
     }
 
     /// Run the [`MockProver`] and panic if any constraint is unsatisfied.
+    ///
+    /// Uses full [`Self::populate`]. Continuations-shaped end-to-end coverage is in `openvm-sdk`
+    /// integration tests.
     pub fn mock(&self, shape: &StaticVerifierShape, proof: &Proof<RootConfig>) {
         let mut builder = Self::builder(CircuitBuilderStage::Mock, shape);
         let public_inputs = self.populate(&mut builder, proof);
 
         let _ = builder.calculate_params(Some(shape.minimum_rows));
 
-        let prover = MockProver::run(shape.k as u32, &builder, vec![public_inputs])
+        let prover = MockProver::run(shape.k as u32, &builder, vec![public_inputs.to_vec()])
             .expect("MockProver should initialize");
         prover.assert_satisfied();
     }
 
+    /// Prove using only [`Self::populate_verify_stark_constraints`]. `shape.instance_columns` must
+    /// be `0`. [`StaticVerifierProof::public_inputs`] is empty.
+    pub fn prove_verify_stark_constraints_only(
+        &self,
+        params: &Halo2Params,
+        pinning: &Halo2ProvingPinning,
+        shape: &StaticVerifierShape,
+        proof: &Proof<RootConfig>,
+    ) -> StaticVerifierProof {
+        assert_eq!(
+            shape.instance_columns, 0,
+            "prove_verify_stark_constraints_only requires instance_columns == 0"
+        );
+        let mut builder = BaseCircuitBuilder::prover(
+            pinning.metadata.config_params.clone(),
+            pinning.metadata.break_points.clone(),
+        );
+        builder = builder.use_instance_columns(0);
+
+        let range = builder.range_chip();
+        let ctx = builder.main(0);
+        let _ = self.populate_verify_stark_constraints(ctx, range, proof);
+
+        let public_inputs = Vec::new();
+
+        let rng = ChaCha20Rng::from_seed(Default::default());
+        let instances: &[&[Fr]] = &[];
+        let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+        create_proof::<
+            KZGCommitmentScheme<Bn256>,
+            ProverSHPLONK<'_, Bn256>,
+            Challenge255<_>,
+            _,
+            Blake2bWrite<Vec<u8>, G1Affine, _>,
+            _,
+        >(
+            params,
+            &pinning.pk,
+            &[builder],
+            &[instances],
+            rng,
+            &mut transcript,
+        )
+        .expect("Halo2 proof generation should succeed");
+
+        StaticVerifierProof {
+            proof_bytes: transcript.finalize(),
+            public_inputs,
+        }
+    }
+
     /// Generate a Halo2 proof using a previously computed [`Halo2ProvingPinning`].
+    ///
+    /// Uses full [`Self::populate`]. Continuations-shaped proving is covered in `openvm-sdk`
+    /// integration tests.
     pub fn prove(
         &self,
         params: &Halo2Params,
@@ -102,6 +159,7 @@ impl StaticVerifierCircuit {
         builder = builder.use_instance_columns(shape.instance_columns);
 
         let public_inputs = self.populate(&mut builder, proof);
+        let public_inputs = public_inputs.to_vec();
 
         let rng = ChaCha20Rng::from_seed(Default::default());
         let instances: &[&[Fr]] = &[&public_inputs];
@@ -137,17 +195,35 @@ impl StaticVerifierCircuit {
     ) -> bool {
         let verifier_params = params.verifier_params();
         let strategy = SingleStrategy::new(params);
-        let instances: &[&[Fr]] = &[&proof.public_inputs];
         let mut transcript =
             Blake2bRead::<_, _, Challenge255<_>>::init(proof.proof_bytes.as_slice());
-        verify_proof::<
-            KZGCommitmentScheme<Bn256>,
-            VerifierSHPLONK<'_, Bn256>,
-            Challenge255<G1Affine>,
-            Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
-            SingleStrategy<'_, Bn256>,
-        >(verifier_params, vk, strategy, &[instances], &mut transcript)
-        .is_ok()
+        // One entry per circuit; inner slice length must match `num_instance_columns` (here: 0).
+        let no_instance_cols: &[&[Fr]] = &[];
+        let ok = if proof.public_inputs.is_empty() {
+            verify_proof::<
+                KZGCommitmentScheme<Bn256>,
+                VerifierSHPLONK<'_, Bn256>,
+                Challenge255<G1Affine>,
+                Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+                SingleStrategy<'_, Bn256>,
+            >(
+                verifier_params,
+                vk,
+                strategy,
+                &[no_instance_cols],
+                &mut transcript,
+            )
+        } else {
+            let instances: &[&[Fr]] = &[&proof.public_inputs];
+            verify_proof::<
+                KZGCommitmentScheme<Bn256>,
+                VerifierSHPLONK<'_, Bn256>,
+                Challenge255<G1Affine>,
+                Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+                SingleStrategy<'_, Bn256>,
+            >(verifier_params, vk, strategy, &[instances], &mut transcript)
+        };
+        ok.is_ok()
     }
 }
 

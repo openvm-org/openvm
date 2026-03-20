@@ -25,12 +25,15 @@ use crate::{
         },
         whir::{constrain_whir_verification, load_whir_proof_wire, WhirProofWire},
     },
-    transcript::{digest_wire_from_root, TranscriptGadget},
+    transcript::{digest_wire_from_root, DigestWire, TranscriptGadget},
     Fr,
 };
 
+mod public_values;
 #[cfg(test)]
 mod tests;
+
+pub use public_values::*;
 
 #[derive(Clone, Debug)]
 pub struct ProofWire {
@@ -120,20 +123,13 @@ fn observe_preamble(
     log_heights_per_air: &[usize],
     public_values: &[Vec<BabyBearWire>],
     cached_commitment_roots: &[Vec<AssignedValue<Fr>>],
-    statement_public_inputs: [AssignedValue<Fr>; 2],
+    vk_pre_hash: DigestWire,
+    common_main_commit: DigestWire,
 ) {
     let base_chip = BabyBearChip::new(Arc::new(range.clone()));
 
-    transcript.observe_commit(
-        ctx,
-        &base_chip,
-        &digest_wire_from_root(statement_public_inputs[0]),
-    );
-    transcript.observe_commit(
-        ctx,
-        &base_chip,
-        &digest_wire_from_root(statement_public_inputs[1]),
-    );
+    transcript.observe_commit(ctx, &base_chip, &vk_pre_hash);
+    transcript.observe_commit(ctx, &base_chip, &common_main_commit);
 
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
@@ -184,56 +180,55 @@ fn observe_preamble(
 /// `[mvk_pre_hash_root, common_main_commit_root]`.
 pub fn constrained_verify(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
-    mvk: &MultiStarkVerifyingKey<RootConfig>,
-    proof_wire: ProofWire,
+    range: RangeChip<Fr>,
+    root_vk: &MultiStarkVerifyingKey<RootConfig>,
+    proof_wire: &ProofWire, /* Root proof */
     trace_id_to_air_id: &[usize],
     log_heights_per_air: &[usize],
     stacked_layouts: &[StackedLayout],
-) -> [AssignedValue<Fr>; 2] {
+) {
     assert_eq!(
         log_heights_per_air.len(),
-        mvk.inner.per_air.len(),
+        root_vk.inner.per_air.len(),
         "log_heights_per_air must match VK per_air count"
     );
-    let l_skip = mvk.inner.params.l_skip;
-
-    let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(mvk.pre_hash[0]));
-    let statement_public_inputs = [mvk_pre_hash_root, proof_wire.common_main_commit_root];
-
+    let l_skip = root_vk.inner.params.l_skip;
     let n_per_trace: Vec<isize> = trace_id_to_air_id
         .iter()
         .map(|&air_id| log_heights_per_air[air_id] as isize - l_skip as isize)
         .collect();
 
+    let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
     let mut transcript = TranscriptGadget::new(ctx);
     observe_preamble(
         ctx,
-        range,
+        &range,
         &mut transcript,
-        mvk,
+        root_vk,
         log_heights_per_air,
         &proof_wire.public_values,
         &proof_wire.cached_commitment_roots,
-        statement_public_inputs,
+        digest_wire_from_root(mvk_pre_hash_root),
+        digest_wire_from_root(proof_wire.common_main_commit_root),
     );
 
-    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
+    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range)));
     let ext_chip = BabyBearExtChip::new(base_chip);
+    let range = ext_chip.range();
 
     let batch = constrain_batch_constraints_verification(
         ctx,
         range,
         &mut transcript,
-        &mvk.inner,
+        &root_vk.inner,
         &proof_wire.gkr,
         &proof_wire.batch,
         &n_per_trace,
         trace_id_to_air_id,
-        proof_wire.public_values,
+        proof_wire.public_values.clone(),
     );
 
-    let need_rot_per_commit = get_need_rot_per_commit(&mvk.inner, trace_id_to_air_id);
+    let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
         &ext_chip,
@@ -242,7 +237,7 @@ pub fn constrained_verify(
         stacked_layouts,
         &need_rot_per_commit,
         l_skip,
-        mvk.inner.params.n_stack,
+        root_vk.inner.params.n_stack,
         &batch.column_openings,
         &batch.r,
     );
@@ -261,10 +256,10 @@ pub fn constrained_verify(
     };
 
     let initial_commitment_roots = {
-        let common_main_root = statement_public_inputs[1];
+        let common_main_root = proof_wire.common_main_commit_root;
         let mut commits = vec![common_main_root];
         for &air_id in trace_id_to_air_id {
-            if let Some(preprocessed) = &mvk.inner.per_air[air_id].preprocessed_data {
+            if let Some(preprocessed) = &root_vk.inner.per_air[air_id].preprocessed_data {
                 commits.push(ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
             }
             commits.extend(proof_wire.cached_commitment_roots[air_id].iter().copied());
@@ -276,14 +271,12 @@ pub fn constrained_verify(
         ctx,
         &ext_chip,
         &mut transcript,
-        &mvk.inner,
+        &root_vk.inner,
         &proof_wire.whir,
         &stacked_reduction.stacking_openings,
         &initial_commitment_roots,
         &u_cube,
     );
-
-    statement_public_inputs
 }
 
 /// Helper function, purely on out-of-circuit values.
