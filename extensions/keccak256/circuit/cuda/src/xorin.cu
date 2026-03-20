@@ -187,7 +187,7 @@ extern "C" int _xorin_tracegen(
     assert(height >= d_records.len());
     assert(width == sizeof(XorinVmCols<uint8_t>));
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     xorin_tracegen<<<grid, block>>>(
         d_trace,
