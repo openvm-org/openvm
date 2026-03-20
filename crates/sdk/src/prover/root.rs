@@ -174,7 +174,7 @@ pub fn compute_root_proof_heights(
         None,
     );
 
-    let root_proving_ctx = root_prover
+    let root_proving_ctx: ProvingContext<<E as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,

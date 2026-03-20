@@ -492,7 +492,7 @@ fn test_recursion_circuit_dag_commit_subair() {
         },
     );
     let cached_trace_record = <VerifierSubCircuit<2> as VerifierTraceGen<
-        _,
+        CpuBackend<BabyBearPoseidon2Config>,
         BabyBearPoseidon2Config,
     >>::cached_trace_record(&circuit, &vk);
     let ctxs = circuit.generate_proving_ctxs_base(

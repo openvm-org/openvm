@@ -739,8 +739,11 @@ fn test_deferral_e2e() -> Result<()> {
         Some(def_hook_vk_commit.into()),
         None,
     );
-    let ctx =
-        root_prover.generate_proving_ctx(combined_proof, &user_pvs_proof, Some(&merkle_proofs));
+    let ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB>(
+        combined_proof,
+        &user_pvs_proof,
+        Some(&merkle_proofs),
+    );
     warn!("proving root (CPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
