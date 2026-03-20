@@ -22,7 +22,7 @@ using p3_keccak_air::U64_LIMBS;
 // Main kernel for KeccakfPermChip trace generation
 // Each thread processes one permutation (24 rows)
 __global__ void keccakf_perm_tracegen(
-    Fp *d_trace,
+    Fp *__restrict__ d_trace, // no alias with d_records, enables store optimization
     size_t height,
     uint32_t num_records,
     uint32_t blocks_to_fill, // = ceil(height / 24)
@@ -34,9 +34,10 @@ __global__ void keccakf_perm_tracegen(
         return;
     }
 
-    // Initialize state - will be transformed by generate_trace_row_for_round
+    // Single persistent state (no separate initial_state to reduce register pressure).
     __align__(16) uint64_t current_state[5][5] = {0};
-    __align__(16) uint64_t initial_state[5][5] = {0};
+    // Compact preimage as u16 limbs, rewritten each round.
+    uint16_t preimage_limbs[5 * 5 * U64_LIMBS] = {0};
 
     uint32_t timestamp = 0;
 
@@ -57,15 +58,15 @@ __global__ void keccakf_perm_tracegen(
                     val |= static_cast<uint64_t>(rec.preimage_buffer_bytes[keccak_offset * 8 + j])
                            << (j * 8);
                 }
-                // Store as current_state[y][x] = A[x][y] for generate_trace_row_for_round
                 current_state[y][x] = val;
-                initial_state[y][x] = val;
             }
         }
+        memcpy(
+            preimage_limbs,
+            reinterpret_cast<uint16_t *>(&current_state[0][0]),
+            sizeof(preimage_limbs)
+        );
     }
-
-    // Convert initial state to u16 limbs for preimage columns
-    uint16_t *initial_state_limbs = reinterpret_cast<uint16_t *>(initial_state);
 
     // Calculate how many rows to fill for this block
     size_t rows_for_this_block = NUM_ROUNDS;
@@ -77,93 +78,31 @@ __global__ void keccakf_perm_tracegen(
         }
     }
 
-    // Generate 24 round rows
+    // Generate 24 round rows. Dummy blocks (block_idx >= num_records) use zero-initialized
+    // state and produce a valid keccak-f trace over zero input. Every column is explicitly
+    // written: preimage and a below, intermediates by generate_trace_row_for_round, then
+    // export and timestamp at the end.
     for (uint32_t round_idx = 0; round_idx < rows_for_this_block; round_idx++) {
         size_t row_idx = block_idx * NUM_ROUNDS + round_idx;
         RowSlice row(d_trace + row_idx, height);
 
-        // Fill zero first for safety
-        row.fill_zero(0, sizeof(KeccakfPermCols<uint8_t>));
+        // Fill preimage columns (same for all rounds within a permutation)
+        KECCAKF_PERM_WRITE_ARRAY(inner.preimage, preimage_limbs);
 
-        if (block_idx < num_records) {
-            // Valid record: fill preimage and compute keccak-f trace
+        // Fill 'a' input state directly from current_state.
+        // After iota of the previous round, current_state already holds the correct
+        // next-round input, so no prev-row readback is needed.
+        uint16_t *state_limbs = reinterpret_cast<uint16_t *>(&current_state[0][0]);
+        COL_WRITE_ARRAY(row, KeccakfPermCols, inner.a, state_limbs);
 
-            // Fill preimage columns (same for all rounds within a permutation)
-            COL_WRITE_ARRAY(row, KeccakfPermCols, inner.preimage, initial_state_limbs);
+        // Generate trace row for this round (updates current_state in-place)
+        p3_keccak_air::generate_trace_row_for_round(row, round_idx, current_state);
 
-            // Fill 'a' input state - on first round, same as preimage
-            // On subsequent rounds, copy from previous row's output
-            if (round_idx == 0) {
-                COL_WRITE_ARRAY(row, KeccakfPermCols, inner.a, initial_state_limbs);
-            } else {
-                // Copy previous round's output to this round's input
-                // a[y][x] gets a_prime_prime_prime[0][0] for (x,y)=(0,0), else a_prime_prime[y][x]
-                RowSlice prev_row(d_trace + row_idx - 1, height);
-                for (int y = 0; y < 5; y++) {
-                    for (int x = 0; x < 5; x++) {
-                        for (int limb = 0; limb < U64_LIMBS; limb++) {
-                            Fp val;
-                            if (x == 0 && y == 0) {
-                                val = prev_row[COL_INDEX(
-                                    KeccakfPermCols, inner.a_prime_prime_prime_0_0_limbs[limb]
-                                )];
-                            } else {
-                                val = prev_row[COL_INDEX(
-                                    KeccakfPermCols, inner.a_prime_prime[y][x][limb]
-                                )];
-                            }
-                            KECCAKF_PERM_WRITE(inner.a[y][x][limb], val);
-                        }
-                    }
-                }
-            }
-
-            // Generate trace row for this round (updates current_state in-place)
-            p3_keccak_air::generate_trace_row_for_round(row, round_idx, current_state);
-
-            // Set export flag and timestamp on last round
-            if (round_idx == NUM_ROUNDS - 1) {
-                KECCAKF_PERM_WRITE(inner._export, 1);
-                KECCAKF_PERM_WRITE(timestamp, timestamp);
-            } else {
-                KECCAKF_PERM_WRITE(inner._export, 0);
-                KECCAKF_PERM_WRITE(timestamp, 0);
-            }
+        // Set export flag and timestamp on last round
+        if (block_idx < num_records && round_idx == NUM_ROUNDS - 1) {
+            KECCAKF_PERM_WRITE(inner._export, 1);
+            KECCAKF_PERM_WRITE(timestamp, timestamp);
         } else {
-            // Dummy block: generate valid keccak-f trace with zero state, export=0
-            // The KeccakAir constraints require all intermediate columns (C, C', A', A'', etc.)
-            // to be properly computed, so we can't just zero them out.
-
-            // Fill preimage with zeros (already zeroed)
-            // Fill 'a' input state
-            if (round_idx == 0) {
-                // a = preimage = zeros (already zeroed)
-            } else {
-                // Copy previous round's output to this round's input
-                RowSlice prev_row(d_trace + row_idx - 1, height);
-                for (int y = 0; y < 5; y++) {
-                    for (int x = 0; x < 5; x++) {
-                        for (int limb = 0; limb < U64_LIMBS; limb++) {
-                            Fp val;
-                            if (x == 0 && y == 0) {
-                                val = prev_row[COL_INDEX(
-                                    KeccakfPermCols, inner.a_prime_prime_prime_0_0_limbs[limb]
-                                )];
-                            } else {
-                                val = prev_row[COL_INDEX(
-                                    KeccakfPermCols, inner.a_prime_prime[y][x][limb]
-                                )];
-                            }
-                            KECCAKF_PERM_WRITE(inner.a[y][x][limb], val);
-                        }
-                    }
-                }
-            }
-
-            // Generate trace row for this round (using current_state which is zero for dummy blocks)
-            p3_keccak_air::generate_trace_row_for_round(row, round_idx, current_state);
-
-            // Dummy rows: export must be 0, timestamp = 0
             KECCAKF_PERM_WRITE(inner._export, 0);
             KECCAKF_PERM_WRITE(timestamp, 0);
         }
