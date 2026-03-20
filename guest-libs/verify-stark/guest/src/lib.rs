@@ -13,7 +13,7 @@ pub struct ProofOutput {
     pub user_public_values: Vec<u8>,
 }
 
-pub fn get_proof_output<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutput {
+pub fn verify_stark_unchecked<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutput {
     let output_key = deferred_compute::<DEF_IDX>(input_commit);
     let output_len = output_key.output_len as usize;
 
@@ -38,8 +38,8 @@ pub fn get_proof_output<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutpu
     }
 }
 
-pub fn verify_proof_output<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput) {
-    let actual = get_proof_output::<DEF_IDX>(input_commit);
+pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput) {
+    let actual = verify_stark_unchecked::<DEF_IDX>(input_commit);
     if actual != *expected {
         panic!("Proof verification failed for commit {:?}", input_commit);
     }
