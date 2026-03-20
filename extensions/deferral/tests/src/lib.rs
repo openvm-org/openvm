@@ -1,5 +1,4 @@
 #[cfg(test)]
-#[cfg(not(feature = "cuda"))]
 mod tests {
     use std::sync::Arc;
 
@@ -13,7 +12,7 @@ mod tests {
         utils::{air_test_with_min_segments, test_system_config},
     };
     use openvm_deferral_circuit::{
-        DeferralCpuBuilder, DeferralExtension, DeferralFn, Rv32DeferralConfig,
+        DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
     };
     use openvm_deferral_transpiler::DeferralTranspilerExtension;
     use openvm_instructions::{exe::VmExe, DEFERRAL_AS};
@@ -96,7 +95,7 @@ mod tests {
                     config.deferral.def_vk_commits.clone(),
                 )),
         )?;
-        air_test_with_min_segments(DeferralCpuBuilder, config, exe, streams, 1).unwrap();
+        air_test_with_min_segments(Rv32DeferralBuilder, config, exe, streams, 1).unwrap();
         Ok(())
     }
 

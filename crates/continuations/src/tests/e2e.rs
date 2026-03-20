@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
 use openvm_deferral_circuit::{
-    DeferralCpuBuilder, DeferralExtension, DeferralFn, Rv32DeferralConfig,
+    DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
@@ -367,11 +367,10 @@ fn test_deferral_e2e() -> Result<()> {
     };
 
     // =========================================================================
-    // SECTION 2: Run the VM (CPU engine for DeferralCpuBuilder), capture merkle
-    // proofs before and after execution.
+    // SECTION 2: Run the VM, capture merkle proofs before and after execution.
     // =========================================================================
     let app_engine = AppEngine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, DeferralCpuBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, Rv32DeferralBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
 
