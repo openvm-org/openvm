@@ -19,7 +19,7 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 - `app_vk_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — public values revealed by the verified app
 
-`DEF_IDX` must match the index of the corresponding `DeferralFn` in `DeferralExtension.fns`, as configured when building the VM extension.
+`DEF_IDX` must match the index of the corresponding `DeferralFn` in `DeferralExtension.fns`, as configured when [building the VM extension](#using-deferralextension). Each STARK verifying key will correspond to a different deferral circuit, and thus a different `DEF_IDX`.
 
 ### `verify_proof_output`
 
@@ -36,3 +36,48 @@ The circuit crate (`openvm-verify-stark-circuit`) provides the `DeferredVerifyCi
 1. Verifies the child STARK proof using the recursion verifier sub-circuit
 2. Constrains that the user public values are present in the final memory state
 3. Produces the output commitment containing `app_exe_commit`, `app_vk_commit`, and `user_public_values`
+
+There should be a unique `DeferredVerifyCircuit` for each STARK verifying key you want to support.
+
+### Using `DeferralExtension`
+
+To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralExtension`. A VM config can support up to 1024 different deferral circuits at one time. `DeferralExtension` stores:
+
+- `fns: Vec<Arc<DeferralFn>>` - one function per deferral circuit
+- `def_vk_commits: Vec<[u8; 32]>` - the corresponding deferral-circuit VK commitments
+
+These vectors are aligned by index.
+
+It is **highly** recommended that guest programs that use deferrals are proved using the SDK. The flow for this is:
+
+1. Build a `DeferralProver` whose single-circuit prover is `VerifyCircuitProver`.
+2. Create the extension with `make_extension`, passing the deferral function(s).
+3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
+4. Build your SDK with `.with_deferral_prover(deferral_prover)`.
+
+For example, to initialize the SDK with the `verify-stark` deferral circuit:
+
+```rust
+let deferred_verify_prover = VerifyProver::new::<E>(
+    ir_vk,
+    ir_pcs_data,
+    def_circuit_params,
+    memory_dimensions,
+    num_user_pvs,
+    None,
+    0,
+);
+let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
+
+let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+let deferral_ext =
+    deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+
+let mut vm_config = SdkVmConfig::riscv32();
+vm_config.deferral = Some(deferral_ext);
+
+let sdk = CpuSdk::new(AppConfig::new(vm_config, app_params), agg_params)?
+    .with_deferral_prover(deferral_prover);
+```
+
+Each guest call `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.
