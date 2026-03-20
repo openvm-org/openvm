@@ -23,7 +23,9 @@ use openvm_stark_sdk::{
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
-use crate::system::{AggregationSubCircuit, VerifierSubCircuit, VerifierTraceGen};
+use crate::system::{
+    AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierSubCircuit, VerifierTraceGen,
+};
 
 pub const MAX_CONSTRAINT_DEGREE: usize = 4;
 
@@ -79,7 +81,7 @@ fn run_test<const MAX_NUM_PROOFS: usize, Fx: TestFixture<BabyBearPoseidon2Config
     let proofs: Vec<_> = (0..num_proofs).map(|_| proof.clone()).collect();
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
-        vk_commit_data,
+        CachedTraceCtx::PcsData(vk_commit_data),
         &proofs,
         default_duplex_sponge_recorder(),
     );
@@ -153,7 +155,7 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
     let vk_commit_data = circuit.commit_child_vk(&parent_engine, &vk);
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
-        vk_commit_data,
+        CachedTraceCtx::PcsData(vk_commit_data),
         &[proof],
         default_duplex_sponge_recorder(),
     );
@@ -471,6 +473,38 @@ fn test_recursion_circuit_multiple_cached() {
     run_test::<5, _>(fx, &child_engine, &parent_engine, 5);
 }
 
+#[test]
+fn test_recursion_circuit_dag_commit_subair() {
+    let params = test_system_params_small(3, 5, 3);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
+    let parent_engine = test_engine_small();
+    let fx = MixtureFixture::standard(
+        5,
+        BabyBearPoseidon2Config::default_from_params(params.clone()),
+    );
+    let (vk, proof) = fx.keygen_and_prove(&child_engine);
+
+    let circuit = VerifierSubCircuit::<2>::new_with_options(
+        Arc::new(vk.clone()),
+        VerifierConfig {
+            has_cached: false,
+            ..Default::default()
+        },
+    );
+    let cached_trace_record = <VerifierSubCircuit<2> as VerifierTraceGen<
+        CpuBackend<BabyBearPoseidon2Config>,
+        BabyBearPoseidon2Config,
+    >>::cached_trace_record(&circuit, &vk);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        CachedTraceCtx::Records(cached_trace_record),
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    assert!(ctxs[0].cached_mains.is_empty());
+    debug(&parent_engine, &circuit.airs(), ctxs);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // NEGATIVE HYPERCUBE TESTS
 ///////////////////////////////////////////////////////////////////////////////
@@ -616,7 +650,7 @@ fn test_recursion_circuit_w_stack_too_small() {
     let vk_commit_data = circuit.commit_child_vk(&parent_engine, &vk);
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
-        vk_commit_data,
+        CachedTraceCtx::PcsData(vk_commit_data),
         std::slice::from_ref(&proof),
         default_duplex_sponge_recorder(),
     );
@@ -684,13 +718,13 @@ mod cuda {
         let vk_commit_data_gpu = circuit.commit_child_vk(&gpu_engine, &vk);
         let cpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
-            vk_commit_data_cpu,
+            CachedTraceCtx::PcsData(vk_commit_data_cpu),
             &proofs,
             default_duplex_sponge_recorder(),
         );
         let gpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
-            vk_commit_data_gpu,
+            CachedTraceCtx::PcsData(vk_commit_data_gpu),
             &proofs,
             default_duplex_sponge_recorder(),
         );

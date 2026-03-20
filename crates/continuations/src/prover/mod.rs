@@ -4,7 +4,7 @@ use openvm_cuda_backend::GpuBackend;
 use openvm_recursion_circuit::system::VerifierSubCircuit;
 
 #[cfg(feature = "root-prover")]
-use crate::{circuit::root::RootTraceGenImpl, RootSC};
+use crate::circuit::root::RootTraceGenImpl;
 use crate::{
     circuit::{
         deferral::{hook::DeferralHookTraceGenImpl, inner::DeferralInnerTraceGenImpl},
@@ -33,13 +33,9 @@ pub type InnerGpuProver<const MAX_NUM_PROOFS: usize> =
     InnerAggregationProver<GpuBackend, VerifierSubCircuit<MAX_NUM_PROOFS>, InnerTraceGenImpl>;
 
 #[cfg(feature = "root-prover")]
-pub type RootCpuProver = RootProver<CpuBackend<RootSC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
+pub type RootCpuProver = RootProver<VerifierSubCircuit<1>, RootTraceGenImpl>;
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
-pub type RootGpuProver = RootProver<
-    <openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine as openvm_stark_backend::StarkEngine>::PB,
-    VerifierSubCircuit<1>,
-    RootTraceGenImpl,
->;
+pub type RootGpuProver = RootProver<VerifierSubCircuit<1>, RootTraceGenImpl>;
 
 pub type DeferralInnerCpuProver =
     DeferralInnerProver<CpuBackend<SC>, VerifierSubCircuit<2>, DeferralInnerTraceGenImpl>;

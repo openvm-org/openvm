@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
 use openvm_recursion_circuit::system::{
-    AggregationSubCircuit, VerifierExternalData, VerifierTraceGen,
+    AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use openvm_stark_backend::{
     proof::Proof,
@@ -18,20 +18,19 @@ use crate::{
     RootSC, SC,
 };
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
-    > RootProver<PB, S, T>
-where
-    PB::Matrix: Clone,
-{
-    pub fn generate_proving_ctx(
+impl<S: AggregationSubCircuit, T> RootProver<S, T> {
+    pub fn generate_proving_ctx<PB>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
-    ) -> Option<ProvingContext<PB>> {
+    ) -> Option<ProvingContext<PB>>
+    where
+        PB: ProverBackend<Val = F, Challenge = EF>,
+        PB::Matrix: Clone,
+        S: VerifierTraceGen<PB, RootSC>,
+        T: RootTraceGen<PB>,
+    {
         assert_eq!(
             user_pvs_proof.public_values.len(),
             self.circuit.num_user_pvs
@@ -71,7 +70,7 @@ where
 
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs(
             &self.child_vk,
-            self.child_vk_pcs_data.clone(),
+            CachedTraceCtx::Records(self.cached_trace_record.clone()),
             &[proof],
             &mut external_data,
             default_duplex_sponge_recorder(),
@@ -89,11 +88,17 @@ where
     }
 
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_no_def(
+    pub fn generate_proving_ctx_no_def<PB>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-    ) -> Option<ProvingContext<PB>> {
+    ) -> Option<ProvingContext<PB>>
+    where
+        PB: ProverBackend<Val = F, Challenge = EF>,
+        PB::Matrix: Clone,
+        S: VerifierTraceGen<PB, RootSC>,
+        T: RootTraceGen<PB>,
+    {
         assert!(
             self.circuit.def_hook_vk_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
