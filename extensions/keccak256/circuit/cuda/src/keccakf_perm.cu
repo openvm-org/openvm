@@ -19,31 +19,38 @@ using p3_keccak_air::U64_LIMBS;
 #define KECCAKF_PERM_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, KeccakfPermCols, FIELD, VALUE)
 #define KECCAKF_PERM_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, KeccakfPermCols, FIELD, VALUES)
 
-// Main kernel for KeccakfPermChip trace generation
-// Each thread processes one permutation (24 rows)
-__global__ void keccakf_perm_tracegen(
-    Fp *__restrict__ d_trace, // no alias with d_records, enables store optimization
-    size_t height,
+static constexpr uint32_t KECCAK_STATE_WORDS = 25;
+
+// Two-phase keccak-f trace generation for coalesced column-major stores.
+// Trace layout is trace[col * height + row]; threads writing adjacent rows coalesce.
+//
+// Phase 1 (1 thread per permutation):
+//   - runs 24 keccak-f rounds (theta/rho/pi/chi/iota)
+//   - stores the 25-lane u64 round-input state before each round
+//     into scratch: d_round_states[perm][round][lane] (~4.8 KB/perm)
+//
+// Phase 2 (1 thread per row = 1 round of 1 permutation):
+//   - loads round-input state from scratch
+//   - recomputes that round to materialize intermediates (c, c', a', a'', ...)
+//   - writes all 2634 trace columns
+
+// Phase 1: compute keccak-f, store round-input states to scratch
+// each thread processes one permutation (24 rounds)
+__global__ void keccakf_perm_phase1(
+    uint64_t *__restrict__ d_round_states, // [blocks_to_fill][24][25]
     uint32_t num_records,
-    uint32_t blocks_to_fill, // = ceil(height / 24)
+    uint32_t blocks_to_fill,
     DeviceBufferConstView<KeccakfOpRecord> d_records
 ) {
-    uint32_t block_idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (block_idx >= blocks_to_fill) {
+    uint32_t perm_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (perm_idx >= blocks_to_fill) {
         return;
     }
 
-    // Single persistent state (no separate initial_state to reduce register pressure).
     __align__(16) uint64_t current_state[5][5] = {0};
-    // Compact preimage as u16 limbs, rewritten each round.
-    uint16_t preimage_limbs[5 * 5 * U64_LIMBS] = {0};
 
-    uint32_t timestamp = 0;
-
-    if (block_idx < num_records) {
-        auto const &rec = d_records[block_idx];
-        timestamp = rec.timestamp;
+    if (perm_idx < num_records) {
+        auto const &rec = d_records[perm_idx];
 
         // Convert preimage bytes to u64 state with coordinate transposition
         // generate_trace_row_for_round expects current_state[y][x] = A[x][y] (keccak notation)
@@ -61,51 +68,67 @@ __global__ void keccakf_perm_tracegen(
                 current_state[y][x] = val;
             }
         }
-        memcpy(
-            preimage_limbs,
-            reinterpret_cast<uint16_t *>(&current_state[0][0]),
-            sizeof(preimage_limbs)
-        );
     }
 
-    // Calculate how many rows to fill for this block
-    size_t rows_for_this_block = NUM_ROUNDS;
-    if (block_idx == blocks_to_fill - 1) {
-        // Last block might have fewer rows
-        size_t remaining = height - block_idx * NUM_ROUNDS;
-        if (remaining < NUM_ROUNDS) {
-            rows_for_this_block = remaining;
+    // Store round-input state before each round, then advance
+    uint64_t *flat = &current_state[0][0];
+    for (uint32_t round_idx = 0; round_idx < NUM_ROUNDS; round_idx++) {
+        size_t off = (static_cast<size_t>(perm_idx) * NUM_ROUNDS + round_idx) * KECCAK_STATE_WORDS;
+#pragma unroll
+        for (uint32_t i = 0; i < KECCAK_STATE_WORDS; i++) {
+            d_round_states[off + i] = flat[i];
         }
+        p3_keccak_air::apply_round_in_place(round_idx, current_state);
+    }
+}
+
+// Phase 2: write column-major trace from cached round states
+// Each thread writes one row; adjacent threads write adjacent rows (coalesced)
+__global__ void keccakf_perm_phase2(
+    Fp *__restrict__ d_trace,
+    size_t height,
+    uint32_t num_records,
+    DeviceBufferConstView<KeccakfOpRecord> d_records,
+    uint64_t const *__restrict__ d_round_states // [blocks_to_fill][24][25]
+) {
+    size_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row_idx >= height) {
+        return;
     }
 
-    // Generate 24 round rows. Dummy blocks (block_idx >= num_records) use zero-initialized
-    // state and produce a valid keccak-f trace over zero input. Every column is explicitly
-    // written: preimage and a below, intermediates by generate_trace_row_for_round, then
-    // export and timestamp at the end.
-    for (uint32_t round_idx = 0; round_idx < rows_for_this_block; round_idx++) {
-        size_t row_idx = block_idx * NUM_ROUNDS + round_idx;
-        RowSlice row(d_trace + row_idx, height);
+    uint32_t perm_idx = static_cast<uint32_t>(row_idx / NUM_ROUNDS);
+    uint32_t round_idx = static_cast<uint32_t>(row_idx % NUM_ROUNDS);
 
-        // Fill preimage columns (same for all rounds within a permutation)
-        KECCAKF_PERM_WRITE_ARRAY(inner.preimage, preimage_limbs);
+    // Load round-input state from scratch
+    __align__(16) uint64_t current_state[5][5];
+    size_t off = (static_cast<size_t>(perm_idx) * NUM_ROUNDS + round_idx) * KECCAK_STATE_WORDS;
+    uint64_t *flat = &current_state[0][0];
+#pragma unroll
+    for (uint32_t i = 0; i < KECCAK_STATE_WORDS; i++) {
+        flat[i] = d_round_states[off + i];
+    }
 
-        // Fill 'a' input state directly from current_state.
-        // After iota of the previous round, current_state already holds the correct
-        // next-round input, so no prev-row readback is needed.
-        uint16_t *state_limbs = reinterpret_cast<uint16_t *>(&current_state[0][0]);
-        COL_WRITE_ARRAY(row, KeccakfPermCols, inner.a, state_limbs);
+    RowSlice row(d_trace + row_idx, height);
 
-        // Generate trace row for this round (updates current_state in-place)
-        p3_keccak_air::generate_trace_row_for_round(row, round_idx, current_state);
+    // Fill preimage columns (invariant across rounds, read from round 0 of this permutation)
+    size_t preimage_off = static_cast<size_t>(perm_idx) * NUM_ROUNDS * KECCAK_STATE_WORDS;
+    auto const *preimage_limbs = reinterpret_cast<uint16_t const *>(&d_round_states[preimage_off]);
+    KECCAKF_PERM_WRITE_ARRAY(inner.preimage, preimage_limbs);
 
-        // Set export flag and timestamp on last round
-        if (block_idx < num_records && round_idx == NUM_ROUNDS - 1) {
-            KECCAKF_PERM_WRITE(inner._export, 1);
-            KECCAKF_PERM_WRITE(timestamp, timestamp);
-        } else {
-            KECCAKF_PERM_WRITE(inner._export, 0);
-            KECCAKF_PERM_WRITE(timestamp, 0);
-        }
+    // Fill 'a' input state from current round state
+    uint16_t *state_limbs = reinterpret_cast<uint16_t *>(&current_state[0][0]);
+    COL_WRITE_ARRAY(row, KeccakfPermCols, inner.a, state_limbs);
+
+    // Generate trace row for this round (writes c, c_prime, a_prime, a_prime_prime, etc.)
+    p3_keccak_air::generate_trace_row_for_round(row, round_idx, current_state);
+
+    // Set export flag and timestamp on last round of valid records
+    if (perm_idx < num_records && round_idx == NUM_ROUNDS - 1) {
+        KECCAKF_PERM_WRITE(inner._export, 1);
+        KECCAKF_PERM_WRITE(timestamp, d_records[perm_idx].timestamp);
+    } else {
+        KECCAKF_PERM_WRITE(inner._export, 0);
+        KECCAKF_PERM_WRITE(timestamp, 0);
     }
 }
 
@@ -117,16 +140,32 @@ extern "C" int _keccakf_perm_tracegen(
     size_t height,
     size_t width,
     DeviceBufferConstView<KeccakfOpRecord> d_records,
-    size_t num_records
+    size_t num_records,
+    uint64_t *d_round_states,
+    size_t round_state_words
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(KeccakfPermCols<uint8_t>));
 
     uint32_t blocks_to_fill = div_ceil(height, uint32_t(NUM_ROUNDS));
+    assert(
+        round_state_words >= static_cast<size_t>(blocks_to_fill) * NUM_ROUNDS * KECCAK_STATE_WORDS
+    );
 
-    auto [grid, block] = kernel_launch_params(blocks_to_fill, 256);
-    keccakf_perm_tracegen<<<grid, block>>>(
-        d_trace, height, static_cast<uint32_t>(num_records), blocks_to_fill, d_records
+    // Phase 1: compute keccak-f, store round states to scratch
+    auto [p1_grid, p1_block] = kernel_launch_params(blocks_to_fill, 128);
+    keccakf_perm_phase1<<<p1_grid, p1_block>>>(
+        d_round_states, static_cast<uint32_t>(num_records), blocks_to_fill, d_records
+    );
+    int result = CHECK_KERNEL();
+    if (result != 0) {
+        return result;
+    }
+
+    // Phase 2: write trace with coalesced stores (one thread per row)
+    auto [p2_grid, p2_block] = kernel_launch_params(height, 256);
+    keccakf_perm_phase2<<<p2_grid, p2_block>>>(
+        d_trace, height, static_cast<uint32_t>(num_records), d_records, d_round_states
     );
     return CHECK_KERNEL();
 }
