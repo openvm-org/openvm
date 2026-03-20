@@ -17,7 +17,8 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_verify_stark_host::pvs::{
-    VerifierBasePvs, VerifierDefPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID,
+    VerifierBasePvs, VerifierDefPvs, CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
+    VERIFIER_PVS_AIR_ID,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
@@ -28,7 +29,6 @@ use crate::circuit::{
     root::NUM_DIGESTS_IN_VK_COMMIT,
     subair::{HashSliceCtx, HashSliceSubAir},
     utils::{assert_dag_commit_eq, assert_dag_commit_unset, vk_commit_components},
-    CONSTRAINT_EVAL_CACHED_INDEX,
 };
 
 #[repr(C)]

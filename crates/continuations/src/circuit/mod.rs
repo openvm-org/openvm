@@ -12,8 +12,6 @@ pub mod inner;
 pub mod root;
 pub mod subair;
 
-pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
-
 pub struct SubCircuitTraceData<PB: ProverBackend> {
     pub air_proving_ctxs: Vec<AirProvingContext<PB>>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
