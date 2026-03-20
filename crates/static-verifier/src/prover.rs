@@ -82,7 +82,7 @@ impl StaticVerifierCircuit {
 
         let _ = builder.calculate_params(Some(shape.minimum_rows));
 
-        let prover = MockProver::run(shape.k as u32, &builder, vec![public_inputs])
+        let prover = MockProver::run(shape.k as u32, &builder, vec![public_inputs.to_vec()])
             .expect("MockProver should initialize");
         prover.assert_satisfied();
     }
@@ -102,6 +102,7 @@ impl StaticVerifierCircuit {
         builder = builder.use_instance_columns(shape.instance_columns);
 
         let public_inputs = self.populate(&mut builder, proof);
+        let public_inputs = public_inputs.to_vec();
 
         let rng = ChaCha20Rng::from_seed(Default::default());
         let instances: &[&[Fr]] = &[&public_inputs];

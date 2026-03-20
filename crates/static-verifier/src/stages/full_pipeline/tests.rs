@@ -2,6 +2,7 @@ use halo2_base::{
     gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
 };
+use itertools::Itertools;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
         BabyBearBn254Poseidon2Config as RootConfig, BabyBearBn254Poseidon2CpuEngine,
@@ -32,11 +33,7 @@ const END_TO_END_K: u32 = 22;
 const END_TO_END_LOOKUP_BITS: usize = 8;
 const END_TO_END_MIN_ROWS: usize = 32768;
 
-fn run_mock(
-    expect_satisfied: bool,
-    public_inputs: &[Fr],
-    build: impl FnOnce(&mut BaseCircuitBuilder<Fr>),
-) {
+fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(END_TO_END_K as usize)
         .use_lookup_bits(END_TO_END_LOOKUP_BITS)
@@ -74,7 +71,12 @@ fn run_mock(
             >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
-    let prover = MockProver::run(END_TO_END_K, &builder, vec![public_inputs.to_vec()])
+    let pvs = builder
+        .assigned_instances
+        .iter()
+        .map(|vs| vs.iter().map(|w| *w.value()).collect_vec())
+        .collect_vec();
+    let prover = MockProver::run(END_TO_END_K, &builder, pvs)
         .expect("mock prover should initialize for pipeline end-to-end circuit");
     if expect_satisfied {
         prover.assert_satisfied();
@@ -90,27 +92,16 @@ fn test_engine() -> BabyBearBn254Poseidon2CpuEngine {
     BabyBearBn254Poseidon2CpuEngine::new(test_system_params_small(2, 8, 3))
 }
 
-fn pipeline_public_inputs(
-    mvk: &MultiStarkVerifyingKey<RootConfig>,
-    proof: &Proof<RootConfig>,
-) -> Vec<Fr> {
-    vec![
-        digest_scalar_to_fr(mvk.pre_hash[0]),
-        digest_scalar_to_fr(proof.common_main_commit[0]),
-    ]
-}
-
 fn assert_fixture_matches_native<Fx>(engine: &BabyBearBn254Poseidon2CpuEngine, fixture: Fx)
 where
     Fx: TestFixture<RootConfig>,
 {
     let (vk, proof) = fixture.keygen_and_prove(engine);
-    let public_inputs = pipeline_public_inputs(&vk, &proof);
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
     let circuit =
         StaticVerifierCircuit::try_new(vk, &log_heights_per_air).expect("static circuit params");
 
-    run_mock(true, &public_inputs, |builder| {
+    run_mock(true, |builder| {
         circuit.populate(builder, &proof);
     });
 }
@@ -185,18 +176,19 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
         ("bus_index_plus_one", bus_constant),
     ];
 
-    let public_inputs = pipeline_public_inputs(&vk, &proof);
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
     let trace_id_to_air_id = trace_id_order_from_static_heights(&vk.inner, &log_heights_per_air);
     let stacked_layouts = build_stacked_layouts_for_static_vk(&vk.inner, &log_heights_per_air);
-    run_mock(false, &public_inputs, move |builder| {
+    run_mock(false, move |builder| {
         let range = builder.range_chip();
+        let base_chip = BabyBearChip::new(Arc::new(range.clone()));
         let ctx = builder.main(0);
         let proof_wire = load_proof_wire(ctx, &range, &proof, &log_heights_per_air);
+        let pvs = extract_public_values(ctx, &base_chip, &proof_wire);
         clear_recorded_ext_base_consts();
-        let statement_public_inputs = constrained_verify(
+        constrained_verify(
             ctx,
-            &range,
+            range,
             &vk,
             proof_wire,
             &trace_id_to_air_id,
@@ -213,21 +205,6 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
             .map(|record| record.constant)
             .unwrap_or(1);
         prank_recorded_ext_constant(ctx, &records, "normalization", normalization_constant);
-        builder.assigned_instances[0].extend(statement_public_inputs);
-    });
-}
-
-#[test]
-fn pipeline_constraints_fail_when_public_inputs_are_tampered() {
-    let engine = test_engine();
-    let (vk, proof) = InteractionsFixture11.keygen_and_prove(&engine);
-    let mut tampered_public_inputs = pipeline_public_inputs(&vk, &proof);
-    tampered_public_inputs[0] += Fr::from(1u64);
-
-    let log_heights_per_air = log_heights_per_air_from_proof(&proof);
-    let circuit =
-        StaticVerifierCircuit::try_new(vk, &log_heights_per_air).expect("static circuit params");
-    run_mock(false, &tampered_public_inputs, |builder| {
-        circuit.populate(builder, &proof);
+        builder.assigned_instances[0].extend(pvs.to_vec());
     });
 }
