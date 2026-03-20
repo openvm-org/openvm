@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use openvm::io::read;
 use openvm_deferral_guest::Commit;
-use openvm_verify_stark_guest::{verify_proof_output, ProofOutput};
+use openvm_verify_stark_guest::{verify_stark, ProofOutput};
 
 openvm::entry!(main);
 
@@ -23,5 +23,5 @@ pub fn main() {
     };
 
     let input_commit: Commit = read();
-    verify_proof_output::<0>(&input_commit, &expected);
+    verify_stark::<0>(&input_commit, &expected);
 }
