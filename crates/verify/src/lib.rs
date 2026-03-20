@@ -195,29 +195,25 @@ pub fn verify_vm_stark_proof_pvs(
         });
     }
 
-    // Check the proof's cached commit is the internal-recursive one.
-    if let Some(trace_vdata) = proof.inner.trace_vdata[CONSTRAINT_EVAL_AIR_ID].as_ref() {
-        if let Some(proof_cached_commit) = trace_vdata
-            .cached_commitments
-            .get(CONSTRAINT_EVAL_CACHED_INDEX)
-        {
-            if *proof_cached_commit != vk.baseline.internal_recursive_dag_commit.cached_commit {
-                return Err(VerifyStarkError::ProofCachedCommitMismatch {
-                    expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
-                    actual: *proof_cached_commit,
+    // Check that SymbolicExpressionAir's cached trace exists and extract it.
+    let proof_cached_commit =
+        if let Some(trace_vdata) = proof.inner.trace_vdata[CONSTRAINT_EVAL_AIR_ID].as_ref() {
+            if let Some(proof_cached_commit) = trace_vdata
+                .cached_commitments
+                .get(CONSTRAINT_EVAL_CACHED_INDEX)
+            {
+                *proof_cached_commit
+            } else {
+                return Err(VerifyStarkError::MissingConstraintEvalCachedTrace {
+                    air_idx: CONSTRAINT_EVAL_AIR_ID,
+                    cached_idx: CONSTRAINT_EVAL_CACHED_INDEX,
                 });
             }
         } else {
-            return Err(VerifyStarkError::MissingConstraintEvalCachedTrace {
+            return Err(VerifyStarkError::MissingConstraintEvalTraceVdata {
                 air_idx: CONSTRAINT_EVAL_AIR_ID,
-                cached_idx: CONSTRAINT_EVAL_CACHED_INDEX,
             });
-        }
-    } else {
-        return Err(VerifyStarkError::MissingConstraintEvalTraceVdata {
-            air_idx: CONSTRAINT_EVAL_AIR_ID,
-        });
-    }
+        };
 
     // Check that recursion_flag is 1 or 2, i.e. that the penultimate layer is
     // internal-for-leaf or internal-recursive.
@@ -244,6 +240,12 @@ pub fn verify_vm_stark_proof_pvs(
                 actual: internal_recursive_dag_commit.vk_pre_hash,
             });
         }
+        if proof_cached_commit != vk.baseline.internal_recursive_dag_commit.cached_commit {
+            return Err(VerifyStarkError::ProofCachedCommitMismatch {
+                expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
+                actual: proof_cached_commit,
+            });
+        }
     } else {
         if !is_unset(&internal_recursive_dag_commit.cached_commit) {
             return Err(VerifyStarkError::InternalRecursiveDagCachedCommitSet {
@@ -253,6 +255,12 @@ pub fn verify_vm_stark_proof_pvs(
         if !is_unset(&internal_recursive_dag_commit.vk_pre_hash) {
             return Err(VerifyStarkError::InternalRecursiveDagPreHashSet {
                 actual: internal_recursive_dag_commit.vk_pre_hash,
+            });
+        }
+        if proof_cached_commit != vk.baseline.internal_for_leaf_dag_commit.cached_commit {
+            return Err(VerifyStarkError::ProofCachedCommitMismatch {
+                expected: vk.baseline.internal_for_leaf_dag_commit.cached_commit,
+                actual: proof_cached_commit,
             });
         }
     }
