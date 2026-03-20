@@ -5,6 +5,8 @@
 //! Full [`StaticVerifierCircuit::populate`] end-to-end is exercised in `openvm-sdk` integration
 //! tests, not here.
 
+use std::sync::Arc;
+
 use halo2_base::{
     gates::circuit::CircuitBuilderStage,
     halo2_proofs::plonk::{keygen_pk, keygen_vk},
@@ -28,6 +30,7 @@ use openvm_stark_sdk::{
     utils::setup_tracing,
 };
 use openvm_static_verifier::{
+    field::baby_bear::{BabyBearChip, BabyBearExtChip},
     log_heights_per_air_from_proof, Halo2ProvingMetadata, Halo2ProvingPinning,
     StaticVerifierCircuit, StaticVerifierShape,
 };
@@ -46,8 +49,9 @@ fn select_k_verify_stark(circuit: &StaticVerifierCircuit, proof: &Proof<RootConf
         };
         let mut builder = StaticVerifierCircuit::builder(CircuitBuilderStage::Keygen, &shape);
         let range = builder.range_chip();
+        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
-        let _ = circuit.populate_verify_stark_constraints(ctx, range, proof);
+        let _ = circuit.populate_verify_stark_constraints(ctx, &ext_chip, proof);
         let params = builder.calculate_params(Some(MIN_ROWS));
         if params.num_advice_per_phase[0] == 1 {
             builder.clear();
@@ -105,8 +109,9 @@ fn real_prover_keygen_prove_verify_roundtrip() {
     let pinning = {
         let mut builder = StaticVerifierCircuit::builder(CircuitBuilderStage::Keygen, &shape);
         let range = builder.range_chip();
+        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
-        let _proof_wire = circuit.populate_verify_stark_constraints(ctx, range, &proof_keygen);
+        let _proof_wire = circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof_keygen);
 
         let config_params = builder.calculate_params(Some(shape.minimum_rows));
 

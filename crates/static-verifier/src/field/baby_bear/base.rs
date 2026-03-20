@@ -53,6 +53,7 @@ impl BabyBearWire {
     }
 }
 
+#[derive(Clone)]
 pub struct BabyBearChip {
     pub range: Arc<RangeChip<Fr>>,
 }

@@ -1,4 +1,4 @@
-use std::{iter::zip, sync::Arc};
+use std::iter::zip;
 
 use halo2_base::Context;
 use openvm_stark_sdk::{
@@ -582,7 +582,7 @@ fn observe_layer_claims_assigned(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn constrain_batch_constraints_verification(
     ctx: &mut Context<Fr>,
-    range: &halo2_base::gates::range::RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptGadget,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     gkr_wire: &GkrProofWire,
@@ -591,8 +591,6 @@ pub(crate) fn constrain_batch_constraints_verification(
     trace_id_to_air_id: &[usize],
     public_values: Vec<Vec<BabyBearWire>>,
 ) -> BatchConstraintIntermediatesWire {
-    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
-    let ext_chip = BabyBearExtChip::new(base_chip);
     let baby_bear = ext_chip.base();
 
     let l_skip = mvk0.params.l_skip;
@@ -692,9 +690,9 @@ pub(crate) fn constrain_batch_constraints_verification(
             let mu0 = transcript.sample_ext(ctx, baby_bear);
             let mut gkr_sample_stream = vec![mu0];
             let mut numer_claim =
-                interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[0], &layer0[2], &mu0);
+                interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[0], &layer0[2], &mu0);
             let mut denom_claim =
-                interpolate_linear_at_01_assigned(ctx, &ext_chip, &layer0[1], &layer0[3], &mu0);
+                interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[1], &layer0[3], &mu0);
             let mut gkr_r = vec![mu0];
 
             for round in 1..total_gkr_rounds {
@@ -722,7 +720,7 @@ pub(crate) fn constrain_batch_constraints_verification(
                     let ev0 = ext_chip.sub(ctx, claim, ev1);
                     claim = interpolate_cubic_at_0123_assigned(
                         ctx,
-                        &ext_chip,
+                        ext_chip,
                         [&ev0, &ev1, &ev2, &ev3],
                         &ri,
                     );
@@ -750,14 +748,14 @@ pub(crate) fn constrain_batch_constraints_verification(
                 gkr_sample_stream.push(mu_round);
                 numer_claim = interpolate_linear_at_01_assigned(
                     ctx,
-                    &ext_chip,
+                    ext_chip,
                     &layer_claims[0],
                     &layer_claims[2],
                     &mu_round,
                 );
                 denom_claim = interpolate_linear_at_01_assigned(
                     ctx,
-                    &ext_chip,
+                    ext_chip,
                     &layer_claims[1],
                     &layer_claims[3],
                     &mu_round,
@@ -827,7 +825,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     ext_chip.assert_equal(ctx, sum_claim, sum_univ_domain_s_0);
 
     let sumcheck_round_polys = &batch_wire.sumcheck_round_polys;
-    let mut consistency_lhs = eval_ext_poly_horner(ctx, &ext_chip, univariate_round_coeffs, &r[0]);
+    let mut consistency_lhs = eval_ext_poly_horner(ctx, ext_chip, univariate_round_coeffs, &r[0]);
     for round_evals in sumcheck_round_polys {
         for eval in round_evals {
             transcript.observe_ext(ctx, baby_bear, eval);
@@ -840,7 +838,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         interpolation_evals.extend(round_evals.iter().copied());
         let next_r = transcript.sample_ext(ctx, baby_bear);
         consistency_lhs =
-            eval_lagrange_on_integer_grid(ctx, &ext_chip, &next_r, &interpolation_evals);
+            eval_lagrange_on_integer_grid(ctx, ext_chip, &next_r, &interpolation_evals);
         r.push(next_r);
     }
 
@@ -848,7 +846,7 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         let need_rot = column_openings_need_rot[trace_idx][0];
-        for claim in column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[0], need_rot) {
+        for claim in column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[0], need_rot) {
             transcript.observe_ext(ctx, baby_bear, &claim.local);
             transcript.observe_ext(ctx, baby_bear, &claim.next);
         }
@@ -857,7 +855,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         for (part_idx, claims) in air_openings.iter().enumerate().skip(1) {
             let need_rot = column_openings_need_rot[trace_idx][part_idx];
-            for claim in column_openings_by_rot_assigned(ctx, &ext_chip, claims, need_rot) {
+            for claim in column_openings_by_rot_assigned(ctx, ext_chip, claims, need_rot) {
                 transcript.observe_ext(ctx, baby_bear, &claim.local);
                 transcript.observe_ext(ctx, baby_bear, &claim.next);
             }
@@ -885,7 +883,7 @@ pub(crate) fn constrain_batch_constraints_verification(
             stacked_idx += 1 << (l_skip + n_lift);
             let eq = eval_eq_mle_binary_assigned(
                 ctx,
-                &ext_chip,
+                ext_chip,
                 &xi[l_skip + n_lift..l_skip + n_logup_host],
                 &b_vec,
             );
@@ -896,13 +894,13 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let mut eq_ns = vec![one; n_max_host + 1];
     let mut eq_sharp_ns = vec![one; n_max_host + 1];
-    eq_ns[0] = eval_eq_uni_assigned(ctx, &ext_chip, l_skip, &xi[0], &r[0]);
+    eq_ns[0] = eval_eq_uni_assigned(ctx, ext_chip, l_skip, &xi[0], &r[0]);
     eq_sharp_ns[0] =
-        eval_eq_sharp_uni_assigned(ctx, &ext_chip, &omega_skip_pows, &xi[..l_skip], &r[0]);
+        eval_eq_sharp_uni_assigned(ctx, ext_chip, &omega_skip_pows, &xi[..l_skip], &r[0]);
     for (i, r_i) in r.iter().enumerate().skip(1) {
         let eq_mle = eval_eq_mle_assigned(
             ctx,
-            &ext_chip,
+            ext_chip,
             &[xi[l_skip + i - 1]],
             core::slice::from_ref(r_i),
         );
@@ -928,10 +926,10 @@ pub(crate) fn constrain_batch_constraints_verification(
 
         let need_rot_flags = &column_openings_need_rot[trace_idx];
         let common_main =
-            column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[0], need_rot_flags[0]);
+            column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[0], need_rot_flags[0]);
         let has_preprocessed = trace_has_preprocessed[trace_idx];
         let preprocessed = has_preprocessed.then(|| {
-            column_openings_by_rot_assigned(ctx, &ext_chip, &air_openings[1], need_rot_flags[1])
+            column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[1], need_rot_flags[1])
         });
         let cached_idx = 1 + has_preprocessed as usize;
         let mut partitioned_main = air_openings[cached_idx..]
@@ -940,7 +938,7 @@ pub(crate) fn constrain_batch_constraints_verification(
             .map(|(part_offset, opening)| {
                 column_openings_by_rot_assigned(
                     ctx,
-                    &ext_chip,
+                    ext_chip,
                     opening,
                     need_rot_flags[cached_idx + part_offset],
                 )
@@ -959,7 +957,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         };
 
         let inv_l = RootF::from_usize(1usize << l).inverse();
-        let mut is_first_row = progression_exp_2_assigned(ctx, &ext_chip, &rs_n[0], l);
+        let mut is_first_row = progression_exp_2_assigned(ctx, ext_chip, &rs_n[0], l);
         is_first_row = ext_chip.mul_base_const(ctx, is_first_row, inv_l);
         for x in rs_n.iter().skip(1) {
             let one_minus_x = ext_chip.sub(ctx, one, *x);
@@ -968,7 +966,7 @@ pub(crate) fn constrain_batch_constraints_verification(
 
         let omega = RootF::two_adic_generator(l);
         let rs0_omega = ext_chip.mul_base_const(ctx, rs_n[0], omega);
-        let mut is_last_row = progression_exp_2_assigned(ctx, &ext_chip, &rs0_omega, l);
+        let mut is_last_row = progression_exp_2_assigned(ctx, ext_chip, &rs0_omega, l);
         is_last_row = ext_chip.mul_base_const(ctx, is_last_row, inv_l);
         for x in rs_n.iter().skip(1) {
             is_last_row = ext_chip.mul(ctx, is_last_row, *x);
@@ -984,7 +982,7 @@ pub(crate) fn constrain_batch_constraints_verification(
 
         let node_values = eval_symbolic_nodes_assigned(
             ctx,
-            &ext_chip,
+            ext_chip,
             &evaluator,
             &trace_constraint_nodes[trace_idx],
         );

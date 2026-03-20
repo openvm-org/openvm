@@ -105,10 +105,10 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
 fn baby_bear_ext_mul_matches_native_binomial_extension() {
     run_mock(|builder| {
         let range = builder.range_chip();
-        let base_chip = BabyBearChip::new(Arc::new(range.clone()));
-        let ext_chip = BabyBearExt4Chip::new(Arc::new(base_chip));
+        let base_chip = BabyBearChip::new(Arc::new(range));
+        let ext_chip = BabyBearExt4Chip::new(base_chip);
         let ctx = builder.main(0);
-        let gate = range.gate();
+        let gate = ext_chip.base().gate();
 
         let lhs_native = RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([3, 5, 7, 11][i]));
         let rhs_native = RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([2, 4, 6, 8][i]));

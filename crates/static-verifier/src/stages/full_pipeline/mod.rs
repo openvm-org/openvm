@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use halo2_base::{gates::range::RangeChip, utils::biguint_to_fe, AssignedValue, Context};
+use halo2_base::{utils::biguint_to_fe, AssignedValue, Context};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2Config as RootConfig, Bn254Scalar},
     openvm_stark_backend::{
@@ -54,7 +52,7 @@ pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
 /// host-side asserts that per-AIR log heights extracted from the proof match `log_heights_per_air`.
 pub fn load_proof_wire(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip,
     proof: &Proof<RootConfig>,
     log_heights_per_air: &[usize],
 ) -> ProofWire {
@@ -65,8 +63,7 @@ pub fn load_proof_wire(
         "per-AIR log heights from proof must match this circuit's fixed log_heights_per_air"
     );
 
-    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range.clone())));
-    let ext_chip = BabyBearExtChip::new(base_chip.clone());
+    let base_chip = ext_chip.base();
 
     let common_main_commit_root =
         ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0]));
@@ -98,10 +95,10 @@ pub fn load_proof_wire(
         })
         .collect();
 
-    let gkr = load_gkr_proof_wire(ctx, &base_chip, &ext_chip, &proof.gkr_proof);
-    let batch = load_batch_constraint_proof_wire(ctx, &ext_chip, &proof.batch_constraint_proof);
-    let stacking = load_stacking_proof_wire(ctx, &ext_chip, &proof.stacking_proof);
-    let whir = load_whir_proof_wire(ctx, &base_chip, &ext_chip, &proof.whir_proof);
+    let gkr = load_gkr_proof_wire(ctx, base_chip, ext_chip, &proof.gkr_proof);
+    let batch = load_batch_constraint_proof_wire(ctx, ext_chip, &proof.batch_constraint_proof);
+    let stacking = load_stacking_proof_wire(ctx, ext_chip, &proof.stacking_proof);
+    let whir = load_whir_proof_wire(ctx, base_chip, ext_chip, &proof.whir_proof);
 
     ProofWire {
         common_main_commit_root,
@@ -117,7 +114,7 @@ pub fn load_proof_wire(
 #[allow(clippy::too_many_arguments)]
 fn observe_preamble(
     ctx: &mut Context<Fr>,
-    range: &RangeChip<Fr>,
+    base_chip: &BabyBearChip,
     transcript: &mut TranscriptGadget,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     log_heights_per_air: &[usize],
@@ -126,10 +123,8 @@ fn observe_preamble(
     vk_pre_hash: DigestWire,
     common_main_commit: DigestWire,
 ) {
-    let base_chip = BabyBearChip::new(Arc::new(range.clone()));
-
-    transcript.observe_commit(ctx, &base_chip, &vk_pre_hash);
-    transcript.observe_commit(ctx, &base_chip, &common_main_commit);
+    transcript.observe_commit(ctx, base_chip, &vk_pre_hash);
+    transcript.observe_commit(ctx, base_chip, &common_main_commit);
 
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
@@ -137,7 +132,7 @@ fn observe_preamble(
             let presence_flag = ctx.load_constant(Fr::one());
             transcript.observe(
                 ctx,
-                &base_chip,
+                base_chip,
                 &BabyBearWire {
                     value: presence_flag,
                     max_bits: 1,
@@ -147,21 +142,21 @@ fn observe_preamble(
 
         if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
             let preprocessed_root = ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
-            transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(preprocessed_root));
+            transcript.observe_commit(ctx, base_chip, &digest_wire_from_root(preprocessed_root));
         } else {
             // Fixed circuit parameter (not loaded from the proof witness).
             let lh = u32::try_from(log_heights_per_air[air_idx])
                 .expect("log_height must fit in u32 for BabyBear constant");
             let log_height = base_chip.load_constant(ctx, BabyBear::from_u32(lh));
-            transcript.observe(ctx, &base_chip, &log_height);
+            transcript.observe(ctx, base_chip, &log_height);
         }
 
         for root in &cached_commitment_roots[air_idx] {
-            transcript.observe_commit(ctx, &base_chip, &digest_wire_from_root(*root));
+            transcript.observe_commit(ctx, base_chip, &digest_wire_from_root(*root));
         }
 
         for value in &public_values[air_idx] {
-            transcript.observe(ctx, &base_chip, value);
+            transcript.observe(ctx, base_chip, value);
         }
     }
 }
@@ -180,7 +175,7 @@ fn observe_preamble(
 /// `[mvk_pre_hash_root, common_main_commit_root]`.
 pub fn constrained_verify(
     ctx: &mut Context<Fr>,
-    range: RangeChip<Fr>,
+    ext_chip: &BabyBearExtChip,
     root_vk: &MultiStarkVerifyingKey<RootConfig>,
     proof_wire: &ProofWire, /* Root proof */
     trace_id_to_air_id: &[usize],
@@ -202,7 +197,7 @@ pub fn constrained_verify(
     let mut transcript = TranscriptGadget::new(ctx);
     observe_preamble(
         ctx,
-        &range,
+        ext_chip.base(),
         &mut transcript,
         root_vk,
         log_heights_per_air,
@@ -212,13 +207,9 @@ pub fn constrained_verify(
         digest_wire_from_root(proof_wire.common_main_commit_root),
     );
 
-    let base_chip = Arc::new(BabyBearChip::new(Arc::new(range)));
-    let ext_chip = BabyBearExtChip::new(base_chip);
-    let range = ext_chip.range();
-
     let batch = constrain_batch_constraints_verification(
         ctx,
-        range,
+        ext_chip,
         &mut transcript,
         &root_vk.inner,
         &proof_wire.gkr,
@@ -231,7 +222,7 @@ pub fn constrained_verify(
     let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
-        &ext_chip,
+        ext_chip,
         &mut transcript,
         &proof_wire.stacking,
         stacked_layouts,
@@ -269,7 +260,7 @@ pub fn constrained_verify(
 
     constrain_whir_verification(
         ctx,
-        &ext_chip,
+        ext_chip,
         &mut transcript,
         &root_vk.inner,
         &proof_wire.whir,

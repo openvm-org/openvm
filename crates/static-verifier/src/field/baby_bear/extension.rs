@@ -1,4 +1,3 @@
-use std::sync::Arc;
 #[cfg(test)]
 use std::{cell::RefCell, vec::Vec};
 
@@ -43,8 +42,9 @@ pub(crate) fn take_recorded_ext_base_consts() -> Vec<RecordedExtBaseConst> {
 }
 
 // irred poly is x^4 - 11
+#[derive(Clone)]
 pub struct BabyBearExt4Chip {
-    pub base: Arc<BabyBearChip>,
+    pub base: BabyBearChip,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -59,7 +59,7 @@ impl BabyBearExt4Wire {
 }
 
 impl BabyBearExt4Chip {
-    pub fn new(base_chip: Arc<BabyBearChip>) -> Self {
+    pub fn new(base_chip: BabyBearChip) -> Self {
         BabyBearExt4Chip { base: base_chip }
     }
     pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
