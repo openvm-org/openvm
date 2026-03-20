@@ -1,7 +1,10 @@
 use halo2_base::Context;
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
-use crate::{field::baby_bear::BabyBearExtChip, Fr, RootF};
+use crate::{
+    field::baby_bear::{BabyBearExtChip, BabyBearWire},
+    Fr, RootF,
+};
 
 pub(crate) type BabyBearExtWire = crate::field::baby_bear::BabyBearExtWire;
 
@@ -38,6 +41,20 @@ pub(crate) fn horner_eval_ext_poly_assigned(
     let mut acc = ext_chip.zero(ctx);
     for coeff in coeffs.iter().rev() {
         acc = ext_chip.mul(ctx, acc, *x);
+        acc = ext_chip.add(ctx, acc, *coeff);
+    }
+    acc
+}
+
+pub(crate) fn horner_eval_ext_poly_f_assigned(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip,
+    coeffs: &[BabyBearExtWire],
+    x: &BabyBearWire,
+) -> BabyBearExtWire {
+    let mut acc = ext_chip.zero(ctx);
+    for coeff in coeffs.iter().rev() {
+        acc = ext_chip.scalar_mul(ctx, acc, *x);
         acc = ext_chip.add(ctx, acc, *coeff);
     }
     acc
