@@ -196,15 +196,26 @@ pub fn verify_vm_stark_proof_pvs(
     }
 
     // Check the proof's cached commit is the internal-recursive one.
-    let proof_cached_commit = proof.inner.trace_vdata[CONSTRAINT_EVAL_AIR_ID]
-        .as_ref()
-        .unwrap()
-        .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
-
-    if proof_cached_commit != vk.baseline.internal_recursive_dag_commit.cached_commit {
-        return Err(VerifyStarkError::ProofCachedCommitMismatch {
-            expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
-            actual: proof_cached_commit,
+    if let Some(trace_vdata) = proof.inner.trace_vdata[CONSTRAINT_EVAL_AIR_ID].as_ref() {
+        if let Some(proof_cached_commit) = trace_vdata
+            .cached_commitments
+            .get(CONSTRAINT_EVAL_CACHED_INDEX)
+        {
+            if *proof_cached_commit != vk.baseline.internal_recursive_dag_commit.cached_commit {
+                return Err(VerifyStarkError::ProofCachedCommitMismatch {
+                    expected: vk.baseline.internal_recursive_dag_commit.cached_commit,
+                    actual: *proof_cached_commit,
+                });
+            }
+        } else {
+            return Err(VerifyStarkError::MissingConstraintEvalCachedTrace {
+                air_idx: CONSTRAINT_EVAL_AIR_ID,
+                cached_idx: CONSTRAINT_EVAL_CACHED_INDEX,
+            });
+        }
+    } else {
+        return Err(VerifyStarkError::MissingConstraintEvalTraceVdata {
+            air_idx: CONSTRAINT_EVAL_AIR_ID,
         });
     }
 
