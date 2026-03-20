@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
@@ -36,7 +38,7 @@ const END_TO_END_MIN_ROWS: usize = 32768;
 fn run_mock(
     instance_columns: usize,
     expect_satisfied: bool,
-    build: impl FnOnce(&mut Context<Fr>, RangeChip<Fr>),
+    build: impl FnOnce(&mut Context<Fr>, BabyBearExtChip),
 ) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(END_TO_END_K as usize)
@@ -44,15 +46,16 @@ fn run_mock(
         .use_instance_columns(instance_columns);
 
     let range = builder.range_chip();
+    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
     let ctx = builder.main(0);
     if expect_satisfied {
-        build(ctx, range);
+        build(ctx, ext_chip);
     } else {
         // Disable guarded debug assertions in BabyBearChip, and catch host-side
         // panics (e.g. deterministic metadata shape checks) that fire before the
         // MockProver can verify constraints.
         let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::utils::with_debug_asserts_disabled(|| build(ctx, range));
+            crate::utils::with_debug_asserts_disabled(|| build(ctx, ext_chip));
         }));
         if build_result.is_err() {
             return;
@@ -112,8 +115,8 @@ where
     let circuit = StaticVerifierCircuit::try_new(vk, dummy_cached_commit, &log_heights_per_air)
         .expect("static circuit params");
 
-    run_mock(0, true, |ctx, range| {
-        circuit.populate_verify_stark_constraints(ctx, range, &proof);
+    run_mock(0, true, |ctx, ext_chip| {
+        circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
     });
 }
 
@@ -164,12 +167,12 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
     let trace_id_to_air_id = trace_id_order_from_static_heights(&vk.inner, &log_heights_per_air);
     let stacked_layouts = build_stacked_layouts_for_static_vk(&vk.inner, &log_heights_per_air);
-    run_mock(1, false, move |ctx, range| {
-        let proof_wire = load_proof_wire(ctx, &range, &proof, &log_heights_per_air);
+    run_mock(1, false, move |ctx, ext_chip| {
+        let proof_wire = load_proof_wire(ctx, &ext_chip, &proof, &log_heights_per_air);
         clear_recorded_ext_base_consts();
         constrained_verify(
             ctx,
-            range,
+            &ext_chip,
             &vk,
             &proof_wire,
             &trace_id_to_air_id,

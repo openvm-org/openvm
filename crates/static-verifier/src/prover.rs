@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
@@ -27,7 +29,11 @@ use openvm_stark_sdk::{
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::{circuit::StaticVerifierCircuit, config::StaticVerifierShape};
+use crate::{
+    circuit::StaticVerifierCircuit,
+    config::StaticVerifierShape,
+    field::baby_bear::{BabyBearChip, BabyBearExtChip},
+};
 
 /// KZG parameters for the Halo2 BN256 proving system.
 pub type Halo2Params = ParamsKZG<Bn256>;
@@ -110,8 +116,9 @@ impl StaticVerifierCircuit {
         builder = builder.use_instance_columns(0);
 
         let range = builder.range_chip();
+        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
-        let _ = self.populate_verify_stark_constraints(ctx, range, proof);
+        let _ = self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
 
         let public_inputs = Vec::new();
 

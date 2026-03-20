@@ -4,7 +4,7 @@ use core::cmp::Reverse;
 use std::{fmt, sync::Arc};
 
 use halo2_base::{
-    gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
+    gates::{circuit::builder::BaseCircuitBuilder, GateInstructions},
     halo2_proofs::halo2curves::bn256::Fr,
     Context,
 };
@@ -22,7 +22,7 @@ use openvm_stark_sdk::{
 use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 
 use crate::{
-    field::baby_bear::BabyBearChip,
+    field::baby_bear::{BabyBearChip, BabyBearExtChip},
     stages::{
         full_pipeline::{
             constrained_verify, digest_scalar_to_fr, extract_public_values, load_proof_wire,
@@ -159,13 +159,13 @@ impl StaticVerifierCircuit {
     pub fn populate_verify_stark_constraints(
         &self,
         ctx: &mut Context<Fr>,
-        range: RangeChip<Fr>,
+        ext_chip: &BabyBearExtChip,
         proof: &Proof<RootConfig>,
     ) -> ProofWire {
-        let proof_wire = load_proof_wire(ctx, &range, proof, &self.log_heights_per_air);
+        let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);
         constrained_verify(
             ctx,
-            range,
+            ext_chip,
             &self.root_vk,
             &proof_wire,
             &self.trace_id_to_air_id,
@@ -182,13 +182,13 @@ impl StaticVerifierCircuit {
         proof: &Proof<RootConfig>,
     ) -> StaticVerifierPvs<Fr> {
         let range = builder.range_chip();
-        let base_chip = BabyBearChip::new(Arc::new(range.clone()));
+        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
-        let proof_wire = &self.populate_verify_stark_constraints(ctx, range, proof);
+        let proof_wire = &self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
 
         // Pin the proof's cached trace to the expected root_dag_cached_commit constant
         let root_dag_cached_commit = proof_wire.cached_commitment_roots[CONSTRAINT_EVAL_AIR_ID][0];
-        base_chip.gate().assert_is_const(
+        ext_chip.base().gate().assert_is_const(
             ctx,
             &root_dag_cached_commit,
             &digest_scalar_to_fr(self.internal_recursive_dag_cached_commit[0]),
@@ -202,7 +202,7 @@ impl StaticVerifierCircuit {
             "Only DAG cached trace allowed."
         );
 
-        let pvs_wire = extract_public_values(ctx, &base_chip, proof_wire);
+        let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
 
         let pvs_vec = pvs_wire.to_vec();
         let pvs_fr = pvs_vec.iter().map(|v| *v.value()).collect_vec();
