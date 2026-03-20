@@ -207,14 +207,13 @@ pub(crate) fn reduce_32_cells(
     values: &[AssignedValue<Fr>],
 ) -> AssignedValue<Fr> {
     let base = Fr::from(1u64 << 32);
-    let mut power = Fr::from(1u64);
-    let mut acc = ctx.load_constant(Fr::from(0u64));
-
-    for value in values {
-        acc = gate.mul_add(ctx, *value, Constant(power), acc);
-        power *= base;
-    }
-    acc
+    gate.inner_product(
+        ctx,
+        values.iter().copied(),
+        core::iter::successors(Some(Fr::from(1u64)), |power| Some(*power * base))
+            .take(values.len())
+            .map(Constant),
+    )
 }
 
 pub(crate) fn hash_babybear_slice_to_digest(
@@ -224,8 +223,8 @@ pub(crate) fn hash_babybear_slice_to_digest(
 ) -> AssignedValue<Fr> {
     let gate = range.gate();
     let params = &*super::POSEIDON2_PARAMS;
-    let mut state =
-        Poseidon2State::new(core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64))));
+    let zero = ctx.load_zero();
+    let mut state = Poseidon2State::new(core::array::from_fn(|_| zero));
     for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
         for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
             let cells = chunk.iter().map(|value| value.value).collect::<Vec<_>>();
@@ -244,7 +243,7 @@ pub(crate) fn compress_bn254_digests(
 ) -> AssignedValue<Fr> {
     let gate = range.gate();
     let params = &*super::POSEIDON2_PARAMS;
-    let zero = ctx.load_constant(Fr::from(0u64));
+    let zero = ctx.load_zero();
     let mut state = Poseidon2State::new([left, right, zero]);
     state.permutation(ctx, gate, params);
     state.s[0]

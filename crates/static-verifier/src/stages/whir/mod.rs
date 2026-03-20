@@ -1,7 +1,7 @@
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
     utils::biguint_to_fe,
-    AssignedValue, Context,
+    AssignedValue, Context, QuantumCell,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
@@ -19,12 +19,16 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearExt4Wire, BabyBearExtChip, BabyBearExtWire, BabyBearWire, BABY_BEAR_EXT_DEGREE,
+        BabyBearChip, BabyBearExt4Wire, BabyBearExtChip, BabyBearExtWire, BabyBearWire,
+        BABY_BEAR_EXT_DEGREE,
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     stages::{
-        batch_constraints::eval_eq_mle_assigned,
-        shared_math::{horner_eval_ext_poly_assigned, interpolate_quadratic_at_012_assigned},
+        batch_constraints::{eval_eq_mle_assigned, eval_eq_mle_ef_f_assigned},
+        shared_math::{
+            horner_eval_ext_poly_assigned, horner_eval_ext_poly_f_assigned,
+            interpolate_quadratic_at_012_assigned,
+        },
     },
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr, RootEF, RootF,
@@ -230,36 +234,41 @@ fn eval_mle_evals_at_point_assigned(
 
 fn invert_base_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
+    base_chip: &BabyBearChip,
     value: BabyBearWire,
 ) -> BabyBearWire {
-    let one = ext_chip.base().one(ctx);
-    ext_chip.base().div(ctx, one, value)
+    let one = base_chip.one(ctx);
+    base_chip.div(ctx, one, value)
 }
 
 fn query_root_from_bits_assigned(
     ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
+    base_chip: &BabyBearChip,
     query_bits: &[AssignedValue<Fr>],
     log_rs_domain_size: usize,
 ) -> BabyBearWire {
-    let gate = ext_chip.range().gate();
-    let one = ctx.load_constant(Fr::from(1u64));
+    let gate = base_chip.range().gate();
     let omega = RootF::two_adic_generator(log_rs_domain_size);
-    let mut root = ext_chip.base().one(ctx);
+    let mut root = None;
     for (bit_idx, &bit) in query_bits.iter().enumerate() {
         let omega_pow = omega.exp_u64(1u64 << bit_idx).as_canonical_u64();
-        let omega_pow_const = ctx.load_constant(Fr::from(omega_pow));
-        let bit_times_pow = gate.mul(ctx, bit, omega_pow_const);
-        let one_minus_bit = gate.sub(ctx, one, bit);
-        let rhs = gate.add(ctx, bit_times_pow, one_minus_bit);
+        let value = gate.select(
+            ctx,
+            QuantumCell::Constant(Fr::from(omega_pow)),
+            QuantumCell::Constant(Fr::one()),
+            bit,
+        );
         let selected = BabyBearWire {
-            value: rhs,
+            value,
             max_bits: crate::field::baby_bear::BABYBEAR_MAX_BITS,
         };
-        root = ext_chip.base().mul(ctx, root, selected);
+        if let Some(prev) = &mut root {
+            *prev = base_chip.mul(ctx, *prev, selected);
+        } else {
+            root = Some(selected);
+        }
     }
-    root
+    root.unwrap()
 }
 
 fn binary_k_fold_assigned(
@@ -269,6 +278,8 @@ fn binary_k_fold_assigned(
     alphas: &[BabyBearExtWire],
     x: BabyBearWire,
 ) -> BabyBearExtWire {
+    let base_chip = ext_chip.base();
+
     let n = values.len();
     assert_eq!(
         n,
@@ -287,28 +298,27 @@ fn binary_k_fold_assigned(
     let half = RootF::ONE.halve();
 
     let mut x_pow = x;
-    let x_inv = invert_base_assigned(ctx, ext_chip, x);
+    let x_inv = invert_base_assigned(ctx, base_chip, x);
     let mut x_inv_pow = x_inv;
 
     for (j, alpha) in alphas.iter().enumerate() {
         let m = n >> (j + 1);
         for i in 0..m {
-            let t = ext_chip.base().mul_const(ctx, x_pow, tw[i << j]);
-            let t_inv = ext_chip.base().mul_const(ctx, x_inv_pow, inv_tw[i << j]);
-            let t_inv_half = ext_chip.base().mul_const(ctx, t_inv, half);
+            let t = base_chip.mul_const(ctx, x_pow, tw[i << j]);
+            let t_inv = base_chip.mul_const(ctx, x_inv_pow, inv_tw[i << j]);
+            let t_inv_half = base_chip.mul_const(ctx, t_inv, half);
 
             let lo = values[i];
             let hi = values[i + m];
             let lo_minus_hi = ext_chip.sub(ctx, lo, hi);
-            let t_ext = ext_chip.from_base_var(ctx, t);
-            let alpha_minus_t = ext_chip.sub(ctx, *alpha, t_ext);
+            let mut alpha_minus_t = *alpha;
+            alpha_minus_t.0[0] = base_chip.sub(ctx, alpha_minus_t.0[0], t);
             let fold = ext_chip.mul(ctx, alpha_minus_t, lo_minus_hi);
-            let t_inv_half_ext = ext_chip.from_base_var(ctx, t_inv_half);
-            let fold = ext_chip.mul(ctx, fold, t_inv_half_ext);
+            let fold = ext_chip.scalar_mul(ctx, fold, t_inv_half);
             values[i] = ext_chip.add(ctx, lo, fold);
         }
-        x_pow = ext_chip.base().square(ctx, x_pow);
-        x_inv_pow = ext_chip.base().square(ctx, x_inv_pow);
+        x_pow = base_chip.square(ctx, x_pow);
+        x_inv_pow = base_chip.square(ctx, x_inv_pow);
     }
     values[0]
 }
@@ -353,7 +363,6 @@ fn constrain_merkle_path(
     );
 
     let gate = ext_chip.range().gate();
-    let one = ctx.load_constant(Fr::from(1u64));
 
     assert_eq!(
         merkle_path.siblings.len(),
@@ -373,10 +382,7 @@ fn constrain_merkle_path(
     for (bit, &sibling) in query_bits.iter().zip(merkle_path.siblings.iter()) {
         let left_right = compress_bn254_digests(ctx, ext_chip.range(), cur, sibling);
         let right_left = compress_bn254_digests(ctx, ext_chip.range(), sibling, cur);
-        let one_minus_bit = gate.sub(ctx, one, *bit);
-        let pick_right_left = gate.mul(ctx, right_left, *bit);
-        let pick_left_right = gate.mul(ctx, left_right, one_minus_bit);
-        cur = gate.add(ctx, pick_right_left, pick_left_right);
+        cur = gate.select(ctx, right_left, left_right, *bit);
     }
 
     ctx.constrain_equal(&cur, &root_digest);
@@ -526,13 +532,16 @@ pub(crate) fn constrain_whir_verification(
             } else {
                 gate.num_to_bits(ctx, query_index, query_bits)
             };
-            let zi_root_base =
-                query_root_from_bits_assigned(ctx, ext_chip, &query_bits_vec, log_rs_domain_size);
-            let zi_root_ext = ext_chip.from_base_var(ctx, zi_root_base);
-            let zi = ext_chip.pow_power_of_two(ctx, zi_root_ext, k_whir);
+            let zi_root = query_root_from_bits_assigned(
+                ctx,
+                ext_chip.base(),
+                &query_bits_vec,
+                log_rs_domain_size,
+            );
+            let zi = ext_chip.base().pow_power_of_two(ctx, zi_root, k_whir);
 
             let yi = if is_initial_round {
-                let mut codeword_vals = vec![ext_chip.zero(ctx); 1usize << k_whir];
+                let mut codeword_vals = vec![None; 1usize << k_whir];
                 let mut mu_power_idx = 0usize;
                 for (commit_idx, commit_openings) in stacking_openings.iter().enumerate() {
                     let merkle_path = &whir_wire.initial_round_merkle_paths[commit_idx][query_idx];
@@ -549,13 +558,17 @@ pub(crate) fn constrain_whir_verification(
                             let opened_base = row[col_idx];
                             let opened_ext = ext_chip.from_base_var(ctx, opened_base);
                             let weighted = ext_chip.mul(ctx, opened_ext, mu_pow);
-                            codeword_vals[row_idx] =
-                                ext_chip.add(ctx, codeword_vals[row_idx], weighted);
+                            codeword_vals[row_idx] = if let Some(prev) = codeword_vals[row_idx] {
+                                Some(ext_chip.add(ctx, prev, weighted))
+                            } else {
+                                Some(weighted)
+                            };
                         }
                         mu_power_idx += 1;
                     }
                 }
-                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, zi_root_base)
+                let codeword_vals = codeword_vals.into_iter().flatten().collect::<Vec<_>>();
+                binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, zi_root)
             } else {
                 let merkle_path = &whir_wire.codeword_merkle_paths[round_idx - 1][query_idx];
                 constrain_merkle_path(
@@ -570,7 +583,7 @@ pub(crate) fn constrain_whir_verification(
                     .iter()
                     .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx])))
                     .collect::<Vec<_>>();
-                binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, zi_root_base)
+                binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, zi_root)
             };
 
             zs_round.push(zi);
@@ -636,7 +649,7 @@ pub(crate) fn constrain_whir_verification(
             let mut zi_pows = Vec::with_capacity(slc_len);
             zi_pows.push(*zi);
             for _ in 1..slc_len {
-                let next = ext_chip.mul(
+                let next = ext_chip.base().mul(
                     ctx,
                     *zi_pows.last().expect("zi power sequence is non-empty"),
                     *zi_pows.last().expect("zi power sequence is non-empty"),
@@ -644,13 +657,13 @@ pub(crate) fn constrain_whir_verification(
                 zi_pows.push(next);
             }
             let zi_max = *zi_pows.last().expect("zi power sequence is non-empty");
-            let eq = eval_eq_mle_assigned(
+            let eq = eval_eq_mle_ef_f_assigned(
                 ctx,
                 ext_chip,
                 alpha_slc,
                 &zi_pows[..zi_pows.len().saturating_sub(1)],
             );
-            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, final_poly, &zi_max);
+            let poly_eval = horner_eval_ext_poly_f_assigned(ctx, ext_chip, final_poly, &zi_max);
             let term = ext_chip.mul(ctx, gamma_pow, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);

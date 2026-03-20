@@ -98,7 +98,8 @@ pub fn split_assigned_bn254_to_babybear_limbs(
 
 impl TranscriptGadget {
     pub fn new(ctx: &mut Context<Fr>) -> Self {
-        let sponge_state = core::array::from_fn(|_| ctx.load_constant(Fr::from(0u64)));
+        let zero = ctx.load_zero();
+        let sponge_state = core::array::from_fn(|_| zero);
         Self {
             sponge_state,
             input_buffer: Vec::new(),
@@ -236,7 +237,7 @@ impl TranscriptGadget {
         );
 
         if bits == 0 {
-            return ctx.load_constant(Fr::from(0u64));
+            return ctx.load_zero();
         }
         let sampled = self.sample(ctx, baby_bear);
         // Reduce BabyBearWire so it is constrained to be less than BabyBear modulus

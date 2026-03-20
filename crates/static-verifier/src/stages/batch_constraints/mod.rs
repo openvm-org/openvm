@@ -158,16 +158,25 @@ fn eval_lagrange_on_integer_grid(
     evals: &[BabyBearExtWire],
 ) -> BabyBearExtWire {
     let n = evals.len().saturating_sub(1);
+    let one = ext_chip.from_base_const(ctx, RootF::ONE);
+    let x_grid = (0..=n)
+        .map(|j| {
+            ext_chip
+                .base()
+                .load_constant(ctx, RootF::from_u64(j as u64))
+        })
+        .collect::<Vec<_>>();
     let mut acc = ext_chip.zero(ctx);
     for (i, eval_i) in evals.iter().enumerate() {
-        let mut basis = ext_chip.from_base_const(ctx, RootF::ONE);
+        let mut basis = one;
         let mut denom = RootF::ONE;
+        #[allow(clippy::needless_range_loop)]
         for j in 0..=n {
             if i == j {
                 continue;
             }
-            let x_j = ext_chip.from_base_const(ctx, RootF::from_u64(j as u64));
-            let x_minus_j = ext_chip.sub(ctx, *point, x_j);
+            let mut x_minus_j = *point;
+            x_minus_j.0[0] = ext_chip.base().sub(ctx, x_minus_j.0[0], x_grid[j]);
             basis = ext_chip.mul(ctx, basis, x_minus_j);
 
             let diff = if i >= j {
@@ -192,8 +201,8 @@ fn progression_exp_2_assigned(
     l: usize,
 ) -> BabyBearExtWire {
     let mut pow = *m;
-    let mut sum = ext_chip.from_base_const(ctx, RootF::ONE);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
+    let mut sum = one;
     for _ in 0..l {
         let one_plus_pow = ext_chip.add(ctx, one, pow);
         sum = ext_chip.mul(ctx, sum, one_plus_pow);
@@ -215,8 +224,28 @@ pub(crate) fn eval_eq_mle_assigned(
         let xy = ext_chip.mul(ctx, *x_i, *y_i);
         let two_xy = ext_chip.mul_base_const(ctx, xy, RootF::TWO);
         let one_minus_y = ext_chip.sub(ctx, one, *y_i);
-        let one_minus_y_minus_x = ext_chip.sub(ctx, one_minus_y, *x_i);
-        let factor = ext_chip.add(ctx, one_minus_y_minus_x, two_xy);
+        let factor = ext_chip.sub(ctx, two_xy, *x_i);
+        let factor = ext_chip.add(ctx, factor, one_minus_y);
+        acc = ext_chip.mul(ctx, acc, factor);
+    }
+    acc
+}
+
+pub(crate) fn eval_eq_mle_ef_f_assigned(
+    ctx: &mut Context<Fr>,
+    ext_chip: &BabyBearExtChip,
+    x: &[BabyBearExtWire],
+    y: &[BabyBearWire],
+) -> BabyBearExtWire {
+    assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
+    let one = ext_chip.base().one(ctx);
+    let mut acc = ext_chip.from_base_const(ctx, RootF::ONE);
+    for (x_i, y_i) in x.iter().zip(y.iter()) {
+        let xy = ext_chip.scalar_mul(ctx, *x_i, *y_i);
+        let two_xy = ext_chip.mul_base_const(ctx, xy, RootF::TWO);
+        let one_minus_y = ext_chip.base().sub(ctx, one, *y_i);
+        let mut factor = ext_chip.sub(ctx, two_xy, *x_i);
+        factor.0[0] = ext_chip.base().add(ctx, factor.0[0], one_minus_y);
         acc = ext_chip.mul(ctx, acc, factor);
     }
     acc

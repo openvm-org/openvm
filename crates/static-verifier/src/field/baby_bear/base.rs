@@ -81,7 +81,11 @@ impl BabyBearChip {
 
     pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
         let max_bits = bit_length(value.as_canonical_u64());
-        let value = ctx.load_constant(Fr::from(PrimeField64::as_canonical_u64(&value)));
+        let value = if value == BabyBear::ZERO {
+            ctx.load_zero()
+        } else {
+            ctx.load_constant(Fr::from(PrimeField64::as_canonical_u64(&value)))
+        };
         BabyBearWire { value, max_bits }
     }
 
@@ -377,6 +381,19 @@ impl BabyBearChip {
 
     pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
         self.mul(ctx, a, a)
+    }
+
+    pub fn pow_power_of_two(
+        &self,
+        ctx: &mut Context<Fr>,
+        a: BabyBearWire,
+        n: usize,
+    ) -> BabyBearWire {
+        let mut result = a;
+        for _ in 0..n {
+            result = self.square(ctx, result);
+        }
+        result
     }
 }
 
