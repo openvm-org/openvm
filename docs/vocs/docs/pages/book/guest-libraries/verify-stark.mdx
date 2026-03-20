@@ -8,13 +8,14 @@ You can find the library source code [here](https://github.com/openvm-org/openvm
 
 The guest library (`openvm-verify-stark-guest`) provides functions to request and consume deferred STARK proof verification.
 
-### `get_proof_output`
+### `verify_stark_unchecked`
 
 ```rust
-pub fn get_proof_output<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutput
+pub fn verify_stark_unchecked<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutput
 ```
 
-Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit` (a 32-byte commitment identifying the proof). Returns a `ProofOutput` containing:
+Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit` (a 32-byte commitment identifying the proof). When correctly configured with the [`DeferredVerifyCircuit`](#circuit), the proof is verified outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). Returns a `ProofOutput` containing:
+
 - `app_exe_commit: Commit` — commitment to the app executable whose execution is being verified
 - `app_vk_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — public values revealed by the verified app
@@ -27,7 +28,7 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput)
 ```
 
-Calls `get_proof_output` and panics if the result does not match `expected`.
+Calls `verify_stark_unchecked` and panics if the result does not match `expected`.
 
 ## Circuit
 
@@ -48,7 +49,7 @@ To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config v
 
 These vectors are aligned by index.
 
-It is **highly** recommended that guest programs that use deferrals are proved using the SDK. The flow for this is:
+It is **highly** recommended that guest programs that use deferrals are proved using the SDK. The flow is:
 
 1. Build a `DeferralProver` whose single-circuit prover is `VerifyCircuitProver`.
 2. Create the extension with `make_extension`, passing the deferral function(s).
@@ -58,16 +59,17 @@ It is **highly** recommended that guest programs that use deferrals are proved u
 For example, to initialize the SDK with the `verify-stark` deferral circuit:
 
 ```rust
-let deferred_verify_prover = VerifyProver::new::<E>(
+let def_idx = 0;
+let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
     ir_vk,
     ir_pcs_data,
     def_circuit_params,
     memory_dimensions,
     num_user_pvs,
     None,
-    0,
+    def_idx,
 );
-let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
+let verify_stark_prover = DeferredVerifyCpuCircuitProver::new(deferred_verify_prover);
 
 let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
 let deferral_ext =
@@ -80,4 +82,4 @@ let sdk = CpuSdk::new(AppConfig::new(vm_config, app_params), agg_params)?
     .with_deferral_prover(deferral_prover);
 ```
 
-Each guest call `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.
+Each guest call using `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.
