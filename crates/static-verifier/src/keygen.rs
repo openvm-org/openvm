@@ -38,7 +38,7 @@ impl StaticVerifierCircuit {
             metadata: Halo2ProvingMetadata {
                 config_params,
                 break_points,
-                num_pvs: vec![public_inputs.len()],
+                num_pvs: vec![public_inputs.to_vec().len()],
             },
         }
     }

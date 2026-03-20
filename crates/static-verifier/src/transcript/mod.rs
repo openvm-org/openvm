@@ -26,8 +26,6 @@ use crate::{
 };
 
 pub(crate) const NUM_SPLIT_LIMBS: usize = 3;
-const MAX_U64_DIV_BABY_BEAR_PLUS_ONE: u64 =
-    ((u64::MAX as u128 / BABY_BEAR_MODULUS_U64 as u128) + 1) as u64;
 
 #[derive(Clone, Debug)]
 pub struct DigestWire {
@@ -81,14 +79,11 @@ fn reduce_assigned_limb_to_babybear(
     limb: AssignedValue<Fr>,
 ) -> BabyBearWire {
     let range = baby_bear.range();
-    let (quotient, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
-    range.check_less_than_safe(ctx, quotient, MAX_U64_DIV_BABY_BEAR_PLUS_ONE);
-    let reduced = BabyBearWire {
+    let (_, remainder) = range.div_mod(ctx, limb, BigUint::from(BABY_BEAR_MODULUS_U64), 64);
+    BabyBearWire {
         value: remainder,
         max_bits: BABY_BEAR_BITS,
-    };
-    range.check_less_than_safe(ctx, reduced.value, BABY_BEAR_MODULUS_U64);
-    reduced
+    }
 }
 
 pub fn split_assigned_bn254_to_babybear_limbs(
