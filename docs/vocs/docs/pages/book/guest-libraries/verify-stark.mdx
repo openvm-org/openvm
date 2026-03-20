@@ -14,11 +14,13 @@ The guest library (`openvm-verify-stark-guest`) provides functions to request an
 pub fn verify_stark_unchecked<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutput
 ```
 
-Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit` (a 32-byte commitment identifying the proof). When correctly configured with the [`DeferredVerifyCircuit`](#circuit), the proof is verified outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). Returns a `ProofOutput` containing:
+Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit` (a 32-byte commitment identifying the proof). Returns a `ProofOutput` containing:
 
 - `app_exe_commit: Commit` — commitment to the app executable whose execution is being verified
 - `app_vk_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — public values revealed by the verified app
+
+When correctly configured with the [`DeferredVerifyCircuit`](#circuit), verification is performed outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). From the guest perspective, this establishes that **there exists a proof** matching `input_commit` that verifies and yields the returned `ProofOutput`; the proof itself is never accessible from the guest program.
 
 `DEF_IDX` must match the index of the corresponding `DeferralFn` in `DeferralExtension.fns`, as configured when [building the VM extension](#using-deferralextension). Each STARK verifying key will correspond to a different deferral circuit, and thus a different `DEF_IDX`.
 
