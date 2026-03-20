@@ -38,7 +38,7 @@ pub fn get_proof_output<const DEF_IDX: u16>(input_commit: &Commit) -> ProofOutpu
     }
 }
 
-pub fn verify_proof_output<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput) {
+pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput) {
     let actual = get_proof_output::<DEF_IDX>(input_commit);
     if actual != *expected {
         panic!("Proof verification failed for commit {:?}", input_commit);

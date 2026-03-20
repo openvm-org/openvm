@@ -21,13 +21,13 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 
 `DEF_IDX` must match the index of the corresponding `DeferralFn` in `DeferralExtension.fns`, as configured when [building the VM extension](#using-deferralextension). Each STARK verifying key will correspond to a different deferral circuit, and thus a different `DEF_IDX`.
 
-### `verify_proof_output`
+### `verify_stark`
 
 ```rust
-pub fn verify_proof_output<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput)
+pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofOutput)
 ```
 
-Convenience wrapper that calls `get_proof_output` and panics if the result does not match `expected`.
+Cals `get_proof_output` and panics if the result does not match `expected`.
 
 ## Circuit
 
