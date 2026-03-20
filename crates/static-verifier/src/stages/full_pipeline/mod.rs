@@ -182,7 +182,7 @@ pub fn constrained_verify(
     ctx: &mut Context<Fr>,
     range: RangeChip<Fr>,
     root_vk: &MultiStarkVerifyingKey<RootConfig>,
-    proof_wire: ProofWire, /* Root proof */
+    proof_wire: &ProofWire, /* Root proof */
     trace_id_to_air_id: &[usize],
     log_heights_per_air: &[usize],
     stacked_layouts: &[StackedLayout],
@@ -225,7 +225,7 @@ pub fn constrained_verify(
         &proof_wire.batch,
         &n_per_trace,
         trace_id_to_air_id,
-        proof_wire.public_values,
+        proof_wire.public_values.clone(),
     );
 
     let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);

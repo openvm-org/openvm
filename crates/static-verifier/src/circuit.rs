@@ -4,8 +4,9 @@ use core::cmp::Reverse;
 use std::{fmt, sync::Arc};
 
 use halo2_base::{
-    gates::{circuit::builder::BaseCircuitBuilder, GateInstructions},
+    gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
     halo2_proofs::halo2curves::bn256::Fr,
+    Context,
 };
 use itertools::Itertools;
 use openvm_stark_sdk::{
@@ -25,7 +26,7 @@ use crate::{
     stages::{
         full_pipeline::{
             constrained_verify, digest_scalar_to_fr, extract_public_values, load_proof_wire,
-            StaticVerifierPvs,
+            ProofWire, StaticVerifierPvs,
         },
         proof_shape::trace_id_order_from_static_heights,
     },
@@ -107,8 +108,9 @@ impl std::error::Error for StaticCircuitParamsError {}
 pub struct StaticVerifierCircuit {
     pub root_vk: MultiStarkVerifyingKey<RootConfig>,
     /// The [RootConfig] commitment of the cached trace in the SymbolicExpressionAir in the
-    /// RootVerifierCircuit. This can be derived from `root_vk` using the symbolic constraints DAG.
-    pub root_dag_cached_commit: RootDigest,
+    /// RootVerifierCircuit. This is the commitment to the symbolic constraints DAG of the
+    /// internal-recursive verifier circuit.
+    pub internal_recursive_dag_cached_commit: RootDigest,
     pub log_heights_per_air: Vec<usize>,
     pub trace_id_to_air_id: Vec<usize>,
     pub stacked_layouts: Vec<StackedLayout>,
@@ -122,7 +124,7 @@ impl StaticVerifierCircuit {
     /// first).
     pub fn try_new(
         root_vk: MultiStarkVerifyingKey<RootConfig>,
-        root_dag_cached_commit: RootDigest,
+        internal_recursive_dag_cached_commit: RootDigest,
         log_heights_per_air: &[usize],
     ) -> Result<Self, StaticCircuitParamsError> {
         let n = root_vk.inner.per_air.len();
@@ -139,11 +141,38 @@ impl StaticVerifierCircuit {
             build_stacked_layouts_for_static_vk(&root_vk.inner, &log_heights_per_air);
         Ok(Self {
             root_vk,
-            root_dag_cached_commit,
+            internal_recursive_dag_cached_commit,
             log_heights_per_air,
             trace_id_to_air_id,
             stacked_layouts,
         })
+    }
+
+    /// STARK verification constraints only: load the proof witness and run
+    /// `constrained_verify`.
+    ///
+    /// Does **not** check proof public values or cached trace commitments, which requires the proof
+    /// to have a particular shape following the VM Continuations framework.
+    ///
+    /// This function should be used internally or for testing only.
+    /// Production uses with the continuations framework **must** use [`Self::populate`] instead.
+    pub fn populate_verify_stark_constraints(
+        &self,
+        ctx: &mut Context<Fr>,
+        range: RangeChip<Fr>,
+        proof: &Proof<RootConfig>,
+    ) -> ProofWire {
+        let proof_wire = load_proof_wire(ctx, &range, proof, &self.log_heights_per_air);
+        constrained_verify(
+            ctx,
+            range,
+            &self.root_vk,
+            &proof_wire,
+            &self.trace_id_to_air_id,
+            &self.log_heights_per_air,
+            &self.stacked_layouts,
+        );
+        proof_wire
     }
 
     /// Populate a builder with the static verifier constraints and return the public values.
@@ -155,13 +184,14 @@ impl StaticVerifierCircuit {
         let range = builder.range_chip();
         let base_chip = BabyBearChip::new(Arc::new(range.clone()));
         let ctx = builder.main(0);
-        let proof_wire = load_proof_wire(ctx, &range, proof, &self.log_heights_per_air);
+        let proof_wire = &self.populate_verify_stark_constraints(ctx, range, proof);
+
         // Pin the proof's cached trace to the expected root_dag_cached_commit constant
         let root_dag_cached_commit = proof_wire.cached_commitment_roots[CONSTRAINT_EVAL_AIR_ID][0];
-        range.gate.assert_is_const(
+        base_chip.gate().assert_is_const(
             ctx,
             &root_dag_cached_commit,
-            &digest_scalar_to_fr(self.root_dag_cached_commit[0]),
+            &digest_scalar_to_fr(self.internal_recursive_dag_cached_commit[0]),
         );
         debug_assert!(
             proof_wire
@@ -172,17 +202,7 @@ impl StaticVerifierCircuit {
             "Only DAG cached trace allowed."
         );
 
-        let pvs_wire = extract_public_values(ctx, &base_chip, &proof_wire);
-
-        constrained_verify(
-            ctx,
-            range,
-            &self.root_vk,
-            proof_wire,
-            &self.trace_id_to_air_id,
-            &self.log_heights_per_air,
-            &self.stacked_layouts,
-        );
+        let pvs_wire = extract_public_values(ctx, &base_chip, proof_wire);
 
         let pvs_vec = pvs_wire.to_vec();
         let pvs_fr = pvs_vec.iter().map(|v| *v.value()).collect_vec();

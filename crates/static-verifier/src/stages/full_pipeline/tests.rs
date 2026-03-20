@@ -5,7 +5,7 @@ use halo2_base::{
 use itertools::Itertools;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as RootConfig, BabyBearBn254Poseidon2CpuEngine,
+        BabyBearBn254Poseidon2Config as RootConfig, BabyBearBn254Poseidon2CpuEngine, Bn254Scalar,
     },
     openvm_stark_backend::{
         p3_field::{PrimeCharacteristicRing, PrimeField64, TwoAdicField},
@@ -33,20 +33,26 @@ const END_TO_END_K: u32 = 22;
 const END_TO_END_LOOKUP_BITS: usize = 8;
 const END_TO_END_MIN_ROWS: usize = 32768;
 
-fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
+fn run_mock(
+    instance_columns: usize,
+    expect_satisfied: bool,
+    build: impl FnOnce(&mut Context<Fr>, RangeChip<Fr>),
+) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(END_TO_END_K as usize)
         .use_lookup_bits(END_TO_END_LOOKUP_BITS)
-        .use_instance_columns(1);
+        .use_instance_columns(instance_columns);
 
+    let range = builder.range_chip();
+    let ctx = builder.main(0);
     if expect_satisfied {
-        build(&mut builder);
+        build(ctx, range);
     } else {
         // Disable guarded debug assertions in BabyBearChip, and catch host-side
         // panics (e.g. deterministic metadata shape checks) that fire before the
         // MockProver can verify constraints.
         let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::utils::with_debug_asserts_disabled(|| build(&mut builder));
+            crate::utils::with_debug_asserts_disabled(|| build(ctx, range));
         }));
         if build_result.is_err() {
             return;
@@ -71,11 +77,15 @@ fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<F
             >= STATIC_VERIFIER_LOOKUP_ADVICE_COLS
     );
 
-    let pvs = builder
-        .assigned_instances
-        .iter()
-        .map(|vs| vs.iter().map(|w| *w.value()).collect_vec())
-        .collect_vec();
+    let pvs: Vec<Vec<Fr>> = if instance_columns == 0 {
+        vec![]
+    } else {
+        builder
+            .assigned_instances
+            .iter()
+            .map(|vs| vs.iter().map(|w| *w.value()).collect_vec())
+            .collect_vec()
+    };
     let prover = MockProver::run(END_TO_END_K, &builder, pvs)
         .expect("mock prover should initialize for pipeline end-to-end circuit");
     if expect_satisfied {
@@ -92,17 +102,18 @@ fn test_engine() -> BabyBearBn254Poseidon2CpuEngine {
     BabyBearBn254Poseidon2CpuEngine::new(test_system_params_small(2, 8, 3))
 }
 
-fn assert_fixture_matches_native<Fx>(engine: &BabyBearBn254Poseidon2CpuEngine, fixture: Fx)
+fn assert_fixture_constraints_only<Fx>(engine: &BabyBearBn254Poseidon2CpuEngine, fixture: Fx)
 where
     Fx: TestFixture<RootConfig>,
 {
     let (vk, proof) = fixture.keygen_and_prove(engine);
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
-    let circuit =
-        StaticVerifierCircuit::try_new(vk, &log_heights_per_air).expect("static circuit params");
+    let dummy_cached_commit = [Bn254Scalar::ZERO];
+    let circuit = StaticVerifierCircuit::try_new(vk, dummy_cached_commit, &log_heights_per_air)
+        .expect("static circuit params");
 
-    run_mock(true, |builder| {
-        circuit.populate(builder, &proof);
+    run_mock(0, true, |ctx, range| {
+        circuit.populate_verify_stark_constraints(ctx, range, &proof);
     });
 }
 
@@ -119,32 +130,6 @@ fn prank_recorded_ext_constant(
     record
         .cell
         .debug_prank(ctx, Fr::from((constant + 1) % BABY_BEAR_MODULUS_U64));
-}
-
-#[test]
-fn pipeline_end_to_end_matches_native_for_fib_fixture() {
-    let engine = test_engine();
-    assert_fixture_matches_native(&engine, FibFixture::new(0, 1, 1 << 5));
-}
-
-#[test]
-fn pipeline_end_to_end_matches_native_for_interactions_fixture() {
-    let engine = test_engine();
-    assert_fixture_matches_native(&engine, InteractionsFixture11);
-}
-
-#[test]
-fn pipeline_end_to_end_matches_native_for_cached_fixture() {
-    let engine = test_engine();
-    assert_fixture_matches_native(&engine, CachedFixture11::new(engine.config().clone()));
-}
-
-#[test]
-fn pipeline_end_to_end_matches_native_for_preprocessed_fixture() {
-    let engine = test_engine();
-    let height = 1 << 5;
-    let sels = (0..height).map(|i| i % 2 == 0).collect::<Vec<_>>();
-    assert_fixture_matches_native(&engine, PreprocessedFibFixture::new(0, 1, sels));
 }
 
 #[test]
@@ -179,18 +164,14 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
     let trace_id_to_air_id = trace_id_order_from_static_heights(&vk.inner, &log_heights_per_air);
     let stacked_layouts = build_stacked_layouts_for_static_vk(&vk.inner, &log_heights_per_air);
-    run_mock(false, move |builder| {
-        let range = builder.range_chip();
-        let base_chip = BabyBearChip::new(Arc::new(range.clone()));
-        let ctx = builder.main(0);
+    run_mock(1, false, move |ctx, range| {
         let proof_wire = load_proof_wire(ctx, &range, &proof, &log_heights_per_air);
-        let pvs = extract_public_values(ctx, &base_chip, &proof_wire);
         clear_recorded_ext_base_consts();
         constrained_verify(
             ctx,
             range,
             &vk,
-            proof_wire,
+            &proof_wire,
             &trace_id_to_air_id,
             &log_heights_per_air,
             &stacked_layouts,
@@ -205,6 +186,31 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
             .map(|record| record.constant)
             .unwrap_or(1);
         prank_recorded_ext_constant(ctx, &records, "normalization", normalization_constant);
-        builder.assigned_instances[0].extend(pvs.to_vec());
     });
+}
+
+#[test]
+fn pipeline_constraints_only_matches_native_for_fib_fixture() {
+    let engine = test_engine();
+    assert_fixture_constraints_only(&engine, FibFixture::new(0, 1, 1 << 5));
+}
+
+#[test]
+fn pipeline_constraints_only_matches_native_for_interactions_fixture() {
+    let engine = test_engine();
+    assert_fixture_constraints_only(&engine, InteractionsFixture11);
+}
+
+#[test]
+fn pipeline_constraints_only_matches_native_for_cached_fixture() {
+    let engine = test_engine();
+    assert_fixture_constraints_only(&engine, CachedFixture11::new(engine.config().clone()));
+}
+
+#[test]
+fn pipeline_constraints_only_matches_native_for_preprocessed_fixture() {
+    let engine = test_engine();
+    let height = 1 << 5;
+    let sels = (0..height).map(|i| i % 2 == 0).collect::<Vec<_>>();
+    assert_fixture_constraints_only(&engine, PreprocessedFibFixture::new(0, 1, sels));
 }

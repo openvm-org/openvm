@@ -9,6 +9,11 @@
 //!   fixed.
 //! - The trace heights of the root proof are all nonzero. In other words no AIR in the child
 //!   verifying key is optional.
+//!
+//! End-to-end Halo2 tests that use full [`StaticVerifierCircuit::populate`] (continuations public
+//! values + symbolic DAG cached-commit pin) belong in `openvm-sdk` integration tests; this crate
+//! keeps a lighter FibFixture + KZG roundtrip via
+//! [`StaticVerifierCircuit::populate_verify_stark_constraints`].
 #![forbid(unsafe_code)]
 
 mod circuit;
