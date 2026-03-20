@@ -30,11 +30,8 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
-        baby_bear_poseidon2::{
-            poseidon2_compress_with_capacity, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
-        },
+    config::baby_bear_poseidon2::{
+        poseidon2_compress_with_capacity, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
     },
     utils::setup_tracing_with_log_level,
 };
@@ -66,7 +63,6 @@ use crate::{
 type GpuEngine = BabyBearPoseidon2GpuEngine;
 type CpuEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
 type RootEngine = BabyBearBn254Poseidon2GpuEngine;
-type RootVerifyEngine = BabyBearBn254Poseidon2CpuEngine;
 
 const NUM_DEF_CIRCUITS: usize = 3;
 const MAX_NUM_PROOFS: usize = 4;
@@ -748,7 +744,7 @@ fn test_deferral_e2e() -> Result<()> {
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let root_vk = root_prover.get_vk();
-    let engine = RootVerifyEngine::new(root_vk.inner.params.clone());
+    let engine = RootEngine::new(root_vk.inner.params.clone());
     engine.verify(&root_vk, &root_proof)?;
 
     Ok(())

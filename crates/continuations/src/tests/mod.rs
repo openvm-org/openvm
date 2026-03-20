@@ -54,7 +54,6 @@ cfg_if::cfg_if! {
         use {
             crate::prover::{DeferralHookGpuProver as DeferralHookProver, RootGpuProver as RootProver},
             openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine,
-            openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
             openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs},
         };
 
@@ -67,8 +66,6 @@ cfg_if::cfg_if! {
 
         #[cfg(feature = "root-prover")]
         type RootEngine = BabyBearBn254Poseidon2GpuEngine;
-        #[cfg(feature = "root-prover")]
-        type RootVerifyEngine = BabyBearBn254Poseidon2CpuEngine;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
@@ -300,7 +297,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let vk = root_prover.get_vk();
-    let engine = RootVerifyEngine::new(vk.inner.params.clone());
+    let engine = RootEngine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
     Ok(())
 }
@@ -364,7 +361,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx)?;
 
     let vk = root_prover.get_vk();
-    let engine = RootVerifyEngine::new(vk.inner.params.clone());
+    let engine = RootEngine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
     Ok(())
 }
