@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
-use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
+use openvm_recursion_circuit::{
+    batch_constraint::expr_eval::CachedTraceRecord,
+    system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen},
+};
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{CommittedTraceData, DeviceDataTransporter, ProverBackend, ProvingContext},
+    prover::{DeviceDataTransporter, ProverBackend, ProvingContext},
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
@@ -25,35 +28,28 @@ use crate::{
 
 mod trace;
 
-pub struct RootProver<
-    PB: ProverBackend<Val = F, Challenge = EF>,
-    S: AggregationSubCircuit,
-    T: RootTraceGen<PB>,
-> {
+pub struct RootProver<S: AggregationSubCircuit, T> {
     pk: Arc<MultiStarkProvingKey<RootSC>>,
     vk: Arc<MultiStarkVerifyingKey<RootSC>>,
 
     agg_node_tracegen: T,
 
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-    child_vk_pcs_data: CommittedTraceData<PB>,
+    cached_trace_record: CachedTraceRecord,
     circuit: Arc<RootCircuit<S>>,
     trace_heights: Option<Vec<usize>>,
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
-    > RootProver<PB, S, T>
-where
-    PB::Matrix: Clone,
-{
+impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     #[instrument(name = "total_proof", skip_all)]
-    pub fn root_prove_from_ctx<E: StarkEngine<SC = RootSC, PB = PB>>(
-        &self,
-        ctx: ProvingContext<PB>,
-    ) -> Result<Proof<RootSC>> {
+    pub fn root_prove_from_ctx<E>(&self, ctx: ProvingContext<E::PB>) -> Result<Proof<RootSC>>
+    where
+        E: StarkEngine<SC = RootSC>,
+        E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
+        <E::PB as ProverBackend>::Matrix: Clone,
+        S: VerifierTraceGen<E::PB, RootSC>,
+        T: RootTraceGen<E::PB>,
+    {
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, RootSC>(&ctx.per_trace, &self.circuit.airs());
         }
@@ -68,13 +64,8 @@ where
     }
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
-    > RootProver<PB, S, T>
-{
-    pub fn new<E: StarkEngine<SC = RootSC, PB = PB>>(
+impl<S: AggregationSubCircuit, T> RootProver<S, T> {
+    pub fn new<E>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
         system_params: SystemParams,
@@ -84,20 +75,24 @@ impl<
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
-        E::PD: DeviceDataTransporter<RootSC, PB> + Clone,
-        PB::Val: Field + PrimeField32,
-        PB::Matrix: Clone,
-        PB::Commitment: Into<CommitBytes>,
+        E: StarkEngine<SC = RootSC>,
+        E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
+        S: VerifierTraceGen<E::PB, RootSC>,
+        T: RootTraceGen<E::PB>,
+        E::PD: DeviceDataTransporter<RootSC, E::PB> + Clone,
+        <E::PB as ProverBackend>::Val: Field + PrimeField32,
+        <E::PB as ProverBackend>::Matrix: Clone,
     {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
                 continuations_enabled: true,
+                has_cached: false,
                 ..Default::default()
             },
         );
+        let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let engine = E::new(system_params);
-        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let internal_recursive_dag_commit = DagCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
@@ -115,13 +110,13 @@ impl<
             vk: Arc::new(vk),
             agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
             child_vk,
-            child_vk_pcs_data,
+            cached_trace_record,
             circuit,
             trace_heights,
         }
     }
 
-    pub fn from_pk<E: StarkEngine<SC = RootSC, PB = PB>>(
+    pub fn from_pk<E>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<RootSC>>,
@@ -131,19 +126,22 @@ impl<
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
-        PB::Val: Field + PrimeField32,
-        PB::Matrix: Clone,
-        PB::Commitment: Into<CommitBytes>,
+        E: StarkEngine<SC = RootSC>,
+        E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
+        S: VerifierTraceGen<E::PB, RootSC>,
+        T: RootTraceGen<E::PB>,
+        <E::PB as ProverBackend>::Val: Field + PrimeField32,
+        <E::PB as ProverBackend>::Matrix: Clone,
     {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
                 continuations_enabled: true,
+                has_cached: false,
                 ..Default::default()
             },
         );
-        let engine = E::new(pk.params.clone());
-        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let internal_recursive_dag_commit = DagCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
@@ -161,7 +159,7 @@ impl<
             vk,
             agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
             child_vk,
-            child_vk_pcs_data,
+            cached_trace_record,
             circuit,
             trace_heights,
         }
@@ -177,10 +175,6 @@ impl<
 
     pub fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<RootSC>> {
         self.vk.clone()
-    }
-
-    pub fn get_cached_commit(&self) -> <PB as ProverBackend>::Commitment {
-        self.child_vk_pcs_data.commitment
     }
 
     pub fn get_trace_heights(&self) -> Option<Vec<usize>> {
