@@ -96,6 +96,9 @@ __global__ void keccak256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     auto row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row_idx >= height) {
+        return;
+    }
     auto round_idx = row_idx % NUM_ROUNDS;
 
     RowSlice row(trace + row_idx, height);
