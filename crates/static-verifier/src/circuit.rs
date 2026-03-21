@@ -4,9 +4,7 @@ use core::cmp::Reverse;
 use std::{fmt, sync::Arc};
 
 use halo2_base::{
-    gates::{circuit::builder::BaseCircuitBuilder, GateInstructions},
-    halo2_proofs::halo2curves::bn256::Fr,
-    Context,
+    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context,
 };
 use itertools::Itertools;
 use openvm_stark_sdk::{
@@ -19,14 +17,13 @@ use openvm_stark_sdk::{
         prover::stacked_pcs::StackedLayout,
     },
 };
-use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip},
     stages::{
         full_pipeline::{
-            constrained_verify, digest_scalar_to_fr, extract_public_values, load_proof_wire,
-            ProofWire, StaticVerifierPvs,
+            constrained_verify, extract_public_values, load_proof_wire, ProofWire,
+            StaticVerifierPvs,
         },
         proof_shape::trace_id_order_from_static_heights,
     },
@@ -186,20 +183,12 @@ impl StaticVerifierCircuit {
         let ctx = builder.main(0);
         let proof_wire = &self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
 
-        // Pin the proof's cached trace to the expected root_dag_cached_commit constant
-        let root_dag_cached_commit = proof_wire.cached_commitment_roots[CONSTRAINT_EVAL_AIR_ID][0];
-        ext_chip.base().gate().assert_is_const(
-            ctx,
-            &root_dag_cached_commit,
-            &digest_scalar_to_fr(self.internal_recursive_dag_cached_commit[0]),
-        );
         debug_assert!(
             proof_wire
                 .cached_commitment_roots
                 .iter()
-                .enumerate()
-                .all(|(air_id, commits)| air_id == CONSTRAINT_EVAL_AIR_ID || commits.is_empty()),
-            "Only DAG cached trace allowed."
+                .all(|commits| commits.is_empty()),
+            "RootVerifierCircuit has no cached trace"
         );
 
         let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
