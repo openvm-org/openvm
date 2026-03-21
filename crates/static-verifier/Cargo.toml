@@ -25,6 +25,7 @@ itertools.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true
 tracing.workspace = true
+inferno = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
@@ -34,3 +35,4 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 default = []
 evm-prove = ["dep:snark-verifier-sdk", "dep:serde_with"]
 evm-verify = ["evm-prove"]
+cell-profiling = ["dep:inferno"]

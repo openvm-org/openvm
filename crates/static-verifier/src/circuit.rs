@@ -159,7 +159,14 @@ impl StaticVerifierCircuit {
         ext_chip: &BabyBearExtChip,
         proof: &Proof<RootConfig>,
     ) -> ProofWire {
+        let mut profiler =
+            crate::profiling::CellProfiler::new("static_verifier", ctx.advice.len());
+
+        profiler.push("load_proof_wire", ctx.advice.len());
         let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);
+        profiler.pop(ctx.advice.len());
+
+        profiler.push("constrained_verify", ctx.advice.len());
         constrained_verify(
             ctx,
             ext_chip,
@@ -169,6 +176,23 @@ impl StaticVerifierCircuit {
             &self.log_heights_per_air,
             &self.stacked_layouts,
         );
+        profiler.pop(ctx.advice.len());
+
+        #[cfg(feature = "cell-profiling")]
+        if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
+            let _ = std::fs::create_dir_all(&dir);
+            profiler.write_flamegraph(
+                &format!("{dir}/static_verifier_constraints.svg"),
+                "Static Verifier Constraints",
+                ctx.advice.len(),
+            );
+            profiler.write_flamegraph_reversed(
+                &format!("{dir}/static_verifier_constraints_rev.svg"),
+                "Static Verifier Constraints (reversed)",
+                ctx.advice.len(),
+            );
+        }
+
         proof_wire
     }
 
@@ -181,7 +205,12 @@ impl StaticVerifierCircuit {
         let range = builder.range_chip();
         let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
+
+        let mut profiler = crate::profiling::CellProfiler::new("populate", ctx.advice.len());
+
+        profiler.push("verify_stark_constraints", ctx.advice.len());
         let proof_wire = &self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
+        profiler.pop(ctx.advice.len());
 
         debug_assert!(
             proof_wire
@@ -191,7 +220,24 @@ impl StaticVerifierCircuit {
             "RootVerifierCircuit has no cached trace"
         );
 
+        profiler.push("extract_public_values", ctx.advice.len());
         let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
+        profiler.pop(ctx.advice.len());
+
+        #[cfg(feature = "cell-profiling")]
+        if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
+            let _ = std::fs::create_dir_all(&dir);
+            profiler.write_flamegraph(
+                &format!("{dir}/populate.svg"),
+                "Static Verifier Populate",
+                ctx.advice.len(),
+            );
+            profiler.write_flamegraph_reversed(
+                &format!("{dir}/populate_rev.svg"),
+                "Static Verifier Populate (reversed)",
+                ctx.advice.len(),
+            );
+        }
 
         let pvs_vec = pvs_wire.to_vec();
         let pvs_fr = pvs_vec.iter().map(|v| *v.value()).collect_vec();

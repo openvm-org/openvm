@@ -16,6 +16,10 @@
 //! [`StaticVerifierCircuit::populate_verify_stark_constraints`].
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "cell-profiling")]
+mod context_tree;
+pub mod profiling;
+
 mod circuit;
 pub mod config;
 pub mod field;
