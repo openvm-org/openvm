@@ -141,6 +141,25 @@ impl BabyBearExt4Chip {
         )
     }
 
+    /// Fused `a * b + c` where `b` is a base-field scalar.
+    /// Uses `mul_add` gates to save cells vs separate `scalar_mul` + `add`.
+    pub fn scalar_mul_add(
+        &self,
+        ctx: &mut Context<Fr>,
+        a: BabyBearExt4Wire,
+        b: BabyBearWire,
+        c: BabyBearExt4Wire,
+    ) -> BabyBearExt4Wire {
+        BabyBearExt4Wire(
+            a.0.iter()
+                .zip(c.0.iter())
+                .map(|(ai, ci)| self.base.mul_add(ctx, *ai, b, *ci))
+                .collect_vec()
+                .try_into()
+                .unwrap(),
+        )
+    }
+
     pub fn select(
         &self,
         ctx: &mut Context<Fr>,

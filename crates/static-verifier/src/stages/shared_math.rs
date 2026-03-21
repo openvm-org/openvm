@@ -41,9 +41,12 @@ pub(crate) fn horner_eval_ext_poly_assigned(
     if coeffs.is_empty() {
         return ext_chip.zero(ctx);
     }
+    // Pre-reduce x so that ext_mul doesn't redundantly reduce the same
+    // high-max_bits components on every Horner step.
+    let x_reduced = ext_chip.reduce_max_bits(ctx, *x);
     let mut acc = *coeffs.last().unwrap();
     for coeff in coeffs.iter().rev().skip(1) {
-        acc = ext_chip.mul(ctx, acc, *x);
+        acc = ext_chip.mul(ctx, acc, x_reduced);
         acc = ext_chip.add(ctx, acc, *coeff);
     }
     acc
@@ -58,10 +61,12 @@ pub(crate) fn horner_eval_ext_poly_f_assigned(
     if coeffs.is_empty() {
         return ext_chip.zero(ctx);
     }
+    // Pre-reduce x so that each mul_add step inside the loop doesn't redundantly
+    // reduce the same high-max_bits value on every iteration.
+    let x_reduced = ext_chip.base().reduce_max_bits(ctx, *x);
     let mut acc = *coeffs.last().unwrap();
     for coeff in coeffs.iter().rev().skip(1) {
-        acc = ext_chip.scalar_mul(ctx, acc, *x);
-        acc = ext_chip.add(ctx, acc, *coeff);
+        acc = ext_chip.scalar_mul_add(ctx, acc, x_reduced, *coeff);
     }
     acc
 }
