@@ -297,9 +297,9 @@ fn binary_k_fold_assigned(
     let inv_tw = omega_k_inv.powers().take(1usize << (k - 1)).collect();
     let half = RootF::ONE.halve();
 
-    let mut x_pow = x;
+    let mut x_pow = base_chip.reduce_max_bits(ctx, x);
     let x_inv = invert_base_assigned(ctx, base_chip, x);
-    let mut x_inv_pow = x_inv;
+    let mut x_inv_pow = base_chip.reduce_max_bits(ctx, x_inv);
 
     for (j, alpha) in alphas.iter().enumerate() {
         let m = n >> (j + 1);
@@ -318,7 +318,9 @@ fn binary_k_fold_assigned(
             values[i] = ext_chip.add(ctx, lo, fold);
         }
         x_pow = base_chip.square(ctx, x_pow);
+        x_pow = base_chip.reduce_max_bits(ctx, x_pow);
         x_inv_pow = base_chip.square(ctx, x_inv_pow);
+        x_inv_pow = base_chip.reduce_max_bits(ctx, x_inv_pow);
     }
     values[0]
 }
@@ -380,9 +382,11 @@ fn constrain_merkle_path(
     let query_bits = query_bits.to_vec();
 
     for (bit, &sibling) in query_bits.iter().zip(merkle_path.siblings.iter()) {
-        let left_right = compress_bn254_digests(ctx, ext_chip.range(), cur, sibling);
-        let right_left = compress_bn254_digests(ctx, ext_chip.range(), sibling, cur);
-        cur = gate.select(ctx, right_left, left_right, *bit);
+        // Select input order first, then compress once (instead of compressing
+        // both orderings and selecting after). Halves Poseidon2 calls per level.
+        let left = gate.select(ctx, sibling, cur, *bit);
+        let right = gate.select(ctx, cur, sibling, *bit);
+        cur = compress_bn254_digests(ctx, ext_chip.range(), left, right);
     }
 
     ctx.constrain_equal(&cur, &root_digest);
@@ -580,6 +584,7 @@ pub(crate) fn constrain_whir_verification(
                         mu_power_idx += 1;
                     }
                 }
+
                 let codeword_vals = codeword_vals.into_iter().flatten().collect::<Vec<_>>();
                 binary_k_fold_assigned(ctx, ext_chip, codeword_vals, &alphas_round, zi_root)
             } else {
@@ -591,6 +596,7 @@ pub(crate) fn constrain_whir_verification(
                     merkle_path,
                     codeword_commitment_roots[round_idx - 1],
                 );
+
                 let opened_values = merkle_path
                     .leaf_values
                     .iter()
@@ -650,19 +656,21 @@ pub(crate) fn constrain_whir_verification(
             let mut z0_pows = Vec::with_capacity(slc_len);
             z0_pows.push(*z0);
             for _ in 1..slc_len {
-                let next = ext_chip.mul(
-                    ctx,
-                    *z0_pows.last().expect("z0 power sequence is non-empty"),
-                    *z0_pows.last().expect("z0 power sequence is non-empty"),
-                );
+                let prev = z0_pows.last().unwrap();
+                let next = ext_chip.square(ctx, *prev);
                 z0_pows.push(next);
             }
-            let z0_max = *z0_pows.last().expect("z0 power sequence is non-empty");
+            let z0_max = *z0_pows.last().unwrap();
+            // Pre-reduce z0_pows so eq_mle doesn't redundantly reduce them.
+            let z0_pows_reduced: Vec<_> = z0_pows
+                .iter()
+                .map(|p| ext_chip.reduce_max_bits(ctx, *p))
+                .collect();
             let eq = eval_eq_mle_assigned(
                 ctx,
                 ext_chip,
                 alpha_slc,
-                &z0_pows[..z0_pows.len().saturating_sub(1)],
+                &z0_pows_reduced[..z0_pows_reduced.len().saturating_sub(1)],
             );
             let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, final_poly, &z0_max);
             let term = ext_chip.mul(ctx, *gamma, eq);
@@ -673,25 +681,34 @@ pub(crate) fn constrain_whir_verification(
 
         profiler.push("query_point_evals", ctx.advice.len());
         let mut gamma_pow = ext_chip.mul(ctx, *gamma, *gamma);
-        for zi in &zs_per_round[round_idx] {
+        for zi in zs_per_round[round_idx].iter() {
             let mut zi_pows = Vec::with_capacity(slc_len);
             zi_pows.push(*zi);
             for _ in 1..slc_len {
-                let next = ext_chip.base().mul(
-                    ctx,
-                    *zi_pows.last().expect("zi power sequence is non-empty"),
-                    *zi_pows.last().expect("zi power sequence is non-empty"),
-                );
+                let prev = zi_pows.last().unwrap();
+                let next = ext_chip.base().square(ctx, *prev);
                 zi_pows.push(next);
             }
-            let zi_max = *zi_pows.last().expect("zi power sequence is non-empty");
+            // Pre-reduce zi_pows so eq_mle and poly eval don't redundantly reduce.
+            let zi_pows_reduced: Vec<_> = zi_pows
+                .iter()
+                .map(|p| ext_chip.base().reduce_max_bits(ctx, *p))
+                .collect();
+
             let eq = eval_eq_mle_ef_f_assigned(
                 ctx,
                 ext_chip,
                 alpha_slc,
-                &zi_pows[..zi_pows.len().saturating_sub(1)],
+                &zi_pows_reduced[..zi_pows_reduced.len().saturating_sub(1)],
             );
-            let poly_eval = horner_eval_ext_poly_f_assigned(ctx, ext_chip, final_poly, &zi_max);
+
+            let poly_eval = horner_eval_ext_poly_f_assigned(
+                ctx,
+                ext_chip,
+                final_poly,
+                zi_pows_reduced.last().unwrap(),
+            );
+
             let term = ext_chip.mul(ctx, gamma_pow, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);
