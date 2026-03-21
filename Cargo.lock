@@ -5100,6 +5100,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-continuations",
  "openvm-cpu-backend",
+ "openvm-cuda-backend",
  "openvm-recursion-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",

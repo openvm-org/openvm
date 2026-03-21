@@ -399,11 +399,16 @@ pub(crate) fn constrain_whir_verification(
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
 ) {
+    let mut profiler =
+        crate::profiling::CellProfiler::new("whir_verification", ctx.advice.len());
+
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
     let params = &mvk0.params;
     let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
+
+    profiler.push("mu_pows_and_claim", ctx.advice.len());
 
     let mu_pow_witness = whir_wire.mu_pow_witness;
     transcript.check_witness(ctx, base_chip, params.whir.mu_pow_bits, &mu_pow_witness);
@@ -440,6 +445,8 @@ pub(crate) fn constrain_whir_verification(
         }
     }
 
+    profiler.pop(ctx.advice.len());
+
     let mut folding_alphas = Vec::new();
     let mut z0_challenges = Vec::new();
     let mut gammas = Vec::with_capacity(num_whir_rounds);
@@ -454,10 +461,14 @@ pub(crate) fn constrain_whir_verification(
     let mut log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
 
     for (round_idx, round_params) in params.whir.rounds.iter().enumerate() {
+        let round_label = format!("round_{round_idx}");
+        profiler.push(&round_label, ctx.advice.len());
+
         let is_initial_round = round_idx == 0;
         let is_final_round = round_idx + 1 == num_whir_rounds;
         let mut alphas_round = Vec::new();
 
+        profiler.push("sumcheck", ctx.advice.len());
         for _ in 0..k_whir {
             if let Some(evals) = whir_sumcheck_polys.get(sumcheck_cursor) {
                 let ev1 = evals[0];
@@ -489,6 +500,7 @@ pub(crate) fn constrain_whir_verification(
             }
         }
         folding_counts_per_round.push(alphas_round.len());
+        profiler.pop(ctx.advice.len());
 
         let y0 = if is_final_round {
             for coeff in final_poly {
@@ -523,6 +535,7 @@ pub(crate) fn constrain_whir_verification(
         let mut ys_round = Vec::with_capacity(num_queries);
         let mut zs_round = Vec::with_capacity(num_queries);
 
+        profiler.push("queries", ctx.advice.len());
         for query_idx in 0..num_queries {
             let query_index = transcript.sample_bits(ctx, ext_chip.base(), query_bits);
             query_index_bits.push(query_bits);
@@ -589,7 +602,9 @@ pub(crate) fn constrain_whir_verification(
             zs_round.push(zi);
             ys_round.push(yi);
         }
+        profiler.pop(ctx.advice.len());
 
+        profiler.push("gamma_accumulation", ctx.advice.len());
         let gamma = transcript.sample_ext(ctx, ext_chip.base());
         if let Some(y0) = y0 {
             let y0_term = ext_chip.mul(ctx, y0, gamma);
@@ -603,23 +618,34 @@ pub(crate) fn constrain_whir_verification(
         }
 
         gammas.push(gamma);
+        profiler.pop(ctx.advice.len());
+
         zs_per_round.push(zs_round);
         log_rs_domain_size = log_rs_domain_size.saturating_sub(1);
+        profiler.pop(ctx.advice.len());
     }
 
+    profiler.push("final_verification", ctx.advice.len());
     let rounds = query_counts_per_round.len();
     let t = k_whir * rounds;
+
+    profiler.push("eq_mle_prefix_suffix", ctx.advice.len());
     let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
     let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, final_poly, &u_cube[t..]);
     let mut final_acc = ext_chip.mul(ctx, prefix, suffix);
+    profiler.pop(ctx.advice.len());
 
     let mut alpha_offset = k_whir;
     for round_idx in 0..rounds {
+        let final_round_label = format!("final_round_{round_idx}");
+        profiler.push(&final_round_label, ctx.advice.len());
+
         let gamma = &gammas[round_idx];
         let alpha_slc = &folding_alphas[alpha_offset..t];
         let slc_len = (t - alpha_offset) + 1;
 
         if round_idx + 1 != rounds {
+            profiler.push("z0_ood_eval", ctx.advice.len());
             let z0 = &z0_challenges[round_idx];
             let mut z0_pows = Vec::with_capacity(slc_len);
             z0_pows.push(*z0);
@@ -642,8 +668,10 @@ pub(crate) fn constrain_whir_verification(
             let term = ext_chip.mul(ctx, *gamma, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);
+            profiler.pop(ctx.advice.len());
         }
 
+        profiler.push("query_point_evals", ctx.advice.len());
         let mut gamma_pow = ext_chip.mul(ctx, *gamma, *gamma);
         for zi in &zs_per_round[round_idx] {
             let mut zi_pows = Vec::with_capacity(slc_len);
@@ -669,11 +697,29 @@ pub(crate) fn constrain_whir_verification(
             final_acc = ext_chip.add(ctx, final_acc, term);
             gamma_pow = ext_chip.mul(ctx, gamma_pow, *gamma);
         }
+        profiler.pop(ctx.advice.len());
 
+        profiler.pop(ctx.advice.len());
         alpha_offset += k_whir;
     }
 
     let final_residual = ext_chip.sub(ctx, final_acc, final_claim);
     let zero = ext_chip.zero(ctx);
     ext_chip.assert_equal(ctx, final_residual, zero);
+    profiler.pop(ctx.advice.len());
+
+    #[cfg(feature = "cell-profiling")]
+    if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
+        let _ = std::fs::create_dir_all(&dir);
+        profiler.write_flamegraph(
+            &format!("{dir}/whir_verification.svg"),
+            "WHIR Verification",
+            ctx.advice.len(),
+        );
+        profiler.write_flamegraph_reversed(
+            &format!("{dir}/whir_verification_rev.svg"),
+            "WHIR Verification (reversed)",
+            ctx.advice.len(),
+        );
+    }
 }
