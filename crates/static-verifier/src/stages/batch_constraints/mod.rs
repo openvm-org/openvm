@@ -220,12 +220,15 @@ pub(crate) fn eval_eq_mle_assigned(
     assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut acc = one;
+    // Rewrite: 2xy - x + (1-y) = (1-y) + x(2y-1).
+    // This replaces one ext×ext mul (xy) + scalar_mul (2*xy)
+    // with just a scalar_mul (2*y) + one ext×ext mul (x * (2y-1)).
     for (x_i, y_i) in x.iter().zip(y.iter()) {
-        let xy = ext_chip.mul(ctx, *x_i, *y_i);
-        let two_xy = ext_chip.mul_base_const(ctx, xy, RootF::TWO);
+        let two_y_minus_one = ext_chip.mul_base_const(ctx, *y_i, RootF::TWO);
+        let two_y_minus_one = ext_chip.sub(ctx, two_y_minus_one, one);
+        let x_term = ext_chip.mul(ctx, *x_i, two_y_minus_one);
         let one_minus_y = ext_chip.sub(ctx, one, *y_i);
-        let factor = ext_chip.sub(ctx, two_xy, *x_i);
-        let factor = ext_chip.add(ctx, factor, one_minus_y);
+        let factor = ext_chip.add(ctx, one_minus_y, x_term);
         acc = ext_chip.mul(ctx, acc, factor);
     }
     acc
@@ -238,13 +241,17 @@ pub(crate) fn eval_eq_mle_ef_f_assigned(
     y: &[BabyBearWire],
 ) -> BabyBearExtWire {
     assert_eq!(x.len(), y.len(), "eq_mle vector length mismatch");
-    let one = ext_chip.base().one(ctx);
+    let one_base = ext_chip.base().one(ctx);
     let mut acc = ext_chip.from_base_const(ctx, RootF::ONE);
+    // Rewrite: 2xy - x + (1-y) = (1-y) + x(2y-1).
+    // Since y is base-field: compute 2y-1 as a base-field constant,
+    // then scalar_mul x by it. Saves one scalar_mul (the old xy + 2*xy chain).
     for (x_i, y_i) in x.iter().zip(y.iter()) {
-        let xy = ext_chip.scalar_mul(ctx, *x_i, *y_i);
-        let two_xy = ext_chip.mul_base_const(ctx, xy, RootF::TWO);
-        let one_minus_y = ext_chip.base().sub(ctx, one, *y_i);
-        let mut factor = ext_chip.sub(ctx, two_xy, *x_i);
+        let two_y = ext_chip.base().mul_const(ctx, *y_i, RootF::TWO);
+        let two_y_minus_one = ext_chip.base().sub(ctx, two_y, one_base);
+        let x_term = ext_chip.scalar_mul(ctx, *x_i, two_y_minus_one);
+        let one_minus_y = ext_chip.base().sub(ctx, one_base, *y_i);
+        let mut factor = x_term;
         factor.0[0] = ext_chip.base().add(ctx, factor.0[0], one_minus_y);
         acc = ext_chip.mul(ctx, acc, factor);
     }

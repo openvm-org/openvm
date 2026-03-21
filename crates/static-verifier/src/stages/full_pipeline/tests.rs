@@ -32,7 +32,7 @@ use crate::{
 };
 
 const END_TO_END_K: u32 = 22;
-const END_TO_END_LOOKUP_BITS: usize = 8;
+const END_TO_END_LOOKUP_BITS: usize = END_TO_END_K as usize - 1;
 const END_TO_END_MIN_ROWS: usize = 32768;
 
 fn run_mock(

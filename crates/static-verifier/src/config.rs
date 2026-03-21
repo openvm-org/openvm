@@ -16,7 +16,7 @@ impl Default for StaticVerifierShape {
     fn default() -> Self {
         Self {
             k: 12,
-            lookup_bits: 8,
+            lookup_bits: 11,
             minimum_rows: 20,
             instance_columns: 1,
         }

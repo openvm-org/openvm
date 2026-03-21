@@ -188,14 +188,16 @@ fn eval_mobius_eq_mle_assigned(
 ) -> BabyBearExtWire {
     assert_eq!(u.len(), x.len(), "mobius-eq arity mismatch");
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
+    let two = ext_chip.from_base_const(ctx, RootF::TWO);
+    let three = RootF::from_u64(3);
     let mut acc = one;
+    // (1-2u)(1-x) + ux = (1-x) + u(3x-2)
     for (u_i, x_i) in u.iter().zip(x.iter()) {
-        let two_u = ext_chip.mul_base_const(ctx, *u_i, RootF::TWO);
-        let w0 = ext_chip.sub(ctx, one, two_u);
         let one_minus_x = ext_chip.sub(ctx, one, *x_i);
-        let left = ext_chip.mul(ctx, w0, one_minus_x);
-        let right = ext_chip.mul(ctx, *u_i, *x_i);
-        let factor = ext_chip.add(ctx, left, right);
+        let three_x_minus_two = ext_chip.mul_base_const(ctx, *x_i, three);
+        let three_x_minus_two = ext_chip.sub(ctx, three_x_minus_two, two);
+        let u_term = ext_chip.mul(ctx, *u_i, three_x_minus_two);
+        let factor = ext_chip.add(ctx, one_minus_x, u_term);
         acc = ext_chip.mul(ctx, acc, factor);
     }
     acc
@@ -212,18 +214,16 @@ fn eval_mle_evals_at_point_assigned(
         1usize << x.len(),
         "MLE table length must be 2^arity",
     );
-    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut values = evals.to_vec();
     let mut len = values.len();
     for xj in x.iter().rev() {
         len >>= 1;
-        let one_minus_xj = ext_chip.sub(ctx, one, *xj);
         for i in 0..len {
             let lo = values[i];
             let hi = values[i + len];
-            let lo_term = ext_chip.mul(ctx, lo, one_minus_xj);
-            let hi_term = ext_chip.mul(ctx, hi, *xj);
-            values[i] = ext_chip.add(ctx, lo_term, hi_term);
+            let diff = ext_chip.sub(ctx, hi, lo);
+            let weighted = ext_chip.mul(ctx, diff, *xj);
+            values[i] = ext_chip.add(ctx, lo, weighted);
         }
     }
     values
@@ -293,9 +293,13 @@ fn binary_k_fold_assigned(
     let k = alphas.len();
     let omega_k = RootF::two_adic_generator(k);
     let omega_k_inv = omega_k.inverse();
-    let tw = omega_k.powers().take(1usize << (k - 1)).collect();
-    let inv_tw = omega_k_inv.powers().take(1usize << (k - 1)).collect();
+    let tw: Vec<RootF> = omega_k.powers().take(1usize << (k - 1)).collect();
     let half = RootF::ONE.halve();
+    let inv_tw_half: Vec<RootF> = omega_k_inv
+        .powers()
+        .take(1usize << (k - 1))
+        .map(|p| p * half)
+        .collect();
 
     let mut x_pow = base_chip.reduce_max_bits(ctx, x);
     let x_inv = invert_base_assigned(ctx, base_chip, x);
@@ -305,8 +309,7 @@ fn binary_k_fold_assigned(
         let m = n >> (j + 1);
         for i in 0..m {
             let t = base_chip.mul_const(ctx, x_pow, tw[i << j]);
-            let t_inv = base_chip.mul_const(ctx, x_inv_pow, inv_tw[i << j]);
-            let t_inv_half = base_chip.mul_const(ctx, t_inv, half);
+            let t_inv_half = base_chip.mul_const(ctx, x_inv_pow, inv_tw_half[i << j]);
 
             let lo = values[i];
             let hi = values[i + m];
@@ -572,12 +575,10 @@ pub(crate) fn constrain_whir_verification(
                         let mu_pow = mu_pows[mu_power_idx];
                         for (row_idx, row) in merkle_path.leaf_values.iter().enumerate() {
                             let opened_base = row[col_idx];
-                            let opened_ext = ext_chip.from_base_var(ctx, opened_base);
-                            let weighted = ext_chip.mul(ctx, opened_ext, mu_pow);
                             codeword_vals[row_idx] = if let Some(prev) = codeword_vals[row_idx] {
-                                Some(ext_chip.add(ctx, prev, weighted))
+                                Some(ext_chip.scalar_mul_add(ctx, mu_pow, opened_base, prev))
                             } else {
-                                Some(weighted)
+                                Some(ext_chip.scalar_mul(ctx, mu_pow, opened_base))
                             };
                         }
                         mu_power_idx += 1;

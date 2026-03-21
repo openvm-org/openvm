@@ -20,7 +20,7 @@ use crate::{
 fn run_mock(build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(12)
-        .use_lookup_bits(8)
+        .use_lookup_bits(11)
         .use_instance_columns(1);
     build(&mut builder);
 
