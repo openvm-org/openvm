@@ -217,3 +217,46 @@ fn pipeline_constraints_only_matches_native_for_preprocessed_fixture() {
     let sels = (0..height).map(|i| i % 2 == 0).collect::<Vec<_>>();
     assert_fixture_constraints_only(&engine, PreprocessedFibFixture::new(0, 1, sels));
 }
+
+#[cfg(feature = "cell-profiling")]
+#[test]
+fn pipeline_cell_count_profiling() {
+    use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
+    use openvm_stark_sdk::{
+        config::log_up_params::log_up_security_params_baby_bear_100_bits,
+        openvm_stark_backend::test_utils::FibFixture,
+    };
+
+    let system_params = SystemParams::new(
+        4,  // log_blowup
+        2,  // l_skip
+        19, // n_stack
+        16, // w_stack
+        10,
+        20, // folding pow
+        20, // mu pow
+        WhirProximityStrategy::ListDecoding { m: 2 },
+        100,
+        log_up_security_params_baby_bear_100_bits(),
+    );
+    let engine: BabyBearBn254Poseidon2CpuEngine =
+        BabyBearBn254Poseidon2CpuEngine::new(system_params);
+    let (vk, proof) = FibFixture::new(0, 1, 1 << 5).keygen_and_prove(&engine);
+    let log_heights_per_air = log_heights_per_air_from_proof(&proof);
+    let dummy_cached_commit = [Bn254Scalar::ZERO];
+    let circuit = StaticVerifierCircuit::try_new(vk, dummy_cached_commit, &log_heights_per_air)
+        .expect("static circuit params");
+
+    let profile_dir = std::env::var("OPENVM_PROFILE_DIR").unwrap_or_else(|_| "profile".to_string());
+    std::env::set_var("OPENVM_PROFILE_DIR", &profile_dir);
+
+    run_mock(0, true, |ctx, ext_chip| {
+        let initial_cells = ctx.advice.len();
+        circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
+        let final_cells = ctx.advice.len();
+        assert!(
+            final_cells > initial_cells,
+            "expected advice cells to increase during populate_verify_stark_constraints"
+        );
+    });
+}

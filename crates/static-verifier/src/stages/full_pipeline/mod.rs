@@ -193,8 +193,13 @@ pub fn constrained_verify(
         .map(|&air_id| log_heights_per_air[air_id] as isize - l_skip as isize)
         .collect();
 
+    let mut profiler =
+        crate::profiling::CellProfiler::new("constrained_verify", ctx.advice.len());
+
     let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
     let mut transcript = TranscriptGadget::new(ctx);
+
+    profiler.push("observe_preamble", ctx.advice.len());
     observe_preamble(
         ctx,
         ext_chip.base(),
@@ -206,7 +211,9 @@ pub fn constrained_verify(
         digest_wire_from_root(mvk_pre_hash_root),
         digest_wire_from_root(proof_wire.common_main_commit_root),
     );
+    profiler.pop(ctx.advice.len());
 
+    profiler.push("batch_constraints", ctx.advice.len());
     let batch = constrain_batch_constraints_verification(
         ctx,
         ext_chip,
@@ -218,8 +225,11 @@ pub fn constrained_verify(
         trace_id_to_air_id,
         proof_wire.public_values.clone(),
     );
+    profiler.pop(ctx.advice.len());
 
     let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);
+
+    profiler.push("stacked_reduction", ctx.advice.len());
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
         ext_chip,
@@ -232,6 +242,7 @@ pub fn constrained_verify(
         &batch.column_openings,
         &batch.r,
     );
+    profiler.pop(ctx.advice.len());
 
     let u_cube = {
         let u = &stacked_reduction.u;
@@ -258,6 +269,7 @@ pub fn constrained_verify(
         commits
     };
 
+    profiler.push("whir_verification", ctx.advice.len());
     constrain_whir_verification(
         ctx,
         ext_chip,
@@ -268,6 +280,22 @@ pub fn constrained_verify(
         &initial_commitment_roots,
         &u_cube,
     );
+    profiler.pop(ctx.advice.len());
+
+    #[cfg(feature = "cell-profiling")]
+    if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
+        let _ = std::fs::create_dir_all(&dir);
+        profiler.write_flamegraph(
+            &format!("{dir}/constrained_verify.svg"),
+            "Constrained Verify Sub-stages",
+            ctx.advice.len(),
+        );
+        profiler.write_flamegraph_reversed(
+            &format!("{dir}/constrained_verify_rev.svg"),
+            "Constrained Verify Sub-stages (reversed)",
+            ctx.advice.len(),
+        );
+    }
 }
 
 /// Helper function, purely on out-of-circuit values.
