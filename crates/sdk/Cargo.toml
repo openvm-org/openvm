@@ -112,6 +112,10 @@ cuda = [
     "openvm-verify-stark-circuit/cuda",
     "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
+cell-profiling = [
+    "evm-prove",
+    "openvm-static-verifier/cell-profiling",
+]
 
 # [[example]]
 # name = "sdk_evm"

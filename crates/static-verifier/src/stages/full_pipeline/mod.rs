@@ -281,6 +281,8 @@ pub fn constrained_verify(
     );
     profiler.pop(ctx.advice.len());
 
+    profiler.print(ctx.advice.len());
+
     #[cfg(feature = "cell-profiling")]
     if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
         let _ = std::fs::create_dir_all(&dir);

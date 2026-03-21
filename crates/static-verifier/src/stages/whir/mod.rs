@@ -725,6 +725,8 @@ pub(crate) fn constrain_whir_verification(
     ext_chip.assert_equal(ctx, final_residual, zero);
     profiler.pop(ctx.advice.len());
 
+    profiler.print(ctx.advice.len());
+
     #[cfg(feature = "cell-profiling")]
     if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
         let _ = std::fs::create_dir_all(&dir);
