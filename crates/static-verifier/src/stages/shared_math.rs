@@ -38,8 +38,11 @@ pub(crate) fn horner_eval_ext_poly_assigned(
     coeffs: &[BabyBearExtWire],
     x: &BabyBearExtWire,
 ) -> BabyBearExtWire {
-    let mut acc = ext_chip.zero(ctx);
-    for coeff in coeffs.iter().rev() {
+    if coeffs.is_empty() {
+        return ext_chip.zero(ctx);
+    }
+    let mut acc = *coeffs.last().unwrap();
+    for coeff in coeffs.iter().rev().skip(1) {
         acc = ext_chip.mul(ctx, acc, *x);
         acc = ext_chip.add(ctx, acc, *coeff);
     }
@@ -52,8 +55,11 @@ pub(crate) fn horner_eval_ext_poly_f_assigned(
     coeffs: &[BabyBearExtWire],
     x: &BabyBearWire,
 ) -> BabyBearExtWire {
-    let mut acc = ext_chip.zero(ctx);
-    for coeff in coeffs.iter().rev() {
+    if coeffs.is_empty() {
+        return ext_chip.zero(ctx);
+    }
+    let mut acc = *coeffs.last().unwrap();
+    for coeff in coeffs.iter().rev().skip(1) {
         acc = ext_chip.scalar_mul(ctx, acc, *x);
         acc = ext_chip.add(ctx, acc, *coeff);
     }

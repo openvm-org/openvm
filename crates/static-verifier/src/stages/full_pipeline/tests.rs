@@ -239,9 +239,20 @@ fn pipeline_cell_count_profiling() {
         100,
         log_up_security_params_baby_bear_100_bits(),
     );
-    let engine: BabyBearBn254Poseidon2CpuEngine =
-        BabyBearBn254Poseidon2CpuEngine::new(system_params);
-    let (vk, proof) = FibFixture::new(0, 1, 1 << 5).keygen_and_prove(&engine);
+    let fib = FibFixture::new(0, 1, 1 << 5);
+    let (vk, proof) = {
+        #[cfg(feature = "cuda")]
+        {
+            let engine =
+                openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine::new(system_params);
+            fib.keygen_and_prove(&engine)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let engine = BabyBearBn254Poseidon2CpuEngine::new(system_params);
+            fib.keygen_and_prove(&engine)
+        }
+    };
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
     let dummy_cached_commit = [Bn254Scalar::ZERO];
     let circuit = StaticVerifierCircuit::try_new(vk, dummy_cached_commit, &log_heights_per_air)
@@ -250,13 +261,19 @@ fn pipeline_cell_count_profiling() {
     let profile_dir = std::env::var("OPENVM_PROFILE_DIR").unwrap_or_else(|_| "profile".to_string());
     std::env::set_var("OPENVM_PROFILE_DIR", &profile_dir);
 
-    run_mock(0, true, |ctx, ext_chip| {
-        let initial_cells = ctx.advice.len();
-        circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
-        let final_cells = ctx.advice.len();
-        assert!(
-            final_cells > initial_cells,
-            "expected advice cells to increase during populate_verify_stark_constraints"
-        );
-    });
+    let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
+        .use_k(END_TO_END_K as usize)
+        .use_lookup_bits(END_TO_END_LOOKUP_BITS)
+        .use_instance_columns(0);
+    let range = builder.range_chip();
+    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
+    let ctx = builder.main(0);
+
+    let initial_cells = ctx.advice.len();
+    circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
+    let final_cells = ctx.advice.len();
+    assert!(
+        final_cells > initial_cells,
+        "expected advice cells to increase during populate_verify_stark_constraints"
+    );
 }
