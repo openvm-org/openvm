@@ -143,16 +143,17 @@ impl StaticVerifierProvingKey {
         .use_instance_columns(self.shape.instance_columns);
 
         let public_inputs = self.circuit.populate(&mut builder, proof);
+        let instances_vec = public_inputs.to_vec();
 
         let snark = gen_evm_proof_shplonk(
             params,
             &self.pinning.pk,
             builder,
-            vec![public_inputs.clone()],
+            vec![instances_vec.clone()],
         );
 
         RawEvmProof {
-            instances: public_inputs,
+            instances: instances_vec,
             proof: snark,
         }
     }
@@ -163,8 +164,10 @@ impl StaticVerifierProvingKey {
 /// Returns the gas used on success, or an error message on failure.
 #[cfg(feature = "evm-verify")]
 pub fn evm_verify(deployment_code: &[u8], proof: &RawEvmProof) -> Result<u64, String> {
-    let calldata =
-        snark_verifier_sdk::evm::encode_calldata(&[proof.instances.as_slice()], &proof.proof);
-    snark_verifier_sdk::evm::evm_verify(deployment_code.to_vec(), calldata)
-        .map_err(|e| format!("EVM verification failed: {e}"))
+    snark_verifier_sdk::evm::evm_verify(
+        deployment_code.to_vec(),
+        vec![proof.instances.clone()],
+        proof.proof.clone(),
+    )
+    .map_err(|e| format!("EVM verification failed: {e}"))
 }

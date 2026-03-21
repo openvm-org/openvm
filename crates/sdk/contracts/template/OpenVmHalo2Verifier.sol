@@ -18,15 +18,17 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     /// @dev Proof verification failed
     error ProofVerificationFailed();
 
-    /// @dev The length of the proof data, in bytes.
-    uint256 private constant PROOF_DATA_LENGTH = (12 + 43) * 32;
+    /// @dev The length of the proof data, in bytes. This is the raw SHPLONK proof
+    /// (no KZG accumulator).
+    uint256 private constant PROOF_DATA_LENGTH = {PROOF_DATA_LENGTH};
 
     /// @dev The length of the public values, in bytes. This value is set by
     /// OpenVM and is guaranteed to be no larger than 8192.
     uint256 private constant PUBLIC_VALUES_LENGTH = {PUBLIC_VALUES_LENGTH};
 
-    /// @dev The length of the full proof, in bytes
-    uint256 private constant FULL_PROOF_LENGTH = (12 + 2 + PUBLIC_VALUES_LENGTH + 43) * 32;
+    /// @dev The length of the full proof, in bytes.
+    /// Layout: appExeCommit (32) + appVmCommit (32) + PUBLIC_VALUES_LENGTH * 32 + PROOF_DATA_LENGTH
+    uint256 private constant FULL_PROOF_LENGTH = (2 + PUBLIC_VALUES_LENGTH) * 32 + PROOF_DATA_LENGTH;
 
     /// @dev The version of OpenVM that generated this verifier.
     string public constant OPENVM_VERSION = "{OPENVM_VERSION}";
@@ -35,16 +37,13 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     /// use with the `snark-verifier` verification.
     ///
     /// @dev The verifier expected proof format is:
-    /// proof[..12 * 32]: KZG accumulator
-    /// proof[12 * 32..13 * 32]: app exe commit
-    /// proof[13 * 32..14 * 32]: app vm commit
-    /// proof[14 * 32..(14 + PUBLIC_VALUES_LENGTH) * 32]: publicValues[0..PUBLIC_VALUES_LENGTH]
-    /// proof[(14 + PUBLIC_VALUES_LENGTH) * 32..]: Proof Suffix
+    /// proof[0x00..0x20]: app exe commit
+    /// proof[0x20..0x40]: app vm commit
+    /// proof[0x40..(0x40 + PUBLIC_VALUES_LENGTH * 32)]: publicValues[0..PUBLIC_VALUES_LENGTH]
+    /// proof[(0x40 + PUBLIC_VALUES_LENGTH * 32)..]: proofData (raw SHPLONK proof bytes)
     ///
     /// @param publicValues The PVs revealed by the OpenVM guest program.
-    /// @param proofData All components of the proof except the public values and
-    /// app exe and vm commits. The expected format is:
-    /// `abi.encodePacked(kzgAccumulator, proofSuffix)`
+    /// @param proofData The raw SHPLONK proof bytes.
     /// @param appExeCommit The commitment to the OpenVM application executable whose execution
     /// is being verified.
     /// @param appVmCommit The commitment to the VM configuration.
@@ -74,7 +73,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     //
     /// ```solidity
     /// bytes memory proof =
-    ///     abi.encodePacked(proofData[0:0x180], appExeCommit, appVmCommit, publicValuesPayload, proofData[0x180:]);
+    ///     abi.encodePacked(appExeCommit, appVmCommit, publicValuesPayload, proofData);
     /// ```
     //
     /// where `publicValuesPayload` is a memory payload with each byte in
@@ -92,14 +91,14 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
         returns (MemoryPointer proofPtr)
     {
         uint256 fullProofLength = FULL_PROOF_LENGTH;
+        uint256 proofDataLength = PROOF_DATA_LENGTH;
 
         // The expected proof format using hex offsets:
         //
-        // proof[..0x180]: KZG accumulator
-        // proof[0x180..0x1a0]: app exe commit
-        // proof[0x1a0..0x1c0]: app vm commit
-        // proof[0x1c0..(0x1c0 + PUBLIC_VALUES_LENGTH * 32)]: publicValues[0..PUBLIC_VALUES_LENGTH]
-        // proof[(0x1c0 + PUBLIC_VALUES_LENGTH * 32)..]: Proof Suffix
+        // proof[0x00..0x20]: app exe commit
+        // proof[0x20..0x40]: app vm commit
+        // proof[0x40..(0x40 + PUBLIC_VALUES_LENGTH * 32)]: publicValues[0..PUBLIC_VALUES_LENGTH]
+        // proof[(0x40 + PUBLIC_VALUES_LENGTH * 32)..]: proofData
 
         /// @solidity memory-safe-assembly
         assembly {
@@ -107,26 +106,18 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
             // Allocate the memory as a safety measure.
             mstore(0x40, add(proofPtr, fullProofLength))
 
-            // Copy the KZG accumulator (length 0x180) into the beginning of
-            // the memory buffer
-            calldatacopy(proofPtr, proofData.offset, 0x180)
+            // Copy the App Exe Commit and App Vm Commit into the beginning of the memory buffer
+            mstore(proofPtr, appExeCommit)
+            mstore(add(proofPtr, 0x20), appVmCommit)
 
-            // Copy the App Exe Commit and App Vm Commit into the memory buffer
-            mstore(add(proofPtr, 0x180), appExeCommit)
-            mstore(add(proofPtr, 0x1a0), appVmCommit)
-
-            // Copy the Proof Suffix (length 43 * 32 = 0x560) into the
-            // end of the memory buffer, leaving PUBLIC_VALUES_LENGTH words in
-            // between for the publicValuesPayload.
-            //
-            // Begin copying from the end of the KZG accumulator in the
-            // calldata buffer (0x180)
-            let proofSuffixOffset := add(0x1c0, shl(5, PUBLIC_VALUES_LENGTH))
-            calldatacopy(add(proofPtr, proofSuffixOffset), add(proofData.offset, 0x180), 0x560)
+            // Copy the proofData into the end of the memory buffer, leaving
+            // PUBLIC_VALUES_LENGTH words in between for the publicValuesPayload.
+            let proofDataOffset := add(0x40, shl(5, PUBLIC_VALUES_LENGTH))
+            calldatacopy(add(proofPtr, proofDataOffset), proofData.offset, proofDataLength)
 
             // Copy each byte of the public values into the proof. It copies the
             // most significant bytes of public values first.
-            let publicValuesMemOffset := add(add(proofPtr, 0x1c0), 0x1f)
+            let publicValuesMemOffset := add(add(proofPtr, 0x40), 0x1f)
             for { let i := 0 } iszero(eq(i, PUBLIC_VALUES_LENGTH)) { i := add(i, 1) } {
                 calldatacopy(add(publicValuesMemOffset, shl(5, i)), add(publicValues.offset, i), 0x01)
             }

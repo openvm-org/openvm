@@ -36,5 +36,5 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 default = []
 cuda = ["dep:openvm-cuda-backend"]
 evm-prove = ["dep:snark-verifier-sdk", "dep:serde_with"]
-evm-verify = ["evm-prove"]
+evm-verify = ["evm-prove", "snark-verifier-sdk/revm"]
 cell-profiling = ["dep:inferno"]

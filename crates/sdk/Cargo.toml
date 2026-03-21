@@ -25,6 +25,13 @@ openvm-deferral-circuit = { workspace = true }
 # TODO[INT-6957]: evm-prove should enable root-prover
 openvm-continuations = { workspace = true, features = ["root-prover"] }
 openvm-verify-stark-host = { workspace = true }
+openvm-static-verifier = { workspace = true, optional = true }
+halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
+p3-bn254 = { workspace = true, optional = true }
+
+alloy-sol-types = { workspace = true, optional = true }
+forge-fmt = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 
 bitcode = { workspace = true }
 bon = { workspace = true }
@@ -52,18 +59,23 @@ openvm-toolchain-tests = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
-evm-prove = []
-# evm-prove = [
-#     "openvm-continuations/static-verifier",
-#     "dep:snark-verifier",
-#     "dep:snark-verifier-sdk",
-# ]
-evm-verify = []
-# evm-verify = [
-#     "evm-prove",
-#     "dep:alloy-sol-types",
-#     "dep:forge-fmt",
-# ]
+evm-prove = [
+    "dep:openvm-static-verifier",
+    "dep:halo2-base",
+    "dep:p3-bn254",
+    "openvm-static-verifier/evm-prove",
+]
+evm-verify = [
+    "evm-prove",
+    "openvm-static-verifier/evm-verify",
+    "dep:alloy-sol-types",
+    "dep:tempfile",
+]
+# Optional Solidity code formatting; requires Rust 1.91+ due to foundry/alloy transitive deps.
+evm-verify-fmt = [
+    "evm-verify",
+    "dep:forge-fmt",
+]
 metrics = ["openvm-continuations/metrics", "openvm-sdk-config/metrics"]
 aot = [
     "openvm-circuit/aot",
