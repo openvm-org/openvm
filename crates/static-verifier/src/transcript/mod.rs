@@ -3,8 +3,8 @@ use std::sync::OnceLock;
 use halo2_base::{
     gates::{range::RangeChip, GateInstructions, RangeInstructions},
     halo2_proofs::arithmetic::Field,
-    utils::{biguint_to_fe, fe_to_biguint},
-    AssignedValue, Context,
+    utils::{biguint_to_fe, fe_to_biguint, ScalarField},
+    AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -250,6 +250,83 @@ impl TranscriptGadget {
             BABY_BEAR_BITS,
         );
         rem
+    }
+
+    /// Optimized `sample_bits` for power-of-two moduli that returns the bit
+    /// decomposition directly, avoiding both the generic `div_mod` and the
+    /// caller's subsequent `num_to_bits`.
+    ///
+    /// Decomposes the reduced sample into `bits` boolean witnesses via
+    /// `inner_product` + `assert_bit`, then witnesses a quotient and
+    /// constrains `quotient * 2^bits + remainder == reduced_value`.
+    pub fn sample_bits_as_bits(
+        &mut self,
+        ctx: &mut Context<Fr>,
+        baby_bear: &BabyBearChip,
+        bits: usize,
+    ) -> Vec<AssignedValue<Fr>> {
+        assert!(
+            bits < (u32::BITS as usize),
+            "sample_bits_as_bits requires bits < 32: {bits}"
+        );
+        assert!(
+            (1u64 << bits) < BABY_BEAR_MODULUS_U64,
+            "sample_bits_as_bits requires (1 << bits) < modulus: bits={bits}"
+        );
+
+        if bits == 0 {
+            return Vec::new();
+        }
+        let sampled = self.sample(ctx, baby_bear);
+        // Reduce BabyBearWire so it is constrained to be less than BabyBear modulus
+        let sampled_reduced = baby_bear.reduce(ctx, sampled);
+        let gate = baby_bear.range().gate();
+        let range = baby_bear.range();
+        let val = sampled_reduced.value;
+
+        // Decompose the low `bits` of val into boolean witnesses via inner_product,
+        // mirroring the layout of GateChip::num_to_bits so we can extract cell refs.
+        let bit_witnesses = val
+            .value()
+            .to_u64_limbs(bits, 1)
+            .into_iter()
+            .map(|x| QuantumCell::Witness(Fr::from(x)));
+        let row_offset = ctx.advice.len();
+        let rem = gate.inner_product(
+            ctx,
+            bit_witnesses,
+            gate.pow_of_two[..bits]
+                .iter()
+                .map(|c| QuantumCell::Constant(*c)),
+        );
+
+        // Extract bit cells from inner_product layout (same indexing as num_to_bits)
+        let mut bit_cells = Vec::with_capacity(bits);
+        bit_cells.push(ctx.get(row_offset as isize));
+        for i in 1..bits {
+            bit_cells.push(ctx.get((row_offset + 1 + 3 * (i - 1)) as isize));
+        }
+        for &bit in &bit_cells {
+            gate.assert_bit(ctx, bit);
+        }
+
+        // Witness the quotient q = val >> bits, then constrain q * 2^bits + rem == val.
+        let q_val = fe_to_biguint(val.value()) >> bits;
+        let q = ctx.load_witness(biguint_to_fe::<Fr>(&q_val));
+        let reconstructed = gate.mul_add(
+            ctx,
+            QuantumCell::Existing(q),
+            QuantumCell::Constant(Fr::from(1u64 << bits)),
+            QuantumCell::Existing(rem),
+        );
+        ctx.constrain_equal(&reconstructed, &val);
+
+        // Range check quotient: q < 2^(BABY_BEAR_BITS - bits)
+        let q_range_bits =
+            (BABY_BEAR_BITS - bits).div_ceil(range.lookup_bits()) * range.lookup_bits();
+        range.range_check(ctx, q, q_range_bits);
+
+        bit_cells
     }
 
     /// Asserts that the PoW witness must pass.

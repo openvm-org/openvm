@@ -406,7 +406,6 @@ pub(crate) fn constrain_whir_verification(
     let mut profiler =
         crate::profiling::CellProfiler::new("whir_verification", ctx.advice.len());
 
-    let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
     let params = &mvk0.params;
     let k_whir = params.k_whir();
@@ -454,10 +453,8 @@ pub(crate) fn constrain_whir_verification(
     let mut folding_alphas = Vec::new();
     let mut z0_challenges = Vec::new();
     let mut gammas = Vec::with_capacity(num_whir_rounds);
-    let mut query_indices = Vec::new();
     let mut folding_counts_per_round = Vec::with_capacity(num_whir_rounds);
     let mut query_counts_per_round = Vec::with_capacity(num_whir_rounds);
-    let mut query_index_bits = Vec::new();
     let mut zs_per_round = Vec::with_capacity(num_whir_rounds);
 
     let mut sumcheck_cursor = 0usize;
@@ -541,14 +538,8 @@ pub(crate) fn constrain_whir_verification(
 
         profiler.push("queries", ctx.advice.len());
         for query_idx in 0..num_queries {
-            let query_index = transcript.sample_bits(ctx, ext_chip.base(), query_bits);
-            query_index_bits.push(query_bits);
-            query_indices.push(query_index);
-            let query_bits_vec = if query_bits == 0 {
-                Vec::new()
-            } else {
-                gate.num_to_bits(ctx, query_index, query_bits)
-            };
+            let query_bits_vec =
+                transcript.sample_bits_as_bits(ctx, ext_chip.base(), query_bits);
             let zi_root = query_root_from_bits_assigned(
                 ctx,
                 ext_chip.base(),
@@ -573,12 +564,10 @@ pub(crate) fn constrain_whir_verification(
                         let mu_pow = mu_pows[mu_power_idx];
                         for (row_idx, row) in merkle_path.leaf_values.iter().enumerate() {
                             let opened_base = row[col_idx];
-                            let opened_ext = ext_chip.from_base_var(ctx, opened_base);
-                            let weighted = ext_chip.mul(ctx, opened_ext, mu_pow);
                             codeword_vals[row_idx] = if let Some(prev) = codeword_vals[row_idx] {
-                                Some(ext_chip.add(ctx, prev, weighted))
+                                Some(ext_chip.scalar_mul_add(ctx, mu_pow, opened_base, prev))
                             } else {
-                                Some(weighted)
+                                Some(ext_chip.scalar_mul(ctx, mu_pow, opened_base))
                             };
                         }
                         mu_power_idx += 1;
