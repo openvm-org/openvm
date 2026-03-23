@@ -9,7 +9,9 @@ use openvm_circuit::{
         PreflightExecutor, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
         VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
     },
-    system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
+    system::{
+        memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
+    },
 };
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
@@ -89,7 +91,7 @@ where
     /// Returns commitment to the executable
     pub fn app_exe_commit(&self) -> Digest {
         *self.app_exe_commit.get_or_init(|| {
-            VmCommittedExe::<SC>::compute_exe_commit(
+            compute_exe_commit_from_mem_config(
                 &self.app_program_commit(),
                 self.instance.exe(),
                 &self.instance.vm.config().as_ref().memory_config,

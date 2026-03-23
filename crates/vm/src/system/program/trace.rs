@@ -1,6 +1,5 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
-use derivative::Derivative;
 use itertools::Itertools;
 use openvm_circuit::{arch::hasher::poseidon2::Poseidon2Hasher, primitives::Chip};
 use openvm_cpu_backend::CpuBackend;
@@ -13,13 +12,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{
-        stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
-        CpuColMajorBackend, ReferenceDevice, TraceCommitter,
-    },
-    Com, StarkEngine, StarkProtocolConfig, Val,
+    prover::AirProvingContext,
+    StarkProtocolConfig, Val,
 };
-use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
@@ -32,87 +27,6 @@ use crate::{
         program::ProgramChip,
     },
 };
-
-/// **Note**: this struct stores the program ROM twice: once in [VmExe] and once as a cached trace
-/// matrix `trace`.
-#[derive(Serialize, Deserialize, Derivative)]
-#[serde(bound(
-    serialize = "VmExe<Val<SC>>: Serialize, Com<SC>: Serialize",
-    deserialize = "VmExe<Val<SC>>: Deserialize<'de>, Com<SC>: Deserialize<'de>"
-))]
-#[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct VmCommittedExe<SC: StarkProtocolConfig> {
-    /// Raw executable.
-    pub exe: Arc<VmExe<Val<SC>>>,
-    program_commitment: Com<SC>,
-    /// Program ROM as cached trace matrix.
-    pub trace: Arc<RowMajorMatrix<Val<SC>>>,
-    pub prover_data: Arc<StackedPcsData<SC::F, SC::Digest>>,
-}
-
-impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
-    /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
-    /// program code as a _cached trace_ matrix.
-    pub fn commit<E: StarkEngine<SC = SC>>(exe: VmExe<Val<SC>>, e: &E) -> Self {
-        let trace = generate_cached_trace(&exe.program);
-        let ref_device = ReferenceDevice::new(e.config().clone());
-        let (commit, prover_data) = ref_device
-            .commit(&[&ColMajorMatrix::from_row_major(&trace)])
-            .unwrap();
-        Self {
-            exe: Arc::new(exe),
-            program_commitment: commit,
-            trace: Arc::new(trace),
-            prover_data: Arc::new(prover_data),
-        }
-    }
-    pub fn get_program_commit(&self) -> Com<SC> {
-        self.program_commitment
-    }
-
-    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuColMajorBackend<SC>> {
-        CommittedTraceData {
-            commitment: self.prover_data.commit().unwrap(),
-            data: self.prover_data.clone(),
-            trace: ColMajorMatrix::from_row_major(&self.trace),
-        }
-    }
-
-    /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:
-    /// - Program code commitment (commitment of the cached trace)
-    /// - Merkle root of the initial memory
-    /// - Starting program counter (`pc_start`)
-    ///
-    /// The program code commitment is itself a commitment (via the proof system PCS) to
-    /// the program code.
-    ///
-    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
-    /// and a cryptographic compression function (for internal nodes).
-    ///
-    /// **Note**: This function recomputes the Merkle tree for the initial memory image.
-    pub fn compute_exe_commit(
-        program_commitment: &[Val<SC>; CHUNK],
-        exe: &VmExe<Val<SC>>,
-        memory_config: &MemoryConfig,
-    ) -> [Val<SC>; CHUNK]
-    where
-        Val<SC>: PrimeField32,
-    {
-        let hasher = vm_poseidon2_hasher();
-        let memory_dimensions = memory_config.memory_dimensions();
-        let mem_config = memory_config;
-        let mut memory_image = AddressMap::new(mem_config.addr_spaces.clone());
-        memory_image.set_from_sparse(&exe.init_memory);
-        let init_memory_commit =
-            MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
-        compute_exe_commit(
-            &hasher,
-            program_commitment,
-            &init_memory_commit,
-            Val::<SC>::from_u32(exe.pc_start),
-        )
-    }
-}
 
 impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
@@ -135,6 +49,38 @@ impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
             public_values: vec![],
         }
     }
+}
+
+/// Computes a commitment to a VM executable. This is a Merklelized hash of:
+/// - Program code commitment (commitment of the cached trace)
+/// - Merkle root of the initial memory
+/// - Starting program counter (`pc_start`)
+///
+/// The program code commitment is itself a commitment (via the proof system PCS) to
+/// the program code.
+///
+/// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
+/// and a cryptographic compression function (for internal nodes).
+///
+/// **Note**: This function recomputes the Merkle tree for the initial memory image.
+pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
+    program_commitment: &[F; CHUNK],
+    exe: &VmExe<F>,
+    memory_config: &MemoryConfig,
+) -> [F; CHUNK] {
+    let hasher = vm_poseidon2_hasher();
+    let memory_dimensions = memory_config.memory_dimensions();
+    let mem_config = memory_config;
+    let mut memory_image = AddressMap::new(mem_config.addr_spaces.clone());
+    memory_image.set_from_sparse(&exe.init_memory);
+    let init_memory_commit =
+        MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
+    compute_exe_commit(
+        &hasher,
+        program_commitment,
+        &init_memory_commit,
+        F::from_u32(exe.pc_start),
+    )
 }
 
 /// Computes a Merklelized hash of:

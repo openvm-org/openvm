@@ -1,11 +1,8 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
-    instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
+    exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing, prover::AirProvingContext, verifier::VerifierError,
@@ -22,7 +19,6 @@ use crate::{
     },
     system::{
         memory::{online::GuestMemory, AddressMap},
-        program::trace::VmCommittedExe,
         SystemCpuBuilder,
     },
     utils::test_cpu_engine,
@@ -77,13 +73,13 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     )];
 
     let program = Program::from_instructions(&instructions);
-    let committed_exe = Arc::new(VmCommittedExe::<SC>::commit(program.into(), &vm.engine));
+    let vm_exe: VmExe<F> = program.into();
     let max_trace_heights = vec![0; vk.inner.per_air.len()];
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
-    vm.load_program(vm.commit_program_on_device(&committed_exe.exe.program));
+    vm.load_program(vm.commit_program_on_device(&vm_exe.program));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
-    let mut interpreter = vm.preflight_interpreter(&committed_exe.exe).unwrap();
+    let mut interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
     let PreflightExecutionOutput {
         system_records,
         record_arenas,
