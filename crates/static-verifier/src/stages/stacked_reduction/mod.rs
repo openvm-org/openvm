@@ -223,14 +223,16 @@ pub(crate) fn constrain_stacked_reduction(
         })
         .collect::<Vec<_>>();
 
-    // Cache per-n computations: (ind, eq_prism, rot_kernel).
-    // These only depend on n (via l_skip, u, r) and are identical across columns with the same n.
-    let mut n_cache: HashMap<isize, (BabyBearExtWire, BabyBearExtWire, BabyBearExtWire)> =
-        HashMap::new();
     // Determine whether any column needs rotation (to decide if rot_kernel is needed).
     let any_need_rot = lambda_indices_per_layout
         .iter()
         .any(|indices| indices.iter().any(|&(_, rot)| rot));
+
+    // Cache per-n computations: (ind, eq_prism, rot_kernel).
+    let mut n_cache: HashMap<isize, (BabyBearExtWire, BabyBearExtWire, BabyBearExtWire)> =
+        HashMap::new();
+    // Cache eq_mle results by (n, b_bits encoded as usize).
+    let mut eq_mle_cache: HashMap<(isize, usize), BabyBearExtWire> = HashMap::new();
 
     for (commit_idx, layout) in layouts.iter().enumerate() {
         let lambda_indices = &lambda_indices_per_layout[commit_idx];
@@ -238,10 +240,14 @@ pub(crate) fn constrain_stacked_reduction(
             let (lambda_idx, need_rot) = lambda_indices[col_idx];
             let n = s.log_height() as isize - l_skip as isize;
             let n_lift = n.max(0) as usize;
-            let b_bits = (l_skip + n_lift..l_skip + n_stack)
-                .map(|j| ((s.row_idx >> j) & 1) == 1)
-                .collect::<Vec<_>>();
-            let eq_mle = eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &b_bits);
+            let b_key = s.row_idx >> (l_skip + n_lift);
+
+            let eq_mle = *eq_mle_cache.entry((n, b_key)).or_insert_with(|| {
+                let b_bits = (l_skip + n_lift..l_skip + n_stack)
+                    .map(|j| ((s.row_idx >> j) & 1) == 1)
+                    .collect::<Vec<_>>();
+                eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &b_bits)
+            });
 
             let &mut (ind, eq_prism, rot_kernel) = n_cache.entry(n).or_insert_with(|| {
                 let ind = eval_in_uni_assigned(ctx, ext_chip, l_skip, n, u[0]);
