@@ -174,12 +174,12 @@ fn set_and_execute_output<RA, E>(
     tester.write(
         RV32_REGISTER_AS as usize,
         rd,
-        output_ptr.to_le_bytes().map(F::from_u8),
+        (output_ptr as u32).to_le_bytes().map(F::from_u8),
     );
     tester.write(
         RV32_REGISTER_AS as usize,
         rs,
-        input_ptr.to_le_bytes().map(F::from_u8),
+        (input_ptr as u32).to_le_bytes().map(F::from_u8),
     );
 
     let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.try_into().unwrap();
