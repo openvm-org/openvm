@@ -18,13 +18,11 @@ __global__ void deferral_count_tracegen(
     const size_t num_def_circuits
 ) {
     const uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (row_idx >= height) {
-        return;
-    }
     RowSlice row(trace + row_idx, height);
 
     if (row_idx >= num_def_circuits) {
         row.fill_zero(0, sizeof(DeferralCircuitCountCols<uint8_t>));
+        COL_WRITE_VALUE(row, DeferralCircuitCountCols, row_idx, row_idx);
         return;
     }
 
