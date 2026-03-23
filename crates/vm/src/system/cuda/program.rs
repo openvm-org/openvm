@@ -122,23 +122,23 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 
 #[cfg(test)]
 mod tests {
-    use openvm_circuit::system::program::trace::VmCommittedExe;
-    use openvm_cuda_backend::{
-        data_transporter::assert_eq_host_and_device_matrix_col_maj,
-        prelude::{F, SC},
-    };
+    use std::sync::Arc;
+
+    use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::F};
     use openvm_instructions::{
-        exe::VmExe,
         instruction::Instruction,
         program::{Program, DEFAULT_PC_STEP},
         LocalOpcode,
         SystemOpcode::*,
     };
-    use openvm_stark_backend::StarkEngine;
+    use openvm_stark_backend::{prover::TraceCommitter, StarkEngine};
 
     use super::ProgramChipGPU;
     use crate::{
-        system::program::tests::{BEQ, BNE, JAL, STOREW, SUB},
+        system::program::{
+            tests::{BEQ, BNE, JAL, STOREW, SUB},
+            trace::generate_cached_trace,
+        },
         utils::{test_cpu_engine, test_gpu_engine},
     };
 
@@ -149,13 +149,13 @@ mod tests {
         let gpu_cached = ProgramChipGPU::get_committed_trace(gpu_trace, gpu_device);
 
         let cpu_engine = test_cpu_engine();
-        let cpu_exe = VmExe::new(program.clone());
-        let cpu_committed_exe = VmCommittedExe::<SC>::commit(cpu_exe, &cpu_engine);
-        let cpu_cached = cpu_committed_exe.get_committed_trace();
+        let cpu_device = cpu_engine.device();
+        let cpu_trace = Arc::new(generate_cached_trace(&program));
+        let (cpu_commit, _) = cpu_device.commit(&[&cpu_trace]).unwrap();
 
         // NOTE: This compares the stacked matrices, not the original cached trace
-        assert_eq_host_and_device_matrix_col_maj(&cpu_cached.trace, &gpu_cached.trace);
-        assert_eq!(gpu_cached.commitment, cpu_cached.commitment);
+        assert_eq_host_and_device_matrix(cpu_trace, &gpu_cached.trace);
+        assert_eq!(gpu_cached.commitment, cpu_commit);
     }
 
     #[test]

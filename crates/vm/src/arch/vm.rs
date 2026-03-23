@@ -64,7 +64,7 @@ use crate::{
             online::{GuestMemory, TracingMemory},
             AddressMap, CHUNK,
         },
-        program::trace::{generate_cached_trace, VmCommittedExe},
+        program::trace::generate_cached_trace,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
@@ -875,27 +875,6 @@ where
         }
     }
 
-    /// Convenience method to transport a host committed Exe to device. This can be used if you have
-    /// a pre-committed program and want to transport to device instead of re-committing. One should
-    /// benchmark the latency of this function versus
-    /// [`commit_program_on_device`](Self::commit_program_on_device), which directly re-commits on
-    /// device, to determine which method is more suitable.
-    pub fn transport_committed_exe_to_device(
-        &self,
-        committed_exe: &VmCommittedExe<E::SC>,
-    ) -> CommittedTraceData<E::PB> {
-        let data = &committed_exe.prover_data;
-        let trace = data.mat_view(0).to_matrix();
-        let d_trace = self.engine.device().transport_matrix_to_device(&trace);
-        let d_data = self.engine.device().transport_pcs_data_to_device(data);
-        let commitment = data.commit().unwrap();
-        CommittedTraceData {
-            commitment,
-            data: Arc::new(d_data),
-            trace: d_trace,
-        }
-    }
-
     /// Loads cached program trace into the VM.
     pub fn load_program(&mut self, cached_program_trace: CommittedTraceData<E::PB>) {
         self.chip_complex.system.load_program(cached_program_trace);
@@ -1197,8 +1176,8 @@ pub struct VerifiedExecutionPayload<F> {
 /// - `vk` is a valid verifying key of a VM circuit.
 ///
 /// Returns:
-/// - The commitment to the [VmCommittedExe] extracted from `proofs`. It is the responsibility of
-///   the caller to check that the returned commitment matches the VM executable that the VM was
+/// - The commitment to the VM executable extracted from `proofs`. It is the responsibility of the
+///   caller to check that the returned commitment matches the VM executable that the VM was
 ///   supposed to execute.
 /// - The Merkle root of the final memory state.
 ///
