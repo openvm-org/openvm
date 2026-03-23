@@ -16,7 +16,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire},
-    stages::shared_math,
+    stages::shared_math::{self, horner_eval_ext_poly_assigned},
     transcript::TranscriptGadget,
     Fr, RootF,
 };
@@ -135,20 +135,6 @@ pub(crate) fn load_batch_constraint_proof_wire(
         sumcheck_round_polys,
         column_openings,
     }
-}
-
-fn eval_ext_poly_horner(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
-    coeffs: &[BabyBearExtWire],
-    point: &BabyBearExtWire,
-) -> BabyBearExtWire {
-    let mut acc = ext_chip.zero(ctx);
-    for coeff in coeffs.iter().rev() {
-        acc = ext_chip.mul(ctx, acc, *point);
-        acc = ext_chip.add(ctx, acc, *coeff);
-    }
-    acc
 }
 
 fn eval_lagrange_on_integer_grid(
@@ -821,7 +807,8 @@ pub(crate) fn constrain_batch_constraints_verification(
     ext_chip.assert_equal(ctx, sum_claim, sum_univ_domain_s_0);
 
     let sumcheck_round_polys = &batch_wire.sumcheck_round_polys;
-    let mut consistency_lhs = eval_ext_poly_horner(ctx, ext_chip, univariate_round_coeffs, &r[0]);
+    let mut consistency_lhs =
+        horner_eval_ext_poly_assigned(ctx, ext_chip, univariate_round_coeffs, &r[0]);
     for round_evals in sumcheck_round_polys {
         for eval in round_evals {
             transcript.observe_ext(ctx, baby_bear, eval);
