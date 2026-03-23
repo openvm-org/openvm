@@ -30,6 +30,7 @@ use crate::{
             interpolate_quadratic_at_012_assigned,
         },
     },
+    profiling::CellProfiler,
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr, RootEF, RootF,
 };
@@ -404,8 +405,8 @@ pub(crate) fn constrain_whir_verification(
     stacking_openings: &[Vec<BabyBearExtWire>],
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
+    profiler: &mut CellProfiler,
 ) {
-    let mut profiler = crate::profiling::CellProfiler::new("whir_verification", ctx.advice.len());
 
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
@@ -730,21 +731,4 @@ pub(crate) fn constrain_whir_verification(
     let zero = ext_chip.zero(ctx);
     ext_chip.assert_equal(ctx, final_residual, zero);
     profiler.pop(ctx.advice.len());
-
-    profiler.print(ctx.advice.len());
-
-    #[cfg(feature = "cell-profiling")]
-    if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
-        let _ = std::fs::create_dir_all(&dir);
-        profiler.write_flamegraph(
-            &format!("{dir}/whir_verification.svg"),
-            "WHIR Verification",
-            ctx.advice.len(),
-        );
-        profiler.write_flamegraph_reversed(
-            &format!("{dir}/whir_verification_rev.svg"),
-            "WHIR Verification (reversed)",
-            ctx.advice.len(),
-        );
-    }
 }

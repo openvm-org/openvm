@@ -223,6 +223,7 @@ pub fn constrained_verify(
         &n_per_trace,
         trace_id_to_air_id,
         proof_wire.public_values.clone(),
+        &mut profiler,
     );
     profiler.pop(ctx.advice.len());
 
@@ -240,6 +241,7 @@ pub fn constrained_verify(
         root_vk.inner.params.n_stack,
         &batch.column_openings,
         &batch.r,
+        &mut profiler,
     );
     profiler.pop(ctx.advice.len());
 
@@ -278,6 +280,7 @@ pub fn constrained_verify(
         &stacked_reduction.stacking_openings,
         &initial_commitment_roots,
         &u_cube,
+        &mut profiler,
     );
     profiler.pop(ctx.advice.len());
 

@@ -1,4 +1,4 @@
-use std::iter::zip;
+use std::{collections::BTreeMap, iter::zip};
 
 use halo2_base::Context;
 use openvm_stark_sdk::{
@@ -16,6 +16,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire},
+    profiling::CellProfiler,
     stages::shared_math::{self, horner_eval_ext_poly_assigned},
     transcript::TranscriptGadget,
     Fr, RootF,
@@ -598,6 +599,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     n_per_trace: &[isize],
     trace_id_to_air_id: &[usize],
     public_values: Vec<Vec<BabyBearWire>>,
+    profiler: &mut CellProfiler,
 ) -> BatchConstraintIntermediatesWire {
     let baby_bear = ext_chip.base();
 
@@ -668,6 +670,8 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let alpha_logup = transcript.sample_ext(ctx, baby_bear);
     let beta_logup = transcript.sample_ext(ctx, baby_bear);
+
+    profiler.push("gkr_verification", ctx.advice.len());
 
     let gkr_q0_claim = gkr_wire.q0_claim;
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
@@ -772,6 +776,9 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let lambda = transcript.sample_ext(ctx, baby_bear);
 
+    profiler.pop(ctx.advice.len());
+    profiler.push("batch_sumcheck", ctx.advice.len());
+
     let numerator_term_per_air = &batch_wire.numerator_term_per_air;
     let denominator_term_per_air = &batch_wire.denominator_term_per_air;
     for (num_term, den_term) in numerator_term_per_air
@@ -846,6 +853,9 @@ pub(crate) fn constrain_batch_constraints_verification(
         r.push(next_r);
     }
 
+    profiler.pop(ctx.advice.len());
+    profiler.push("observe_openings", ctx.advice.len());
+
     let column_openings = &batch_wire.column_openings;
 
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
@@ -866,6 +876,9 @@ pub(crate) fn constrain_batch_constraints_verification(
         }
     }
 
+    profiler.pop(ctx.advice.len());
+    profiler.push("eq_3b_tree", ctx.advice.len());
+
     let mut eq_3b_per_trace = Vec::with_capacity(n_per_trace.len());
     let mut stacked_idx = 0usize;
     for (trace_idx, &n) in n_per_trace.iter().enumerate() {
@@ -879,6 +892,19 @@ pub(crate) fn constrain_batch_constraints_verification(
         let d = n_logup_host.saturating_sub(n_lift);
         let xi_slice = &xi[l_skip + n_lift..l_skip + n_logup_host];
 
+        // Determine needed leaf indices before building the tree.
+        let needed_leaves: Vec<usize> = {
+            let mut leaves = Vec::with_capacity(interactions.len());
+            let mut tmp_idx = stacked_idx;
+            for _ in 0..interactions.len() {
+                let b_int = tmp_idx >> (l_skip + n_lift);
+                let tree_idx = b_int & ((1 << d) - 1);
+                leaves.push(tree_idx);
+                tmp_idx += 1 << (l_skip + n_lift);
+            }
+            leaves
+        };
+
         // Precompute per-bit factors: (x_i, 1-x_i) for tree product.
         let factors: Vec<(BabyBearExtWire, BabyBearExtWire)> = xi_slice
             .iter()
@@ -888,37 +914,46 @@ pub(crate) fn constrain_batch_constraints_verification(
             })
             .collect();
 
-        // Build a partial product tree of depth d.
-        // tree[level][node] = product of factors for bits [0..level) matching the node index.
-        // Level 0: all nodes are `one` (empty product).
-        // Level j+1: tree[j+1][idx] = tree[j][idx >> 1] * factor_j(bit_j)
-        let mut tree: Vec<Vec<BabyBearExtWire>> = Vec::with_capacity(d + 1);
-        tree.push(vec![one]); // level 0
+        // Build a sparse partial product tree containing only ancestors of needed leaves.
+        // tree[level][node_idx] = product of factors for bits matching node_idx.
+        // Level 0: single root node with value `one`.
+        // Level j+1: only children whose index appears in the needed set for that level.
+        let mut prev_level: BTreeMap<usize, BabyBearExtWire> = BTreeMap::new();
+        prev_level.insert(0, one);
+
         for level_idx in 0..d {
-            // Build tree in reverse factor order so that the LSB of the
-            // tree index corresponds to factors[0] (matching b_int's LSB).
             let factor_j = d - 1 - level_idx;
-            let prev = &tree[level_idx];
-            let mut level = Vec::with_capacity(prev.len() * 2);
-            for parent in prev {
-                let child0 = ext_chip.mul(ctx, *parent, factors[factor_j].1);
-                let child1 = ext_chip.mul(ctx, *parent, factors[factor_j].0);
-                level.push(child0);
-                level.push(child1);
+            // Determine which nodes are needed at level (level_idx + 1):
+            // a leaf index shifted right by the remaining levels.
+            let shift = d - (level_idx + 1);
+            let mut curr_level = BTreeMap::new();
+            for node_idx in needed_leaves.iter().map(|&leaf| leaf >> shift) {
+                if curr_level.contains_key(&node_idx) {
+                    continue;
+                }
+                let parent_idx = node_idx >> 1;
+                let parent = prev_level[&parent_idx];
+                let val = if node_idx & 1 == 0 {
+                    ext_chip.mul(ctx, parent, factors[factor_j].1)
+                } else {
+                    ext_chip.mul(ctx, parent, factors[factor_j].0)
+                };
+                curr_level.insert(node_idx, val);
             }
-            tree.push(level);
+            prev_level = curr_level;
         }
 
-        // For each interaction, look up the tree at the deepest level.
+        // Look up each interaction's eq_3b from the sparse tree leaves.
         let mut eq_3b = Vec::with_capacity(interactions.len());
-        for _ in 0..interactions.len() {
-            let b_int = stacked_idx >> (l_skip + n_lift);
-            let tree_idx = b_int & ((1 << d) - 1);
+        for &tree_idx in &needed_leaves {
             stacked_idx += 1 << (l_skip + n_lift);
-            eq_3b.push(tree[d][tree_idx]);
+            eq_3b.push(prev_level[&tree_idx]);
         }
         eq_3b_per_trace.push(eq_3b);
     }
+
+    profiler.pop(ctx.advice.len());
+    profiler.push("eq_ns_precompute", ctx.advice.len());
 
     let mut eq_ns = vec![one; n_max_host + 1];
     let mut eq_sharp_ns = vec![one; n_max_host + 1];
@@ -944,6 +979,9 @@ pub(crate) fn constrain_batch_constraints_verification(
             r_rev_prod = ext_chip.mul(ctx, r_rev_prod, r[i]);
         }
     }
+
+    profiler.pop(ctx.advice.len());
+    profiler.push("constraint_eval", ctx.advice.len());
 
     let mut interactions_evals = Vec::new();
     let mut constraints_evals = Vec::new();
@@ -1069,6 +1107,9 @@ pub(crate) fn constrain_batch_constraints_verification(
         interactions_evals.push(denom_scaled);
     }
 
+    profiler.pop(ctx.advice.len());
+    profiler.push("final_consistency", ctx.advice.len());
+
     let mut consistency_rhs = ext_chip.zero(ctx);
     let mut cur_mu_pow = one;
     for (i, term) in interactions_evals
@@ -1086,6 +1127,8 @@ pub(crate) fn constrain_batch_constraints_verification(
     }
     let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
     ext_chip.assert_equal(ctx, consistency_residual, zero);
+
+    profiler.pop(ctx.advice.len());
 
     BatchConstraintIntermediatesWire {
         column_openings: column_openings.clone(),
