@@ -75,6 +75,7 @@ fn eval_in_uni_assigned(
     n: isize,
     z: BabyBearExtWire,
 ) -> BabyBearExtWire {
+    debug_assert!(n >= -(l_skip as isize));
     if n.is_negative() {
         let z_pow = ext_chip.pow_power_of_two(ctx, z, l_skip.wrapping_add_signed(n));
         eval_eq_uni_at_one_assigned(ctx, ext_chip, n.unsigned_abs(), &z_pow)
