@@ -86,15 +86,6 @@ fn reduce_assigned_limb_to_babybear(
     }
 }
 
-pub fn split_assigned_bn254_to_babybear_limbs(
-    ctx: &mut Context<Fr>,
-    baby_bear: &BabyBearChip,
-    packed: AssignedValue<Fr>,
-) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
-    let limbs = decompose_packed_bn254_to_split_limbs(ctx, baby_bear.range(), packed);
-    core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, baby_bear, limbs[idx]))
-}
-
 impl TranscriptGadget {
     pub fn new(ctx: &mut Context<Fr>) -> Self {
         let zero = ctx.load_zero();
