@@ -15,7 +15,7 @@ use openvm_circuit::{
     },
     utils::test_utils::test_system_config,
 };
-use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, BabyBearPoseidon2GpuEngine};
 use openvm_deferral_circuit::{
     DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
 };
@@ -30,11 +30,8 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
-        baby_bear_poseidon2::{
-            poseidon2_compress_with_capacity, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
-        },
+    config::baby_bear_poseidon2::{
+        poseidon2_compress_with_capacity, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
     },
     utils::setup_tracing_with_log_level,
 };
@@ -58,14 +55,14 @@ use crate::{
     prover::{
         ChildVkKind, DeferralChildVkKind, DeferralHookGpuProver as DeferralHookProver,
         DeferralInnerGpuProver as DeferralInnerProver, InnerGpuProver as InnerProver,
-        RootCpuProver as RootProver,
+        RootGpuProver as RootProver,
     },
     SC,
 };
 
 type GpuEngine = BabyBearPoseidon2GpuEngine;
 type CpuEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
-type RootEngine = BabyBearBn254Poseidon2CpuEngine;
+type RootEngine = BabyBearBn254Poseidon2GpuEngine;
 
 const NUM_DEF_CIRCUITS: usize = 3;
 const MAX_NUM_PROOFS: usize = 4;
@@ -743,7 +740,7 @@ fn test_deferral_e2e() -> Result<()> {
         &user_pvs_proof,
         Some(&merkle_proofs),
     );
-    warn!("proving root (CPU)");
+    warn!("proving root (GPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let root_vk = root_prover.get_vk();

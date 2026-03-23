@@ -6,6 +6,10 @@ use openvm_stark_backend::{
 
 use crate::circuit::Circuit;
 
+pub(crate) fn debug_checks_enabled() -> bool {
+    std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
+}
+
 pub fn debug_constraints<SC, C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)
 where
     SC: StarkProtocolConfig<F = F>,
