@@ -9,3 +9,7 @@ pub use bus::*;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 pub use trace::*;
+
+#[cfg(feature = "cuda")]
+#[cfg(test)]
+mod tests;

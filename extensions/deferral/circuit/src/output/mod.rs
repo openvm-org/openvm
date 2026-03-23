@@ -11,4 +11,7 @@ pub use air::*;
 pub use cuda::*;
 pub use trace::*;
 
+#[cfg(test)]
+mod tests;
+
 pub type DeferralOutputChip<F> = VmChipWrapper<F, DeferralOutputFiller<F>>;
