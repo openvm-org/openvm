@@ -682,7 +682,13 @@ where
                     .into();
 
             // Generate a dummy root proof by running a trivial program through the pipeline
-            let dummy_root_proof = self.generate_dummy_root_proof();
+            let dummy_root_proof = keygen::dummy::generate_dummy_root_proof::<E, _>(
+                self.app_vm_builder.clone(),
+                &self.app_pk().app_vm_pk,
+                self.agg_prover(),
+                self.def_path_prover.clone(),
+                self.root_prover(),
+            );
 
             keygen::static_verifier::keygen_static_verifier(
                 &params,
@@ -692,41 +698,6 @@ where
                 &dummy_root_proof,
             )
         })
-    }
-
-    /// Generate a dummy root proof for keygen purposes.
-    /// Runs a trivial TERMINATE program through the full pipeline.
-    #[cfg(feature = "evm-prove")]
-    fn generate_dummy_root_proof(
-        &self,
-    ) -> openvm_stark_backend::proof::Proof<openvm_continuations::RootSC> {
-        use openvm_circuit::arch::instructions::{
-            instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
-        };
-
-        let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
-            SystemOpcode::TERMINATE.global_opcode(),
-            0,
-            0,
-            0,
-            0,
-            0,
-        )]);
-        let dummy_exe = Arc::new(VmExe::new(dummy_program));
-
-        let mut evm_prover = EvmProver::<E, _>::new(
-            self.app_vm_builder.clone(),
-            &self.app_pk().app_vm_pk,
-            dummy_exe,
-            self.agg_prover(),
-            self.def_path_prover.clone(),
-            self.root_prover(),
-        )
-        .expect("Failed to create dummy EVM prover");
-
-        evm_prover
-            .prove(StdIn::default(), &[])
-            .expect("Failed to generate dummy root proof")
     }
 
     /// Sets the halo2 proving keys. Returns `Ok(())` if halo2 keygen has not been called and
@@ -967,7 +938,13 @@ where
     #[cfg(feature = "evm-verify")]
     fn compute_evm_proof_data_length(&self) -> usize {
         // Generate a dummy EVM proof to determine the proof data length
-        let dummy_root_proof = self.generate_dummy_root_proof();
+        let dummy_root_proof = keygen::dummy::generate_dummy_root_proof::<E, _>(
+            self.app_vm_builder.clone(),
+            &self.app_pk().app_vm_pk,
+            self.agg_prover(),
+            self.def_path_prover.clone(),
+            self.root_prover(),
+        );
         let halo2_pk = self.halo2_pk();
         let params = self.halo2_params_reader.read_params(halo2_pk.shape.k);
         let raw_evm_proof = halo2_pk.prove_for_evm(&params, &dummy_root_proof);
