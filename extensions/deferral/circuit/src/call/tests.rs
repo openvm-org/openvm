@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, DEFAULT_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -50,10 +50,7 @@ use crate::{
         deferral_poseidon2_air, deferral_poseidon2_chip, DeferralPoseidon2Air,
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
-    utils::{
-        byte_commit_to_f, COMMIT_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
-    },
+    utils::{byte_commit_to_f, COMMIT_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS},
     DeferralFn,
 };
 
@@ -145,10 +142,10 @@ fn set_and_execute_call<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, MEMORY_OP_SIZE);
-    let rs = gen_pointer(rng, MEMORY_OP_SIZE);
-    let output_ptr = gen_pointer(rng, MEMORY_OP_SIZE);
-    let input_ptr = gen_pointer(rng, MEMORY_OP_SIZE);
+    let rd = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let rs = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let output_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let input_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let input_commit_f: [F; DIGEST_SIZE] =
@@ -175,11 +172,11 @@ fn set_and_execute_call<RA, E>(
         rs,
         input_ptr.to_le_bytes().map(F::from_u8),
     );
-    for (chunk_idx, chunk) in input_commit.chunks_exact(MEMORY_OP_SIZE).enumerate() {
-        let chunk: [u8; MEMORY_OP_SIZE] = chunk.try_into().unwrap();
+    for (chunk_idx, chunk) in input_commit.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
+        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
         tester.write(
             RV32_MEMORY_AS as usize,
-            input_ptr + chunk_idx * MEMORY_OP_SIZE,
+            input_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
             chunk.map(F::from_u8),
         );
     }
@@ -216,12 +213,12 @@ fn set_and_execute_call<RA, E>(
 
     let mut output_key = [0u8; OUTPUT_TOTAL_BYTES];
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        let chunk: [F; MEMORY_OP_SIZE] = tester.read(
+        let chunk: [F; DEFAULT_BLOCK_SIZE] = tester.read(
             RV32_MEMORY_AS as usize,
-            output_ptr + chunk_idx * MEMORY_OP_SIZE,
+            output_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
         );
-        for i in 0..MEMORY_OP_SIZE {
-            output_key[chunk_idx * MEMORY_OP_SIZE + i] = chunk[i].as_canonical_u32() as u8;
+        for i in 0..DEFAULT_BLOCK_SIZE {
+            output_key[chunk_idx * DEFAULT_BLOCK_SIZE + i] = chunk[i].as_canonical_u32() as u8;
         }
     }
     let output_commit_expected: [u8; COMMIT_NUM_BYTES] = output_commit.clone().try_into().unwrap();
@@ -372,7 +369,7 @@ fn create_cuda_harness(
 #[test]
 fn rand_deferral_call_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::volatile(test_memory_config());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -407,7 +404,7 @@ fn rand_deferral_call_test() {
 #[test]
 fn test_cuda_rand_deferral_call_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester = GpuChipTestBuilder::volatile(
+    let mut tester = GpuChipTestBuilder::new(
         test_memory_config(),
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
     )
