@@ -243,8 +243,7 @@ fn pipeline_cell_count_profiling() {
     let (vk, proof) = {
         #[cfg(feature = "cuda")]
         {
-            let engine =
-                openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine::new(system_params);
+            let engine = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine::new(system_params);
             fib.keygen_and_prove(&engine)
         }
         #[cfg(not(feature = "cuda"))]

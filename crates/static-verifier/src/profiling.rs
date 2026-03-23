@@ -74,7 +74,7 @@ mod disabled {
     }
 }
 
-#[cfg(feature = "cell-profiling")]
-pub use enabled::CellProfiler;
 #[cfg(not(feature = "cell-profiling"))]
 pub use disabled::CellProfiler;
+#[cfg(feature = "cell-profiling")]
+pub use enabled::CellProfiler;
