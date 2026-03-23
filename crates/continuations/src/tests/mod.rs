@@ -52,20 +52,20 @@ cfg_if::cfg_if! {
 
         #[cfg(feature = "root-prover")]
         use {
-            crate::prover::{DeferralHookGpuProver as DeferralHookProver, RootCpuProver as RootProver},
-            openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
+            crate::prover::{DeferralHookGpuProver as DeferralHookProver, RootGpuProver as RootProver},
+            openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine,
             openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs},
         };
 
         use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-        use openvm_stark_backend::{prover::CommittedTraceData};
+        use openvm_stark_backend::prover::CommittedTraceData;
         use openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity;
-        use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID};
+        use openvm_verify_stark_host::pvs::VERIFIER_PVS_AIR_ID;
         use p3_field::PrimeField32;
 
         #[cfg(feature = "root-prover")]
-        type RootEngine = BabyBearBn254Poseidon2CpuEngine;
+        type RootEngine = BabyBearBn254Poseidon2GpuEngine;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
