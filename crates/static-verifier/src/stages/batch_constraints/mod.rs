@@ -606,6 +606,7 @@ pub(crate) fn constrain_batch_constraints_verification(
             (num_interactions as u64) << (l_skip + n_lift)
         })
         .sum::<u64>();
+    assert!(total_interactions_host > 0, "0 interactions not supported");
     let n_logup_host = calculate_n_logup(l_skip, total_interactions_host);
     let n_max_host = n_per_trace.iter().copied().max().unwrap_or(0).max(0) as usize;
     let n_global_host = n_max_host.max(n_logup_host);
@@ -660,113 +661,106 @@ pub(crate) fn constrain_batch_constraints_verification(
     let alpha_logup = transcript.sample_ext(ctx, baby_bear);
     let beta_logup = transcript.sample_ext(ctx, baby_bear);
 
-    let gkr_q0_claim = (total_interactions_host != 0).then_some(gkr_wire.q0_claim);
+    let gkr_q0_claim = gkr_wire.q0_claim;
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
     let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
 
     let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
-    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, _gkr_sample_stream) =
-        if total_interactions_host == 0 {
-            let q0_claim = gkr_wire.q0_claim;
-            ext_chip.assert_equal(ctx, q0_claim, one);
-            (zero, alpha_logup, Vec::new(), Vec::new())
-        } else {
-            let q0_claim =
-                gkr_q0_claim.expect("non-zero interaction branch must include q0 claim witness");
-            transcript.observe_ext(ctx, baby_bear, &q0_claim);
+    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, _gkr_sample_stream) = {
+        transcript.observe_ext(ctx, baby_bear, &gkr_q0_claim);
 
-            let layer0 = &gkr_claims_per_layer[0];
-            observe_layer_claims_assigned(ctx, transcript, baby_bear, layer0);
+        let layer0 = &gkr_claims_per_layer[0];
+        observe_layer_claims_assigned(ctx, transcript, baby_bear, layer0);
 
-            let p0_q1 = ext_chip.mul(ctx, layer0[0], layer0[3]);
-            let p1_q0 = ext_chip.mul(ctx, layer0[2], layer0[1]);
-            let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
-            let q_cross = ext_chip.mul(ctx, layer0[1], layer0[3]);
-            ext_chip.assert_equal(ctx, p_cross, zero);
-            ext_chip.assert_equal(ctx, q_cross, q0_claim);
+        let p0_q1 = ext_chip.mul(ctx, layer0[0], layer0[3]);
+        let p1_q0 = ext_chip.mul(ctx, layer0[2], layer0[1]);
+        let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
+        let q_cross = ext_chip.mul(ctx, layer0[1], layer0[3]);
+        ext_chip.assert_equal(ctx, p_cross, zero);
+        ext_chip.assert_equal(ctx, q_cross, gkr_q0_claim);
 
-            let mu0 = transcript.sample_ext(ctx, baby_bear);
-            let mut gkr_sample_stream = vec![mu0];
-            let mut numer_claim =
-                interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[0], &layer0[2], &mu0);
-            let mut denom_claim =
-                interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[1], &layer0[3], &mu0);
-            let mut gkr_r = vec![mu0];
+        let mu0 = transcript.sample_ext(ctx, baby_bear);
+        let mut gkr_sample_stream = vec![mu0];
+        let mut numer_claim =
+            interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[0], &layer0[2], &mu0);
+        let mut denom_claim =
+            interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[1], &layer0[3], &mu0);
+        let mut gkr_r = vec![mu0];
 
-            for round in 1..total_gkr_rounds {
-                let lambda_round = transcript.sample_ext(ctx, baby_bear);
-                gkr_sample_stream.push(lambda_round);
+        for round in 1..total_gkr_rounds {
+            let lambda_round = transcript.sample_ext(ctx, baby_bear);
+            gkr_sample_stream.push(lambda_round);
 
-                let lambda_denom = ext_chip.mul(ctx, lambda_round, denom_claim);
-                let mut claim = ext_chip.add(ctx, numer_claim, lambda_denom);
-                let round_polys = &gkr_sumcheck_polys[round - 1];
-                let mut gkr_r_prime = Vec::with_capacity(round);
-                let mut eq = one;
+            let lambda_denom = ext_chip.mul(ctx, lambda_round, denom_claim);
+            let mut claim = ext_chip.add(ctx, numer_claim, lambda_denom);
+            let round_polys = &gkr_sumcheck_polys[round - 1];
+            let mut gkr_r_prime = Vec::with_capacity(round);
+            let mut eq = one;
 
-                for (subround, xi_prev) in gkr_r.iter().enumerate().take(round) {
-                    let ev1 = round_polys[subround * 3];
-                    let ev2 = round_polys[subround * 3 + 1];
-                    let ev3 = round_polys[subround * 3 + 2];
-                    transcript.observe_ext(ctx, baby_bear, &ev1);
-                    transcript.observe_ext(ctx, baby_bear, &ev2);
-                    transcript.observe_ext(ctx, baby_bear, &ev3);
+            for (subround, xi_prev) in gkr_r.iter().enumerate().take(round) {
+                let ev1 = round_polys[subround * 3];
+                let ev2 = round_polys[subround * 3 + 1];
+                let ev3 = round_polys[subround * 3 + 2];
+                transcript.observe_ext(ctx, baby_bear, &ev1);
+                transcript.observe_ext(ctx, baby_bear, &ev2);
+                transcript.observe_ext(ctx, baby_bear, &ev3);
 
-                    let ri = transcript.sample_ext(ctx, baby_bear);
-                    gkr_sample_stream.push(ri);
-                    gkr_r_prime.push(ri);
+                let ri = transcript.sample_ext(ctx, baby_bear);
+                gkr_sample_stream.push(ri);
+                gkr_r_prime.push(ri);
 
-                    let ev0 = ext_chip.sub(ctx, claim, ev1);
-                    claim = interpolate_cubic_at_0123_assigned(
-                        ctx,
-                        ext_chip,
-                        [&ev0, &ev1, &ev2, &ev3],
-                        &ri,
-                    );
-                    let xi_ri = ext_chip.mul(ctx, *xi_prev, ri);
-                    let one_minus_xi = ext_chip.sub(ctx, one, *xi_prev);
-                    let one_minus_ri = ext_chip.sub(ctx, one, ri);
-                    let one_minus_term = ext_chip.mul(ctx, one_minus_xi, one_minus_ri);
-                    let eq_factor = ext_chip.add(ctx, xi_ri, one_minus_term);
-                    eq = ext_chip.mul(ctx, eq, eq_factor);
-                }
-
-                let layer_claims = &gkr_claims_per_layer[round];
-                observe_layer_claims_assigned(ctx, transcript, baby_bear, layer_claims);
-
-                let p0_q1 = ext_chip.mul(ctx, layer_claims[0], layer_claims[3]);
-                let p1_q0 = ext_chip.mul(ctx, layer_claims[2], layer_claims[1]);
-                let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
-                let q_cross = ext_chip.mul(ctx, layer_claims[1], layer_claims[3]);
-                let lambda_q_cross = ext_chip.mul(ctx, lambda_round, q_cross);
-                let claim_sum = ext_chip.add(ctx, p_cross, lambda_q_cross);
-                let expected_claim = ext_chip.mul(ctx, claim_sum, eq);
-                ext_chip.assert_equal(ctx, expected_claim, claim);
-
-                let mu_round = transcript.sample_ext(ctx, baby_bear);
-                gkr_sample_stream.push(mu_round);
-                numer_claim = interpolate_linear_at_01_assigned(
+                let ev0 = ext_chip.sub(ctx, claim, ev1);
+                claim = interpolate_cubic_at_0123_assigned(
                     ctx,
                     ext_chip,
-                    &layer_claims[0],
-                    &layer_claims[2],
-                    &mu_round,
+                    [&ev0, &ev1, &ev2, &ev3],
+                    &ri,
                 );
-                denom_claim = interpolate_linear_at_01_assigned(
-                    ctx,
-                    ext_chip,
-                    &layer_claims[1],
-                    &layer_claims[3],
-                    &mu_round,
-                );
-                gkr_r = core::iter::once(mu_round)
-                    .chain(gkr_r_prime.into_iter())
-                    .collect();
+                let xi_ri = ext_chip.mul(ctx, *xi_prev, ri);
+                let one_minus_xi = ext_chip.sub(ctx, one, *xi_prev);
+                let one_minus_ri = ext_chip.sub(ctx, one, ri);
+                let one_minus_term = ext_chip.mul(ctx, one_minus_xi, one_minus_ri);
+                let eq_factor = ext_chip.add(ctx, xi_ri, one_minus_term);
+                eq = ext_chip.mul(ctx, eq, eq_factor);
             }
 
-            (numer_claim, denom_claim, gkr_r, gkr_sample_stream)
-        };
+            let layer_claims = &gkr_claims_per_layer[round];
+            observe_layer_claims_assigned(ctx, transcript, baby_bear, layer_claims);
+
+            let p0_q1 = ext_chip.mul(ctx, layer_claims[0], layer_claims[3]);
+            let p1_q0 = ext_chip.mul(ctx, layer_claims[2], layer_claims[1]);
+            let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
+            let q_cross = ext_chip.mul(ctx, layer_claims[1], layer_claims[3]);
+            let lambda_q_cross = ext_chip.mul(ctx, lambda_round, q_cross);
+            let claim_sum = ext_chip.add(ctx, p_cross, lambda_q_cross);
+            let expected_claim = ext_chip.mul(ctx, claim_sum, eq);
+            ext_chip.assert_equal(ctx, expected_claim, claim);
+
+            let mu_round = transcript.sample_ext(ctx, baby_bear);
+            gkr_sample_stream.push(mu_round);
+            numer_claim = interpolate_linear_at_01_assigned(
+                ctx,
+                ext_chip,
+                &layer_claims[0],
+                &layer_claims[2],
+                &mu_round,
+            );
+            denom_claim = interpolate_linear_at_01_assigned(
+                ctx,
+                ext_chip,
+                &layer_claims[1],
+                &layer_claims[3],
+                &mu_round,
+            );
+            gkr_r = core::iter::once(mu_round)
+                .chain(gkr_r_prime.into_iter())
+                .collect();
+        }
+
+        (numer_claim, denom_claim, gkr_r, gkr_sample_stream)
+    };
 
     let mut xi = gkr_xi_claims;
     while xi.len() != l_skip + n_global_host {
