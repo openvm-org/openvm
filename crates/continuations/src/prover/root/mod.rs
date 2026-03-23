@@ -13,6 +13,10 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
+#[cfg(feature = "cuda")]
+use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
+    BabyBearBn254Poseidon2CpuEngine, Transcript as CpuBn254Transcript,
+};
 use p3_bn254::Bn254;
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
@@ -96,7 +100,6 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             },
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
-        let engine = E::new(system_params);
         let internal_recursive_dag_commit = DagCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
@@ -108,7 +111,15 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             memory_dimensions,
             num_user_pvs,
         ));
-        let (pk, vk) = engine.keygen(&circuit.airs());
+        #[cfg(feature = "cuda")]
+        let (pk, vk) = {
+            // The BN254 root PK is backend-agnostic; keygen on CPU and use the GPU only for
+            // proving to avoid expensive CUDA setup work in constructor-heavy paths.
+            BabyBearBn254Poseidon2CpuEngine::<CpuBn254Transcript>::new(system_params)
+                .keygen(&circuit.airs())
+        };
+        #[cfg(not(feature = "cuda"))]
+        let (pk, vk) = E::new(system_params).keygen(&circuit.airs());
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),

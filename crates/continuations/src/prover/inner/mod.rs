@@ -10,6 +10,8 @@ use openvm_stark_backend::{
     },
     StarkEngine, SystemParams,
 };
+#[cfg(feature = "cuda")]
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
 use tracing::instrument;
@@ -115,12 +117,19 @@ impl<
                 ..Default::default()
             },
         );
-        let engine = E::new(system_params);
+        let engine = E::new(system_params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_cached_commit.map(|d| d.into()),
         ));
+        #[cfg(feature = "cuda")]
+        let (pk, vk) = {
+            // Key generation is backend-independent for this circuit, so use the cheaper
+            // CPU engine and only upload the resulting PK to the proving backend.
+            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&circuit.airs())
+        };
+        #[cfg(not(feature = "cuda"))]
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
