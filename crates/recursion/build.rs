@@ -16,7 +16,9 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include_from_dep("DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE")
             .include("cuda/include")
-            .include("../circuits/poseidon2-air/cuda/include");
+            .include("../circuits/poseidon2-air/cuda/include")
+            // CUB on recent CUDA toolchains can trigger a host-side GCC false positive here.
+            .flag("-Xcompiler=-Wno-maybe-uninitialized");
 
         common.emit_link_directives();
 
