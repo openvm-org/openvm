@@ -398,7 +398,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(22)
-        .use_lookup_bits(8)
+        .use_lookup_bits(21)
         .use_instance_columns(0);
     let range = builder.range_chip();
     let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));

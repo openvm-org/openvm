@@ -317,8 +317,7 @@ fn binary_k_fold_assigned(
             let mut alpha_minus_t = *alpha;
             alpha_minus_t.0[0] = base_chip.sub(ctx, alpha_minus_t.0[0], t);
             let fold = ext_chip.mul(ctx, alpha_minus_t, lo_minus_hi);
-            let fold = ext_chip.scalar_mul(ctx, fold, t_inv_half);
-            values[i] = ext_chip.add(ctx, lo, fold);
+            values[i] = ext_chip.scalar_mul_add(ctx, fold, t_inv_half, lo);
         }
         x_pow = base_chip.square(ctx, x_pow);
         x_pow = base_chip.reduce_max_bits(ctx, x_pow);
@@ -445,7 +444,11 @@ pub(crate) fn constrain_whir_verification(
     let mut mu_idx = 0usize;
     for commit_openings in stacking_openings {
         for opening in commit_openings {
-            let weighted = ext_chip.mul(ctx, *opening, mu_pows[mu_idx]);
+            let weighted = if mu_idx == 0 {
+                *opening
+            } else {
+                ext_chip.mul(ctx, *opening, mu_pows[mu_idx])
+            };
             final_claim = ext_chip.add(ctx, final_claim, weighted);
             mu_idx += 1;
         }
@@ -573,10 +576,13 @@ pub(crate) fn constrain_whir_verification(
                     );
                     for col_idx in 0..commit_openings.len() {
                         let mu_pow = mu_pows[mu_power_idx];
+                        let is_first_mu = mu_power_idx == 0;
                         for (row_idx, row) in merkle_path.leaf_values.iter().enumerate() {
                             let opened_base = row[col_idx];
                             codeword_vals[row_idx] = if let Some(prev) = codeword_vals[row_idx] {
                                 Some(ext_chip.scalar_mul_add(ctx, mu_pow, opened_base, prev))
+                            } else if is_first_mu {
+                                Some(ext_chip.from_base_var(ctx, opened_base))
                             } else {
                                 Some(ext_chip.scalar_mul(ctx, mu_pow, opened_base))
                             };

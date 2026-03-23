@@ -145,10 +145,16 @@ pub(crate) fn constrain_stacked_reduction(
     }
 
     let mut s_0 = ext_chip.zero(ctx);
-    for ((claim, claim_rot), lambda_pow) in t_claims.iter().zip(lambda_sqr_powers.iter()) {
+    for (i, ((claim, claim_rot), lambda_pow)) in
+        t_claims.iter().zip(lambda_sqr_powers.iter()).enumerate()
+    {
         let claim_rot_lambda = ext_chip.mul(ctx, *claim_rot, lambda);
         let batched_claim = ext_chip.add(ctx, *claim, claim_rot_lambda);
-        let term = ext_chip.mul(ctx, batched_claim, *lambda_pow);
+        let term = if i == 0 {
+            batched_claim
+        } else {
+            ext_chip.mul(ctx, batched_claim, *lambda_pow)
+        };
         s_0 = ext_chip.add(ctx, s_0, term);
     }
 
