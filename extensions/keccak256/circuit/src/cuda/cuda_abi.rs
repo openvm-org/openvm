@@ -110,6 +110,8 @@ pub mod keccakf_perm {
             width: usize,
             d_records: DeviceBufferView,
             num_records: usize,
+            d_round_states: *mut u64,
+            round_state_words: usize,
         ) -> i32;
     }
 
@@ -120,6 +122,7 @@ pub mod keccakf_perm {
         height: usize,
         d_records: &DeviceBuffer<u8>,
         num_records: usize,
+        d_round_states: &DeviceBuffer<u64>,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_keccakf_perm_tracegen(
@@ -128,6 +131,8 @@ pub mod keccakf_perm {
             d_trace.len() / height,
             d_records.view(),
             num_records,
+            d_round_states.as_mut_ptr(),
+            d_round_states.len(),
         ))
     }
 }
