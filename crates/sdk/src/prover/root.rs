@@ -33,6 +33,11 @@ use crate::{
     StdIn,
 };
 
+// CPU engine used for `compute_root_proof_heights` — trace heights are structural
+// and backend-independent, so we always use the faster CPU engine for that step.
+type CpuRootE =
+    openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_continuations::prover::RootGpuProver as RootInnerProver;
@@ -143,6 +148,7 @@ pub fn compute_root_proof_heights(
     let def_hook_vk_commit = def_prover.as_ref().map(|p| p.def_hook_vk_commit().into());
 
     let app_pk = AppProvingKey::keygen(app_config)?;
+
     let agg_prover = Arc::new(AggProver::new(
         Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
         AggregationConfig { params: agg_params },
@@ -159,7 +165,9 @@ pub fn compute_root_proof_heights(
     )?;
     let (agg_proof, _) = stark_prover.prove(StdIn::default(), &[])?;
 
-    let root_prover = RootInnerProver::new::<E>(
+    // Use the CPU engine for root keygen + tracegen: trace heights are structural
+    // and backend-independent, so we avoid expensive GPU BN254 keygen here.
+    let root_prover = openvm_continuations::prover::RootCpuProver::new::<CpuRootE>(
         agg_prover.internal_recursive_prover.get_vk(),
         agg_prover
             .internal_recursive_prover
@@ -173,8 +181,7 @@ pub fn compute_root_proof_heights(
         def_hook_vk_commit,
         None,
     );
-
-    let root_proving_ctx: ProvingContext<<E as StarkEngine>::PB> = root_prover
+    let root_proving_ctx = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
