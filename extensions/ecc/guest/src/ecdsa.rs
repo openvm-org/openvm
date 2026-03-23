@@ -116,7 +116,7 @@ where
         }
 
         // Validate tag
-        let tag = Tag::from_u8(bytes[0]).unwrap();
+        let tag = Tag::from_u8(bytes[0]).map_err(|_| Error::new())?;
 
         // Validate length
         let expected_len = tag.message_len(Coordinate::<C>::NUM_LIMBS);
@@ -126,8 +126,8 @@ where
 
         match tag {
             Tag::Identity => {
-                let point = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::IDENTITY;
-                Ok(Self { point })
+                // Reject identity point, a PublicKey must be non-identity
+                Err(Error::new())
             }
 
             Tag::CompressedEvenY | Tag::CompressedOddY => {
