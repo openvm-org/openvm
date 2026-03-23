@@ -668,7 +668,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
-    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims, _gkr_sample_stream) = {
+    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims) = {
         transcript.observe_ext(ctx, baby_bear, &gkr_q0_claim);
 
         let layer0 = &gkr_claims_per_layer[0];
@@ -682,7 +682,6 @@ pub(crate) fn constrain_batch_constraints_verification(
         ext_chip.assert_equal(ctx, q_cross, gkr_q0_claim);
 
         let mu0 = transcript.sample_ext(ctx, baby_bear);
-        let mut gkr_sample_stream = vec![mu0];
         let mut numer_claim =
             interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[0], &layer0[2], &mu0);
         let mut denom_claim =
@@ -691,7 +690,6 @@ pub(crate) fn constrain_batch_constraints_verification(
 
         for round in 1..total_gkr_rounds {
             let lambda_round = transcript.sample_ext(ctx, baby_bear);
-            gkr_sample_stream.push(lambda_round);
 
             let lambda_denom = ext_chip.mul(ctx, lambda_round, denom_claim);
             let mut claim = ext_chip.add(ctx, numer_claim, lambda_denom);
@@ -708,7 +706,6 @@ pub(crate) fn constrain_batch_constraints_verification(
                 transcript.observe_ext(ctx, baby_bear, &ev3);
 
                 let ri = transcript.sample_ext(ctx, baby_bear);
-                gkr_sample_stream.push(ri);
                 gkr_r_prime.push(ri);
 
                 let ev0 = ext_chip.sub(ctx, claim, ev1);
@@ -739,7 +736,6 @@ pub(crate) fn constrain_batch_constraints_verification(
             ext_chip.assert_equal(ctx, expected_claim, claim);
 
             let mu_round = transcript.sample_ext(ctx, baby_bear);
-            gkr_sample_stream.push(mu_round);
             numer_claim = interpolate_linear_at_01_assigned(
                 ctx,
                 ext_chip,
@@ -759,7 +755,7 @@ pub(crate) fn constrain_batch_constraints_verification(
                 .collect();
         }
 
-        (numer_claim, denom_claim, gkr_r, gkr_sample_stream)
+        (numer_claim, denom_claim, gkr_r)
     };
 
     let mut xi = gkr_xi_claims;
