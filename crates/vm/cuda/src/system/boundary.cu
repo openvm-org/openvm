@@ -5,6 +5,8 @@
 
 inline constexpr size_t PERSISTENT_CHUNK = 8;
 inline constexpr size_t BLOCKS_PER_CHUNK = 2;
+// TODO better address space handling
+inline constexpr uint32_t DEFERRAL_AS = 4;
 
 template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     uint32_t address_space;
@@ -43,10 +45,19 @@ __global__ void cukernel_persistent_boundary_tracegen(
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, leaf_label, record.ptr / PERSISTENT_CHUNK);
         if (row_idx % 2 == 0) {
-            // TODO better address space handling
             FpArray<8> init_values;
-            if (initial_mem[record.address_space - 1]) {
-                init_values = FpArray<8>::from_u8_array(initial_mem[record.address_space - 1] + record.ptr);
+            uint32_t addr_space_idx = record.address_space - 1;
+            if (initial_mem[addr_space_idx]) {
+                init_values =
+                    record.address_space == DEFERRAL_AS
+                        ? FpArray<8>::from_raw_array(
+                            reinterpret_cast<uint32_t const *>(
+                                initial_mem[addr_space_idx]
+                            ) + record.ptr
+                        )
+                        : FpArray<8>::from_u8_array(
+                            initial_mem[addr_space_idx] + record.ptr
+                        );
             } else {
                 #pragma unroll
                 for (int i = 0; i < 8; ++i) {
