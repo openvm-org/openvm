@@ -610,13 +610,19 @@ macro_rules! impl_bit_op {
             #[cfg(target_os = "zkvm")]
             #[inline(always)]
             fn $fn_assign(&mut self, rhs: &Uint<BITS, LIMBS>) {
-                use crate::support::zkvm::$fn_zkvm_impl;
-                unsafe {
-                    $fn_zkvm_impl(
-                        self.limbs.as_mut_ptr() as *mut u8,
-                        self.limbs.as_ptr() as *const u8,
-                        rhs.limbs.as_ptr() as *const u8,
-                    );
+                if BITS == 256 {
+                    use crate::support::zkvm::$fn_zkvm_impl;
+                    unsafe {
+                        $fn_zkvm_impl(
+                            self.limbs.as_mut_ptr() as *mut u8,
+                            self.limbs.as_ptr() as *const u8,
+                            rhs.limbs.as_ptr() as *const u8,
+                        );
+                    }
+                } else {
+                    for i in 0..LIMBS {
+                        u64::$fn_assign(&mut self.limbs[i], rhs.limbs[i]);
+                    }
                 }
             }
         }

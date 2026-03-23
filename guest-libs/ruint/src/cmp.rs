@@ -27,7 +27,7 @@ impl<const BITS: usize, const LIMBS: usize> Ord for Uint<BITS, LIMBS> {
                 )
             };
         }
-        self.cmp(rhs)
+        crate::algorithms::cmp(self.as_limbs(), rhs.as_limbs())
     }
 }
 
