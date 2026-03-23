@@ -159,8 +159,7 @@ impl StaticVerifierCircuit {
         ext_chip: &BabyBearExtChip,
         proof: &Proof<RootConfig>,
     ) -> ProofWire {
-        let mut profiler =
-            crate::profiling::CellProfiler::new("static_verifier", ctx.advice.len());
+        let mut profiler = crate::profiling::CellProfiler::new("static_verifier", ctx.advice.len());
 
         profiler.push("load_proof_wire", ctx.advice.len());
         let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);

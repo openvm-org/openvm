@@ -403,8 +403,7 @@ pub(crate) fn constrain_whir_verification(
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
 ) {
-    let mut profiler =
-        crate::profiling::CellProfiler::new("whir_verification", ctx.advice.len());
+    let mut profiler = crate::profiling::CellProfiler::new("whir_verification", ctx.advice.len());
 
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
