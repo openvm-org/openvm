@@ -15,15 +15,11 @@ use openvm_stark_backend::{
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine, StarkTestError,
 };
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
-};
-use serde::{de::DeserializeOwned, Serialize};
-use static_assertions::assert_impl_all;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
-    system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip},
+    system::program::{trace::generate_cached_trace, ProgramAir, ProgramBus, ProgramChip},
     utils::test_cpu_engine,
 };
 
@@ -35,8 +31,6 @@ pub(crate) const BEQ: VmOpcode = VmOpcode::from_usize(0x220);
 pub(crate) const SUB: VmOpcode = VmOpcode::from_usize(0x201);
 pub(crate) const JAL: VmOpcode = VmOpcode::from_usize(0x230);
 pub(crate) const BNE: VmOpcode = VmOpcode::from_usize(0x221);
-
-assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let mut execution_frequencies = vec![0; program.len()];
@@ -57,13 +51,12 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     let engine = test_cpu_engine();
     let exe = VmExe::new(program);
-    let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
-    let (commitment, pcs_data) =
-        TraceCommitter::commit(engine.device(), &[committed_exe.trace.as_ref()]).unwrap();
+    let cached_trace = generate_cached_trace(&exe.program);
+    let (commitment, pcs_data) = TraceCommitter::commit(engine.device(), &[&cached_trace]).unwrap();
     let cached = CommittedTraceData {
         commitment,
         data: Arc::new(pcs_data),
-        trace: committed_exe.trace.as_ref().clone(),
+        trace: cached_trace,
     };
     let chip = ProgramChip {
         filtered_exec_frequencies,
@@ -74,9 +67,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
-    let program = &committed_exe.exe.program;
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
-        let option = program.get_instruction_and_debug_info(index);
+        let option = exe.program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {
             program_cells.extend([
                 BabyBear::from_u32(frequency),
@@ -171,13 +163,12 @@ fn test_program_negative() {
     let execution_frequencies = vec![1; instructions.len()];
     let engine = test_cpu_engine();
     let exe = VmExe::new(program);
-    let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
-    let (commitment, pcs_data) =
-        TraceCommitter::commit(engine.device(), &[committed_exe.trace.as_ref()]).unwrap();
+    let cached_trace = generate_cached_trace(&exe.program);
+    let (commitment, pcs_data) = TraceCommitter::commit(engine.device(), &[&cached_trace]).unwrap();
     let cached = CommittedTraceData {
         commitment,
         data: Arc::new(pcs_data),
-        trace: committed_exe.trace.as_ref().clone(),
+        trace: cached_trace,
     };
     let chip = ProgramChip {
         filtered_exec_frequencies: execution_frequencies.clone(),
