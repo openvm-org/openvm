@@ -239,13 +239,11 @@ impl TranscriptGadget {
             return ctx.load_zero();
         }
         let sampled = self.sample(ctx, baby_bear);
-        // Reduce BabyBearWire so it is constrained to be less than BabyBear modulus
-        let sampled_reduced = baby_bear.reduce(ctx, sampled);
         // PERF[jpw]: we could optimize this since the divisor is a power of 2
         let range = baby_bear.range();
         let (_, rem) = range.div_mod(
             ctx,
-            sampled_reduced.value,
+            sampled.value,
             BigUint::from(1u64) << bits,
             BABY_BEAR_BITS,
         );
