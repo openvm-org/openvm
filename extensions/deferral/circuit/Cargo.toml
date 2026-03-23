@@ -60,7 +60,8 @@ cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-builder",
     "openvm-circuit-primitives/cuda",
-    "openvm-circuit/cuda"
+    "openvm-circuit/cuda",
+    "openvm-rv32im-circuit/cuda",
 ]
 touchemall = [
     "cuda",

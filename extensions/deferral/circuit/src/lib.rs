@@ -9,6 +9,9 @@ pub mod canonicity;
 pub mod count;
 pub mod output;
 pub mod poseidon2;
+
+#[cfg(feature = "cuda")]
+pub(crate) mod cuda_abi;
 pub(crate) mod utils;
 
 mod def_fn;

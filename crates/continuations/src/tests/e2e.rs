@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
 use openvm_deferral_circuit::{
-    DeferralCpuBuilder, DeferralExtension, DeferralFn, Rv32DeferralConfig,
+    DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
@@ -64,7 +64,7 @@ use crate::{
 };
 
 type GpuEngine = BabyBearPoseidon2GpuEngine;
-type AppEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
+type CpuEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
 type RootEngine = BabyBearBn254Poseidon2CpuEngine;
 
 const NUM_DEF_CIRCUITS: usize = 3;
@@ -367,11 +367,10 @@ fn test_deferral_e2e() -> Result<()> {
     };
 
     // =========================================================================
-    // SECTION 2: Run the VM (CPU engine for DeferralCpuBuilder), capture merkle
-    // proofs before and after execution.
+    // SECTION 2: Run the VM, capture merkle proofs before and after execution.
     // =========================================================================
-    let app_engine = AppEngine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, DeferralCpuBuilder, config)?;
+    let app_engine = GpuEngine::new(app_system_params());
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, Rv32DeferralBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
 
@@ -383,7 +382,7 @@ fn test_deferral_e2e() -> Result<()> {
         &vm_poseidon2_hasher::<F>(),
     );
 
-    warn!("proving app proof (CPU)");
+    warn!("proving app proof");
     let app_proof = instance.prove(streams)?;
 
     let final_address_map = &instance.state().as_ref().unwrap().memory.memory;
@@ -400,7 +399,7 @@ fn test_deferral_e2e() -> Result<()> {
     // For each deferred_compute call, produce a proof whose DeferralCircuitPvs
     // carries the matching (input_commit, output_commit).
     // =========================================================================
-    let cpu_engine = AppEngine::new(app_system_params());
+    let cpu_engine = CpuEngine::new(app_system_params());
     let (def_pk, _) = cpu_engine
         .keygen(&[Arc::new(EmptyAirWithPvs(DeferralCircuitPvs::<u8>::width())) as AirRef<SC>]);
 

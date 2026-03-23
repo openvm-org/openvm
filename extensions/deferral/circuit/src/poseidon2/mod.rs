@@ -4,10 +4,14 @@ use openvm_stark_backend::interaction::LookupBus;
 
 mod air;
 mod bus;
+#[cfg(feature = "cuda")]
+mod cuda;
 mod trace;
 
 pub use air::*;
 pub use bus::*;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 pub use trace::*;
 
 const SBOX_REGISTERS: usize = 1;
