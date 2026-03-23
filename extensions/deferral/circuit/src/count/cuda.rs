@@ -16,6 +16,10 @@ pub struct DeferralCircuitCountChipGpu {
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(next_power_of_two_or_zero(self.num_deferral_circuits))
+    }
+
     fn generate_proving_ctx(&self, _: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         if self.num_deferral_circuits == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
