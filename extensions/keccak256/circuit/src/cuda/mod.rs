@@ -163,6 +163,11 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
         let trace_height = next_power_of_two_or_zero(num_records * NUM_ROUNDS);
 
         let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        // Scratch buffer for two-phase tracegen: 25 u64 lanes per round per permutation.
+        // 24 rounds * 25 lanes * 8 bytes = 4800 bytes/perm, vs 24 * 2634 * 4 = 252864 bytes/perm
+        // for the trace matrix (~1.9% overhead).
+        let blocks_to_fill = trace_height.div_ceil(NUM_ROUNDS);
+        let d_round_states = DeviceBuffer::<u64>::with_capacity(blocks_to_fill * NUM_ROUNDS * 25);
 
         unsafe {
             cuda_abi::keccakf_perm::tracegen(
@@ -170,6 +175,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
                 trace_height,
                 &d_records,
                 num_records,
+                &d_round_states,
             )
             .unwrap();
         }
