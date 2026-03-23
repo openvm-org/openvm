@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use openvm_circuit::{arch::DenseRecordArena, Arena};
+use openvm_circuit::arch::{Arena, DenseRecordArena};
 use openvm_circuit_primitives::Chip;
-use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix_col_maj;
+use openvm_cpu_backend::CpuBackend;
+use openvm_cuda_backend::{
+    data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::BabyBearPoseidon2Config,
+};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::ColMajorMatrix;
 use openvm_stark_sdk::utils::create_seeded_rng;
@@ -29,7 +32,11 @@ fn test_cuda_deferral_count_tracegen_equivalence() {
     let count = Arc::new(counts.to_device().unwrap());
     let gpu_chip = DeferralCircuitCountChipGpu::new(count, NUM_DEFERRAL_CIRCUITS);
 
-    let cpu_trace = cpu_chip.generate_proving_ctx(()).common_main;
+    let cpu_trace = <DeferralCircuitCountChip as Chip<
+        (),
+        CpuBackend<BabyBearPoseidon2Config>,
+    >>::generate_proving_ctx(&cpu_chip, ())
+    .common_main;
     let gpu_trace = gpu_chip
         .generate_proving_ctx(DenseRecordArena::with_capacity(1, 1))
         .common_main;
