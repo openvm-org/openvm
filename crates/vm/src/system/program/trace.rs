@@ -70,8 +70,7 @@ pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
 ) -> [F; CHUNK] {
     let hasher = vm_poseidon2_hasher();
     let memory_dimensions = memory_config.memory_dimensions();
-    let mem_config = memory_config;
-    let mut memory_image = AddressMap::new(mem_config.addr_spaces.clone());
+    let mut memory_image = AddressMap::new(memory_config.addr_spaces.clone());
     memory_image.set_from_sparse(&exe.init_memory);
     let init_memory_commit =
         MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
