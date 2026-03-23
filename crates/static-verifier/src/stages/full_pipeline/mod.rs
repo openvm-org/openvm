@@ -193,8 +193,7 @@ pub fn constrained_verify(
         .map(|&air_id| log_heights_per_air[air_id] as isize - l_skip as isize)
         .collect();
 
-    let mut profiler =
-        crate::profiling::CellProfiler::new("constrained_verify", ctx.advice.len());
+    let mut profiler = crate::profiling::CellProfiler::new("constrained_verify", ctx.advice.len());
 
     let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
     let mut transcript = TranscriptGadget::new(ctx);
