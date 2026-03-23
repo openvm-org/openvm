@@ -668,7 +668,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
-    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, gkr_xi_claims) = {
+    let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, mut xi) = {
         transcript.observe_ext(ctx, baby_bear, &gkr_q0_claim);
 
         let layer0 = &gkr_claims_per_layer[0];
@@ -758,7 +758,6 @@ pub(crate) fn constrain_batch_constraints_verification(
         (numer_claim, denom_claim, gkr_r)
     };
 
-    let mut xi = gkr_xi_claims;
     while xi.len() != l_skip + n_global_host {
         xi.push(transcript.sample_ext(ctx, baby_bear));
     }
