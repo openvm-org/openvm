@@ -17,8 +17,10 @@ template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
     uint32_t values[CHUNK];      // Montgomery-encoded Fp values (Fp::asRaw())
 };
 
-const uint32_t IN_BLOCK_SIZE = 4;
-const uint32_t OUT_BLOCK_SIZE = 8;
+inline constexpr uint32_t IN_BLOCK_SIZE = 4;
+inline constexpr uint32_t OUT_BLOCK_SIZE = 8;
+// TODO better address space handling
+inline constexpr uint32_t DEFERRAL_AS = 4;
 
 using InRec = MemoryInventoryRecord<IN_BLOCK_SIZE, 1>;
 using OutRec = MemoryInventoryRecord<OUT_BLOCK_SIZE, 2>;
@@ -40,6 +42,8 @@ __device__ inline bool same_output_block(
 /// field elements. The output values must be in Montgomery form because they are
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
 /// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
+/// DEFERRAL_AS stores field elements (4 bytes per cell, already Montgomery-encoded).
+/// Other address spaces store u8 cells (1 byte per cell).
 __device__ inline void read_initial_chunk(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
@@ -55,12 +59,20 @@ __device__ inline void read_initial_chunk(
         }
         return;
     }
-    size_t byte_offset = static_cast<size_t>(chunk_ptr);
-    #pragma unroll
-    for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
-        size_t off = byte_offset + static_cast<size_t>(i);
-        // Convert u8 value to field element in Montgomery form.
-        out_values[i] = Fp(mem[off]).asRaw();
+    if (address_space == DEFERRAL_AS) {
+        // F-type cells: 4 bytes per cell, already raw Montgomery u32
+        uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + chunk_ptr;
+        #pragma unroll
+        for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
+            out_values[i] = cells[i];
+        }
+    } else {
+        // U8 cells: 1 byte per cell, convert to Montgomery form
+        size_t byte_offset = static_cast<size_t>(chunk_ptr);
+        #pragma unroll
+        for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
+            out_values[i] = Fp(mem[byte_offset + i]).asRaw();
+        }
     }
 }
 
