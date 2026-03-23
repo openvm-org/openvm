@@ -43,8 +43,11 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
+        pub use self::cuda::Rv32DeferralGpuBuilder as Rv32DeferralBuilder;
+
     } else {
         pub use self::DeferralCpuProverExt as DeferralProverExt;
+        pub use self::Rv32DeferralCpuBuilder as Rv32DeferralBuilder;
     }
 }
 
@@ -235,9 +238,9 @@ pub struct Rv32DeferralConfig {
 impl InitFileGenerator for Rv32DeferralConfig {}
 
 #[derive(Clone)]
-pub struct DeferralCpuBuilder;
+pub struct Rv32DeferralCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for DeferralCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32DeferralCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
