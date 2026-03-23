@@ -60,6 +60,7 @@ cuda = [
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
+    "openvm-deferral-circuit/cuda",
     "openvm-recursion-circuit/cuda",
 ]
 touchemall = [

@@ -18,7 +18,7 @@ use openvm_verify_stark_host::vk::NonRootStarkVerifyingKey;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
     prover::DeferralProver,
-    CpuSdk, DeferralInput, Sdk, StdIn,
+    DeferralInput, Sdk, StdIn,
 };
 
 cfg_if::cfg_if! {
@@ -141,9 +141,8 @@ fn test_verify_stark_deferral() -> Result<()> {
     vs_config.deferral = Some(deferral_ext);
     vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
-    // TODO[INT-6241]: Switch this to SDK once CUDA is implemented for deferrals
     let vs_app_config = AppConfig::new(vs_config, app_params);
-    let vs_sdk = CpuSdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
+    let vs_sdk = Sdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
 
     // ---- Step 7: Build the verify-stark ELF ----
     let vs_elf = Elf::decode(
