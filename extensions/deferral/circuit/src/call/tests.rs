@@ -50,7 +50,10 @@ use crate::{
         deferral_poseidon2_air, deferral_poseidon2_chip, DeferralPoseidon2Air,
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
-    utils::{byte_commit_to_f, COMMIT_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS},
+    utils::{
+        byte_commit_to_f, join_memory_ops, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_BYTES,
+        OUTPUT_TOTAL_MEMORY_OPS,
+    },
     DeferralFn,
 };
 
@@ -128,6 +131,14 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
         .collect()
 }
 
+fn read_deferral_digest(tester: &mut impl TestBuilder<F>, ptr: usize) -> [F; DIGEST_SIZE] {
+    let chunks = from_fn(|chunk_idx| {
+        tester
+            .read::<DEFAULT_BLOCK_SIZE>(DEFERRAL_AS as usize, ptr + chunk_idx * DEFAULT_BLOCK_SIZE)
+    });
+    join_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(chunks)
+}
+
 fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
     tester.streams_mut().deferrals = vec![DeferralState::new(vec![]); num_deferrals];
 }
@@ -165,12 +176,12 @@ fn set_and_execute_call<RA, E>(
     tester.write(
         RV32_REGISTER_AS as usize,
         rd,
-        output_ptr.to_le_bytes().map(F::from_u8),
+        (output_ptr as u32).to_le_bytes().map(F::from_u8),
     );
     tester.write(
         RV32_REGISTER_AS as usize,
         rs,
-        input_ptr.to_le_bytes().map(F::from_u8),
+        (input_ptr as u32).to_le_bytes().map(F::from_u8),
     );
     for (chunk_idx, chunk) in input_commit.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
         let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
@@ -183,8 +194,8 @@ fn set_and_execute_call<RA, E>(
 
     let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE;
     let output_acc_ptr = input_acc_ptr + DIGEST_SIZE;
-    let old_input_acc: [F; DIGEST_SIZE] = tester.read(DEFERRAL_AS as usize, input_acc_ptr);
-    let old_output_acc: [F; DIGEST_SIZE] = tester.read(DEFERRAL_AS as usize, output_acc_ptr);
+    let old_input_acc = read_deferral_digest(tester, input_acc_ptr);
+    let old_output_acc = read_deferral_digest(tester, output_acc_ptr);
 
     tester.execute(
         executor,
@@ -238,8 +249,8 @@ fn set_and_execute_call<RA, E>(
     let output_f_commit = byte_commit_to_f(&output_commit_expected.map(F::from_u8));
     let expected_new_input_acc = poseidon2_chip.perm(&old_input_acc, &input_f_commit, true);
     let expected_new_output_acc = poseidon2_chip.perm(&old_output_acc, &output_f_commit, true);
-    let new_input_acc: [F; DIGEST_SIZE] = tester.read(DEFERRAL_AS as usize, input_acc_ptr);
-    let new_output_acc: [F; DIGEST_SIZE] = tester.read(DEFERRAL_AS as usize, output_acc_ptr);
+    let new_input_acc = read_deferral_digest(tester, input_acc_ptr);
+    let new_output_acc = read_deferral_digest(tester, output_acc_ptr);
     assert_eq!(
         new_input_acc, expected_new_input_acc,
         "input accumulator mismatch"

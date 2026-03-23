@@ -16,6 +16,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_instructions::DEFERRAL_AS;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -73,8 +74,13 @@ impl DeviceMemoryTester {
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
         const { assert!(N == DEFAULT_BLOCK_SIZE) };
         let t = self.memory.timestamp();
-        let (t_prev, data) = unsafe { self.memory.read::<u8, N>(addr_space as u32, ptr as u32) };
-        let data = data.map(F::from_u8);
+        let (t_prev, data) = if addr_space as u32 == DEFERRAL_AS {
+            unsafe { self.memory.read::<F, N>(addr_space as u32, ptr as u32) }
+        } else {
+            let (t_prev, data) =
+                unsafe { self.memory.read::<u8, N>(addr_space as u32, ptr as u32) };
+            (t_prev, data.map(F::from_u8))
+        };
         self.chip
             .receive(addr_space as u32, ptr as u32, &data, t_prev);
         self.chip.send(addr_space as u32, ptr as u32, &data, t);

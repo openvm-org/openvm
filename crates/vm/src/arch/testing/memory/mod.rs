@@ -1,4 +1,5 @@
 use air::{MemoryDummyAir, MemoryDummyChip};
+use openvm_instructions::DEFERRAL_AS;
 use rand::Rng;
 
 use crate::{
@@ -35,8 +36,12 @@ impl<F: VmField> MemoryTester<F> {
         const { assert!(N == DEFAULT_BLOCK_SIZE) };
         let memory = &mut self.memory;
         let t = memory.timestamp();
-        let (t_prev, data) = unsafe { memory.read::<u8, N>(addr_space as u32, ptr as u32) };
-        let data = data.map(F::from_u8);
+        let (t_prev, data) = if addr_space as u32 == DEFERRAL_AS {
+            unsafe { memory.read::<F, N>(addr_space as u32, ptr as u32) }
+        } else {
+            let (t_prev, data) = unsafe { memory.read::<u8, N>(addr_space as u32, ptr as u32) };
+            (t_prev, data.map(F::from_u8))
+        };
         self.chip
             .receive(addr_space as u32, ptr as u32, &data, t_prev);
         self.chip.send(addr_space as u32, ptr as u32, &data, t);
