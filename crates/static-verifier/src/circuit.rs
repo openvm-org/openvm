@@ -1,15 +1,17 @@
 //! Host-fixed parameters for the static verifier Halo2 circuit (see crate `lib.rs`).
 
 use core::cmp::Reverse;
-use std::{fmt, sync::Arc};
+use std::{borrow::Borrow, fmt, sync::Arc};
 
 use halo2_base::{
     gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context,
 };
 use itertools::Itertools;
+use openvm_recursion_circuit::batch_constraint::expr_eval::DagCommitPvs;
 use openvm_stark_sdk::{
-    config::baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2Config as RootConfig, Digest as RootDigest,
+    config::{
+        baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
+        baby_bear_poseidon2::Digest as InnerDigest,
     },
     openvm_stark_backend::{
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
@@ -17,6 +19,7 @@ use openvm_stark_sdk::{
         prover::stacked_pcs::StackedLayout,
     },
 };
+use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip},
@@ -104,10 +107,13 @@ impl std::error::Error for StaticCircuitParamsError {}
 #[derive(Clone, Debug)]
 pub struct StaticVerifierCircuit {
     pub root_vk: MultiStarkVerifyingKey<RootConfig>,
-    /// The [RootConfig] commitment of the cached trace in the SymbolicExpressionAir in the
-    /// RootVerifierCircuit. This is the commitment to the symbolic constraints DAG of the
-    /// internal-recursive verifier circuit.
-    pub internal_recursive_dag_cached_commit: RootDigest,
+    /// The [RootConfig] hash onion commitment to the internal-recursive verifier circuit's
+    /// symbolic constraints DAG. This is exposed as a public value by the DagCommitSubAir within
+    /// the SymbolicExpressionAir in the RootVerifierCircuit.
+    ///
+    /// This value can be obtained from `cached_trace_record.dag_commit_info.commit` in the
+    /// `RootProver`.
+    pub internal_recursive_dag_onion_commit: InnerDigest,
     pub log_heights_per_air: Vec<usize>,
     pub trace_id_to_air_id: Vec<usize>,
     pub stacked_layouts: Vec<StackedLayout>,
@@ -121,7 +127,7 @@ impl StaticVerifierCircuit {
     /// first).
     pub fn try_new(
         root_vk: MultiStarkVerifyingKey<RootConfig>,
-        internal_recursive_dag_cached_commit: RootDigest,
+        internal_recursive_dag_onion_commit: InnerDigest,
         log_heights_per_air: &[usize],
     ) -> Result<Self, StaticCircuitParamsError> {
         let n = root_vk.inner.per_air.len();
@@ -138,7 +144,7 @@ impl StaticVerifierCircuit {
             build_stacked_layouts_for_static_vk(&root_vk.inner, &log_heights_per_air);
         Ok(Self {
             root_vk,
-            internal_recursive_dag_cached_commit,
+            internal_recursive_dag_onion_commit,
             log_heights_per_air,
             trace_id_to_air_id,
             stacked_layouts,
@@ -218,6 +224,20 @@ impl StaticVerifierCircuit {
                 .all(|commits| commits.is_empty()),
             "RootVerifierCircuit has no cached trace"
         );
+        profiler.push("pin_dag_onion_commit", ctx.advice.len());
+        let &DagCommitPvs::<_> {
+            commit: onion_commit,
+        } = proof_wire.public_values[CONSTRAINT_EVAL_AIR_ID]
+            .as_slice()
+            .borrow();
+        for (bb_wire, bb_const) in onion_commit
+            .into_iter()
+            .zip_eq(self.internal_recursive_dag_onion_commit)
+        {
+            let loaded_const = ext_chip.base().load_constant(ctx, bb_const);
+            ext_chip.base().assert_equal(ctx, bb_wire, loaded_const);
+        }
+        profiler.pop(ctx.advice.len());
 
         profiler.push("extract_public_values", ctx.advice.len());
         let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
