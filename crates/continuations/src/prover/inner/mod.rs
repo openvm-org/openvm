@@ -5,7 +5,9 @@ use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, Ve
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{CommittedTraceData, DeviceMultiStarkProvingKey, ProverBackend},
+    prover::{
+        CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
+    },
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
@@ -17,7 +19,7 @@ use crate::{
         inner::{InnerCircuit, InnerTraceGen, ProofsType},
         Circuit,
     },
-    prover::{trace_heights_tracing_info, transport_pk},
+    prover::trace_heights_tracing_info,
     SC,
 };
 
@@ -113,15 +115,14 @@ impl<
                 ..Default::default()
             },
         );
-        let engine = E::new(system_params.clone());
+        let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_cached_commit.map(|d| d.into()),
         ));
-        let airs = circuit.airs();
-        let (pk, vk) = engine.keygen(&airs);
-        let d_pk = transport_pk(&engine, &pk);
+        let (pk, vk) = engine.keygen(&circuit.airs());
+        let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
@@ -160,7 +161,7 @@ impl<
             def_hook_cached_commit.map(|d| d.into()),
         ));
         let vk = Arc::new(pk.get_vk());
-        let d_pk = transport_pk(&engine, &pk);
+        let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {

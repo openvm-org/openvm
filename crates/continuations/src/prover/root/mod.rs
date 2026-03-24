@@ -22,7 +22,7 @@ use crate::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
     },
-    prover::{trace_heights_tracing_info, transport_pk},
+    prover::trace_heights_tracing_info,
     CommitBytes, DagCommitBytes, RootSC, SC,
 };
 
@@ -58,7 +58,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         if crate::prover::debug_checks_enabled() {
             crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
         }
-        let d_pk = transport_pk(&engine, self.pk.as_ref());
+        let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
         let proof = engine.prove(&d_pk, ctx)?;
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
@@ -96,6 +96,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             },
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
+        let engine = E::new(system_params);
         let internal_recursive_dag_commit = DagCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
@@ -107,9 +108,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             memory_dimensions,
             num_user_pvs,
         ));
-        let airs = circuit.airs();
-        let engine = E::new(system_params.clone());
-        let (pk, vk) = engine.keygen(&airs);
+        let (pk, vk) = engine.keygen(&circuit.airs());
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),

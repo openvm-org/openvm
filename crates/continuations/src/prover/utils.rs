@@ -1,10 +1,6 @@
 use openvm_recursion_circuit::prelude::F;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkProvingKey,
-    prover::{
-        AirProvingContext, DeviceDataTransporter, DeviceMultiStarkProvingKey, MatrixDimensions,
-        ProverBackend, ProvingContext,
-    },
+    prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
     AirRef, StarkEngine, StarkProtocolConfig,
 };
 
@@ -12,17 +8,6 @@ use crate::circuit::Circuit;
 
 pub(crate) fn debug_checks_enabled() -> bool {
     std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
-}
-
-pub(crate) fn transport_pk<E>(
-    engine: &E,
-    pk: &MultiStarkProvingKey<E::SC>,
-) -> DeviceMultiStarkProvingKey<E::PB>
-where
-    E: StarkEngine,
-    E::PD: DeviceDataTransporter<E::SC, E::PB>,
-{
-    engine.device().transport_pk_to_device(pk)
 }
 
 pub fn debug_constraints<SC, C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)
