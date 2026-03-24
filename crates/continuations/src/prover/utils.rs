@@ -17,7 +17,7 @@ pub(crate) fn debug_checks_enabled() -> bool {
 pub(crate) fn keygen_for_proving_backend<SC, E, Keygen>(
     engine: &E,
     airs: &[AirRef<SC>],
-    cuda_keygen: Keygen,
+    cpu_keygen: Keygen,
 ) -> (MultiStarkProvingKey<SC>, MultiStarkVerifyingKey<SC>)
 where
     SC: StarkProtocolConfig<F = F>,
@@ -27,12 +27,12 @@ where
     #[cfg(feature = "cuda")]
     {
         let _ = (engine, airs);
-        cuda_keygen()
+        cpu_keygen()
     }
 
     #[cfg(not(feature = "cuda"))]
     {
-        let _ = cuda_keygen;
+        let _ = cpu_keygen;
         engine.keygen(airs)
     }
 }
