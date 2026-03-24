@@ -1,47 +1,25 @@
 use std::sync::Arc;
 
 use eyre::Result;
-use openvm_circuit::{
-    arch::{
-        instructions::{
-            exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
-        },
-        SystemConfig,
-    },
-    system::memory::dimensions::MemoryDimensions,
-};
+use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{CommitBytes, RootSC, SC};
-use openvm_sdk_config::SdkVmBuilder;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::ProvingContext,
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security,
-    baby_bear_poseidon2::{Digest, F},
-    MAX_APP_LOG_STACKED_HEIGHT,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use openvm_verify_stark_host::NonRootStarkProof;
 use tracing::info_span;
-
-use crate::{
-    config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
-    keygen::AppProvingKey,
-    prover::{AggProver, DeferralPathProver, StarkProver},
-    StdIn,
-};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_continuations::prover::RootCpuProver as RootInnerProver;
         type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
-        type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
         use openvm_continuations::prover::RootCpuProver as RootInnerProver;
         type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
-        type ChildE = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 
@@ -112,79 +90,4 @@ impl RootProver {
             .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
         Ok(proof)
     }
-}
-
-pub fn compute_root_proof_heights(
-    system_config: SystemConfig,
-    agg_params: AggregationSystemParams,
-    agg_tree_config: AggregationTreeConfig,
-    root_params: SystemParams,
-    def_prover: Option<Arc<DeferralPathProver>>,
-) -> Result<Vec<usize>> {
-    let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
-        SystemOpcode::TERMINATE.global_opcode(),
-        0,
-        0,
-        0,
-        0,
-        0,
-    )]);
-    let dummy_exe = Arc::new(VmExe::new(dummy_program));
-
-    let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.num_public_values;
-
-    let mut app_config = AppConfig::riscv32(app_params_with_100_bits_security(
-        MAX_APP_LOG_STACKED_HEIGHT,
-    ));
-    app_config.app_vm_config.system.config = system_config;
-
-    let def_hook_cached_commit = def_prover.as_ref().map(|p| p.def_hook_cached_commit());
-    let def_hook_vk_commit = def_prover.as_ref().map(|p| p.def_hook_vk_commit().into());
-
-    let app_pk = AppProvingKey::keygen(app_config)?;
-    let agg_prover = Arc::new(AggProver::new(
-        Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
-        AggregationConfig { params: agg_params },
-        agg_tree_config,
-        def_hook_cached_commit,
-    ));
-
-    let mut stark_prover = StarkProver::<ChildE, SdkVmBuilder>::new(
-        Default::default(),
-        &app_pk.app_vm_pk,
-        dummy_exe,
-        agg_prover.clone(),
-        def_prover,
-    )?;
-    let (agg_proof, _) = stark_prover.prove(StdIn::default(), &[])?;
-
-    let root_prover = RootInnerProver::new::<E>(
-        agg_prover.internal_recursive_prover.get_vk(),
-        agg_prover
-            .internal_recursive_prover
-            .get_self_vk_pcs_data()
-            .unwrap()
-            .commitment
-            .into(),
-        root_params,
-        memory_dimensions,
-        num_user_pvs,
-        def_hook_vk_commit,
-        None,
-    );
-
-    let root_proving_ctx: ProvingContext<<E as StarkEngine>::PB> = root_prover
-        .generate_proving_ctx(
-            agg_proof.inner,
-            &agg_proof.user_pvs_proof,
-            agg_proof.deferral_merkle_proofs.as_ref(),
-        )
-        .unwrap();
-
-    let ret = root_proving_ctx
-        .into_iter()
-        .map(|(_, air_ctx)| air_ctx.height())
-        .collect();
-    Ok(ret)
 }

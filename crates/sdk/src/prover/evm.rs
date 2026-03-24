@@ -8,11 +8,18 @@ use openvm_circuit::arch::{
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
+#[cfg(feature = "evm-prove")]
+use crate::prover::Halo2Prover;
 use crate::{
     prover::{vm::types::VmProvingKey, AggProver, DeferralPathProver, RootProver, StarkProver},
     DeferralInput, StdIn, SC,
 };
 
+/// EVM prover that produces a root STARK proof with Halo2 wrapping.
+///
+/// [`EvmProver::prove_unwrapped`] outputs the unwrapped root STARK, while
+/// [`EvmProver::prove_evm`] produces an [`EvmProof`](crate::types::EvmProof)
+/// suitable for on-chain verification.
 pub struct EvmProver<E, VB>
 where
     E: StarkEngine,
@@ -20,6 +27,8 @@ where
 {
     pub stark_prover: StarkProver<E, VB>,
     pub root_prover: Arc<RootProver>,
+    #[cfg(feature = "evm-prove")]
+    pub halo2_prover: Option<Halo2Prover>,
 }
 
 impl<E, VB> EvmProver<E, VB>
@@ -35,15 +44,17 @@ where
         agg_prover: Arc<AggProver>,
         def_prover: Option<Arc<DeferralPathProver>>,
         root_prover: Arc<RootProver>,
+        #[cfg(feature = "evm-prove")] halo2_prover: Option<Halo2Prover>,
     ) -> Result<Self> {
         Ok(Self {
             stark_prover: StarkProver::new(vm_builder, app_vm_pk, app_exe, agg_prover, def_prover)?,
             root_prover,
+            #[cfg(feature = "evm-prove")]
+            halo2_prover,
         })
     }
 
-    // TODO[INT-5581]: should output an EvmProof
-    pub fn prove(
+    pub fn prove_unwrapped(
         &mut self,
         input: StdIn<Val<SC>>,
         def_inputs: &[DeferralInput],
@@ -102,5 +113,25 @@ where
 
         let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
         Ok(root_proof)
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn prove_evm(
+        &mut self,
+        input: StdIn<Val<SC>>,
+        def_inputs: &[DeferralInput],
+    ) -> Result<crate::types::EvmProof>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
+            + MeteredExecutor<Val<SC>>
+            + PreflightExecutor<Val<SC>, VB::RecordArena>,
+    {
+        let root_proof = self.prove_unwrapped(input, def_inputs)?;
+        let evm_proof = self
+            .halo2_prover
+            .as_ref()
+            .unwrap()
+            .prove_for_evm(&root_proof);
+        Ok(evm_proof)
     }
 }

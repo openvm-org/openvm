@@ -223,6 +223,7 @@ pub fn constrained_verify(
         &n_per_trace,
         trace_id_to_air_id,
         proof_wire.public_values.clone(),
+        &mut profiler,
     );
     profiler.pop(ctx.advice.len());
 
@@ -240,6 +241,7 @@ pub fn constrained_verify(
         root_vk.inner.params.n_stack,
         &batch.column_openings,
         &batch.r,
+        &mut profiler,
     );
     profiler.pop(ctx.advice.len());
 
@@ -251,6 +253,7 @@ pub fn constrained_verify(
         for _ in 0..l_skip {
             u_cube.push(power);
             power = ext_chip.square(ctx, power);
+            power = ext_chip.reduce_max_bits(ctx, power);
         }
         u_cube.extend(u.iter().skip(1).copied());
         u_cube
@@ -278,8 +281,11 @@ pub fn constrained_verify(
         &stacked_reduction.stacking_openings,
         &initial_commitment_roots,
         &u_cube,
+        &mut profiler,
     );
     profiler.pop(ctx.advice.len());
+
+    profiler.print(ctx.advice.len());
 
     #[cfg(feature = "cell-profiling")]
     if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {

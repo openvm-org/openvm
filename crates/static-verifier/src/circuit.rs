@@ -7,6 +7,7 @@ use halo2_base::{
     gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context,
 };
 use itertools::Itertools;
+use openvm_cpu_backend::CpuBackend;
 use openvm_recursion_circuit::{
     batch_constraint::expr_eval::DagCommitPvs,
     system::{VerifierConfig, VerifierSubCircuit, VerifierTraceGen},
@@ -186,6 +187,8 @@ impl StaticVerifierCircuit {
         );
         profiler.pop(ctx.advice.len());
 
+        profiler.print(ctx.advice.len());
+
         #[cfg(feature = "cell-profiling")]
         if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
             let _ = std::fs::create_dir_all(&dir);
@@ -283,10 +286,13 @@ pub fn compute_dag_onion_commit(
             ..Default::default()
         },
     );
-    let cached_trace_record = VerifierTraceGen::<_, BabyBearPoseidon2Config>::cached_trace_record(
-        &verifier_circuit,
-        internal_recursive_vk,
-    );
-    // despite the name, this returns the DAG onion commit for when there is no cached trace
+
+    // The ProverBackend and config used here also does not impact the generated CachedTraceRecord
+    let cached_trace_record = VerifierTraceGen::<
+        CpuBackend<BabyBearPoseidon2Config>,
+        BabyBearPoseidon2Config,
+    >::cached_trace_record(&verifier_circuit, internal_recursive_vk);
+
+    // Despite the name, this returns the DAG onion commit for when there is no cached trace
     cached_trace_record.dag_commit_info.unwrap().commit
 }

@@ -1,61 +1,69 @@
-use openvm_circuit::arch::{SingleSegmentVmProver, VirtualMachineError};
-use openvm_continuations::{
-    static_verifier::{StaticVerifierConfig, StaticVerifierPvHandler},
-    verifier::root::types::RootVmVerifierInput,
+use std::sync::Arc;
+
+use openvm_continuations::{RootSC, SC};
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
+use openvm_static_verifier::{
+    compute_dag_onion_commit, log_heights_per_air_from_proof, Halo2Params, Halo2ParamsReader,
+    Halo2WrapperProvingKey, StaticVerifierCircuit, StaticVerifierProvingKey, StaticVerifierShape,
 };
-use openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS;
-use openvm_native_compiler::prelude::*;
-use openvm_native_recursion::{
-    halo2::{verifier::Halo2VerifierProvingKey, Halo2Params, Halo2Prover},
-    hints::Hintable,
-    witness::Witnessable,
-};
-use openvm_stark_sdk::openvm_stark_backend::{p3_field::PrimeCharacteristicRing, proof::Proof};
 
-use crate::{keygen::RootVerifierProvingKey, prover::RootVerifierLocalProver, RootSC, F, SC};
+use crate::{config::Halo2Config, keygen::Halo2ProvingKey};
 
-impl RootVerifierProvingKey {
-    /// Keygen the static verifier for this root verifier.
-    pub fn keygen_static_verifier(
-        &self,
-        params: &Halo2Params,
-        root_proof: Proof<RootSC>,
-        pv_handler: &impl StaticVerifierPvHandler,
-    ) -> Halo2VerifierProvingKey {
-        let mut witness = Witness::default();
-        root_proof.write(&mut witness);
-        let special_air_ids = self.air_id_permutation().get_special_air_ids();
-        let config = StaticVerifierConfig {
-            root_verifier_fri_params: self.vm_pk.fri_params,
-            special_air_ids,
-            root_verifier_program_commit: self.root_committed_exe.get_program_commit().into(),
-        };
-        let dsl_operations = config.build_static_verifier_operations(
-            &self.vm_pk.vm_pk.get_vk(),
-            &root_proof,
-            pv_handler,
-        );
-        Halo2VerifierProvingKey {
-            pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
-            dsl_ops: dsl_operations,
-        }
+/// Generate a [`Halo2ProvingKey`] (static verifier + wrapper) by running a
+/// dummy root proof through the pipeline.
+///
+/// This is the self-contained keygen flow:
+/// 1. Build a [`StaticVerifierProvingKey`] from the root VK and proof shape
+/// 2. Generate a dummy snark from the static verifier
+/// 3. Build a [`Halo2WrapperProvingKey`] (auto-tuned or fixed `k`)
+/// 4. Return the composite [`Halo2ProvingKey`]
+pub fn keygen_halo2(
+    halo2_config: &Halo2Config,
+    reader: &impl Halo2ParamsReader,
+    shape: StaticVerifierShape,
+    internal_recursive_vk: &MultiStarkVerifyingKey<SC>,
+    root_vk: &MultiStarkVerifyingKey<RootSC>,
+    dummy_root_proof: &Proof<RootSC>,
+) -> Halo2ProvingKey {
+    let params = reader.read_params(shape.k);
+
+    let verifier = keygen_static_verifier(
+        &params,
+        shape,
+        internal_recursive_vk,
+        root_vk,
+        dummy_root_proof,
+    );
+
+    let dummy_snark = verifier.generate_dummy_snark(reader);
+
+    let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
+        Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
+    } else {
+        Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
+    };
+
+    Halo2ProvingKey {
+        verifier: Arc::new(verifier),
+        wrapper: Arc::new(wrapper),
+        profiling: halo2_config.profiling,
     }
+}
 
-    pub fn generate_dummy_root_proof(
-        &self,
-        dummy_internal_proof: Proof<SC>,
-    ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        let mut prover = RootVerifierLocalProver::new(self)?;
-        // 2 * DIGEST_SIZE for exe_commit and leaf_commit
-        let num_public_values = prover.vm_config().as_ref().num_public_values - 2 * DIGEST_SIZE;
-        SingleSegmentVmProver::prove(
-            &mut prover,
-            RootVmVerifierInput {
-                proofs: vec![dummy_internal_proof],
-                public_values: vec![F::ZERO; num_public_values],
-            }
-            .write(),
-            NATIVE_MAX_TRACE_HEIGHTS,
-        )
-    }
+/// Generate a [`StaticVerifierProvingKey`] from a root VK, heights, and a
+/// dummy root proof. This is the lower-level keygen without the wrapper.
+pub fn keygen_static_verifier(
+    params: &Halo2Params,
+    shape: StaticVerifierShape,
+    internal_recursive_vk: &MultiStarkVerifyingKey<SC>,
+    root_vk: &MultiStarkVerifyingKey<RootSC>,
+    dummy_root_proof: &Proof<RootSC>,
+) -> StaticVerifierProvingKey {
+    let log_heights = log_heights_per_air_from_proof(dummy_root_proof);
+    let onion_commit = compute_dag_onion_commit(internal_recursive_vk);
+
+    let circuit = StaticVerifierCircuit::try_new(root_vk.clone(), onion_commit, &log_heights)
+        .expect("Failed to construct StaticVerifierCircuit");
+
+    StaticVerifierProvingKey::keygen(params, shape, circuit, dummy_root_proof)
 }

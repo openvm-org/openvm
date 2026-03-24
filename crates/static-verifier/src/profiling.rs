@@ -67,6 +67,9 @@ mod disabled {
         pub fn pop(&mut self, _cell_count: usize) {}
 
         #[inline(always)]
+        pub fn print(&self, _cell_count: usize) {}
+
+        #[inline(always)]
         pub fn write_flamegraph(&self, _path: &str, _title: &str, _cell_count: usize) {}
 
         #[inline(always)]

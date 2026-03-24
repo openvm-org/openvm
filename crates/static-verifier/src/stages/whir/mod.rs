@@ -23,6 +23,7 @@ use crate::{
         BABY_BEAR_EXT_DEGREE,
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
+    profiling::CellProfiler,
     stages::{
         batch_constraints::{eval_eq_mle_assigned, eval_eq_mle_ef_f_assigned},
         shared_math::{
@@ -317,8 +318,7 @@ fn binary_k_fold_assigned(
             let mut alpha_minus_t = *alpha;
             alpha_minus_t.0[0] = base_chip.sub(ctx, alpha_minus_t.0[0], t);
             let fold = ext_chip.mul(ctx, alpha_minus_t, lo_minus_hi);
-            let fold = ext_chip.scalar_mul(ctx, fold, t_inv_half);
-            values[i] = ext_chip.add(ctx, lo, fold);
+            values[i] = ext_chip.scalar_mul_add(ctx, fold, t_inv_half, lo);
         }
         x_pow = base_chip.square(ctx, x_pow);
         x_pow = base_chip.reduce_max_bits(ctx, x_pow);
@@ -405,9 +405,8 @@ pub(crate) fn constrain_whir_verification(
     stacking_openings: &[Vec<BabyBearExtWire>],
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
+    profiler: &mut CellProfiler,
 ) {
-    let mut profiler = crate::profiling::CellProfiler::new("whir_verification", ctx.advice.len());
-
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
     let params = &mvk0.params;
@@ -439,13 +438,18 @@ pub(crate) fn constrain_whir_verification(
     for _ in 0..total_width {
         mu_pows.push(mu_pow);
         mu_pow = ext_chip.mul(ctx, mu_pow, mu_challenge);
+        mu_pow = ext_chip.reduce_max_bits(ctx, mu_pow);
     }
 
     let mut final_claim = ext_chip.zero(ctx);
     let mut mu_idx = 0usize;
     for commit_openings in stacking_openings {
         for opening in commit_openings {
-            let weighted = ext_chip.mul(ctx, *opening, mu_pows[mu_idx]);
+            let weighted = if mu_idx == 0 {
+                *opening
+            } else {
+                ext_chip.mul(ctx, *opening, mu_pows[mu_idx])
+            };
             final_claim = ext_chip.add(ctx, final_claim, weighted);
             mu_idx += 1;
         }
@@ -573,10 +577,13 @@ pub(crate) fn constrain_whir_verification(
                     );
                     for col_idx in 0..commit_openings.len() {
                         let mu_pow = mu_pows[mu_power_idx];
+                        let is_first_mu = mu_power_idx == 0;
                         for (row_idx, row) in merkle_path.leaf_values.iter().enumerate() {
                             let opened_base = row[col_idx];
                             codeword_vals[row_idx] = if let Some(prev) = codeword_vals[row_idx] {
                                 Some(ext_chip.scalar_mul_add(ctx, mu_pow, opened_base, prev))
+                            } else if is_first_mu {
+                                Some(ext_chip.from_base_var(ctx, opened_base))
                             } else {
                                 Some(ext_chip.scalar_mul(ctx, mu_pow, opened_base))
                             };
@@ -724,19 +731,4 @@ pub(crate) fn constrain_whir_verification(
     let zero = ext_chip.zero(ctx);
     ext_chip.assert_equal(ctx, final_residual, zero);
     profiler.pop(ctx.advice.len());
-
-    #[cfg(feature = "cell-profiling")]
-    if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
-        let _ = std::fs::create_dir_all(&dir);
-        profiler.write_flamegraph(
-            &format!("{dir}/whir_verification.svg"),
-            "WHIR Verification",
-            ctx.advice.len(),
-        );
-        profiler.write_flamegraph_reversed(
-            &format!("{dir}/whir_verification_rev.svg"),
-            "WHIR Verification (reversed)",
-            ctx.advice.len(),
-        );
-    }
 }

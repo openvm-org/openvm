@@ -60,38 +60,39 @@ impl DeferralPoseidon2ChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
     fn generate_proving_ctx(&self, _: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let mut num_records = self.idx.to_host().unwrap()[0] as usize;
+        if num_records == 0 {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
 
-        if num_records > 0 {
-            unsafe {
-                let d_num_records = [num_records].to_device().unwrap();
-                let mut temp_bytes = 0;
-                poseidon2::deduplicate_records_get_temp_bytes(
-                    &self.records,
-                    &self.counts,
-                    num_records,
-                    &d_num_records,
-                    &mut temp_bytes,
-                )
-                .expect("Failed to get deferral poseidon2 temp bytes");
+        unsafe {
+            let d_num_records = [num_records].to_device().unwrap();
+            let mut temp_bytes = 0;
+            poseidon2::deduplicate_records_get_temp_bytes(
+                &self.records,
+                &self.counts,
+                num_records,
+                &d_num_records,
+                &mut temp_bytes,
+            )
+            .expect("Failed to get deferral poseidon2 temp bytes");
 
-                let d_temp_storage = if temp_bytes == 0 {
-                    DeviceBuffer::<u8>::new()
-                } else {
-                    DeviceBuffer::<u8>::with_capacity(temp_bytes)
-                };
+            let d_temp_storage = if temp_bytes == 0 {
+                DeviceBuffer::<u8>::new()
+            } else {
+                DeviceBuffer::<u8>::with_capacity(temp_bytes)
+            };
 
-                poseidon2::deduplicate_records(
-                    &self.records,
-                    &self.counts,
-                    num_records,
-                    &d_num_records,
-                    &d_temp_storage,
-                    temp_bytes,
-                )
-                .expect("Failed to deduplicate deferral poseidon2 records");
+            poseidon2::deduplicate_records(
+                &self.records,
+                &self.counts,
+                num_records,
+                &d_num_records,
+                &d_temp_storage,
+                temp_bytes,
+            )
+            .expect("Failed to deduplicate deferral poseidon2 records");
 
-                num_records = *d_num_records.to_host().unwrap().first().unwrap();
-            }
+            num_records = *d_num_records.to_host().unwrap().first().unwrap();
         }
 
         let trace_height = next_power_of_two_or_zero(num_records);

@@ -29,6 +29,8 @@ pub mod prover;
 pub mod stages;
 pub mod transcript;
 mod utils;
+#[cfg(feature = "evm-prove")]
+pub mod wrapper;
 
 pub use circuit::{compute_dag_onion_commit, StaticCircuitParamsError, StaticVerifierCircuit};
 pub use config::{
@@ -39,3 +41,7 @@ pub use keygen::StaticVerifierProvingKey;
 pub use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{EF as RootEF, F as RootF};
 pub use prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof};
 pub use stages::proof_shape::log_heights_per_air_from_proof;
+#[cfg(feature = "evm-prove")]
+pub use wrapper::{
+    EvmVerifierByteCode, FallbackEvmVerifier, Halo2ParamsReader, Halo2WrapperProvingKey,
+};

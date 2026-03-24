@@ -20,7 +20,9 @@ halo2-base = { workspace = true, features = ["halo2-axiom"] }
 snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
 
 rand_chacha.workspace = true
+once_cell = { workspace = true, optional = true }
 serde.workspace = true
+serde_json = { workspace = true, optional = true }
 serde_with = { workspace = true, features = ["hex"], optional = true }
 itertools.workspace = true
 num-bigint.workspace = true
@@ -35,6 +37,6 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 [features]
 default = []
 cuda = ["dep:openvm-cuda-backend"]
-evm-prove = ["dep:snark-verifier-sdk", "dep:serde_with"]
-evm-verify = ["evm-prove"]
+evm-prove = ["dep:snark-verifier-sdk", "dep:serde_with", "dep:once_cell", "dep:serde_json"]
+evm-verify = ["evm-prove", "snark-verifier-sdk/revm"]
 cell-profiling = ["dep:inferno"]

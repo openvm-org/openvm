@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use halo2_base::{
     gates::{GateChip, GateInstructions, RangeChip, RangeInstructions},
@@ -56,11 +56,16 @@ impl BabyBearWire {
 #[derive(Clone)]
 pub struct BabyBearChip {
     pub range: Arc<RangeChip<Fr>>,
+    /// Cache for loaded constants, keyed by canonical u64 value.
+    const_cache: RefCell<HashMap<u64, BabyBearWire>>,
 }
 
 impl BabyBearChip {
     pub fn new(range_chip: Arc<RangeChip<Fr>>) -> Self {
-        BabyBearChip { range: range_chip }
+        BabyBearChip {
+            range: range_chip,
+            const_cache: RefCell::new(HashMap::new()),
+        }
     }
 
     pub fn gate(&self) -> &GateChip<Fr> {
@@ -81,13 +86,22 @@ impl BabyBearChip {
     }
 
     pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
-        let max_bits = bit_length(value.as_canonical_u64());
-        let value = if value == BabyBear::ZERO {
+        let key = value.as_canonical_u64();
+        if let Some(&cached) = self.const_cache.borrow().get(&key) {
+            return cached;
+        }
+        let max_bits = bit_length(key);
+        let assigned = if value == BabyBear::ZERO {
             ctx.load_zero()
         } else {
-            ctx.load_constant(Fr::from(PrimeField64::as_canonical_u64(&value)))
+            ctx.load_constant(Fr::from(key))
         };
-        BabyBearWire { value, max_bits }
+        let wire = BabyBearWire {
+            value: assigned,
+            max_bits,
+        };
+        self.const_cache.borrow_mut().insert(key, wire);
+        wire
     }
 
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {

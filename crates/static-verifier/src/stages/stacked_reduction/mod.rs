@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use halo2_base::Context;
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
@@ -6,6 +8,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{BabyBearExtChip, BabyBearExtWire},
+    profiling::CellProfiler,
     stages::{
         batch_constraints::{
             eval_eq_mle_binary_assigned, eval_eq_prism_assigned, eval_eq_uni_at_one_assigned,
@@ -96,9 +99,12 @@ pub(crate) fn constrain_stacked_reduction(
     n_stack: usize,
     batch_column_openings: &[Vec<Vec<BabyBearExtWire>>],
     r: &[BabyBearExtWire],
+    profiler: &mut CellProfiler,
 ) -> StackedReductionIntermediatesWire {
     let omega_order = 1usize << l_skip;
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
+
+    profiler.push("claim_batching", ctx.advice.len());
 
     let mut lambda_idx = 0usize;
     let lambda_indices_per_layout = layouts
@@ -142,15 +148,25 @@ pub(crate) fn constrain_stacked_reduction(
     for _ in 0..t_claims.len() {
         lambda_sqr_powers.push(cur_lambda_sqr);
         cur_lambda_sqr = ext_chip.mul(ctx, cur_lambda_sqr, lambda_sqr);
+        cur_lambda_sqr = ext_chip.reduce_max_bits(ctx, cur_lambda_sqr);
     }
 
     let mut s_0 = ext_chip.zero(ctx);
-    for ((claim, claim_rot), lambda_pow) in t_claims.iter().zip(lambda_sqr_powers.iter()) {
+    for (i, ((claim, claim_rot), lambda_pow)) in
+        t_claims.iter().zip(lambda_sqr_powers.iter()).enumerate()
+    {
         let claim_rot_lambda = ext_chip.mul(ctx, *claim_rot, lambda);
         let batched_claim = ext_chip.add(ctx, *claim, claim_rot_lambda);
-        let term = ext_chip.mul(ctx, batched_claim, *lambda_pow);
+        let term = if i == 0 {
+            batched_claim
+        } else {
+            ext_chip.mul(ctx, batched_claim, *lambda_pow)
+        };
         s_0 = ext_chip.add(ctx, s_0, term);
     }
+
+    profiler.pop(ctx.advice.len());
+    profiler.push("univariate_sumcheck", ctx.advice.len());
 
     let univariate_round_coeffs = &stacking_wire.univariate_round_coeffs;
     let mut s_0_sum_eval = ext_chip.zero(ctx);
@@ -186,6 +202,9 @@ pub(crate) fn constrain_stacked_reduction(
         u.push(u_j);
     }
 
+    profiler.pop(ctx.advice.len());
+    profiler.push("derived_q_coeffs", ctx.advice.len());
+
     let stacking_matrix_expected_widths = layouts
         .iter()
         .map(|layout| {
@@ -205,30 +224,53 @@ pub(crate) fn constrain_stacked_reduction(
         })
         .collect::<Vec<_>>();
 
+    // Determine whether any column needs rotation (to decide if rot_kernel is needed).
+    let any_need_rot = lambda_indices_per_layout
+        .iter()
+        .any(|indices| indices.iter().any(|&(_, rot)| rot));
+
+    // Cache per-n computations: (ind, eq_prism, rot_kernel).
+    let mut n_cache: HashMap<isize, (BabyBearExtWire, BabyBearExtWire, BabyBearExtWire)> =
+        HashMap::new();
+    // Cache eq_mle results by (n, b_bits encoded as usize).
+    let mut eq_mle_cache: HashMap<(isize, usize), BabyBearExtWire> = HashMap::new();
+
     for (commit_idx, layout) in layouts.iter().enumerate() {
         let lambda_indices = &lambda_indices_per_layout[commit_idx];
         for (col_idx, &(_, _, s)) in layout.sorted_cols.iter().enumerate() {
             let (lambda_idx, need_rot) = lambda_indices[col_idx];
             let n = s.log_height() as isize - l_skip as isize;
             let n_lift = n.max(0) as usize;
-            let b_bits = (l_skip + n_lift..l_skip + n_stack)
-                .map(|j| ((s.row_idx >> j) & 1) == 1)
-                .collect::<Vec<_>>();
-            let eq_mle = eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &b_bits);
-            let ind = eval_in_uni_assigned(ctx, ext_chip, l_skip, n, u[0]);
-            let (l, rs_n) = if n.is_negative() {
-                (
-                    l_skip.wrapping_add_signed(n),
-                    vec![ext_chip.pow_power_of_two(ctx, r[0], n.unsigned_abs())],
-                )
-            } else {
-                (l_skip, r[..=n_lift].to_vec())
-            };
-            let eq_prism = eval_eq_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
+            let b_key = s.row_idx >> (l_skip + n_lift);
+
+            let eq_mle = *eq_mle_cache.entry((n, b_key)).or_insert_with(|| {
+                let b_bits = (l_skip + n_lift..l_skip + n_stack)
+                    .map(|j| ((s.row_idx >> j) & 1) == 1)
+                    .collect::<Vec<_>>();
+                eval_eq_mle_binary_assigned(ctx, ext_chip, &u[n_lift + 1..], &b_bits)
+            });
+
+            let &mut (ind, eq_prism, rot_kernel) = n_cache.entry(n).or_insert_with(|| {
+                let ind = eval_in_uni_assigned(ctx, ext_chip, l_skip, n, u[0]);
+                let (l, rs_n) = if n.is_negative() {
+                    (
+                        l_skip.wrapping_add_signed(n),
+                        vec![ext_chip.pow_power_of_two(ctx, r[0], n.unsigned_abs())],
+                    )
+                } else {
+                    (l_skip, r[..=n_lift].to_vec())
+                };
+                let eq_prism = eval_eq_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
+                let rot_kernel = if any_need_rot {
+                    eval_rot_kernel_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n)
+                } else {
+                    ext_chip.zero(ctx)
+                };
+                (ind, eq_prism, rot_kernel)
+            });
+
             let mut batched = ext_chip.mul(ctx, lambda_sqr_powers[lambda_idx], eq_prism);
             if need_rot {
-                let rot_kernel =
-                    eval_rot_kernel_prism_assigned(ctx, ext_chip, l, &u[..=n_lift], &rs_n);
                 let lambda_rot = ext_chip.mul(ctx, lambda, rot_kernel);
                 let rot_term = ext_chip.mul(ctx, lambda_sqr_powers[lambda_idx], lambda_rot);
                 batched = ext_chip.add(ctx, batched, rot_term);
@@ -239,6 +281,9 @@ pub(crate) fn constrain_stacked_reduction(
             derived_q_coeffs[commit_idx][s.col_idx] = updated;
         }
     }
+
+    profiler.pop(ctx.advice.len());
+    profiler.push("final_verification", ctx.advice.len());
 
     let stacking_openings = &stacking_wire.stacking_openings;
     let mut final_sum = ext_chip.zero(ctx);
@@ -252,6 +297,8 @@ pub(crate) fn constrain_stacked_reduction(
 
     let final_residual = ext_chip.sub(ctx, final_claim, final_sum);
     ext_chip.assert_equal(ctx, final_residual, zero);
+
+    profiler.pop(ctx.advice.len());
 
     StackedReductionIntermediatesWire {
         stacking_openings: stacking_openings.clone(),
