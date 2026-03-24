@@ -1397,6 +1397,7 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
+ "terminal_size",
 ]
 
 [[package]]
@@ -1436,10 +1437,78 @@ dependencies = [
 ]
 
 [[package]]
+name = "codspeed"
+version = "3.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35584c5fcba8059780748866387fb97c5a203bcfc563fc3d0790af406727a117"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "colored",
+ "glob",
+ "libc",
+ "nix",
+ "serde",
+ "serde_json",
+ "statrs",
+ "uuid",
+]
+
+[[package]]
+name = "codspeed-divan-compat"
+version = "3.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adf64eda57508448d59efd940bad62ede7c50b0d451a150b8d6a0eca642792a6"
+dependencies = [
+ "codspeed",
+ "codspeed-divan-compat-macros",
+ "codspeed-divan-compat-walltime",
+]
+
+[[package]]
+name = "codspeed-divan-compat-macros"
+version = "3.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "058167258e819b16a4ba601fdfe270349ef191154758dbce122c62a698f70ba8"
+dependencies = [
+ "divan-macros",
+ "itertools 0.14.0",
+ "proc-macro-crate 3.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "codspeed-divan-compat-walltime"
+version = "3.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48f9866ee3a4ef9d2868823ea5811886763af244f2df584ca247f49281c43f1f"
+dependencies = [
+ "cfg-if",
+ "clap",
+ "codspeed",
+ "condtype",
+ "divan-macros",
+ "libc",
+ "regex-lite",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
+
+[[package]]
+name = "colored"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
+dependencies = [
+ "lazy_static",
+ "windows-sys 0.52.0",
+]
 
 [[package]]
 name = "concurrent-queue"
@@ -1449,6 +1518,12 @@ checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
+
+[[package]]
+name = "condtype"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baf0a07a401f374238ab8e2f11a104d2851bf9ce711ec69804834de8af45c7af"
 
 [[package]]
 name = "const-default"
@@ -2011,6 +2086,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "divan-macros"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dc51d98e636f5e3b0759a39257458b22619cac7e96d932da6eeb052891bb67c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2255,7 +2341,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3150,7 +3236,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3564,6 +3650,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3845,6 +3943,78 @@ dependencies = [
  "openvm-transpiler",
  "rrs-lib",
  "strum",
+]
+
+[[package]]
+name = "openvm-benchmarks-execute"
+version = "2.0.0-alpha"
+dependencies = [
+ "bitcode",
+ "clap",
+ "codspeed-divan-compat",
+ "derive_more 1.0.0",
+ "eyre",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-benchmarks-utils",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-pairing-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "rand 0.9.2",
+ "serde",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "openvm-benchmarks-prove"
+version = "2.0.0-alpha"
+dependencies = [
+ "clap",
+ "eyre",
+ "k256 0.13.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "metrics",
+ "openvm-benchmarks-utils",
+ "openvm-circuit",
+ "openvm-continuations",
+ "openvm-sdk",
+ "openvm-sdk-config",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-transpiler",
+ "openvm-verify-stark-host",
+ "p3-field",
+ "rand_chacha 0.3.1",
+ "tiny-keccak",
+ "tracing",
+ "zstd",
+]
+
+[[package]]
+name = "openvm-benchmarks-utils"
+version = "2.0.0-alpha"
+dependencies = [
+ "cargo_metadata",
+ "clap",
+ "eyre",
+ "openvm-build",
+ "openvm-transpiler",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -6241,7 +6411,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6764,6 +6934,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "statrs"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
+dependencies = [
+ "approx",
+ "num-traits",
+]
+
+[[package]]
 name = "strength_reduce"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6888,7 +7068,17 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7533,6 +7723,7 @@ version = "1.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a68d3c8f01c0cfa54a75291d83601161799e4a89a39e0929f4b0354d88757a37"
 dependencies = [
+ "getrandom 0.4.2",
  "js-sys",
  "wasm-bindgen",
 ]
@@ -7768,7 +7959,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

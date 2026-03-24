@@ -1,22 +1,20 @@
 use clap::Parser;
-use eyre::Result;
-use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_sdk::{
-    config::{SdkVmBuilder, SdkVmConfig},
-    StdIn,
-};
-use openvm_stark_sdk::bench::run_with_metric_collection;
+use openvm_benchmarks_prove::BenchmarkCli;
+use openvm_sdk::StdIn;
+use openvm_sdk_config::SdkVmConfig;
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-fn main() -> Result<()> {
+fn main() -> eyre::Result<()> {
     let args = BenchmarkCli::parse();
+    let vm_config = SdkVmConfig::from_toml(include_str!("../../../guest/rkyv/openvm.toml"))?;
 
-    let config =
-        SdkVmConfig::from_toml(include_str!("../../../guest/rkyv/openvm.toml"))?.app_vm_config;
-    let elf = args.build_bench_program("rkyv", &config, None)?;
+    let elf = Elf::decode(
+        include_bytes!("../../../guest/rkyv/elf/openvm-rkyv-program.elf"),
+        MEM_SIZE as u32,
+    )?;
 
-    run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let file_data = include_bytes!("../../../guest/rkyv/minecraft_savedata.bin");
-        let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe::<SdkVmBuilder, _>("rkyv", config, elf, stdin)
-    })
+    let file_data = include_bytes!("../../../guest/rkyv/minecraft_savedata.bin");
+    let stdin = StdIn::from_bytes(file_data);
+
+    args.run(vm_config, elf, stdin)
 }

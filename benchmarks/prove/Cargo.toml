@@ -12,20 +12,23 @@ openvm-benchmarks-utils.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-continuations.workspace = true
 openvm-sdk.workspace = true
+openvm-sdk-config.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
+openvm-verify-stark-host.workspace = true
 
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
+tracing.workspace = true
+metrics.workspace = true
+zstd.workspace = true
+p3-field = { workspace = true }
+
+# for ecrecover benchmark
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
-derive_more = { workspace = true, features = ["from"] }
-rand.workspace = true
-tracing.workspace = true
-metrics.workspace = true
 
 [dev-dependencies]
 
@@ -36,13 +39,11 @@ tco = ["openvm-sdk/tco"]
 aot = ["openvm-sdk/aot"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
-async = ["openvm-sdk/async"]
-# runs leaf aggregation benchmarks:
 aggregation = []
 evm = ["openvm-sdk/evm-verify"]
-parallel = ["openvm-sdk/parallel"]
+parallel = ["openvm-sdk/parallel", "openvm-stark-backend/parallel"]
 mimalloc = ["openvm-sdk/mimalloc"]
-jemalloc = ["openvm-sdk/jemalloc"]
+jemalloc = ["openvm-sdk/jemalloc", "openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 
 cuda = [
@@ -50,18 +51,46 @@ cuda = [
     "openvm-sdk/cuda",
 ]
 
-[package.metadata.cargo-shear]
-ignored = ["derive_more", "rand"]
+[[bin]]
+name = "fibonacci"
+path = "src/bin/fibonacci.rs"
 
 [[bin]]
-name = "fib_e2e"
-path = "src/bin/fib_e2e.rs"
+name = "keccak"
+path = "src/bin/keccak.rs"
+
+[[bin]]
+name = "keccak_par"
+path = "src/bin/keccak_par.rs"
 
 [[bin]]
 name = "kitchen_sink"
 path = "src/bin/kitchen_sink.rs"
 
 [[bin]]
-name = "async_regex"
-path = "src/bin/async_regex.rs"
-required-features = ["async"]
+name = "regex"
+path = "src/bin/regex.rs"
+
+[[bin]]
+name = "ecrecover"
+path = "src/bin/ecrecover.rs"
+
+[[bin]]
+name = "pairing"
+path = "src/bin/pairing.rs"
+
+[[bin]]
+name = "base64_json"
+path = "src/bin/base64_json.rs"
+
+[[bin]]
+name = "bincode"
+path = "src/bin/bincode.rs"
+
+[[bin]]
+name = "rkyv"
+path = "src/bin/rkyv.rs"
+
+[[bin]]
+name = "revm_transfer"
+path = "src/bin/revm_transfer.rs"

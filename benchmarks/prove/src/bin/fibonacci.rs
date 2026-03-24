@@ -1,23 +1,21 @@
 use clap::Parser;
-use eyre::Result;
-use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_sdk::{
-    config::{SdkVmBuilder, SdkVmConfig},
-    StdIn,
-};
-use openvm_stark_sdk::bench::run_with_metric_collection;
+use openvm_benchmarks_prove::BenchmarkCli;
+use openvm_sdk::StdIn;
+use openvm_sdk_config::SdkVmConfig;
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-fn main() -> Result<()> {
+fn main() -> eyre::Result<()> {
     let args = BenchmarkCli::parse();
+    let vm_config = SdkVmConfig::from_toml(include_str!("../../../guest/fibonacci/openvm.toml"))?;
 
-    let config =
-        SdkVmConfig::from_toml(include_str!("../../../guest/fibonacci/openvm.toml"))?.app_vm_config;
-    let elf = args.build_bench_program("fibonacci", &config, None)?;
+    let elf = Elf::decode(
+        include_bytes!("../../../guest/fibonacci/elf/openvm-fibonacci-program.elf"),
+        MEM_SIZE as u32,
+    )?;
 
-    run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let n = 100_000u64;
-        let mut stdin = StdIn::default();
-        stdin.write(&n);
-        args.bench_from_exe::<SdkVmBuilder, _>("fibonacci_program", config, elf, stdin)
-    })
+    let n = 800_000u64;
+    let mut stdin = StdIn::default();
+    stdin.write(&n);
+
+    args.run(vm_config, elf, stdin)
 }
