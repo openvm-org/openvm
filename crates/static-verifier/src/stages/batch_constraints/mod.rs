@@ -601,7 +601,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         .sum::<u64>();
     assert!(total_interactions_host > 0, "0 interactions not supported");
     let n_logup_host = calculate_n_logup(l_skip, total_interactions_host);
-    let n_max_host = n_per_trace.iter().copied().max().unwrap_or(0).max(0) as usize;
+    let n_max_host = n_per_trace.iter().copied().max().unwrap().max(0) as usize;
     let n_global_host = n_max_host.max(n_logup_host);
     let omega_skip = RootF::two_adic_generator(l_skip);
     let omega_skip_pows: Vec<_> = omega_skip.powers().take(1usize << l_skip).collect();
