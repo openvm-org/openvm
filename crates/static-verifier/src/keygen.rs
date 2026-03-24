@@ -89,8 +89,6 @@ use halo2_base::{
 #[cfg(feature = "evm-prove")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "evm-prove")]
-use serde_with::serde_as;
-#[cfg(feature = "evm-prove")]
 use snark_verifier_sdk::{
     evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code},
     SHPLONK,
@@ -102,25 +100,6 @@ use snark_verifier_sdk::{
 pub struct RawEvmProof {
     pub instances: Vec<Fr>,
     pub proof: Vec<u8>,
-}
-
-/// Compiled Solidity verifier contract for on-chain verification.
-#[cfg(feature = "evm-prove")]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FallbackEvmVerifier {
-    pub sol_code: String,
-    pub artifact: EvmVerifierByteCode,
-}
-
-/// Bytecode of a compiled EVM verifier contract.
-#[cfg(feature = "evm-prove")]
-#[serde_as]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct EvmVerifierByteCode {
-    pub sol_compiler_version: String,
-    pub sol_compiler_options: String,
-    #[serde_as(as = "serde_with::hex::Hex")]
-    pub bytecode: Vec<u8>,
 }
 
 #[cfg(feature = "evm-prove")]

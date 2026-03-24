@@ -61,7 +61,7 @@ pub struct ProofData {
 // =================== EVM types (evm-prove feature) ===================
 
 #[cfg(feature = "evm-prove")]
-pub use openvm_static_verifier::keygen::EvmVerifierByteCode;
+pub use openvm_static_verifier::wrapper::EvmVerifierByteCode;
 
 #[cfg(feature = "evm-prove")]
 #[derive(Clone, Debug, Serialize, Deserialize)]

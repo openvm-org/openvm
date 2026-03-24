@@ -73,13 +73,14 @@ pub trait Halo2ParamsReader {
 // ---- Wrapper types ----
 
 /// `FallbackEvmVerifier` is for the raw verifier contract outputted by
-/// `snark-verifier`.
+/// `snark-verifier` for on-chain verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FallbackEvmVerifier {
     pub sol_code: String,
     pub artifact: EvmVerifierByteCode,
 }
 
+/// Bytecode of a compiled EVM verifier contract.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmVerifierByteCode {
