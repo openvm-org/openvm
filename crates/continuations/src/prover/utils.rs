@@ -2,8 +2,8 @@ use openvm_recursion_circuit::prelude::F;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     prover::{
-        AirProvingContext, DeviceDataTransporter, DeviceMultiStarkProvingKey,
-        MatrixDimensions, ProverBackend, ProvingContext,
+        AirProvingContext, DeviceDataTransporter, DeviceMultiStarkProvingKey, MatrixDimensions,
+        ProverBackend, ProvingContext,
     },
     AirRef, StarkEngine, StarkProtocolConfig,
 };

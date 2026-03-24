@@ -8,8 +8,9 @@ use openvm_stark_backend::{
     prover::{CommittedTraceData, DeviceMultiStarkProvingKey, ProverBackend},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    BabyBearPoseidon2CpuEngine, Digest, DuplexSponge, EF, F,
+};
 use openvm_verify_stark_host::pvs::DagCommit;
 use tracing::instrument;
 

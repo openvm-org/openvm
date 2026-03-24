@@ -12,9 +12,11 @@ use openvm_stark_backend::{
     prover::{DeviceDataTransporter, ProverBackend, ProvingContext},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
-use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
-    BabyBearBn254Poseidon2CpuEngine, Transcript as CpuBn254Transcript,
+use openvm_stark_sdk::config::{
+    baby_bear_bn254_poseidon2::{
+        BabyBearBn254Poseidon2CpuEngine, Transcript as CpuBn254Transcript,
+    },
+    baby_bear_poseidon2::{EF, F},
 };
 use p3_bn254::Bn254;
 use p3_field::{Field, PrimeField32};
