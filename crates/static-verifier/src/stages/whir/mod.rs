@@ -438,6 +438,7 @@ pub(crate) fn constrain_whir_verification(
     for _ in 0..total_width {
         mu_pows.push(mu_pow);
         mu_pow = ext_chip.mul(ctx, mu_pow, mu_challenge);
+        mu_pow = ext_chip.reduce_max_bits(ctx, mu_pow);
     }
 
     let mut final_claim = ext_chip.zero(ctx);
