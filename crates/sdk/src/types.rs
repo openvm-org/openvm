@@ -224,7 +224,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
 
 /// Struct purely for encoding and decoding of [NonRootStarkProof].
 #[serde_as]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Encode, Decode)]
 pub struct VersionedNonRootStarkProof {
     /// The openvm major and minor version v{}.{}. The proof format will not change on patch
     /// versions.
