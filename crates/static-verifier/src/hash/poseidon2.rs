@@ -8,8 +8,13 @@ use halo2_base::{
     AssignedValue, Context,
     QuantumCell::{self, Constant},
 };
+pub(crate) use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
+    BABY_BEAR_RATE as MULTI_FIELD32_RATE, BN254_RATE as POSEIDON2_RATE, DIGEST_WIDTH,
+};
 
 use crate::{field::baby_bear::BabyBearWire, Fr};
+
+const MULTI_FIELD32_NUM_F_ELMS: usize = MULTI_FIELD32_RATE / POSEIDON2_RATE;
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2State<F: ScalarField, const T: usize> {
@@ -195,11 +200,6 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         }
     }
 }
-
-pub(crate) const POSEIDON2_RATE: usize = 2;
-pub(crate) const DIGEST_WIDTH: usize = 1;
-const MULTI_FIELD32_RATE: usize = 16;
-const MULTI_FIELD32_NUM_F_ELMS: usize = 8;
 
 pub(crate) fn reduce_32_cells(
     ctx: &mut Context<Fr>,
