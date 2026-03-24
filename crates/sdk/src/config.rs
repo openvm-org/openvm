@@ -89,3 +89,16 @@ impl Default for AggregationTreeConfig {
         }
     }
 }
+
+/// Configuration for the Halo2 (static verifier + wrapper) keygen and proving.
+#[cfg(feature = "evm-prove")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Halo2Config {
+    /// The degree `k` for the static verifier circuit.
+    pub verifier_k: usize,
+    /// The degree `k` for the wrapper circuit. If `None`, auto-tune to pick the
+    /// smallest `k` that results in a single advice column.
+    pub wrapper_k: Option<usize>,
+    /// Whether to collect detailed profiling metrics during proving.
+    pub profiling: bool,
+}

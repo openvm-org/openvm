@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
-// use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
@@ -15,8 +14,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 
-// TODO[jpw]: copied from v1, needs update
-// pub mod perm;
 #[cfg(feature = "evm-prove")]
 pub mod dummy;
 #[cfg(feature = "evm-prove")]
@@ -93,4 +90,17 @@ where
             system_params: self.app_vm_pk.vm_pk.params.clone(),
         }
     }
+}
+
+/// Attention: the serialized size of this struct is VERY large, usually >10GB.
+#[cfg(feature = "evm-prove")]
+#[derive(Clone)]
+pub struct Halo2ProvingKey {
+    /// Static verifier to verify a stark proof of the root verifier.
+    pub verifier: Arc<openvm_static_verifier::StaticVerifierProvingKey>,
+    /// Wrapper circuit to verify static verifier and reduce the verification costs in the final
+    /// proof.
+    pub wrapper: Arc<openvm_static_verifier::Halo2WrapperProvingKey>,
+    /// Whether to collect detailed profiling metrics.
+    pub profiling: bool,
 }

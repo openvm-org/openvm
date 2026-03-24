@@ -32,7 +32,7 @@ use openvm_stark_sdk::config::{
     root_params_with_100_bits_security,
 };
 #[cfg(feature = "evm-prove")]
-use openvm_static_verifier::{StaticVerifierProvingKey, StaticVerifierShape};
+use openvm_static_verifier::StaticVerifierShape;
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
@@ -133,6 +133,9 @@ where
     #[cfg(feature = "evm-prove")]
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
     halo2_shape: StaticVerifierShape,
+    #[cfg(feature = "evm-prove")]
+    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    halo2_config: config::Halo2Config,
 
     #[getset(get = "pub")]
     app_vm_builder: VB,
@@ -155,7 +158,7 @@ where
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
-    halo2_pk: OnceLock<StaticVerifierProvingKey>,
+    halo2_pk: OnceLock<keygen::Halo2ProvingKey>,
 
     _phantom: PhantomData<E>,
 }
@@ -233,6 +236,12 @@ where
             agg_tree_config: Default::default(),
             #[cfg(feature = "evm-prove")]
             halo2_shape: StaticVerifierShape::default(),
+            #[cfg(feature = "evm-prove")]
+            halo2_config: config::Halo2Config {
+                verifier_k: StaticVerifierShape::default().k,
+                wrapper_k: None,
+                profiling: false,
+            },
             app_vm_builder: Default::default(),
             transpiler: None,
             executor,
@@ -477,17 +486,9 @@ where
         inputs: StdIn,
     ) -> Result<types::EvmProof, SdkError> {
         let app_exe = self.convert_to_exe(app_exe)?;
-        let mut evm_prover = self.evm_prover(app_exe)?;
-        // Generate the root STARK proof
-        let root_proof = evm_prover.prove(inputs, &[])?;
-
-        // Run the static verifier (Halo2) to produce an EVM-compatible proof
-        let halo2_pk = self.halo2_pk();
-        let params = self.halo2_params_reader.read_params(halo2_pk.shape.k);
-        let raw_evm_proof = halo2_pk.prove_for_evm(&params, &root_proof);
-
-        // Convert RawEvmProof → EvmProof
-        Ok(types::EvmProof::from(raw_evm_proof))
+        let mut evm_halo2_prover = self.evm_halo2_prover(app_exe)?;
+        let evm_proof = evm_halo2_prover.prove_evm(inputs, &[])?;
+        Ok(evm_proof)
     }
 
     // ========================= Prover Constructors =========================
@@ -528,7 +529,6 @@ where
         Ok(stark_prover)
     }
 
-    // #[cfg(feature = "evm-prove")]
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -544,6 +544,27 @@ where
             self.root_prover(),
         )?;
         Ok(evm_prover)
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn evm_halo2_prover(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<prover::EvmHalo2Prover<E, VB>, SdkError> {
+        let app_exe = self.convert_to_exe(app_exe)?;
+        let app_pk = self.app_pk();
+        let halo2_pk = self.halo2_pk().clone();
+        let evm_halo2_prover = prover::EvmHalo2Prover::<E, _>::new(
+            &self.halo2_params_reader,
+            self.app_vm_builder.clone(),
+            &app_pk.app_vm_pk,
+            app_exe,
+            self.agg_prover(),
+            self.def_path_prover.clone(),
+            self.root_prover(),
+            halo2_pk,
+        )?;
+        Ok(evm_halo2_prover)
     }
 
     // ===================== Component Prover Constructors =====================
@@ -654,21 +675,21 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn halo2_keygen(&self) -> &StaticVerifierProvingKey {
+    pub fn halo2_keygen(&self) -> &keygen::Halo2ProvingKey {
         self.halo2_pk()
     }
 
-    /// Generates the Halo2 (static verifier) proving key once and caches it.
+    /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
     ///
     /// The flow:
     /// 1. Get the root VK and internal recursive DAG cached commit
     /// 2. Generate a dummy root proof via the EVM prover pipeline
-    /// 3. Use the dummy root proof to keygen the static verifier circuit
+    /// 3. Keygen the static verifier circuit
+    /// 4. Generate a dummy snark from the verifier
+    /// 5. Keygen the wrapper circuit (auto-tuned or fixed k)
     #[cfg(feature = "evm-prove")]
-    pub fn halo2_pk(&self) -> &StaticVerifierProvingKey {
+    pub fn halo2_pk(&self) -> &keygen::Halo2ProvingKey {
         self.halo2_pk.get_or_init(|| {
-            let params = self.halo2_params_reader.read_params(self.halo2_shape.k);
-
             let root_prover = self.root_prover();
             let root_vk = root_prover.0.get_vk().as_ref().clone();
 
@@ -690,8 +711,9 @@ where
                 self.root_prover(),
             );
 
-            keygen::static_verifier::keygen_static_verifier(
-                &params,
+            keygen::static_verifier::keygen_halo2(
+                &self.halo2_config,
+                &self.halo2_params_reader,
                 self.halo2_shape,
                 &root_vk,
                 internal_recursive_dag_cached_commit,
@@ -706,14 +728,14 @@ where
     #[allow(clippy::result_large_err)]
     pub fn set_halo2_pk(
         &self,
-        halo2_pk: StaticVerifierProvingKey,
-    ) -> Result<(), StaticVerifierProvingKey> {
+        halo2_pk: keygen::Halo2ProvingKey,
+    ) -> Result<(), keygen::Halo2ProvingKey> {
         self.halo2_pk.set(halo2_pk)
     }
     /// See [`set_halo2_pk`](Self::set_halo2_pk). This should only be used in a constructor, and
     /// panics if halo2 keygen has already been called.
     #[cfg(feature = "evm-prove")]
-    pub fn with_halo2_pk(self, halo2_pk: StaticVerifierProvingKey) -> Self {
+    pub fn with_halo2_pk(self, halo2_pk: keygen::Halo2ProvingKey) -> Self {
         let _ = self
             .set_halo2_pk(halo2_pk)
             .map_err(|_| panic!("halo2_pk already set"));
@@ -768,36 +790,42 @@ where
         };
 
         let halo2_pk = self.halo2_pk();
-        let params = self.halo2_params_reader.read_params(halo2_pk.shape.k);
+        let wrapper_k = halo2_pk.wrapper.pinning.metadata.config_params.k;
+        let params = self.halo2_params_reader.read_params(wrapper_k);
 
         // Generate the base Halo2Verifier Solidity code from snark-verifier
-        let halo2_verifier_code = halo2_pk.generate_fallback_evm_verifier(&params);
+        // (via the wrapper circuit, which is what produces the final EVM proof)
+        let fallback_verifier = halo2_pk.wrapper.generate_fallback_evm_verifier(&params);
+        let halo2_verifier_code = fallback_verifier.sol_code;
 
-        // Compute public values length: num_pvs[0] - 2 (subtract exe and vk commits)
+        // Compute public values length from the wrapper circuit's instances.
+        // The wrapper's instances layout is:
+        //   [0..12]: KZG accumulator
+        //   [12]: app_exe_commit
+        //   [13]: app_vm_commit
+        //   [14..]: user public values
         let num_pvs = halo2_pk
+            .wrapper
             .pinning
             .metadata
             .num_pvs
             .first()
             .expect("Expected at least one instance column");
+        // Subtract 12 (accumulator) + 2 (commits) = 14
         let pvs_length = num_pvs
-            .checked_sub(2)
-            .expect("Unexpected number of static verifier public values");
+            .checked_sub(types::NUM_BN254_ACCUMULATOR + 2)
+            .expect("Unexpected number of wrapper circuit public values");
 
         assert!(
             pvs_length <= 8192,
             "OpenVM Halo2 verifier contract does not support more than 8192 public values"
         );
 
-        // Compute proof data length: generate a dummy EVM proof to measure its size
-        // In practice, this is deterministic for a given circuit configuration
-        let proof_data_length = self.compute_evm_proof_data_length();
-
+        // PROOF_DATA_LENGTH is now a constant in the template: (12 + 43) * 32
         // Fill out template placeholders
         let openvm_verifier_code = EVM_HALO2_VERIFIER_TEMPLATE
             .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
-            .replace("{OPENVM_VERSION}", OPENVM_VERSION)
-            .replace("{PROOF_DATA_LENGTH}", &proof_data_length.to_string());
+            .replace("{OPENVM_VERSION}", OPENVM_VERSION);
 
         // Format Solidity code if forge-fmt is available (requires Rust 1.91+)
         let (formatted_interface, formatted_halo2_verifier_code, formatted_openvm_verifier_code) =
@@ -931,24 +959,6 @@ where
             },
         };
         Ok(evm_verifier)
-    }
-
-    /// Compute the expected EVM proof data length (raw proof bytes, no instances).
-    /// This is deterministic for a given static verifier circuit config.
-    #[cfg(feature = "evm-verify")]
-    fn compute_evm_proof_data_length(&self) -> usize {
-        // Generate a dummy EVM proof to determine the proof data length
-        let dummy_root_proof = keygen::dummy::generate_dummy_root_proof::<E, _>(
-            self.app_vm_builder.clone(),
-            &self.app_pk().app_vm_pk,
-            self.agg_prover(),
-            self.def_path_prover.clone(),
-            self.root_prover(),
-        );
-        let halo2_pk = self.halo2_pk();
-        let params = self.halo2_params_reader.read_params(halo2_pk.shape.k);
-        let raw_evm_proof = halo2_pk.prove_for_evm(&params, &dummy_root_proof);
-        raw_evm_proof.proof.len()
     }
 
     #[cfg(feature = "evm-verify")]

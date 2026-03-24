@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use openvm_static_verifier::Halo2Params;
+use openvm_static_verifier::{Halo2Params, Halo2ParamsReader};
 
 /// Caching reader for Halo2 KZG parameters.
 ///
@@ -13,6 +13,12 @@ use openvm_static_verifier::Halo2Params;
 pub struct CacheHalo2ParamsReader {
     params_dir: PathBuf,
     cached: Mutex<HashMap<usize, Arc<Halo2Params>>>,
+}
+
+impl Halo2ParamsReader for CacheHalo2ParamsReader {
+    fn read_params(&self, k: usize) -> Arc<Halo2Params> {
+        self.read_params(k)
+    }
 }
 
 impl CacheHalo2ParamsReader {

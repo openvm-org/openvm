@@ -8,9 +8,7 @@ use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
 use crate::{
-    prover::{
-        vm::types::VmProvingKey, AggProver, DeferralPathProver, EvmProver, RootProver,
-    },
+    prover::{vm::types::VmProvingKey, AggProver, DeferralPathProver, EvmProver, RootProver},
     StdIn, F, SC,
 };
 

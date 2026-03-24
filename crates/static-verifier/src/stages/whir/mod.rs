@@ -23,6 +23,7 @@ use crate::{
         BABY_BEAR_EXT_DEGREE,
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
+    profiling::CellProfiler,
     stages::{
         batch_constraints::{eval_eq_mle_assigned, eval_eq_mle_ef_f_assigned},
         shared_math::{
@@ -30,7 +31,6 @@ use crate::{
             interpolate_quadratic_at_012_assigned,
         },
     },
-    profiling::CellProfiler,
     transcript::{digest_wire_from_root, TranscriptGadget},
     Fr, RootEF, RootF,
 };
@@ -407,7 +407,6 @@ pub(crate) fn constrain_whir_verification(
     u_cube: &[BabyBearExtWire],
     profiler: &mut CellProfiler,
 ) {
-
     let gate = ext_chip.range().gate();
     let base_chip = ext_chip.base();
     let params = &mvk0.params;

@@ -134,8 +134,53 @@ impl StaticVerifierProvingKey {
         )
     }
 
-    /// Generate an EVM-compatible proof.
-    pub fn prove_for_evm(&self, params: &Halo2Params, proof: &Proof<RootConfig>) -> RawEvmProof {
+    /// Produce a [`Snark`] for consumption by the wrapper circuit.
+    ///
+    /// Unlike [`prove_for_evm_unwrapped`](Self::prove_for_evm_unwrapped), this
+    /// returns a `Snark` (not a raw EVM proof), which should be fed into
+    /// [`Halo2WrapperProvingKey::prove_for_evm`](crate::wrapper::Halo2WrapperProvingKey::prove_for_evm).
+    pub fn prove_wrapped(
+        &self,
+        params: &Halo2Params,
+        proof: &Proof<RootConfig>,
+    ) -> snark_verifier_sdk::Snark {
+        let mut builder = BaseCircuitBuilder::prover(
+            self.pinning.metadata.config_params.clone(),
+            self.pinning.metadata.break_points.clone(),
+        )
+        .use_instance_columns(self.shape.instance_columns);
+
+        let _public_inputs = self.circuit.populate(&mut builder, proof);
+
+        snark_verifier_sdk::halo2::gen_snark_shplonk(
+            params,
+            &self.pinning.pk,
+            builder,
+            None::<&str>,
+        )
+    }
+
+    /// Generate a dummy snark for wrapper keygen.
+    pub fn generate_dummy_snark(
+        &self,
+        reader: &impl crate::wrapper::Halo2ParamsReader,
+    ) -> snark_verifier_sdk::Snark {
+        let k = self.pinning.metadata.config_params.k;
+        let params = reader.read_params(k);
+        snark_verifier_sdk::halo2::gen_dummy_snark_from_vk::<SHPLONK>(
+            &params,
+            self.pinning.pk.get_vk(),
+            self.pinning.metadata.num_pvs.clone(),
+            None,
+        )
+    }
+
+    /// Generate an EVM-compatible proof directly (one-step, no wrapper circuit).
+    pub fn prove_for_evm_unwrapped(
+        &self,
+        params: &Halo2Params,
+        proof: &Proof<RootConfig>,
+    ) -> RawEvmProof {
         let mut builder = BaseCircuitBuilder::prover(
             self.pinning.metadata.config_params.clone(),
             self.pinning.metadata.break_points.clone(),
