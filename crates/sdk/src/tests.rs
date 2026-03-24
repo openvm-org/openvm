@@ -270,14 +270,15 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     };
     use openvm_stark_sdk::config::log_up_params::log_up_security_params_baby_bear_100_bits;
     use openvm_static_verifier::{
+        compute_dag_onion_commit,
         field::baby_bear::{BabyBearChip, BabyBearExtChip},
         log_heights_per_air_from_proof, StaticVerifierCircuit,
     };
-    use p3_bn254::Bn254;
 
     use crate::{
         config::{AggregationSystemParams, DEFAULT_APP_L_SKIP},
-        prover::{compute_root_proof_heights, EvmProver, RootProver},
+        keygen::dummy::compute_root_proof_heights,
+        prover::{EvmProver, RootProver},
         Sdk, StdIn,
     };
 
@@ -300,9 +301,9 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
     let proof_path = format!("{cache_dir}/sdk_root_proof.bin");
     let vk_path = format!("{cache_dir}/sdk_root_vk.bin");
-    let commit_path = format!("{cache_dir}/sdk_dag_commit.bin");
+    let commit_path = format!("{cache_dir}/sdk_onion_commit.bin");
 
-    let (root_vk, root_proof, dag_commit) =
+    let (root_vk, root_proof, onion_commit) =
         if Path::new(&proof_path).exists() && Path::new(&vk_path).exists() {
             eprintln!("Loading cached root proof from {cache_dir}/");
             let proof_bytes = std::fs::read(&proof_path)?;
@@ -315,9 +316,9 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let commit_bytes: [u8; 32] = std::fs::read(&commit_path)?
                 .try_into()
                 .map_err(|_| eyre::eyre!("invalid commit file"))?;
-            let dag_commit = CommitBytes::new(commit_bytes);
+            let onion_commit = CommitBytes::new(commit_bytes).into();
 
-            (root_vk, root_proof, dag_commit)
+            (root_vk, root_proof, onion_commit)
         } else {
             eprintln!("Generating root proof via SDK pipeline (this takes a while)...");
             let n_stack = 19;
@@ -350,6 +351,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 .get_self_vk_pcs_data()
                 .unwrap();
             let dag_commit: CommitBytes = ir_pcs_data.commitment.into();
+            let onion_commit = compute_dag_onion_commit(&ir_vk);
 
             let memory_dimensions = system_config.memory_config.memory_dimensions();
             let num_user_pvs = system_config.num_public_values;
@@ -358,7 +360,6 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 ir_vk,
                 dag_commit,
                 root_pk,
-                root_params.clone(),
                 memory_dimensions,
                 num_user_pvs,
                 None,
@@ -372,13 +373,14 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 agg_prover,
                 None,
                 root_prover.clone(),
+                None,
             )?;
 
             let n = 100u64;
             let mut stdin = StdIn::default();
             stdin.write(&n);
 
-            let root_proof = evm_prover.prove(stdin, &[])?;
+            let root_proof = evm_prover.prove_unwrapped(stdin, &[])?;
             let root_vk_arc = root_prover.0.get_vk();
             let root_vk = root_vk_arc.as_ref().clone();
 
@@ -394,17 +396,16 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 bitcode::serialize(&root_vk)
                     .map_err(|e| eyre::eyre!("failed to serialize root VK: {e}"))?,
             )?;
-            std::fs::write(&commit_path, dag_commit.as_slice())?;
+            std::fs::write(&commit_path, CommitBytes::from(onion_commit).as_slice())?;
 
-            (root_vk, root_proof, dag_commit)
+            (root_vk, root_proof, onion_commit)
         };
 
     // Run static verifier cell profiling
     eprintln!("Running static verifier cell profiling...");
     let log_heights = log_heights_per_air_from_proof(&root_proof);
 
-    let bn254: Bn254 = dag_commit.into();
-    let circuit = StaticVerifierCircuit::try_new(root_vk, [bn254], &log_heights)
+    let circuit = StaticVerifierCircuit::try_new(root_vk, onion_commit, &log_heights)
         .expect("Failed to construct StaticVerifierCircuit");
 
     let profile_dir = std::env::var("OPENVM_PROFILE_DIR").unwrap_or_else(|_| "profile".to_string());
