@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use openvm_continuations::{CommitBytes, RootSC};
+use openvm_continuations::{RootSC, SC};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
 use openvm_static_verifier::{
-    log_heights_per_air_from_proof, Halo2Params, Halo2ParamsReader, Halo2WrapperProvingKey,
-    StaticVerifierCircuit, StaticVerifierProvingKey, StaticVerifierShape,
+    compute_dag_onion_commit, log_heights_per_air_from_proof, Halo2Params, Halo2ParamsReader,
+    Halo2WrapperProvingKey, StaticVerifierCircuit, StaticVerifierProvingKey, StaticVerifierShape,
 };
 
 use crate::{config::Halo2Config, keygen::Halo2ProvingKey};
@@ -21,8 +21,8 @@ pub fn keygen_halo2(
     halo2_config: &Halo2Config,
     reader: &impl Halo2ParamsReader,
     shape: StaticVerifierShape,
+    internal_recursive_vk: &MultiStarkVerifyingKey<SC>,
     root_vk: &MultiStarkVerifyingKey<RootSC>,
-    internal_recursive_dag_cached_commit: CommitBytes,
     dummy_root_proof: &Proof<RootSC>,
 ) -> Halo2ProvingKey {
     let params = reader.read_params(halo2_config.verifier_k);
@@ -30,8 +30,8 @@ pub fn keygen_halo2(
     let verifier = keygen_static_verifier(
         &params,
         shape,
+        internal_recursive_vk,
         root_vk,
-        internal_recursive_dag_cached_commit,
         dummy_root_proof,
     );
 
@@ -55,18 +55,14 @@ pub fn keygen_halo2(
 pub fn keygen_static_verifier(
     params: &Halo2Params,
     shape: StaticVerifierShape,
+    internal_recursive_vk: &MultiStarkVerifyingKey<SC>,
     root_vk: &MultiStarkVerifyingKey<RootSC>,
-    internal_recursive_dag_cached_commit: CommitBytes,
     dummy_root_proof: &Proof<RootSC>,
 ) -> StaticVerifierProvingKey {
     let log_heights = log_heights_per_air_from_proof(dummy_root_proof);
+    let onion_commit = compute_dag_onion_commit(internal_recursive_vk);
 
-    // Convert CommitBytes → RootDigest ([Bn254; 1])
-    use p3_bn254::Bn254;
-    let bn254: Bn254 = internal_recursive_dag_cached_commit.into();
-    let root_digest = [bn254];
-
-    let circuit = StaticVerifierCircuit::try_new(root_vk.clone(), root_digest, &log_heights)
+    let circuit = StaticVerifierCircuit::try_new(root_vk.clone(), onion_commit, &log_heights)
         .expect("Failed to construct StaticVerifierCircuit");
 
     StaticVerifierProvingKey::keygen(params, shape, circuit, dummy_root_proof)

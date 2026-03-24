@@ -37,6 +37,7 @@ impl From<Vec<u8>> for ExecutableFormat {
 }
 
 /// Number of bytes in a Bn254.
+#[allow(dead_code)]
 pub(crate) const BN254_BYTES: usize = 32;
 /// Number of Bn254 in `accumulator` field (KZG accumulator).
 pub const NUM_BN254_ACCUMULATOR: usize = 12;

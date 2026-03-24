@@ -5,9 +5,12 @@ use openvm::platform::memory::MEM_SIZE;
 use openvm_circuit::arch::instructions::DEFERRAL_AS;
 use openvm_deferral_circuit::DeferralFn;
 use openvm_stark_backend::StarkEngine;
-use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security, internal_params_with_100_bits_security,
-    root_params_with_100_bits_security,
+use openvm_stark_sdk::{
+    config::{
+        app_params_with_100_bits_security, internal_params_with_100_bits_security,
+        root_params_with_100_bits_security,
+    },
+    utils::setup_tracing,
 };
 use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_circuit::extension::{
@@ -36,7 +39,8 @@ cfg_if::cfg_if! {
 }
 
 #[test]
-fn test_root_prover_trace_heights() -> Result<()> {
+fn test_sdk_fibonacci() -> Result<()> {
+    setup_tracing();
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
@@ -48,16 +52,25 @@ fn test_root_prover_trace_heights() -> Result<()> {
 
     let sdk = Sdk::riscv32(app_params, agg_params);
     let app_exe = sdk.convert_to_exe(elf)?;
-    let mut evm_prover = sdk.evm_prover(app_exe)?;
 
     let n = 1000u64;
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    let proof = evm_prover.prove(stdin, &[])?;
-    let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
-    engine.verify(&vk, &proof)?;
+    #[cfg(not(feature = "evm-verify"))]
+    {
+        let mut evm_prover = sdk.evm_prover(app_exe)?;
+        let proof = evm_prover.prove_unwrapped(stdin, &[])?;
+        let vk = evm_prover.root_prover.0.get_vk();
+        let engine = RootE::new(vk.inner.params.clone());
+        engine.verify(&vk, &proof)?;
+    }
+    #[cfg(feature = "evm-verify")]
+    {
+        let evm_proof = sdk.prove_evm(app_exe, stdin, &[])?;
+        let openvm_verifier = sdk.generate_halo2_verifier_solidity()?;
+        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof)?;
+    }
 
     Ok(())
 }
@@ -164,7 +177,7 @@ fn test_verify_stark_deferral() -> Result<()> {
 
     // ---- Step 10: Prove and verify ----
     let mut evm_prover = vs_sdk.evm_prover(vs_exe)?;
-    let vs_proof = evm_prover.prove(vs_stdin, &[def_input])?;
+    let vs_proof = evm_prover.prove_unwrapped(vs_stdin, &[def_input])?;
 
     let vk = evm_prover.root_prover.0.get_vk();
     let engine = RootE::new(vk.inner.params.clone());
@@ -221,7 +234,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     stdin.write(&n);
 
     let mut evm_prover = sdk.evm_prover(app_exe)?;
-    let proof = evm_prover.prove(stdin, &[])?;
+    let proof = evm_prover.prove_unwrapped(stdin, &[])?;
 
     // ---- Step 3: Verify the final result ----
     let vk = evm_prover.root_prover.0.get_vk();
@@ -322,15 +335,15 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
             // Compute trace heights for root prover with profiling params
             let system_config = sdk.app_config().app_vm_config.as_ref();
-            let trace_heights = compute_root_proof_heights(
-                system_config.clone(),
-                sdk.agg_config().params.clone(),
-                *sdk.agg_tree_config(),
+            let agg_prover = sdk.agg_prover();
+            let (trace_heights, root_pk) = compute_root_proof_heights::<E, _>(
+                sdk.app_vm_builder().clone(),
+                &sdk.app_pk().app_vm_pk,
+                agg_prover.clone(),
                 root_params.clone(),
                 None,
             )?;
 
-            let agg_prover = sdk.agg_prover();
             let ir_vk = agg_prover.internal_recursive_prover.get_vk();
             let ir_pcs_data = agg_prover
                 .internal_recursive_prover
@@ -341,9 +354,10 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let memory_dimensions = system_config.memory_config.memory_dimensions();
             let num_user_pvs = system_config.num_public_values;
 
-            let root_prover = Arc::new(RootProver::new(
+            let root_prover = Arc::new(RootProver::from_pk(
                 ir_vk,
                 dag_commit,
+                root_pk,
                 root_params.clone(),
                 memory_dimensions,
                 num_user_pvs,

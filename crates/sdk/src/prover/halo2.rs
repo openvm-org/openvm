@@ -7,6 +7,7 @@ use tracing::info_span;
 
 use crate::{keygen::Halo2ProvingKey, types::EvmProof};
 
+#[derive(Clone)]
 pub struct Halo2Prover {
     halo2_pk: Halo2ProvingKey,
     verifier_srs: Arc<Halo2Params>,
@@ -39,5 +40,9 @@ impl Halo2Prover {
                 .prove_for_evm(&self.wrapper_srs, snark);
             EvmProof::from(raw)
         })
+    }
+
+    pub fn pk(&self) -> Halo2ProvingKey {
+        self.halo2_pk.clone()
     }
 }

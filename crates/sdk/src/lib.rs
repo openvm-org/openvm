@@ -42,17 +42,17 @@ use openvm_verify_stark_host::{
     NonRootStarkProof,
 };
 
-#[cfg(feature = "evm-prove")]
-use crate::halo2_params::CacheHalo2ParamsReader;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
-    keygen::AggProvingKey,
+    keygen::{dummy::compute_root_proof_heights, AggProvingKey},
     prover::{
-        compute_root_proof_heights, AggProver, AppProver, DeferralPathProver, DeferralProver,
-        EvmProver, RootProver, StarkProver,
+        AggProver, AppProver, DeferralPathProver, DeferralProver, EvmProver, RootProver,
+        StarkProver,
     },
     types::ExecutableFormat,
 };
+#[cfg(feature = "evm-prove")]
+use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -158,7 +158,7 @@ where
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
-    halo2_pk: OnceLock<keygen::Halo2ProvingKey>,
+    halo2_prover: OnceLock<Halo2Prover>,
 
     _phantom: PhantomData<E>,
 }
@@ -252,7 +252,7 @@ where
             #[cfg(feature = "evm-prove")]
             halo2_params_reader: CacheHalo2ParamsReader::new_with_default_params_dir(),
             #[cfg(feature = "evm-prove")]
-            halo2_pk: OnceLock::new(),
+            halo2_prover: OnceLock::new(),
             _phantom: Default::default(),
         })
     }
@@ -484,10 +484,11 @@ where
         &self,
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
+        def_inputs: &[DeferralInput],
     ) -> Result<types::EvmProof, SdkError> {
         let app_exe = self.convert_to_exe(app_exe)?;
-        let mut evm_halo2_prover = self.evm_halo2_prover(app_exe)?;
-        let evm_proof = evm_halo2_prover.prove_evm(inputs, &[])?;
+        let mut evm_prover = self.evm_prover(app_exe)?;
+        let evm_proof = evm_prover.prove_evm(inputs, def_inputs)?;
         Ok(evm_proof)
     }
 
@@ -542,31 +543,11 @@ where
             self.agg_prover(),
             self.def_path_prover.clone(),
             self.root_prover(),
+            #[cfg(feature = "evm-prove")]
+            Some(self.halo2_prover()),
         )?;
         Ok(evm_prover)
     }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn evm_halo2_prover(
-        &self,
-        app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<prover::EvmHalo2Prover<E, VB>, SdkError> {
-        let app_exe = self.convert_to_exe(app_exe)?;
-        let app_pk = self.app_pk();
-        let halo2_pk = self.halo2_pk().clone();
-        let evm_halo2_prover = prover::EvmHalo2Prover::<E, _>::new(
-            &self.halo2_params_reader,
-            self.app_vm_builder.clone(),
-            &app_pk.app_vm_pk,
-            app_exe,
-            self.agg_prover(),
-            self.def_path_prover.clone(),
-            self.root_prover(),
-            halo2_pk,
-        )?;
-        Ok(evm_halo2_prover)
-    }
-
     // ===================== Component Prover Constructors =====================
 
     pub fn agg_prover(&self) -> Arc<AggProver> {
@@ -589,11 +570,13 @@ where
                 // TODO[INT-6073]: store root_params
                 let system_config = self.app_config.app_vm_config.as_ref();
                 let root_params = root_params_with_100_bits_security();
+                let app_pk = self.app_pk();
+                let agg_prover = self.agg_prover();
 
-                let trace_heights = compute_root_proof_heights(
-                    system_config.clone(),
-                    self.agg_config.params.clone(),
-                    self.agg_tree_config,
+                let (trace_heights, root_pk) = compute_root_proof_heights::<E, VB>(
+                    self.app_vm_builder.clone(),
+                    &app_pk.app_vm_pk,
+                    agg_prover.clone(),
                     root_params.clone(),
                     self.def_path_prover.clone(),
                 )
@@ -602,8 +585,7 @@ where
                 let memory_dimensions = system_config.memory_config.memory_dimensions();
                 let num_user_pvs = system_config.num_public_values;
 
-                let agg_prover = self.agg_prover();
-                Arc::new(RootProver::new(
+                Arc::new(RootProver::from_pk(
                     agg_prover.internal_recursive_prover.get_vk(),
                     agg_prover
                         .internal_recursive_prover
@@ -611,12 +593,45 @@ where
                         .unwrap()
                         .commitment
                         .into(),
-                    root_params,
+                    root_pk,
                     memory_dimensions,
                     num_user_pvs,
                     self.def_hook_vk_commit(),
                     Some(trace_heights),
                 ))
+            })
+            .clone()
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn halo2_prover(&self) -> Halo2Prover {
+        self.halo2_prover
+            .get_or_init(|| {
+                use crate::keygen::static_verifier::keygen_halo2;
+
+                let root_prover = self.root_prover();
+                let root_vk = root_prover.0.get_vk().as_ref().clone();
+                let agg_prover = self.agg_prover();
+
+                // Generate a dummy root proof by running a trivial program through the pipeline
+                let dummy_root_proof = keygen::dummy::generate_dummy_root_proof::<E, _>(
+                    self.app_vm_builder.clone(),
+                    &self.app_pk().app_vm_pk,
+                    agg_prover.clone(),
+                    self.def_path_prover.clone(),
+                    root_prover,
+                );
+
+                let halo2_pk = keygen_halo2(
+                    &self.halo2_config,
+                    &self.halo2_params_reader,
+                    self.halo2_shape,
+                    &agg_prover.internal_recursive_prover.get_vk(),
+                    &root_vk,
+                    &dummy_root_proof,
+                );
+
+                Halo2Prover::new(self.halo2_params_reader(), halo2_pk)
             })
             .clone()
     }
@@ -674,11 +689,6 @@ where
         self.agg_prover().internal_recursive_prover.get_vk()
     }
 
-    #[cfg(feature = "evm-prove")]
-    pub fn halo2_keygen(&self) -> &keygen::Halo2ProvingKey {
-        self.halo2_pk()
-    }
-
     /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
     ///
     /// The flow:
@@ -688,58 +698,8 @@ where
     /// 4. Generate a dummy snark from the verifier
     /// 5. Keygen the wrapper circuit (auto-tuned or fixed k)
     #[cfg(feature = "evm-prove")]
-    pub fn halo2_pk(&self) -> &keygen::Halo2ProvingKey {
-        self.halo2_pk.get_or_init(|| {
-            let root_prover = self.root_prover();
-            let root_vk = root_prover.0.get_vk().as_ref().clone();
-
-            let agg_prover = self.agg_prover();
-            let internal_recursive_dag_cached_commit: openvm_continuations::CommitBytes =
-                agg_prover
-                    .internal_recursive_prover
-                    .get_self_vk_pcs_data()
-                    .unwrap()
-                    .commitment
-                    .into();
-
-            // Generate a dummy root proof by running a trivial program through the pipeline
-            let dummy_root_proof = keygen::dummy::generate_dummy_root_proof::<E, _>(
-                self.app_vm_builder.clone(),
-                &self.app_pk().app_vm_pk,
-                self.agg_prover(),
-                self.def_path_prover.clone(),
-                self.root_prover(),
-            );
-
-            keygen::static_verifier::keygen_halo2(
-                &self.halo2_config,
-                &self.halo2_params_reader,
-                self.halo2_shape,
-                &root_vk,
-                internal_recursive_dag_cached_commit,
-                &dummy_root_proof,
-            )
-        })
-    }
-
-    /// Sets the halo2 proving keys. Returns `Ok(())` if halo2 keygen has not been called and
-    /// `Err(halo2_pk)` if keygen has already been called.
-    #[cfg(feature = "evm-prove")]
-    #[allow(clippy::result_large_err)]
-    pub fn set_halo2_pk(
-        &self,
-        halo2_pk: keygen::Halo2ProvingKey,
-    ) -> Result<(), keygen::Halo2ProvingKey> {
-        self.halo2_pk.set(halo2_pk)
-    }
-    /// See [`set_halo2_pk`](Self::set_halo2_pk). This should only be used in a constructor, and
-    /// panics if halo2 keygen has already been called.
-    #[cfg(feature = "evm-prove")]
-    pub fn with_halo2_pk(self, halo2_pk: keygen::Halo2ProvingKey) -> Self {
-        let _ = self
-            .set_halo2_pk(halo2_pk)
-            .map_err(|_| panic!("halo2_pk already set"));
-        self
+    pub fn halo2_pk(&self) -> Halo2ProvingKey {
+        self.halo2_prover().pk()
     }
 
     #[cfg(feature = "evm-prove")]
@@ -747,6 +707,7 @@ where
         self.set_halo2_params_dir(params_dir);
         self
     }
+
     #[cfg(feature = "evm-prove")]
     pub fn set_halo2_params_dir(&mut self, params_dir: impl AsRef<Path>) {
         self.halo2_params_reader = CacheHalo2ParamsReader::new(params_dir);

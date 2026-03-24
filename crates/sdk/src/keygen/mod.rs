@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 
-#[cfg(feature = "evm-prove")]
 pub mod dummy;
 #[cfg(feature = "evm-prove")]
 pub mod static_verifier;
