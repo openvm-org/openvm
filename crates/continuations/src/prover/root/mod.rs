@@ -13,7 +13,6 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
-#[cfg(feature = "cuda")]
 use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
     BabyBearBn254Poseidon2CpuEngine, Transcript as CpuBn254Transcript,
 };
@@ -26,7 +25,7 @@ use crate::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_for_proving_backend, trace_heights_tracing_info, transport_pk},
     CommitBytes, DagCommitBytes, RootSC, SC,
 };
 
@@ -62,7 +61,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         if crate::prover::debug_checks_enabled() {
             crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
         }
-        let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
+        let d_pk = transport_pk(&engine, self.pk.as_ref());
         let proof = engine.prove(&d_pk, ctx)?;
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
@@ -111,15 +110,13 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             memory_dimensions,
             num_user_pvs,
         ));
-        #[cfg(feature = "cuda")]
-        let (pk, vk) = {
+        let airs = circuit.airs();
+        let engine = E::new(system_params.clone());
+        let (pk, vk) = keygen_for_proving_backend(&engine, &airs, || {
             // The BN254 root PK is backend-agnostic; keygen on CPU and use the GPU only for
             // proving to avoid expensive CUDA setup work in constructor-heavy paths.
-            BabyBearBn254Poseidon2CpuEngine::<CpuBn254Transcript>::new(system_params)
-                .keygen(&circuit.airs())
-        };
-        #[cfg(not(feature = "cuda"))]
-        let (pk, vk) = E::new(system_params).keygen(&circuit.airs());
+            BabyBearBn254Poseidon2CpuEngine::<CpuBn254Transcript>::new(system_params).keygen(&airs)
+        });
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),

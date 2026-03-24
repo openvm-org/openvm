@@ -5,12 +5,9 @@ use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, Ve
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{
-        CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
-    },
+    prover::{CommittedTraceData, DeviceMultiStarkProvingKey, ProverBackend},
     StarkEngine, SystemParams,
 };
-#[cfg(feature = "cuda")]
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use p3_field::{Field, PrimeField32};
@@ -21,7 +18,7 @@ use crate::{
         deferral::hook::{DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_for_proving_backend, trace_heights_tracing_info, transport_pk},
     CommitBytes, DagCommitBytes, SC,
 };
 
@@ -107,14 +104,12 @@ impl<
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
         ));
-        #[cfg(feature = "cuda")]
-        let (pk, vk) = {
+        let airs = circuit.airs();
+        let (pk, vk) = keygen_for_proving_backend(&engine, &airs, || {
             // Generate the proving key on CPU and upload it to the GPU backend for proving.
-            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&circuit.airs())
-        };
-        #[cfg(not(feature = "cuda"))]
-        let (pk, vk) = engine.keygen(&circuit.airs());
-        let d_pk = engine.device().transport_pk_to_device(&pk);
+            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&airs)
+        });
+        let d_pk = transport_pk(&engine, &pk);
 
         Self {
             pk: Arc::new(pk),
@@ -155,7 +150,7 @@ impl<
             internal_recursive_dag_commit,
         ));
         let vk = Arc::new(pk.get_vk());
-        let d_pk = engine.device().transport_pk_to_device(pk.as_ref());
+        let d_pk = transport_pk(&engine, pk.as_ref());
         Self {
             pk,
             d_pk,

@@ -5,12 +5,9 @@ use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, Ve
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{
-        CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
-    },
+    prover::{CommittedTraceData, DeviceMultiStarkProvingKey, ProverBackend},
     StarkEngine, SystemParams,
 };
-#[cfg(feature = "cuda")]
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
@@ -21,7 +18,7 @@ use crate::{
         inner::{InnerCircuit, InnerTraceGen, ProofsType},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_for_proving_backend, trace_heights_tracing_info, transport_pk},
     SC,
 };
 
@@ -123,15 +120,13 @@ impl<
             Arc::new(verifier_circuit),
             def_hook_cached_commit.map(|d| d.into()),
         ));
-        #[cfg(feature = "cuda")]
-        let (pk, vk) = {
+        let airs = circuit.airs();
+        let (pk, vk) = keygen_for_proving_backend(&engine, &airs, || {
             // Key generation is backend-independent for this circuit, so use the cheaper
             // CPU engine and only upload the resulting PK to the proving backend.
-            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&circuit.airs())
-        };
-        #[cfg(not(feature = "cuda"))]
-        let (pk, vk) = engine.keygen(&circuit.airs());
-        let d_pk = engine.device().transport_pk_to_device(&pk);
+            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&airs)
+        });
+        let d_pk = transport_pk(&engine, &pk);
         let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
@@ -170,7 +165,7 @@ impl<
             def_hook_cached_commit.map(|d| d.into()),
         ));
         let vk = Arc::new(pk.get_vk());
-        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let d_pk = transport_pk(&engine, &pk);
         let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {

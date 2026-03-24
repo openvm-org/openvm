@@ -1,6 +1,10 @@
 use openvm_recursion_circuit::prelude::F;
 use openvm_stark_backend::{
-    prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    prover::{
+        AirProvingContext, DeviceDataTransporter, DeviceMultiStarkProvingKey,
+        MatrixDimensions, ProverBackend, ProvingContext,
+    },
     AirRef, StarkEngine, StarkProtocolConfig,
 };
 
@@ -8,6 +12,40 @@ use crate::circuit::Circuit;
 
 pub(crate) fn debug_checks_enabled() -> bool {
     std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
+}
+
+pub(crate) fn keygen_for_proving_backend<SC, E, Keygen>(
+    engine: &E,
+    airs: &[AirRef<SC>],
+    cuda_keygen: Keygen,
+) -> (MultiStarkProvingKey<SC>, MultiStarkVerifyingKey<SC>)
+where
+    SC: StarkProtocolConfig<F = F>,
+    E: StarkEngine<SC = SC>,
+    Keygen: FnOnce() -> (MultiStarkProvingKey<SC>, MultiStarkVerifyingKey<SC>),
+{
+    #[cfg(feature = "cuda")]
+    {
+        let _ = (engine, airs);
+        cuda_keygen()
+    }
+
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = cuda_keygen;
+        engine.keygen(airs)
+    }
+}
+
+pub(crate) fn transport_pk<E>(
+    engine: &E,
+    pk: &MultiStarkProvingKey<E::SC>,
+) -> DeviceMultiStarkProvingKey<E::PB>
+where
+    E: StarkEngine,
+    E::PD: DeviceDataTransporter<E::SC, E::PB>,
+{
+    engine.device().transport_pk_to_device(pk)
 }
 
 pub fn debug_constraints<SC, C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)
