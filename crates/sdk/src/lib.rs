@@ -238,7 +238,6 @@ where
             halo2_shape: StaticVerifierShape::default(),
             #[cfg(feature = "evm-prove")]
             halo2_config: config::Halo2Config {
-                verifier_k: StaticVerifierShape::default().k,
                 wrapper_k: None,
                 profiling: false,
             },

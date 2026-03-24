@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub const STATIC_VERIFIER_NUM_ADVICE_COLS: usize = 1;
 pub const STATIC_VERIFIER_LOOKUP_ADVICE_COLS: usize = 1;
 
+pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct StaticVerifierShape {
     pub k: usize,
@@ -15,7 +17,7 @@ pub struct StaticVerifierShape {
 impl Default for StaticVerifierShape {
     fn default() -> Self {
         Self {
-            k: 12,
+            k: DEFAULT_HALO2_VERIFIER_K,
             lookup_bits: 11,
             minimum_rows: 20,
             instance_columns: 1,
