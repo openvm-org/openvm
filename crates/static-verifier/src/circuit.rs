@@ -273,8 +273,9 @@ pub fn compute_dag_onion_commit(
     internal_recursive_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
 ) -> InnerDigest {
     // Note: the MAX_NUM_PROOFS const generic does not impact the build_cached_trace_record function
-    // used internally below, but we use the default 3
-    let verifier_circuit = VerifierSubCircuit::<3>::new_with_options(
+    // used internally below, but we use 1 to match the root circuit. The internal_recursive circuit
+    // itself uses MAX_NUM_PROOFS = 3, but here it is the child.
+    let verifier_circuit = VerifierSubCircuit::<1>::new_with_options(
         Arc::new(internal_recursive_vk.clone()),
         VerifierConfig {
             continuations_enabled: true,

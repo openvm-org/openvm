@@ -248,13 +248,14 @@ fn pipeline_cell_count_profiling() {
         }
         #[cfg(not(feature = "cuda"))]
         {
-            let engine = BabyBearBn254Poseidon2CpuEngine::new(system_params);
+            let engine: BabyBearBn254Poseidon2CpuEngine =
+                BabyBearBn254Poseidon2CpuEngine::new(system_params);
             fib.keygen_and_prove(&engine)
         }
     };
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
-    let dummy_cached_commit = [Bn254Scalar::ZERO];
-    let circuit = StaticVerifierCircuit::try_new(vk, dummy_cached_commit, &log_heights_per_air)
+    let dummy_onion_commit = Default::default();
+    let circuit = StaticVerifierCircuit::try_new(vk, dummy_onion_commit, &log_heights_per_air)
         .expect("static circuit params");
 
     let profile_dir = std::env::var("OPENVM_PROFILE_DIR").unwrap_or_else(|_| "profile".to_string());
