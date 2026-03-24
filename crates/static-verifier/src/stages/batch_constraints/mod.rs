@@ -519,7 +519,6 @@ fn eval_symbolic_nodes_assigned(
     evaluator: &ConstraintEvaluatorWire<'_>,
     nodes: &[SymbolicExpressionNode<RootF>],
 ) -> Vec<BabyBearExtWire> {
-    let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let mut exprs: Vec<BabyBearExtWire> = Vec::with_capacity(nodes.len());
     for node in nodes {
         let expr = match node {
@@ -558,7 +557,10 @@ fn eval_symbolic_nodes_assigned(
             }
             SymbolicExpressionNode::IsFirstRow => evaluator.is_first_row,
             SymbolicExpressionNode::IsLastRow => evaluator.is_last_row,
-            SymbolicExpressionNode::IsTransition => ext_chip.sub(ctx, one, evaluator.is_last_row),
+            SymbolicExpressionNode::IsTransition => {
+                let one = ext_chip.from_base_const(ctx, RootF::ONE);
+                ext_chip.sub(ctx, one, evaluator.is_last_row)
+            }
         };
         exprs.push(expr);
     }
@@ -690,7 +692,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         let p1_q0 = ext_chip.mul(ctx, layer0[2], layer0[1]);
         let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
         let q_cross = ext_chip.mul(ctx, layer0[1], layer0[3]);
-        ext_chip.assert_equal(ctx, p_cross, zero);
+        ext_chip.assert_zero(ctx, p_cross);
         ext_chip.assert_equal(ctx, q_cross, gkr_q0_claim);
 
         let mu0 = transcript.sample_ext(ctx, baby_bear);
@@ -969,6 +971,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         );
         eq_ns[i] = ext_chip.mul(ctx, eq_ns[i - 1], eq_mle);
         eq_sharp_ns[i] = ext_chip.mul(ctx, eq_sharp_ns[i - 1], eq_mle);
+        eq_ns[i] = ext_chip.reduce_max_bits(ctx, eq_ns[i]);
+        eq_sharp_ns[i] = ext_chip.reduce_max_bits(ctx, eq_sharp_ns[i]);
     }
     if n_max_host > 0 {
         let n_max_usize = n_max_host;
@@ -976,6 +980,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         for i in (0..n_max_usize).rev() {
             eq_ns[i] = ext_chip.mul(ctx, eq_ns[i], r_rev_prod);
             eq_sharp_ns[i] = ext_chip.mul(ctx, eq_sharp_ns[i], r_rev_prod);
+            eq_ns[i] = ext_chip.reduce_max_bits(ctx, eq_ns[i]);
+            eq_sharp_ns[i] = ext_chip.reduce_max_bits(ctx, eq_sharp_ns[i]);
             r_rev_prod = ext_chip.mul(ctx, r_rev_prod, r[i]);
         }
     }
@@ -985,6 +991,9 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let mut interactions_evals = Vec::new();
     let mut constraints_evals = Vec::new();
+
+    let mut beta_pows = vec![one];
+    let mut lambda_pows = vec![one];
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         let air_idx = trace_id_to_air_id_host[trace_idx];
         let n = n_per_trace[trace_idx];
@@ -1041,8 +1050,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         let evaluator = ConstraintEvaluatorWire {
             preprocessed: preprocessed.as_deref(),
             partitioned_main: &partitioned_main,
-            is_first_row,
-            is_last_row,
+            is_first_row: ext_chip.reduce_max_bits(ctx, is_first_row),
+            is_last_row: ext_chip.reduce_max_bits(ctx, is_last_row),
             public_values: public_values[air_idx].as_slice(),
         };
 
@@ -1054,15 +1063,19 @@ pub(crate) fn constrain_batch_constraints_verification(
         );
 
         let mut expr = ext_chip.zero(ctx);
-        let mut lambda_pow = one;
         for (i, &constraint_idx) in trace_constraint_indices[trace_idx].iter().enumerate() {
             let term = if i == 0 {
                 node_values[constraint_idx]
             } else {
-                ext_chip.mul(ctx, node_values[constraint_idx], lambda_pow)
+                if i >= lambda_pows.len() {
+                    debug_assert_eq!(i, lambda_pows.len());
+                    let new_pow = ext_chip.mul(ctx, *lambda_pows.last().unwrap(), lambda);
+                    lambda_pows.push(ext_chip.reduce_max_bits(ctx, new_pow));
+                }
+
+                ext_chip.mul(ctx, node_values[constraint_idx], lambda_pows[i])
             };
             expr = ext_chip.add(ctx, expr, term);
-            lambda_pow = ext_chip.mul(ctx, lambda_pow, lambda);
         }
         constraints_evals.push(ext_chip.mul(ctx, eq_ns[n_lift], expr));
 
@@ -1073,19 +1086,27 @@ pub(crate) fn constrain_batch_constraints_verification(
         for (eq_3b, interaction) in eq_3bs.iter().zip(interactions.iter()) {
             let count_eval = node_values[interaction.count];
             let mut denom_eval = ext_chip.zero(ctx);
-            let mut beta_pow = one;
             for (j, &msg_idx) in interaction.message.iter().enumerate() {
                 let term = if j == 0 {
                     node_values[msg_idx]
                 } else {
-                    ext_chip.mul(ctx, node_values[msg_idx], beta_pow)
+                    if j >= beta_pows.len() {
+                        debug_assert_eq!(j, beta_pows.len());
+                        let new_pow = ext_chip.mul(ctx, *beta_pows.last().unwrap(), beta_logup);
+                        beta_pows.push(ext_chip.reduce_max_bits(ctx, new_pow));
+                    }
+
+                    ext_chip.mul(ctx, node_values[msg_idx], beta_pows[j])
                 };
                 denom_eval = ext_chip.add(ctx, denom_eval, term);
-                beta_pow = ext_chip.mul(ctx, beta_pow, beta_logup);
+            }
+            if interaction.message.len() >= beta_pows.len() {
+                let new_pow = ext_chip.mul(ctx, *beta_pows.last().unwrap(), beta_logup);
+                beta_pows.push(ext_chip.reduce_max_bits(ctx, new_pow));
             }
             let bus_term = ext_chip.mul_base_const(
                 ctx,
-                beta_pow,
+                beta_pows[interaction.message.len()],
                 RootF::from_u64(u64::from(interaction.bus_index) + 1),
             );
             denom_eval = ext_chip.add(ctx, denom_eval, bus_term);

@@ -148,6 +148,7 @@ pub(crate) fn constrain_stacked_reduction(
     for _ in 0..t_claims.len() {
         lambda_sqr_powers.push(cur_lambda_sqr);
         cur_lambda_sqr = ext_chip.mul(ctx, cur_lambda_sqr, lambda_sqr);
+        cur_lambda_sqr = ext_chip.reduce_max_bits(ctx, cur_lambda_sqr);
     }
 
     let mut s_0 = ext_chip.zero(ctx);

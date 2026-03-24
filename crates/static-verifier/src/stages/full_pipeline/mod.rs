@@ -253,6 +253,7 @@ pub fn constrained_verify(
         for _ in 0..l_skip {
             u_cube.push(power);
             power = ext_chip.square(ctx, power);
+            power = ext_chip.reduce_max_bits(ctx, power);
         }
         u_cube.extend(u.iter().skip(1).copied());
         u_cube
