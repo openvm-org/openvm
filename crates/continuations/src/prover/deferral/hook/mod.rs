@@ -8,9 +8,7 @@ use openvm_stark_backend::{
     prover::{CommittedTraceData, DeviceMultiStarkProvingKey, ProverBackend},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2CpuEngine, Digest, DuplexSponge, EF, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
 
@@ -19,7 +17,7 @@ use crate::{
         deferral::hook::{DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit},
         Circuit,
     },
-    prover::{keygen_for_proving_backend, trace_heights_tracing_info, transport_pk},
+    prover::{trace_heights_tracing_info, transport_pk},
     CommitBytes, DagCommitBytes, SC,
 };
 
@@ -106,10 +104,7 @@ impl<
             internal_recursive_dag_commit,
         ));
         let airs = circuit.airs();
-        let (pk, vk) = keygen_for_proving_backend(&engine, &airs, || {
-            // Generate the proving key on CPU and upload it to the GPU backend for proving.
-            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&airs)
-        });
+        let (pk, vk) = engine.keygen(&airs);
         let d_pk = transport_pk(&engine, &pk);
 
         Self {

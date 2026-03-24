@@ -8,9 +8,7 @@ use openvm_stark_backend::{
     prover::{CommittedTraceData, DeviceMultiStarkProvingKey, ProverBackend},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2CpuEngine, Digest, DuplexSponge, EF, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use openvm_verify_stark_host::pvs::DagCommit;
 use tracing::instrument;
 
@@ -19,7 +17,7 @@ use crate::{
         deferral::inner::{DeferralInnerCircuit, DeferralInnerTraceGen},
         Circuit,
     },
-    prover::{keygen_for_proving_backend, trace_heights_tracing_info, transport_pk},
+    prover::{trace_heights_tracing_info, transport_pk},
     SC,
 };
 
@@ -108,10 +106,7 @@ impl<
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(DeferralInnerCircuit::new(Arc::new(verifier_circuit)));
         let airs = circuit.airs();
-        let (pk, vk) = keygen_for_proving_backend(&engine, &airs, || {
-            // Reuse CPU keygen for the backend-agnostic PK, then upload it for GPU proving.
-            BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(system_params).keygen(&airs)
-        });
+        let (pk, vk) = engine.keygen(&airs);
         let d_pk = transport_pk(&engine, &pk);
         let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))

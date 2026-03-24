@@ -1,6 +1,6 @@
 use openvm_recursion_circuit::prelude::F;
 use openvm_stark_backend::{
-    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    keygen::types::MultiStarkProvingKey,
     prover::{
         AirProvingContext, DeviceDataTransporter, DeviceMultiStarkProvingKey, MatrixDimensions,
         ProverBackend, ProvingContext,
@@ -12,29 +12,6 @@ use crate::circuit::Circuit;
 
 pub(crate) fn debug_checks_enabled() -> bool {
     std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
-}
-
-pub(crate) fn keygen_for_proving_backend<SC, E, Keygen>(
-    engine: &E,
-    airs: &[AirRef<SC>],
-    cpu_keygen: Keygen,
-) -> (MultiStarkProvingKey<SC>, MultiStarkVerifyingKey<SC>)
-where
-    SC: StarkProtocolConfig<F = F>,
-    E: StarkEngine<SC = SC>,
-    Keygen: FnOnce() -> (MultiStarkProvingKey<SC>, MultiStarkVerifyingKey<SC>),
-{
-    #[cfg(feature = "cuda")]
-    {
-        let _ = (engine, airs);
-        cpu_keygen()
-    }
-
-    #[cfg(not(feature = "cuda"))]
-    {
-        let _ = cpu_keygen;
-        engine.keygen(airs)
-    }
 }
 
 pub(crate) fn transport_pk<E>(

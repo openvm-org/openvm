@@ -12,12 +12,7 @@ use openvm_stark_backend::{
     prover::{DeviceDataTransporter, ProverBackend, ProvingContext},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::{
-    baby_bear_bn254_poseidon2::{
-        BabyBearBn254Poseidon2CpuEngine, Transcript as CpuBn254Transcript,
-    },
-    baby_bear_poseidon2::{EF, F},
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
 use p3_bn254::Bn254;
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
@@ -27,7 +22,7 @@ use crate::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
     },
-    prover::{keygen_for_proving_backend, trace_heights_tracing_info, transport_pk},
+    prover::{trace_heights_tracing_info, transport_pk},
     CommitBytes, DagCommitBytes, RootSC, SC,
 };
 
@@ -114,11 +109,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         ));
         let airs = circuit.airs();
         let engine = E::new(system_params.clone());
-        let (pk, vk) = keygen_for_proving_backend(&engine, &airs, || {
-            // The BN254 root PK is backend-agnostic; keygen on CPU and use the GPU only for
-            // proving to avoid expensive CUDA setup work in constructor-heavy paths.
-            BabyBearBn254Poseidon2CpuEngine::<CpuBn254Transcript>::new(system_params).keygen(&airs)
-        });
+        let (pk, vk) = engine.keygen(&airs);
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
