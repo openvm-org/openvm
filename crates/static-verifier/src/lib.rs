@@ -30,7 +30,7 @@ pub mod stages;
 pub mod transcript;
 mod utils;
 
-pub use circuit::{StaticCircuitParamsError, StaticVerifierCircuit};
+pub use circuit::{compute_dag_onion_commit, StaticCircuitParamsError, StaticVerifierCircuit};
 pub use config::{
     StaticVerifierShape, STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS,
 };

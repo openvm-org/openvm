@@ -13,7 +13,6 @@ use halo2_base::{
     utils::fs::gen_srs,
 };
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
     p3_util::log2_ceil_usize,
     proof::Proof,
     test_utils::{FibFixture, TestFixture},
@@ -23,8 +22,8 @@ use openvm_stark_sdk::{
     config::{
         baby_bear_bn254_poseidon2::{
             BabyBearBn254Poseidon2Config as RootConfig, BabyBearBn254Poseidon2CpuEngine,
-            Bn254Scalar,
         },
+        baby_bear_poseidon2::Digest as InnerDigest,
         log_up_params::log_up_security_params_baby_bear_100_bits,
     },
     utils::setup_tracing,
@@ -93,7 +92,7 @@ fn real_prover_keygen_prove_verify_roundtrip() {
     let (_vk_prove, proof_prove) = FibFixture::new(1, 1, 1 << 5).keygen_and_prove(&engine);
 
     let log_heights_per_air = log_heights_per_air_from_proof(&proof_keygen);
-    let circuit = StaticVerifierCircuit::try_new(vk, [Bn254Scalar::ZERO], &log_heights_per_air)
+    let circuit = StaticVerifierCircuit::try_new(vk, InnerDigest::default(), &log_heights_per_air)
         .expect("static circuit params");
 
     let k = select_k_verify_stark(&circuit, &proof_keygen);

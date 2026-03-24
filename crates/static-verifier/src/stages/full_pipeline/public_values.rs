@@ -3,9 +3,9 @@ use std::borrow::Borrow;
 use halo2_base::{
     gates::GateInstructions, halo2_proofs::arithmetic::Field, AssignedValue, Context, QuantumCell,
 };
-use openvm_continuations::circuit::root::RootVerifierPvs;
+use openvm_continuations::circuit::root::{RootVerifierPvs, USER_PVS_COMMIT_AIR_ID};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE as APP_DIGEST_SIZE;
-use openvm_verify_stark_host::pvs::{VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
+use openvm_verify_stark_host::pvs::VERIFIER_PVS_AIR_ID;
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearWire, BABY_BEAR_MODULUS_U64},
@@ -56,7 +56,7 @@ pub fn extract_public_values(
     let app_exe_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_exe_commit);
     let app_vk_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_vk_commit);
     // not reduced:
-    let user_pvs_nr = &proof.public_values[VM_PVS_AIR_ID];
+    let user_pvs_nr = &proof.public_values[USER_PVS_COMMIT_AIR_ID];
     let user_public_values = user_pvs_nr
         .iter()
         .map(|bb| chip.reduce(ctx, *bb).value)
