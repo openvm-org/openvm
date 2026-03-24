@@ -7,11 +7,14 @@ use halo2_base::{
     gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context,
 };
 use itertools::Itertools;
-use openvm_recursion_circuit::batch_constraint::expr_eval::DagCommitPvs;
+use openvm_recursion_circuit::{
+    batch_constraint::expr_eval::DagCommitPvs,
+    system::{VerifierConfig, VerifierSubCircuit, VerifierTraceGen},
+};
 use openvm_stark_sdk::{
     config::{
         baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
-        baby_bear_poseidon2::Digest as InnerDigest,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest as InnerDigest},
     },
     openvm_stark_backend::{
         keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
@@ -264,4 +267,25 @@ impl StaticVerifierCircuit {
 
         StaticVerifierPvs::from_slice(&pvs_fr)
     }
+}
+
+pub fn compute_dag_onion_commit(
+    internal_recursive_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+) -> InnerDigest {
+    // Note: the MAX_NUM_PROOFS const generic does not impact the build_cached_trace_record function
+    // used internally below, but we use the default 3
+    let verifier_circuit = VerifierSubCircuit::<3>::new_with_options(
+        Arc::new(internal_recursive_vk.clone()),
+        VerifierConfig {
+            continuations_enabled: true,
+            has_cached: false,
+            ..Default::default()
+        },
+    );
+    let cached_trace_record = VerifierTraceGen::<_, BabyBearPoseidon2Config>::cached_trace_record(
+        &verifier_circuit,
+        internal_recursive_vk,
+    );
+    // despite the name, this returns the DAG onion commit for when there is no cached trace
+    cached_trace_record.dag_commit_info.unwrap().commit
 }
