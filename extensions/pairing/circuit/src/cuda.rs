@@ -1,6 +1,5 @@
-//! GPU builder where the [Rv32ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
-//! either cuda tracegen or hybrid CPU tracegen depending on what [openvm_algebra_circuit] and
-//! [openvm_ecc_circuit] crates export.
+//! GPU builder where the [Rv32ModularBuilder], [AlgebraProverExt], and [EccProverExt] use the
+//! CUDA prover exports from [openvm_algebra_circuit] and [openvm_ecc_circuit].
 use openvm_algebra_circuit::{AlgebraProverExt, Rv32ModularBuilder};
 use openvm_circuit::{
     arch::{

@@ -21,8 +21,8 @@ cfg_if::cfg_if! {
         mod hybrid;
         pub use hybrid::*;
         pub use {
-            EccHybridProverExt as EccProverExt,
-            Rv32WeierstrassHybridBuilder as Rv32WeierstrassBuilder,
+            EccGpuProverExt as EccProverExt,
+            Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
         };
     } else {
         pub use self::{
