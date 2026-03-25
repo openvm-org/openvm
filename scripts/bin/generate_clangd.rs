@@ -1,6 +1,8 @@
 use std::{env, fs};
 
-use openvm_scripts::{find_cuda_include_dirs, get_cuda_dep_common_include_dirs};
+use openvm_scripts::{
+    find_cuda_include_dirs, get_cuda_dep_common_include_dirs, get_cuda_dep_primitives_include_dirs,
+};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -34,6 +36,7 @@ fn main() -> eyre::Result<()> {
 
     let include_dirs = find_cuda_include_dirs(&workspace_root);
     let common_include_dirs = get_cuda_dep_common_include_dirs();
+    let primitives_include_dirs = get_cuda_dep_primitives_include_dirs();
 
     println!("Found {} include directories:", include_dirs.len());
     for dir in &include_dirs {
@@ -46,6 +49,7 @@ fn main() -> eyre::Result<()> {
     let compile_flags: Vec<String> = include_dirs
         .iter()
         .chain(common_include_dirs.iter())
+        .chain(primitives_include_dirs.iter())
         .map(|p| format!("-I{}", p.display()))
         .chain([
             "-x".into(),
