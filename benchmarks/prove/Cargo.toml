@@ -38,9 +38,9 @@ aot = ["openvm-sdk/aot"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
 evm = ["openvm-sdk/evm-verify"]
-parallel = ["openvm-sdk/parallel", "openvm-stark-backend/parallel"]
+parallel = ["openvm-sdk/parallel"]
 mimalloc = ["openvm-sdk/mimalloc"]
-jemalloc = ["openvm-sdk/jemalloc", "openvm-stark-backend/jemalloc"]
+jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 
 cuda = [
