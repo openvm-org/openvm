@@ -9,9 +9,9 @@ license = "MIT OR Apache-2.0"
 
 [workspace]
 members = [
-    # "benchmarks/utils",
-    # "benchmarks/execute",
-    # "benchmarks/prove",
+    "benchmarks/utils",
+    "benchmarks/execute",
+    "benchmarks/prove",
     "crates/prof",
     "crates/cli",
     "crates/sdk",
