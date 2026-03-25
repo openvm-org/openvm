@@ -10,6 +10,7 @@ eyre = { workspace = true }
 serde = { workspace = true }
 clap = { version = "4.5.9", features = ["derive", "env"] }
 serde_yaml = "0.9"
+tempfile = "3.13"
 walkdir = "2.5"
 
 [features]
@@ -26,4 +27,9 @@ required-features = ["cuda"]
 [[bin]]
 name = "run-clang-tidy"
 path = "bin/run_clang_tidy.rs"
+required-features = ["cuda"]
+
+[[bin]]
+name = "ptx-details"
+path = "bin/ptx_details.rs"
 required-features = ["cuda"]
