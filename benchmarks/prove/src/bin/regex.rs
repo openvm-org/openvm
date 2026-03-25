@@ -1,27 +1,20 @@
 use clap::Parser;
-use eyre::Result;
-use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_sdk::{
-    config::{SdkVmBuilder, SdkVmConfig},
-    StdIn,
-};
-use openvm_stark_sdk::bench::run_with_metric_collection;
+use openvm_benchmarks_prove::BenchmarkCli;
+use openvm_sdk::StdIn;
+use openvm_sdk_config::SdkVmConfig;
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-fn main() -> Result<()> {
+fn main() -> eyre::Result<()> {
     let args = BenchmarkCli::parse();
+    let vm_config = SdkVmConfig::from_toml(include_str!("../../../guest/regex/openvm.toml"))?;
 
-    let config =
-        SdkVmConfig::from_toml(include_str!("../../../guest/regex/openvm.toml"))?.app_vm_config;
-    let elf = args.build_bench_program("regex", &config, None)?;
-    run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let data = include_str!("../../../guest/regex/regex_email.txt");
+    let elf = Elf::decode(
+        include_bytes!("../../../guest/regex/elf/openvm-regex-program.elf"),
+        MEM_SIZE as u32,
+    )?;
 
-        let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe::<SdkVmBuilder, _>(
-            "regex_program",
-            config,
-            elf,
-            StdIn::from_bytes(&fe_bytes),
-        )
-    })
+    let data = include_str!("../../../guest/regex/regex_email.txt");
+    let stdin = StdIn::from_bytes(&data.to_owned().into_bytes());
+
+    args.run(vm_config, elf, stdin)
 }

@@ -7,12 +7,9 @@ import subprocess
 def run_cargo_command(
     bin_name,
     feature_flags,
-    app_log_blowup,
-    leaf_log_blowup,
-    root_log_blowup,
-    internal_log_blowup,
     max_segment_length,
     output_path,
+    app_only,
     kzg_params_dir,
     profile="release",
 ):
@@ -36,20 +33,13 @@ def run_cargo_command(
         "--",
     ]
 
-    if app_log_blowup is not None:
-        command.extend(["--app_log_blowup", app_log_blowup])
-    if leaf_log_blowup is not None:
-        command.extend(["--leaf_log_blowup", leaf_log_blowup])
-    if root_log_blowup is not None:
-        command.extend(["--root_log_blowup", root_log_blowup])
-    if internal_log_blowup is not None:
-        command.extend(["--internal_log_blowup", internal_log_blowup])
     if max_segment_length is not None:
         command.extend(["--max_segment_length", max_segment_length])
+    if app_only:
+        command.extend(["--app-only"])
     if kzg_params_dir is not None:
         command.extend(["--kzg-params-dir", kzg_params_dir])
     if "perf-metrics" in feature_flags:
-        # set guest build args and vm config to profiling
         command.extend(["--profiling"])
 
     output_path_old = None
@@ -80,14 +70,6 @@ def bench():
     parser = argparse.ArgumentParser()
     parser.add_argument("bench_name", type=str, help="Name of the benchmark to run")
     parser.add_argument(
-        "--app_log_blowup", type=str, help="Application level log blowup"
-    )
-    parser.add_argument("--leaf_log_blowup", type=str, help="Leaf level log blowup")
-    parser.add_argument("--root_log_blowup", type=str, help="Root level log blowup")
-    parser.add_argument(
-        "--internal_log_blowup", type=str, help="Internal level log blowup"
-    )
-    parser.add_argument(
         "--max_segment_length", type=str, help="Max segment length for continuations"
     )
     parser.add_argument(
@@ -102,6 +84,11 @@ def bench():
         required=True,
         help="The path to write the metrics to",
     )
+    parser.add_argument(
+        "--app-only",
+        action="store_true",
+        help="Only run the app proof (skip aggregation)",
+    )
     args = parser.parse_args()
 
     feature_flags = ["metrics", "parallel"] + (
@@ -112,12 +99,9 @@ def bench():
     run_cargo_command(
         args.bench_name,
         feature_flags,
-        args.app_log_blowup,
-        args.leaf_log_blowup,
-        args.root_log_blowup,
-        args.internal_log_blowup,
         args.max_segment_length,
         args.output_path,
+        args.app_only,
         args.kzg_params_dir,
     )
 

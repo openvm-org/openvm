@@ -1,133 +1,18 @@
-use std::sync::Arc;
-
 use clap::Parser;
-use eyre::Result;
-use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::{arch::instructions::exe::VmExe, utils::TestStarkEngine as Poseidon2Engine};
-use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
-use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
-use openvm_native_recursion::fri::MAX_TWO_ADICITY;
-use openvm_sdk::{
-    config::SdkVmConfig,
-    prover::vm::{new_local_prover, types::VmProvingKey},
-    Sdk, StdIn, F, SC,
-};
-use openvm_stark_backend::{StarkProtocolConfig, p3_field::BasedVectorSpace};
-use openvm_stark_sdk::bench::run_with_metric_collection;
+use openvm_benchmarks_prove::BenchmarkCli;
+use openvm_sdk::StdIn;
+use openvm_sdk_config::SdkVmConfig;
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-fn verify_native_max_trace_heights(
-    sdk: &Sdk,
-    app_exe: Arc<VmExe<F>>,
-    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    num_children_leaf: usize,
-) -> Result<()> {
-    let app_proof = sdk.app_prover(app_exe)?.prove(StdIn::default())?;
-    let leaf_inputs =
-        LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
-    let mut leaf_prover = new_local_prover::<Poseidon2Engine, _>(
-        NativeBuilder::default(),
-        &leaf_vm_pk,
-        sdk.app_pk().leaf_committed_exe.exe.clone(),
-    )?;
-
-    for leaf_input in leaf_inputs {
-        let exe = leaf_prover.exe().clone();
-        let vm = &mut leaf_prover.vm;
-        let metered_ctx = vm
-            .build_metered_ctx(&exe)
-            .with_max_cells(usize::MAX) // no segmentation
-            .with_max_trace_height(1 << MAX_TWO_ADICITY);
-        let (segments, _) = vm
-            .metered_interpreter(&exe)?
-            .execute_metered(leaf_input.write_to_stream(), metered_ctx)?;
-        assert_eq!(segments.len(), 1);
-        let estimated_trace_heights = &segments[0].trace_heights;
-        println!("estimated_trace_heights: {estimated_trace_heights:?}");
-
-        // Tracegen without proving since leaf proofs take a while
-        let state = vm.create_initial_state(&exe, leaf_input.write_to_stream());
-        vm.transport_init_memory_to_device(&state.memory);
-        let mut interpreter = vm.preflight_interpreter(&exe)?;
-        let out = vm.execute_preflight(&mut interpreter, state, None, estimated_trace_heights)?;
-        let actual_trace_heights = vm
-            .generate_proving_ctx(out.system_records, out.record_arenas)?
-            .per_air
-            .into_iter()
-            .map(|(_, air_ctx)| air_ctx.main_trace_height())
-            .collect::<Vec<usize>>();
-        println!("actual_trace_heights: {actual_trace_heights:?}");
-
-        actual_trace_heights
-            .iter()
-            .zip(NATIVE_MAX_TRACE_HEIGHTS)
-            .for_each(|(&actual, &expected)| {
-                assert!(
-                    actual <= (expected as usize),
-                    "Actual trace height {actual} exceeds expected height {expected}"
-                );
-            });
-    }
-    Ok(())
-}
-
-fn main() -> Result<()> {
+fn main() -> eyre::Result<()> {
     let args = BenchmarkCli::parse();
-
     let vm_config =
-        SdkVmConfig::from_toml(include_str!("../../../guest/kitchen-sink/openvm.toml"))?
-            .app_vm_config;
-    let app_config = args.app_config(vm_config.clone());
-    let elf = args.build_bench_program("kitchen-sink", &vm_config, None)?;
-    let sdk = Sdk::new(app_config)?;
-    let exe = sdk.convert_to_exe(elf)?;
+        SdkVmConfig::from_toml(include_str!("../../../guest/kitchen-sink/openvm.toml"))?;
 
-    let (_, app_vk) = sdk.app_keygen();
-    let ext_degree = <<SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<F>>::DIMENSION;
-    println!(
-        "app_total_width = {}",
-        app_vk
-            .vk
-            .inner
-            .per_air
-            .iter()
-            .map(|vk| vk.params.width.total_width(ext_degree))
-            .sum::<usize>()
-    );
-    let agg_pk = sdk.agg_pk();
-    println!(
-        "leaf_total_width = {}",
-        agg_pk
-            .leaf_vm_pk
-            .vm_pk
-            .get_vk()
-            .inner
-            .per_air
-            .iter()
-            .map(|vk| vk.params.width.total_width(ext_degree))
-            .sum::<usize>()
-    );
-    // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
-    verify_native_max_trace_heights(
-        &sdk,
-        exe.clone(),
-        agg_pk.leaf_vm_pk.clone(),
-        args.agg_tree_config.num_children_leaf,
+    let elf = Elf::decode(
+        include_bytes!("../../../guest/kitchen-sink/elf/openvm-kitchen-sink-program.elf"),
+        MEM_SIZE as u32,
     )?;
 
-    run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<()> {
-        let stdin = StdIn::default();
-        #[cfg(not(feature = "evm"))]
-        {
-            let mut prover = sdk.prover(exe)?.with_program_name("kitchen_sink");
-            let app_commit = prover.app_commit();
-            let proof = prover.prove(stdin)?;
-            Sdk::verify_proof(&agg_pk.get_agg_vk(), app_commit, &proof)?;
-        }
-        #[cfg(feature = "evm")]
-        let _proof = sdk
-            .evm_prover(exe)?
-            .with_program_name("kitchen_sink")
-            .prove_evm(stdin)?;
-        Ok(())
-    })
+    args.run(vm_config, elf, StdIn::default())
 }
