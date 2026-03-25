@@ -7,6 +7,7 @@ use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
 // Necessary so the linker doesn't skip importing openvm crate
 openvm::entry!(main);
+openvm::init!();
 
 fn main() {
     let mut evm = Evm::builder()
