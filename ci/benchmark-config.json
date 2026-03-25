@@ -1,20 +1,6 @@
 {
   "benchmarks": [
     {
-      "name": "verify_fibair",
-      "id": "verify_fibair",
-      "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
-      "run_params": [
-        {
-          "instance_type": "g6.2xlarge",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1
-        }
-      ]
-    },
-    {
       "name": "fibonacci",
       "id": "fibonacci",
       "working_directory": "benchmarks/prove",
@@ -22,9 +8,19 @@
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1
+          "memory_allocator": "jemalloc"
+        }
+      ]
+    },
+    {
+      "name": "keccak",
+      "id": "keccak",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "g6.2xlarge",
+          "memory_allocator": "jemalloc"
         }
       ]
     },
@@ -36,9 +32,7 @@
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1
+          "memory_allocator": "jemalloc"
         }
       ]
     },
@@ -50,9 +44,7 @@
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1
+          "memory_allocator": "jemalloc"
         }
       ]
     },
@@ -64,26 +56,7 @@
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1
-        }
-      ]
-    },
-    {
-      "name": "fib_e2e",
-      "id": "fib_e2e",
-      "working_directory": "benchmarks/prove",
-      "e2e_bench": true,
-      "run_params": [
-        {
-          "instance_type": "g6e.4xlarge",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1,
-          "internal_log_blowup": 2,
-          "root_log_blowup": 3,
-          "max_segment_length": 1048476
+          "memory_allocator": "jemalloc"
         }
       ]
     },
@@ -91,16 +64,12 @@
       "name": "kitchen_sink",
       "id": "kitchen_sink",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": true,
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6e.2xlarge",
           "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1,
-          "internal_log_blowup": 2,
-          "root_log_blowup": 3,
-          "max_segment_length": 4194204
+          "max_segment_length": 4194304
         }
       ]
     }
