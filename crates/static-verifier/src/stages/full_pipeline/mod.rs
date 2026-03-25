@@ -11,7 +11,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearWire},
+    field::baby_bear::{BabyBearExtChip, BabyBearWire},
     stages::{
         batch_constraints::{
             constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
@@ -23,7 +23,7 @@ use crate::{
         },
         whir::{constrain_whir_verification, load_whir_proof_wire, WhirProofWire},
     },
-    transcript::{digest_wire_from_root, DigestWire, TranscriptGadget},
+    transcript::{digest_wire_from_root, DigestWire, TranscriptChip},
     Fr,
 };
 
@@ -114,8 +114,7 @@ pub fn load_proof_wire(
 #[allow(clippy::too_many_arguments)]
 fn observe_preamble(
     ctx: &mut Context<Fr>,
-    base_chip: &BabyBearChip,
-    transcript: &mut TranscriptGadget,
+    transcript: &mut TranscriptChip,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     log_heights_per_air: &[usize],
     public_values: &[Vec<BabyBearWire>],
@@ -123,8 +122,8 @@ fn observe_preamble(
     vk_pre_hash: DigestWire,
     common_main_commit: DigestWire,
 ) {
-    transcript.observe_commit(ctx, base_chip, &vk_pre_hash);
-    transcript.observe_commit(ctx, base_chip, &common_main_commit);
+    transcript.observe_commit(ctx, &vk_pre_hash);
+    transcript.observe_commit(ctx, &common_main_commit);
 
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
@@ -132,7 +131,6 @@ fn observe_preamble(
             let presence_flag = ctx.load_constant(Fr::one());
             transcript.observe(
                 ctx,
-                base_chip,
                 &BabyBearWire {
                     value: presence_flag,
                     max_bits: 1,
@@ -142,21 +140,23 @@ fn observe_preamble(
 
         if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
             let preprocessed_root = ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
-            transcript.observe_commit(ctx, base_chip, &digest_wire_from_root(preprocessed_root));
+            transcript.observe_commit(ctx, &digest_wire_from_root(preprocessed_root));
         } else {
             // Fixed circuit parameter (not loaded from the proof witness).
             let lh = u32::try_from(log_heights_per_air[air_idx])
                 .expect("log_height must fit in u32 for BabyBear constant");
-            let log_height = base_chip.load_constant(ctx, BabyBear::from_u32(lh));
-            transcript.observe(ctx, base_chip, &log_height);
+            let log_height = transcript
+                .baby_bear()
+                .load_constant(ctx, BabyBear::from_u32(lh));
+            transcript.observe(ctx, &log_height);
         }
 
         for root in &cached_commitment_roots[air_idx] {
-            transcript.observe_commit(ctx, base_chip, &digest_wire_from_root(*root));
+            transcript.observe_commit(ctx, &digest_wire_from_root(*root));
         }
 
         for value in &public_values[air_idx] {
-            transcript.observe(ctx, base_chip, value);
+            transcript.observe(ctx, value);
         }
     }
 }
@@ -196,12 +196,11 @@ pub fn constrained_verify(
     let mut profiler = crate::profiling::CellProfiler::new("constrained_verify", ctx.advice.len());
 
     let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
-    let mut transcript = TranscriptGadget::new(ctx);
+    let mut transcript = TranscriptChip::new(ctx, ext_chip.base().clone());
 
     profiler.push("observe_preamble", ctx.advice.len());
     observe_preamble(
         ctx,
-        ext_chip.base(),
         &mut transcript,
         root_vk,
         log_heights_per_air,
