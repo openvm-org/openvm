@@ -10,7 +10,7 @@ use tempfile::Builder as TempfileBuilder;
 
 #[derive(Parser)]
 #[command(author, version, about = "Compile CUDA code with nvcc")]
-pub struct Args {
+struct Args {
     /// Write output to this path. If omitted, a temporary file is used and deleted.
     #[arg(long)]
     out: Option<PathBuf>,
@@ -20,12 +20,7 @@ pub struct Args {
     nvcc: String,
 
     /// Path to CUDA installation (used for include paths)
-    #[arg(
-        long,
-        env = "CUDA_PATH",
-        env = "CUDA_HOME",
-        default_value = "/usr/local/cuda"
-    )]
+    #[arg(long, env = "CUDA_PATH", default_value = "/usr/local/cuda")]
     cuda_path: String,
 
     /// CUDA architecture (e.g. 89 -> sm_89 / compute_89)
