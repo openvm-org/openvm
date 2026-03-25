@@ -1,0 +1,42 @@
+name: Static Verifier Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/static-verifier/**"
+      - "Cargo.toml"
+      - ".github/workflows/static-verifier.yml"
+
+concurrency:
+  group: ${{ github.workflow_ref }}-static-verifier-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_FAST_TEST: "1"
+
+jobs:
+  tests:
+    name: Static verifier tests
+    runs-on:
+      - runs-on=${{ github.run_id }}-static-verifier-${{ github.run_attempt }}/runner=64cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run static verifier tests
+        working-directory: crates/static-verifier
+        run: |
+          cargo nextest run --cargo-profile fast --features parallel
