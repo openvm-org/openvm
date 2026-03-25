@@ -33,7 +33,7 @@ pub struct GkrProofWire {
     pub logup_pow_witness: BabyBearWire,
     pub q0_claim: BabyBearExtWire,
     pub claims_per_layer: Vec<Vec<BabyBearExtWire>>,
-    pub sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
+    pub sumcheck_polys: Vec<Vec<[BabyBearExtWire; 3]>>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,13 +69,9 @@ pub(crate) fn load_gkr_proof_wire(
         .sumcheck_polys
         .iter()
         .map(|poly| {
-            let mut assigned = Vec::with_capacity(poly.len() * 3);
-            for evals in poly {
-                for &value in evals {
-                    assigned.push(ext_chip.load_witness(ctx, value));
-                }
-            }
-            assigned
+            poly.iter()
+                .map(|evals| evals.map(|value| ext_chip.load_witness(ctx, value)))
+                .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
     GkrProofWire {
@@ -709,9 +705,7 @@ pub(crate) fn constrain_batch_constraints_verification(
             let mut eq = one;
 
             for (subround, xi_prev) in gkr_r.iter().enumerate().take(round) {
-                let ev1 = round_polys[subround * 3];
-                let ev2 = round_polys[subround * 3 + 1];
-                let ev3 = round_polys[subround * 3 + 2];
+                let [ev1, ev2, ev3] = round_polys[subround];
                 transcript.observe_ext(ctx, &ev1);
                 transcript.observe_ext(ctx, &ev2);
                 transcript.observe_ext(ctx, &ev3);
