@@ -6,7 +6,6 @@ authors.workspace = true
 
 [dependencies]
 openvm-cuda-common = { workspace = true, optional = true }
-openvm-circuit-primitives = { workspace = true, optional = true }
 eyre = { workspace = true }
 serde = { workspace = true }
 clap = { version = "4.5.9", features = ["derive", "env"] }
@@ -15,7 +14,7 @@ tempfile = "3.13"
 walkdir = "2.5"
 
 [features]
-cuda = ["dep:openvm-cuda-common", "dep:openvm-circuit-primitives", "openvm-circuit-primitives/cuda"]
+cuda = ["dep:openvm-cuda-common"]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm-cuda-common"]

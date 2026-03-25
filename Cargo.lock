@@ -4728,7 +4728,6 @@ version = "2.0.0-alpha"
 dependencies = [
  "clap",
  "eyre",
- "openvm-circuit-primitives",
  "openvm-cuda-common",
  "serde",
  "serde_yaml",

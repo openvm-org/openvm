@@ -67,13 +67,3 @@ pub fn get_cuda_dep_common_include_dirs() -> Vec<PathBuf> {
         vec![]
     }
 }
-
-pub fn get_cuda_dep_primitives_include_dirs() -> Vec<PathBuf> {
-    if let Some(val) = option_env!("DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE") {
-        env::split_paths(val)
-            .filter(|p| !p.as_os_str().is_empty())
-            .collect()
-    } else {
-        vec![]
-    }
-}
