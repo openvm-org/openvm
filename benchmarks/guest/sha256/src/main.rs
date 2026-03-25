@@ -16,7 +16,7 @@ pub fn main() {
     }
 
     // Prevent optimizer from optimizing away the computation
-    let sha256 = Sha256::new();
+    let mut sha256 = Sha256::new();
     sha256.update(black_box(&input));
     black_box(sha256.finalize());
 }
