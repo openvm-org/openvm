@@ -841,6 +841,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     // Returns Some(None) if the hint proves that self is not a quadratic residue
                     // Otherwise, returns Some(Some(sqrt)) where sqrt is a square root of self
                     fn honest_host_sqrt(&self) -> Option<Option<Self>> {
+                        // Zero is always a perfect square; bypass the host hint to prevent
+                        // a dishonest host from claiming 0 is not a QR (the verification
+                        // check `0*0 == 0*non_qr` would trivially pass for sqrt=0).
+                        if self == &<Self as ::openvm_algebra_guest::IntMod>::ZERO {
+                            return Some(Some(<Self as ::openvm_algebra_guest::IntMod>::ZERO));
+                        }
+
                         let (is_square, sqrt) = self.hint_sqrt_impl()?;
 
                         if is_square {
