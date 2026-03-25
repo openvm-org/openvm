@@ -1,4 +1,5 @@
 use openvm as _;
+openvm::init!();
 use revm::{
     db::BenchmarkDB,
     primitives::{address, bytes, hex, Bytecode, Bytes, TxKind},
