@@ -6,7 +6,7 @@
 - Use the CI-like build profile: `cargo build --profile fast -p <crate>` (note: `--cargo-profile` is a **nextest** flag, not a Cargo build flag).
 - Formatting requires nightly rustfmt: `cargo +nightly fmt --all` (stable `cargo fmt` will fail due to unstable options in `rustfmt.toml`).
 - Run tests with nextest when available: `cargo nextest run --cargo-profile=fast -p <crate>`; fallback: `cargo test -p <crate>`.
-- Speed knobs for local runs: `OPENVM_FAST_TEST=1` and `OPENVM_SKIP_DEBUG=1` (see below).
+- Speed knob for local runs: `OPENVM_SKIP_DEBUG=1` (see below).
 - After major code edits, run `./scripts/pre-push.sh` to check formatting, linting, and tests on changed crates before pushing.
 
 ## Project Overview
@@ -74,7 +74,6 @@ cargo nextest run --cargo-profile=fast --features parallel
 
 ### Environment Variables for Tests
 
-- `OPENVM_FAST_TEST=1`: CI sets this; may reduce test sizes
 - `OPENVM_SKIP_DEBUG=1`: Skips debug-mode constraint checking in `air_test` (faster CI runs)
 
 ### Nextest Profiles
