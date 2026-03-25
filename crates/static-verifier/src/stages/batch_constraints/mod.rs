@@ -665,7 +665,7 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let logup_pow_bits = mvk0.params.logup.pow_bits;
     let logup_pow_witness = gkr_wire.logup_pow_witness;
-    transcript.check_witness(ctx,logup_pow_bits, &logup_pow_witness);
+    transcript.check_witness(ctx, logup_pow_bits, &logup_pow_witness);
 
     let alpha_logup = transcript.sample_ext(ctx);
     let beta_logup = transcript.sample_ext(ctx);
@@ -680,10 +680,10 @@ pub(crate) fn constrain_batch_constraints_verification(
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, mut xi) = {
-        transcript.observe_ext(ctx,&gkr_q0_claim);
+        transcript.observe_ext(ctx, &gkr_q0_claim);
 
         let layer0 = &gkr_claims_per_layer[0];
-        observe_layer_claims_assigned(ctx, transcript,layer0);
+        observe_layer_claims_assigned(ctx, transcript, layer0);
 
         let p0_q1 = ext_chip.mul(ctx, layer0[0], layer0[3]);
         let p1_q0 = ext_chip.mul(ctx, layer0[2], layer0[1]);
@@ -712,9 +712,9 @@ pub(crate) fn constrain_batch_constraints_verification(
                 let ev1 = round_polys[subround * 3];
                 let ev2 = round_polys[subround * 3 + 1];
                 let ev3 = round_polys[subround * 3 + 2];
-                transcript.observe_ext(ctx,&ev1);
-                transcript.observe_ext(ctx,&ev2);
-                transcript.observe_ext(ctx,&ev3);
+                transcript.observe_ext(ctx, &ev1);
+                transcript.observe_ext(ctx, &ev2);
+                transcript.observe_ext(ctx, &ev3);
 
                 let ri = transcript.sample_ext(ctx);
                 gkr_r_prime.push(ri);
@@ -735,7 +735,7 @@ pub(crate) fn constrain_batch_constraints_verification(
             }
 
             let layer_claims = &gkr_claims_per_layer[round];
-            observe_layer_claims_assigned(ctx, transcript,layer_claims);
+            observe_layer_claims_assigned(ctx, transcript, layer_claims);
 
             let p0_q1 = ext_chip.mul(ctx, layer_claims[0], layer_claims[3]);
             let p1_q0 = ext_chip.mul(ctx, layer_claims[2], layer_claims[1]);
@@ -786,8 +786,8 @@ pub(crate) fn constrain_batch_constraints_verification(
     {
         gkr_p_xi_claim = ext_chip.sub(ctx, gkr_p_xi_claim, *num_term);
         gkr_q_xi_claim = ext_chip.sub(ctx, gkr_q_xi_claim, *den_term);
-        transcript.observe_ext(ctx,num_term);
-        transcript.observe_ext(ctx,den_term);
+        transcript.observe_ext(ctx, num_term);
+        transcript.observe_ext(ctx, den_term);
     }
     let gkr_numerator_residual = gkr_p_xi_claim;
     let gkr_denominator_claim = gkr_q_xi_claim;
@@ -820,7 +820,7 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let univariate_round_coeffs = &batch_wire.univariate_round_coeffs;
     for coeff in univariate_round_coeffs {
-        transcript.observe_ext(ctx,coeff);
+        transcript.observe_ext(ctx, coeff);
     }
     let mut r = vec![transcript.sample_ext(ctx)];
 
@@ -838,7 +838,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         horner_eval_ext_poly_assigned(ctx, ext_chip, univariate_round_coeffs, &r[0]);
     for round_evals in sumcheck_round_polys {
         for eval in round_evals {
-            transcript.observe_ext(ctx,eval);
+            transcript.observe_ext(ctx, eval);
         }
 
         let s_1 = round_evals[0];
@@ -860,8 +860,8 @@ pub(crate) fn constrain_batch_constraints_verification(
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         let need_rot = column_openings_need_rot[trace_idx][0];
         for claim in column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[0], need_rot) {
-            transcript.observe_ext(ctx,&claim.local);
-            transcript.observe_ext(ctx,&claim.next);
+            transcript.observe_ext(ctx, &claim.local);
+            transcript.observe_ext(ctx, &claim.next);
         }
     }
 
@@ -869,8 +869,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         for (part_idx, claims) in air_openings.iter().enumerate().skip(1) {
             let need_rot = column_openings_need_rot[trace_idx][part_idx];
             for claim in column_openings_by_rot_assigned(ctx, ext_chip, claims, need_rot) {
-                transcript.observe_ext(ctx,&claim.local);
-                transcript.observe_ext(ctx,&claim.next);
+                transcript.observe_ext(ctx, &claim.local);
+                transcript.observe_ext(ctx, &claim.next);
             }
         }
     }

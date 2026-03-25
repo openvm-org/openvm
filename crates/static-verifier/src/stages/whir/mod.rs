@@ -482,16 +482,12 @@ pub(crate) fn constrain_whir_verification(
             if let Some(evals) = whir_sumcheck_polys.get(sumcheck_cursor) {
                 let ev1 = evals[0];
                 let ev2 = evals[1];
-                transcript.observe_ext(ctx,&ev1);
-                transcript.observe_ext(ctx,&ev2);
+                transcript.observe_ext(ctx, &ev1);
+                transcript.observe_ext(ctx, &ev2);
 
                 let pow_witness = folding_pow_witnesses[folding_pow_cursor];
                 folding_pow_cursor += 1;
-                transcript.check_witness(
-                    ctx,
-                    params.whir.folding_pow_bits,
-                    &pow_witness,
-                );
+                transcript.check_witness(ctx, params.whir.folding_pow_bits, &pow_witness);
 
                 let alpha = transcript.sample_ext(ctx);
                 alphas_round.push(alpha);
@@ -512,19 +508,16 @@ pub(crate) fn constrain_whir_verification(
 
         let y0 = if is_final_round {
             for coeff in final_poly {
-                transcript.observe_ext(ctx,coeff);
+                transcript.observe_ext(ctx, coeff);
             }
             None
         } else {
-            transcript.observe_commit(
-                ctx,
-                &codeword_commitment_digests[round_idx],
-            );
+            transcript.observe_commit(ctx, &codeword_commitment_digests[round_idx]);
             let z0 = transcript.sample_ext(ctx);
             z0_challenges.push(z0);
 
             let y0 = ood_values[round_idx];
-            transcript.observe_ext(ctx,&y0);
+            transcript.observe_ext(ctx, &y0);
             Some(y0)
         };
 

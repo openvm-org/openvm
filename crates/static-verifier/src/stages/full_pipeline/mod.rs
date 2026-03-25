@@ -145,7 +145,9 @@ fn observe_preamble(
             // Fixed circuit parameter (not loaded from the proof witness).
             let lh = u32::try_from(log_heights_per_air[air_idx])
                 .expect("log_height must fit in u32 for BabyBear constant");
-            let log_height = transcript.baby_bear().load_constant(ctx, BabyBear::from_u32(lh));
+            let log_height = transcript
+                .baby_bear()
+                .load_constant(ctx, BabyBear::from_u32(lh));
             transcript.observe(ctx, &log_height);
         }
 

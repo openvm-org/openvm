@@ -116,11 +116,7 @@ impl TranscriptChip {
         self.sponge_state = state.s;
     }
 
-    fn reduce_32(
-        &self,
-        ctx: &mut Context<Fr>,
-        values: &[BabyBearWire],
-    ) -> AssignedValue<Fr> {
+    fn reduce_32(&self, ctx: &mut Context<Fr>, values: &[BabyBearWire]) -> AssignedValue<Fr> {
         reduce_32_cells(
             ctx,
             self.baby_bear.range().gate(),
@@ -134,7 +130,9 @@ impl TranscriptChip {
         packed: AssignedValue<Fr>,
     ) -> [BabyBearWire; NUM_SPLIT_LIMBS] {
         let limbs = decompose_packed_bn254_to_split_limbs(ctx, self.baby_bear.range(), packed);
-        core::array::from_fn(|idx| reduce_assigned_limb_to_babybear(ctx, &self.baby_bear, limbs[idx]))
+        core::array::from_fn(|idx| {
+            reduce_assigned_limb_to_babybear(ctx, &self.baby_bear, limbs[idx])
+        })
     }
 
     fn duplexing(&mut self, ctx: &mut Context<Fr>) {
@@ -157,11 +155,7 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        value: &BabyBearWire,
-    ) {
+    pub fn observe(&mut self, ctx: &mut Context<Fr>, value: &BabyBearWire) {
         self.output_buffer.clear();
         self.input_buffer.push(*value);
         if self.input_buffer.len() == NUM_SPLIT_LIMBS * POSEIDON2_RATE {
@@ -169,21 +163,13 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe_ext(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        value: &BabyBearExtWire,
-    ) {
+    pub fn observe_ext(&mut self, ctx: &mut Context<Fr>, value: &BabyBearExtWire) {
         for coeff in &value.0 {
             self.observe(ctx, coeff);
         }
     }
 
-    pub fn observe_commit(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        digest: &DigestWire,
-    ) {
+    pub fn observe_commit(&mut self, ctx: &mut Context<Fr>, digest: &DigestWire) {
         for packed in &digest.elems {
             let limbs = self.split_state_to_babybear(ctx, *packed);
             for limb in &limbs {
@@ -202,19 +188,12 @@ impl TranscriptChip {
             .expect("transcript output buffer must be non-empty after duplexing")
     }
 
-    pub fn sample_ext(
-        &mut self,
-        ctx: &mut Context<Fr>,
-    ) -> BabyBearExtWire {
+    pub fn sample_ext(&mut self, ctx: &mut Context<Fr>) -> BabyBearExtWire {
         let coeffs = core::array::from_fn(|_| self.sample(ctx));
         BabyBearExt4Wire(coeffs)
     }
 
-    pub fn sample_bits(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        bits: usize,
-    ) -> AssignedValue<Fr> {
+    pub fn sample_bits(&mut self, ctx: &mut Context<Fr>, bits: usize) -> AssignedValue<Fr> {
         assert!(
             bits < (u32::BITS as usize),
             "sample_bits requires bits < 32: {bits}"
@@ -240,12 +219,7 @@ impl TranscriptChip {
     }
 
     /// Asserts that the PoW witness must pass.
-    pub fn check_witness(
-        &mut self,
-        ctx: &mut Context<Fr>,
-        bits: usize,
-        witness: &BabyBearWire,
-    ) {
+    pub fn check_witness(&mut self, ctx: &mut Context<Fr>, bits: usize, witness: &BabyBearWire) {
         if bits == 0 {
             return;
         }
