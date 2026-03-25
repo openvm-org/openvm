@@ -12,8 +12,8 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{
         p3_field::{PrimeCharacteristicRing, PrimeField64, TwoAdicField},
         test_utils::{
-            test_system_params_small, CachedFixture11, FibFixture, InteractionsFixture11,
-            PreprocessedFibFixture, TestFixture,
+            test_system_params_small, CachedFixture11, InteractionsFixture11, MixtureFixture,
+            TestFixture,
         },
         StarkEngine,
     },
@@ -193,9 +193,12 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
 }
 
 #[test]
-fn pipeline_constraints_only_matches_native_for_fib_fixture() {
+fn pipeline_constraints_only_matches_native_for_mixture_fixture() {
     let engine = test_engine();
-    assert_fixture_constraints_only(&engine, FibFixture::new(0, 1, 1 << 5));
+    assert_fixture_constraints_only(
+        &engine,
+        MixtureFixture::standard(5, engine.config().clone()),
+    );
 }
 
 #[test]
@@ -210,21 +213,13 @@ fn pipeline_constraints_only_matches_native_for_cached_fixture() {
     assert_fixture_constraints_only(&engine, CachedFixture11::new(engine.config().clone()));
 }
 
-#[test]
-fn pipeline_constraints_only_matches_native_for_preprocessed_fixture() {
-    let engine = test_engine();
-    let height = 1 << 5;
-    let sels = (0..height).map(|i| i % 2 == 0).collect::<Vec<_>>();
-    assert_fixture_constraints_only(&engine, PreprocessedFibFixture::new(0, 1, sels));
-}
-
 #[cfg(feature = "cell-profiling")]
 #[test]
 fn pipeline_cell_count_profiling() {
     use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
     use openvm_stark_sdk::{
         config::log_up_params::log_up_security_params_baby_bear_100_bits,
-        openvm_stark_backend::test_utils::FibFixture,
+        openvm_stark_backend::test_utils::MixtureFixture,
     };
 
     let system_params = SystemParams::new(
@@ -239,18 +234,19 @@ fn pipeline_cell_count_profiling() {
         100,
         log_up_security_params_baby_bear_100_bits(),
     );
-    let fib = FibFixture::new(0, 1, 1 << 5);
     let (vk, proof) = {
         #[cfg(feature = "cuda")]
         {
             let engine = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine::new(system_params);
-            fib.keygen_and_prove(&engine)
+            let fx = MixtureFixture::standard(5, engine.config().clone());
+            fx.keygen_and_prove(&engine)
         }
         #[cfg(not(feature = "cuda"))]
         {
             let engine: BabyBearBn254Poseidon2CpuEngine =
                 BabyBearBn254Poseidon2CpuEngine::new(system_params);
-            fib.keygen_and_prove(&engine)
+            let fx = MixtureFixture::standard(5, engine.config().clone());
+            fx.keygen_and_prove(&engine)
         }
     };
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);

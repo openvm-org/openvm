@@ -1,4 +1,4 @@
-//! Integration: one Halo2 KZG roundtrip on a BN254 [`FibFixture`] proof using only
+//! Integration: one Halo2 KZG roundtrip on a BN254 [`MixtureFixture`] proof using only
 //! [`StaticVerifierCircuit::populate_verify_stark_constraints`] (no continuations public values or
 //! DAG cached-commit pin).
 //!
@@ -15,7 +15,7 @@ use halo2_base::{
 use openvm_stark_backend::{
     p3_util::log2_ceil_usize,
     proof::Proof,
-    test_utils::{FibFixture, TestFixture},
+    test_utils::{MixtureFixture, TestFixture},
     StarkEngine, SystemParams, WhirProximityStrategy,
 };
 use openvm_stark_sdk::{
@@ -88,8 +88,10 @@ fn real_prover_keygen_prove_verify_roundtrip() {
     let engine: BabyBearBn254Poseidon2CpuEngine =
         BabyBearBn254Poseidon2CpuEngine::new(system_params);
 
-    let (vk, proof_keygen) = FibFixture::new(0, 1, 1 << 5).keygen_and_prove(&engine);
-    let (_vk_prove, proof_prove) = FibFixture::new(1, 1, 1 << 5).keygen_and_prove(&engine);
+    let fx = MixtureFixture::standard(5, engine.config().clone());
+    let (vk, proof_keygen) = fx.keygen_and_prove(&engine);
+    let fx_prove = MixtureFixture::standard(5, engine.config().clone());
+    let (_vk_prove, proof_prove) = fx_prove.keygen_and_prove(&engine);
 
     let log_heights_per_air = log_heights_per_air_from_proof(&proof_keygen);
     let circuit = StaticVerifierCircuit::try_new(vk, InnerDigest::default(), &log_heights_per_air)
