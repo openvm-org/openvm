@@ -6871,6 +6871,7 @@ dependencies = [
  "openvm-cuda-common",
  "serde",
  "serde_yaml",
+ "tempfile",
  "walkdir",
 ]
 
