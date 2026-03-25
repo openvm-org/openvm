@@ -17,9 +17,7 @@ use openvm_stark_sdk::{
 use openvm_transpiler::{elf::Elf, FromElf};
 use openvm_verify_stark_host::{verify_vm_stark_proof_decoded, vk::NonRootStarkVerifyingKey};
 
-/// Max segment height, set slightly below 2^20 to leave headroom for system rows.
-/// Rounded up to the next power of two (2^20) when applied.
-pub const DEFAULT_MAX_SEGMENT: u32 = 1048476;
+pub const DEFAULT_MAX_SEGMENT: u32 = 1 << 20;
 pub const DEFAULT_LOG_STACKED_HEIGHT: usize = 21;
 
 #[derive(Parser, Debug)]
@@ -36,15 +34,17 @@ pub struct BenchmarkCli {
 
 impl BenchmarkCli {
     /// Applies CLI-specified segmentation config to the VM config.
+    /// The max trace height is always rounded up to the next power of two.
     pub fn apply_config(&self, vm_config: &mut SdkVmConfig) {
+        let max_height = self
+            .max_segment_length
+            .unwrap_or(DEFAULT_MAX_SEGMENT)
+            .next_power_of_two();
         vm_config
             .as_mut()
             .segmentation_config
             .limits
-            .set_max_trace_height(
-                self.max_segment_length
-                    .unwrap_or(DEFAULT_MAX_SEGMENT.next_power_of_two()),
-            );
+            .set_max_trace_height(max_height);
     }
 
     pub fn run(&self, mut vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> eyre::Result<()> {

@@ -56,6 +56,8 @@ fn main() -> eyre::Result<()> {
             let exe = exe.clone();
             let stdin = stdin.clone();
             let handle = std::thread::spawn(move || -> eyre::Result<_> {
+                // Sdk uses OnceLock for internal caching and is not Clone/Sync,
+                // so each thread creates its own instance with the shared app_pk.
                 let sdk = Sdk::new(app_config, Default::default())?;
                 sdk.set_app_pk(app_pk)
                     .map_err(|_| eyre::eyre!("Error setting app pk"))?;
