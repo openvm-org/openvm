@@ -27,6 +27,7 @@ typedef struct {
 typedef struct {
     const uint32_t *constants;
     const uint32_t *const_limb_counts;
+    const uint32_t *const_limb_offsets;
     const uint32_t *q_limb_counts;
     const uint32_t *carry_limb_counts;
 

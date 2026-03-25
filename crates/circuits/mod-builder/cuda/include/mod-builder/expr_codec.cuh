@@ -21,316 +21,286 @@ __device__ __forceinline__ DecodedExpr decode_expr_op(ExprOp raw) {
     return d;
 }
 
-__device__ __noinline__ BigIntGpu evaluate_bigint(
+__device__ __forceinline__ uint32_t get_const_offset(const ExprMeta *meta, uint32_t const_idx) {
+    if (meta->const_limb_offsets != nullptr) {
+        return meta->const_limb_offsets[const_idx];
+    }
+
+    // Compatibility fallback while transitioning metadata.
+    uint32_t offset = 0;
+    for (uint32_t i = 0; i < const_idx; i++) {
+        offset += meta->const_limb_counts[i];
+    }
+    return offset;
+}
+
+__device__ __forceinline__ void push_child_if_needed(
+    uint32_t child_idx,
+    uint32_t done_mark,
+    uint32_t pending_mark,
+    uint32_t pool_size,
+    uint32_t *visit_epoch,
+    uint32_t *node_stack,
+    uint8_t *phase_stack,
+    uint32_t &stack_len
+) {
+    assert(child_idx < pool_size);
+    uint32_t state = visit_epoch[child_idx];
+    if (state == done_mark || state == pending_mark) {
+        return;
+    }
+
+    assert(stack_len < pool_size);
+    visit_epoch[child_idx] = pending_mark;
+    node_stack[stack_len] = child_idx;
+    phase_stack[stack_len] = 0;
+    stack_len++;
+}
+
+// Iterative compute evaluator with lazy SELECT semantics.
+__device__ __noinline__ void compute_flat_lazy(
+    uint32_t *result,
     const ExprOp *expr_ops,
     uint32_t root_idx,
-    const ExprMeta *expr_meta,
-    const uint32_t *inputs,
-    const uint32_t *vars,
-    const bool *flags,
-    uint32_t n,
-    uint32_t limb_bits
-) {
-    DecodedExpr node = decode_expr_op(expr_ops[root_idx]);
-
-    switch (node.kind) {
-    case EXPR_INPUT: {
-        uint32_t idx = node.data0;
-        return BigIntGpu(inputs + idx * n, n, limb_bits);
-    }
-    case EXPR_VAR: {
-        uint32_t idx = node.data0;
-        return BigIntGpu(vars + idx * n, n, limb_bits);
-    }
-    case EXPR_CONST: {
-        uint32_t const_idx = node.data0;
-        const uint32_t *const_limbs = expr_meta->constants;
-        uint32_t offset = 0;
-        for (uint32_t i = 0; i < const_idx; i++) {
-            offset += expr_meta->const_limb_counts[i];
-        }
-        return BigIntGpu(const_limbs + offset, expr_meta->const_limb_counts[const_idx], limb_bits);
-    }
-    case EXPR_ADD: {
-        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) +
-               evaluate_bigint(expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits);
-    }
-    case EXPR_SUB: {
-        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) -
-               evaluate_bigint(expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits);
-    }
-    case EXPR_MUL: {
-        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) *
-               evaluate_bigint(expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits);
-    }
-    case EXPR_INT_ADD: {
-        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) +
-               BigIntGpu((int32_t)node.data1, limb_bits);
-    }
-    case EXPR_INT_MUL: {
-        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) *
-               BigIntGpu((int32_t)node.data1, limb_bits);
-    }
-    case EXPR_SELECT: {
-        if (flags[node.data0]) {
-            return evaluate_bigint(
-                expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits
-            );
-        } else {
-            return evaluate_bigint(
-                expr_ops, node.data2, expr_meta, inputs, vars, flags, n, limb_bits
-            );
-        }
-    }
-    default: {
-        return BigIntGpu(limb_bits);
-    }
-    }
-}
-
-__device__ __noinline__ BigUintGpu compute_biguint(
-    const ExprOp *expr_ops,
-    uint32_t expr_idx,
     const ExprMeta *meta,
     const uint32_t *inputs,
     const uint32_t *vars,
     const bool *flags,
     uint32_t num_limbs,
     uint32_t limb_bits,
-    BigUintGpu &prime
+    const BigUintGpu &prime,
+    BigUintGpu *scratch,
+    uint32_t *visit_epoch,
+    uint32_t current_epoch,
+    uint32_t *node_stack,
+    uint8_t *phase_stack,
+    uint32_t pool_size
 ) {
-    DecodedExpr e = decode_expr_op(expr_ops[expr_idx]);
-
-    switch (e.kind) {
-    case EXPR_INPUT: {
-        const uint32_t *in_limbs = inputs + e.data0 * num_limbs;
-        return BigUintGpu(in_limbs, num_limbs, limb_bits).mod_reduce(prime, meta->barrett_mu);
-    }
-    case EXPR_VAR: {
-        const uint32_t *var_limbs = vars + e.data0 * num_limbs;
-        return BigUintGpu(var_limbs, num_limbs, limb_bits);
-    }
-    case EXPR_CONST: {
-        uint32_t idx = e.data0;
-        uint32_t offset = 0;
-        for (uint32_t i = 0; i < idx; i++) {
-            offset += meta->const_limb_counts[i];
+    if (pool_size == 0) {
+        for (uint32_t i = 0; i < num_limbs; i++) {
+            result[i] = 0;
         }
-        return BigUintGpu(meta->constants + offset, meta->const_limb_counts[idx], limb_bits);
+        return;
     }
-    case EXPR_ADD: {
-        BigUintGpu sum = compute_biguint(
-            expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-        );
-        sum += compute_biguint(
-            expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-        );
-        return sum.mod_reduce(prime, meta->barrett_mu);
-    }
-    case EXPR_SUB: {
-        return compute_biguint(
-                   expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-        )
-            .mod_sub(
-                compute_biguint(
-                    expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-                ),
-                prime
-            );
-    }
-    case EXPR_MUL: {
-        return (compute_biguint(
-                    expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-                ) *
-                compute_biguint(
-                    expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-                ))
-            .mod_reduce(prime, meta->barrett_mu);
-    }
-    case EXPR_DIV: {
-        return compute_biguint(
-                   expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-        )
-            .mod_div(
-                compute_biguint(
-                    expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-                ),
-                prime,
-                meta->barrett_mu
-            );
-    }
-    case EXPR_INT_ADD: {
-        BigIntGpu a = BigIntGpu(
-            compute_biguint(
-                expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-            ),
-            false
-        );
-        BigIntGpu sum = a + BigIntGpu((int32_t)e.data1, limb_bits);
-        return sum.mag.mod_reduce(prime, meta->barrett_mu);
-    }
-    case EXPR_INT_MUL: {
-        BigIntGpu a = BigIntGpu(
-            compute_biguint(
-                expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-            ),
-            false
-        );
-        BigIntGpu prod = a * BigIntGpu((int32_t)e.data1, limb_bits);
-        return prod.mag.mod_reduce(prime, meta->barrett_mu);
-    }
-    case EXPR_SELECT: {
-        bool f = flags[e.data0];
-        uint32_t idx = f ? e.data1 : e.data2;
-        return compute_biguint(
-            expr_ops, idx, meta, inputs, vars, flags, num_limbs, limb_bits, prime
-        );
-    }
-    default: {
-        return BigUintGpu(limb_bits);
-    }
-    }
-}
 
-__device__ void compute(
-    uint32_t *result,
-    const ExprOp *expr_ops,
-    uint32_t expr_idx,
-    const ExprMeta *meta,
-    const uint32_t *inputs,
-    const uint32_t *vars,
-    const bool *flags,
-    uint32_t num_limbs,
-    uint32_t limb_bits,
-    BigUintGpu &prime
-) {
-    BigUintGpu result_big =
-        compute_biguint(expr_ops, expr_idx, meta, inputs, vars, flags, num_limbs, limb_bits, prime);
+    assert(root_idx < pool_size);
+    assert((current_epoch & 0x80000000u) == 0);
+
+    uint32_t done_mark = current_epoch;
+    uint32_t pending_mark = current_epoch | 0x80000000u;
+
+    uint32_t stack_len = 0;
+    visit_epoch[root_idx] = pending_mark;
+    node_stack[stack_len] = root_idx;
+    phase_stack[stack_len] = 0;
+    stack_len++;
+
+    while (stack_len > 0) {
+        uint32_t idx = node_stack[stack_len - 1];
+        uint8_t phase = phase_stack[stack_len - 1];
+
+        if (visit_epoch[idx] == done_mark) {
+            stack_len--;
+            continue;
+        }
+
+        DecodedExpr node = decode_expr_op(expr_ops[idx]);
+
+        if (phase == 0) {
+            phase_stack[stack_len - 1] = 1;
+
+            switch (node.kind) {
+            case EXPR_ADD:
+            case EXPR_SUB:
+            case EXPR_MUL:
+            case EXPR_DIV:
+                // Push right then left to evaluate left first.
+                push_child_if_needed(
+                    node.data1,
+                    done_mark,
+                    pending_mark,
+                    pool_size,
+                    visit_epoch,
+                    node_stack,
+                    phase_stack,
+                    stack_len
+                );
+                push_child_if_needed(
+                    node.data0,
+                    done_mark,
+                    pending_mark,
+                    pool_size,
+                    visit_epoch,
+                    node_stack,
+                    phase_stack,
+                    stack_len
+                );
+                break;
+            case EXPR_INT_ADD:
+            case EXPR_INT_MUL:
+                push_child_if_needed(
+                    node.data0,
+                    done_mark,
+                    pending_mark,
+                    pool_size,
+                    visit_epoch,
+                    node_stack,
+                    phase_stack,
+                    stack_len
+                );
+                break;
+            case EXPR_SELECT: {
+                uint32_t child = flags[node.data0] ? node.data1 : node.data2;
+                push_child_if_needed(
+                    child,
+                    done_mark,
+                    pending_mark,
+                    pool_size,
+                    visit_epoch,
+                    node_stack,
+                    phase_stack,
+                    stack_len
+                );
+                break;
+            }
+            default:
+                break;
+            }
+
+            continue;
+        }
+
+        switch (node.kind) {
+        case EXPR_INPUT:
+            scratch[idx] =
+                BigUintGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits)
+                    .mod_reduce(prime, meta->barrett_mu);
+            break;
+        case EXPR_VAR:
+            scratch[idx] = BigUintGpu(vars + node.data0 * num_limbs, num_limbs, limb_bits);
+            break;
+        case EXPR_CONST: {
+            uint32_t offset = get_const_offset(meta, node.data0);
+            scratch[idx] =
+                BigUintGpu(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
+            break;
+        }
+        case EXPR_ADD:
+            scratch[idx] =
+                (scratch[node.data0] + scratch[node.data1]).mod_reduce(prime, meta->barrett_mu);
+            break;
+        case EXPR_SUB:
+            scratch[idx] = scratch[node.data0].mod_sub(scratch[node.data1], prime);
+            break;
+        case EXPR_MUL:
+            scratch[idx] =
+                (scratch[node.data0] * scratch[node.data1]).mod_reduce(prime, meta->barrett_mu);
+            break;
+        case EXPR_DIV:
+            scratch[idx] =
+                scratch[node.data0].mod_div(scratch[node.data1], prime, meta->barrett_mu);
+            break;
+        case EXPR_INT_ADD: {
+            BigIntGpu a(scratch[node.data0], false);
+            scratch[idx] =
+                (a + BigIntGpu((int32_t)node.data1, limb_bits)).mag.mod_reduce(prime, meta->barrett_mu);
+            break;
+        }
+        case EXPR_INT_MUL: {
+            BigIntGpu a(scratch[node.data0], false);
+            scratch[idx] =
+                (a * BigIntGpu((int32_t)node.data1, limb_bits)).mag.mod_reduce(prime, meta->barrett_mu);
+            break;
+        }
+        case EXPR_SELECT:
+            scratch[idx] = flags[node.data0] ? scratch[node.data1] : scratch[node.data2];
+            break;
+        default:
+            scratch[idx] = BigUintGpu(limb_bits);
+            break;
+        }
+
+        visit_epoch[idx] = done_mark;
+        stack_len--;
+    }
 
     for (uint32_t i = 0; i < num_limbs; i++) {
-        result[i] = (i < result_big.num_limbs) ? result_big.limbs[i] : 0;
+        result[i] = (i < scratch[root_idx].num_limbs) ? scratch[root_idx].limbs[i] : 0;
     }
 }
 
-// Raw evaluator: walks op stream, performs no modular reduction
-__device__ __noinline__ OverflowInt evaluate_overflow_int(
+// Flat constraint evaluator over the entire topologically-sorted pool.
+__device__ __noinline__ void evaluate_constraint_pool_flat(
     const ExprOp *expr_ops,
-    uint32_t op_idx,
-    const ExprMeta *meta,
-    const uint32_t *inputs,
-    const uint32_t *vars,
-    const bool *flags,
-    uint32_t num_limbs,
-    uint32_t limb_bits
-) {
-    DecodedExpr d = decode_expr_op(expr_ops[op_idx]);
-
-    switch (d.kind) {
-    case EXPR_INPUT: {
-        const uint32_t *in_limbs = inputs + d.data0 * num_limbs;
-        return OverflowInt(in_limbs, num_limbs, limb_bits);
-        break;
-    }
-    case EXPR_VAR: {
-        const uint32_t *var_limbs = vars + d.data0 * num_limbs;
-        return OverflowInt(var_limbs, num_limbs, limb_bits);
-        break;
-    }
-    case EXPR_CONST: {
-        uint32_t idx = d.data0;
-        uint32_t offset = 0;
-        for (uint32_t i = 0; i < idx; i++) {
-            offset += meta->const_limb_counts[i];
-        }
-        return OverflowInt(meta->constants + offset, meta->const_limb_counts[idx], limb_bits);
-        break;
-    }
-    case EXPR_ADD: {
-        OverflowInt a = evaluate_overflow_int(
-            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        a += evaluate_overflow_int(
-            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        return a;
-    }
-    case EXPR_SUB: {
-        OverflowInt a = evaluate_overflow_int(
-            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        a -= evaluate_overflow_int(
-            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        return a;
-    }
-    case EXPR_MUL: {
-        OverflowInt a = evaluate_overflow_int(
-            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        a *= evaluate_overflow_int(
-            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        return a;
-    }
-    case EXPR_SELECT: {
-        OverflowInt a = evaluate_overflow_int(
-            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        OverflowInt b = evaluate_overflow_int(
-            expr_ops, d.data2, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        if (flags[d.data0]) {
-            a.limb_max_abs = max(a.limb_max_abs, b.limb_max_abs);
-            a.max_overflow_bits = max(a.max_overflow_bits, b.max_overflow_bits);
-            return a;
-        } else {
-            b.limb_max_abs = max(a.limb_max_abs, b.limb_max_abs);
-            b.max_overflow_bits = max(a.max_overflow_bits, b.max_overflow_bits);
-            return b;
-        }
-    }
-    case EXPR_INT_ADD: {
-        OverflowInt a = evaluate_overflow_int(
-            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        int32_t scalar = (int32_t)d.data1;
-        a += scalar;
-        return a;
-    }
-    case EXPR_INT_MUL: {
-        OverflowInt a = evaluate_overflow_int(
-            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
-        );
-        int32_t scalar = (int32_t)d.data1;
-        a *= scalar;
-        return a;
-    }
-    default:
-        return OverflowInt(limb_bits);
-    }
-}
-
-__device__ void evaluate_overflow(
-    uint32_t *result,
-    const ExprOp *expr_ops,
-    uint32_t op_idx,
+    uint32_t pool_size,
     const ExprMeta *meta,
     const uint32_t *inputs,
     const uint32_t *vars,
     const bool *flags,
     uint32_t num_limbs,
     uint32_t limb_bits,
-    uint32_t &max_limb_abs,
-    uint32_t &max_overflow_bits,
-    uint32_t *temp_storage
+    BigIntGpu *bigint_scratch,
+    OverflowInt *overflow_scratch
 ) {
-    OverflowInt result_overflow =
-        evaluate_overflow_int(expr_ops, op_idx, meta, inputs, vars, flags, num_limbs, limb_bits);
+    for (uint32_t i = 0; i < pool_size; i++) {
+        DecodedExpr node = decode_expr_op(expr_ops[i]);
 
-    for (uint32_t i = 0; i < 2 * num_limbs; i++) {
-        result[i] = (i < result_overflow.num_limbs) ? result_overflow.limbs[i] : 0;
+        switch (node.kind) {
+        case EXPR_INPUT:
+            bigint_scratch[i] = BigIntGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits);
+            overflow_scratch[i] =
+                OverflowInt(inputs + node.data0 * num_limbs, num_limbs, limb_bits);
+            break;
+        case EXPR_VAR:
+            bigint_scratch[i] = BigIntGpu(vars + node.data0 * num_limbs, num_limbs, limb_bits);
+            overflow_scratch[i] = OverflowInt(vars + node.data0 * num_limbs, num_limbs, limb_bits);
+            break;
+        case EXPR_CONST: {
+            uint32_t offset = get_const_offset(meta, node.data0);
+            bigint_scratch[i] =
+                BigIntGpu(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
+            overflow_scratch[i] =
+                OverflowInt(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
+            break;
+        }
+        case EXPR_ADD:
+            bigint_scratch[i] = bigint_scratch[node.data0] + bigint_scratch[node.data1];
+            overflow_scratch[i] = overflow_scratch[node.data0] + overflow_scratch[node.data1];
+            break;
+        case EXPR_SUB:
+            bigint_scratch[i] = bigint_scratch[node.data0] - bigint_scratch[node.data1];
+            overflow_scratch[i] = overflow_scratch[node.data0] - overflow_scratch[node.data1];
+            break;
+        case EXPR_MUL:
+            bigint_scratch[i] = bigint_scratch[node.data0] * bigint_scratch[node.data1];
+            overflow_scratch[i] = overflow_scratch[node.data0] * overflow_scratch[node.data1];
+            break;
+        case EXPR_INT_ADD:
+            bigint_scratch[i] = bigint_scratch[node.data0] + BigIntGpu((int32_t)node.data1, limb_bits);
+            overflow_scratch[i] = overflow_scratch[node.data0] + (int32_t)node.data1;
+            break;
+        case EXPR_INT_MUL:
+            bigint_scratch[i] = bigint_scratch[node.data0] * BigIntGpu((int32_t)node.data1, limb_bits);
+            overflow_scratch[i] = overflow_scratch[node.data0] * (int32_t)node.data1;
+            break;
+        case EXPR_SELECT: {
+            bool take_true = flags[node.data0];
+            bigint_scratch[i] = take_true ? bigint_scratch[node.data1] : bigint_scratch[node.data2];
+
+            OverflowInt true_expr = overflow_scratch[node.data1];
+            OverflowInt false_expr = overflow_scratch[node.data2];
+            OverflowInt selected = take_true ? true_expr : false_expr;
+            selected.limb_max_abs = max(true_expr.limb_max_abs, false_expr.limb_max_abs);
+            selected.max_overflow_bits =
+                max(true_expr.max_overflow_bits, false_expr.max_overflow_bits);
+            overflow_scratch[i] = selected;
+            break;
+        }
+        default:
+            // Constraint expressions should not contain division.
+            bigint_scratch[i] = BigIntGpu(limb_bits);
+            overflow_scratch[i] = OverflowInt(limb_bits);
+            break;
+        }
     }
-
-    max_limb_abs = result_overflow.limb_max_abs;
-    max_overflow_bits = result_overflow.max_overflow_bits;
 }

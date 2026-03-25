@@ -706,3 +706,178 @@ fn test_concurrent_direct_recorded_simulation() {
     let same_inputs = vec![BigUint::from(123u32), BigUint::from(456u32)];
     test_trace_equivalence(&expr, &range_checker, same_inputs, vec![], width);
 }
+
+#[cfg(feature = "cuda")]
+mod cuda_tests {
+    use std::{mem::size_of, sync::Arc};
+
+    use num_bigint::BigUint;
+    use openvm_circuit::utils::next_power_of_two_or_zero;
+    use openvm_circuit_primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+        TraceSubRowGenerator,
+    };
+    use openvm_cuda_common::copy::{MemCopyD2H as _, MemCopyH2D as _};
+    use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord};
+    use openvm_stark_backend::{p3_air::BaseAir, p3_field::PrimeCharacteristicRing};
+    use openvm_stark_sdk::utils::create_seeded_rng;
+    use rand::RngCore;
+
+    use super::*;
+    use crate::{
+        utils::biguint_to_limbs_vec, FieldExpressionChipGPU, FieldExpressionCoreAir,
+        FieldExpressionCoreRecordMut,
+    };
+
+    #[derive(Clone)]
+    struct TraceCase {
+        opcode: u8,
+        inputs: Vec<BigUint>,
+        flags: Vec<bool>,
+    }
+
+    fn sample_input(prime: &BigUint, rng: &mut impl RngCore) -> BigUint {
+        let mut bytes = [0u8; 64];
+        rng.fill_bytes(&mut bytes);
+        BigUint::from_bytes_le(&bytes) % prime
+    }
+
+    fn align_up(value: usize, alignment: usize) -> usize {
+        (value + alignment - 1) & !(alignment - 1)
+    }
+
+    fn run_cuda_tracegen_parity(
+        expr: &FieldExpr,
+        range_checker: Arc<VariableRangeCheckerChip>,
+        local_opcode_idx: Vec<usize>,
+        opcode_flag_idx: Vec<usize>,
+        cases: &[TraceCase],
+    ) {
+        assert!(!cases.is_empty());
+        assert_eq!(expr.canonical_num_limbs(), 32);
+
+        let adapter_blocks = 1usize;
+        let adapter_width = Rv32VecHeapAdapterCols::<BabyBear, 2, 1, 1, 32, 32>::width();
+        let adapter_size = size_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>();
+        let core_size = 1 + expr.builder.num_input * expr.canonical_num_limbs();
+        // Keep each record adapter-aligned; otherwise later records can trigger GPU misaligned loads.
+        let adapter_alignment = std::mem::align_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>();
+        let record_stride = align_up(adapter_size + core_size, adapter_alignment);
+
+        let mut records = vec![0u8; record_stride * cases.len()];
+        for (i, case) in cases.iter().enumerate() {
+            let start = i * record_stride + adapter_size;
+            let end = start + core_size;
+            let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
+                &mut records[start..end],
+                &case.inputs,
+                expr.canonical_num_limbs(),
+            );
+            let data: Vec<u8> = case
+                .inputs
+                .iter()
+                .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
+                .collect();
+            record.fill_from_execution_data(case.opcode, &data);
+        }
+
+        let d_records = records.to_device().unwrap();
+        let gpu_chip = FieldExpressionChipGPU::new(
+            FieldExpressionCoreAir::new(expr.clone(), 0, local_opcode_idx, opcode_flag_idx),
+            d_records,
+            cases.len(),
+            record_stride,
+            adapter_width,
+            adapter_blocks,
+            Arc::new(VariableRangeCheckerChipGPU::hybrid(range_checker.clone())),
+            Arc::new(BitwiseOperationLookupChipGPU::<LIMB_BITS>::new()),
+            29,
+            29,
+        );
+        let d_trace = gpu_chip.generate_field_trace();
+        let gpu_trace = d_trace.to_host().unwrap();
+
+        let padded_height = next_power_of_two_or_zero(cases.len());
+        let core_width = BaseAir::<BabyBear>::width(expr);
+
+        // Compare only core columns; adapter columns are zero-initialized dummy records.
+        for (row_idx, case) in cases.iter().enumerate() {
+            let mut expected = BabyBear::zero_vec(core_width);
+            expr.generate_subrow(
+                (&range_checker, case.inputs.clone(), case.flags.clone()),
+                &mut expected,
+            );
+
+            for (core_col, expected_cell) in expected.iter().enumerate() {
+                let gpu_col = adapter_width + core_col;
+                let actual = gpu_trace[gpu_col * padded_height + row_idx];
+                assert_eq!(
+                    actual, *expected_cell,
+                    "Mismatch at row {row_idx}, core col {core_col}, opcode {}",
+                    case.opcode
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cuda_field_expr_tracegen_random_arith() {
+        let prime = secp256k1_coord_prime();
+        let (_, builder) = setup(&prime);
+
+        let x1 = ExprBuilder::new_input(builder.clone());
+        let x2 = ExprBuilder::new_input(builder.clone());
+        let mut out = (x1.clone() * x2.clone()) + x1.clone().int_mul(7) - x2.clone().int_mul(3);
+        out.save();
+
+        let builder = builder.borrow().clone();
+        let (expr, range_checker, _) = create_field_expr_with_setup(builder);
+
+        let mut rng = create_seeded_rng();
+        let cases: Vec<TraceCase> = (0..100)
+            .map(|_| TraceCase {
+                opcode: 0,
+                inputs: vec![
+                    sample_input(&prime, &mut rng),
+                    sample_input(&prime, &mut rng),
+                ],
+                flags: vec![],
+            })
+            .collect();
+
+        run_cuda_tracegen_parity(&expr, range_checker, vec![0], vec![], &cases);
+    }
+
+    fn flags_for_opcode(opcode: u8) -> Vec<bool> {
+        match opcode {
+            0 => vec![true, false],
+            1 => vec![false, true],
+            _ => vec![false, false], // setup/default path
+        }
+    }
+
+    #[test]
+    fn test_cuda_field_expr_tracegen_random_select() {
+        let prime = secp256k1_coord_prime();
+        let (_, builder) = setup(&prime);
+        let builder = make_addsub_chip(builder);
+        let (expr, range_checker, _) = create_field_expr_with_flags_setup(builder);
+
+        let mut rng = create_seeded_rng();
+        let cases: Vec<TraceCase> = (0..100)
+            .map(|i| {
+                let opcode = (i % 3) as u8;
+                TraceCase {
+                    opcode,
+                    inputs: vec![
+                        sample_input(&prime, &mut rng),
+                        sample_input(&prime, &mut rng),
+                    ],
+                    flags: flags_for_opcode(opcode),
+                }
+            })
+            .collect();
+
+        run_cuda_tracegen_parity(&expr, range_checker, vec![0, 1, 2], vec![0, 1], &cases);
+    }
+}

@@ -15,6 +15,7 @@ use crate::{
 pub struct ExprMeta {
     pub constants: *const u32,
     pub const_limb_counts: *const u32,
+    pub const_limb_offsets: *const u32,
     pub q_limb_counts: *const u32,
     pub carry_limb_counts: *const u32,
 
@@ -62,14 +63,14 @@ pub struct FieldExprMeta {
     pub carry_limb_counts: *const u32,
     pub compute_expr_ops: *const ExprOp,
     pub compute_root_indices: *const u32,
+    pub compute_pool_size: u32,
     pub constraint_expr_ops: *const ExprOp,
     pub constraint_root_indices: *const u32,
+    pub constraint_pool_size: u32,
 
     pub max_q_count: u32,
 
     pub expr_meta: ExprMeta,
-
-    pub max_ast_depth: u32,
 }
 
 unsafe impl Send for FieldExprMeta {}
@@ -98,6 +99,7 @@ pub struct FieldExpressionChipGPU {
     pub constraint_roots_buf: DeviceBuffer<u32>,
     pub constants_buf: DeviceBuffer<u32>,
     pub const_limb_counts_buf: DeviceBuffer<u32>,
+    pub const_limb_offsets_buf: DeviceBuffer<u32>,
     pub q_limb_counts_buf: DeviceBuffer<u32>,
     pub carry_limb_counts_buf: DeviceBuffer<u32>,
     pub barrett_mu_buf: DeviceBuffer<u8>,

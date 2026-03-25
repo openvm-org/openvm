@@ -8,6 +8,7 @@
 #include "mod-builder/rv32_vec_heap_router.cuh"
 #include "primitives/trace_access.h"
 #include <cstdint>
+#include <cstring>
 
 using namespace mod_builder;
 
@@ -30,6 +31,12 @@ __device__ __noinline__ void generate_subrow_gpu(
     const bool *flags,
     uint32_t *vars,
     uint32_t *all_carries,
+    BigUintGpu *compute_scratch,
+    uint32_t *compute_visit_epoch,
+    uint32_t *compute_node_stack,
+    uint8_t *compute_phase_stack,
+    BigIntGpu *constraint_bigint_scratch,
+    OverflowInt *constraint_overflow_scratch,
     VariableRangeChecker &range_checker,
     bool is_valid,
     RowSlice core_row
@@ -47,7 +54,7 @@ __device__ __noinline__ void generate_subrow_gpu(
         uint32_t root = meta->compute_root_indices[var];
         uint32_t *result = &vars[var * num_limbs];
 
-        compute(
+        compute_flat_lazy(
             result,
             meta->compute_expr_ops,
             root,
@@ -58,6 +65,13 @@ __device__ __noinline__ void generate_subrow_gpu(
             num_limbs,
             limb_bits,
             prime
+            ,
+            compute_scratch,
+            compute_visit_epoch,
+            var + 1,
+            compute_node_stack,
+            compute_phase_stack,
+            meta->compute_pool_size
         );
     }
 
@@ -80,19 +94,23 @@ __device__ __noinline__ void generate_subrow_gpu(
     uint32_t c_offset = 0;
 
     if (meta->expr_meta.num_vars > 0) {
+        evaluate_constraint_pool_flat(
+            meta->constraint_expr_ops,
+            meta->constraint_pool_size,
+            &meta->expr_meta,
+            inputs,
+            vars,
+            flags,
+            num_limbs,
+            limb_bits,
+            constraint_bigint_scratch,
+            constraint_overflow_scratch
+        );
+
         for (uint32_t var_idx = 0; var_idx < meta->expr_meta.num_vars; var_idx++) {
             uint32_t constraint_root = meta->constraint_root_indices[var_idx];
 
-            BigIntGpu constraint_result = evaluate_bigint(
-                meta->constraint_expr_ops,
-                constraint_root,
-                &meta->expr_meta,
-                inputs,
-                vars,
-                flags,
-                num_limbs,
-                limb_bits
-            );
+            BigIntGpu constraint_result = constraint_bigint_scratch[constraint_root];
 
             BigIntGpu quotient = constraint_result.div_biguint(prime);
 
@@ -108,16 +126,7 @@ __device__ __noinline__ void generate_subrow_gpu(
                 }
             }
 
-            OverflowInt expr = evaluate_overflow_int(
-                meta->constraint_expr_ops,
-                constraint_root,
-                &meta->expr_meta,
-                inputs,
-                vars,
-                flags,
-                num_limbs,
-                limb_bits
-            );
+            OverflowInt expr = constraint_overflow_scratch[constraint_root];
 
             // result = expr - q * p
             OverflowInt result = expr - (OverflowInt(quotient, q_count) * prime_overflow);
@@ -212,6 +221,12 @@ struct FieldExprCore {
     )
         : meta(m), range_checker(rc), is_valid(is_valid), workspace(ws) {}
 
+    __device__ static uint8_t *align_ptr(uint8_t *ptr, size_t alignment) {
+        uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+        uintptr_t aligned = (p + alignment - 1) & ~(alignment - 1);
+        return reinterpret_cast<uint8_t *>(aligned);
+    }
+
     __device__ void fill_trace_row(RowSlice core_row, const FieldExprCoreRecord *core_rec) {
         const uint8_t *rec_bytes = core_rec->input_limbs;
         uint8_t opcode = core_rec->opcode;
@@ -224,11 +239,27 @@ struct FieldExprCore {
         uint32_t *vars = (uint32_t *)(workspace + in_size * sizeof(uint32_t));
         uint32_t *all_carries = (uint32_t *)(workspace + (in_size + var_size) * sizeof(uint32_t));
         bool *flags = (bool *)(workspace + (in_size + var_size + carry_size) * sizeof(uint32_t));
+        uint8_t *scratch_base = align_ptr(
+            reinterpret_cast<uint8_t *>(flags + meta->num_u32_flags), alignof(BigUintGpu)
+        );
 
-        size_t total_size = (in_size + var_size + carry_size) * sizeof(uint32_t) +
-                            meta->num_u32_flags * sizeof(bool);
+        uint8_t *compute_ptr = scratch_base;
+        BigUintGpu *compute_scratch = reinterpret_cast<BigUintGpu *>(compute_ptr);
+        compute_ptr += (size_t)meta->compute_pool_size * sizeof(BigUintGpu);
+        uint32_t *compute_visit_epoch = reinterpret_cast<uint32_t *>(compute_ptr);
+        compute_ptr += (size_t)meta->compute_pool_size * sizeof(uint32_t);
+        uint32_t *compute_node_stack = reinterpret_cast<uint32_t *>(compute_ptr);
+        compute_ptr += (size_t)meta->compute_pool_size * sizeof(uint32_t);
+        uint8_t *compute_phase_stack = compute_ptr;
 
-        memset(workspace, 0, total_size);
+        uint8_t *constraint_ptr = scratch_base;
+        BigIntGpu *constraint_bigint_scratch = reinterpret_cast<BigIntGpu *>(constraint_ptr);
+        constraint_ptr += (size_t)meta->constraint_pool_size * sizeof(BigIntGpu);
+        OverflowInt *constraint_overflow_scratch =
+            reinterpret_cast<OverflowInt *>(constraint_ptr);
+
+        memset(flags, 0, meta->num_u32_flags * sizeof(bool));
+        memset(compute_visit_epoch, 0, (size_t)meta->compute_pool_size * sizeof(uint32_t));
 
         uint32_t bytes_per_limb = (meta->limb_bits + 7) / 8;
 
@@ -252,7 +283,20 @@ struct FieldExprCore {
         }
 
         generate_subrow_gpu(
-            meta, inputs, flags, vars, all_carries, range_checker, is_valid, core_row
+            meta,
+            inputs,
+            flags,
+            vars,
+            all_carries,
+            compute_scratch,
+            compute_visit_epoch,
+            compute_node_stack,
+            compute_phase_stack,
+            constraint_bigint_scratch,
+            constraint_overflow_scratch,
+            range_checker,
+            is_valid,
+            core_row
         );
 
         if (is_valid) {

@@ -1,9 +1,8 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, mem::size_of, sync::Arc};
 
-use cuda_runtime_sys::{cudaDeviceSetLimit, cudaLimit};
 use num_bigint::BigUint;
 use num_traits::{FromBytes, One};
 use openvm_circuit::utils::next_power_of_two_or_zero;
@@ -27,6 +26,36 @@ use crate::{
     ExprMeta, ExprNode, FieldExprMeta, FieldExpressionChipGPU, FieldExpressionCoreAir,
     SymbolicExpr,
 };
+
+// Must match `mod_builder::MAX_LIMBS` in
+// `crates/circuits/primitives/cuda/include/primitives/constants.h`.
+const CUDA_MOD_BUILDER_MAX_LIMBS: usize = 97;
+
+#[repr(C)]
+struct BigUintGpuLayout {
+    limbs: [u8; CUDA_MOD_BUILDER_MAX_LIMBS],
+    num_limbs: u32,
+    limb_bits: u32,
+}
+
+#[repr(C)]
+struct BigIntGpuLayout {
+    mag: BigUintGpuLayout,
+    is_negative: bool,
+}
+
+#[repr(C)]
+struct OverflowIntLayout {
+    limbs: [i32; CUDA_MOD_BUILDER_MAX_LIMBS],
+    num_limbs: u32,
+    limb_bits: u32,
+    limb_max_abs: u32,
+    max_overflow_bits: u32,
+}
+
+fn align_up(value: usize, alignment: usize) -> usize {
+    (value + alignment - 1) & !(alignment - 1)
+}
 
 impl FieldExpressionChipGPU {
     pub fn new(
@@ -90,11 +119,13 @@ impl FieldExpressionChipGPU {
             compute_roots_buf,
             constraint_expr_ops_buf,
             constraint_roots_buf,
+            compute_pool_size,
+            constraint_pool_size,
             constants_buf,
             const_limb_counts_buf,
+            const_limb_offsets_buf,
             q_limb_counts_buf,
             carry_limb_counts_buf,
-            ast_depth,
             max_q_count,
         ) = Self::build_expr_meta(
             &air,
@@ -155,11 +186,12 @@ impl FieldExpressionChipGPU {
             carry_limb_counts: carry_limb_counts_buf.as_ptr(),
             compute_expr_ops: compute_expr_ops_buf.as_ptr() as *const ExprOp,
             compute_root_indices: compute_roots_buf.as_ptr(),
+            compute_pool_size,
             constraint_expr_ops: constraint_expr_ops_buf.as_ptr() as *const ExprOp,
             constraint_root_indices: constraint_roots_buf.as_ptr(),
+            constraint_pool_size,
             max_q_count,
             expr_meta,
-            max_ast_depth: ast_depth,
         };
 
         let meta = vec![meta_host].to_device().unwrap();
@@ -181,6 +213,7 @@ impl FieldExpressionChipGPU {
             constraint_roots_buf,
             constants_buf,
             const_limb_counts_buf,
+            const_limb_offsets_buf,
             q_limb_counts_buf,
             carry_limb_counts_buf,
             barrett_mu_buf,
@@ -204,21 +237,20 @@ impl FieldExpressionChipGPU {
         DeviceBuffer<u32>,
         DeviceBuffer<u128>,
         DeviceBuffer<u32>,
-        DeviceBuffer<u32>,
-        DeviceBuffer<u32>,
-        DeviceBuffer<u32>,
-        DeviceBuffer<u32>,
         u32,
+        u32,
+        DeviceBuffer<u32>,
+        DeviceBuffer<u32>,
+        DeviceBuffer<u32>,
+        DeviceBuffer<u32>,
+        DeviceBuffer<u32>,
         u32,
     ) {
         // Build compute expressions AST
         let mut compute_expr_pool = Vec::new();
         let mut compute_node_map = HashMap::new();
         let mut compute_root_indices = Vec::with_capacity(air.expr.builder.computes.len());
-        let mut max_compute_depth = 0;
         for compute_expr in &air.expr.builder.computes {
-            let depth = Self::calculate_ast_depth(compute_expr);
-            max_compute_depth = max_compute_depth.max(depth);
             let root =
                 Self::add_expr_to_pool(compute_expr, &mut compute_expr_pool, &mut compute_node_map);
             compute_root_indices.push(root);
@@ -228,10 +260,7 @@ impl FieldExpressionChipGPU {
         let mut constraint_expr_pool = Vec::new();
         let mut constraint_node_map = HashMap::new();
         let mut constraint_root_indices = Vec::with_capacity(air.expr.builder.constraints.len());
-        let mut max_constraint_depth = 0;
         for constraint_expr in &air.expr.builder.constraints {
-            let depth = Self::calculate_ast_depth(constraint_expr);
-            max_constraint_depth = max_constraint_depth.max(depth);
             let root = Self::add_expr_to_pool(
                 constraint_expr,
                 &mut constraint_expr_pool,
@@ -240,16 +269,18 @@ impl FieldExpressionChipGPU {
             constraint_root_indices.push(root);
         }
 
-        let ast_depth = max_compute_depth.max(max_constraint_depth);
-
         // Extract constants
         let mut constants = Vec::new();
         let mut const_limb_counts = Vec::new();
+        let mut const_limb_offsets = Vec::new();
+        let mut current_const_offset = 0u32;
         for (_const_val, const_limbs) in &air.expr.builder.constants {
+            const_limb_offsets.push(current_const_offset);
             const_limb_counts.push(const_limbs.len() as u32);
             for &limb in const_limbs {
                 constants.push(limb as u32);
             }
+            current_const_offset += const_limbs.len() as u32;
         }
         let q_counts: Vec<u32> = air.expr.builder.q_limbs.iter().map(|&x| x as u32).collect();
         let carry_counts: Vec<u32> = air
@@ -291,6 +322,11 @@ impl FieldExpressionChipGPU {
         } else {
             const_limb_counts.to_device().unwrap()
         };
+        let const_limb_offsets_buf = if const_limb_offsets.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            const_limb_offsets.to_device().unwrap()
+        };
         let q_limb_counts_buf = if q_counts.is_empty() {
             DeviceBuffer::new()
         } else {
@@ -305,6 +341,7 @@ impl FieldExpressionChipGPU {
         let expr_meta = ExprMeta {
             constants: constants_buf.as_ptr(),
             const_limb_counts: const_limb_counts_buf.as_ptr(),
+            const_limb_offsets: const_limb_offsets_buf.as_ptr(),
             q_limb_counts: q_limb_counts_buf.as_ptr(),
             carry_limb_counts: carry_limb_counts_buf.as_ptr(),
             num_vars,
@@ -322,31 +359,15 @@ impl FieldExpressionChipGPU {
             compute_roots_buf,
             constraint_expr_ops_buf,
             constraint_roots_buf,
+            compute_expr_pool.len() as u32,
+            constraint_expr_pool.len() as u32,
             constants_buf,
             const_limb_counts_buf,
+            const_limb_offsets_buf,
             q_limb_counts_buf,
             carry_limb_counts_buf,
-            ast_depth,
             max_q_count,
         )
-    }
-
-    fn calculate_ast_depth(expr: &SymbolicExpr) -> u32 {
-        match expr {
-            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) | SymbolicExpr::Const(_, _, _) => 1,
-            SymbolicExpr::Add(left, right)
-            | SymbolicExpr::Sub(left, right)
-            | SymbolicExpr::Mul(left, right)
-            | SymbolicExpr::Div(left, right) => {
-                1 + Self::calculate_ast_depth(left).max(Self::calculate_ast_depth(right))
-            }
-            SymbolicExpr::IntAdd(child, _) | SymbolicExpr::IntMul(child, _) => {
-                1 + Self::calculate_ast_depth(child)
-            }
-            SymbolicExpr::Select(_, if_true, if_false) => {
-                1 + Self::calculate_ast_depth(if_true).max(Self::calculate_ast_depth(if_false))
-            }
-        }
     }
 
     fn convert_to_expr_node(
@@ -450,18 +471,34 @@ impl FieldExpressionChipGPU {
         let mat = DeviceMatrix::with_capacity(padded_height, self.total_trace_width);
 
         let meta_host = self.meta.to_host().unwrap()[0].clone();
-        let input_size = meta_host.num_inputs * meta_host.num_limbs;
-        let var_size = meta_host.expr_meta.num_vars * meta_host.num_limbs;
+        let input_size = meta_host.num_inputs as usize * meta_host.num_limbs as usize;
+        let var_size = meta_host.expr_meta.num_vars as usize * meta_host.num_limbs as usize;
         let carry_counts = self.carry_limb_counts_buf.to_host().unwrap();
-        let total_carry_count: u32 = carry_counts.iter().sum::<u32>();
+        let total_carry_count: usize = carry_counts.iter().map(|&x| x as usize).sum::<usize>();
 
-        // size in bytes
-        let workspace_per_thread = (input_size + var_size + total_carry_count)
-            * (size_of::<u32>() as u32)
-            + meta_host.num_u32_flags;
+        let base_bytes = (input_size + var_size + total_carry_count) * size_of::<u32>()
+            + meta_host.num_u32_flags as usize * size_of::<bool>();
 
-        // Align workspace size to 16 bytes for CUDA alignment requirements
-        let workspace_per_thread = workspace_per_thread.next_multiple_of(16);
+        let biguint_size = size_of::<BigUintGpuLayout>();
+        let bigint_size = size_of::<BigIntGpuLayout>();
+        let overflow_size = size_of::<OverflowIntLayout>();
+
+        let compute_pool_size = meta_host.compute_pool_size as usize;
+        let constraint_pool_size = meta_host.constraint_pool_size as usize;
+
+        let compute_region_bytes = compute_pool_size * biguint_size
+            + compute_pool_size * size_of::<u32>()
+            + compute_pool_size * size_of::<u32>()
+            + compute_pool_size * size_of::<u8>();
+        let constraint_region_bytes =
+            constraint_pool_size * (bigint_size + overflow_size);
+
+        // Compute and constraint scratch share a single region in CUDA.
+        let scratch_region_bytes = compute_region_bytes.max(constraint_region_bytes);
+        let scratch_offset = align_up(base_bytes, std::mem::align_of::<BigUintGpuLayout>());
+
+        // Keep alignment conservative for C++ pointer arithmetic.
+        let workspace_per_thread = align_up(scratch_offset + scratch_region_bytes, 16) as u32;
 
         // Allocate workspace for all threads
         let total_workspace_size = (workspace_per_thread as usize)
@@ -470,7 +507,6 @@ impl FieldExpressionChipGPU {
         let workspace = DeviceBuffer::<u8>::with_capacity(total_workspace_size);
 
         unsafe {
-            cudaDeviceSetLimit(cudaLimit::cudaLimitStackSize, 48 * 1024);
             tracegen(
                 &self.records,
                 mat.buffer(),

@@ -30,11 +30,11 @@ typedef struct {
     const uint32_t *carry_limb_counts;
     const ExprOp *compute_expr_ops;
     const uint32_t *compute_root_indices;
+    uint32_t compute_pool_size;
     const ExprOp *constraint_expr_ops;
     const uint32_t *constraint_root_indices;
+    uint32_t constraint_pool_size;
     uint32_t max_q_count;
 
     ExprMeta expr_meta;
-
-    uint32_t max_ast_depth;
 } FieldExprMeta;

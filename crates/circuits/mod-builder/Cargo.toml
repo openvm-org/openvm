@@ -37,10 +37,11 @@ openvm-circuit-primitives = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 halo2curves-axiom = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32-adapters = { workspace = true }
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
-default = []
+default = ["cuda"]
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-common",

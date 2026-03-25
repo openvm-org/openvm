@@ -6722,6 +6722,7 @@ dependencies = [
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-pairing-guest",
+ "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
