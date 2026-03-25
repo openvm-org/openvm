@@ -30,6 +30,10 @@ pub struct BenchmarkCli {
     /// Only runs the app proof
     #[arg(long)]
     pub app_only: bool,
+
+    /// Whether to execute with additional profiling metric collection
+    #[arg(long)]
+    pub profiling: bool,
 }
 
 impl BenchmarkCli {
@@ -45,6 +49,7 @@ impl BenchmarkCli {
             .segmentation_config
             .limits
             .set_max_trace_height(max_height);
+        vm_config.as_mut().profiling = self.profiling;
     }
 
     pub fn run(&self, mut vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> eyre::Result<()> {
