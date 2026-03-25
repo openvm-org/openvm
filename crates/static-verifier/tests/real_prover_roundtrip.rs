@@ -15,8 +15,8 @@ use halo2_base::{
 use openvm_stark_backend::{
     p3_util::log2_ceil_usize,
     proof::Proof,
-    test_utils::{MixtureFixture, TestFixture},
-    StarkEngine, SystemParams, WhirProximityStrategy,
+    test_utils::{test_system_params_small, MixtureFixture, TestFixture},
+    StarkEngine,
 };
 use openvm_stark_sdk::{
     config::{
@@ -24,7 +24,6 @@ use openvm_stark_sdk::{
             BabyBearBn254Poseidon2Config as RootConfig, BabyBearBn254Poseidon2CpuEngine,
         },
         baby_bear_poseidon2::Digest as InnerDigest,
-        log_up_params::log_up_security_params_baby_bear_100_bits,
     },
     utils::setup_tracing,
 };
@@ -72,19 +71,7 @@ fn select_k_verify_stark(circuit: &StaticVerifierCircuit, proof: &Proof<RootConf
 #[ignore = "too slow"]
 fn real_prover_keygen_prove_verify_roundtrip() {
     setup_tracing();
-    // TODO: switch back to root_params_
-    let system_params = SystemParams::new(
-        4,  // log_blowup
-        2,  // l_skip
-        19, // n_stack
-        16, // w_stack
-        10,
-        20, // folding pow
-        20, // mu pow
-        WhirProximityStrategy::ListDecoding { m: 2 },
-        100,
-        log_up_security_params_baby_bear_100_bits(),
-    );
+    let system_params = test_system_params_small(2, 8, 3);
     let engine: BabyBearBn254Poseidon2CpuEngine =
         BabyBearBn254Poseidon2CpuEngine::new(system_params);
 

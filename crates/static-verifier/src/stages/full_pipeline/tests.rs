@@ -218,22 +218,14 @@ fn pipeline_constraints_only_matches_native_for_cached_fixture() {
 fn pipeline_cell_count_profiling() {
     use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
     use openvm_stark_sdk::{
-        config::log_up_params::log_up_security_params_baby_bear_100_bits,
+        config::{
+            log_up_params::log_up_security_params_baby_bear_100_bits,
+            root_params_with_100_bits_security,
+        },
         openvm_stark_backend::test_utils::MixtureFixture,
     };
 
-    let system_params = SystemParams::new(
-        4,  // log_blowup
-        2,  // l_skip
-        19, // n_stack
-        16, // w_stack
-        10,
-        20, // folding pow
-        20, // mu pow
-        WhirProximityStrategy::ListDecoding { m: 2 },
-        100,
-        log_up_security_params_baby_bear_100_bits(),
-    );
+    let system_params = root_params_with_100_bits_security();
     let (vk, proof) = {
         #[cfg(feature = "cuda")]
         {

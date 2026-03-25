@@ -287,7 +287,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         4,  // log_blowup
         2,  // l_skip
         19, // n_stack
-        16, // w_stack
+        9,  // w_stack
         10, // max_log_final_poly_len
         20, // folding pow
         20, // mu pow
