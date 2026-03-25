@@ -179,9 +179,7 @@ pub(crate) fn generate_halo2_verifier_solidity(
         .get("contracts")
         .expect("No 'contracts' field found")
         .get(format!("src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol"))
-        .unwrap_or_else(|| {
-            panic!("No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found")
-        })
+        .unwrap_or_else(|| panic!("No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found"))
         .get("OpenVmHalo2Verifier")
         .expect("No 'OpenVmHalo2Verifier' field found")
         .get("evm")
@@ -218,9 +216,7 @@ pub(crate) fn verify_evm_halo2_proof(
     let deployment_code = &openvm_verifier.artifact.bytecode;
 
     let gas_cost = openvm_static_verifier::keygen::evm_verify(deployment_code, &raw_evm_proof)
-        .map_err(|reason| {
-            SdkError::Other(eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason}"))
-        })?;
+        .map_err(|reason| SdkError::Other(eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason}")))?;
 
     Ok(gas_cost)
 }
