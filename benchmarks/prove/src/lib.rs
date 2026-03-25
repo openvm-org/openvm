@@ -34,6 +34,14 @@ pub struct BenchmarkCli {
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
     pub profiling: bool,
+    /// Directory containing KZG trusted setup files (for e2e halo2 proving)
+    #[arg(long)]
+    pub kzg_params_dir: Option<std::path::PathBuf>,
+    // #[arg(long)]
+    // pub halo2_outer_k: Option<usize>,
+
+    // #[arg(long)]
+    // pub halo2_wrapper_k: Option<usize>,
 }
 
 impl BenchmarkCli {

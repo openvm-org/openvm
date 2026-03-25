@@ -8,9 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm-benchmarks-utils.workspace = true
-openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-continuations.workspace = true
+openvm-circuit.workspace = true
 openvm-sdk.workspace = true
 openvm-sdk-config.workspace = true
 openvm-stark-backend.workspace = true
