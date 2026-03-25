@@ -29,7 +29,7 @@ cfg_if::cfg_if! {
         use openvm_verify_stark_circuit::prover::DeferredVerifyGpuProver as VerifyProver;
         use openvm_verify_stark_circuit::prover::DeferredVerifyGpuCircuitProver as VerifyCircuitProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
-        type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+        type RootE = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
     } else {
         use openvm_verify_stark_circuit::prover::DeferredVerifyCpuProver as VerifyProver;
         use openvm_verify_stark_circuit::prover::DeferredVerifyCpuCircuitProver as VerifyCircuitProver;
