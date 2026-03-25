@@ -27,8 +27,6 @@ openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-sha2-circuit.workspace = true
 openvm-sha2-transpiler.workspace = true
-openvm-continuations = { workspace = true }
-openvm-sdk = { workspace = true }
 
 clap.workspace = true
 eyre.workspace = true
