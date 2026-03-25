@@ -5,7 +5,7 @@ use std::hint::black_box;
 use openvm_algebra_guest::IntMod;
 use openvm_keccak256::keccak256;
 use openvm_ruint::aliases::U256;
-use openvm_sha2::sha256;
+use openvm_sha2::Sha256;
 #[allow(unused_imports)]
 use {
     openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup},
@@ -100,7 +100,7 @@ pub fn main() {
     for _ in 0..200 {
         let digest1 = keccak256(&hash);
         hash.extend_from_slice(&digest1);
-        let digest2 = sha256(&hash);
+        let digest2 = Sha256::digest(&hash);
         hash.extend_from_slice(&digest2);
 
         // SAFETY: internally U256 is represented as [u8; 32]
