@@ -39,22 +39,17 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sdk::{
-    commit::VmCommittedExe,
-    config::{AggregationConfig, DEFAULT_NUM_CHILDREN_INTERNAL, DEFAULT_NUM_CHILDREN_LEAF},
-};
 use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
 use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
     openvm_cpu_backend::{CpuBackend, CpuDevice},
     openvm_stark_backend::{
-        self, keygen::types::MultiStarkProvingKey, proof::Proof,
-        prover::DeviceDataTransporter, StarkEngine, StarkProtocolConfig, SystemParams, Val,
+        self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, StarkEngine,
+        StarkProtocolConfig, SystemParams, Val,
     },
     p3_baby_bear::BabyBear,
 };
-use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
