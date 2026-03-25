@@ -135,7 +135,7 @@ impl EvmProof {
     pub fn verifier_calldata(self) -> Vec<u8> {
         use alloy_sol_types::SolCall;
 
-        use crate::IOpenVmHalo2Verifier;
+        use crate::solidity::IOpenVmHalo2Verifier;
 
         let EvmProof {
             user_public_values,

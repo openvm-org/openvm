@@ -25,8 +25,8 @@ use crate::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_continuations::prover::RootCpuProver as RootInnerProver;
-        type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+        use openvm_continuations::prover::RootGpuProver as RootInnerProver;
+        type RootE = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
     } else {
         use openvm_continuations::prover::RootCpuProver as RootInnerProver;
         type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
