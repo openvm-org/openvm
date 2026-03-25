@@ -39,3 +39,8 @@ jobs:
         working-directory: crates/static-verifier
         run: |
           cargo nextest run --cargo-profile fast
+
+      - name: Run ignored roundtrip test
+        working-directory: crates/static-verifier
+        run: |
+          cargo nextest run --release --run-ignored=only real_prover_keygen_prove_verify_roundtrip
