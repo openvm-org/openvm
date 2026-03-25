@@ -324,6 +324,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
         None,
     );
+    let root_pk = root_base_prover.get_pk();
     let ctx = root_base_prover
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
             internal_recursive_proof.clone(),
@@ -339,10 +340,10 @@ fn test_root_prover_trace_heights() -> Result<()> {
     const AIR_MODIFIED_HEIGHT_IDX: usize = 4;
     trace_heights[AIR_MODIFIED_HEIGHT_IDX] *= 2;
 
-    let root_prover = RootProver::new::<RootEngine>(
+    let root_prover = RootProver::from_pk::<RootEngine>(
         internal_recursive_vk,
         internal_recursive_pcs_data.commitment.into(),
-        root_system_params(),
+        root_pk,
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
         None,
