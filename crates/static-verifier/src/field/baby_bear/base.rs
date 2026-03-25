@@ -53,7 +53,7 @@ impl BabyBearWire {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BabyBearChip {
     pub range: Arc<RangeChip<Fr>>,
     /// Cache for loaded constants, keyed by canonical u64 value.

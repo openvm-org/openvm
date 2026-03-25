@@ -117,39 +117,39 @@ fn transcript_outputs_match_native_interleaved_flow() {
         let ctx = builder.main(0);
         let gate = range.gate();
 
-        let mut transcript = TranscriptGadget::new(ctx);
+        let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
 
         let one = baby_bear.load_witness(ctx, RootF::from_u64(1));
         let two = baby_bear.load_witness(ctx, RootF::from_u64(2));
         let three = baby_bear.load_witness(ctx, RootF::from_u64(3));
-        transcript.observe(ctx, &baby_bear, &one);
-        transcript.observe(ctx, &baby_bear, &two);
-        transcript.observe(ctx, &baby_bear, &three);
+        transcript.observe(ctx, &one);
+        transcript.observe(ctx, &two);
+        transcript.observe(ctx, &three);
 
         let observed_ext = BabyBearExt4Wire(core::array::from_fn(|i| {
             baby_bear.load_witness(ctx, RootF::from_u64(observed_ext_coeffs[i]))
         }));
-        transcript.observe_ext(ctx, &baby_bear, &observed_ext);
+        transcript.observe_ext(ctx, &observed_ext);
 
-        let digest_wire = TranscriptGadget::load_digest_witness(ctx, digest);
-        transcript.observe_commit(ctx, &baby_bear, &digest_wire);
+        let digest_wire = TranscriptChip::load_digest_witness(ctx, digest);
+        transcript.observe_commit(ctx, &digest_wire);
 
-        let sampled = transcript.sample(ctx, &baby_bear);
+        let sampled = transcript.sample(ctx);
         gate.assert_is_const(ctx, &sampled.value, &Fr::from(expected_sample));
 
-        let sampled_ext = transcript.sample_ext(ctx, &baby_bear);
+        let sampled_ext = transcript.sample_ext(ctx);
         for (i, coeff) in sampled_ext.0.iter().enumerate() {
             gate.assert_is_const(ctx, &coeff.value, &Fr::from(expected_ext[i]));
         }
 
-        let sampled_bits = transcript.sample_bits(ctx, &baby_bear, 17);
+        let sampled_bits = transcript.sample_bits(ctx, 17);
         gate.assert_is_const(ctx, &sampled_bits, &Fr::from(expected_bits));
 
         let pow_witness = baby_bear.load_witness(ctx, RootF::from_u64(witness_for_pow));
         // check_witness now returns () and asserts internally
-        transcript.check_witness(ctx, &baby_bear, 9, &pow_witness);
+        transcript.check_witness(ctx, 9, &pow_witness);
 
-        let followup = transcript.sample(ctx, &baby_bear);
+        let followup = transcript.sample(ctx);
         gate.assert_is_const(ctx, &followup.value, &Fr::from(expected_followup));
     });
 }
@@ -170,19 +170,19 @@ fn transcript_check_witness_zero_bits_matches_native() {
         let ctx = builder.main(0);
         let gate = range.gate();
 
-        let mut transcript = TranscriptGadget::new(ctx);
+        let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
 
         let obs = baby_bear.load_witness(ctx, RootF::from_u64(99));
-        transcript.observe(ctx, &baby_bear, &obs);
+        transcript.observe(ctx, &obs);
 
-        let first = transcript.sample(ctx, &baby_bear);
+        let first = transcript.sample(ctx);
         gate.assert_is_const(ctx, &first.value, &Fr::from(expected_first));
 
         let witness = baby_bear.load_witness(ctx, RootF::from_u64(7));
         // check_witness now returns () and asserts internally
-        transcript.check_witness(ctx, &baby_bear, 0, &witness);
+        transcript.check_witness(ctx, 0, &witness);
 
-        let second = transcript.sample(ctx, &baby_bear);
+        let second = transcript.sample(ctx);
         gate.assert_is_const(ctx, &second.value, &Fr::from(expected_second));
     });
 }
@@ -194,8 +194,8 @@ fn transcript_sample_bits_rejects_bits_equal_31() {
             let range = builder.range_chip();
             let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
             let ctx = builder.main(0);
-            let mut transcript = TranscriptGadget::new(ctx);
-            let _ = transcript.sample_bits(ctx, &baby_bear, 31);
+            let mut transcript = TranscriptChip::new(ctx, baby_bear);
+            let _ = transcript.sample_bits(ctx, 31);
         });
     }));
     assert!(

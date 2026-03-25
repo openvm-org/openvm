@@ -19,7 +19,7 @@ use crate::{
             interpolate_quadratic_at_012_assigned,
         },
     },
-    transcript::TranscriptGadget,
+    transcript::TranscriptChip,
     Fr, RootF,
 };
 
@@ -91,7 +91,7 @@ fn eval_in_uni_assigned(
 pub(crate) fn constrain_stacked_reduction(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
-    transcript: &mut TranscriptGadget,
+    transcript: &mut TranscriptChip,
     stacking_wire: &StackingProofWire,
     layouts: &[StackedLayout],
     need_rot_per_commit: &[Vec<bool>],
@@ -141,7 +141,7 @@ pub(crate) fn constrain_stacked_reduction(
         }
     }
 
-    let lambda = transcript.sample_ext(ctx, ext_chip.base());
+    let lambda = transcript.sample_ext(ctx);
     let lambda_sqr = ext_chip.mul(ctx, lambda, lambda);
     let mut lambda_sqr_powers = Vec::with_capacity(t_claims.len());
     let mut cur_lambda_sqr = one;
@@ -180,11 +180,11 @@ pub(crate) fn constrain_stacked_reduction(
     ext_chip.assert_equal(ctx, s_0_residual, zero);
 
     for coeff in univariate_round_coeffs {
-        transcript.observe_ext(ctx, ext_chip.base(), coeff);
+        transcript.observe_ext(ctx,coeff);
     }
 
     let mut u = Vec::with_capacity(n_stack + 1);
-    u.push(transcript.sample_ext(ctx, ext_chip.base()));
+    u.push(transcript.sample_ext(ctx));
 
     let sumcheck_round_polys = &stacking_wire.sumcheck_round_polys;
 
@@ -193,9 +193,9 @@ pub(crate) fn constrain_stacked_reduction(
     for round_poly in sumcheck_round_polys {
         let s_j_1 = round_poly[0];
         let s_j_2 = round_poly[1];
-        transcript.observe_ext(ctx, ext_chip.base(), &s_j_1);
-        transcript.observe_ext(ctx, ext_chip.base(), &s_j_2);
-        let u_j = transcript.sample_ext(ctx, ext_chip.base());
+        transcript.observe_ext(ctx,&s_j_1);
+        transcript.observe_ext(ctx,&s_j_2);
+        let u_j = transcript.sample_ext(ctx);
         let s_j_0 = ext_chip.sub(ctx, final_claim, s_j_1);
         final_claim =
             interpolate_quadratic_at_012_assigned(ctx, ext_chip, [&s_j_0, &s_j_1, &s_j_2], &u_j);
@@ -289,7 +289,7 @@ pub(crate) fn constrain_stacked_reduction(
     let mut final_sum = ext_chip.zero(ctx);
     for (coeff_row, opening_row) in derived_q_coeffs.iter().zip(stacking_openings.iter()) {
         for (coeff, opening) in coeff_row.iter().zip(opening_row.iter()) {
-            transcript.observe_ext(ctx, ext_chip.base(), opening);
+            transcript.observe_ext(ctx,opening);
             let term = ext_chip.mul(ctx, *coeff, *opening);
             final_sum = ext_chip.add(ctx, final_sum, term);
         }
