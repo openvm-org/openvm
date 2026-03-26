@@ -17,6 +17,7 @@ use crate::{config::Halo2Config, keygen::Halo2ProvingKey};
 /// 2. Generate a dummy snark from the static verifier
 /// 3. Build a [`Halo2WrapperProvingKey`] (auto-tuned or fixed `k`)
 /// 4. Return the composite [`Halo2ProvingKey`]
+#[tracing::instrument(level = "info", fields(group = "halo2_keygen"), skip_all)]
 pub fn keygen_halo2(
     halo2_config: &Halo2Config,
     reader: &impl Halo2ParamsReader,
