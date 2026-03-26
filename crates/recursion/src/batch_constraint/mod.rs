@@ -1095,7 +1095,7 @@ pub mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
-            let indexed_cpu_traces = indexed_cpu_rm_traces
+            let indexed_cpu_gpu_traces = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
                     (
@@ -1109,7 +1109,7 @@ pub mod cuda_tracegen {
 
             indexed_gpu_traces
                 .into_iter()
-                .chain(indexed_cpu_traces)
+                .chain(indexed_cpu_gpu_traces)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_index, ctx)| ctx)
                 .collect()

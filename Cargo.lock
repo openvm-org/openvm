@@ -5701,6 +5701,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
+name = "nvtx"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad2e855e8019f99e4b94ac33670eb4e4f570a2e044f3749a0b2c7f83b841e52c"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "nybbles"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6236,7 +6245,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6283,7 +6292,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "cfg-if",
  "derive-new 0.7.0",
@@ -6308,7 +6317,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6335,7 +6344,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "cc",
  "glob",
@@ -6344,7 +6353,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "bytesize",
  "ctor",
@@ -7134,7 +7143,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "cfg-if",
  "derivative",
@@ -7168,7 +7177,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d03d55792149624433853685a86af51be78fd61e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4fe0be244cba8f47a7e78c4eced34b25a9c323e1"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -7179,6 +7188,7 @@ dependencies = [
  "metrics-tracing-context",
  "metrics-util",
  "num-bigint 0.4.6",
+ "nvtx",
  "openvm-cpu-backend",
  "openvm-stark-backend",
  "p3-baby-bear",
