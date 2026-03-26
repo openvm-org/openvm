@@ -6992,6 +6992,7 @@ dependencies = [
  "halo2-base",
  "hex",
  "itertools 0.14.0",
+ "metrics",
  "num-bigint 0.4.6",
  "openvm",
  "openvm-build",
