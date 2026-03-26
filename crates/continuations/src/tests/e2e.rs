@@ -272,8 +272,11 @@ fn test_deferral_e2e() -> Result<()> {
         internal_system_params(),
         true,
     );
-    let hook_prover_for_commit =
-        DeferralHookProver::new::<GpuEngine>(def_i1_prover.get_vk(), root_system_params());
+    let hook_prover_for_commit = DeferralHookProver::new::<GpuEngine>(
+        def_i1_prover.get_vk(),
+        def_i1_prover.get_dag_commit(true).cached_commit.into(),
+        root_system_params(),
+    );
     let def_hook_cached_commit = hook_prover_for_commit.get_cached_commit();
 
     // Compute vk commit using [cached_commit, vk_pre_hash] for def/leaf/i4l.
@@ -532,8 +535,11 @@ fn test_deferral_e2e() -> Result<()> {
             None,
         )?;
 
-        let hook_prover =
-            DeferralHookProver::new::<GpuEngine>(ir_prover.get_vk(), root_system_params());
+        let hook_prover = DeferralHookProver::new::<GpuEngine>(
+            ir_prover.get_vk(),
+            ir_prover.get_dag_commit(true).cached_commit.into(),
+            root_system_params(),
+        );
         warn!("proving deferral hook");
         let hook_proof = hook_prover.prove::<GpuEngine>(wrapped, leaf_children)?;
         Ok(hook_proof)

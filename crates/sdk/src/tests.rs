@@ -111,7 +111,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let def_circuit_params = internal_params_with_100_bits_security();
     let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
-        ir_pcs_data,
+        ir_pcs_data.commitment.into(),
         def_circuit_params,
         memory_dimensions,
         num_user_pvs,
@@ -205,7 +205,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     let def_circuit_params = internal_params_with_100_bits_security();
     let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
-        ir_pcs_data,
+        ir_pcs_data.commitment.into(),
         def_circuit_params,
         memory_dimensions,
         num_user_pvs,

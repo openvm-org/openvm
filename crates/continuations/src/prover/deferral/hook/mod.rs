@@ -81,6 +81,7 @@ impl<
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_cached_commit: CommitBytes,
         system_params: SystemParams,
     ) -> Self
     where
@@ -98,7 +99,7 @@ impl<
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let internal_recursive_dag_commit = DagCommitBytes {
-            cached_commit: child_vk_pcs_data.commitment.into(),
+            cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(DeferralHookCircuit::new(

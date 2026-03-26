@@ -178,7 +178,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
     let system_config = test_rv32im_config().rv32i.system;
     let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
         internal_recursive_vk.clone(),
-        internal_recursive_pcs_data,
+        internal_recursive_pcs_data.commitment.into(),
         root_params_with_100_bits_security(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
