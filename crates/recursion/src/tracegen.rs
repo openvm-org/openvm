@@ -61,7 +61,6 @@ impl<SC: StarkProtocolConfig<F = F>, T: RowMajorChip<F>> ModuleChip<CpuBackend<S
 
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda {
-    use super::*;
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
 
     pub(crate) struct StandardTracegenGpuCtx<'a> {
