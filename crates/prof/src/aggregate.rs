@@ -652,6 +652,9 @@ pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
 pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
 
+pub const HALO2_VERIFIER_K_LABEL: &str = "halo2_verifier_k";
+pub const HALO2_WRAPPER_K_LABEL: &str = "halo2_wrapper_k";
+
 pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
@@ -679,4 +682,6 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     "prover.openings.stacked_reduction.round0_time_ms",
     "prover.openings.stacked_reduction.mle_rounds_time_ms",
     "prover.openings.whir_time_ms",
+    HALO2_VERIFIER_K_LABEL,
+    HALO2_WRAPPER_K_LABEL,
 ];

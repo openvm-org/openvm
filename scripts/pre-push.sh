@@ -22,7 +22,6 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 # Match CI environment variables for faster test runs
-export OPENVM_FAST_TEST="${OPENVM_FAST_TEST:-1}"
 export OPENVM_SKIP_DEBUG="${OPENVM_SKIP_DEBUG:-1}"
 
 # --- Colors ---

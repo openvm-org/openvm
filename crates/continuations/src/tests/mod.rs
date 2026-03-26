@@ -47,7 +47,7 @@ cfg_if::cfg_if! {
                 DeferralChildVkKind, DeferralInnerGpuProver as DeferralInnerProver,
                 InnerGpuProver as InnerProver,
             },
-            utils::zero_hash,
+            utils::zero_hash, CommitBytes,
         };
 
         #[cfg(feature = "root-prover")]
@@ -405,12 +405,13 @@ fn aggregate_deferral_layer(
     Ok(next)
 }
 
+#[allow(clippy::type_complexity)]
 #[cfg(feature = "cuda")]
 pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
     deferral_vk: Arc<MultiStarkVerifyingKey<SC>>,
     def_proof: Proof<SC>,
     num_copies: usize,
-) -> Result<(Arc<MultiStarkVerifyingKey<SC>>, Proof<SC>)> {
+) -> Result<(Arc<MultiStarkVerifyingKey<SC>>, CommitBytes, Proof<SC>)> {
     assert!(num_copies > 0, "num_copies must be non-zero");
 
     let mut current_proofs = vec![def_proof.clone(); num_copies];
@@ -449,7 +450,14 @@ pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
                 DeferralChildVkKind::RecursiveSelf,
                 None,
             )?;
-            return Ok((internal_recursive_prover.get_vk(), wrapped));
+            return Ok((
+                internal_recursive_prover.get_vk(),
+                internal_recursive_prover
+                    .get_dag_commit(true)
+                    .cached_commit
+                    .into(),
+                wrapped,
+            ));
         }
     }
 }
@@ -552,7 +560,7 @@ fn test_deferral_leaf_prover(num_children: usize) -> Result<()> {
 fn test_deferral_aggregation(num_children: usize) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (deferral_vk, def_proof) = dummy::generate_single_dummy_def_proof()?;
-    let (vk, final_proof) = generate_deferral_internal_recursive_proof_from_copies(
+    let (vk, _, final_proof) = generate_deferral_internal_recursive_proof_from_copies(
         deferral_vk,
         def_proof.clone(),
         num_children,
@@ -613,7 +621,7 @@ fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
 
     setup_tracing_with_log_level(Level::INFO);
     let (deferral_vk, def_proof) = dummy::generate_single_dummy_def_proof()?;
-    let (deferral_internal_recursive_vk, final_inner_proof) =
+    let (deferral_internal_recursive_vk, internal_recursive_cached_commit, final_inner_proof) =
         generate_deferral_internal_recursive_proof_from_copies(
             deferral_vk,
             def_proof.clone(),
@@ -624,8 +632,11 @@ fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
     let leaf_commit = (leaf_input_commit, leaf_output_commit);
     let leaf_children = vec![leaf_commit; num_children];
 
-    let deferral_hook_prover =
-        DeferralHookProver::new::<Engine>(deferral_internal_recursive_vk, root_system_params());
+    let deferral_hook_prover = DeferralHookProver::new::<Engine>(
+        deferral_internal_recursive_vk,
+        internal_recursive_cached_commit,
+        root_system_params(),
+    );
     let root_proof =
         deferral_hook_prover.prove::<Engine>(final_inner_proof.clone(), leaf_children)?;
 

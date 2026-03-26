@@ -110,7 +110,7 @@ impl<
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
+        internal_recursive_cached_commit: CommitBytes,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -133,9 +133,10 @@ impl<
         );
         let engine = E::new(system_params);
         let internal_recursive_dag_commit = DagCommitBytes {
-            cached_commit: child_vk_pcs_data.commitment.into(),
+            cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let def_hook_vk_commit = def_hook_vk_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
@@ -157,9 +158,8 @@ impl<
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn from_pk(
+    pub fn from_pk<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
         internal_recursive_cached_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<SC>>,
         memory_dimensions: MemoryDimensions,
@@ -168,6 +168,7 @@ impl<
         def_idx: usize,
     ) -> Self
     where
+        E::PD: DeviceDataTransporter<SC, PB> + Clone,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,
@@ -185,6 +186,8 @@ impl<
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
+        let engine = E::new(pk.params.clone());
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         // WARNING: def_idx must match the original def_idx used when generating the pk,
         // or else the generated proof will be incorrect.
         let circuit = Arc::new(DeferredVerifyCircuit::new(

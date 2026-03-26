@@ -31,6 +31,8 @@ use openvm_stark_sdk::config::{
     baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, Digest},
     root_params_with_100_bits_security,
 };
+#[cfg(feature = "evm-prove")]
+use openvm_static_verifier::StaticVerifierShape;
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
@@ -42,13 +44,15 @@ use openvm_verify_stark_host::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
-    keygen::AggProvingKey,
+    keygen::{dummy::compute_root_proof_heights, AggProvingKey},
     prover::{
-        compute_root_proof_heights, AggProver, AppProver, DeferralPathProver, DeferralProver,
-        EvmProver, RootProver, StarkProver,
+        AggProver, AppProver, DeferralPathProver, DeferralProver, EvmProver, RootProver,
+        StarkProver,
     },
     types::ExecutableFormat,
 };
+#[cfg(feature = "evm-prove")]
+use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -66,8 +70,12 @@ pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config 
 
 pub mod config;
 pub mod fs;
+#[cfg(feature = "evm-prove")]
+pub mod halo2_params;
 pub mod keygen;
 pub mod prover;
+#[cfg(feature = "evm-verify")]
+mod solidity;
 pub mod types;
 pub mod util;
 
@@ -111,7 +119,10 @@ where
     agg_tree_config: AggregationTreeConfig,
     #[cfg(feature = "evm-prove")]
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
-    halo2_config: Halo2Config,
+    halo2_shape: StaticVerifierShape,
+    #[cfg(feature = "evm-prove")]
+    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    halo2_config: config::Halo2Config,
 
     #[getset(get = "pub")]
     app_vm_builder: VB,
@@ -134,7 +145,7 @@ where
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
-    halo2_pk: OnceLock<Halo2ProvingKey>,
+    halo2_prover: OnceLock<Halo2Prover>,
 
     _phantom: PhantomData<E>,
 }
@@ -210,6 +221,13 @@ where
             app_config,
             agg_config,
             agg_tree_config: Default::default(),
+            #[cfg(feature = "evm-prove")]
+            halo2_shape: StaticVerifierShape::default(),
+            #[cfg(feature = "evm-prove")]
+            halo2_config: config::Halo2Config {
+                wrapper_k: None,
+                profiling: false,
+            },
             app_vm_builder: Default::default(),
             transpiler: None,
             executor,
@@ -217,6 +235,10 @@ where
             agg_prover: OnceLock::new(),
             root_prover: OnceLock::new(),
             def_path_prover: None,
+            #[cfg(feature = "evm-prove")]
+            halo2_params_reader: CacheHalo2ParamsReader::new_with_default_params_dir(),
+            #[cfg(feature = "evm-prove")]
+            halo2_prover: OnceLock::new(),
             _phantom: Default::default(),
         })
     }
@@ -448,11 +470,12 @@ where
         &self,
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
-    ) -> Result<EvmProof, SdkError> {
+        def_inputs: &[DeferralInput],
+    ) -> Result<types::EvmProof, SdkError> {
         let app_exe = self.convert_to_exe(app_exe)?;
         let mut evm_prover = self.evm_prover(app_exe)?;
-        let proof = evm_prover.prove_evm(inputs)?;
-        Ok(proof)
+        let evm_proof = evm_prover.prove_evm(inputs, def_inputs)?;
+        Ok(evm_proof)
     }
 
     // ========================= Prover Constructors =========================
@@ -493,7 +516,6 @@ where
         Ok(stark_prover)
     }
 
-    // #[cfg(feature = "evm-prove")]
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -507,10 +529,11 @@ where
             self.agg_prover(),
             self.def_path_prover.clone(),
             self.root_prover(),
+            #[cfg(feature = "evm-prove")]
+            Some(self.halo2_prover()),
         )?;
         Ok(evm_prover)
     }
-
     // ===================== Component Prover Constructors =====================
 
     pub fn agg_prover(&self) -> Arc<AggProver> {
@@ -533,11 +556,13 @@ where
                 // TODO[INT-6073]: store root_params
                 let system_config = self.app_config.app_vm_config.as_ref();
                 let root_params = root_params_with_100_bits_security();
+                let app_pk = self.app_pk();
+                let agg_prover = self.agg_prover();
 
-                let trace_heights = compute_root_proof_heights(
-                    system_config.clone(),
-                    self.agg_config.params.clone(),
-                    self.agg_tree_config,
+                let (trace_heights, root_pk) = compute_root_proof_heights::<E, VB>(
+                    self.app_vm_builder.clone(),
+                    &app_pk.app_vm_pk,
+                    agg_prover.clone(),
                     root_params.clone(),
                     self.def_path_prover.clone(),
                 )
@@ -546,8 +571,7 @@ where
                 let memory_dimensions = system_config.memory_config.memory_dimensions();
                 let num_user_pvs = system_config.num_public_values;
 
-                let agg_prover = self.agg_prover();
-                Arc::new(RootProver::new(
+                Arc::new(RootProver::from_pk(
                     agg_prover.internal_recursive_prover.get_vk(),
                     agg_prover
                         .internal_recursive_prover
@@ -555,12 +579,45 @@ where
                         .unwrap()
                         .commitment
                         .into(),
-                    root_params,
+                    root_pk,
                     memory_dimensions,
                     num_user_pvs,
                     self.def_hook_vk_commit(),
                     Some(trace_heights),
                 ))
+            })
+            .clone()
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn halo2_prover(&self) -> Halo2Prover {
+        self.halo2_prover
+            .get_or_init(|| {
+                use crate::keygen::static_verifier::keygen_halo2;
+
+                let root_prover = self.root_prover();
+                let root_vk = root_prover.0.get_vk().as_ref().clone();
+                let agg_prover = self.agg_prover();
+
+                // Generate a dummy root proof by running a trivial program through the pipeline
+                let dummy_root_proof = keygen::dummy::generate_dummy_root_proof::<E, _>(
+                    self.app_vm_builder.clone(),
+                    &self.app_pk().app_vm_pk,
+                    agg_prover.clone(),
+                    self.def_path_prover.clone(),
+                    root_prover,
+                );
+
+                let halo2_pk = keygen_halo2(
+                    &self.halo2_config,
+                    &self.halo2_params_reader,
+                    self.halo2_shape,
+                    &agg_prover.internal_recursive_prover.get_vk(),
+                    &root_vk,
+                    &dummy_root_proof,
+                );
+
+                Halo2Prover::new(self.halo2_params_reader(), halo2_pk)
             })
             .clone()
     }
@@ -618,40 +675,17 @@ where
         self.agg_prover().internal_recursive_prover.get_vk()
     }
 
+    /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
+    ///
+    /// The flow:
+    /// 1. Get the root VK and internal recursive DAG cached commit
+    /// 2. Generate a dummy root proof via the EVM prover pipeline
+    /// 3. Keygen the static verifier circuit
+    /// 4. Generate a dummy snark from the verifier
+    /// 5. Keygen the wrapper circuit (auto-tuned or fixed k)
     #[cfg(feature = "evm-prove")]
-    pub fn halo2_keygen(&self) -> Halo2ProvingKey {
-        self.halo2_pk().clone()
-    }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn halo2_pk(&self) -> &Halo2ProvingKey {
-        let (agg_pk, dummy_internal_proof) = self.agg_pk_and_dummy_internal_proof();
-        // TODO[jpw]: use `get_or_try_init` once it is stable
-        self.halo2_pk.get_or_init(|| {
-            Halo2ProvingKey::keygen(
-                self.halo2_config,
-                self.halo2_params_reader(),
-                &DefaultStaticVerifierPvHandler,
-                agg_pk,
-                dummy_internal_proof.clone(),
-            )
-            .expect("halo2_keygen failed")
-        })
-    }
-    /// Sets the halo2 proving keys. Returns `Ok(())` if halo2 keygen has not been called and
-    /// `Err(halo2_pk)` if keygen has already been called.
-    #[cfg(feature = "evm-prove")]
-    pub fn set_halo2_pk(&self, halo2_pk: Halo2ProvingKey) -> Result<(), Halo2ProvingKey> {
-        self.halo2_pk.set(halo2_pk)
-    }
-    /// See [`set_halo2_pk`](Self::set_halo2_pk). This should only be used in a constructor, and
-    /// panics if halo2 keygen has already been called.
-    #[cfg(feature = "evm-prove")]
-    pub fn with_halo2_pk(self, halo2_pk: Halo2ProvingKey) -> Self {
-        let _ = self
-            .set_halo2_pk(halo2_pk)
-            .map_err(|_| panic!("halo2_pk already set"));
-        self
+    pub fn halo2_pk(&self) -> Halo2ProvingKey {
+        self.halo2_prover().pk()
     }
 
     #[cfg(feature = "evm-prove")]
@@ -659,6 +693,7 @@ where
         self.set_halo2_params_dir(params_dir);
         self
     }
+
     #[cfg(feature = "evm-prove")]
     pub fn set_halo2_params_dir(&mut self, params_dir: impl AsRef<Path>) {
         self.halo2_params_reader = CacheHalo2ParamsReader::new(params_dir);
@@ -685,234 +720,18 @@ where
 
     #[cfg(feature = "evm-verify")]
     pub fn generate_halo2_verifier_solidity(&self) -> Result<types::EvmHalo2Verifier, SdkError> {
-        use std::{
-            fs::{create_dir_all, write},
-            io::Write,
-            process::{Command, Stdio},
-        };
-
-        use eyre::Context;
-        use forge_fmt::{
-            format, FormatterConfig, IntTypes, MultilineFuncHeaderStyle, NumberUnderscore,
-            QuoteStyle, SingleLineBlockStyle,
-        };
-        use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
-        use serde_json::{json, Value};
-        use snark_verifier::halo2_base::halo2_proofs::poly::commitment::Params;
-        use snark_verifier_sdk::SHPLONK;
-        use tempfile::tempdir;
-        use types::EvmHalo2Verifier;
-
-        use crate::fs::{
-            EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
-            EVM_HALO2_VERIFIER_PARENT_NAME,
-        };
-
-        let reader = self.halo2_params_reader();
-        let halo2_pk = self.halo2_pk();
-
-        let params = reader.read_params(halo2_pk.wrapper.pinning.metadata.config_params.k);
-        let pinning = &halo2_pk.wrapper.pinning;
-
-        assert_eq!(
-            pinning.metadata.config_params.k as u32,
-            params.k(),
-            "Provided params don't match circuit config"
-        );
-
-        let halo2_verifier_code = gen_evm_verifier_sol_code::<AggregationCircuit, SHPLONK>(
-            &params,
-            pinning.pk.get_vk(),
-            pinning.metadata.num_pvs.clone(),
-        );
-
-        let wrapper_pvs = halo2_pk.wrapper.pinning.metadata.num_pvs.clone();
-        let pvs_length = match wrapper_pvs.first() {
-            // We subtract 14 to exclude the KZG accumulator and the app exe
-            // and vm commits.
-            Some(v) => v
-                .checked_sub(14)
-                .expect("Unexpected number of static verifier wrapper public values"),
-            _ => panic!("Unexpected amount of instance columns in the static verifier wrapper"),
-        };
-
-        assert!(
-            pvs_length <= 8192,
-            "OpenVM Halo2 verifier contract does not support more than 8192 public values"
-        );
-
-        // Fill out the public values length and OpenVM version in the template
-        let openvm_verifier_code = EVM_HALO2_VERIFIER_TEMPLATE
-            .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
-            .replace("{OPENVM_VERSION}", OPENVM_VERSION);
-
-        let formatter_config = FormatterConfig {
-            line_length: 120,
-            tab_width: 4,
-            bracket_spacing: true,
-            int_types: IntTypes::Long,
-            multiline_func_header: MultilineFuncHeaderStyle::AttributesFirst,
-            quote_style: QuoteStyle::Double,
-            number_underscore: NumberUnderscore::Thousands,
-            single_line_statement_blocks: SingleLineBlockStyle::Preserve,
-            override_spacing: false,
-            wrap_comments: false,
-            ignore: vec![],
-            contract_new_lines: false,
-            sort_imports: false,
-            ..Default::default()
-        };
-
-        let formatted_interface = format(EVM_HALO2_VERIFIER_INTERFACE, formatter_config.clone())
-            .into_result()
-            .expect("Failed to format interface");
-        let formatted_halo2_verifier_code = format(&halo2_verifier_code, formatter_config.clone())
-            .into_result()
-            .expect("Failed to format halo2 verifier code");
-        let formatted_openvm_verifier_code = format(&openvm_verifier_code, formatter_config)
-            .into_result()
-            .expect("Failed to format openvm verifier code");
-
-        // Create temp dir
-        let temp_dir = tempdir()
-            .wrap_err("Failed to create temp dir")
-            .map_err(SdkError::Other)?;
-        let temp_path = temp_dir.path();
-        let root_path = Path::new("src").join(format!("v{OPENVM_VERSION}"));
-
-        // Make interfaces dir
-        let interfaces_path = root_path.join("interfaces");
-
-        // This will also create the dir for root_path, so no need to explicitly
-        // create it
-        create_dir_all(temp_path.join(&interfaces_path))?;
-
-        let interface_file_path = interfaces_path.join(EVM_HALO2_VERIFIER_INTERFACE_NAME);
-        let parent_file_path = root_path.join(EVM_HALO2_VERIFIER_PARENT_NAME);
-        let base_file_path = root_path.join(EVM_HALO2_VERIFIER_BASE_NAME);
-
-        // Write the files to the temp dir. This is only for compilation
-        // purposes.
-        write(temp_path.join(&interface_file_path), &formatted_interface)?;
-        write(
-            temp_path.join(&parent_file_path),
-            &formatted_halo2_verifier_code,
-        )?;
-        write(
-            temp_path.join(&base_file_path),
-            &formatted_openvm_verifier_code,
-        )?;
-
-        // Run solc from the temp dir
-        let solc_input = json!({
-            "language": "Solidity",
-            "sources": {
-                interface_file_path.to_str().unwrap(): {
-                    "content": formatted_interface
-                },
-                parent_file_path.to_str().unwrap(): {
-                    "content": formatted_halo2_verifier_code
-                },
-                base_file_path.to_str().unwrap(): {
-                    "content": formatted_openvm_verifier_code
-                }
-            },
-            "settings": {
-                "remappings": ["forge-std/=lib/forge-std/src/"],
-                "optimizer": {
-                    "enabled": true,
-                    "runs": 100000,
-                    "details": {
-                        "constantOptimizer": false,
-                        "yul": false
-                    }
-                },
-                "evmVersion": "paris",
-                "viaIR": false,
-                "outputSelection": {
-                    "*": {
-                        "*": ["metadata", "evm.bytecode.object"]
-                    }
-                }
-            }
-        });
-
-        let mut child = Command::new("solc")
-            .current_dir(temp_path)
-            .arg("--standard-json")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("Failed to spawn solc");
-
-        child
-            .stdin
-            .as_mut()
-            .expect("Failed to open stdin")
-            .write_all(solc_input.to_string().as_bytes())
-            .expect("Failed to write to stdin");
-
-        let output = child.wait_with_output().expect("Failed to read output");
-
-        if !output.status.success() {
-            return Err(SdkError::Other(eyre::eyre!(
-                "solc exited with status {}: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            )));
-        }
-
-        let parsed: Value =
-            serde_json::from_slice(&output.stdout).map_err(|e| SdkError::Other(e.into()))?;
-
-        let bytecode = parsed
-            .get("contracts")
-            .expect("No 'contracts' field found")
-            .get(format!("src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol"))
-            .unwrap_or_else(|| {
-                panic!("No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found")
-            })
-            .get("OpenVmHalo2Verifier")
-            .expect("No 'OpenVmHalo2Verifier' field found")
-            .get("evm")
-            .expect("No 'evm' field found")
-            .get("bytecode")
-            .expect("No 'bytecode' field found")
-            .get("object")
-            .expect("No 'object' field found")
-            .as_str()
-            .expect("No 'object' field found");
-
-        let bytecode = hex::decode(bytecode).expect("Invalid hex in Binary");
-
-        let evm_verifier = EvmHalo2Verifier {
-            halo2_verifier_code: formatted_halo2_verifier_code,
-            openvm_verifier_code: formatted_openvm_verifier_code,
-            openvm_verifier_interface: formatted_interface,
-            artifact: EvmVerifierByteCode {
-                sol_compiler_version: "0.8.19".to_string(),
-                sol_compiler_options: solc_input.get("settings").unwrap().to_string(),
-                bytecode,
-            },
-        };
-        Ok(evm_verifier)
+        solidity::generate_halo2_verifier_solidity(&self.halo2_pk(), &self.halo2_params_reader)
     }
 
     #[cfg(feature = "evm-verify")]
     /// Uses the `verify(..)` interface of the `OpenVmHalo2Verifier` contract.
+    ///
+    /// Requires the `evm-verify` feature. Internally deploys the verifier bytecode in a local EVM
+    /// and executes the verification call.
     pub fn verify_evm_halo2_proof(
         openvm_verifier: &types::EvmHalo2Verifier,
-        evm_proof: EvmProof,
+        evm_proof: types::EvmProof,
     ) -> Result<u64, SdkError> {
-        let calldata = evm_proof.verifier_calldata();
-        let deployment_code = openvm_verifier.artifact.bytecode.clone();
-
-        let gas_cost = snark_verifier::loader::evm::deploy_and_call(deployment_code, calldata)
-            .map_err(|reason| {
-                SdkError::Other(eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason:?}"))
-            })?;
-
-        Ok(gas_cost)
+        solidity::verify_evm_halo2_proof(openvm_verifier, evm_proof)
     }
 }

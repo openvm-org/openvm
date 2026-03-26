@@ -1,0 +1,42 @@
+[package]
+name = "openvm-static-verifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-circuit-primitives-derive.workspace = true
+openvm-verify-stark-host.workspace = true
+openvm-recursion-circuit.workspace = true
+openvm-cpu-backend.workspace = true
+openvm-continuations = { workspace = true, features = ["root-prover"] }
+zkhash = { workspace = true }
+halo2-base = { workspace = true, features = ["halo2-axiom"] }
+snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
+
+rand_chacha.workspace = true
+once_cell = { workspace = true, optional = true }
+serde.workspace = true
+serde_json = { workspace = true, optional = true }
+serde_with = { workspace = true, features = ["hex"], optional = true }
+itertools.workspace = true
+num-bigint.workspace = true
+num-integer.workspace = true
+tracing.workspace = true
+inferno = { workspace = true, optional = true }
+
+[dev-dependencies]
+openvm-stark-backend = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
+
+[features]
+default = []
+cuda = ["dep:openvm-cuda-backend"]
+evm-prove = ["dep:snark-verifier-sdk", "dep:serde_with", "dep:once_cell", "dep:serde_json"]
+evm-verify = ["evm-prove", "snark-verifier-sdk/revm"]
+cell-profiling = ["dep:inferno"]

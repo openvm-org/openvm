@@ -22,7 +22,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  OPENVM_FAST_TEST: "1"
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
@@ -46,11 +45,6 @@ jobs:
 
     steps:
       - uses: runs-on/action@v2
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
