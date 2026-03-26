@@ -650,13 +650,12 @@ impl RowMajorChip<F> for GkrModuleChip {
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
     use itertools::Itertools;
-    use openvm_cuda_backend::GpuBackend;
-    use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+    use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
+    use openvm_stark_backend::{p3_maybe_rayon::prelude::*, prover::AirProvingContext};
 
     use super::*;
-    use crate::{
-        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
-        tracegen::cuda::generate_gpu_proving_ctx,
+    use crate::cuda::{
+        preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu,
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for GkrModule {
@@ -689,19 +688,27 @@ mod cuda_tracegen {
                 GkrModuleChip::XiSampler,
             ];
 
+            // Phase 1: CPU trace generation in parallel
             let span = tracing::Span::current();
-            chips
+            let cpu_traces: Vec<_> = chips
                 .par_iter()
                 .map(|chip| {
                     let _guard = span.enter();
-                    generate_gpu_proving_ctx(
-                        chip,
+                    chip.generate_trace(
                         &blob,
                         required_heights.map(|heights| heights[chip.index()]),
                     )
                 })
-                .collect::<Vec<_>>()
+                .collect();
+
+            // Phase 2: H2D transfer serially on main thread
+            cpu_traces
                 .into_iter()
+                .map(|trace| {
+                    trace.map(|m| {
+                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                    })
+                })
                 .collect()
         }
     }

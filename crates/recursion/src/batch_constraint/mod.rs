@@ -905,7 +905,7 @@ pub mod cuda_tracegen {
             interactions_folding::cuda::InteractionsFoldingBlobGpu,
         },
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
-        tracegen::cuda::{generate_gpu_proving_ctx, StandardTracegenGpuCtx},
+        tracegen::cuda::StandardTracegenGpuCtx,
     };
 
     impl ModuleChip<GpuBackend> for BatchConstraintModuleChip {
@@ -1079,16 +1079,14 @@ pub mod cuda_tracegen {
                 cached_trace_record,
             );
 
-            // We parallelize the CPU trace generation
-            let indexed_cpu_traces = cpu_chips
+            // Phase 1: CPU trace generation in parallel
+            let indexed_cpu_rm_traces = cpu_chips
                 .par_iter()
                 .map(|chip| {
-                    // span within par_iter to handle parallelism
                     let _guard = span.enter();
                     (
                         chip.index(),
-                        generate_gpu_proving_ctx(
-                            chip,
+                        chip.generate_trace(
                             &cpu_ctx,
                             required_heights.map(|heights| heights[chip.index()]),
                         ),
@@ -1096,9 +1094,22 @@ pub mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
+            // Phase 2: H2D transfer serially on main thread
+            let indexed_cpu_gpu_traces = indexed_cpu_rm_traces
+                .into_iter()
+                .map(|(idx, trace)| {
+                    (
+                        idx,
+                        trace.map(|m| {
+                            AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+
             indexed_gpu_traces
                 .into_iter()
-                .chain(indexed_cpu_traces)
+                .chain(indexed_cpu_gpu_traces)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_index, ctx)| ctx)
                 .collect()
