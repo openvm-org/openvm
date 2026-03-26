@@ -34,8 +34,7 @@ impl Halo2Prover {
             let verifier_k = self.halo2_pk.verifier.pinning.metadata.config_params.k;
             let wrapper_k = self.halo2_pk.wrapper.pinning.metadata.config_params.k;
             metrics::gauge!("halo2_verifier_k", "group" => "halo2_outer").set(verifier_k as f64);
-            metrics::gauge!("halo2_wrapper_k", "group" => "halo2_wrapper")
-                .set(wrapper_k as f64);
+            metrics::gauge!("halo2_wrapper_k", "group" => "halo2_wrapper").set(wrapper_k as f64);
         }
         let snark = info_span!("total_proof", group = "halo2_outer").in_scope(|| {
             self.halo2_pk
