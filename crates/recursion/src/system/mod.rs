@@ -619,9 +619,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         }
     }
 
-    /// Runs preflight for a single proof.
     #[tracing::instrument(name = "execute_preflight", skip_all)]
-    pub fn run_preflight<TS>(
+    fn run_preflight_without_merkle<TS>(
         &self,
         mut sponge: TS,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
@@ -646,6 +645,35 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         }
         preflight.transcript = sponge.into_log();
 
+        preflight
+    }
+
+    /// Runs preflight for a single proof.
+    #[tracing::instrument(name = "execute_preflight", skip_all)]
+    pub fn run_preflight<TS>(
+        &self,
+        sponge: TS,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> Preflight
+    where
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    {
+        let mut preflight = self.run_preflight_without_merkle(sponge, child_vk, proof);
+        Self::apply_merkle_precomputation(proof, &mut preflight);
+
+        preflight
+    }
+
+    /// Computes merkle precomputation (hashing opened rows) and writes results
+    /// into the preflight. When `cuda` is enabled, this launches GPU kernels on
+    /// the default stream and must not be called from parallel threads.
+    #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
+    pub fn apply_merkle_precomputation(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &mut Preflight,
+    ) {
         #[cfg(feature = "cuda")]
         let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof);
         #[cfg(not(feature = "cuda"))]
@@ -655,8 +683,6 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
         preflight.initial_row_states = merkle_precomputation.initial_row_states;
         preflight.codeword_states = merkle_precomputation.codeword_states;
-
-        preflight
     }
 
     #[cfg_attr(feature = "cuda", allow(dead_code))]
@@ -1046,7 +1072,14 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
                     let span = span.clone();
                     s.spawn(move || {
                         let _guard = span.enter();
-                        self.run_preflight(sponge, child_vk, proof)
+                        #[cfg(feature = "cuda")]
+                        {
+                            self.run_preflight_without_merkle(sponge, child_vk, proof)
+                        }
+                        #[cfg(not(feature = "cuda"))]
+                        {
+                            self.run_preflight(sponge, child_vk, proof)
+                        }
                     })
                 })
                 .collect();
@@ -1055,6 +1088,10 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
                 .map(|h| h.join().unwrap())
                 .collect::<Vec<_>>()
         });
+        #[cfg(feature = "cuda")]
+        for (proof, preflight) in proofs.iter().zip(preflights.iter_mut()) {
+            Self::apply_merkle_precomputation(proof, preflight);
+        }
 
         if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
             // WARNING: For convenience we use the fact that the last transcript operation should be
@@ -1298,7 +1335,7 @@ pub mod cuda_tracegen {
                         let span = span.clone();
                         s.spawn(move || {
                             let _guard = span.enter();
-                            self.run_preflight(sponge, child_vk, proof)
+                            self.run_preflight_without_merkle(sponge, child_vk, proof)
                         })
                     })
                     .collect();
@@ -1307,6 +1344,11 @@ pub mod cuda_tracegen {
                     .map(|h| h.join().unwrap())
                     .collect::<Vec<_>>()
             });
+
+            // Merkle precomputation launches CUDA kernels, so run serially on main thread.
+            for (proof, preflight) in proofs.iter().zip(preflights_cpu.iter_mut()) {
+                Self::apply_merkle_precomputation(proof, preflight);
+            }
 
             if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
                 // WARNING: For convenience we use the fact that the last transcript operation
