@@ -1382,7 +1382,7 @@ impl RowMajorChip<F> for WhirModuleChip {
 mod cuda_tracegen {
     use std::cmp;
 
-    use openvm_cuda_backend::GpuBackend;
+    use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
     use openvm_cuda_common::d_buffer::DeviceBuffer;
     use openvm_poseidon2_air::POSEIDON2_WIDTH;
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
@@ -1394,7 +1394,7 @@ mod cuda_tracegen {
             preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr, vk::VerifyingKeyGpu,
             GlobalCtxGpu,
         },
-        tracegen::cuda::{generate_gpu_proving_ctx, StandardTracegenGpuCtx},
+        tracegen::{cuda::StandardTracegenGpuCtx, RowMajorChip, StandardTracegenCtx},
         whir::cuda_abi::PoseidonStatePair,
     };
 
@@ -1640,7 +1640,10 @@ mod cuda_tracegen {
                         },
                         ctx.2,
                     );
-                    generate_gpu_proving_ctx(self, &cpu_ctx, required_height)
+                    let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
+                    trace.map(|m| {
+                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                    })
                 }
             }
         }
@@ -1708,18 +1711,42 @@ mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
-            // Then run CPU tracegen for the remaining AIRs in parallel.
+            // Phase 1: CPU trace generation in parallel
+            let cpu_proofs = ctx.0.proofs.iter().map(|p| &p.cpu).collect_vec();
+            let cpu_preflights = ctx.0.preflights.iter().map(|p| &p.cpu).collect_vec();
+            let cpu_ctx = (
+                StandardTracegenCtx {
+                    vk: &ctx.0.vk.cpu,
+                    proofs: &cpu_proofs,
+                    preflights: &cpu_preflights,
+                },
+                ctx.2,
+            );
             let span = tracing::Span::current();
-            let indexed_cpu_ctxs = cpu_chips
+            let indexed_cpu_rm_traces = cpu_chips
                 .par_iter()
                 .map(|chip| {
                     let _guard = span.enter();
                     (
                         chip.index(),
-                        chip.generate_proving_ctx(
-                            &ctx,
+                        RowMajorChip::generate_trace(
+                            chip,
+                            &cpu_ctx,
                             required_heights.map(|heights| heights[chip.index()]),
                         ),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            // Phase 2: H2D transfer serially on main thread
+            let indexed_cpu_ctxs = indexed_cpu_rm_traces
+                .into_iter()
+                .map(|(idx, trace)| {
+                    (
+                        idx,
+                        trace.map(|m| {
+                            AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                        }),
                     )
                 })
                 .collect::<Vec<_>>();
