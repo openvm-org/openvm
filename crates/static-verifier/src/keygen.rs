@@ -6,6 +6,7 @@ use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::proof::Proof,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     circuit::StaticVerifierCircuit,
@@ -87,8 +88,6 @@ impl StaticVerifierProvingKey {
 use halo2_base::{
     gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr,
 };
-#[cfg(feature = "evm-prove")]
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "evm-prove")]
 use snark_verifier_sdk::{
     evm::{gen_evm_proof_shplonk, gen_evm_verifier_sol_code},

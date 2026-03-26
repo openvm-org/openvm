@@ -5,14 +5,13 @@ use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
 };
+use openvm_continuations::RootSC;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     StarkEngine,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use serde::{Deserialize, Serialize};
-
-use openvm_continuations::RootSC;
 
 use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use halo2_base::halo2_proofs::SerdeFormat;
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
@@ -21,6 +20,7 @@ use halo2_base::{
         transcript::{
             Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
         },
+        SerdeFormat,
     },
 };
 use openvm_stark_sdk::{

@@ -335,7 +335,11 @@ fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
     Ok(get_target_dir(&cargo_args.target_dir, &manifest_path))
 }
 
-fn maybe_with_cached_keys(sdk: Sdk, agg_pk: &Option<PathBuf>, cargo_args: &RunCargoArgs) -> Result<Sdk> {
+fn maybe_with_cached_keys(
+    sdk: Sdk,
+    agg_pk: &Option<PathBuf>,
+    cargo_args: &RunCargoArgs,
+) -> Result<Sdk> {
     let target_dir = target_dir_from_cargo_args(cargo_args)?;
     let mut sdk = if let Some(agg_pk) = agg_pk {
         sdk.with_agg_pk(read_object_from_file(agg_pk)?)
