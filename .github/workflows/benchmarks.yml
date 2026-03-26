@@ -48,7 +48,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  OPENVM_FAST_TEST: "1"
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"

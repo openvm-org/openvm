@@ -8,7 +8,10 @@ use openvm_stark_backend::codec::{Decode, Encode};
 use serde::{de::DeserializeOwned, Serialize};
 
 #[cfg(feature = "evm-prove")]
-use crate::{types::EvmHalo2Verifier, OPENVM_VERSION};
+use crate::{
+    types::{EvmHalo2Verifier, EvmVerifierByteCode},
+    OPENVM_VERSION,
+};
 
 pub const EVM_HALO2_VERIFIER_INTERFACE_NAME: &str = "IOpenVmHalo2Verifier.sol";
 pub const EVM_HALO2_VERIFIER_PARENT_NAME: &str = "Halo2Verifier.sol";

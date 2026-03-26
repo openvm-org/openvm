@@ -68,8 +68,15 @@ impl DeferralProver {
             agg_config.params.internal,
             true,
         );
-        let def_hook_prover =
-            DeferralHookProver::new::<E>(internal_recursive_prover.get_vk(), hook_params);
+        let internal_recursive_cached_commit = internal_recursive_prover
+            .get_dag_commit(true)
+            .cached_commit
+            .into();
+        let def_hook_prover = DeferralHookProver::new::<E>(
+            internal_recursive_prover.get_vk(),
+            internal_recursive_cached_commit,
+            hook_params,
+        );
         Self {
             single_circuit_provers: vec![single_circuit_prover],
             internal_recursive_prover,
