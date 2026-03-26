@@ -44,6 +44,7 @@ pub struct InternalLayerMetadata {
 }
 
 impl AggProver {
+    #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
     pub fn new(
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_config: AggregationConfig,
