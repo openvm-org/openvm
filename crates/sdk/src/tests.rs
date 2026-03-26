@@ -283,19 +283,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     };
 
     // Root verifier params matching pipeline_cell_count_profiling in static-verifier
-    let root_params = SystemParams::new(
-        4,  // log_blowup
-        2,  // l_skip
-        19, // n_stack
-        9,  // w_stack
-        10, // max_log_final_poly_len
-        20, // folding pow
-        20, // mu pow
-        WhirProximityStrategy::ListDecoding { m: 2 },
-        100,
-        log_up_security_params_baby_bear_100_bits(),
-    );
-
+    let root_params = root_params_with_100_bits_security();
     let cache_dir = std::env::var("OPENVM_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
     std::fs::create_dir_all(&cache_dir)?;
 
