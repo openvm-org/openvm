@@ -619,11 +619,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         }
     }
 
-    /// Runs preflight for a single proof.
-    /// When `cuda` is enabled, merkle precomputation is excluded here and must
-    /// be applied separately via a serial call to avoid cross-thread kernel launches.
     #[tracing::instrument(name = "execute_preflight", skip_all)]
-    pub fn run_preflight<TS>(
+    fn run_preflight_without_merkle<TS>(
         &self,
         mut sponge: TS,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
@@ -648,9 +645,22 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         }
         preflight.transcript = sponge.into_log();
 
-        // On CPU, merkle precomputation is pure CPU work and safe to run in parallel.
-        // On CUDA, it launches GPU kernels and is run serially after the thread scope.
-        #[cfg(not(feature = "cuda"))]
+        preflight
+    }
+
+    /// Runs preflight for a single proof.
+    #[tracing::instrument(name = "execute_preflight", skip_all)]
+    pub fn run_preflight<TS>(
+        &self,
+        sponge: TS,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> Preflight
+    where
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    {
+        let mut preflight = self.run_preflight_without_merkle(sponge, child_vk, proof);
         Self::apply_merkle_precomputation(proof, &mut preflight);
 
         preflight
@@ -659,6 +669,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     /// Computes merkle precomputation (hashing opened rows) and writes results
     /// into the preflight. When `cuda` is enabled, this launches GPU kernels on
     /// the default stream and must not be called from parallel threads.
+    #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
     pub fn apply_merkle_precomputation(
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
@@ -1061,7 +1072,14 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
                     let span = span.clone();
                     s.spawn(move || {
                         let _guard = span.enter();
-                        self.run_preflight(sponge, child_vk, proof)
+                        #[cfg(feature = "cuda")]
+                        {
+                            self.run_preflight_without_merkle(sponge, child_vk, proof)
+                        }
+                        #[cfg(not(feature = "cuda"))]
+                        {
+                            self.run_preflight(sponge, child_vk, proof)
+                        }
                     })
                 })
                 .collect();
@@ -1070,9 +1088,6 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
                 .map(|h| h.join().unwrap())
                 .collect::<Vec<_>>()
         });
-
-        // When cuda feature is enabled, run_preflight skips merkle precomputation
-        // (it's done serially to avoid cross-thread CUDA kernel launches).
         #[cfg(feature = "cuda")]
         for (proof, preflight) in proofs.iter().zip(preflights.iter_mut()) {
             Self::apply_merkle_precomputation(proof, preflight);
@@ -1320,7 +1335,7 @@ pub mod cuda_tracegen {
                         let span = span.clone();
                         s.spawn(move || {
                             let _guard = span.enter();
-                            self.run_preflight(sponge, child_vk, proof)
+                            self.run_preflight_without_merkle(sponge, child_vk, proof)
                         })
                     })
                     .collect();
