@@ -12,6 +12,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use serde::{Deserialize, Serialize};
 
+use openvm_continuations::RootSC;
+
 use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 
 pub mod dummy;
@@ -35,6 +37,12 @@ pub struct AggProvingKey {
     pub leaf_pk: Arc<MultiStarkProvingKey<SC>>,
     pub internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,
     pub internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RootProvingKey {
+    pub root_pk: Arc<MultiStarkProvingKey<RootSC>>,
+    pub trace_heights: Vec<usize>,
 }
 
 impl<VC> AppProvingKey<VC>
@@ -93,7 +101,7 @@ where
 
 /// Attention: the serialized size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
     pub verifier: Arc<openvm_static_verifier::StaticVerifierProvingKey>,

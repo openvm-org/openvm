@@ -6,8 +6,6 @@ use std::{
 use eyre::Result;
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
 use openvm_sdk::config::AppConfig;
-#[cfg(feature = "evm-prove")]
-use openvm_sdk::keygen::{AggProvingKey, Halo2ProvingKey};
 use openvm_sdk_config::SdkVmConfig;
 use serde::de::DeserializeOwned;
 
@@ -32,15 +30,6 @@ pub fn read_config_toml_or_default(config: impl AsRef<Path>) -> Result<AppConfig
         );
         Ok(default_app_config())
     }
-}
-
-#[cfg(feature = "evm-prove")]
-pub fn read_default_agg_and_halo2_pk() -> Result<(AggProvingKey, Halo2ProvingKey)> {
-    use openvm_sdk::fs::read_object_from_file;
-
-    let agg_pk = read_object_from_file(crate::default::default_agg_stark_pk_path())?;
-    let halo2_pk = read_object_from_file(crate::default::default_agg_halo2_pk_path())?;
-    Ok((agg_pk, halo2_pk))
 }
 
 pub fn find_manifest_dir(mut current_dir: PathBuf) -> Result<PathBuf> {
@@ -79,17 +68,34 @@ pub fn get_target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
     target_dir.join("openvm").join(profile).to_path_buf()
 }
 
+pub fn get_openvm_dir(target_dir: &Path) -> PathBuf {
+    target_dir.join("openvm")
+}
+
 pub fn get_app_pk_path(target_dir: &Path) -> PathBuf {
-    target_dir.join("openvm").join(DEFAULT_APP_PK_NAME)
+    get_openvm_dir(target_dir).join(DEFAULT_APP_PK_NAME)
 }
 
 pub fn get_app_vk_path(target_dir: &Path) -> PathBuf {
-    target_dir.join("openvm").join(DEFAULT_APP_VK_NAME)
+    get_openvm_dir(target_dir).join(DEFAULT_APP_VK_NAME)
+}
+
+pub fn get_agg_pk_path(target_dir: &Path) -> PathBuf {
+    get_openvm_dir(target_dir).join("agg.pk")
+}
+
+pub fn get_agg_vk_path(target_dir: &Path) -> PathBuf {
+    get_openvm_dir(target_dir).join("agg.vk")
 }
 
 pub fn get_app_commit_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
     let commit_name = target_name.with_extension("commit.json");
     target_output_dir.join(commit_name)
+}
+
+pub fn get_app_baseline_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
+    let baseline_name = target_name.with_extension("baseline.json");
+    target_output_dir.join(baseline_name)
 }
 
 // Given the arguments to a run command, this function isolates the executable to

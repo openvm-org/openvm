@@ -24,6 +24,7 @@ use openvm_stark_sdk::{
     },
 };
 use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip},
@@ -108,7 +109,7 @@ impl fmt::Display for StaticCircuitParamsError {
 impl std::error::Error for StaticCircuitParamsError {}
 
 /// Parameters fixed host-side for the static verifier (child VK, trace heights, AIR permutation).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StaticVerifierCircuit {
     pub root_vk: MultiStarkVerifyingKey<RootConfig>,
     /// The [RootConfig] hash onion commitment to the internal-recursive verifier circuit's

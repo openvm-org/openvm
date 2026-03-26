@@ -72,34 +72,33 @@ pub struct EvmHalo2Verifier {
     pub artifact: EvmVerifierByteCode,
 }
 
-/// Application execution commitment pair (big-endian 32-byte values).
-#[cfg(feature = "evm-prove")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AppExecutionCommit {
-    #[serde(with = "hex_bytes32")]
-    pub app_exe_commit: openvm_continuations::CommitBytes,
-    #[serde(with = "hex_bytes32")]
-    pub app_vm_commit: openvm_continuations::CommitBytes,
-}
-
 /// Custom serde for CommitBytes as hex-encoded [u8; 32].
-#[cfg(feature = "evm-prove")]
-mod hex_bytes32 {
+pub mod hex_bytes32 {
     use openvm_continuations::CommitBytes;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<S: Serializer>(val: &CommitBytes, s: S) -> Result<S::Ok, S::Error> {
-        hex::encode(val.as_slice()).serialize(s)
+        format!("0x{}", hex::encode(val.as_slice())).serialize(s)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<CommitBytes, D::Error> {
         let hex_str = String::deserialize(d)?;
+        let hex_str = hex_str.strip_prefix("0x").unwrap_or(&hex_str);
         let bytes: [u8; 32] = hex::decode(hex_str)
             .map_err(serde::de::Error::custom)?
             .try_into()
             .map_err(|_| serde::de::Error::custom("expected 32 bytes"))?;
         Ok(CommitBytes::new(bytes))
     }
+}
+
+/// Application execution commitment pair (big-endian 32-byte values).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppExecutionCommit {
+    #[serde(with = "hex_bytes32")]
+    pub app_exe_commit: openvm_continuations::CommitBytes,
+    #[serde(with = "hex_bytes32")]
+    pub app_vk_commit: openvm_continuations::CommitBytes,
 }
 
 #[cfg(feature = "evm-prove")]
@@ -153,7 +152,7 @@ impl EvmProof {
             publicValues: user_public_values.into(),
             proofData: proof_data_bytes.into(),
             appExeCommit: (*app_commit.app_exe_commit.as_slice()).into(),
-            appVmCommit: (*app_commit.app_vm_commit.as_slice()).into(),
+            appVmCommit: (*app_commit.app_vk_commit.as_slice()).into(),
         }
         .abi_encode()
     }
@@ -232,7 +231,7 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::new(app_exe_bytes),
-            app_vm_commit: CommitBytes::new(app_vm_bytes),
+            app_vk_commit: CommitBytes::new(app_vm_bytes),
         };
 
         Self {
@@ -273,7 +272,7 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         app_exe_bytes.reverse();
         let app_exe_fr = Fr::from_bytes(&app_exe_bytes).unwrap();
 
-        let mut app_vm_bytes = *app_commit.app_vm_commit.as_slice();
+        let mut app_vm_bytes = *app_commit.app_vk_commit.as_slice();
         app_vm_bytes.reverse();
         let app_vm_fr = Fr::from_bytes(&app_vm_bytes).unwrap();
 

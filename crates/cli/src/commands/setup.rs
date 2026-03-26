@@ -8,23 +8,16 @@ use aws_sdk_s3::Client;
 use clap::Parser;
 use eyre::{eyre, Result};
 use openvm_sdk::{
-    config::DEFAULT_HALO2_VERIFIER_K,
+    config::AggregationSystemParams,
     fs::{
-        read_object_from_file, write_evm_halo2_verifier_to_folder, write_object_to_file,
-        EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
-        EVM_HALO2_VERIFIER_PARENT_NAME,
+        write_evm_halo2_verifier_to_folder, EVM_HALO2_VERIFIER_BASE_NAME,
+        EVM_HALO2_VERIFIER_INTERFACE_NAME, EVM_HALO2_VERIFIER_PARENT_NAME,
     },
-    Sdk,
+    Sdk, OPENVM_VERSION,
 };
-use static_assertions::const_assert;
+use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 
-use crate::{
-    default::{
-        default_agg_halo2_pk_path, default_agg_stark_pk_path, default_agg_stark_vk_path,
-        default_asm_path, default_evm_halo2_verifier_path, default_params_dir,
-    },
-    util::read_default_agg_and_halo2_pk,
-};
+use crate::default::{default_evm_halo2_verifier_path, default_params_dir};
 
 /// The maximum value of `k` to download Halo2 KZG trusted setup parameters for. This depends on the
 /// default verifier circuit and wrapper circuit sizes.
@@ -39,115 +32,53 @@ pub struct SetupCmd {
     #[arg(
         long,
         default_value = "false",
-        help = "use --evm to also generate proving keys for EVM verifier"
+        help = "Force verifier regeneration even if the verifier contract already exists"
     )]
-    pub evm: bool,
-    #[arg(
-        long,
-        default_value = "false",
-        help = "force keygen even if the proving keys already exist"
-    )]
-    pub force_agg_keygen: bool,
+    pub force: bool,
 }
 
 impl SetupCmd {
     pub async fn run(&self) -> Result<()> {
-        let default_agg_stark_pk_path = default_agg_stark_pk_path();
-        let default_agg_stark_vk_path = default_agg_stark_vk_path();
-        let default_evm_halo2_verifier_path = default_evm_halo2_verifier_path();
-        let default_asm_path = default_asm_path();
-        if !self.evm {
-            if PathBuf::from(&default_agg_stark_pk_path).exists() && !self.force_agg_keygen {
-                println!("Aggregation stark proving key already exists");
-                return Ok(());
-            }
-            // agg keygen does not depend on the app config
-            let sdk = Sdk::standard();
-            let (agg_pk, agg_vk) = sdk.agg_keygen()?;
-
-            println!(
-                "Writing STARK aggregation proving key to {}",
-                &default_agg_stark_pk_path
-            );
-            write_object_to_file(default_agg_stark_pk_path, agg_pk)?;
-            println!(
-                "Writing STARK aggregation verifying key to {}",
-                &default_agg_stark_vk_path
-            );
-            write_object_to_file(default_agg_stark_vk_path, agg_vk)?;
-
-            println!("Generating root verifier ASM...");
-            let root_verifier_asm = sdk.generate_root_verifier_asm();
-
-            println!("Writing root verifier ASM to {}", &default_asm_path);
-            write(&default_asm_path, root_verifier_asm)?;
-        } else {
-            let default_agg_halo2_pk_path = default_agg_halo2_pk_path();
-            if PathBuf::from(&default_agg_stark_pk_path).exists()
-                && PathBuf::from(&default_agg_halo2_pk_path).exists()
-                && PathBuf::from(&default_evm_halo2_verifier_path)
-                    .join(EVM_HALO2_VERIFIER_PARENT_NAME)
-                    .exists()
-                && PathBuf::from(&default_evm_halo2_verifier_path)
-                    .join(EVM_HALO2_VERIFIER_BASE_NAME)
-                    .exists()
-                && PathBuf::from(&default_evm_halo2_verifier_path)
-                    .join("interfaces")
-                    .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
-                    .exists()
-            {
-                println!("Aggregation proving key and verifier contract already exist");
-                return Ok(());
-            } else if !Self::check_solc_installed() {
-                return Err(eyre!(
-                    "solc is not installed, please install solc to continue"
-                ));
-            }
-
-            const_assert!(DEFAULT_HALO2_VERIFIER_K <= MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD);
-            Self::download_params(10, MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD as u32).await?;
-            // halo2 keygen does not depend on the app config
-            let sdk = Sdk::standard();
-
-            let agg_vk = if !self.force_agg_keygen
-                && PathBuf::from(&default_agg_stark_pk_path).exists()
-                && PathBuf::from(&default_agg_stark_vk_path).exists()
-                && PathBuf::from(&default_agg_halo2_pk_path).exists()
-            {
-                let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk()?;
-                sdk.set_agg_pk(agg_pk)
-                    .map_err(|_| eyre!("agg_pk already existed"))?;
-                sdk.set_halo2_pk(halo2_pk)
-                    .map_err(|_| eyre!("halo2_pk already existed"))?;
-                read_object_from_file(&default_agg_stark_vk_path)?
-            } else {
-                println!("Generating proving key...");
-                let (_agg_pk, agg_vk) = sdk.agg_keygen()?;
-                let _halo2_pk = sdk.halo2_pk();
-                agg_vk
-            };
-
-            println!("Generating root verifier ASM...");
-            let root_verifier_asm = sdk.generate_root_verifier_asm();
-
-            println!("Generating verifier contract...");
-            let verifier = sdk.generate_halo2_verifier_solidity()?;
-
-            println!("Writing stark proving key to file...");
-            write_object_to_file(&default_agg_stark_pk_path, sdk.agg_pk())?;
-
-            println!("Writing stark verifying key to file...");
-            write_object_to_file(&default_agg_stark_vk_path, agg_vk)?;
-
-            println!("Writing halo2 proving key to file...");
-            write_object_to_file(&default_agg_halo2_pk_path, sdk.halo2_pk())?;
-
-            println!("Writing root verifier ASM to file...");
-            write(&default_asm_path, root_verifier_asm)?;
-
-            println!("Writing verifier contract to file...");
-            write_evm_halo2_verifier_to_folder(verifier, &default_evm_halo2_verifier_path)?;
+        if !Self::check_solc_installed() {
+            return Err(eyre!(
+                "solc is not installed, please install solc to continue"
+            ));
         }
+
+        Self::download_params(10, MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD as u32).await?;
+
+        let verifier_dir = PathBuf::from(default_evm_halo2_verifier_path());
+        let versioned_verifier_dir = verifier_dir.join("src").join(format!("v{OPENVM_VERSION}"));
+        let interface_dir = versioned_verifier_dir.join("interfaces");
+
+        if !self.force
+            && versioned_verifier_dir
+                .join(EVM_HALO2_VERIFIER_PARENT_NAME)
+                .exists()
+            && versioned_verifier_dir
+                .join(EVM_HALO2_VERIFIER_BASE_NAME)
+                .exists()
+            && interface_dir
+                .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
+                .exists()
+        {
+            println!(
+                "EVM verifier artifacts already exist in {}",
+                verifier_dir.display()
+            );
+            return Ok(());
+        }
+
+        let sdk = Sdk::standard(
+            app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT),
+            AggregationSystemParams::default(),
+        );
+
+        println!("Generating verifier contract...");
+        let verifier = sdk.generate_halo2_verifier_solidity()?;
+
+        println!("Writing verifier contract to {}", verifier_dir.display());
+        write_evm_halo2_verifier_to_folder(verifier, &verifier_dir)?;
         Ok(())
     }
 

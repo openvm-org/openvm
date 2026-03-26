@@ -23,7 +23,9 @@ openvm-sdk = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-circuit = { workspace = true }
+openvm-continuations = { workspace = true, features = ["root-prover"] }
 openvm-sdk-config = { workspace = true }
+p3-bn254 = { workspace = true }
 
 # TODO: revisit these pinned AWS SDK versions after the next MSRV update.
 # Keep pinned for rustc 1.90.0 compatibility, but avoid legacy AWS default features
@@ -46,8 +48,7 @@ include_dir = "0.7"
 static_assertions.workspace = true
 
 [features]
-# TODO: restore "evm-verify" when evm deps compile on this branch
-default = ["parallel", "jemalloc", "metrics"]
+default = ["parallel", "jemalloc", "evm-verify", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
