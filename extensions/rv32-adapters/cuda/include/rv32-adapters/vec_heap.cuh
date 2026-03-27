@@ -88,12 +88,12 @@ struct Rv32VecHeapAdapter {
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv32VecHeapAdapterRecord<
+        const Rv32VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
             READ_SIZE,
-            WRITE_SIZE> record
+            WRITE_SIZE> &record
     ) {
         const size_t limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits;
 

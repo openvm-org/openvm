@@ -41,7 +41,7 @@ openvm-rv32-adapters = { workspace = true }
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
-default = ["cuda"]
+default = []
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-common",

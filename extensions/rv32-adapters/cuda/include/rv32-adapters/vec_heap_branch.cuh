@@ -53,7 +53,7 @@ struct Rv32VecHeapBranchAdapter {
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ> record
+        const Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ> &record
     ) {
         const size_t limb_shift_bits = RV32_REGISTER_TOTAL_BITS - pointer_max_bits;
 

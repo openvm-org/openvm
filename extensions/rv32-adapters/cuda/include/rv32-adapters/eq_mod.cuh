@@ -50,7 +50,7 @@ struct Rv32IsEqualModAdapter {
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv32IsEqualModAdapterRecord<NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS> record
+        const Rv32IsEqualModAdapterRecord<NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS> &record
     ) {
         const uint32_t ts = record.timestamp;
 
