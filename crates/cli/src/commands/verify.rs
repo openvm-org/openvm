@@ -10,13 +10,9 @@ use openvm_sdk::{
 };
 
 use super::KeygenCargoArgs;
-use crate::{
-    default::default_evm_halo2_verifier_path,
-    util::{
-        get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_files_with_ext,
-        get_manifest_path_and_dir, get_single_target_name_raw, get_target_dir,
-        get_target_output_dir,
-    },
+use crate::util::{
+    get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_files_with_ext,
+    get_manifest_path_and_dir, get_single_target_name_raw, get_target_dir, get_target_output_dir,
 };
 
 #[derive(Parser)]
@@ -227,7 +223,8 @@ impl VerifyCmd {
             VerifySubCommand::Evm { proof } => {
                 use openvm_sdk::{fs::read_evm_halo2_verifier_from_folder, types::EvmProof};
 
-                let verifier_path = PathBuf::from(default_evm_halo2_verifier_path());
+                let verifier_path =
+                    PathBuf::from(crate::default::default_evm_halo2_verifier_path());
                 let evm_verifier = read_evm_halo2_verifier_from_folder(&verifier_path).map_err(
                     |e| {
                         eyre::eyre!(
