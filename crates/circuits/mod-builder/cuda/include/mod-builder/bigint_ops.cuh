@@ -449,6 +449,83 @@ struct BigUintGpu {
         remainder = temp_rem;
     }
 
+    __device__ BigUintGpu div_quotient(const BigUintGpu &divisor) const {
+        uint32_t mask = get_limb_mask(limb_bits);
+        BigUintGpu quotient(limb_bits);
+        BigUintGpu zero(limb_bits);
+
+        quotient.limb_bits = limb_bits;
+        quotient.num_limbs = 1;
+        for (uint32_t i = 0; i < MAX_LIMBS; i++) {
+            quotient.limbs[i] = 0;
+        }
+
+        if (divisor == zero) {
+            return quotient;
+        }
+        if (*this < divisor) {
+            return quotient;
+        }
+
+        int msb_pos = -1;
+        for (int limb = num_limbs - 1; limb >= 0; limb--) {
+            uint32_t v = limbs[limb] & mask;
+            if (v != 0) {
+                int leading = __clz(v);
+                int bit_index = 31 - leading;
+                msb_pos = limb * limb_bits + bit_index;
+                break;
+            }
+        }
+
+        if (msb_pos == -1) {
+            return quotient;
+        }
+
+        BigUintGpu temp_rem(limb_bits);
+        temp_rem.num_limbs = 1;
+
+        for (int bit_pos = msb_pos; bit_pos >= 0; bit_pos--) {
+            uint32_t carry = 0;
+            for (uint32_t i = 0; i < temp_rem.num_limbs; i++) {
+                uint64_t shifted = ((uint64_t)temp_rem.limbs[i] << 1) | carry;
+                temp_rem.limbs[i] = shifted & mask;
+                carry = shifted >> limb_bits;
+            }
+            if (carry > 0 && temp_rem.num_limbs < MAX_LIMBS) {
+                temp_rem.limbs[temp_rem.num_limbs] = carry;
+                temp_rem.num_limbs++;
+            }
+
+            uint32_t limb_idx = bit_pos / limb_bits;
+            uint32_t bit_idx = bit_pos % limb_bits;
+            uint32_t bit = (limbs[limb_idx] >> bit_idx) & 1;
+            temp_rem.limbs[0] = (temp_rem.limbs[0] & ~1U) | bit;
+
+            temp_rem.normalize();
+
+            if (temp_rem >= divisor) {
+                temp_rem -= divisor;
+
+                uint32_t q_limb_idx = bit_pos / limb_bits;
+                uint32_t q_bit_idx = bit_pos % limb_bits;
+                if (q_limb_idx < MAX_LIMBS) {
+                    quotient.limbs[q_limb_idx] |= (1U << q_bit_idx);
+                }
+            }
+        }
+
+        quotient.num_limbs = 1;
+        for (int i = MAX_LIMBS - 1; i >= 0; i--) {
+            if (quotient.limbs[i] != 0) {
+                quotient.num_limbs = i + 1;
+                break;
+            }
+        }
+
+        return quotient;
+    }
+
     __device__ BigUintGpu mod_reduce(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
         BigUintGpu result(limb_bits);
         const uint32_t mask = get_limb_mask(limb_bits);
@@ -648,8 +725,7 @@ struct BigIntGpu {
 
     __device__ BigIntGpu div_biguint(const BigUintGpu &divisor) const {
         BigIntGpu result(mag.limb_bits);
-        BigUintGpu remainder_mag;
-        mag.divrem(result.mag, remainder_mag, divisor);
+        result.mag = mag.div_quotient(divisor);
         result.is_negative = is_negative;
         return result;
     }
