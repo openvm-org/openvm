@@ -742,6 +742,15 @@ mod cuda_tests {
         BigUint::from_bytes_le(&bytes) % prime
     }
 
+    fn sample_nonzero_input(prime: &BigUint, rng: &mut impl RngCore) -> BigUint {
+        loop {
+            let value = sample_input(prime, rng);
+            if value != BigUint::from(0u32) {
+                return value;
+            }
+        }
+    }
+
     fn align_up(value: usize, alignment: usize) -> usize {
         (value + alignment - 1) & !(alignment - 1)
     }
@@ -856,6 +865,31 @@ mod cuda_tests {
         }
     }
 
+    fn flags_for_div_select_opcode(opcode: u8) -> Vec<bool> {
+        match opcode {
+            0 => vec![true, false],
+            1 => vec![false, true],
+            _ => vec![false, false],
+        }
+    }
+
+    fn make_div_select_chip(builder: Rc<RefCell<ExprBuilder>>) -> ExprBuilder {
+        let x1 = ExprBuilder::new_input(builder.clone());
+        let x2 = ExprBuilder::new_input(builder.clone());
+        let x3 = x1.clone() / x2.clone();
+        let x4 = x1.clone() + x2.clone();
+        let (is_div_flag, is_mul_flag) = {
+            let mut builder = builder.borrow_mut();
+            let is_div = builder.new_flag();
+            let is_mul = builder.new_flag();
+            (is_div, is_mul)
+        };
+        let x5 = FieldVariable::select(is_mul_flag, &x4, &x1);
+        let mut x6 = FieldVariable::select(is_div_flag, &x3, &x5);
+        x6.save();
+        builder.borrow().clone()
+    }
+
     #[test]
     fn test_cuda_field_expr_tracegen_random_select() {
         let prime = secp256k1_coord_prime();
@@ -874,6 +908,58 @@ mod cuda_tests {
                         sample_input(&prime, &mut rng),
                     ],
                     flags: flags_for_opcode(opcode),
+                }
+            })
+            .collect();
+
+        run_cuda_tracegen_parity(&expr, range_checker, vec![0, 1, 2], vec![0, 1], &cases);
+    }
+
+    #[test]
+    fn test_cuda_field_expr_tracegen_random_div() {
+        let prime = secp256k1_coord_prime();
+        let (_, builder) = setup(&prime);
+
+        let x1 = ExprBuilder::new_input(builder.clone());
+        let x2 = ExprBuilder::new_input(builder.clone());
+        let _out = (x1.clone().square().int_mul(7)) / x2.clone();
+
+        let builder = builder.borrow().clone();
+        let (expr, range_checker, _) = create_field_expr_with_setup(builder);
+
+        let mut rng = create_seeded_rng();
+        let cases: Vec<TraceCase> = (0..100)
+            .map(|_| TraceCase {
+                opcode: 0,
+                inputs: vec![
+                    sample_input(&prime, &mut rng),
+                    sample_nonzero_input(&prime, &mut rng),
+                ],
+                flags: vec![],
+            })
+            .collect();
+
+        run_cuda_tracegen_parity(&expr, range_checker, vec![0], vec![], &cases);
+    }
+
+    #[test]
+    fn test_cuda_field_expr_tracegen_random_select_div() {
+        let prime = secp256k1_coord_prime();
+        let (_, builder) = setup(&prime);
+        let builder = make_div_select_chip(builder);
+        let (expr, range_checker, _) = create_field_expr_with_flags_setup(builder);
+
+        let mut rng = create_seeded_rng();
+        let cases: Vec<TraceCase> = (0..100)
+            .map(|i| {
+                let opcode = (i % 3) as u8;
+                TraceCase {
+                    opcode,
+                    inputs: vec![
+                        sample_input(&prime, &mut rng),
+                        sample_nonzero_input(&prime, &mut rng),
+                    ],
+                    flags: flags_for_div_select_opcode(opcode),
                 }
             })
             .collect();
