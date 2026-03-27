@@ -32,9 +32,8 @@ __device__ __noinline__ void generate_subrow_gpu(
     uint32_t *vars,
     uint32_t *all_carries,
     BigUintGpu *compute_scratch,
-    uint32_t *compute_visit_epoch,
     uint32_t *compute_node_stack,
-    uint8_t *compute_phase_stack,
+    uint8_t *compute_live_nodes,
     BigIntGpu *constraint_bigint_scratch,
     OverflowInt *constraint_overflow_scratch,
     VariableRangeChecker &range_checker,
@@ -50,28 +49,31 @@ __device__ __noinline__ void generate_subrow_gpu(
     prime.normalize();
     OverflowInt prime_overflow(prime, prime.num_limbs);
 
-    for (uint32_t var = 0; var < meta->expr_meta.num_vars; var++) {
-        uint32_t root = meta->compute_root_indices[var];
-        uint32_t *result = &vars[var * num_limbs];
-
-        compute_flat_lazy(
-            result,
+    memset(compute_live_nodes, 0, (size_t)meta->compute_pool_size * sizeof(uint8_t));
+    if (meta->compute_pool_size > 0 && meta->expr_meta.num_vars > 0) {
+        mark_compute_live_nodes(
             meta->compute_expr_ops,
-            root,
+            flags,
+            meta->compute_root_indices,
+            meta->expr_meta.num_vars,
+            compute_live_nodes,
+            compute_node_stack,
+            meta->compute_pool_size
+        );
+        evaluate_compute_pool_flat(
+            meta->compute_expr_ops,
+            meta->compute_pool_size,
             &meta->expr_meta,
             inputs,
             vars,
             flags,
             num_limbs,
             limb_bits,
-            prime
-            ,
+            prime,
             compute_scratch,
-            compute_visit_epoch,
-            var + 1,
-            compute_node_stack,
-            compute_phase_stack,
-            meta->compute_pool_size
+            compute_live_nodes,
+            meta->compute_root_indices,
+            meta->expr_meta.num_vars
         );
     }
 
@@ -246,11 +248,9 @@ struct FieldExprCore {
         uint8_t *compute_ptr = scratch_base;
         BigUintGpu *compute_scratch = reinterpret_cast<BigUintGpu *>(compute_ptr);
         compute_ptr += (size_t)meta->compute_pool_size * sizeof(BigUintGpu);
-        uint32_t *compute_visit_epoch = reinterpret_cast<uint32_t *>(compute_ptr);
-        compute_ptr += (size_t)meta->compute_pool_size * sizeof(uint32_t);
         uint32_t *compute_node_stack = reinterpret_cast<uint32_t *>(compute_ptr);
         compute_ptr += (size_t)meta->compute_pool_size * sizeof(uint32_t);
-        uint8_t *compute_phase_stack = compute_ptr;
+        uint8_t *compute_live_nodes = compute_ptr;
 
         uint8_t *constraint_ptr = scratch_base;
         BigIntGpu *constraint_bigint_scratch = reinterpret_cast<BigIntGpu *>(constraint_ptr);
@@ -259,7 +259,6 @@ struct FieldExprCore {
             reinterpret_cast<OverflowInt *>(constraint_ptr);
 
         memset(flags, 0, meta->num_u32_flags * sizeof(bool));
-        memset(compute_visit_epoch, 0, (size_t)meta->compute_pool_size * sizeof(uint32_t));
 
         uint32_t bytes_per_limb = (meta->limb_bits + 7) / 8;
 
@@ -289,9 +288,8 @@ struct FieldExprCore {
             vars,
             all_carries,
             compute_scratch,
-            compute_visit_epoch,
             compute_node_stack,
-            compute_phase_stack,
+            compute_live_nodes,
             constraint_bigint_scratch,
             constraint_overflow_scratch,
             range_checker,

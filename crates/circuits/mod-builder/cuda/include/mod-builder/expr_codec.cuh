@@ -34,150 +34,114 @@ __device__ __forceinline__ uint32_t get_const_offset(const ExprMeta *meta, uint3
     return offset;
 }
 
-__device__ __forceinline__ void push_child_if_needed(
+__device__ __forceinline__ void push_compute_child_if_needed(
     uint32_t child_idx,
-    uint32_t done_mark,
-    uint32_t pending_mark,
     uint32_t pool_size,
-    uint32_t *visit_epoch,
+    uint8_t *live_nodes,
     uint32_t *node_stack,
-    uint8_t *phase_stack,
     uint32_t &stack_len
 ) {
     assert(child_idx < pool_size);
-    uint32_t state = visit_epoch[child_idx];
-    if (state == done_mark || state == pending_mark) {
+    if (live_nodes[child_idx] != 0) {
         return;
     }
 
     assert(stack_len < pool_size);
-    visit_epoch[child_idx] = pending_mark;
+    live_nodes[child_idx] = 1;
     node_stack[stack_len] = child_idx;
-    phase_stack[stack_len] = 0;
     stack_len++;
 }
 
-// Iterative compute evaluator with lazy SELECT semantics.
-__device__ __noinline__ void compute_flat_lazy(
-    uint32_t *result,
+// Mark the live compute subgraph for the current row, preserving lazy SELECT semantics.
+__device__ __noinline__ void mark_compute_live_nodes(
     const ExprOp *expr_ops,
-    uint32_t root_idx,
+    const bool *flags,
+    const uint32_t *root_indices,
+    uint32_t num_roots,
+    uint8_t *live_nodes,
+    uint32_t *node_stack,
+    uint32_t pool_size
+) {
+    if (pool_size == 0) {
+        return;
+    }
+
+    uint32_t stack_len = 0;
+    for (uint32_t i = 0; i < num_roots; i++) {
+        uint32_t root_idx = root_indices[i];
+        assert(root_idx < pool_size);
+        if (live_nodes[root_idx] == 0) {
+            live_nodes[root_idx] = 1;
+            node_stack[stack_len] = root_idx;
+            stack_len++;
+        }
+    }
+
+    while (stack_len > 0) {
+        uint32_t idx = node_stack[--stack_len];
+
+        DecodedExpr node = decode_expr_op(expr_ops[idx]);
+
+        switch (node.kind) {
+        case EXPR_ADD:
+        case EXPR_SUB:
+        case EXPR_MUL:
+        case EXPR_DIV:
+            push_compute_child_if_needed(
+                node.data1, pool_size, live_nodes, node_stack, stack_len
+            );
+            push_compute_child_if_needed(
+                node.data0, pool_size, live_nodes, node_stack, stack_len
+            );
+            break;
+        case EXPR_INT_ADD:
+        case EXPR_INT_MUL:
+            push_compute_child_if_needed(
+                node.data0, pool_size, live_nodes, node_stack, stack_len
+            );
+            break;
+        case EXPR_SELECT: {
+            uint32_t child = flags[node.data0] ? node.data1 : node.data2;
+            push_compute_child_if_needed(
+                child, pool_size, live_nodes, node_stack, stack_len
+            );
+            break;
+        }
+        default:
+            break;
+        }
+    }
+}
+
+__device__ __noinline__ void evaluate_compute_pool_flat(
+    const ExprOp *expr_ops,
+    uint32_t pool_size,
     const ExprMeta *meta,
     const uint32_t *inputs,
-    const uint32_t *vars,
+    uint32_t *vars,
     const bool *flags,
     uint32_t num_limbs,
     uint32_t limb_bits,
     const BigUintGpu &prime,
     BigUintGpu *scratch,
-    uint32_t *visit_epoch,
-    uint32_t current_epoch,
-    uint32_t *node_stack,
-    uint8_t *phase_stack,
-    uint32_t pool_size
+    const uint8_t *live_nodes,
+    const uint32_t *root_indices,
+    uint32_t num_roots
 ) {
-    if (pool_size == 0) {
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = 0;
-        }
-        return;
-    }
-
-    assert(root_idx < pool_size);
-    assert((current_epoch & 0x80000000u) == 0);
-
-    uint32_t done_mark = current_epoch;
-    uint32_t pending_mark = current_epoch | 0x80000000u;
-
-    uint32_t stack_len = 0;
-    visit_epoch[root_idx] = pending_mark;
-    node_stack[stack_len] = root_idx;
-    phase_stack[stack_len] = 0;
-    stack_len++;
-
-    while (stack_len > 0) {
-        uint32_t idx = node_stack[stack_len - 1];
-        uint8_t phase = phase_stack[stack_len - 1];
-
-        if (visit_epoch[idx] == done_mark) {
-            stack_len--;
+    for (uint32_t idx = 0; idx < pool_size; idx++) {
+        if (live_nodes[idx] == 0) {
             continue;
         }
 
         DecodedExpr node = decode_expr_op(expr_ops[idx]);
-
-        if (phase == 0) {
-            phase_stack[stack_len - 1] = 1;
-
-            switch (node.kind) {
-            case EXPR_ADD:
-            case EXPR_SUB:
-            case EXPR_MUL:
-            case EXPR_DIV:
-                // Push right then left to evaluate left first.
-                push_child_if_needed(
-                    node.data1,
-                    done_mark,
-                    pending_mark,
-                    pool_size,
-                    visit_epoch,
-                    node_stack,
-                    phase_stack,
-                    stack_len
-                );
-                push_child_if_needed(
-                    node.data0,
-                    done_mark,
-                    pending_mark,
-                    pool_size,
-                    visit_epoch,
-                    node_stack,
-                    phase_stack,
-                    stack_len
-                );
-                break;
-            case EXPR_INT_ADD:
-            case EXPR_INT_MUL:
-                push_child_if_needed(
-                    node.data0,
-                    done_mark,
-                    pending_mark,
-                    pool_size,
-                    visit_epoch,
-                    node_stack,
-                    phase_stack,
-                    stack_len
-                );
-                break;
-            case EXPR_SELECT: {
-                uint32_t child = flags[node.data0] ? node.data1 : node.data2;
-                push_child_if_needed(
-                    child,
-                    done_mark,
-                    pending_mark,
-                    pool_size,
-                    visit_epoch,
-                    node_stack,
-                    phase_stack,
-                    stack_len
-                );
-                break;
-            }
-            default:
-                break;
-            }
-
-            continue;
-        }
-
         switch (node.kind) {
         case EXPR_INPUT:
-            scratch[idx] =
-                BigUintGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits)
-                    .mod_reduce(prime, meta->barrett_mu);
+            scratch[idx] = BigUintGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits)
+                               .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_VAR:
-            scratch[idx] = BigUintGpu(vars + node.data0 * num_limbs, num_limbs, limb_bits);
+            assert(node.data0 < num_roots);
+            scratch[idx] = scratch[root_indices[node.data0]];
             break;
         case EXPR_CONST: {
             uint32_t offset = get_const_offset(meta, node.data0);
@@ -219,13 +183,14 @@ __device__ __noinline__ void compute_flat_lazy(
             scratch[idx] = BigUintGpu(limb_bits);
             break;
         }
-
-        visit_epoch[idx] = done_mark;
-        stack_len--;
     }
 
-    for (uint32_t i = 0; i < num_limbs; i++) {
-        result[i] = (i < scratch[root_idx].num_limbs) ? scratch[root_idx].limbs[i] : 0;
+    for (uint32_t var = 0; var < num_roots; var++) {
+        uint32_t root_idx = root_indices[var];
+        for (uint32_t limb = 0; limb < num_limbs; limb++) {
+            vars[var * num_limbs + limb] =
+                (limb < scratch[root_idx].num_limbs) ? scratch[root_idx].limbs[limb] : 0;
+        }
     }
 }
 

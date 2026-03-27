@@ -488,7 +488,6 @@ impl FieldExpressionChipGPU {
 
         let compute_region_bytes = compute_pool_size * biguint_size
             + compute_pool_size * size_of::<u32>()
-            + compute_pool_size * size_of::<u32>()
             + compute_pool_size * size_of::<u8>();
         let constraint_region_bytes =
             constraint_pool_size * (bigint_size + overflow_size);
