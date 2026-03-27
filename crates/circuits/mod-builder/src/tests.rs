@@ -760,7 +760,7 @@ mod cuda_tests {
         let adapter_width = Rv32VecHeapAdapterCols::<BabyBear, 2, 1, 1, 32, 32>::width();
         let adapter_size = size_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>();
         let core_size = 1 + expr.builder.num_input * expr.canonical_num_limbs();
-        // Keep each record adapter-aligned; otherwise later records can trigger GPU misaligned loads.
+        // Keep records adapter-aligned; otherwise later records can trigger GPU misaligned loads.
         let adapter_alignment = std::mem::align_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>();
         let record_stride = align_up(adapter_size + core_size, adapter_alignment);
 

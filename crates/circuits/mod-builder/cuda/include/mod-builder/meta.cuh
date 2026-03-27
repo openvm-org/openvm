@@ -15,20 +15,11 @@ typedef struct {
     uint32_t adapter_size;
     uint32_t adapter_width;
     uint32_t core_width;
-    uint32_t trace_width;
 
     const uint32_t *local_opcode_idx;
     const uint32_t *opcode_flag_idx;
-    const uint32_t *output_indices;
 
     uint32_t num_local_opcodes;
-    uint32_t num_output_indices;
-
-    uint32_t record_stride;
-    uint32_t input_limbs_offset;
-
-    const uint32_t *q_limb_counts;
-    const uint32_t *carry_limb_counts;
     const ExprOp *compute_expr_ops;
     const uint32_t *compute_root_indices;
     const uint32_t *compute_scratch_slots;
@@ -39,7 +30,6 @@ typedef struct {
     const uint32_t *constraint_scratch_slots;
     uint32_t constraint_pool_size;
     uint32_t constraint_scratch_slot_count;
-    uint32_t max_q_count;
 
     ExprMeta expr_meta;
 } FieldExprMeta;

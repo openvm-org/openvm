@@ -15,10 +15,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{
-    copy::{MemCopyD2H, MemCopyH2D},
-    d_buffer::DeviceBuffer,
-};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
 use openvm_stark_backend::p3_air::BaseAir;
 
@@ -162,7 +159,6 @@ impl FieldExpressionChipGPU {
             const_limb_offsets_buf,
             q_limb_counts_buf,
             carry_limb_counts_buf,
-            max_q_count,
         ) = Self::build_expr_meta(
             &air,
             num_vars,
@@ -189,18 +185,6 @@ impl FieldExpressionChipGPU {
                 .to_device()
                 .unwrap()
         };
-        let output_indices_buf = if air.output_indices().is_empty() {
-            DeviceBuffer::new()
-        } else {
-            air.output_indices()
-                .iter()
-                .map(|&x| x as u32)
-                .collect::<Vec<_>>()
-                .to_device()
-                .unwrap()
-        };
-
-        let input_limbs_offset = std::mem::size_of::<u8>();
         let adapter_size = adapter_record_size(num_limbs, adapter_blocks, num_inputs) as u32;
 
         let meta_host = FieldExprMeta {
@@ -212,16 +196,9 @@ impl FieldExpressionChipGPU {
             adapter_size,
             adapter_width: adapter_width as u32,
             core_width,
-            trace_width,
             local_opcode_idx: local_opcode_idx_buf.as_ptr(),
             opcode_flag_idx: opcode_flag_idx_buf.as_ptr(),
-            output_indices: output_indices_buf.as_ptr(),
             num_local_opcodes: air.local_opcode_idx.len() as u32,
-            num_output_indices: air.output_indices().len() as u32,
-            record_stride: record_stride as u32,
-            input_limbs_offset: input_limbs_offset as u32,
-            q_limb_counts: q_limb_counts_buf.as_ptr(),
-            carry_limb_counts: carry_limb_counts_buf.as_ptr(),
             compute_expr_ops: compute_expr_ops_buf.as_ptr() as *const ExprOp,
             compute_root_indices: compute_roots_buf.as_ptr(),
             compute_scratch_slots: compute_scratch_slots_buf.as_ptr(),
@@ -232,22 +209,36 @@ impl FieldExpressionChipGPU {
             constraint_scratch_slots: constraint_scratch_slots_buf.as_ptr(),
             constraint_pool_size,
             constraint_scratch_slot_count,
-            max_q_count,
             expr_meta,
         };
 
-        let meta = vec![meta_host].to_device().unwrap();
+        let meta = [meta_host].to_device().unwrap();
+
+        let input_size = num_inputs as usize * num_limbs as usize;
+        let var_size = num_vars as usize * num_limbs as usize;
+        let total_carry_count: usize = air.expr.builder.carry_limbs.iter().sum();
+        let base_bytes = (input_size + var_size + total_carry_count) * size_of::<u32>()
+            + num_u32_flags as usize * size_of::<bool>();
+        let bigint_size = size_of::<BigIntGpuLayout>();
+        let overflow_size = size_of::<OverflowIntLayout>();
+        let compute_aux_region_bytes = compute_pool_size as usize * size_of::<u32>()
+            + compute_pool_size as usize * size_of::<u8>();
+        let constraint_region_bytes =
+            constraint_scratch_slot_count as usize * (bigint_size + overflow_size);
+        let scratch_region_bytes = compute_aux_region_bytes.max(constraint_region_bytes);
+        let scratch_offset = align_up(base_bytes, std::mem::align_of::<BigUintGpuLayout>());
+        let workspace_per_thread = align_up(scratch_offset + scratch_region_bytes, 16) as u32;
 
         Self {
-            air,
             records: Arc::new(records),
             num_records,
             record_stride,
             total_trace_width: trace_width as usize,
+            workspace_per_thread,
+            compute_scratch_slot_count: compute_scratch_slot_count as usize,
             meta,
             local_opcode_idx_buf,
             opcode_flag_idx_buf,
-            output_indices_buf,
             prime_limbs_buf,
             compute_expr_ops_buf,
             compute_roots_buf,
@@ -292,7 +283,6 @@ impl FieldExpressionChipGPU {
         DeviceBuffer<u32>,
         DeviceBuffer<u32>,
         DeviceBuffer<u32>,
-        u32,
     ) {
         // Build compute expressions AST
         let mut compute_expr_pool = Vec::new();
@@ -338,12 +328,6 @@ impl FieldExpressionChipGPU {
             .iter()
             .map(|&x| x as u32)
             .collect();
-
-        let max_q_count = if q_counts.is_empty() {
-            num_limbs + 1 // Default fallback
-        } else {
-            *q_counts.iter().max().unwrap()
-        };
 
         let compute_expr_ops_u128: Vec<u128> = compute_expr_pool
             .iter()
@@ -432,7 +416,6 @@ impl FieldExpressionChipGPU {
             const_limb_offsets_buf,
             q_limb_counts_buf,
             carry_limb_counts_buf,
-            max_q_count,
         )
     }
 
@@ -597,39 +580,12 @@ impl FieldExpressionChipGPU {
     pub fn generate_field_trace(&self) -> DeviceMatrix<F> {
         let padded_height = next_power_of_two_or_zero(self.num_records);
         let mat = DeviceMatrix::with_capacity(padded_height, self.total_trace_width);
-
-        let meta_host = self.meta.to_host().unwrap()[0].clone();
-        let input_size = meta_host.num_inputs as usize * meta_host.num_limbs as usize;
-        let var_size = meta_host.expr_meta.num_vars as usize * meta_host.num_limbs as usize;
-        let carry_counts = self.carry_limb_counts_buf.to_host().unwrap();
-        let total_carry_count: usize = carry_counts.iter().map(|&x| x as usize).sum::<usize>();
-
-        let base_bytes = (input_size + var_size + total_carry_count) * size_of::<u32>()
-            + meta_host.num_u32_flags as usize * size_of::<bool>();
-
         let biguint_size = size_of::<BigUintGpuLayout>();
-        let bigint_size = size_of::<BigIntGpuLayout>();
-        let overflow_size = size_of::<OverflowIntLayout>();
-
-        let compute_pool_size = meta_host.compute_pool_size as usize;
-        let compute_scratch_slot_count = meta_host.compute_scratch_slot_count as usize;
-        let constraint_scratch_slot_count = meta_host.constraint_scratch_slot_count as usize;
-
-        let compute_aux_region_bytes =
-            compute_pool_size * size_of::<u32>() + compute_pool_size * size_of::<u8>();
-        let constraint_region_bytes = constraint_scratch_slot_count * (bigint_size + overflow_size);
-
-        // Compute metadata and constraint scratch share the per-thread local region.
-        let scratch_region_bytes = compute_aux_region_bytes.max(constraint_region_bytes);
-        let scratch_offset = align_up(base_bytes, std::mem::align_of::<BigUintGpuLayout>());
-
-        // Keep alignment conservative for C++ pointer arithmetic.
-        let workspace_per_thread = align_up(scratch_offset + scratch_region_bytes, 16) as u32;
-
-        let local_workspace_size = (workspace_per_thread as usize)
+        let local_workspace_size = (self.workspace_per_thread as usize)
             .checked_mul(padded_height)
             .unwrap();
-        let compute_scratch_size = compute_scratch_slot_count
+        let compute_scratch_size = self
+            .compute_scratch_slot_count
             .checked_mul(biguint_size)
             .and_then(|size| size.checked_mul(padded_height))
             .unwrap();
@@ -655,7 +611,7 @@ impl FieldExpressionChipGPU {
                 self.pointer_max_bits,
                 self.timestamp_max_bits,
                 workspace.as_ptr(),
-                workspace_per_thread,
+                self.workspace_per_thread,
             )
             .unwrap();
         }

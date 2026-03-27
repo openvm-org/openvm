@@ -4,7 +4,6 @@
 #include "mod-builder/expr_codec.cuh"
 #include "mod-builder/meta.cuh"
 #include "mod-builder/overflow_ops.cuh"
-#include "mod-builder/records.cuh"
 #include "mod-builder/rv32_vec_heap_router.cuh"
 #include "primitives/trace_access.h"
 #include <cstdint>
@@ -12,15 +11,19 @@
 
 using namespace mod_builder;
 
+struct FieldExprCoreRecord {
+    uint8_t opcode;
+    uint8_t input_limbs[];
+};
+
 #define INPUT_U32_COUNT(meta) ((meta)->num_inputs * (meta)->num_limbs)
 #define VAR_U32_COUNT(meta) ((meta)->expr_meta.num_vars * (meta)->num_limbs)
 #define FLAG_U32_COUNT(meta) (((meta)->num_u32_flags + 3) / 4)
-#define THREAD_U32_COUNT(meta) (INPUT_U32_COUNT(meta) + VAR_U32_COUNT(meta) + FLAG_U32_COUNT(meta))
 
 __device__ inline uint32_t get_total_carry_count(const FieldExprMeta *meta) {
     uint32_t total = 0;
     for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
-        total += meta->carry_limb_counts[i];
+        total += meta->expr_meta.carry_limb_counts[i];
     }
     return total;
 }
@@ -187,7 +190,7 @@ __device__ __noinline__ void evaluate_constraint_subrow_gpu(
 
             BigIntGpu constraint_result = constraint_bigint_scratch[constraint_root_slot];
             BigIntGpu quotient = constraint_result.div_biguint(prime);
-            uint32_t q_count = meta->q_limb_counts[var_idx];
+            uint32_t q_count = meta->expr_meta.q_limb_counts[var_idx];
 
             if (is_valid) {
                 for (uint32_t i = 0; i < q_count; i++) {
@@ -201,7 +204,7 @@ __device__ __noinline__ void evaluate_constraint_subrow_gpu(
 
             OverflowInt expr = constraint_overflow_scratch[constraint_root_slot];
             OverflowInt result = expr - (OverflowInt(quotient, q_count) * prime_overflow);
-            uint32_t c_count = meta->carry_limb_counts[var_idx];
+            uint32_t c_count = meta->expr_meta.carry_limb_counts[var_idx];
 
             OverflowInt carries = result.carry_limbs(c_count);
             for (uint32_t i = 0; i < c_count; i++) {
@@ -228,7 +231,7 @@ __device__ __noinline__ void evaluate_constraint_subrow_gpu(
 
         c_offset = 0;
         for (uint32_t var_idx = 0; var_idx < meta->expr_meta.num_vars; var_idx++) {
-            uint32_t c_count = meta->carry_limb_counts[var_idx];
+            uint32_t c_count = meta->expr_meta.carry_limb_counts[var_idx];
             for (uint32_t limb = 0; limb < c_count; limb++) {
                 int32_t signed_carry = (int32_t)all_carries[c_offset + limb];
                 core_row[col++] = signed_carry >= 0
@@ -239,13 +242,13 @@ __device__ __noinline__ void evaluate_constraint_subrow_gpu(
         }
     } else {
         for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
-            uint32_t q_count = meta->q_limb_counts[i];
+            uint32_t q_count = meta->expr_meta.q_limb_counts[i];
             for (uint32_t limb = 0; limb < q_count; limb++) {
                 core_row[col++] = Fp::zero();
             }
         }
         for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
-            uint32_t c_count = meta->carry_limb_counts[i];
+            uint32_t c_count = meta->expr_meta.carry_limb_counts[i];
             for (uint32_t limb = 0; limb < c_count; limb++) {
                 core_row[col++] = Fp::zero();
             }
