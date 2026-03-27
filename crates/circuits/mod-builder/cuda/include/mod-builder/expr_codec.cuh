@@ -52,6 +52,22 @@ __device__ __forceinline__ void push_compute_child_if_needed(
     stack_len++;
 }
 
+__device__ __forceinline__ BigUintGpu &compute_scratch_slot(
+    BigUintGpu *scratch,
+    uint32_t scratch_stride,
+    uint32_t idx
+) {
+    return scratch[(size_t)idx * scratch_stride];
+}
+
+__device__ __forceinline__ const BigUintGpu &compute_scratch_slot(
+    const BigUintGpu *scratch,
+    uint32_t scratch_stride,
+    uint32_t idx
+) {
+    return scratch[(size_t)idx * scratch_stride];
+}
+
 // Mark the live compute subgraph for the current row, preserving lazy SELECT semantics.
 __device__ __noinline__ void mark_compute_live_nodes(
     const ExprOp *expr_ops,
@@ -124,6 +140,7 @@ __device__ __noinline__ void evaluate_compute_pool_flat(
     uint32_t limb_bits,
     const BigUintGpu &prime,
     BigUintGpu *scratch,
+    uint32_t scratch_stride,
     const uint8_t *live_nodes,
     const uint32_t *root_indices,
     uint32_t num_roots
@@ -136,51 +153,80 @@ __device__ __noinline__ void evaluate_compute_pool_flat(
         DecodedExpr node = decode_expr_op(expr_ops[idx]);
         switch (node.kind) {
         case EXPR_INPUT:
-            scratch[idx] = BigUintGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits)
-                               .mod_reduce(prime, meta->barrett_mu);
+            compute_scratch_slot(scratch, scratch_stride, idx) =
+                BigUintGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits)
+                    .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_VAR:
             assert(node.data0 < num_roots);
-            scratch[idx] = scratch[root_indices[node.data0]];
+            compute_scratch_slot(scratch, scratch_stride, idx) =
+                compute_scratch_slot(scratch, scratch_stride, root_indices[node.data0]);
             break;
         case EXPR_CONST: {
             uint32_t offset = get_const_offset(meta, node.data0);
-            scratch[idx] =
+            compute_scratch_slot(scratch, scratch_stride, idx) =
                 BigUintGpu(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
             break;
         }
         case EXPR_ADD:
-            scratch[idx] =
-                (scratch[node.data0] + scratch[node.data1]).mod_reduce(prime, meta->barrett_mu);
+            compute_scratch_slot(scratch, scratch_stride, idx) =
+                (compute_scratch_slot(scratch, scratch_stride, node.data0) +
+                 compute_scratch_slot(scratch, scratch_stride, node.data1))
+                    .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_SUB:
-            scratch[idx] = scratch[node.data0].mod_sub(scratch[node.data1], prime);
+            compute_scratch_slot(scratch, scratch_stride, idx) = compute_scratch_slot(
+                scratch, scratch_stride, node.data0
+            )
+                                                                 .mod_sub(
+                                                                     compute_scratch_slot(
+                                                                         scratch,
+                                                                         scratch_stride,
+                                                                         node.data1
+                                                                     ),
+                                                                     prime
+                                                                 );
             break;
         case EXPR_MUL:
-            scratch[idx] =
-                (scratch[node.data0] * scratch[node.data1]).mod_reduce(prime, meta->barrett_mu);
+            compute_scratch_slot(scratch, scratch_stride, idx) =
+                (compute_scratch_slot(scratch, scratch_stride, node.data0) *
+                 compute_scratch_slot(scratch, scratch_stride, node.data1))
+                    .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_DIV:
-            scratch[idx] =
-                scratch[node.data0].mod_div(scratch[node.data1], prime, meta->barrett_mu);
+            compute_scratch_slot(scratch, scratch_stride, idx) = compute_scratch_slot(
+                scratch, scratch_stride, node.data0
+            )
+                                                                 .mod_div(
+                                                                     compute_scratch_slot(
+                                                                         scratch,
+                                                                         scratch_stride,
+                                                                         node.data1
+                                                                     ),
+                                                                     prime,
+                                                                     meta->barrett_mu
+                                                                 );
             break;
         case EXPR_INT_ADD: {
-            BigIntGpu a(scratch[node.data0], false);
-            scratch[idx] =
+            BigIntGpu a(compute_scratch_slot(scratch, scratch_stride, node.data0), false);
+            compute_scratch_slot(scratch, scratch_stride, idx) =
                 (a + BigIntGpu((int32_t)node.data1, limb_bits)).mag.mod_reduce(prime, meta->barrett_mu);
             break;
         }
         case EXPR_INT_MUL: {
-            BigIntGpu a(scratch[node.data0], false);
-            scratch[idx] =
+            BigIntGpu a(compute_scratch_slot(scratch, scratch_stride, node.data0), false);
+            compute_scratch_slot(scratch, scratch_stride, idx) =
                 (a * BigIntGpu((int32_t)node.data1, limb_bits)).mag.mod_reduce(prime, meta->barrett_mu);
             break;
         }
         case EXPR_SELECT:
-            scratch[idx] = flags[node.data0] ? scratch[node.data1] : scratch[node.data2];
+            compute_scratch_slot(scratch, scratch_stride, idx) =
+                flags[node.data0]
+                    ? compute_scratch_slot(scratch, scratch_stride, node.data1)
+                    : compute_scratch_slot(scratch, scratch_stride, node.data2);
             break;
         default:
-            scratch[idx] = BigUintGpu(limb_bits);
+            compute_scratch_slot(scratch, scratch_stride, idx) = BigUintGpu(limb_bits);
             break;
         }
     }
@@ -189,7 +235,9 @@ __device__ __noinline__ void evaluate_compute_pool_flat(
         uint32_t root_idx = root_indices[var];
         for (uint32_t limb = 0; limb < num_limbs; limb++) {
             vars[var * num_limbs + limb] =
-                (limb < scratch[root_idx].num_limbs) ? scratch[root_idx].limbs[limb] : 0;
+                (limb < compute_scratch_slot(scratch, scratch_stride, root_idx).num_limbs)
+                    ? compute_scratch_slot(scratch, scratch_stride, root_idx).limbs[limb]
+                    : 0;
         }
     }
 }

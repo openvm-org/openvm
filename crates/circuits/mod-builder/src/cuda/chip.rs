@@ -486,22 +486,30 @@ impl FieldExpressionChipGPU {
         let compute_pool_size = meta_host.compute_pool_size as usize;
         let constraint_pool_size = meta_host.constraint_pool_size as usize;
 
-        let compute_region_bytes = compute_pool_size * biguint_size
-            + compute_pool_size * size_of::<u32>()
+        let compute_aux_region_bytes = compute_pool_size * size_of::<u32>()
             + compute_pool_size * size_of::<u8>();
         let constraint_region_bytes =
             constraint_pool_size * (bigint_size + overflow_size);
 
         // Compute and constraint scratch share a single region in CUDA.
-        let scratch_region_bytes = compute_region_bytes.max(constraint_region_bytes);
+        let scratch_region_bytes =
+            compute_aux_region_bytes.max(constraint_region_bytes);
         let scratch_offset = align_up(base_bytes, std::mem::align_of::<BigUintGpuLayout>());
 
         // Keep alignment conservative for C++ pointer arithmetic.
         let workspace_per_thread = align_up(scratch_offset + scratch_region_bytes, 16) as u32;
 
-        // Allocate workspace for all threads
-        let total_workspace_size = (workspace_per_thread as usize)
+        let local_workspace_size = (workspace_per_thread as usize)
             .checked_mul(padded_height)
+            .unwrap();
+        let compute_scratch_size = compute_pool_size
+            .checked_mul(biguint_size)
+            .and_then(|size| size.checked_mul(padded_height))
+            .unwrap();
+
+        // The compute scratch is slot-major across threads for better coalescing.
+        let total_workspace_size = local_workspace_size
+            .checked_add(compute_scratch_size)
             .unwrap();
         let workspace = DeviceBuffer::<u8>::with_capacity(total_workspace_size);
 

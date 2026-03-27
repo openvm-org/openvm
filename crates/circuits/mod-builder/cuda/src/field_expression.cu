@@ -32,6 +32,7 @@ __device__ __noinline__ void generate_subrow_gpu(
     uint32_t *vars,
     uint32_t *all_carries,
     BigUintGpu *compute_scratch,
+    uint32_t compute_scratch_stride,
     uint32_t *compute_node_stack,
     uint8_t *compute_live_nodes,
     BigIntGpu *constraint_bigint_scratch,
@@ -71,6 +72,7 @@ __device__ __noinline__ void generate_subrow_gpu(
             limb_bits,
             prime,
             compute_scratch,
+            compute_scratch_stride,
             compute_live_nodes,
             meta->compute_root_indices,
             meta->expr_meta.num_vars
@@ -214,14 +216,23 @@ struct FieldExprCore {
     const FieldExprMeta *meta;
     VariableRangeChecker range_checker;
     uint8_t *workspace;
+    BigUintGpu *compute_scratch;
+    uint32_t compute_scratch_stride;
 
     __device__ explicit FieldExprCore(
         const FieldExprMeta *m,
         VariableRangeChecker rc,
         bool is_valid,
-        uint8_t *ws
+        uint8_t *ws,
+        BigUintGpu *compute_scratch,
+        uint32_t compute_scratch_stride
     )
-        : meta(m), range_checker(rc), is_valid(is_valid), workspace(ws) {}
+        : meta(m),
+          range_checker(rc),
+          is_valid(is_valid),
+          workspace(ws),
+          compute_scratch(compute_scratch),
+          compute_scratch_stride(compute_scratch_stride) {}
 
     __device__ static uint8_t *align_ptr(uint8_t *ptr, size_t alignment) {
         uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
@@ -246,8 +257,6 @@ struct FieldExprCore {
         );
 
         uint8_t *compute_ptr = scratch_base;
-        BigUintGpu *compute_scratch = reinterpret_cast<BigUintGpu *>(compute_ptr);
-        compute_ptr += (size_t)meta->compute_pool_size * sizeof(BigUintGpu);
         uint32_t *compute_node_stack = reinterpret_cast<uint32_t *>(compute_ptr);
         compute_ptr += (size_t)meta->compute_pool_size * sizeof(uint32_t);
         uint8_t *compute_live_nodes = compute_ptr;
@@ -288,6 +297,7 @@ struct FieldExprCore {
             vars,
             all_carries,
             compute_scratch,
+            compute_scratch_stride,
             compute_node_stack,
             compute_live_nodes,
             constraint_bigint_scratch,
@@ -334,6 +344,10 @@ __global__ void field_expression_tracegen(
     BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, bitwise_num_bits);
 
     uint8_t *thread_workspace = workspace + idx * workspace_per_thread;
+    BigUintGpu *shared_compute_scratch = reinterpret_cast<BigUintGpu *>(
+        workspace + (size_t)workspace_per_thread * height
+    );
+    BigUintGpu *thread_compute_scratch = shared_compute_scratch + idx;
 
     // Ensure workspace is aligned to 4 bytes for uint32_t access
     assert(((uintptr_t)thread_workspace & 3) == 0);
@@ -357,13 +371,17 @@ __global__ void field_expression_tracegen(
         const FieldExprCoreRecord *core_rec =
             reinterpret_cast<const FieldExprCoreRecord *>(core_bytes);
 
-        FieldExprCore core(meta, range_checker, true, thread_workspace);
+        FieldExprCore core(
+            meta, range_checker, true, thread_workspace, thread_compute_scratch, height
+        );
         core.fill_trace_row(row.slice_from(meta->adapter_width), core_rec);
     } else {
         // We can't just fill with 0s, instead calling w/ invalid opcode
         row.fill_zero(0, meta->adapter_width);
 
-        FieldExprCore dummy_core(meta, range_checker, false, thread_workspace);
+        FieldExprCore dummy_core(
+            meta, range_checker, false, thread_workspace, thread_compute_scratch, height
+        );
 
         uint8_t *dummy_record = thread_workspace;
         memset(dummy_record, 0, workspace_per_thread);
