@@ -76,6 +76,114 @@ struct BigUintGpu {
         return 0;
     }
 
+    __device__ bool is_zero() const {
+        for (uint32_t i = 0; i < num_limbs; i++) {
+            if (limbs[i] != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    __device__ bool is_one() const {
+        if (limbs[0] != 1) {
+            return false;
+        }
+        for (uint32_t i = 1; i < num_limbs; i++) {
+            if (limbs[i] != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    __device__ bool is_even() const { return (limbs[0] & 1U) == 0; }
+
+    __device__ uint32_t count_trailing_zero_bits() const {
+        uint32_t zeros = 0;
+        for (uint32_t i = 0; i < num_limbs; i++) {
+            uint32_t v = limbs[i];
+            if (v == 0) {
+                zeros += limb_bits;
+                continue;
+            }
+            while ((v & 1U) == 0) {
+                zeros++;
+                v >>= 1;
+            }
+            break;
+        }
+        return zeros;
+    }
+
+    __device__ void shr1_in_place() {
+        uint32_t carry = 0;
+        for (int i = num_limbs - 1; i >= 0; i--) {
+            uint32_t next_carry = limbs[i] & 1U;
+            limbs[i] = (limbs[i] >> 1) | (carry << (limb_bits - 1));
+            carry = next_carry;
+        }
+        normalize();
+    }
+
+    __device__ void shr_bits_in_place(uint32_t shift_bits) {
+        if (shift_bits == 0 || num_limbs == 0) {
+            return;
+        }
+
+        uint32_t limb_shift = shift_bits / limb_bits;
+        uint32_t bit_shift = shift_bits % limb_bits;
+        uint32_t mask = get_limb_mask(limb_bits);
+
+        if (limb_shift >= num_limbs) {
+            num_limbs = 1;
+            limbs[0] = 0;
+            for (uint32_t i = 1; i < MAX_LIMBS; i++) {
+                limbs[i] = 0;
+            }
+            return;
+        }
+
+        uint32_t new_len = num_limbs - limb_shift;
+        for (uint32_t i = 0; i < new_len; i++) {
+            uint32_t src = i + limb_shift;
+            uint32_t value = limbs[src] >> bit_shift;
+            if (bit_shift != 0 && src + 1 < num_limbs) {
+                value |= (uint32_t)limbs[src + 1] << (limb_bits - bit_shift);
+            }
+            limbs[i] = value & mask;
+        }
+        for (uint32_t i = new_len; i < MAX_LIMBS; i++) {
+            limbs[i] = 0;
+        }
+        num_limbs = new_len;
+        normalize();
+    }
+
+    __device__ void half_mod_in_place(const BigUintGpu &modulus) {
+        if (!is_even()) {
+            uint32_t mask = get_limb_mask(limb_bits);
+            uint32_t n = max(num_limbs, modulus.num_limbs);
+            uint32_t carry = 0;
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t ai = (i < num_limbs) ? limbs[i] : 0;
+                uint32_t bi = (i < modulus.num_limbs) ? modulus.limbs[i] : 0;
+                uint32_t sum = ai + bi + carry;
+                limbs[i] = sum & mask;
+                carry = sum >> limb_bits;
+            }
+            num_limbs = n;
+            if (carry != 0) {
+                assert(num_limbs < MAX_LIMBS);
+                limbs[num_limbs++] = carry;
+            }
+            for (uint32_t i = num_limbs; i < MAX_LIMBS; i++) {
+                limbs[i] = 0;
+            }
+        }
+        shr1_in_place();
+    }
+
     __device__ void add_in_place(const BigUintGpu &other) {
         uint32_t mask = get_limb_mask(limb_bits);
         uint32_t max_limbs = max(num_limbs, other.num_limbs) + 1;
@@ -198,6 +306,16 @@ struct BigUintGpu {
 
         result.normalize();
         return result;
+    }
+
+    __device__ void mod_sub_in_place(const BigUintGpu &other, const BigUintGpu &prime) {
+        if (*this >= other) {
+            sub_in_place(other);
+            return;
+        }
+
+        add_in_place(prime);
+        sub_in_place(other);
     }
 
     __device__ BigUintGpu rem(const BigUintGpu &divisor) const {
@@ -379,134 +497,58 @@ struct BigUintGpu {
 
     __device__ __noinline__ BigUintGpu
     mod_inverse(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
-        // Check if modulus is zero
-        bool modulus_is_zero = true;
-        for (uint32_t i = 0; i < modulus.num_limbs; i++) {
-            if (modulus.limbs[i] != 0) {
-                modulus_is_zero = false;
-                break;
-            }
-        }
-        if (modulus_is_zero) {
+        if (modulus.is_zero()) {
             return BigUintGpu(limb_bits); // Return zero
         }
 
-        // Check if modulus is one
-        bool modulus_is_one = (modulus.limbs[0] == 1);
-        for (uint32_t i = 1; i < modulus.num_limbs; i++) {
-            if (modulus.limbs[i] != 0) {
-                modulus_is_one = false;
-                break;
-            }
-        }
-        if (modulus_is_one) {
+        if (modulus.is_one()) {
             return BigUintGpu(limb_bits); // Return zero
         }
 
-        // Reuse a small set of temporaries to avoid keeping many bigints live at once.
-        BigUintGpu r0, r1, t0, t1, tmp0, tmp1;
-
-        // Reduce a modulo modulus first
-        r1 = mod_reduce(modulus, barrett_mu);
-
-        // Check if a_mod is zero
-        bool a_is_zero = true;
-        for (uint32_t i = 0; i < r1.num_limbs; i++) {
-            if (r1.limbs[i] != 0) {
-                a_is_zero = false;
-                break;
-            }
-        }
-        if (a_is_zero) {
+        // Binary inverse assumes an odd modulus. Field moduli in this path satisfy that.
+        if (modulus.is_even()) {
             return BigUintGpu(limb_bits); // Return zero (no inverse)
         }
 
-        // Check if a_mod is one
-        bool a_is_one = (r1.limbs[0] == 1);
-        for (uint32_t i = 1; i < r1.num_limbs; i++) {
-            if (r1.limbs[i] != 0) {
-                a_is_one = false;
-                break;
-            }
+        BigUintGpu u = mod_reduce(modulus, barrett_mu);
+        if (u.is_zero()) {
+            return BigUintGpu(limb_bits); // Return zero (no inverse)
         }
-        if (a_is_one) {
+        if (u.is_one()) {
             return BigUintGpu(1, limb_bits); // Return one
         }
 
-        // Extended Euclidean Algorithm
-        // First iteration outside the loop
-        modulus.divrem(tmp0, tmp1, r1);
+        BigUintGpu v = modulus;
+        BigUintGpu x1(1, limb_bits);
+        BigUintGpu x2(limb_bits);
 
-        // Check if r2 is zero (gcd(a, modulus) != 1)
-        bool r2_is_zero = true;
-        for (uint32_t i = 0; i < tmp1.num_limbs; i++) {
-            if (tmp1.limbs[i] != 0) {
-                r2_is_zero = false;
-                break;
-            }
-        }
-        if (r2_is_zero) {
-            return BigUintGpu(limb_bits); // Return zero (no inverse)
-        }
-
-        // Update for next iteration
-        r0 = r1;
-        r1 = tmp1;
-
-        // Initialize t values after first iteration
-        // t0 = 1
-        t0 = BigUintGpu(1, limb_bits);
-
-        // t1 = modulus - q
-        t1 = modulus - tmp0;
-
-        // Main loop
-        while (true) {
-            // Check if r1 is zero
-            bool r1_zero = true;
-            for (uint32_t i = 0; i < r1.num_limbs; i++) {
-                if (r1.limbs[i] != 0) {
-                    r1_zero = false;
-                    break;
+        while (!u.is_one() && !v.is_one()) {
+            uint32_t u_shift = u.count_trailing_zero_bits();
+            if (u_shift != 0) {
+                u.shr_bits_in_place(u_shift);
+                for (uint32_t i = 0; i < u_shift; i++) {
+                    x1.half_mod_in_place(modulus);
                 }
             }
-            if (r1_zero)
-                break;
 
-            // (q, r2) = divrem(r0, r1)
-            r0.divrem(tmp0, tmp1, r1);
-            r0 = r1;
-            r1 = tmp1;
+            uint32_t v_shift = v.count_trailing_zero_bits();
+            if (v_shift != 0) {
+                v.shr_bits_in_place(v_shift);
+                for (uint32_t i = 0; i < v_shift; i++) {
+                    x2.half_mod_in_place(modulus);
+                }
+            }
 
-            // qt1 = q * t1 % modulus
-            tmp0 = tmp0.mul(t1).mod_reduce(modulus, barrett_mu);
-
-            // t2 = (t0 - qt1) % modulus
-            if (t0 >= tmp0) {
-                tmp1 = t0 - tmp0;
+            if (u >= v) {
+                u -= v;
+                x1.mod_sub_in_place(x2, modulus);
             } else {
-                // t0 < qt1, so compute t0 + modulus - qt1
-                tmp1 = modulus - tmp0;
-                tmp1 += t0;
-            }
-
-            t0 = t1;
-            t1 = tmp1;
-        }
-
-        // Check if gcd is 1 (r0 should be 1)
-        bool r0_is_one = (r0.limbs[0] == 1);
-        for (uint32_t i = 1; i < r0.num_limbs; i++) {
-            if (r0.limbs[i] != 0) {
-                r0_is_one = false;
-                break;
+                v -= u;
+                x2.mod_sub_in_place(x1, modulus);
             }
         }
-        if (r0_is_one) {
-            return t0; // t0 is the modular inverse
-        } else {
-            return BigUintGpu(limb_bits); // Return zero (no inverse)
-        }
+
+        return u.is_one() ? x1 : x2;
     }
 
     __device__ BigUintGpu
