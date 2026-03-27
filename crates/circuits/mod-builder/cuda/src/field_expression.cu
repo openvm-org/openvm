@@ -73,6 +73,7 @@ __device__ __noinline__ void generate_subrow_gpu(
             prime,
             compute_scratch,
             compute_scratch_stride,
+            meta->compute_scratch_slots,
             compute_live_nodes,
             meta->compute_root_indices,
             meta->expr_meta.num_vars
@@ -107,14 +108,16 @@ __device__ __noinline__ void generate_subrow_gpu(
             flags,
             num_limbs,
             limb_bits,
+            meta->constraint_scratch_slots,
             constraint_bigint_scratch,
             constraint_overflow_scratch
         );
 
         for (uint32_t var_idx = 0; var_idx < meta->expr_meta.num_vars; var_idx++) {
             uint32_t constraint_root = meta->constraint_root_indices[var_idx];
+            uint32_t constraint_root_slot = meta->constraint_scratch_slots[constraint_root];
 
-            BigIntGpu constraint_result = constraint_bigint_scratch[constraint_root];
+            BigIntGpu constraint_result = constraint_bigint_scratch[constraint_root_slot];
 
             BigIntGpu quotient = constraint_result.div_biguint(prime);
 
@@ -130,7 +133,7 @@ __device__ __noinline__ void generate_subrow_gpu(
                 }
             }
 
-            OverflowInt expr = constraint_overflow_scratch[constraint_root];
+            OverflowInt expr = constraint_overflow_scratch[constraint_root_slot];
 
             // result = expr - q * p
             OverflowInt result = expr - (OverflowInt(quotient, q_count) * prime_overflow);
@@ -227,12 +230,8 @@ struct FieldExprCore {
         BigUintGpu *compute_scratch,
         uint32_t compute_scratch_stride
     )
-        : meta(m),
-          range_checker(rc),
-          is_valid(is_valid),
-          workspace(ws),
-          compute_scratch(compute_scratch),
-          compute_scratch_stride(compute_scratch_stride) {}
+        : meta(m), range_checker(rc), is_valid(is_valid), workspace(ws),
+          compute_scratch(compute_scratch), compute_scratch_stride(compute_scratch_stride) {}
 
     __device__ static uint8_t *align_ptr(uint8_t *ptr, size_t alignment) {
         uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
@@ -263,9 +262,8 @@ struct FieldExprCore {
 
         uint8_t *constraint_ptr = scratch_base;
         BigIntGpu *constraint_bigint_scratch = reinterpret_cast<BigIntGpu *>(constraint_ptr);
-        constraint_ptr += (size_t)meta->constraint_pool_size * sizeof(BigIntGpu);
-        OverflowInt *constraint_overflow_scratch =
-            reinterpret_cast<OverflowInt *>(constraint_ptr);
+        constraint_ptr += (size_t)meta->constraint_scratch_slot_count * sizeof(BigIntGpu);
+        OverflowInt *constraint_overflow_scratch = reinterpret_cast<OverflowInt *>(constraint_ptr);
 
         memset(flags, 0, meta->num_u32_flags * sizeof(bool));
 
@@ -344,9 +342,8 @@ __global__ void field_expression_tracegen(
     BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, bitwise_num_bits);
 
     uint8_t *thread_workspace = workspace + idx * workspace_per_thread;
-    BigUintGpu *shared_compute_scratch = reinterpret_cast<BigUintGpu *>(
-        workspace + (size_t)workspace_per_thread * height
-    );
+    BigUintGpu *shared_compute_scratch =
+        reinterpret_cast<BigUintGpu *>(workspace + (size_t)workspace_per_thread * height);
     BigUintGpu *thread_compute_scratch = shared_compute_scratch + idx;
 
     // Ensure workspace is aligned to 4 bytes for uint32_t access

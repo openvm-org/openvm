@@ -30,10 +30,14 @@ typedef struct {
     const uint32_t *carry_limb_counts;
     const ExprOp *compute_expr_ops;
     const uint32_t *compute_root_indices;
+    const uint32_t *compute_scratch_slots;
     uint32_t compute_pool_size;
+    uint32_t compute_scratch_slot_count;
     const ExprOp *constraint_expr_ops;
     const uint32_t *constraint_root_indices;
+    const uint32_t *constraint_scratch_slots;
     uint32_t constraint_pool_size;
+    uint32_t constraint_scratch_slot_count;
     uint32_t max_q_count;
 
     ExprMeta expr_meta;

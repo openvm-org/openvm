@@ -63,10 +63,14 @@ pub struct FieldExprMeta {
     pub carry_limb_counts: *const u32,
     pub compute_expr_ops: *const ExprOp,
     pub compute_root_indices: *const u32,
+    pub compute_scratch_slots: *const u32,
     pub compute_pool_size: u32,
+    pub compute_scratch_slot_count: u32,
     pub constraint_expr_ops: *const ExprOp,
     pub constraint_root_indices: *const u32,
+    pub constraint_scratch_slots: *const u32,
     pub constraint_pool_size: u32,
+    pub constraint_scratch_slot_count: u32,
 
     pub max_q_count: u32,
 
@@ -95,8 +99,10 @@ pub struct FieldExpressionChipGPU {
     // Expression metadata device buffers
     pub compute_expr_ops_buf: DeviceBuffer<u128>,
     pub compute_roots_buf: DeviceBuffer<u32>,
+    pub compute_scratch_slots_buf: DeviceBuffer<u32>,
     pub constraint_expr_ops_buf: DeviceBuffer<u128>,
     pub constraint_roots_buf: DeviceBuffer<u32>,
+    pub constraint_scratch_slots_buf: DeviceBuffer<u32>,
     pub constants_buf: DeviceBuffer<u32>,
     pub const_limb_counts_buf: DeviceBuffer<u32>,
     pub const_limb_offsets_buf: DeviceBuffer<u32>,

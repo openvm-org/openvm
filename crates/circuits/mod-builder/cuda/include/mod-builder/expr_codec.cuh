@@ -55,17 +55,33 @@ __device__ __forceinline__ void push_compute_child_if_needed(
 __device__ __forceinline__ BigUintGpu &compute_scratch_slot(
     BigUintGpu *scratch,
     uint32_t scratch_stride,
-    uint32_t idx
+    uint32_t slot
 ) {
-    return scratch[(size_t)idx * scratch_stride];
+    return scratch[(size_t)slot * scratch_stride];
 }
 
 __device__ __forceinline__ const BigUintGpu &compute_scratch_slot(
     const BigUintGpu *scratch,
     uint32_t scratch_stride,
+    uint32_t slot
+) {
+    return scratch[(size_t)slot * scratch_stride];
+}
+
+__device__ __forceinline__ BigIntGpu &constraint_bigint_slot(
+    BigIntGpu *scratch,
+    const uint32_t *scratch_slots,
     uint32_t idx
 ) {
-    return scratch[(size_t)idx * scratch_stride];
+    return scratch[scratch_slots[idx]];
+}
+
+__device__ __forceinline__ OverflowInt &constraint_overflow_slot(
+    OverflowInt *scratch,
+    const uint32_t *scratch_slots,
+    uint32_t idx
+) {
+    return scratch[scratch_slots[idx]];
 }
 
 // Mark the live compute subgraph for the current row, preserving lazy SELECT semantics.
@@ -103,24 +119,16 @@ __device__ __noinline__ void mark_compute_live_nodes(
         case EXPR_SUB:
         case EXPR_MUL:
         case EXPR_DIV:
-            push_compute_child_if_needed(
-                node.data1, pool_size, live_nodes, node_stack, stack_len
-            );
-            push_compute_child_if_needed(
-                node.data0, pool_size, live_nodes, node_stack, stack_len
-            );
+            push_compute_child_if_needed(node.data1, pool_size, live_nodes, node_stack, stack_len);
+            push_compute_child_if_needed(node.data0, pool_size, live_nodes, node_stack, stack_len);
             break;
         case EXPR_INT_ADD:
         case EXPR_INT_MUL:
-            push_compute_child_if_needed(
-                node.data0, pool_size, live_nodes, node_stack, stack_len
-            );
+            push_compute_child_if_needed(node.data0, pool_size, live_nodes, node_stack, stack_len);
             break;
         case EXPR_SELECT: {
             uint32_t child = flags[node.data0] ? node.data1 : node.data2;
-            push_compute_child_if_needed(
-                child, pool_size, live_nodes, node_stack, stack_len
-            );
+            push_compute_child_if_needed(child, pool_size, live_nodes, node_stack, stack_len);
             break;
         }
         default:
@@ -141,6 +149,7 @@ __device__ __noinline__ void evaluate_compute_pool_flat(
     const BigUintGpu &prime,
     BigUintGpu *scratch,
     uint32_t scratch_stride,
+    const uint32_t *scratch_slots,
     const uint8_t *live_nodes,
     const uint32_t *root_indices,
     uint32_t num_roots
@@ -151,92 +160,91 @@ __device__ __noinline__ void evaluate_compute_pool_flat(
         }
 
         DecodedExpr node = decode_expr_op(expr_ops[idx]);
+        uint32_t slot = scratch_slots[idx];
         switch (node.kind) {
         case EXPR_INPUT:
-            compute_scratch_slot(scratch, scratch_stride, idx) =
+            compute_scratch_slot(scratch, scratch_stride, slot) =
                 BigUintGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits)
                     .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_VAR:
             assert(node.data0 < num_roots);
-            compute_scratch_slot(scratch, scratch_stride, idx) =
-                compute_scratch_slot(scratch, scratch_stride, root_indices[node.data0]);
+            compute_scratch_slot(scratch, scratch_stride, slot) = compute_scratch_slot(
+                scratch, scratch_stride, scratch_slots[root_indices[node.data0]]
+            );
             break;
         case EXPR_CONST: {
             uint32_t offset = get_const_offset(meta, node.data0);
-            compute_scratch_slot(scratch, scratch_stride, idx) =
-                BigUintGpu(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
+            compute_scratch_slot(scratch, scratch_stride, slot) = BigUintGpu(
+                meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits
+            );
             break;
         }
         case EXPR_ADD:
-            compute_scratch_slot(scratch, scratch_stride, idx) =
-                (compute_scratch_slot(scratch, scratch_stride, node.data0) +
-                 compute_scratch_slot(scratch, scratch_stride, node.data1))
+            compute_scratch_slot(scratch, scratch_stride, slot) =
+                (compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data0]) +
+                 compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data1]))
                     .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_SUB:
-            compute_scratch_slot(scratch, scratch_stride, idx) = compute_scratch_slot(
-                scratch, scratch_stride, node.data0
-            )
-                                                                 .mod_sub(
-                                                                     compute_scratch_slot(
-                                                                         scratch,
-                                                                         scratch_stride,
-                                                                         node.data1
-                                                                     ),
-                                                                     prime
-                                                                 );
+            compute_scratch_slot(scratch, scratch_stride, slot) =
+                compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data0])
+                    .mod_sub(
+                        compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data1]),
+                        prime
+                    );
             break;
         case EXPR_MUL:
-            compute_scratch_slot(scratch, scratch_stride, idx) =
-                (compute_scratch_slot(scratch, scratch_stride, node.data0) *
-                 compute_scratch_slot(scratch, scratch_stride, node.data1))
+            compute_scratch_slot(scratch, scratch_stride, slot) =
+                (compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data0]) *
+                 compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data1]))
                     .mod_reduce(prime, meta->barrett_mu);
             break;
         case EXPR_DIV:
-            compute_scratch_slot(scratch, scratch_stride, idx) = compute_scratch_slot(
-                scratch, scratch_stride, node.data0
-            )
-                                                                 .mod_div(
-                                                                     compute_scratch_slot(
-                                                                         scratch,
-                                                                         scratch_stride,
-                                                                         node.data1
-                                                                     ),
-                                                                     prime,
-                                                                     meta->barrett_mu
-                                                                 );
+            compute_scratch_slot(scratch, scratch_stride, slot) =
+                compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data0])
+                    .mod_div(
+                        compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data1]),
+                        prime,
+                        meta->barrett_mu
+                    );
             break;
         case EXPR_INT_ADD: {
-            BigIntGpu a(compute_scratch_slot(scratch, scratch_stride, node.data0), false);
-            compute_scratch_slot(scratch, scratch_stride, idx) =
-                (a + BigIntGpu((int32_t)node.data1, limb_bits)).mag.mod_reduce(prime, meta->barrett_mu);
+            BigIntGpu a(
+                compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data0]), false
+            );
+            compute_scratch_slot(scratch, scratch_stride, slot) =
+                (a + BigIntGpu((int32_t)node.data1, limb_bits))
+                    .mag.mod_reduce(prime, meta->barrett_mu);
             break;
         }
         case EXPR_INT_MUL: {
-            BigIntGpu a(compute_scratch_slot(scratch, scratch_stride, node.data0), false);
-            compute_scratch_slot(scratch, scratch_stride, idx) =
-                (a * BigIntGpu((int32_t)node.data1, limb_bits)).mag.mod_reduce(prime, meta->barrett_mu);
+            BigIntGpu a(
+                compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data0]), false
+            );
+            compute_scratch_slot(scratch, scratch_stride, slot) =
+                (a * BigIntGpu((int32_t)node.data1, limb_bits))
+                    .mag.mod_reduce(prime, meta->barrett_mu);
             break;
         }
         case EXPR_SELECT:
-            compute_scratch_slot(scratch, scratch_stride, idx) =
+            compute_scratch_slot(scratch, scratch_stride, slot) =
                 flags[node.data0]
-                    ? compute_scratch_slot(scratch, scratch_stride, node.data1)
-                    : compute_scratch_slot(scratch, scratch_stride, node.data2);
+                    ? compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data1])
+                    : compute_scratch_slot(scratch, scratch_stride, scratch_slots[node.data2]);
             break;
         default:
-            compute_scratch_slot(scratch, scratch_stride, idx) = BigUintGpu(limb_bits);
+            compute_scratch_slot(scratch, scratch_stride, slot) = BigUintGpu(limb_bits);
             break;
         }
     }
 
     for (uint32_t var = 0; var < num_roots; var++) {
-        uint32_t root_idx = root_indices[var];
+        uint32_t root_slot = scratch_slots[root_indices[var]];
         for (uint32_t limb = 0; limb < num_limbs; limb++) {
             vars[var * num_limbs + limb] =
-                (limb < compute_scratch_slot(scratch, scratch_stride, root_idx).num_limbs)
-                    ? compute_scratch_slot(scratch, scratch_stride, root_idx).limbs[limb]
+                (limb < compute_scratch_slot(scratch, scratch_stride, root_slot).num_limbs)
+                    ? compute_scratch_slot(scratch, scratch_stride, root_slot).limbs[limb]
                     : 0;
         }
     }
@@ -252,6 +260,7 @@ __device__ __noinline__ void evaluate_constraint_pool_flat(
     const bool *flags,
     uint32_t num_limbs,
     uint32_t limb_bits,
+    const uint32_t *scratch_slots,
     BigIntGpu *bigint_scratch,
     OverflowInt *overflow_scratch
 ) {
@@ -260,59 +269,87 @@ __device__ __noinline__ void evaluate_constraint_pool_flat(
 
         switch (node.kind) {
         case EXPR_INPUT:
-            bigint_scratch[i] = BigIntGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits);
-            overflow_scratch[i] =
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                BigIntGpu(inputs + node.data0 * num_limbs, num_limbs, limb_bits);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
                 OverflowInt(inputs + node.data0 * num_limbs, num_limbs, limb_bits);
             break;
         case EXPR_VAR:
-            bigint_scratch[i] = BigIntGpu(vars + node.data0 * num_limbs, num_limbs, limb_bits);
-            overflow_scratch[i] = OverflowInt(vars + node.data0 * num_limbs, num_limbs, limb_bits);
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                BigIntGpu(vars + node.data0 * num_limbs, num_limbs, limb_bits);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
+                OverflowInt(vars + node.data0 * num_limbs, num_limbs, limb_bits);
             break;
         case EXPR_CONST: {
             uint32_t offset = get_const_offset(meta, node.data0);
-            bigint_scratch[i] =
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
                 BigIntGpu(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
-            overflow_scratch[i] =
-                OverflowInt(meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) = OverflowInt(
+                meta->constants + offset, meta->const_limb_counts[node.data0], limb_bits
+            );
             break;
         }
         case EXPR_ADD:
-            bigint_scratch[i] = bigint_scratch[node.data0] + bigint_scratch[node.data1];
-            overflow_scratch[i] = overflow_scratch[node.data0] + overflow_scratch[node.data1];
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data0) +
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data1);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data0) +
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data1);
             break;
         case EXPR_SUB:
-            bigint_scratch[i] = bigint_scratch[node.data0] - bigint_scratch[node.data1];
-            overflow_scratch[i] = overflow_scratch[node.data0] - overflow_scratch[node.data1];
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data0) -
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data1);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data0) -
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data1);
             break;
         case EXPR_MUL:
-            bigint_scratch[i] = bigint_scratch[node.data0] * bigint_scratch[node.data1];
-            overflow_scratch[i] = overflow_scratch[node.data0] * overflow_scratch[node.data1];
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data0) *
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data1);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data0) *
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data1);
             break;
         case EXPR_INT_ADD:
-            bigint_scratch[i] = bigint_scratch[node.data0] + BigIntGpu((int32_t)node.data1, limb_bits);
-            overflow_scratch[i] = overflow_scratch[node.data0] + (int32_t)node.data1;
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data0) +
+                BigIntGpu((int32_t)node.data1, limb_bits);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data0) +
+                (int32_t)node.data1;
             break;
         case EXPR_INT_MUL:
-            bigint_scratch[i] = bigint_scratch[node.data0] * BigIntGpu((int32_t)node.data1, limb_bits);
-            overflow_scratch[i] = overflow_scratch[node.data0] * (int32_t)node.data1;
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                constraint_bigint_slot(bigint_scratch, scratch_slots, node.data0) *
+                BigIntGpu((int32_t)node.data1, limb_bits);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data0) *
+                (int32_t)node.data1;
             break;
         case EXPR_SELECT: {
             bool take_true = flags[node.data0];
-            bigint_scratch[i] = take_true ? bigint_scratch[node.data1] : bigint_scratch[node.data2];
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) =
+                take_true ? constraint_bigint_slot(bigint_scratch, scratch_slots, node.data1)
+                          : constraint_bigint_slot(bigint_scratch, scratch_slots, node.data2);
 
-            OverflowInt true_expr = overflow_scratch[node.data1];
-            OverflowInt false_expr = overflow_scratch[node.data2];
+            OverflowInt true_expr =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data1);
+            OverflowInt false_expr =
+                constraint_overflow_slot(overflow_scratch, scratch_slots, node.data2);
             OverflowInt selected = take_true ? true_expr : false_expr;
             selected.limb_max_abs = max(true_expr.limb_max_abs, false_expr.limb_max_abs);
             selected.max_overflow_bits =
                 max(true_expr.max_overflow_bits, false_expr.max_overflow_bits);
-            overflow_scratch[i] = selected;
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) = selected;
             break;
         }
         default:
             // Constraint expressions should not contain division.
-            bigint_scratch[i] = BigIntGpu(limb_bits);
-            overflow_scratch[i] = OverflowInt(limb_bits);
+            constraint_bigint_slot(bigint_scratch, scratch_slots, i) = BigIntGpu(limb_bits);
+            constraint_overflow_slot(overflow_scratch, scratch_slots, i) = OverflowInt(limb_bits);
             break;
         }
     }

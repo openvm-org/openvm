@@ -1,7 +1,12 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 
-use std::{collections::HashMap, mem::size_of, sync::Arc};
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
+    mem::size_of,
+    sync::Arc,
+};
 
 use num_bigint::BigUint;
 use num_traits::{FromBytes, One};
@@ -117,10 +122,14 @@ impl FieldExpressionChipGPU {
             expr_meta,
             compute_expr_ops_buf,
             compute_roots_buf,
+            compute_scratch_slots_buf,
             constraint_expr_ops_buf,
             constraint_roots_buf,
+            constraint_scratch_slots_buf,
             compute_pool_size,
+            compute_scratch_slot_count,
             constraint_pool_size,
+            constraint_scratch_slot_count,
             constants_buf,
             const_limb_counts_buf,
             const_limb_offsets_buf,
@@ -186,10 +195,14 @@ impl FieldExpressionChipGPU {
             carry_limb_counts: carry_limb_counts_buf.as_ptr(),
             compute_expr_ops: compute_expr_ops_buf.as_ptr() as *const ExprOp,
             compute_root_indices: compute_roots_buf.as_ptr(),
+            compute_scratch_slots: compute_scratch_slots_buf.as_ptr(),
             compute_pool_size,
+            compute_scratch_slot_count,
             constraint_expr_ops: constraint_expr_ops_buf.as_ptr() as *const ExprOp,
             constraint_root_indices: constraint_roots_buf.as_ptr(),
+            constraint_scratch_slots: constraint_scratch_slots_buf.as_ptr(),
             constraint_pool_size,
+            constraint_scratch_slot_count,
             max_q_count,
             expr_meta,
         };
@@ -209,8 +222,10 @@ impl FieldExpressionChipGPU {
             prime_limbs_buf,
             compute_expr_ops_buf,
             compute_roots_buf,
+            compute_scratch_slots_buf,
             constraint_expr_ops_buf,
             constraint_roots_buf,
+            constraint_scratch_slots_buf,
             constants_buf,
             const_limb_counts_buf,
             const_limb_offsets_buf,
@@ -235,8 +250,12 @@ impl FieldExpressionChipGPU {
         ExprMeta,
         DeviceBuffer<u128>,
         DeviceBuffer<u32>,
+        DeviceBuffer<u32>,
         DeviceBuffer<u128>,
         DeviceBuffer<u32>,
+        DeviceBuffer<u32>,
+        u32,
+        u32,
         u32,
         u32,
         DeviceBuffer<u32>,
@@ -305,12 +324,26 @@ impl FieldExpressionChipGPU {
             .iter()
             .map(|n| ExprOp::from_node(n).0)
             .collect();
+        let (compute_scratch_slots, compute_scratch_slot_count) =
+            Self::allocate_scratch_slots(&compute_expr_pool, &compute_root_indices);
+        let (constraint_scratch_slots, constraint_scratch_slot_count) =
+            Self::allocate_scratch_slots(&constraint_expr_pool, &constraint_root_indices);
 
         let compute_expr_ops_buf = compute_expr_ops_u128.to_device().unwrap();
         let constraint_expr_ops_buf = constraint_expr_ops_u128.to_device().unwrap();
 
         let compute_roots_buf = compute_root_indices.to_device().unwrap();
         let constraint_roots_buf = constraint_root_indices.to_device().unwrap();
+        let compute_scratch_slots_buf = if compute_scratch_slots.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            compute_scratch_slots.to_device().unwrap()
+        };
+        let constraint_scratch_slots_buf = if constraint_scratch_slots.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            constraint_scratch_slots.to_device().unwrap()
+        };
 
         let constants_buf = if constants.is_empty() {
             DeviceBuffer::new()
@@ -357,10 +390,14 @@ impl FieldExpressionChipGPU {
             expr_meta,
             compute_expr_ops_buf,
             compute_roots_buf,
+            compute_scratch_slots_buf,
             constraint_expr_ops_buf,
             constraint_roots_buf,
+            constraint_scratch_slots_buf,
             compute_expr_pool.len() as u32,
+            compute_scratch_slot_count,
             constraint_expr_pool.len() as u32,
+            constraint_scratch_slot_count,
             constants_buf,
             const_limb_counts_buf,
             const_limb_offsets_buf,
@@ -368,6 +405,68 @@ impl FieldExpressionChipGPU {
             carry_limb_counts_buf,
             max_q_count,
         )
+    }
+
+    fn scratch_children(node: &ExprNode) -> [Option<u32>; 2] {
+        match node.r#type {
+            x if x == ExprType::Add as u32
+                || x == ExprType::Sub as u32
+                || x == ExprType::Mul as u32
+                || x == ExprType::Div as u32 =>
+            {
+                [Some(node.data[0]), Some(node.data[1])]
+            }
+            x if x == ExprType::IntAdd as u32 || x == ExprType::IntMul as u32 => {
+                [Some(node.data[0]), None]
+            }
+            x if x == ExprType::Select as u32 => [Some(node.data[1]), Some(node.data[2])],
+            _ => [None, None],
+        }
+    }
+
+    fn allocate_scratch_slots(expr_pool: &[ExprNode], root_indices: &[u32]) -> (Vec<u32>, u32) {
+        let pool_size = expr_pool.len();
+        if pool_size == 0 {
+            return (Vec::new(), 0);
+        }
+
+        let mut last_use: Vec<u32> = (0..pool_size as u32).collect();
+        for (idx, node) in expr_pool.iter().enumerate() {
+            let idx = idx as u32;
+            for child in Self::scratch_children(node).into_iter().flatten() {
+                last_use[child as usize] = last_use[child as usize].max(idx);
+            }
+        }
+        for &root in root_indices {
+            last_use[root as usize] = last_use[root as usize].max(pool_size as u32);
+        }
+
+        let mut slots = vec![0u32; pool_size];
+        let mut free_slots = Vec::new();
+        let mut active = BinaryHeap::<Reverse<(u32, u32)>>::new();
+        let mut next_slot = 0u32;
+        let mut max_live_slots = 0u32;
+
+        for idx in 0..pool_size as u32 {
+            while let Some(&Reverse((end, slot))) = active.peek() {
+                if end >= idx {
+                    break;
+                }
+                active.pop();
+                free_slots.push(slot);
+            }
+
+            let slot = free_slots.pop().unwrap_or_else(|| {
+                let slot = next_slot;
+                next_slot += 1;
+                slot
+            });
+            slots[idx as usize] = slot;
+            active.push(Reverse((last_use[idx as usize], slot)));
+            max_live_slots = max_live_slots.max(next_slot - free_slots.len() as u32);
+        }
+
+        (slots, max_live_slots)
     }
 
     fn convert_to_expr_node(
@@ -484,14 +583,15 @@ impl FieldExpressionChipGPU {
         let overflow_size = size_of::<OverflowIntLayout>();
 
         let compute_pool_size = meta_host.compute_pool_size as usize;
-        let constraint_pool_size = meta_host.constraint_pool_size as usize;
+        let compute_scratch_slot_count = meta_host.compute_scratch_slot_count as usize;
+        let constraint_scratch_slot_count = meta_host.constraint_scratch_slot_count as usize;
 
         let compute_aux_region_bytes = compute_pool_size * size_of::<u32>()
             + compute_pool_size * size_of::<u8>();
         let constraint_region_bytes =
-            constraint_pool_size * (bigint_size + overflow_size);
+            constraint_scratch_slot_count * (bigint_size + overflow_size);
 
-        // Compute and constraint scratch share a single region in CUDA.
+        // Compute metadata and constraint scratch share the per-thread local region.
         let scratch_region_bytes =
             compute_aux_region_bytes.max(constraint_region_bytes);
         let scratch_offset = align_up(base_bytes, std::mem::align_of::<BigUintGpuLayout>());
@@ -502,7 +602,7 @@ impl FieldExpressionChipGPU {
         let local_workspace_size = (workspace_per_thread as usize)
             .checked_mul(padded_height)
             .unwrap();
-        let compute_scratch_size = compute_pool_size
+        let compute_scratch_size = compute_scratch_slot_count
             .checked_mul(biguint_size)
             .and_then(|size| size.checked_mul(padded_height))
             .unwrap();
