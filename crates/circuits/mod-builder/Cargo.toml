@@ -14,6 +14,7 @@ openvm-circuit-primitives = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
+openvm-rv32-adapters = { workspace = true, optional = true }
 halo2curves-axiom = { workspace = true, optional = true }
 openvm-pairing-guest = { workspace = true, optional = true }
 
@@ -45,6 +46,7 @@ default = []
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-common",
+    "dep:openvm-rv32-adapters",
     "dep:cuda-runtime-sys",
     "openvm-circuit-primitives/cuda",
 ]

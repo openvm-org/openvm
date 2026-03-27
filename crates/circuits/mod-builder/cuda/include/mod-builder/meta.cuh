@@ -12,6 +12,7 @@ typedef struct {
     uint32_t num_limbs;
     uint32_t limb_bits;
     uint32_t adapter_blocks;
+    uint32_t adapter_size;
     uint32_t adapter_width;
     uint32_t core_width;
     uint32_t trace_width;

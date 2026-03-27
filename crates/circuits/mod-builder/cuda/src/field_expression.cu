@@ -316,7 +316,7 @@ struct FieldExprCore {
     }
 };
 
-__global__ void field_expression_tracegen(
+__global__ void field_expression_adapter_tracegen(
     const uint8_t *records,
     Fp *trace,
     const FieldExprMeta *meta,
@@ -341,18 +341,8 @@ __global__ void field_expression_tracegen(
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, bitwise_num_bits);
 
-    uint8_t *thread_workspace = workspace + idx * workspace_per_thread;
-    BigUintGpu *shared_compute_scratch =
-        reinterpret_cast<BigUintGpu *>(workspace + (size_t)workspace_per_thread * height);
-    BigUintGpu *thread_compute_scratch = shared_compute_scratch + idx;
-
-    // Ensure workspace is aligned to 4 bytes for uint32_t access
-    assert(((uintptr_t)thread_workspace & 3) == 0);
-
     if (idx < num_records) {
         const uint8_t *rec_bytes = records + idx * record_stride;
-
-        size_t adapter_size = 0;
         route_rv32_vec_heap_adapter(
             row,
             rec_bytes,
@@ -360,35 +350,58 @@ __global__ void field_expression_tracegen(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
-
-        const uint8_t *core_bytes = rec_bytes + adapter_size;
-        const FieldExprCoreRecord *core_rec =
-            reinterpret_cast<const FieldExprCoreRecord *>(core_bytes);
-
-        FieldExprCore core(
-            meta, range_checker, true, thread_workspace, thread_compute_scratch, height
-        );
-        core.fill_trace_row(row.slice_from(meta->adapter_width), core_rec);
     } else {
-        // We can't just fill with 0s, instead calling w/ invalid opcode
         row.fill_zero(0, meta->adapter_width);
+    }
+}
 
-        FieldExprCore dummy_core(
-            meta, range_checker, false, thread_workspace, thread_compute_scratch, height
-        );
+__global__ void field_expression_core_tracegen(
+    const uint8_t *records,
+    Fp *trace,
+    const FieldExprMeta *meta,
+    size_t num_records,
+    size_t record_stride,
+    size_t width,
+    size_t height,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint8_t *workspace,
+    uint32_t workspace_per_thread
+) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= height)
+        return;
 
+    RowSlice row(trace + idx, height);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+
+    uint8_t *thread_workspace = workspace + idx * workspace_per_thread;
+    BigUintGpu *shared_compute_scratch =
+        reinterpret_cast<BigUintGpu *>(workspace + (size_t)workspace_per_thread * height);
+    BigUintGpu *thread_compute_scratch = shared_compute_scratch + idx;
+
+    assert(((uintptr_t)thread_workspace & 3) == 0);
+
+    bool is_valid = idx < num_records;
+    const FieldExprCoreRecord *core_rec;
+
+    if (idx < num_records) {
+        const uint8_t *rec_bytes = records + idx * record_stride;
+        const uint8_t *core_bytes = rec_bytes + meta->adapter_size;
+        core_rec = reinterpret_cast<const FieldExprCoreRecord *>(core_bytes);
+    } else {
         uint8_t *dummy_record = thread_workspace;
         memset(dummy_record, 0, workspace_per_thread);
-        dummy_record[0] = 0xFF; // Invalid opcode
-
-        const FieldExprCoreRecord *dummy_core_record =
-            reinterpret_cast<const FieldExprCoreRecord *>(dummy_record);
-
-        dummy_core.fill_trace_row(row.slice_from(meta->adapter_width), dummy_core_record);
+        dummy_record[0] = 0xFF;
+        core_rec = reinterpret_cast<const FieldExprCoreRecord *>(dummy_record);
     }
+
+    FieldExprCore core(
+        meta, range_checker, is_valid, thread_workspace, thread_compute_scratch, height
+    );
+    core.fill_trace_row(row.slice_from(meta->adapter_width), core_rec);
 }
 
 extern "C" int _field_expression_tracegen(
@@ -410,7 +423,7 @@ extern "C" int _field_expression_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height, 256);
-    field_expression_tracegen<<<grid, block>>>(
+    field_expression_adapter_tracegen<<<grid, block>>>(
         (uint8_t *)d_records,
         d_trace,
         d_meta,
@@ -424,6 +437,25 @@ extern "C" int _field_expression_tracegen(
         bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits,
+        d_workspace,
+        workspace_per_thread
+    );
+
+    int ret = CHECK_KERNEL();
+    if (ret) {
+        return ret;
+    }
+
+    field_expression_core_tracegen<<<grid, block>>>(
+        (uint8_t *)d_records,
+        d_trace,
+        d_meta,
+        num_records,
+        record_stride,
+        width,
+        height,
+        d_range_checker,
+        range_checker_num_bins,
         d_workspace,
         workspace_per_thread
     );

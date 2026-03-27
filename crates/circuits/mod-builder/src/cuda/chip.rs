@@ -19,6 +19,7 @@ use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
 };
+use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
 use openvm_stark_backend::p3_air::BaseAir;
 
 use crate::{
@@ -60,6 +61,32 @@ struct OverflowIntLayout {
 
 fn align_up(value: usize, alignment: usize) -> usize {
     (value + alignment - 1) & !(alignment - 1)
+}
+
+fn adapter_record_size(num_limbs: u32, adapter_blocks: usize, num_inputs: u32) -> usize {
+    if num_limbs <= 32 {
+        if adapter_blocks == 1 {
+            size_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>()
+        } else if adapter_blocks == 2 {
+            if num_inputs == 2 {
+                size_of::<Rv32VecHeapAdapterRecord<1, 2, 2, 32, 32>>()
+            } else {
+                size_of::<Rv32VecHeapAdapterRecord<2, 2, 2, 32, 32>>()
+            }
+        } else {
+            size_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>()
+        }
+    } else if adapter_blocks == 3 {
+        size_of::<Rv32VecHeapAdapterRecord<2, 3, 3, 16, 16>>()
+    } else if adapter_blocks == 6 {
+        if num_inputs == 2 {
+            size_of::<Rv32VecHeapAdapterRecord<1, 6, 6, 16, 16>>()
+        } else {
+            size_of::<Rv32VecHeapAdapterRecord<2, 6, 6, 16, 16>>()
+        }
+    } else {
+        size_of::<Rv32VecHeapAdapterRecord<2, 1, 1, 32, 32>>()
+    }
 }
 
 impl FieldExpressionChipGPU {
@@ -174,6 +201,7 @@ impl FieldExpressionChipGPU {
         };
 
         let input_limbs_offset = std::mem::size_of::<u8>();
+        let adapter_size = adapter_record_size(num_limbs, adapter_blocks, num_inputs) as u32;
 
         let meta_host = FieldExprMeta {
             num_inputs,
@@ -181,6 +209,7 @@ impl FieldExpressionChipGPU {
             num_limbs,
             limb_bits,
             adapter_blocks: adapter_blocks as u32,
+            adapter_size,
             adapter_width: adapter_width as u32,
             core_width,
             trace_width,
@@ -586,14 +615,12 @@ impl FieldExpressionChipGPU {
         let compute_scratch_slot_count = meta_host.compute_scratch_slot_count as usize;
         let constraint_scratch_slot_count = meta_host.constraint_scratch_slot_count as usize;
 
-        let compute_aux_region_bytes = compute_pool_size * size_of::<u32>()
-            + compute_pool_size * size_of::<u8>();
-        let constraint_region_bytes =
-            constraint_scratch_slot_count * (bigint_size + overflow_size);
+        let compute_aux_region_bytes =
+            compute_pool_size * size_of::<u32>() + compute_pool_size * size_of::<u8>();
+        let constraint_region_bytes = constraint_scratch_slot_count * (bigint_size + overflow_size);
 
         // Compute metadata and constraint scratch share the per-thread local region.
-        let scratch_region_bytes =
-            compute_aux_region_bytes.max(constraint_region_bytes);
+        let scratch_region_bytes = compute_aux_region_bytes.max(constraint_region_bytes);
         let scratch_offset = align_up(base_bytes, std::mem::align_of::<BigUintGpuLayout>());
 
         // Keep alignment conservative for C++ pointer arithmetic.

@@ -52,8 +52,7 @@ __device__ inline void instantiate_rv32_vec_heap_adapter(
     size_t pointer_max_bits,
     VariableRangeChecker &range_checker,
     BitwiseOperationLookup &bitwise_lookup,
-    uint32_t timestamp_max_bits,
-    size_t &adapter_size
+    uint32_t timestamp_max_bits
 ) {
     using AdapterRecord = Rv32VecHeapAdapterRecord<
         NUM_READS,
@@ -69,8 +68,6 @@ __device__ inline void instantiate_rv32_vec_heap_adapter(
         pointer_max_bits, range_checker, bitwise_lookup, timestamp_max_bits
     );
     adapter_step.fill_trace_row(row, *adapter_rec);
-
-    adapter_size = sizeof(AdapterRecord);
 }
 
 __device__ inline void route_rv32_vec_heap_adapter(
@@ -80,8 +77,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
     size_t pointer_max_bits,
     VariableRangeChecker &range_checker,
     BitwiseOperationLookup &bitwise_lookup,
-    uint32_t timestamp_max_bits,
-    size_t &adapter_size
+    uint32_t timestamp_max_bits
 ) {
     Rv32VecHeapConfig config = get_rv32_vec_heap_config(meta);
 
@@ -93,8 +89,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     } else if (config.num_reads == 2 && config.blocks_per_read == 1 &&
                config.blocks_per_write == 1 && config.read_size == 32 && config.write_size == 32) {
@@ -104,8 +99,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     } else if (config.num_reads == 2 && config.blocks_per_read == 2 &&
                config.blocks_per_write == 2 && config.read_size == 32 && config.write_size == 32) {
@@ -115,8 +109,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     } else if (config.num_reads == 2 && config.blocks_per_read == 3 &&
                config.blocks_per_write == 3 && config.read_size == 16 && config.write_size == 16) {
@@ -126,8 +119,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     } else if (config.num_reads == 2 && config.blocks_per_read == 6 &&
                config.blocks_per_write == 6 && config.read_size == 16 && config.write_size == 16) {
@@ -137,8 +129,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     } else if (config.num_reads == 1 && config.blocks_per_read == 6 &&
                config.blocks_per_write == 6 && config.read_size == 16 && config.write_size == 16) {
@@ -148,8 +139,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     } else {
         assert(
@@ -162,8 +152,7 @@ __device__ inline void route_rv32_vec_heap_adapter(
             pointer_max_bits,
             range_checker,
             bitwise_lookup,
-            timestamp_max_bits,
-            adapter_size
+            timestamp_max_bits
         );
     }
 }

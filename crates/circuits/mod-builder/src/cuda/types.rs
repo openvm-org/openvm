@@ -45,6 +45,7 @@ pub struct FieldExprMeta {
     pub num_limbs: u32,
     pub limb_bits: u32,
     pub adapter_blocks: u32,
+    pub adapter_size: u32,
     pub adapter_width: u32,
     pub core_width: u32,
     pub trace_width: u32,
