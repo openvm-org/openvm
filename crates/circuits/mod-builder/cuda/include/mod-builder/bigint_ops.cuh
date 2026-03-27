@@ -377,7 +377,8 @@ struct BigUintGpu {
         return result;
     }
 
-    __device__ __noinline__ BigUintGpu mod_inverse(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
+    __device__ __noinline__ BigUintGpu
+    mod_inverse(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
         // Check if modulus is zero
         bool modulus_is_zero = true;
         for (uint32_t i = 0; i < modulus.num_limbs; i++) {
@@ -402,13 +403,16 @@ struct BigUintGpu {
             return BigUintGpu(limb_bits); // Return zero
         }
 
+        // Reuse a small set of temporaries to avoid keeping many bigints live at once.
+        BigUintGpu r0, r1, t0, t1, tmp0, tmp1;
+
         // Reduce a modulo modulus first
-        BigUintGpu a_mod = mod_reduce(modulus, barrett_mu);
+        r1 = mod_reduce(modulus, barrett_mu);
 
         // Check if a_mod is zero
         bool a_is_zero = true;
-        for (uint32_t i = 0; i < a_mod.num_limbs; i++) {
-            if (a_mod.limbs[i] != 0) {
+        for (uint32_t i = 0; i < r1.num_limbs; i++) {
+            if (r1.limbs[i] != 0) {
                 a_is_zero = false;
                 break;
             }
@@ -418,9 +422,9 @@ struct BigUintGpu {
         }
 
         // Check if a_mod is one
-        bool a_is_one = (a_mod.limbs[0] == 1);
-        for (uint32_t i = 1; i < a_mod.num_limbs; i++) {
-            if (a_mod.limbs[i] != 0) {
+        bool a_is_one = (r1.limbs[0] == 1);
+        for (uint32_t i = 1; i < r1.num_limbs; i++) {
+            if (r1.limbs[i] != 0) {
                 a_is_one = false;
                 break;
             }
@@ -430,21 +434,13 @@ struct BigUintGpu {
         }
 
         // Extended Euclidean Algorithm
-        BigUintGpu r0, r1, t0, t1, q, r2, qt1, t2;
-
-        // Initial values
-        r1 = a_mod;
-
         // First iteration outside the loop
-        BigUintGpu temp_quotient, temp_remainder;
-        modulus.divrem(temp_quotient, temp_remainder, r1);
-        q = temp_quotient;
-        r2 = temp_remainder;
+        modulus.divrem(tmp0, tmp1, r1);
 
         // Check if r2 is zero (gcd(a, modulus) != 1)
         bool r2_is_zero = true;
-        for (uint32_t i = 0; i < r2.num_limbs; i++) {
-            if (r2.limbs[i] != 0) {
+        for (uint32_t i = 0; i < tmp1.num_limbs; i++) {
+            if (tmp1.limbs[i] != 0) {
                 r2_is_zero = false;
                 break;
             }
@@ -455,14 +451,14 @@ struct BigUintGpu {
 
         // Update for next iteration
         r0 = r1;
-        r1 = r2;
+        r1 = tmp1;
 
         // Initialize t values after first iteration
         // t0 = 1
         t0 = BigUintGpu(1, limb_bits);
 
         // t1 = modulus - q
-        t1 = modulus - q;
+        t1 = modulus - tmp0;
 
         // Main loop
         while (true) {
@@ -478,24 +474,24 @@ struct BigUintGpu {
                 break;
 
             // (q, r2) = divrem(r0, r1)
-            r0.divrem(q, r2, r1);
+            r0.divrem(tmp0, tmp1, r1);
             r0 = r1;
-            r1 = r2;
+            r1 = tmp1;
 
             // qt1 = q * t1 % modulus
-            qt1 = q.mul(t1).mod_reduce(modulus, barrett_mu);
+            tmp0 = tmp0.mul(t1).mod_reduce(modulus, barrett_mu);
 
             // t2 = (t0 - qt1) % modulus
-            if (t0 >= qt1) {
-                t2 = t0 - qt1;
+            if (t0 >= tmp0) {
+                tmp1 = t0 - tmp0;
             } else {
                 // t0 < qt1, so compute t0 + modulus - qt1
-                BigUintGpu modulus_minus_qt1 = modulus - qt1;
-                t2 = t0 + modulus_minus_qt1;
+                tmp1 = modulus - tmp0;
+                tmp1 += t0;
             }
 
             t0 = t1;
-            t1 = t2;
+            t1 = tmp1;
         }
 
         // Check if gcd is 1 (r0 should be 1)
