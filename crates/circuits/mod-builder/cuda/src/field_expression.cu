@@ -25,18 +25,51 @@ __device__ inline uint32_t get_total_carry_count(const FieldExprMeta *meta) {
     return total;
 }
 
-__device__ __noinline__ void generate_subrow_gpu(
+__device__ __forceinline__ uint8_t *align_ptr(uint8_t *ptr, size_t alignment) {
+    uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t aligned = (p + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<uint8_t *>(aligned);
+}
+
+__device__ __noinline__ void decode_core_record_gpu(
+    const FieldExprMeta *meta,
+    const FieldExprCoreRecord *core_rec,
+    uint32_t *inputs,
+    bool *flags
+) {
+    const uint8_t *rec_bytes = core_rec->input_limbs;
+    uint8_t opcode = core_rec->opcode;
+    uint32_t bytes_per_limb = (meta->limb_bits + 7) / 8;
+
+    memset(flags, 0, meta->num_u32_flags * sizeof(bool));
+
+    for (uint32_t i = 0; i < meta->num_inputs; i++) {
+        for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
+            size_t base = (size_t(i) * meta->num_limbs + limb) * bytes_per_limb;
+            uint32_t v = 0;
+            for (uint32_t b = 0; b < bytes_per_limb; b++) {
+                v |= (uint32_t)rec_bytes[base + b] << (8 * b);
+            }
+            inputs[i * meta->num_limbs + limb] = v;
+        }
+    }
+
+    for (uint32_t j = 0; j < meta->num_local_opcodes; j++) {
+        if (opcode == meta->local_opcode_idx[j] && j < meta->num_u32_flags) {
+            flags[meta->opcode_flag_idx[j]] = true;
+        }
+    }
+}
+
+__device__ __noinline__ void evaluate_compute_subrow_gpu(
     const FieldExprMeta *meta,
     const uint32_t *inputs,
     const bool *flags,
     uint32_t *vars,
-    uint32_t *all_carries,
     BigUintGpu *compute_scratch,
     uint32_t compute_scratch_stride,
     uint32_t *compute_node_stack,
     uint8_t *compute_live_nodes,
-    BigIntGpu *constraint_bigint_scratch,
-    OverflowInt *constraint_overflow_scratch,
     VariableRangeChecker &range_checker,
     bool is_valid,
     RowSlice core_row
@@ -44,11 +77,8 @@ __device__ __noinline__ void generate_subrow_gpu(
     uint32_t num_limbs = meta->num_limbs;
     uint32_t limb_bits = meta->limb_bits;
 
-    BigUintGpu prime(
-        meta->expr_meta.prime_limbs, meta->expr_meta.prime_limb_count, meta->limb_bits
-    );
+    BigUintGpu prime(meta->expr_meta.prime_limbs, meta->expr_meta.prime_limb_count, limb_bits);
     prime.normalize();
-    OverflowInt prime_overflow(prime, prime.num_limbs);
 
     memset(compute_live_nodes, 0, (size_t)meta->compute_pool_size * sizeof(uint8_t));
     if (meta->compute_pool_size > 0 && meta->expr_meta.num_vars > 0) {
@@ -81,7 +111,6 @@ __device__ __noinline__ void generate_subrow_gpu(
     }
 
     uint32_t col = 0;
-
     core_row[col++] = is_valid;
 
     for (uint32_t i = 0; i < meta->num_inputs; i++) {
@@ -92,11 +121,50 @@ __device__ __noinline__ void generate_subrow_gpu(
 
     for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
         for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
-            core_row[col++] = Fp(vars[i * meta->num_limbs + limb]);
+            uint32_t var_val = vars[i * meta->num_limbs + limb];
+            core_row[col++] = Fp(var_val);
+            if (is_valid) {
+                range_checker.add_count(var_val, meta->limb_bits);
+            }
         }
     }
+}
+
+__device__ __noinline__ void load_vars_from_trace_gpu(
+    const FieldExprMeta *meta,
+    RowSlice core_row,
+    uint32_t *vars
+) {
+    uint32_t col = 1 + INPUT_U32_COUNT(meta);
+    for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
+        for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
+            vars[i * meta->num_limbs + limb] = core_row[col++].asUInt32();
+        }
+    }
+}
+
+__device__ __noinline__ void evaluate_constraint_subrow_gpu(
+    const FieldExprMeta *meta,
+    const uint32_t *inputs,
+    const bool *flags,
+    const uint32_t *vars,
+    uint32_t *all_carries,
+    BigIntGpu *constraint_bigint_scratch,
+    OverflowInt *constraint_overflow_scratch,
+    VariableRangeChecker &range_checker,
+    bool is_valid,
+    RowSlice core_row
+) {
+    uint32_t num_limbs = meta->num_limbs;
+    uint32_t limb_bits = meta->limb_bits;
+
+    BigUintGpu prime(meta->expr_meta.prime_limbs, meta->expr_meta.prime_limb_count, limb_bits);
+    prime.normalize();
+    OverflowInt prime_overflow(prime, prime.num_limbs);
+
     memset(all_carries, 0, get_total_carry_count(meta) * sizeof(uint32_t));
     uint32_t c_offset = 0;
+    uint32_t col = 1 + INPUT_U32_COUNT(meta) + VAR_U32_COUNT(meta);
 
     if (meta->expr_meta.num_vars > 0) {
         evaluate_constraint_pool_flat(
@@ -118,9 +186,7 @@ __device__ __noinline__ void generate_subrow_gpu(
             uint32_t constraint_root_slot = meta->constraint_scratch_slots[constraint_root];
 
             BigIntGpu constraint_result = constraint_bigint_scratch[constraint_root_slot];
-
             BigIntGpu quotient = constraint_result.div_biguint(prime);
-
             uint32_t q_count = meta->q_limb_counts[var_idx];
 
             if (is_valid) {
@@ -134,10 +200,7 @@ __device__ __noinline__ void generate_subrow_gpu(
             }
 
             OverflowInt expr = constraint_overflow_scratch[constraint_root_slot];
-
-            // result = expr - q * p
             OverflowInt result = expr - (OverflowInt(quotient, q_count) * prime_overflow);
-
             uint32_t c_count = meta->carry_limb_counts[var_idx];
 
             OverflowInt carries = result.carry_limbs(c_count);
@@ -147,18 +210,10 @@ __device__ __noinline__ void generate_subrow_gpu(
 
             for (uint32_t limb = 0; limb < q_count; limb++) {
                 uint32_t q_limb = quotient.mag.limbs[limb];
-
-                if (!quotient.is_negative) {
-                    core_row[col] = Fp(q_limb);
-                } else {
-                    core_row[col] = Fp::zero() - Fp(q_limb);
-                }
-
-                col++;
+                core_row[col++] = quotient.is_negative ? (Fp::zero() - Fp(q_limb)) : Fp(q_limb);
             }
 
-            uint32_t max_overflow_bits = result.max_overflow_bits;
-            uint32_t carry_bits = max_overflow_bits - limb_bits;
+            uint32_t carry_bits = result.max_overflow_bits - limb_bits;
             uint32_t carry_min_abs = 1 << carry_bits;
             carry_bits++;
 
@@ -174,16 +229,11 @@ __device__ __noinline__ void generate_subrow_gpu(
         c_offset = 0;
         for (uint32_t var_idx = 0; var_idx < meta->expr_meta.num_vars; var_idx++) {
             uint32_t c_count = meta->carry_limb_counts[var_idx];
-
             for (uint32_t limb = 0; limb < c_count; limb++) {
                 int32_t signed_carry = (int32_t)all_carries[c_offset + limb];
-
-                if (signed_carry >= 0) {
-                    core_row[col] = Fp((uint32_t)signed_carry);
-                } else {
-                    core_row[col] = Fp::zero() - Fp((uint32_t)(-signed_carry));
-                }
-                col++;
+                core_row[col++] = signed_carry >= 0
+                                      ? Fp((uint32_t)signed_carry)
+                                      : (Fp::zero() - Fp((uint32_t)(-signed_carry)));
             }
             c_offset += c_count;
         }
@@ -191,15 +241,13 @@ __device__ __noinline__ void generate_subrow_gpu(
         for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
             uint32_t q_count = meta->q_limb_counts[i];
             for (uint32_t limb = 0; limb < q_count; limb++) {
-                core_row[col] = Fp::zero();
-                col++;
+                core_row[col++] = Fp::zero();
             }
         }
         for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
             uint32_t c_count = meta->carry_limb_counts[i];
             for (uint32_t limb = 0; limb < c_count; limb++) {
-                core_row[col] = Fp::zero();
-                col++;
+                core_row[col++] = Fp::zero();
             }
         }
     }
@@ -212,109 +260,6 @@ __device__ __noinline__ void generate_subrow_gpu(
         core_row[col++] = Fp::zero();
     }
 }
-
-struct FieldExprCore {
-    // If true, we shouldn't do any range checks
-    bool is_valid;
-    const FieldExprMeta *meta;
-    VariableRangeChecker range_checker;
-    uint8_t *workspace;
-    BigUintGpu *compute_scratch;
-    uint32_t compute_scratch_stride;
-
-    __device__ explicit FieldExprCore(
-        const FieldExprMeta *m,
-        VariableRangeChecker rc,
-        bool is_valid,
-        uint8_t *ws,
-        BigUintGpu *compute_scratch,
-        uint32_t compute_scratch_stride
-    )
-        : meta(m), range_checker(rc), is_valid(is_valid), workspace(ws),
-          compute_scratch(compute_scratch), compute_scratch_stride(compute_scratch_stride) {}
-
-    __device__ static uint8_t *align_ptr(uint8_t *ptr, size_t alignment) {
-        uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
-        uintptr_t aligned = (p + alignment - 1) & ~(alignment - 1);
-        return reinterpret_cast<uint8_t *>(aligned);
-    }
-
-    __device__ void fill_trace_row(RowSlice core_row, const FieldExprCoreRecord *core_rec) {
-        const uint8_t *rec_bytes = core_rec->input_limbs;
-        uint8_t opcode = core_rec->opcode;
-
-        uint32_t in_size = INPUT_U32_COUNT(meta);
-        uint32_t var_size = VAR_U32_COUNT(meta);
-        uint32_t carry_size = get_total_carry_count(meta);
-
-        uint32_t *inputs = (uint32_t *)workspace;
-        uint32_t *vars = (uint32_t *)(workspace + in_size * sizeof(uint32_t));
-        uint32_t *all_carries = (uint32_t *)(workspace + (in_size + var_size) * sizeof(uint32_t));
-        bool *flags = (bool *)(workspace + (in_size + var_size + carry_size) * sizeof(uint32_t));
-        uint8_t *scratch_base = align_ptr(
-            reinterpret_cast<uint8_t *>(flags + meta->num_u32_flags), alignof(BigUintGpu)
-        );
-
-        uint8_t *compute_ptr = scratch_base;
-        uint32_t *compute_node_stack = reinterpret_cast<uint32_t *>(compute_ptr);
-        compute_ptr += (size_t)meta->compute_pool_size * sizeof(uint32_t);
-        uint8_t *compute_live_nodes = compute_ptr;
-
-        uint8_t *constraint_ptr = scratch_base;
-        BigIntGpu *constraint_bigint_scratch = reinterpret_cast<BigIntGpu *>(constraint_ptr);
-        constraint_ptr += (size_t)meta->constraint_scratch_slot_count * sizeof(BigIntGpu);
-        OverflowInt *constraint_overflow_scratch = reinterpret_cast<OverflowInt *>(constraint_ptr);
-
-        memset(flags, 0, meta->num_u32_flags * sizeof(bool));
-
-        uint32_t bytes_per_limb = (meta->limb_bits + 7) / 8;
-
-        for (uint32_t i = 0; i < meta->num_inputs; i++) {
-            for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
-                size_t base = (size_t(i) * meta->num_limbs + limb) * bytes_per_limb;
-                uint32_t v = 0;
-                for (uint32_t b = 0; b < bytes_per_limb; b++) {
-                    v |= (uint32_t)rec_bytes[base + b] << (8 * b);
-                }
-                inputs[i * meta->num_limbs + limb] = v;
-            }
-        }
-
-        // flags for needs setup. These will all be false if opcode == SETUP
-        // or opcode == 0xFF (the dummy opcode for dummy fill trace row)
-        for (uint32_t j = 0; j < meta->num_local_opcodes; j++) {
-            if (opcode == meta->local_opcode_idx[j] && j < meta->num_u32_flags) {
-                flags[meta->opcode_flag_idx[j]] = true;
-            }
-        }
-
-        generate_subrow_gpu(
-            meta,
-            inputs,
-            flags,
-            vars,
-            all_carries,
-            compute_scratch,
-            compute_scratch_stride,
-            compute_node_stack,
-            compute_live_nodes,
-            constraint_bigint_scratch,
-            constraint_overflow_scratch,
-            range_checker,
-            is_valid,
-            core_row
-        );
-
-        if (is_valid) {
-            for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
-                for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
-                    uint32_t var_val = vars[i * meta->num_limbs + limb];
-                    range_checker.add_count(var_val, meta->limb_bits);
-                }
-            }
-        }
-    }
-};
 
 __global__ void field_expression_adapter_tracegen(
     const uint8_t *records,
@@ -357,7 +302,7 @@ __global__ void field_expression_adapter_tracegen(
     }
 }
 
-__global__ void field_expression_core_tracegen(
+__global__ void field_expression_compute_tracegen(
     const uint8_t *records,
     Fp *trace,
     const FieldExprMeta *meta,
@@ -375,14 +320,23 @@ __global__ void field_expression_core_tracegen(
         return;
 
     RowSlice row(trace + idx, height);
-    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
-
     uint8_t *thread_workspace = workspace + idx * workspace_per_thread;
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     BigUintGpu *shared_compute_scratch =
         reinterpret_cast<BigUintGpu *>(workspace + (size_t)workspace_per_thread * height);
     BigUintGpu *thread_compute_scratch = shared_compute_scratch + idx;
 
     assert(((uintptr_t)thread_workspace & 3) == 0);
+
+    uint32_t in_size = INPUT_U32_COUNT(meta);
+    uint32_t *inputs = reinterpret_cast<uint32_t *>(thread_workspace);
+    uint32_t *vars = reinterpret_cast<uint32_t *>(thread_workspace + in_size * sizeof(uint32_t));
+    bool *flags = reinterpret_cast<bool *>(thread_workspace + (in_size + VAR_U32_COUNT(meta)) * sizeof(uint32_t));
+    uint8_t *scratch_base =
+        align_ptr(reinterpret_cast<uint8_t *>(flags + meta->num_u32_flags), alignof(BigUintGpu));
+    uint32_t *compute_node_stack = reinterpret_cast<uint32_t *>(scratch_base);
+    uint8_t *compute_live_nodes =
+        reinterpret_cast<uint8_t *>(compute_node_stack + meta->compute_pool_size);
 
     bool is_valid = idx < num_records;
     const FieldExprCoreRecord *core_rec;
@@ -398,10 +352,90 @@ __global__ void field_expression_core_tracegen(
         core_rec = reinterpret_cast<const FieldExprCoreRecord *>(dummy_record);
     }
 
-    FieldExprCore core(
-        meta, range_checker, is_valid, thread_workspace, thread_compute_scratch, height
+    decode_core_record_gpu(meta, core_rec, inputs, flags);
+    evaluate_compute_subrow_gpu(
+        meta,
+        inputs,
+        flags,
+        vars,
+        thread_compute_scratch,
+        height,
+        compute_node_stack,
+        compute_live_nodes,
+        range_checker,
+        is_valid,
+        row.slice_from(meta->adapter_width)
     );
-    core.fill_trace_row(row.slice_from(meta->adapter_width), core_rec);
+}
+
+__global__ void field_expression_constraint_tracegen(
+    const uint8_t *records,
+    Fp *trace,
+    const FieldExprMeta *meta,
+    size_t num_records,
+    size_t record_stride,
+    size_t width,
+    size_t height,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint8_t *workspace,
+    uint32_t workspace_per_thread
+) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= height)
+        return;
+
+    RowSlice row(trace + idx, height);
+    RowSlice core_row = row.slice_from(meta->adapter_width);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+
+    uint8_t *thread_workspace = workspace + idx * workspace_per_thread;
+    assert(((uintptr_t)thread_workspace & 3) == 0);
+
+    uint32_t in_size = INPUT_U32_COUNT(meta);
+    uint32_t var_size = VAR_U32_COUNT(meta);
+    uint32_t carry_size = get_total_carry_count(meta);
+    uint32_t *inputs = reinterpret_cast<uint32_t *>(thread_workspace);
+    uint32_t *vars = reinterpret_cast<uint32_t *>(thread_workspace + in_size * sizeof(uint32_t));
+    uint32_t *all_carries =
+        reinterpret_cast<uint32_t *>(thread_workspace + (in_size + var_size) * sizeof(uint32_t));
+    bool *flags =
+        reinterpret_cast<bool *>(thread_workspace + (in_size + var_size + carry_size) * sizeof(uint32_t));
+    uint8_t *scratch_base =
+        align_ptr(reinterpret_cast<uint8_t *>(flags + meta->num_u32_flags), alignof(BigIntGpu));
+    BigIntGpu *constraint_bigint_scratch = reinterpret_cast<BigIntGpu *>(scratch_base);
+    OverflowInt *constraint_overflow_scratch = reinterpret_cast<OverflowInt *>(
+        scratch_base + (size_t)meta->constraint_scratch_slot_count * sizeof(BigIntGpu)
+    );
+
+    bool is_valid = idx < num_records;
+    const FieldExprCoreRecord *core_rec;
+
+    if (idx < num_records) {
+        const uint8_t *rec_bytes = records + idx * record_stride;
+        const uint8_t *core_bytes = rec_bytes + meta->adapter_size;
+        core_rec = reinterpret_cast<const FieldExprCoreRecord *>(core_bytes);
+    } else {
+        uint8_t *dummy_record = thread_workspace;
+        memset(dummy_record, 0, workspace_per_thread);
+        dummy_record[0] = 0xFF;
+        core_rec = reinterpret_cast<const FieldExprCoreRecord *>(dummy_record);
+    }
+
+    decode_core_record_gpu(meta, core_rec, inputs, flags);
+    load_vars_from_trace_gpu(meta, core_row, vars);
+    evaluate_constraint_subrow_gpu(
+        meta,
+        inputs,
+        flags,
+        vars,
+        all_carries,
+        constraint_bigint_scratch,
+        constraint_overflow_scratch,
+        range_checker,
+        is_valid,
+        core_row
+    );
 }
 
 extern "C" int _field_expression_tracegen(
@@ -422,8 +456,9 @@ extern "C" int _field_expression_tracegen(
     uint32_t workspace_per_thread
 ) {
     assert((height & (height - 1)) == 0);
-    auto [grid, block] = kernel_launch_params(height, 256);
-    field_expression_adapter_tracegen<<<grid, block>>>(
+    auto [main_grid, main_block] = kernel_launch_params(height, 256);
+    auto [constraint_grid, constraint_block] = kernel_launch_params(height, 128);
+    field_expression_adapter_tracegen<<<main_grid, main_block>>>(
         (uint8_t *)d_records,
         d_trace,
         d_meta,
@@ -446,7 +481,26 @@ extern "C" int _field_expression_tracegen(
         return ret;
     }
 
-    field_expression_core_tracegen<<<grid, block>>>(
+    field_expression_compute_tracegen<<<main_grid, main_block>>>(
+        (uint8_t *)d_records,
+        d_trace,
+        d_meta,
+        num_records,
+        record_stride,
+        width,
+        height,
+        d_range_checker,
+        range_checker_num_bins,
+        d_workspace,
+        workspace_per_thread
+    );
+
+    ret = CHECK_KERNEL();
+    if (ret) {
+        return ret;
+    }
+
+    field_expression_constraint_tracegen<<<constraint_grid, constraint_block>>>(
         (uint8_t *)d_records,
         d_trace,
         d_meta,
