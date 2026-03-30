@@ -32,6 +32,7 @@ pub struct InputCommitCols<F> {
     pub is_first: F,
 
     pub proof_idx: F,
+    pub row_in_proof_idx: F,
     pub has_verifier_pvs: F,
 
     pub air_idx: F,
@@ -67,19 +68,19 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         let local: &InputCommitCols<AB::Var> = (*local).borrow();
         let next: &InputCommitCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<1> {}.eval(
+        NestedForLoopSubAir::<2> {}.eval(
             builder,
             (
                 NestedForLoopIoCols {
                     is_enabled: local.is_valid,
-                    counter: [local.proof_idx],
-                    is_first: [local.is_first],
+                    counter: [local.proof_idx, local.row_in_proof_idx],
+                    is_first: [local.is_first, local.is_valid],
                 }
                 .map_into(),
                 NestedForLoopIoCols {
                     is_enabled: next.is_valid,
-                    counter: [next.proof_idx],
-                    is_first: [next.is_first],
+                    counter: [next.proof_idx, next.row_in_proof_idx],
+                    is_first: [next.is_first, next.is_valid],
                 }
                 .map_into(),
             ),
@@ -126,9 +127,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             builder,
             local.proof_idx,
             CachedCommitBusMessage {
-                air_idx: local.air_idx,
-                cached_idx: local.cached_idx,
-                cached_commit: local.current_commit,
+                air_idx: local.air_idx.into(),
+                cached_idx: local.cached_idx.into(),
+                global_cached_idx: local.row_in_proof_idx - AB::Expr::ONE,
+                cached_commit: local.current_commit.map(Into::into),
             },
             is_leaf.clone() * (local.is_valid - local.is_first),
         );

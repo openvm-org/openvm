@@ -197,6 +197,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             CachedCommitBusMessage {
                 air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
                 cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
+                global_cached_idx: AB::Expr::ZERO,
                 cached_commit: self.expected_def_hook_cached_commit.into(),
             },
             local.is_present * not(local.has_verifier_pvs),

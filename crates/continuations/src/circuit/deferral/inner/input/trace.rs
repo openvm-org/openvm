@@ -67,6 +67,7 @@ pub fn generate_proving_ctx(
             cols.is_valid = F::ONE;
             cols.is_first = F::from_bool(row_in_proof == 0);
             cols.proof_idx = F::from_usize(proof_idx);
+            cols.row_in_proof_idx = F::from_usize(row_in_proof);
             cols.has_verifier_pvs = F::from_bool(child_is_agg);
             cols.air_idx = F::from_usize(air_idx);
             cols.cached_idx = F::from_usize(cached_idx);
