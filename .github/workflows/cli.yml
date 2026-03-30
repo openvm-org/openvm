@@ -7,7 +7,13 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      # - "crates/circuits/primitives/**"
+      # - "crates/vm/**"
+      # - "crates/toolchain/**"
+      # - "crates/sdk/**"
       - "crates/cli/**"
+      # - "examples/**"
+      # - "Cargo.toml"
       - ".github/workflows/cli.yml"
   workflow_call:
   workflow_dispatch:
