@@ -427,7 +427,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         })
         .collect::<Vec<_>>();
 
-    // Transpile, storing in ${target_dir}/openvm/${profile} by default
+    // Transpile, storing in ${openvm_dir}/${profile} by default
     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
 
     println!("[openvm] Transpiling the package...");

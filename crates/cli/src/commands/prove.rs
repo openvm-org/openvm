@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{eyre, Result};
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::{
         SegmentationConfig, SegmentationLimits, DEFAULT_MAX_MEMORY, DEFAULT_MAX_TRACE_HEIGHT_BITS,
@@ -18,13 +18,13 @@ use openvm_sdk::{
 use openvm_sdk_config::SdkVmConfig;
 
 use super::{RunArgs, RunCargoArgs};
-#[cfg(feature = "evm-prove")]
-use crate::util::read_default_agg_and_halo2_pk;
 use crate::{
     commands::build,
-    default::default_agg_stark_pk_path,
     input::read_to_stdin,
-    util::{get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir},
+    util::{
+        get_agg_pk_path, get_app_pk_path, get_manifest_path_and_dir, get_single_target_name,
+        get_target_dir,
+    },
 };
 
 #[derive(Parser)]
@@ -48,7 +48,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -74,7 +74,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -82,7 +82,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to aggregation proving key, by default will be ~/.openvm/agg.pk",
+            help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
             help_heading = "OpenVM Options"
         )]
         agg_pk: Option<PathBuf>,
@@ -112,10 +112,18 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
+
+        #[arg(
+            long,
+            action,
+            help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
+            help_heading = "OpenVM Options"
+        )]
+        agg_pk: Option<PathBuf>,
 
         #[command(flatten)]
         run_args: RunArgs,
@@ -194,16 +202,14 @@ impl ProveCmd {
             } => {
                 let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
-
-                let _agg_pk_path = agg_pk
-                    .clone()
-                    .unwrap_or_else(|| PathBuf::from(default_agg_stark_pk_path()));
-                // TODO: SDK v2 computes aggregation internally; restore loading
-                // external agg_pk when the SDK supports it again.
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = Sdk::new(app_config, AggregationSystemParams::default())?
-                    .with_agg_tree_config(*agg_tree_config)
-                    .with_app_pk(app_pk);
+                let sdk = with_required_agg_pk(
+                    Sdk::new(app_config, AggregationSystemParams::default())?
+                        .with_agg_tree_config(*agg_tree_config)
+                        .with_app_pk(app_pk),
+                    agg_pk,
+                    cargo_args,
+                )?;
                 let mut prover = sdk.prover(exe)?;
                 let baseline = prover.generate_baseline();
                 println!("exe commit: {:?}", baseline.app_exe_commit);
@@ -226,6 +232,7 @@ impl ProveCmd {
             #[cfg(feature = "evm-prove")]
             ProveSubCommand::Evm {
                 app_pk,
+                agg_pk,
                 proof,
                 run_args,
                 cargo_args,
@@ -236,20 +243,19 @@ impl ProveCmd {
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
-                // Pre-flight check: ensure keys exist before starting expensive proving.
-                // TODO: SDK v2 computes aggregation internally; restore passing
-                // external agg_pk/halo2_pk when the SDK supports it again.
-                let (_agg_pk, _halo2_pk) = read_default_agg_and_halo2_pk().map_err(|e| {
-                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
-                })?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = Sdk::new(app_config, AggregationSystemParams::default())?
-                    .with_agg_tree_config(*agg_tree_config)
-                    .with_app_pk(app_pk);
+                let sdk = with_required_agg_pk(
+                    Sdk::new(app_config, AggregationSystemParams::default())?
+                        .with_agg_tree_config(*agg_tree_config)
+                        .with_app_pk(app_pk),
+                    agg_pk,
+                    cargo_args,
+                )?;
+                let sdk = with_required_root_pk(sdk)?;
                 let mut prover = sdk.evm_prover(exe)?;
                 let exe_commit = prover.stark_prover.app_prover.app_exe_commit();
                 println!("exe commit: {:?}", exe_commit);
-                let evm_proof = prover.prove(read_to_stdin(&run_args.input)?, &[])?;
+                let evm_proof = prover.prove_evm(read_to_stdin(&run_args.input)?, &[])?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
@@ -319,6 +325,47 @@ fn get_app_config(
         .config
         .set_segmentation_config((*segmentation_args).into());
     app_pk.app_config()
+}
+
+fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
+    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+    Ok(get_target_dir(&cargo_args.target_dir, &manifest_path))
+}
+
+fn resolve_agg_pk_path(agg_pk: &Option<PathBuf>, cargo_args: &RunCargoArgs) -> Result<PathBuf> {
+    if let Some(agg_pk) = agg_pk {
+        Ok(agg_pk.to_path_buf())
+    } else {
+        let target_dir = target_dir_from_cargo_args(cargo_args)?;
+        Ok(get_agg_pk_path(&target_dir))
+    }
+}
+
+fn with_required_agg_pk(
+    sdk: Sdk,
+    agg_pk: &Option<PathBuf>,
+    cargo_args: &RunCargoArgs,
+) -> Result<Sdk> {
+    let agg_pk_path = resolve_agg_pk_path(agg_pk, cargo_args)?;
+    let agg_pk = read_object_from_file(&agg_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read aggregation proving key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
+            agg_pk_path.display()
+        )
+    })?;
+    Ok(sdk.with_agg_pk(agg_pk))
+}
+
+#[cfg(feature = "evm-prove")]
+fn with_required_root_pk(sdk: Sdk) -> Result<Sdk> {
+    let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
+    let root_pk = read_object_from_file(&root_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
+            root_pk_path.display()
+        )
+    })?;
+    Ok(sdk.with_root_pk(root_pk))
 }
 
 impl From<SegmentationArgs> for SegmentationConfig {

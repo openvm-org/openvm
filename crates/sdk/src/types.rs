@@ -4,14 +4,18 @@ use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_circuit::{
-    arch::instructions::exe::VmExe, system::memory::merkle::public_values::UserPublicValuesProof,
+    arch::instructions::exe::VmExe,
+    system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
 };
+use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
     codec::{Decode, Encode},
     proof::Proof,
 };
 use openvm_transpiler::elf::Elf;
-use openvm_verify_stark_host::{deferral::DeferralMerkleProofs, NonRootStarkProof};
+use openvm_verify_stark_host::{
+    deferral::DeferralMerkleProofs, pvs::DagCommit, vk::VerificationBaseline, NonRootStarkProof,
+};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -72,34 +76,33 @@ pub struct EvmHalo2Verifier {
     pub artifact: EvmVerifierByteCode,
 }
 
-/// Application execution commitment pair (big-endian 32-byte values).
-#[cfg(feature = "evm-prove")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AppExecutionCommit {
-    #[serde(with = "hex_bytes32")]
-    pub app_exe_commit: openvm_continuations::CommitBytes,
-    #[serde(with = "hex_bytes32")]
-    pub app_vm_commit: openvm_continuations::CommitBytes,
-}
-
 /// Custom serde for CommitBytes as hex-encoded [u8; 32].
-#[cfg(feature = "evm-prove")]
-mod hex_bytes32 {
+pub mod hex_bytes32 {
     use openvm_continuations::CommitBytes;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<S: Serializer>(val: &CommitBytes, s: S) -> Result<S::Ok, S::Error> {
-        hex::encode(val.as_slice()).serialize(s)
+        format!("0x{}", hex::encode(val.as_slice())).serialize(s)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<CommitBytes, D::Error> {
         let hex_str = String::deserialize(d)?;
+        let hex_str = hex_str.strip_prefix("0x").unwrap_or(&hex_str);
         let bytes: [u8; 32] = hex::decode(hex_str)
             .map_err(serde::de::Error::custom)?
             .try_into()
             .map_err(|_| serde::de::Error::custom("expected 32 bytes"))?;
         Ok(CommitBytes::new(bytes))
     }
+}
+
+/// Application execution commitment pair (big-endian 32-byte values).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppExecutionCommit {
+    #[serde(with = "hex_bytes32")]
+    pub app_exe_commit: openvm_continuations::CommitBytes,
+    #[serde(with = "hex_bytes32")]
+    pub app_vk_commit: openvm_continuations::CommitBytes,
 }
 
 #[cfg(feature = "evm-prove")]
@@ -153,7 +156,7 @@ impl EvmProof {
             publicValues: user_public_values.into(),
             proofData: proof_data_bytes.into(),
             appExeCommit: (*app_commit.app_exe_commit.as_slice()).into(),
-            appVmCommit: (*app_commit.app_vm_commit.as_slice()).into(),
+            appVmCommit: (*app_commit.app_vk_commit.as_slice()).into(),
         }
         .abi_encode()
     }
@@ -232,7 +235,7 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::new(app_exe_bytes),
-            app_vm_commit: CommitBytes::new(app_vm_bytes),
+            app_vk_commit: CommitBytes::new(app_vm_bytes),
         };
 
         Self {
@@ -273,7 +276,7 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         app_exe_bytes.reverse();
         let app_exe_fr = Fr::from_bytes(&app_exe_bytes).unwrap();
 
-        let mut app_vm_bytes = *app_commit.app_vm_commit.as_slice();
+        let mut app_vm_bytes = *app_commit.app_vk_commit.as_slice();
         app_vm_bytes.reverse();
         let app_vm_fr = Fr::from_bytes(&app_vm_bytes).unwrap();
 
@@ -358,5 +361,98 @@ impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
                 .map(|bytes| DeferralMerkleProofs::decode(&mut std::io::Cursor::new(&bytes)))
                 .transpose()?,
         })
+    }
+}
+
+// =================== Verification baseline JSON types ===================
+
+/// Hex-formatted [`DagCommit`](openvm_verify_stark_host::pvs::DagCommit) for JSON serialization.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DagCommitJson {
+    #[serde(with = "hex_bytes32")]
+    pub cached_commit: CommitBytes,
+    #[serde(with = "hex_bytes32")]
+    pub vk_pre_hash: CommitBytes,
+}
+
+/// Hex-formatted [`VerificationBaseline`] for JSON serialization.
+///
+/// Mirrors [`VerificationBaseline`] but serializes all commit fields as `0x`-prefixed hex strings,
+/// consistent with [`AppExecutionCommit`].
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VerificationBaselineJson {
+    #[serde(with = "hex_bytes32")]
+    pub app_exe_commit: CommitBytes,
+    pub memory_dimensions: MemoryDimensions,
+    pub app_dag_commit: DagCommitJson,
+    pub leaf_dag_commit: DagCommitJson,
+    pub internal_for_leaf_dag_commit: DagCommitJson,
+    pub internal_recursive_dag_commit: DagCommitJson,
+    #[serde(with = "option_hex_bytes32")]
+    pub expected_def_vk_commit: Option<CommitBytes>,
+}
+
+impl From<VerificationBaseline> for VerificationBaselineJson {
+    fn from(b: VerificationBaseline) -> Self {
+        let dag = |d: DagCommit<crate::F>| DagCommitJson {
+            cached_commit: CommitBytes::from(d.cached_commit),
+            vk_pre_hash: CommitBytes::from(d.vk_pre_hash),
+        };
+        Self {
+            app_exe_commit: CommitBytes::from(b.app_exe_commit),
+            memory_dimensions: b.memory_dimensions,
+            app_dag_commit: dag(b.app_dag_commit),
+            leaf_dag_commit: dag(b.leaf_dag_commit),
+            internal_for_leaf_dag_commit: dag(b.internal_for_leaf_dag_commit),
+            internal_recursive_dag_commit: dag(b.internal_recursive_dag_commit),
+            expected_def_vk_commit: b.expected_def_vk_commit.map(CommitBytes::from),
+        }
+    }
+}
+
+impl From<VerificationBaselineJson> for VerificationBaseline {
+    fn from(b: VerificationBaselineJson) -> Self {
+        use openvm_verify_stark_host::pvs::DagCommit;
+        let dag = |d: DagCommitJson| DagCommit {
+            cached_commit: d.cached_commit.into(),
+            vk_pre_hash: d.vk_pre_hash.into(),
+        };
+        Self {
+            app_exe_commit: b.app_exe_commit.into(),
+            memory_dimensions: b.memory_dimensions,
+            app_dag_commit: dag(b.app_dag_commit),
+            leaf_dag_commit: dag(b.leaf_dag_commit),
+            internal_for_leaf_dag_commit: dag(b.internal_for_leaf_dag_commit),
+            internal_recursive_dag_commit: dag(b.internal_recursive_dag_commit),
+            expected_def_vk_commit: b.expected_def_vk_commit.map(|c| c.into()),
+        }
+    }
+}
+
+/// Custom serde for `Option<CommitBytes>` as hex-encoded `[u8; 32]`.
+pub mod option_hex_bytes32 {
+    use openvm_continuations::CommitBytes;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(val: &Option<CommitBytes>, s: S) -> Result<S::Ok, S::Error> {
+        match val {
+            Some(v) => super::hex_bytes32::serialize(v, s),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<CommitBytes>, D::Error> {
+        let opt: Option<String> = Option::deserialize(d)?;
+        match opt {
+            Some(hex_str) => {
+                let hex_str = hex_str.strip_prefix("0x").unwrap_or(&hex_str);
+                let bytes: [u8; 32] = hex::decode(hex_str)
+                    .map_err(serde::de::Error::custom)?
+                    .try_into()
+                    .map_err(|_| serde::de::Error::custom("expected 32 bytes"))?;
+                Ok(Some(CommitBytes::new(bytes)))
+            }
+            None => Ok(None),
+        }
     }
 }
