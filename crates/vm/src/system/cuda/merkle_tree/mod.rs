@@ -56,25 +56,31 @@ impl MemoryMerkleSubTree {
     /// `addr_space_size` is the number of leaf digest nodes necessary for this address space. The
     /// `max_size` is the number of leaf digest nodes in the full balanced tree dictated by
     /// `addr_space_height` from the `MemoryConfig`.
+    ///
+    /// `addr_space_size` must be a power of two or zero.
+    /// `max_size` must be a power of two.
     pub fn new(addr_space_size: usize, max_size: usize) -> Self {
+        assert!(
+            addr_space_size == 0 || addr_space_size.is_power_of_two(),
+            "The actual address space size must be a power of two"
+        );
         assert!(
             max_size.is_power_of_two(),
             "Max address space size must be a power of two"
         );
-        let size = next_power_of_two_or_zero(addr_space_size);
         if addr_space_size == 0 {
             let mut res = MemoryMerkleSubTree::dummy();
             res.height = log2_ceil_usize(max_size);
             return res;
         }
-        let height = log2_ceil_usize(size);
+        let height = log2_ceil_usize(addr_space_size);
         let path_len = log2_ceil_usize(max_size).checked_sub(height).unwrap();
         tracing::debug!(
             "Creating a subtree buffer, size is {} (addr space size is {})",
-            path_len + (2 * size - 1),
+            path_len + (2 * addr_space_size - 1),
             addr_space_size
         );
-        let buf = DeviceBuffer::<H>::with_capacity(path_len + (2 * size - 1));
+        let buf = DeviceBuffer::<H>::with_capacity(path_len + (2 * addr_space_size - 1));
 
         let created_buffer_event = CudaEvent::new().unwrap();
         unsafe {
