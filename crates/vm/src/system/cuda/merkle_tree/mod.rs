@@ -9,9 +9,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::{
-        cudaStreamPerThread, current_stream_sync, default_stream_wait, CudaEvent, CudaStream,
-    },
+    stream::{cudaStreamPerThread, current_stream_sync, CudaEvent},
 };
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
@@ -37,12 +35,10 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 11;
 /// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size`
 ///   leaves and `2 * size - 1` total nodes.
 ///
-/// The call of filling the buffer is done async on the new stream. Option<CudaEvent> is used to
-/// wait for the completion.
+/// All GPU work is issued on the per-thread default stream (`cudaStreamPerThread`).
+/// `build_completion_event` records when the build kernels finish so that downstream
+/// consumers can synchronize.
 pub struct MemoryMerkleSubTree {
-    pub stream: Arc<CudaStream>,
-    #[allow(dead_code)] // See `drop_subtrees`
-    created_buffer_event: Option<CudaEvent>,
     build_completion_event: Option<CudaEvent>,
     pub buf: DeviceBuffer<H>,
     pub height: usize,
@@ -76,16 +72,7 @@ impl MemoryMerkleSubTree {
         );
         let buf = DeviceBuffer::<H>::with_capacity(path_len + (2 * size - 1));
 
-        let created_buffer_event = CudaEvent::new().unwrap();
-        unsafe {
-            created_buffer_event.record(cudaStreamPerThread).unwrap();
-        }
-
-        let stream = Arc::new(CudaStream::new().unwrap());
-        stream.wait(&created_buffer_event).unwrap();
         Self {
-            stream,
-            created_buffer_event: Some(created_buffer_event),
             build_completion_event: None,
             height,
             buf,
@@ -95,8 +82,6 @@ impl MemoryMerkleSubTree {
 
     pub fn dummy() -> Self {
         Self {
-            stream: Arc::new(CudaStream::new().unwrap()),
-            created_buffer_event: None,
             build_completion_event: None,
             height: 0,
             buf: DeviceBuffer::new(),
@@ -104,7 +89,7 @@ impl MemoryMerkleSubTree {
         }
     }
 
-    /// Asynchronously builds the Merkle subtree on its dedicated CUDA stream.
+    /// Builds the Merkle subtree on the per-thread default stream (`cudaStreamPerThread`).
     /// Also reconstructs the vertical path if `path_len > 0`, and records a completion event.
     ///
     /// Here `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
@@ -116,7 +101,6 @@ impl MemoryMerkleSubTree {
     ) {
         let event = CudaEvent::new().unwrap();
         if self.buf.is_empty() {
-            // TODO not really async in this branch is it
             self.buf = DeviceBuffer::with_capacity(1);
             unsafe {
                 cuda_memcpy::<true, true>(
@@ -135,7 +119,7 @@ impl MemoryMerkleSubTree {
                     &self.buf,
                     self.path_len,
                     addr_space_idx as u32,
-                    self.stream.as_raw(),
+                    cudaStreamPerThread,
                 )
                 .unwrap();
 
@@ -145,11 +129,11 @@ impl MemoryMerkleSubTree {
                         zero_hash,
                         self.path_len,
                         self.height + self.path_len,
-                        self.stream.as_raw(),
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }
-                event.record(self.stream.as_raw()).unwrap();
+                event.record(cudaStreamPerThread).unwrap();
             }
         }
         self.build_completion_event = Some(event);
@@ -188,9 +172,8 @@ impl MemoryMerkleSubTree {
 ///     - if we have > 4 address spaces, top_roots will be extended with the next hash, etc.
 ///
 /// Execution:
-/// - Subtrees are built asynchronously on individual CUDA streams.
-/// - The final root is computed after all subtrees complete, on the default stream.
-/// - `CudaEvent`s are used to synchronize subtree completion.
+/// - Subtrees are built on the per-thread default stream (`cudaStreamPerThread`).
+/// - The final root is computed after all subtrees complete, on the same default stream.
 pub struct MemoryMerkleTree {
     pub subtrees: Vec<MemoryMerkleSubTree>,
     pub top_roots: DeviceBuffer<H>,
@@ -253,8 +236,8 @@ impl MemoryMerkleTree {
         &self.mem_config
     }
 
-    /// Starts asynchronous construction of the specified address space's Merkle subtree.
-    /// Uses internal zero hashes and launches kernels on the subtree's own CUDA stream.
+    /// Starts construction of the specified address space's Merkle subtree.
+    /// Uses internal zero hashes and launches kernels on `cudaStreamPerThread`.
     ///
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
@@ -276,19 +259,9 @@ impl MemoryMerkleTree {
     }
 
     /// Finalizes the Merkle tree by collecting all subtree roots and computing the final root.
-    /// Waits for all subtrees to complete and then performs the final hash operation.
+    /// All subtree builds were issued on `cudaStreamPerThread`, so stream ordering guarantees
+    /// they are complete before the finalize kernel runs on the same stream.
     pub fn finalize(&mut self) {
-        // Default stream waits for all subtrees to complete
-        for subtree in self.subtrees.iter() {
-            default_stream_wait(
-                subtree
-                    .build_completion_event
-                    .as_ref()
-                    .expect("Subtree build event does not exist"),
-            )
-            .unwrap();
-        }
-
         let roots: Vec<usize> = self
             .subtrees
             .iter()
@@ -309,22 +282,9 @@ impl MemoryMerkleTree {
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.
     ///
-    /// Caution: this method destroys all subtree streams and events. For safety, we force
-    /// synchronize all subtree streams and the default stream (cudaStreamPerThread) with host
-    /// before deallocating buffers.
+    /// Synchronizes the default stream before deallocating buffers and destroying events.
     pub fn drop_subtrees(&mut self) {
-        // Make sure all streams are synchronized before destroying events
-        for subtree in self.subtrees.iter() {
-            subtree.stream.synchronize().unwrap();
-            if let Some(_event) = subtree.build_completion_event.as_ref() {
-                tracing::warn!(
-                    "Dropping merkle subtree before build_async event has been destroyed"
-                );
-            }
-        }
         current_stream_sync().unwrap();
-        // Clearing will drop streams (which calls synchronize again) and drops events (which
-        // destroys them)
         self.subtrees.clear();
     }
 
