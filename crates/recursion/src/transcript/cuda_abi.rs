@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{copy::cuda_memcpy, d_buffer::DeviceBuffer, error::CudaError};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -32,6 +32,8 @@ extern "C" {
     fn _poseidon2_deduplicate_records(
         d_records: *mut F,
         d_counts: *mut Poseidon2Count,
+        d_records_out: *mut F,
+        d_counts_out: *mut Poseidon2Count,
         num_records: usize,
         d_num_records: *mut usize,
         num_prefix_perms: usize,
@@ -120,9 +122,15 @@ pub unsafe fn poseidon2_deduplicate_records(
     d_temp_storage: &DeviceBuffer<u8>,
     temp_storage_bytes: usize,
 ) -> Result<(), CudaError> {
+    // CUB ReduceByKey requires non-overlapping input and output ranges.
+    // Allocate separate output buffers, then copy results back.
+    let d_records_out = DeviceBuffer::<F>::with_capacity(num_records * POSEIDON2_WIDTH);
+    let d_counts_out = DeviceBuffer::<Poseidon2Count>::with_capacity(num_records);
     CudaError::from_result(_poseidon2_deduplicate_records(
         d_records.as_mut_ptr(),
         d_counts.as_mut_ptr(),
+        d_records_out.as_mut_ptr(),
+        d_counts_out.as_mut_ptr(),
         num_records,
         d_num_records.as_mut_ptr(),
         num_prefix_perms,
@@ -130,7 +138,14 @@ pub unsafe fn poseidon2_deduplicate_records(
         num_suffix_perms,
         d_temp_storage.as_mut_ptr() as *mut std::ffi::c_void,
         temp_storage_bytes,
-    ))
+    ))?;
+    let records_bytes = num_records * POSEIDON2_WIDTH * std::mem::size_of::<F>();
+    let counts_bytes = num_records * std::mem::size_of::<Poseidon2Count>();
+    cuda_memcpy::<true, true>(d_records.as_mut_raw_ptr(), d_records_out.as_raw_ptr(), records_bytes)
+        .expect("Failed to copy deduplicated records");
+    cuda_memcpy::<true, true>(d_counts.as_mut_raw_ptr(), d_counts_out.as_raw_ptr(), counts_bytes)
+        .expect("Failed to copy deduplicated counts");
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
