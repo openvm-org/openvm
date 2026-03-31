@@ -5,7 +5,7 @@ use std::{
 };
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{Context, Result};
 use itertools::izip;
 use openvm_build::{
     build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
@@ -433,9 +433,12 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     println!("[openvm] Transpiling the package...");
     for (elf_path, target) in izip!(&elf_paths, &elf_targets) {
         let transpiler = app_config.app_vm_config.transpiler();
-        let data = read(elf_path.clone())?;
-        let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-        let exe = VmExe::from_elf(elf, transpiler)?;
+        let data = read(&elf_path)
+            .with_context(|| format!("failed to read ELF at {}", elf_path.display()))?;
+        let elf = Elf::decode(&data, MEM_SIZE as u32)
+            .with_context(|| format!("failed to decode ELF for target '{}'", target.name))?;
+        let exe = VmExe::from_elf(elf, transpiler)
+            .with_context(|| format!("failed to transpile target '{}'", target.name))?;
 
         let target_name = if target.is_example() {
             PathBuf::from("examples").join(&target.name)
@@ -447,8 +450,10 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
 
         write_object_to_file(&file_path, exe)?;
         if let Some(output_dir) = &build_args.output_dir {
-            create_dir_all(output_dir)?;
-            copy(file_path, output_dir.join(file_name))?;
+            create_dir_all(output_dir)
+                .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
+            copy(&file_path, output_dir.join(&file_name))
+                .with_context(|| format!("failed to copy {} to {}", file_name.display(), output_dir.display()))?;
         }
     }
 

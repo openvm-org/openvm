@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{Context, Result};
 use openvm_sdk::{config::AggregationSystemParams, fs::write_object_to_file, Sdk};
 
 use crate::{
@@ -122,12 +122,15 @@ pub(crate) fn keygen(
 
     if let Some(output_dir) = output_dir {
         let output_dir = output_dir.as_ref();
-        create_dir_all(output_dir)?;
-        copy(&app_pk_path, output_dir.join(DEFAULT_APP_PK_NAME))?;
-        copy(&app_vk_path, output_dir.join(DEFAULT_APP_VK_NAME))?;
+        create_dir_all(output_dir)
+            .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
+        copy(&app_pk_path, output_dir.join(DEFAULT_APP_PK_NAME))
+            .with_context(|| format!("failed to copy app pk to {}", output_dir.display()))?;
+        copy(&app_vk_path, output_dir.join(DEFAULT_APP_VK_NAME))
+            .with_context(|| format!("failed to copy app vk to {}", output_dir.display()))?;
         if generate_agg {
-            copy(&agg_pk_path, output_dir.join("agg.pk"))?;
-            copy(&agg_vk_path, output_dir.join("agg.vk"))?;
+            copy(&agg_pk_path, output_dir.join("agg.pk")).with_context(|| format!("failed to copy agg pk to {}", output_dir.display()))?;
+            copy(&agg_vk_path, output_dir.join("agg.vk")).with_context(|| format!("failed to copy agg vk to {}", output_dir.display()))?;
         }
     }
 

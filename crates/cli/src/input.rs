@@ -1,6 +1,6 @@
 use std::{fs::read, path::PathBuf, str::FromStr};
 
-use eyre::Result;
+use eyre::{Context, Result};
 use openvm_sdk::{StdIn, F};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
@@ -84,8 +84,10 @@ pub fn read_to_stdin(input: &Option<Input>) -> Result<StdIn> {
         Some(Input::FilePath(path)) => {
             let mut stdin = StdIn::default();
             // read the json
-            let bytes = read(path)?;
-            let json: serde_json::Value = serde_json::from_slice(&bytes)?;
+            let bytes = read(path)
+                .with_context(|| format!("failed to read input file {}", path.display()))?;
+            let json: serde_json::Value = serde_json::from_slice(&bytes)
+                .with_context(|| format!("failed to parse JSON from {}", path.display()))?;
             json["input"]
                 .as_array()
                 .ok_or_else(|| eyre::eyre!("Input must be an array under 'input' key"))?
@@ -97,7 +99,7 @@ pub fn read_to_stdin(input: &Option<Input>) -> Result<StdIn> {
                         .and_then(|s| match decode_hex_string(s) {
                             Err(msg) => Err(eyre::eyre!("Invalid hex string: {}", msg)),
                             Ok(bytes) => {
-                                read_bytes_into_stdin(&mut stdin, &bytes).expect("Fail: input validation accepted an input, but the deserialization rejected it");
+                                read_bytes_into_stdin(&mut stdin, &bytes)?;
                                 Ok(())
                             }
                         })

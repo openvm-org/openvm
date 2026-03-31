@@ -5,7 +5,7 @@ use std::{
 };
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{Context, Result};
 use include_dir::{include_dir, Dir};
 use toml_edit::{DocumentMut, Item, Value};
 
@@ -141,8 +141,11 @@ impl InitCmd {
 
 fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
     let cargo_toml_path = path.join("Cargo.toml");
-    let cargo_toml_content = read_to_string(&cargo_toml_path)?;
-    let mut doc = cargo_toml_content.parse::<DocumentMut>()?;
+    let cargo_toml_content = read_to_string(&cargo_toml_path)
+        .with_context(|| format!("failed to read {}", cargo_toml_path.display()))?;
+    let mut doc = cargo_toml_content
+        .parse::<DocumentMut>()
+        .with_context(|| format!("failed to parse {}", cargo_toml_path.display()))?;
     let mut openvm_table = toml_edit::InlineTable::new();
     let mut openvm_features = toml_edit::Array::new();
     for feature in features {
@@ -159,7 +162,8 @@ fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
 
     openvm_table.insert("features", Value::Array(openvm_features));
     doc["dependencies"]["openvm"] = Item::Value(toml_edit::Value::InlineTable(openvm_table));
-    write(cargo_toml_path, doc.to_string())?;
+    write(&cargo_toml_path, doc.to_string())
+        .with_context(|| format!("failed to write {}", cargo_toml_path.display()))?;
     Ok(())
 }
 
@@ -167,6 +171,7 @@ fn write_template_file(file_name: &str, dest_dir: &Path) -> Result<()> {
     let file = TEMPLATES
         .get_file(file_name)
         .ok_or_else(|| eyre::eyre!("Template not found: {}", file_name))?;
-    write(dest_dir.join(file_name), file.contents())?;
+    let dest = dest_dir.join(file_name);
+    write(&dest, file.contents()).with_context(|| format!("failed to write {}", dest.display()))?;
     Ok(())
 }

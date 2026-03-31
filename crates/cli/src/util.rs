@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use eyre::Result;
+use eyre::{Context, Result};
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
 use openvm_sdk::config::AppConfig;
 use openvm_sdk_config::SdkVmConfig;
@@ -15,8 +15,11 @@ use crate::{
 };
 
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
-    let toml = read_to_string(path)?;
-    let ret = toml::from_str(&toml)?;
+    let path = path.as_ref();
+    let toml = read_to_string(path)
+        .with_context(|| format!("failed to read config file {}", path.display()))?;
+    let ret = toml::from_str(&toml)
+        .with_context(|| format!("failed to parse TOML from {}", path.display()))?;
     Ok(ret)
 }
 
@@ -37,7 +40,11 @@ pub fn find_manifest_dir(mut current_dir: PathBuf) -> Result<PathBuf> {
     while !current_dir.join("Cargo.toml").exists() {
         current_dir = current_dir
             .parent()
-            .expect("Could not find Cargo.toml in current directory or any parent directory")
+            .ok_or_else(|| {
+                eyre::eyre!(
+                    "could not find Cargo.toml in current directory or any parent directory"
+                )
+            })?
             .to_path_buf();
     }
     Ok(current_dir)

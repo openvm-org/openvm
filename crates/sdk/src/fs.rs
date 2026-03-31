@@ -31,12 +31,19 @@ pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<
     let interface_path = folder
         .join("interfaces")
         .join(EVM_HALO2_VERIFIER_INTERFACE_NAME);
-    let halo2_verifier_code = read_to_string(halo2_verifier_code_path)?;
-    let openvm_verifier_code = read_to_string(openvm_verifier_code_path)?;
-    let interface = read_to_string(interface_path)?;
+    let halo2_verifier_code = read_to_string(&halo2_verifier_code_path)
+        .map_err(|e| read_error(&halo2_verifier_code_path, e.into()))?;
+    let openvm_verifier_code = read_to_string(&openvm_verifier_code_path)
+        .map_err(|e| read_error(&openvm_verifier_code_path, e.into()))?;
+    let interface =
+        read_to_string(&interface_path).map_err(|e| read_error(&interface_path, e.into()))?;
 
     let artifact_path = folder.join(EVM_VERIFIER_ARTIFACT_FILENAME);
-    let artifact: EvmVerifierByteCode = serde_json::from_reader(File::open(artifact_path)?)?;
+    let artifact: EvmVerifierByteCode = File::open(&artifact_path)
+        .map_err(|e| read_error(&artifact_path, e.into()))
+        .and_then(|file| {
+            serde_json::from_reader(file).map_err(|e| read_error(&artifact_path, e.into()))
+        })?;
 
     Ok(EvmHalo2Verifier {
         halo2_verifier_code,
@@ -140,7 +147,7 @@ pub fn write_to_file_json<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Res
 }
 
 pub fn read_from_file_bytes<T: From<Vec<u8>>, P: AsRef<Path>>(path: P) -> Result<T> {
-    let bytes = read(path)?;
+    let bytes = read(&path).map_err(|e| read_error(&path, e.into()))?;
     Ok(T::from(bytes))
 }
 
@@ -153,8 +160,8 @@ pub fn write_to_file_bytes<T: Into<Vec<u8>>, P: AsRef<Path>>(path: P, data: T) -
 }
 
 pub fn decode_from_file<T: Decode, P: AsRef<Path>>(path: P) -> Result<T> {
-    let reader = &mut File::open(path)?;
-    let ret = T::decode(reader)?;
+    let reader = &mut File::open(&path).map_err(|e| read_error(&path, e.into()))?;
+    let ret = T::decode(reader).map_err(|e| read_error(&path, e.into()))?;
     Ok(ret)
 }
 
