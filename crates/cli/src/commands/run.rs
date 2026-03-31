@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
-use eyre::Result;
+use eyre::{eyre, Result};
 use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
 use openvm_sdk::{
     config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
@@ -10,11 +10,10 @@ use openvm_sdk_config::SdkVmConfig;
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
-    commands::keygen::keygen,
     input::{read_to_stdin, Input},
     util::{
-        get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_single_target_name,
-        get_target_dir, read_config_toml_or_default,
+        get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir,
+        read_config_toml_or_default,
     },
 };
 
@@ -281,27 +280,22 @@ impl RunCmd {
         // Create SDK
         let sdk = Sdk::new(app_config, AggregationSystemParams::default())?;
 
-        // For metered modes, load existing app pk from disk or generate it
+        // For metered modes, load existing app pk from disk
         if matches!(
             self.run_args.mode,
             ExecutionMode::Segment | ExecutionMode::Meter
         ) {
             let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
             let app_pk_path = get_app_pk_path(&target_dir);
-            let app_vk_path = get_app_vk_path(&target_dir);
-
-            // Generate app pk if it doesn't exist
-            if !app_pk_path.exists() {
-                let config_path = self
-                    .run_args
-                    .config
-                    .to_owned()
-                    .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
-                keygen(&config_path, &app_pk_path, &app_vk_path, None::<&str>)?;
-            }
 
             // Load the app pk and set it
-            let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
+            let app_pk: AppProvingKey<SdkVmConfig> =
+                read_object_from_file(&app_pk_path).map_err(|e| {
+                    eyre!(
+                        "Failed to read app proving key from {}: {e}\nRun 'cargo openvm keygen --app-only' first to generate it",
+                        app_pk_path.display()
+                    )
+                })?;
             sdk.set_app_pk(app_pk)
                 .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
         }
