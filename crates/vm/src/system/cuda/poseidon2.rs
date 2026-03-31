@@ -29,6 +29,9 @@ pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
 }
 
 impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
+    /// Creates a new Poseidon2 chip with a device buffer of `max_buffer_size` field elements.
+    /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the buffer
+    /// can hold `max_buffer_size / POSEIDON2_WIDTH` records.
     pub fn new(max_buffer_size: usize) -> Self {
         let idx = Arc::new(DeviceBuffer::<u32>::with_capacity(1));
         idx.fill_zero().unwrap();

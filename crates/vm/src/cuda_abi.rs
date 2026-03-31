@@ -43,6 +43,7 @@ pub mod boundary {
             num_records,
             d_poseidon2_raw_buffer.as_mut_ptr(),
             d_poseidon2_buffer_idx.as_mut_ptr(),
+            // Length in F elements; the CUDA side converts to record count.
             d_poseidon2_raw_buffer.len(),
         ))
     }
