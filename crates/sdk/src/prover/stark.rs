@@ -165,6 +165,28 @@ where
             expected_def_vk_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_vk_commit()),
         }
     }
+
+    pub fn app_vk_commit(&self) -> Digest {
+        let app_dag_commit = self.agg_prover.leaf_prover.get_dag_commit(false);
+        let leaf_dag_commit = self
+            .agg_prover
+            .internal_for_leaf_prover
+            .get_dag_commit(false);
+        let internal_for_leaf_dag_commit = self
+            .agg_prover
+            .internal_recursive_prover
+            .get_dag_commit(false);
+        let components = vec![
+            app_dag_commit.cached_commit,
+            app_dag_commit.vk_pre_hash,
+            leaf_dag_commit.cached_commit,
+            leaf_dag_commit.vk_pre_hash,
+            internal_for_leaf_dag_commit.cached_commit,
+            internal_for_leaf_dag_commit.vk_pre_hash,
+        ]
+        .into_flattened();
+        poseidon2_hash_slice(&components).0
+    }
 }
 
 impl DeferralPathProver {

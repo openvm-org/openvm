@@ -90,7 +90,7 @@ pub struct EvmVerifierByteCode {
     pub bytecode: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Halo2WrapperProvingKey {
     pub pinning: Halo2ProvingPinning,
 }

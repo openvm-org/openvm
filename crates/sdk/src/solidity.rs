@@ -49,7 +49,7 @@ pub(crate) fn generate_halo2_verifier_solidity(
     // The wrapper's instances layout is:
     //   [0..12]: KZG accumulator
     //   [12]: app_exe_commit
-    //   [13]: app_vm_commit
+    //   [13]: app_vk_commit
     //   [14..]: user public values
     let num_pvs = halo2_pk
         .wrapper
