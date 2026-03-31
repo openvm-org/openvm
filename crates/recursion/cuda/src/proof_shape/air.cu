@@ -89,7 +89,6 @@ __device__ __forceinline__ void fill_present_row(
     Digest *cached_commits,
     size_t l_skip,
     size_t cached_commits_idx,
-    size_t min_cached_idx,
     RangeChecker &range_checker,
     PowerChecker<32> &pow_checker
 ) {
@@ -180,9 +179,7 @@ __device__ __forceinline__ void fill_present_row(
         if (i < air_data.num_cached) {
             row.write_array(commit_idx, DIGEST_SIZE, cached_commits[trace_data.cached_idx + i]);
         } else {
-            if (i + 1 != MAX_CACHED || min_cached_idx != trace_height.air_idx) {
-                row.fill_zero(commit_idx, DIGEST_SIZE);
-            }
+            row.fill_zero(commit_idx, DIGEST_SIZE);
         }
     }
 }
@@ -397,14 +394,6 @@ __global__ void proof_shape_tracegen(
 
             encoder.write_flag_pt(row.slice_from(encoder_flags_idx), trace_height.air_idx);
 
-            if (inputs.min_cached_idx == trace_height.air_idx) {
-                row.write_array(
-                    cached_commits_idx + DIGEST_SIZE * (MAX_CACHED - 1),
-                    DIGEST_SIZE,
-                    proof_data.main_commit
-                );
-            }
-
             if (record_idx + 1 < inputs.num_airs) {
                 uint8_t current_log_height = trace_height.log_height;
                 uint8_t next_log_height =
@@ -428,7 +417,6 @@ __global__ void proof_shape_tracegen(
                     cached_commits[proof_idx],
                     inputs.l_skip,
                     cached_commits_idx,
-                    inputs.min_cached_idx,
                     range_checker,
                     pow_checker
                 );
@@ -446,6 +434,14 @@ __global__ void proof_shape_tracegen(
                     proof_data.final_total_interactions,
                     cached_commits_idx,
                     range_checker
+                );
+            }
+
+            if (inputs.min_cached_idx == trace_height.air_idx) {
+                row.write_array(
+                    cached_commits_idx + DIGEST_SIZE * (MAX_CACHED - 1),
+                    DIGEST_SIZE,
+                    proof_data.main_commit
                 );
             }
         }
