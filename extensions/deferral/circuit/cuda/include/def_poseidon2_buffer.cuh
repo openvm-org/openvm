@@ -16,6 +16,8 @@ struct DeferralPoseidon2Count {
     uint32_t capacity_mult;
 };
 
+/// Deferral Poseidon2 record buffer. `capacity` is the number of FpArray<16>
+/// records, NOT the number of Fp elements.
 struct DeferralPoseidon2Buffer {
     FpArray<16> *records;
     DeferralPoseidon2Count *counts;

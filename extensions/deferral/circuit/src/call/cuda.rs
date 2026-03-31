@@ -62,6 +62,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
                 &self.poseidon2.records,
                 &self.poseidon2.counts,
                 &self.poseidon2.idx,
+                // Length in F elements; the CUDA side converts to record count.
                 self.poseidon2.records.len(),
                 self.address_bits,
             )

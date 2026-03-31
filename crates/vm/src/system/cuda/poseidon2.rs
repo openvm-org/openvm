@@ -29,6 +29,9 @@ pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
 }
 
 impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
+    /// Creates a new Poseidon2 chip with a device buffer of `max_buffer_size` field elements.
+    /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the buffer
+    /// can hold `max_buffer_size / POSEIDON2_WIDTH` records.
     pub fn new(max_buffer_size: usize) -> Self {
         let idx = Arc::new(DeviceBuffer::<u32>::with_capacity(1));
         idx.fill_zero().unwrap();
@@ -55,6 +58,9 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
 impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let mut num_records = self.idx.to_host().unwrap()[0] as usize;
+        if num_records == 0 {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
         let counts = DeviceBuffer::<u32>::with_capacity(num_records);
         unsafe {
             let d_num_records = [num_records].to_device().unwrap();
