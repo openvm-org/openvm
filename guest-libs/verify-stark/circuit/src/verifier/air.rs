@@ -203,6 +203,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             CachedCommitBusMessage {
                 air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
                 cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
+                global_cached_idx: AB::Expr::ZERO,
                 cached_commit,
             },
             AB::F::ONE,
