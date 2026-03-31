@@ -127,10 +127,7 @@ fn test_multi_target_transpile_default() -> Result<()> {
     build(&build_args, &cargo_args)?;
 
     // OpenVM artifacts are written to a sibling of --target-dir for consistency.
-    let openvm_dir = target_dir
-        .parent()
-        .unwrap_or(target_dir)
-        .join("openvm");
+    let openvm_dir = target_dir.parent().unwrap_or(target_dir).join("openvm");
     assert!(openvm_dir.exists(),);
 
     // Check for release directory
