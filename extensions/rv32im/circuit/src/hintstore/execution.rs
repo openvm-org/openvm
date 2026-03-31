@@ -171,9 +171,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
         let num_words_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
         u32::from_le_bytes(num_words_limbs)
     };
-    debug_assert_ne!(num_words, 0);
-
-    // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+    // Bounds check: num_words must be in [1, MAX_HINT_BUFFER_WORDS]
+    if num_words == 0 {
+        return Err(ExecutionError::HintBufferZeroWords { pc });
+    }
     if num_words > MAX_HINT_BUFFER_WORDS as u32 {
         return Err(ExecutionError::HintBufferTooLarge {
             pc,

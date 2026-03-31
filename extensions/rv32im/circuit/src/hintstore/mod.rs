@@ -417,7 +417,10 @@ where
             read_rv32_register(state.memory.data(), a)
         };
 
-        // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+        // Bounds check: num_words must be in [1, MAX_HINT_BUFFER_WORDS]
+        if num_words == 0 {
+            return Err(ExecutionError::HintBufferZeroWords { pc: *state.pc });
+        }
         if num_words > MAX_HINT_BUFFER_WORDS as u32 {
             return Err(ExecutionError::HintBufferTooLarge {
                 pc: *state.pc,
@@ -442,7 +445,6 @@ where
         ));
 
         debug_assert!(record.inner.mem_ptr <= (1 << self.pointer_max_bits));
-        debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
         record.inner.num_words = num_words;
