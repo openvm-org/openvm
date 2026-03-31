@@ -341,7 +341,10 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     {
         let len_bytes = self.try_take_word()? as usize;
         // We always allocate vec to be word-aligned
-        let capacity = len_bytes.div_ceil(WORD_SIZE) * WORD_SIZE;
+        let capacity = len_bytes
+            .div_ceil(WORD_SIZE)
+            .checked_mul(WORD_SIZE)
+            .ok_or(Error::Custom("deserialized byte length overflow".into()))?;
         // SAFETY: read_padded_bytes **must** error if the
         // buffer is not fully written to.
         let mut bytes = Vec::with_capacity(capacity);
