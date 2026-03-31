@@ -8,7 +8,9 @@ use openvm_poseidon2_air::{
     BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
-use openvm_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
+use openvm_stark_backend::{
+    air_builders::sub::SubAirBuilder, interaction::InteractionBuilder, ColumnsAir,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, InjectiveMonomial, PrimeCharacteristicRing, PrimeField};
@@ -69,6 +71,7 @@ impl<F: Field> BaseAir<F> for DagCommitSubAir<F> {
         DagCommitCols::<u8>::width()
     }
 }
+impl<F: Field> ColumnsAir<F> for DagCommitSubAir<F> {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> SubAir<AB>
     for DagCommitSubAir<AB::F>

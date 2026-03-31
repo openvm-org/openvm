@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -69,6 +69,7 @@ pub struct MultilinearSumcheckAir {
 
 impl<F> BaseAirWithPublicValues<F> for MultilinearSumcheckAir {}
 impl<F> PartitionedBaseAir<F> for MultilinearSumcheckAir {}
+impl<F> ColumnsAir<F> for MultilinearSumcheckAir {}
 
 impl<F> BaseAir<F> for MultilinearSumcheckAir {
     fn width(&self) -> usize {

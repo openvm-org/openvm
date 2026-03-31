@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 
 use crate::{
@@ -33,6 +33,7 @@ impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
 
 impl<F: Field, C: Sha2BlockHasherVmConfig> BaseAirWithPublicValues<F> for Sha2BlockHasherVmAir<C> {}
 impl<F: Field, C: Sha2BlockHasherVmConfig> PartitionedBaseAir<F> for Sha2BlockHasherVmAir<C> {}
+impl<F: Field, C: Sha2BlockHasherVmConfig> ColumnsAir<F> for Sha2BlockHasherVmAir<C> {}
 impl<F: Field, C: Sha2BlockHasherVmConfig> BaseAir<F> for Sha2BlockHasherVmAir<C> {
     fn width(&self) -> usize {
         C::BLOCK_HASHER_WIDTH

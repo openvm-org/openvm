@@ -1,7 +1,7 @@
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use p3_poseidon2_air::{Poseidon2Air, Poseidon2Cols};
 
@@ -58,6 +58,10 @@ impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> BaseAirWit
 {
 }
 impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
+    for Poseidon2SubAir<F, SBOX_REGISTERS>
+{
+}
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> ColumnsAir<F>
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }

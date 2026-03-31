@@ -8,7 +8,7 @@ use openvm_recursion_circuit::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_matrix::Matrix;
@@ -48,6 +48,7 @@ impl<F> BaseAir<F> for OnionHashAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for OnionHashAir {}
+impl<F> ColumnsAir<F> for OnionHashAir {}
 impl<F> PartitionedBaseAir<F> for OnionHashAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for OnionHashAir {

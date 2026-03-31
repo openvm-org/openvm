@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::AirProvingContext,
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 use test_case::test_matrix;
 #[cfg(feature = "cuda")]
@@ -26,10 +26,13 @@ use {
 };
 
 use super::{IsEqSubAir, IsEqualIo};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsEqualCols<T> {
     pub x: T,
     pub y: T,
@@ -42,6 +45,7 @@ pub struct IsEqTestAir(pub IsEqSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsEqTestAir {}
+impl<F: Field> ColumnsAir<F> for IsEqTestAir {}
 impl<F: Field> BaseAir<F> for IsEqTestAir {
     fn width(&self) -> usize {
         IsEqualCols::<F>::width()

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt::{self, Display},
     ops::Deref,
     sync::Arc,
@@ -8,7 +9,10 @@ use itertools::Itertools;
 use openvm_stark_backend::p3_field::Field;
 use serde::{de::Deserializer, Deserialize, Serialize, Serializer};
 
-use crate::instruction::{DebugInfo, Instruction};
+use crate::{
+    instruction::{DebugInfo, Instruction},
+    VmOpcode,
+};
 
 pub const PC_BITS: usize = 30;
 /// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
@@ -28,6 +32,7 @@ pub struct Program<F> {
         deserialize_with = "deserialize_instructions_and_debug_infos"
     )]
     pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
+    pub apc_by_pc_index: HashMap<usize, (Instruction<F>, Option<DebugInfo>)>,
     pub pc_base: u32,
 }
 
@@ -41,6 +46,7 @@ impl<F: Field> Program<F> {
     pub fn new_empty(pc_base: u32) -> Self {
         Self {
             instructions_and_debug_infos: vec![],
+            apc_by_pc_index: HashMap::new(),
             pc_base,
         }
     }
@@ -51,6 +57,7 @@ impl<F: Field> Program<F> {
                 .iter()
                 .map(|instruction| Some((instruction.clone(), None)))
                 .collect(),
+            apc_by_pc_index: HashMap::new(),
             pc_base,
         }
     }
@@ -64,6 +71,7 @@ impl<F: Field> Program<F> {
                 .iter()
                 .map(|instruction| instruction.clone().map(|instruction| (instruction, None)))
                 .collect(),
+            apc_by_pc_index: HashMap::new(),
             pc_base,
         }
     }
@@ -80,6 +88,7 @@ impl<F: Field> Program<F> {
                 .zip_eq(debug_infos.iter())
                 .map(|(instruction, debug_info)| Some((instruction.clone(), debug_info.clone())))
                 .collect(),
+            apc_by_pc_index: HashMap::new(),
             pc_base: 0,
         }
     }
@@ -162,6 +171,24 @@ impl<F: Field> Program<F> {
     pub fn append(&mut self, other: Program<F>) {
         self.instructions_and_debug_infos
             .extend(other.instructions_and_debug_infos);
+    }
+
+    pub fn add_apc_instruction_at_pc_index(&mut self, pc_index: usize, opcode: VmOpcode) {
+        let debug: Option<DebugInfo> = self.instructions_and_debug_infos[pc_index]
+            .as_ref()
+            .unwrap()
+            .1
+            .clone();
+
+        self.apc_by_pc_index
+            .insert(pc_index, (Instruction::from_usize(opcode, []), debug));
+    }
+
+    pub fn get_apc_instruction(
+        &self,
+        pc_index: usize,
+    ) -> Option<&(Instruction<F>, Option<DebugInfo>)> {
+        self.apc_by_pc_index.get(&pc_index)
     }
 }
 

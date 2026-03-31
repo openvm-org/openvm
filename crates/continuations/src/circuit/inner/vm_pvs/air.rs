@@ -7,7 +7,7 @@ use openvm_recursion_circuit::bus::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use openvm_verify_stark_host::pvs::{VmPvs, VM_PVS_AIR_ID};
@@ -47,6 +47,7 @@ impl<F> BaseAirWithPublicValues<F> for VmPvsAir {
         VmPvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for VmPvsAir {}
 impl<F> PartitionedBaseAir<F> for VmPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for VmPvsAir {

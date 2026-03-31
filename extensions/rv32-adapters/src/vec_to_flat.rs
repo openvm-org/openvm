@@ -14,7 +14,7 @@ use openvm_circuit::{
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, p3_air::BaseAir, p3_field::PrimeField32,
-    BaseAirWithPublicValues,
+    BaseAirWithPublicValues, ColumnsAir,
 };
 
 // =================================================================================================
@@ -70,6 +70,30 @@ where
     fn width(&self) -> usize {
         self.0.width()
     }
+}
+
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const BLOCK_SIZE: usize,
+        const TOTAL_READ_SIZE: usize,
+        const TOTAL_WRITE_SIZE: usize,
+    > ColumnsAir<F>
+    for VecToFlatAluAdapterAir<
+        A,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        BLOCK_SIZE,
+        TOTAL_READ_SIZE,
+        TOTAL_WRITE_SIZE,
+    >
+where
+    A: ColumnsAir<F>,
+{
 }
 
 impl<
@@ -338,6 +362,20 @@ where
     fn width(&self) -> usize {
         self.0.width()
     }
+}
+
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_SIZE: usize,
+        const TOTAL_READ_SIZE: usize,
+    > ColumnsAir<F>
+    for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+where
+    A: ColumnsAir<F>,
+{
 }
 
 impl<

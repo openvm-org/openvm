@@ -67,6 +67,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         {
             use ::openvm_circuit::arch::ExecutionError;
             let pc = exec_state.vm_state.pc();
+            ::tracing::trace!(pc = pc as u64, "executing instruction");
             let pre_compute = interpreter.get_pre_compute(pc);
             #execute_stmt
 

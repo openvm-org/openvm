@@ -20,6 +20,11 @@ pub const DEFAULT_PAGE_BITS: usize = 6;
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
+    /// Lower bound of the timestamp at this point in the segment.
+    /// The actual timestamp is larger than this in practice,
+    /// for example in the cases where `increment_timestamp` is called on `TracingMemory`
+    /// without an actual memory operation happening.
+    pub timestamp: u32,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
     #[getset(get = "pub", set = "pub", set_with = "pub")]
@@ -69,6 +74,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         let mut ctx = Self {
             trace_heights,
             is_trace_height_constant,
+            timestamp: 0,
             memory_ctx,
             segmentation_ctx,
             suspend_on_segment: false,
@@ -161,10 +167,12 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             self.segmentation_ctx.instret,
             &mut self.trace_heights,
             &self.is_trace_height_constant,
+            self.timestamp,
         );
 
         if did_segment {
             // Initialize contexts for new segment
+            self.timestamp = 0;
             self.segmentation_ctx
                 .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
@@ -232,6 +240,9 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
             size.is_power_of_two(),
             "size must be a power of 2, got {size}"
         );
+
+        let words = size.div_ceil(4);
+        self.timestamp += words;
 
         // Handle merkle tree updates
         if address_space != RV32_REGISTER_AS {

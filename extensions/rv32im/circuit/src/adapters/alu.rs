@@ -17,7 +17,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -29,6 +29,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 
 use super::{
@@ -36,7 +37,7 @@ use super::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct Rv32BaseAluAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
@@ -62,6 +63,11 @@ pub struct Rv32BaseAluAdapterAir {
 impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
     fn width(&self) -> usize {
         Rv32BaseAluAdapterCols::<F>::width()
+    }
+}
+impl<F: Field> ColumnsAir<F> for Rv32BaseAluAdapterAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        <Rv32BaseAluAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

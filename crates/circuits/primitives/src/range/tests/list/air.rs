@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 
 use super::columns::{ListCols, NUM_LIST_COLS};
@@ -19,6 +19,7 @@ pub struct ListAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for ListAir {}
 impl<F: Field> PartitionedBaseAir<F> for ListAir {}
+impl<F: Field> ColumnsAir<F> for ListAir {}
 impl<F: Field> BaseAir<F> for ListAir {
     fn width(&self) -> usize {
         NUM_LIST_COLS

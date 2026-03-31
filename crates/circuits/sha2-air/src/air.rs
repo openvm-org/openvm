@@ -9,6 +9,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
+    ColumnsAir,
 };
 
 use super::{
@@ -47,6 +48,7 @@ impl<F, C: Sha2BlockHasherSubairConfig> BaseAir<F> for Sha2BlockHasherSubAir<C> 
         C::SUBAIR_WIDTH
     }
 }
+impl<F, C: Sha2BlockHasherSubairConfig> ColumnsAir<F> for Sha2BlockHasherSubAir<C> {}
 
 impl<AB: InteractionBuilder, C: Sha2BlockHasherSubairConfig> SubAir<AB>
     for Sha2BlockHasherSubAir<C>

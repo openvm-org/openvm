@@ -3,7 +3,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::Field,
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 
 use super::ProgramTester;
@@ -16,6 +16,7 @@ pub struct ProgramDummyAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
+impl<F: Field> ColumnsAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {
     fn width(&self) -> usize {
         ProgramTester::<F>::width()

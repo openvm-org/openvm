@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{AlignedBytesBorrow, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
@@ -52,7 +52,7 @@ pub struct PhantomAir {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Copy, Clone, Serialize, Deserialize)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
     pub pc: T,
     #[serde(with = "BigArray")]
@@ -67,6 +67,11 @@ impl<F: Field> BaseAir<F> for PhantomAir {
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for PhantomAir {}
+impl<F: Field> ColumnsAir<F> for PhantomAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        <PhantomCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+    }
+}
 impl<F: Field> BaseAirWithPublicValues<F> for PhantomAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {

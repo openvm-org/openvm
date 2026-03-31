@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     interaction::{InteractionBuilder, LookupBus},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{Field, PrimeCharacteristicRing};
@@ -44,6 +44,7 @@ impl<F: Field> BaseAir<F> for DeferralPoseidon2Air<F> {
     }
 }
 impl<F: Field> BaseAirWithPublicValues<F> for DeferralPoseidon2Air<F> {}
+impl<F: Field> ColumnsAir<F> for DeferralPoseidon2Air<F> {}
 impl<F: Field> PartitionedBaseAir<F> for DeferralPoseidon2Air<F> {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralPoseidon2Air<AB::F> {

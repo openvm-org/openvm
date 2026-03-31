@@ -5,7 +5,7 @@ use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
-    PartitionedBaseAir,
+    ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
@@ -153,6 +153,7 @@ impl<F: Field> PartitionedBaseAir<F> for SymbolicExpressionAir<F> {
             }
     }
 }
+impl<F: Field> ColumnsAir<F> for SymbolicExpressionAir<F> {}
 
 impl<F: Field> BaseAir<F> for SymbolicExpressionAir<F> {
     fn width(&self) -> usize {

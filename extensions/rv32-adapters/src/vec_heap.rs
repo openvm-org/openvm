@@ -21,7 +21,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -36,6 +36,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
@@ -46,7 +47,7 @@ use openvm_stark_backend::{
 /// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv32VecHeapAdapterCols<
     T,
     const NUM_READS: usize,
@@ -105,6 +106,28 @@ impl<
             READ_SIZE,
             WRITE_SIZE,
         >::width()
+    }
+}
+
+impl<
+        F: Field,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > ColumnsAir<F>
+    for Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+{
+    fn columns(&self) -> Option<Vec<String>> {
+        <Rv32VecHeapAdapterCols<
+            F,
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            READ_SIZE,
+            WRITE_SIZE,
+        > as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

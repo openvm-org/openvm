@@ -286,6 +286,17 @@ impl SegmentationCtx {
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
+        self.should_segment_with_ts(instret, trace_heights, is_trace_height_constant, 0)
+    }
+
+    #[inline(always)]
+    pub(crate) fn should_segment_with_ts(
+        &self,
+        instret: u64,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+        ts: u32,
+    ) -> bool {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.air_names.len());
         debug_assert_eq!(trace_heights.len(), self.widths.len());
@@ -300,6 +311,26 @@ impl SegmentationCtx {
         // Segment should contain at least one cycle
         if num_insns == 0 {
             return false;
+        }
+
+        // Powdr-specific: segment based on timestamp approaching the limit
+        let should_segment_timestamp_powdr = std::env::var("POWDR_OPENVM_SEGMENT_DELTA")
+            .ok()
+            .map(|val| val.parse::<u64>().unwrap())
+            .is_some_and(|delta| {
+                // ts * 1.2, but don't want to use floats
+                if (((ts as u64) * 12) / 10) > ((1 << 29) - delta) {
+                    tracing::info!(
+                        "Should segment because timestamp {ts} is approaching the limit",
+                    );
+                    true
+                } else {
+                    false
+                }
+            });
+
+        if should_segment_timestamp_powdr {
+            return true;
         }
 
         let main_weight = self.config.main_cell_weight;
@@ -376,8 +407,10 @@ impl SegmentationCtx {
         instret: u64,
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
+        ts: u32,
     ) -> bool {
-        let should_seg = self.should_segment(instret, trace_heights, is_trace_height_constant);
+        let should_seg =
+            self.should_segment_with_ts(instret, trace_heights, is_trace_height_constant, ts);
 
         if should_seg {
             self.create_segment_from_checkpoint(instret, trace_heights);

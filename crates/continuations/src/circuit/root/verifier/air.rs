@@ -11,7 +11,7 @@ use openvm_recursion_circuit::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use openvm_verify_stark_host::pvs::{
@@ -82,6 +82,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir {
         RootVerifierPvs::<u8>::width()
     }
 }
+impl<F: Field> ColumnsAir<F> for RootVerifierPvsAir {}
 impl<F: Field> PartitionedBaseAir<F> for RootVerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

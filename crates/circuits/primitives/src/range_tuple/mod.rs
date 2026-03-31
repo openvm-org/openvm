@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::AirProvingContext,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use crate::Chip;
@@ -79,6 +79,7 @@ impl<const N: usize> RangeTupleCheckerAir<N> {
 }
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
+impl<F: Field, const N: usize> ColumnsAir<F> for RangeTupleCheckerAir<N> {}
 
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {

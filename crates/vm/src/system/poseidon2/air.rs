@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::Field,
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 
 use super::columns::Poseidon2PeripheryCols;
@@ -30,6 +30,10 @@ impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
 {
 }
 impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
+    for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
+{
+}
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir<F>
     for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
 {
 }

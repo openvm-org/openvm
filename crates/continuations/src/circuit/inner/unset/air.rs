@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
@@ -32,6 +32,7 @@ impl<F> BaseAir<F> for UnsetPvsAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UnsetPvsAir {}
+impl<F> ColumnsAir<F> for UnsetPvsAir {}
 impl<F> PartitionedBaseAir<F> for UnsetPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnsetPvsAir {

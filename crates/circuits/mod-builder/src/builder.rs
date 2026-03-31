@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField64},
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 
 use super::{FieldVariable, SymbolicExpr};
@@ -317,6 +317,7 @@ impl Deref for FieldExpr {
 
 impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
 impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
+impl<F: Field> ColumnsAir<F> for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
         assert!(self.builder.is_finalized());

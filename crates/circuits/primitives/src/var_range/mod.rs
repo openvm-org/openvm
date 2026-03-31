@@ -17,11 +17,11 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::AirProvingContext,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use tracing::instrument;
 
-use crate::Chip;
+use crate::{Chip, StructReflection, StructReflectionHelper};
 
 mod bus;
 pub use bus::*;
@@ -34,7 +34,7 @@ pub use cuda::*;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(Default, AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct VariableRangeCols<T> {
     /// The value being range checked
@@ -62,6 +62,11 @@ impl VariableRangeCheckerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for VariableRangeCheckerAir {}
 impl<F: Field> PartitionedBaseAir<F> for VariableRangeCheckerAir {}
+impl<F: Field> ColumnsAir<F> for VariableRangeCheckerAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        <VariableRangeCols<F> as crate::StructReflectionHelper>::struct_reflection()
+    }
+}
 impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
     fn width(&self) -> usize {
         VariableRangeCols::<F>::width()

@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::AirProvingContext,
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -31,10 +31,13 @@ use {
 };
 
 use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsEqArrayCols<T, const N: usize> {
     x: [T; N],
     y: [T; N],
@@ -47,6 +50,7 @@ pub struct IsEqArrayTestAir<const N: usize>(IsEqArraySubAir<N>);
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for IsEqArrayTestAir<N> {}
+impl<F: Field, const N: usize> ColumnsAir<F> for IsEqArrayTestAir<N> {}
 impl<F: Field, const N: usize> BaseAir<F> for IsEqArrayTestAir<N> {
     fn width(&self) -> usize {
         IsEqArrayCols::<F, N>::width()

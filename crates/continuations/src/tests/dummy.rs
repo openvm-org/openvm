@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
-    AirRef, PartitionedBaseAir, StarkEngine,
+    AirRef, ColumnsAir, PartitionedBaseAir, StarkEngine,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
@@ -28,6 +28,7 @@ impl<F> BaseAirWithPublicValues<F> for EmptyAirWithPvs {
         self.0
     }
 }
+impl<F> ColumnsAir<F> for EmptyAirWithPvs {}
 impl<F> PartitionedBaseAir<F> for EmptyAirWithPvs {}
 impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
     fn eval(&self, builder: &mut AB) {

@@ -9,7 +9,7 @@ use openvm_recursion_circuit::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
@@ -54,6 +54,7 @@ impl<F> BaseAirWithPublicValues<F> for DeferralAggPvsAir {
         DeferralAggregationPvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for DeferralAggPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralAggPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

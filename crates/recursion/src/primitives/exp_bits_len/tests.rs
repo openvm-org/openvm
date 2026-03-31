@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
     utils::disable_debug_builder,
     verifier::VerifierError,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkProtocolConfig,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkEngine, StarkProtocolConfig,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F},
@@ -85,6 +85,7 @@ impl<F> BaseAir<F> for ExpBitsLenLookupAir {
 }
 
 impl<F> BaseAirWithPublicValues<F> for ExpBitsLenLookupAir {}
+impl<F> ColumnsAir<F> for ExpBitsLenLookupAir {}
 impl<F> PartitionedBaseAir<F> for ExpBitsLenLookupAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpBitsLenLookupAir {

@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -187,6 +187,10 @@ impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<
 {
 }
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
+    for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
+{
+}
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir<F>
     for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
 {
 }

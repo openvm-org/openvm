@@ -20,7 +20,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
-    BaseAirWithPublicValues,
+    BaseAirWithPublicValues, ColumnsAir,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -98,6 +98,7 @@ impl<F: Field> BaseAir<F> for FieldExpressionCoreAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for FieldExpressionCoreAir {}
+impl<F: Field> ColumnsAir<F> for FieldExpressionCoreAir {}
 
 impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for FieldExpressionCoreAir
 where

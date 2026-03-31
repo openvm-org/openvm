@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::AirProvingContext,
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(feature = "cuda")]
 use {
@@ -24,10 +24,10 @@ use {
 };
 
 use super::*;
-use crate::utils::test_engine_small;
+use crate::{utils::test_engine_small, StructReflection, StructReflectionHelper};
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct IsLtArrayCols<T, const NUM: usize, const AUX_LEN: usize> {
     pub x: [T; NUM],
     pub y: [T; NUM],
@@ -50,6 +50,10 @@ impl<F: Field, const NUM: usize, const AUX_LEN: usize> BaseAir<F>
     }
 }
 impl<F: Field, const NUM: usize, const AUX_LEN: usize> PartitionedBaseAir<F>
+    for IsLtArrayTestAir<NUM, AUX_LEN>
+{
+}
+impl<F: Field, const NUM: usize, const AUX_LEN: usize> ColumnsAir<F>
     for IsLtArrayTestAir<NUM, AUX_LEN>
 {
 }

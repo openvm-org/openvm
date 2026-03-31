@@ -22,6 +22,8 @@
 
 /// Derive macros
 pub use openvm_circuit_primitives_derive::*;
+/// Struct reflection for column names
+pub use struct_reflection::{StructReflection, StructReflectionHelper};
 
 pub mod assert_less_than;
 pub mod bigint;

@@ -11,10 +11,10 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::AirProvingContext,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
-use crate::Chip;
+use crate::{Chip, StructReflection, StructReflectionHelper};
 
 mod bus;
 pub use bus::*;
@@ -27,7 +27,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-#[derive(AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
     /// Binary decomposition of x (x_bits[0] is LSB, x_bits[NUM_BITS-1] is MSB)
@@ -55,6 +55,11 @@ impl<F: Field, const NUM_BITS: usize> BaseAirWithPublicValues<F>
 impl<F: Field, const NUM_BITS: usize> PartitionedBaseAir<F>
     for BitwiseOperationLookupAir<NUM_BITS>
 {
+}
+impl<F: Field, const NUM_BITS: usize> ColumnsAir<F> for BitwiseOperationLookupAir<NUM_BITS> {
+    fn columns(&self) -> Option<Vec<String>> {
+        <BitwiseOperationLookupCols<F, NUM_BITS> as crate::StructReflectionHelper>::struct_reflection()
+    }
 }
 impl<F: Field, const NUM_BITS: usize> BaseAir<F> for BitwiseOperationLookupAir<NUM_BITS> {
     fn width(&self) -> usize {

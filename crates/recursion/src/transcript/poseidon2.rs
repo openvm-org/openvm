@@ -7,7 +7,7 @@ use openvm_poseidon2_air::{
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
-    PartitionedBaseAir,
+    ColumnsAir, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
@@ -48,6 +48,7 @@ impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
     for Poseidon2Air<F, SBOX_REGISTERS>
 {
 }
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {}
 
 impl<AB: AirBuilder + InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
     for Poseidon2Air<AB::F, SBOX_REGISTERS>

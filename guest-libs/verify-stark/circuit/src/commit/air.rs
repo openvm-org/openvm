@@ -6,7 +6,7 @@ use openvm_continuations::circuit::subair::{
 };
 use openvm_recursion_circuit::{bus::Poseidon2CompressBus, utils::assert_zeros};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
@@ -65,6 +65,7 @@ impl<F> BaseAir<F> for UserPvsCommitValuesAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsCommitValuesAir {}
+impl<F> ColumnsAir<F> for UserPvsCommitValuesAir {}
 impl<F> PartitionedBaseAir<F> for UserPvsCommitValuesAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

@@ -11,6 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
+    StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -24,7 +25,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
@@ -101,6 +102,7 @@ impl<F> BaseAir<F> for DeferralOutputAir {
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputAir {}
+impl<F> ColumnsAir<F> for DeferralOutputAir {}
 
 impl<AB> Air<AB> for DeferralOutputAir
 where

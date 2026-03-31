@@ -18,7 +18,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -33,6 +33,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers (for branch operations).
@@ -42,7 +43,7 @@ use openvm_stark_backend::{
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv32VecHeapBranchAdapterCols<
     T,
     const NUM_READS: usize,
@@ -77,6 +78,14 @@ impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_
 {
     fn width(&self) -> usize {
         Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width()
+    }
+}
+
+impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
+    ColumnsAir<F> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+{
+    fn columns(&self) -> Option<Vec<String>> {
+        <Rv32VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

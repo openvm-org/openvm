@@ -2,7 +2,7 @@ use core::borrow::Borrow;
 
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
@@ -29,6 +29,7 @@ impl<F, const NUM_BITS: usize> BaseAir<F> for RangeCheckerAir<NUM_BITS> {
 }
 impl<F, const NUM_BITS: usize> BaseAirWithPublicValues<F> for RangeCheckerAir<NUM_BITS> {}
 impl<F, const NUM_BITS: usize> PartitionedBaseAir<F> for RangeCheckerAir<NUM_BITS> {}
+impl<F, const NUM_BITS: usize> ColumnsAir<F> for RangeCheckerAir<NUM_BITS> {}
 
 impl<AB: AirBuilder + InteractionBuilder, const NUM_BITS: usize> Air<AB>
     for RangeCheckerAir<NUM_BITS>

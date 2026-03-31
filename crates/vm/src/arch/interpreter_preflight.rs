@@ -45,6 +45,8 @@ pub struct PcEntry<F> {
     // to avoid padding. This means PcEntry has align=8 and size=40 bytes, which is too big
     pub insn: Instruction<F>,
     pub executor_idx: ExecutorId,
+    /// Whether this instruction was overridden by an APC (auto-precompile) instruction.
+    pub is_apc: bool,
 }
 
 impl<F: Field, E> PreflightInterpretedInstance<F, E> {
@@ -67,9 +69,16 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
         let base_idx = get_pc_index(pc_base);
         let mut pc_handler = Vec::with_capacity(base_idx + len);
         pc_handler.extend(repeat_n(PcEntry::undefined(), base_idx));
-        for insn_and_debug_info in &program.instructions_and_debug_infos {
-            if let Some((insn, _)) = insn_and_debug_info {
-                let insn = insn.clone();
+        for (pc_idx, insn_and_debug_info) in program.instructions_and_debug_infos.iter().enumerate()
+        {
+            // If an apc exists at this pc index, override the instruction and remember that fact
+            let insn_and_debug_info = program
+                .apc_by_pc_index
+                .get(&pc_idx)
+                .map(|insn| (insn, true))
+                .or(insn_and_debug_info.as_ref().map(|i| (i, false)));
+
+            if let Some(((insn, _), is_apc)) = insn_and_debug_info {
                 let executor_idx = if insn.opcode == SystemOpcode::TERMINATE.global_opcode() {
                     // The execution loop will always branch to terminate before using this executor
                     0
@@ -84,7 +93,11 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
                     (executor_idx as usize) < inventory.executors.len(),
                     "ExecutorInventory ensures executor_idx is in bounds"
                 );
-                let pc_entry = PcEntry { insn, executor_idx };
+                let pc_entry = PcEntry {
+                    insn: insn.clone(),
+                    executor_idx,
+                    is_apc,
+                };
                 pc_handler.push(pc_entry);
             } else {
                 pc_handler.push(PcEntry::undefined());
@@ -164,9 +177,13 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
             .ok_or_else(|| ExecutionError::PcOutOfBounds(pc))?;
         // SAFETY: `execution_frequencies` has the same length as `pc_handler` so `get_pc_entry`
         // already does the bounds check
-        unsafe {
-            *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
-        };
+        // Skip frequency counting for APC instructions (they replace original instructions
+        // and should not be counted in the execution profile)
+        if !pc_entry.is_apc {
+            unsafe {
+                *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
+            };
+        }
         // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
         // `executor_idx` is within bounds
         let executor = unsafe {
@@ -222,6 +239,7 @@ impl<F: Default> PcEntry<F> {
         Self {
             insn: Instruction::default(),
             executor_idx: u32::MAX,
+            is_apc: false,
         }
     }
 }

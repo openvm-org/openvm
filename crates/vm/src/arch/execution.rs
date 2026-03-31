@@ -1,4 +1,4 @@
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{AlignedBytesBorrow, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
@@ -306,7 +306,9 @@ pub struct E2PreCompute<DATA> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, StructReflection, Serialize, Deserialize,
+)]
 pub struct ExecutionState<T> {
     pub pc: T,
     pub timestamp: T,

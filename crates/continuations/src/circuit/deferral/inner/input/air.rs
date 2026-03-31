@@ -11,7 +11,7 @@ use openvm_recursion_circuit::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
@@ -56,6 +56,7 @@ impl<F> BaseAir<F> for InputCommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for InputCommitAir {}
+impl<F> ColumnsAir<F> for InputCommitAir {}
 impl<F> PartitionedBaseAir<F> for InputCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for InputCommitAir {

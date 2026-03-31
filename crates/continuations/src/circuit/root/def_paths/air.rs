@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 use openvm_recursion_circuit::bus::Poseidon2CompressBus;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -90,6 +90,7 @@ impl<F> BaseAir<F> for DeferralAccMerklePathsAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralAccMerklePathsAir {}
+impl<F> ColumnsAir<F> for DeferralAccMerklePathsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralAccMerklePathsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir {

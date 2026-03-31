@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -72,6 +72,7 @@ pub struct EqNsAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqNsAir {}
 impl<F> PartitionedBaseAir<F> for EqNsAir {}
+impl<F> ColumnsAir<F> for EqNsAir {}
 
 impl<F> BaseAir<F> for EqNsAir {
     fn width(&self) -> usize {

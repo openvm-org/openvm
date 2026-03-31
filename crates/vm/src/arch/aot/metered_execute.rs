@@ -1,6 +1,6 @@
 use std::{ffi::c_void, mem::offset_of};
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{common::*, AotInstance};
@@ -177,7 +177,15 @@ where
             asm_str += "\n";
         }
 
-        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+        for (pc, original_instruction, _) in exe.program.enumerate_by_pc() {
+            // Check if this PC has an APC override - use APC instruction if so
+            let pc_index = ((pc - exe.program.pc_base) / DEFAULT_PC_STEP) as usize;
+            let instruction = exe
+                .program
+                .apc_by_pc_index
+                .get(&pc_index)
+                .map(|(inst, _)| inst.clone())
+                .unwrap_or(original_instruction);
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 

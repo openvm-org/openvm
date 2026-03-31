@@ -7,7 +7,7 @@ use openvm_recursion_circuit::bus::{
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use openvm_verify_stark_host::pvs::{
     VerifierBasePvs, CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX, VERIFIER_PVS_AIR_ID,
@@ -54,6 +54,7 @@ impl<F> BaseAirWithPublicValues<F> for DeferralVerifierPvsAir {
         VerifierBasePvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for DeferralVerifierPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralVerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

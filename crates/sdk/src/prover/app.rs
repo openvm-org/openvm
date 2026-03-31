@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use getset::Getters;
+use getset::{Getters, MutGetters};
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
@@ -26,14 +26,14 @@ use crate::{
     StdIn, F, SC,
 };
 
-#[derive(Getters)]
+#[derive(Getters, MutGetters)]
 pub struct AppProver<E, VB>
 where
     E: StarkEngine,
     VB: VmBuilder<E>,
 {
     pub program_name: Option<String>,
-    #[getset(get = "pub")]
+    #[getset(get = "pub", get_mut = "pub")]
     instance: VmInstance<E, VB>,
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,

@@ -9,7 +9,7 @@ use openvm_recursion_circuit::{
     prelude::DIGEST_SIZE,
     primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage},
 };
-use openvm_stark_backend::{interaction::InteractionBuilder, PartitionedBaseAir};
+use openvm_stark_backend::{interaction::InteractionBuilder, ColumnsAir, PartitionedBaseAir};
 use p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
@@ -55,6 +55,7 @@ impl<F> BaseAir<F> for DeferralOutputCommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputCommitAir {}
+impl<F> ColumnsAir<F> for DeferralOutputCommitAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir

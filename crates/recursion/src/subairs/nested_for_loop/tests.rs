@@ -12,7 +12,8 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
     utils::disable_debug_builder,
     verifier::VerifierError,
-    AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkProtocolConfig,
+    AirRef, BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkEngine,
+    StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 
@@ -31,6 +32,7 @@ impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAirWithPublicValues<F>
 {
 }
 impl<F: Field, const DEPTH_MINUS_ONE: usize> PartitionedBaseAir<F> for TestAir<DEPTH_MINUS_ONE> {}
+impl<F: Field, const DEPTH_MINUS_ONE: usize> ColumnsAir<F> for TestAir<DEPTH_MINUS_ONE> {}
 impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAir<F> for TestAir<DEPTH_MINUS_ONE> {
     fn width(&self) -> usize {
         width::<DEPTH_MINUS_ONE>()

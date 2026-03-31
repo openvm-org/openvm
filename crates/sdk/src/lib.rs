@@ -332,6 +332,42 @@ where
         Ok(public_values)
     }
 
+    /// Executes using the interpreter (non-AOT) regardless of feature flags.
+    /// This is needed for PGO profiling, which relies on tracing events emitted
+    /// by the interpreter but not by AOT-compiled code.
+    #[cfg(feature = "aot")]
+    pub fn execute_interpreted(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+    ) -> Result<Vec<u8>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        let instance = self
+            .executor
+            .interpreter_instance(&exe)
+            .map_err(VirtualMachineError::from)?;
+        let final_memory = instance
+            .execute(inputs, None)
+            .map_err(VirtualMachineError::from)?
+            .memory;
+        let public_values = extract_public_values(
+            self.executor.config.as_ref().num_public_values,
+            &final_memory.memory,
+        );
+        Ok(public_values)
+    }
+
+    /// Executes using the interpreter (non-AOT). When AOT is not enabled,
+    /// this is the same as `execute()`.
+    #[cfg(not(feature = "aot"))]
+    pub fn execute_interpreted(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+    ) -> Result<Vec<u8>, SdkError> {
+        self.execute(app_exe, inputs)
+    }
+
     /// Executes with segmentation for proof generation.
     /// Returns both user public values and segments with instruction counts and trace heights.
     pub fn execute_metered(

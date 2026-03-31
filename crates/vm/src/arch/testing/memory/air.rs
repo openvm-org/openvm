@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::AirProvingContext,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use crate::{
@@ -72,6 +72,7 @@ pub struct MemoryDummyAir {
 
 impl<F> BaseAirWithPublicValues<F> for MemoryDummyAir {}
 impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
+impl<F> ColumnsAir<F> for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
         DEFAULT_BLOCK_SIZE + 4

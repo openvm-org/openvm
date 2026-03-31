@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::AirProvingContext,
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(feature = "cuda")]
 use {
@@ -47,6 +47,7 @@ pub struct IsLtTestAir(pub IsLtSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
+impl<F: Field> ColumnsAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {
     fn width(&self) -> usize {
         // Cannot use size_of because Cols has Vec<T> which is stored on the heap
