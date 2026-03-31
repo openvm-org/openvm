@@ -10,7 +10,7 @@ use openvm_continuations::CommitBytes;
 use openvm_sdk::{
     config::AggregationSystemParams,
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
-    types::AppExecutionCommit,
+    types::{AppExecutionCommit, VerificationBaselineJson},
     Sdk,
 };
 use p3_bn254::Bn254;
@@ -147,7 +147,8 @@ impl CommitCmd {
         // Write verification baseline (used by `verify stark`)
         let baseline_path = get_app_baseline_path(&target_output_dir, target_name);
         println!("Writing baseline to {}", baseline_path.display());
-        write_to_file_json(&baseline_path, &baseline)?;
+        let baseline_json: VerificationBaselineJson = baseline.into();
+        write_to_file_json(&baseline_path, &baseline_json)?;
 
         if let Some(output_dir) = &self.output_dir {
             create_dir_all(output_dir)?;

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{eyre, Result};
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::{
         SegmentationConfig, SegmentationLimits, DEFAULT_MAX_MEMORY, DEFAULT_MAX_TRACE_HEIGHT_BITS,
@@ -22,8 +22,8 @@ use crate::{
     commands::build,
     input::read_to_stdin,
     util::{
-        get_agg_pk_path, get_agg_vk_path, get_app_pk_path, get_manifest_path_and_dir,
-        get_single_target_name, get_target_dir,
+        get_agg_pk_path, get_app_pk_path, get_manifest_path_and_dir, get_single_target_name,
+        get_target_dir,
     },
 };
 
@@ -203,7 +203,7 @@ impl ProveCmd {
                 let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = maybe_with_cached_keys(
+                let sdk = with_required_agg_pk(
                     Sdk::new(app_config, AggregationSystemParams::default())?
                         .with_agg_tree_config(*agg_tree_config)
                         .with_app_pk(app_pk),
@@ -217,8 +217,6 @@ impl ProveCmd {
                 let (stark_proof, _metadata) =
                     prover.prove(read_to_stdin(&run_args.input)?, &[])?;
                 let stark_proof_bytes = VersionedNonRootStarkProof::new(stark_proof)?;
-
-                save_keys(&sdk, cargo_args)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
@@ -246,19 +244,18 @@ impl ProveCmd {
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = maybe_with_cached_keys(
+                let sdk = with_required_agg_pk(
                     Sdk::new(app_config, AggregationSystemParams::default())?
                         .with_agg_tree_config(*agg_tree_config)
                         .with_app_pk(app_pk),
                     agg_pk,
                     cargo_args,
                 )?;
+                let sdk = with_required_root_pk(sdk)?;
                 let mut prover = sdk.evm_prover(exe)?;
                 let exe_commit = prover.stark_prover.app_prover.app_exe_commit();
                 println!("exe commit: {:?}", exe_commit);
                 let evm_proof = prover.prove_evm(read_to_stdin(&run_args.input)?, &[])?;
-
-                save_keys(&sdk, cargo_args)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
@@ -335,54 +332,40 @@ fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
     Ok(get_target_dir(&cargo_args.target_dir, &manifest_path))
 }
 
-fn maybe_with_cached_keys(
+fn resolve_agg_pk_path(agg_pk: &Option<PathBuf>, cargo_args: &RunCargoArgs) -> Result<PathBuf> {
+    if let Some(agg_pk) = agg_pk {
+        Ok(agg_pk.to_path_buf())
+    } else {
+        let target_dir = target_dir_from_cargo_args(cargo_args)?;
+        Ok(get_agg_pk_path(&target_dir))
+    }
+}
+
+fn with_required_agg_pk(
     sdk: Sdk,
     agg_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
 ) -> Result<Sdk> {
-    let target_dir = target_dir_from_cargo_args(cargo_args)?;
-    let mut sdk = if let Some(agg_pk) = agg_pk {
-        sdk.with_agg_pk(read_object_from_file(agg_pk)?)
-    } else {
-        let agg_pk_path = get_agg_pk_path(&target_dir);
-        if agg_pk_path.exists() {
-            sdk.with_agg_pk(read_object_from_file(agg_pk_path)?)
-        } else {
-            sdk
-        }
-    };
-    let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
-    if root_pk_path.exists() {
-        sdk = sdk.with_root_pk(read_object_from_file(&root_pk_path)?);
-    }
-    Ok(sdk)
+    let agg_pk_path = resolve_agg_pk_path(agg_pk, cargo_args)?;
+    let agg_pk = read_object_from_file(&agg_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read aggregation proving key from {}: {e}\nRun 'cargo openvm commit' first to generate it",
+            agg_pk_path.display()
+        )
+    })?;
+    Ok(sdk.with_agg_pk(agg_pk))
 }
 
-/// Save generated keys for reuse.
-fn save_keys(sdk: &Sdk, cargo_args: &RunCargoArgs) -> Result<()> {
-    let target_dir = target_dir_from_cargo_args(cargo_args)?;
-    let agg_pk_path = get_agg_pk_path(&target_dir);
-    let agg_vk_path = get_agg_vk_path(&target_dir);
-    if !agg_pk_path.exists() {
-        println!(
-            "Writing aggregation proving key to {}",
-            agg_pk_path.display()
-        );
-        write_object_to_file(&agg_pk_path, sdk.agg_pk())?;
-    }
-    if !agg_vk_path.exists() {
-        println!(
-            "Writing aggregation verifying key to {}",
-            agg_vk_path.display()
-        );
-        write_object_to_file(&agg_vk_path, sdk.agg_vk().as_ref().clone())?;
-    }
+#[cfg(feature = "evm-prove")]
+fn with_required_root_pk(sdk: Sdk) -> Result<Sdk> {
     let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
-    if !root_pk_path.exists() {
-        println!("Writing root proving key to {}", root_pk_path.display());
-        write_object_to_file(&root_pk_path, sdk.root_pk())?;
-    }
-    Ok(())
+    let root_pk = read_object_from_file(&root_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read root proving key from {}: {e}\nRun 'cargo openvm commit' first to generate it",
+            root_pk_path.display()
+        )
+    })?;
+    Ok(sdk.with_root_pk(root_pk))
 }
 
 impl From<SegmentationArgs> for SegmentationConfig {

@@ -5,7 +5,7 @@ use eyre::{Context, Result};
 use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof,
-    types::VersionedNonRootStarkProof,
+    types::{VerificationBaselineJson, VersionedNonRootStarkProof},
     Sdk, OPENVM_VERSION,
 };
 
@@ -178,7 +178,7 @@ impl VerifyCmd {
                 let agg_vk_path = get_agg_vk_path(&target_dir);
                 let agg_vk = read_object_from_file(&agg_vk_path).map_err(|e| {
                     eyre::eyre!(
-                        "Failed to read aggregation verifying key from {}: {e}\nRun 'cargo openvm prove stark' first to generate it",
+                        "Failed to read aggregation verifying key from {}: {e}\nRun 'cargo openvm commit' first to generate it",
                         agg_vk_path.display()
                     )
                 })?;
@@ -196,7 +196,8 @@ impl VerifyCmd {
                     )?;
                     get_app_baseline_path(&target_output_dir, target_name)
                 };
-                let expected_app_commit = read_from_file_json(baseline_path)?;
+                let baseline_json: VerificationBaselineJson = read_from_file_json(baseline_path)?;
+                let expected_app_commit = baseline_json.into();
 
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
