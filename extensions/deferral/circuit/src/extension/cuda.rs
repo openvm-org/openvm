@@ -23,7 +23,7 @@ use crate::{
     call::{DeferralCallAir, DeferralCallChipGpu},
     count::{DeferralCircuitCountAir, DeferralCircuitCountChipGpu},
     output::{DeferralOutputAir, DeferralOutputChipGpu},
-    poseidon2::{poseidon2_buffer_capacity, DeferralPoseidon2Air, DeferralPoseidon2ChipGpu},
+    poseidon2::{DeferralPoseidon2Air, DeferralPoseidon2ChipGpu},
     DeferralExtension, Rv32DeferralConfig,
 };
 
@@ -53,13 +53,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
             count.fill_zero().unwrap();
         }
 
-        let max_trace_height = inventory
-            .config()
-            .segmentation_config
-            .limits
-            .max_trace_height as usize;
-        let poseidon2_capacity = poseidon2_buffer_capacity(max_trace_height.max(1));
-
         inventory.next_air::<DeferralCircuitCountAir>()?;
         let count_chip = Arc::new(DeferralCircuitCountChipGpu::new(
             count.clone(),
@@ -68,7 +61,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         inventory.add_periphery_chip(count_chip);
 
         inventory.next_air::<DeferralPoseidon2Air<CudaF>>()?;
-        let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(poseidon2_capacity, 1));
+        let max_trace_height = inventory
+            .config()
+            .segmentation_config
+            .limits
+            .max_trace_height as usize;
+        let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(max_trace_height.max(1), 1));
         let poseidon2_shared = poseidon2_chip.shared_buffer();
         inventory.add_periphery_chip(poseidon2_chip);
 
