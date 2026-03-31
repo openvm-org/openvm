@@ -143,6 +143,17 @@ impl<C: Config> Builder<C> {
         Array::Dyn(ptr, Usize::Var(len))
     }
 
+    /// Reads an element from an array.
+    ///
+    /// For `Array::Dyn`, this emits an unchecked load at `index`.
+    ///
+    /// # Safety
+    ///
+    /// When `slice` is `Array::Dyn`, the caller must have already established that
+    /// `index < slice.len()`. Otherwise this may read invalid memory and compromise soundness.
+    ///
+    /// When `slice` is `Array::Fixed`, `index` must be a constant in bounds, and the element must
+    /// have been initialized.
     pub fn get<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
         slice: &Array<C, V>,

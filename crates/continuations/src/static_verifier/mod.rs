@@ -125,6 +125,9 @@ impl StaticVerifierConfig {
             };
             builder.assert_var_eq(commit, self.root_verifier_program_commit[0]);
         }
+        // SAFETY: The static verifier operates over a fixed `per_air` array materialized from
+        // this concrete proof, and `special_air_ids.connector_air_id` is the connector AIR slot
+        // for the root verifier.
         assert_single_segment_vm_exit_successfully_with_connector_air_id(
             builder,
             input,

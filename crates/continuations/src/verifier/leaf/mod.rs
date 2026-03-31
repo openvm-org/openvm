@@ -79,9 +79,13 @@ impl LeafVmVerifierConfig {
                     );
                 }
 
+                // SAFETY: `assert_required_air_for_app_vm_present` has already ensured
+                // `CONNECTOR_AIR_ID < proof.per_air.len()`.
                 let proof_connector_pvs = get_connector_pvs(builder, &proof);
                 assert_or_assign_connector_pvs(builder, &pvs.connector, i, &proof_connector_pvs);
 
+                // SAFETY: `assert_required_air_for_app_vm_present` has already ensured
+                // `MERKLE_AIR_ID < proof.per_air.len()`.
                 let proof_memory_pvs = get_memory_pvs(builder, &proof);
                 assert_or_assign_memory_pvs(builder, &pvs.memory, i, &proof_memory_pvs);
             });

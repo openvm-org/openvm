@@ -99,6 +99,8 @@ impl<C: Config> NonLeafVerifierVariables<C> {
         C::F: PrimeField32,
     {
         let flatten_proof_vm_pvs = InternalVmVerifierPvs::<Felt<C::F>>::uninit(builder).flatten();
+        // SAFETY: `assert_required_air_for_agg_vm_present` has already ensured
+        // `PUBLIC_VALUES_AIR_ID < proof.per_air.len()`.
         let proof_vm_pvs_arr = builder
             .get(&proof.per_air, PUBLIC_VALUES_AIR_ID)
             .public_values;

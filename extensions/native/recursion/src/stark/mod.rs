@@ -213,8 +213,11 @@ where
         // (T02b): For all `i`, `air_proofs[i].log_degree <= MAX_TWO_ADICITY - log_blowup`.
         // (T02c): For all `0<=i<num_air-1`, `air_proofs[air_perm_by_height[i]].log_degree >=
         // air_proofs[air_perm_by_height[i+1]].log_degree`.
+        builder.assert_nonzero(&air_proofs.len());
         let log_max_height = {
             let index = builder.get(air_perm_by_height, RVar::zero());
+            // SAFETY: `air_proofs.len() != 0` and `air_perm_by_height` is a permutation of
+            // `0..air_proofs.len()`, so `index < air_proofs.len()`.
             let air_proof = builder.get(air_proofs, index);
             RVar::from(air_proof.log_degree.clone())
         };
@@ -338,6 +341,7 @@ where
                         );
                         let air_proof_data = builder.get(&proof.per_air, j);
                         let exposed_values = air_proof_data.exposed_values_after_challenge;
+                        builder.assert_usize_eq(exposed_values.len(), RVar::one());
                         let values = builder.get(&exposed_values, phase_idx);
                         let values_len =
                             builder.get(&air_advice.num_exposed_values_after_challenge, phase_idx);
@@ -486,6 +490,8 @@ where
         let main_commit_idx: Usize<_> = builder.eval(RVar::zero());
         builder.assert_usize_eq(opening.values.main.len(), num_main_commits);
         let common_main_values_per_mat = builder.get(&opening.values.main, num_cached_mains);
+        builder.assert_usize_eq(common_main_values_per_mat.len(), num_common_main_traces);
+        builder.assert_usize_eq(num_common_main_traces, num_airs);
         let common_main_mats = builder.array(num_common_main_traces);
         let common_main_matrix_idx: Usize<_> = builder.eval(RVar::zero());
         builder.range(0, num_airs).for_each(|i_vec, builder| {
@@ -534,6 +540,9 @@ where
                 .if_ne(common_main_width, RVar::zero())
                 .then(|builder| {
                     // common_main_mats
+                    // SAFETY: `common_main_values_per_mat.len()` was asserted to equal
+                    // `num_airs`, so every selected AIR contributes one common-main entry.
+                    // `common_main_matrix_idx` counts prior AIRs in this same AIR order.
                     let main =
                         builder.get(&common_main_values_per_mat, common_main_matrix_idx.clone());
 
@@ -571,6 +580,9 @@ where
 
         // 3. After challenge: one per phase
         builder.assert_usize_eq(opening.values.after_challenge.len(), num_phases);
+        builder.if_eq(num_phases, RVar::one()).then(|builder| {
+            builder.assert_usize_eq(num_after_challenge_traces, num_airs);
+        });
         builder
             .range(0, num_phases)
             .for_each(|phase_idx_vec, builder| {
@@ -746,88 +758,100 @@ where
             .collect_vec();
 
         for (i, air_const) in m_advice.per_air.iter().enumerate() {
-            let abs_air_idx = builder.get(&air_ids, air_idx.clone());
-            builder.if_eq(abs_air_idx, RVar::from(i)).then(|builder| {
-                let preprocessed_values = if air_const.preprocessed_data.is_some() {
-                    let ret =
-                        Some(builder.get(&opening.values.preprocessed, preprocessed_idx.clone()));
-                    builder.inc(&preprocessed_idx);
-                    ret
-                } else {
-                    None
-                };
-                let mut partitioned_main_values = (0..air_const.width.cached_mains.len())
-                    .map(|_| {
-                        let ret = builder.get(&opening.values.main, cached_main_commit_idx.clone());
-                        builder.inc(&cached_main_commit_idx);
-                        builder.get(&ret, 0)
-                    })
-                    .collect_vec();
-                if air_const.width.common_main > 0 {
-                    let common_main =
-                        builder.get(&common_main_openings, common_main_matrix_idx.clone());
-                    builder.inc(&common_main_matrix_idx);
-                    partitioned_main_values.push(common_main);
-                }
+            builder
+                .if_ne(air_idx.clone(), air_ids.len())
+                .then(|builder| {
+                    let abs_air_idx = builder.get(&air_ids, air_idx.clone());
+                    builder.if_eq(abs_air_idx, RVar::from(i)).then(|builder| {
+                        let preprocessed_values = if air_const.preprocessed_data.is_some() {
+                            let ret = Some(
+                                builder.get(&opening.values.preprocessed, preprocessed_idx.clone()),
+                            );
+                            builder.inc(&preprocessed_idx);
+                            ret
+                        } else {
+                            None
+                        };
+                        let mut partitioned_main_values = (0..air_const.width.cached_mains.len())
+                            .map(|_| {
+                                let ret = builder
+                                    .get(&opening.values.main, cached_main_commit_idx.clone());
+                                builder.inc(&cached_main_commit_idx);
+                                builder.get(&ret, 0)
+                            })
+                            .collect_vec();
+                        if air_const.width.common_main > 0 {
+                            // SAFETY: `common_main_values_per_mat.len()` was asserted to equal
+                            // `num_airs`, so every selected AIR contributes one common-main entry.
+                            // `common_main_matrix_idx` counts prior AIRs in this same AIR order.
+                            let common_main =
+                                builder.get(&common_main_openings, common_main_matrix_idx.clone());
+                            builder.inc(&common_main_matrix_idx);
+                            partitioned_main_values.push(common_main);
+                        }
 
-                let after_challenge_values = if air_const.width.after_challenge.is_empty() {
-                    AdjacentOpenedValuesVariable {
-                        local: builder.vec(vec![]),
-                        next: builder.vec(vec![]),
-                    }
-                } else {
-                    // One phase for now
-                    let after_challenge_values = builder.get(&opening.values.after_challenge, 0);
-                    let after_challenge_values =
-                        builder.get(&after_challenge_values, after_challenge_idx.clone());
-                    builder.inc(&after_challenge_idx);
-                    after_challenge_values
-                };
-                let trace_domain = builder.get(&domains, air_idx.clone());
-                let quotient_domain: TwoAdicMultiplicativeCosetVariable<_> =
-                    builder.get(&quotient_domains, air_idx.clone());
-                // Check that the quotient data matches the chip's data.
-                let log_quotient_degree = air_const.log_quotient_degree();
-                let quotient_chunks = builder.get(&opening.values.quotient, air_idx.clone());
+                        let after_challenge_values = if air_const.width.after_challenge.is_empty() {
+                            AdjacentOpenedValuesVariable {
+                                local: builder.vec(vec![]),
+                                next: builder.vec(vec![]),
+                            }
+                        } else {
+                            // One phase for now
+                            let after_challenge_values =
+                                builder.get(&opening.values.after_challenge, 0);
+                            let after_challenge_values =
+                                builder.get(&after_challenge_values, after_challenge_idx.clone());
+                            builder.inc(&after_challenge_idx);
+                            after_challenge_values
+                        };
+                        let trace_domain = builder.get(&domains, air_idx.clone());
+                        let quotient_domain: TwoAdicMultiplicativeCosetVariable<_> =
+                            builder.get(&quotient_domains, air_idx.clone());
+                        // Check that the quotient data matches the chip's data.
+                        let log_quotient_degree = air_const.log_quotient_degree();
+                        let quotient_chunks =
+                            builder.get(&opening.values.quotient, air_idx.clone());
 
-                // Get the domains from the chip itself.
-                let qc_domains = quotient_domain.split_domains_const(builder, log_quotient_degree);
-                let air_proof = builder.get(air_proofs, air_idx.clone());
-                let pvs = (0..air_const.num_public_values)
-                    .map(|x| builder.get(&air_proof.public_values, x))
-                    .collect_vec();
+                        // Get the domains from the chip itself.
+                        let qc_domains =
+                            quotient_domain.split_domains_const(builder, log_quotient_degree);
+                        let air_proof = builder.get(air_proofs, air_idx.clone());
+                        let pvs = (0..air_const.num_public_values)
+                            .map(|x| builder.get(&air_proof.public_values, x))
+                            .collect_vec();
 
-                let exposed_values = air_const
-                    .num_exposed_values_after_challenge
-                    .iter()
-                    .enumerate()
-                    .map(|(phase, &num_exposed)| {
-                        let exposed_values =
-                            builder.get(&air_proof.exposed_values_after_challenge, phase);
-                        (0..num_exposed)
-                            .map(|j| builder.get(&exposed_values, j))
-                            .collect_vec()
-                    })
-                    .collect_vec();
+                        let exposed_values = air_const
+                            .num_exposed_values_after_challenge
+                            .iter()
+                            .enumerate()
+                            .map(|(phase, &num_exposed)| {
+                                let exposed_values =
+                                    builder.get(&air_proof.exposed_values_after_challenge, phase);
+                                (0..num_exposed)
+                                    .map(|j| builder.get(&exposed_values, j))
+                                    .collect_vec()
+                            })
+                            .collect_vec();
 
-                Self::verify_single_rap_constraints(
-                    builder,
-                    air_const,
-                    preprocessed_values,
-                    &partitioned_main_values,
-                    quotient_chunks,
-                    &pvs,
-                    trace_domain,
-                    qc_domains,
-                    zeta,
-                    alpha,
-                    after_challenge_values,
-                    &challenges,
-                    &exposed_values,
-                );
+                        Self::verify_single_rap_constraints(
+                            builder,
+                            air_const,
+                            preprocessed_values,
+                            &partitioned_main_values,
+                            quotient_chunks,
+                            &pvs,
+                            trace_domain,
+                            qc_domains,
+                            zeta,
+                            alpha,
+                            after_challenge_values,
+                            &challenges,
+                            &exposed_values,
+                        );
 
-                builder.inc(&air_idx);
-            });
+                        builder.inc(&air_idx);
+                    });
+                });
         }
         // Assert that all provided AIRs were verified.
         builder.assert_usize_eq(air_idx, air_ids.len());
