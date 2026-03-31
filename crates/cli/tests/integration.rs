@@ -53,6 +53,12 @@ fn test_cli_stark_e2e_simplified() -> Result<()> {
 }
 
 #[test]
+fn test_cli_stark_e2e_no_commit() -> Result<()> {
+    install_cli();
+    run_script("cli_stark_e2e_no_commit.sh", &[])
+}
+
+#[test]
 fn test_cli_init_build() -> Result<()> {
     install_cli();
     run_script("cli_init_build.sh", &[])
