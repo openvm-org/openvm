@@ -247,6 +247,9 @@ impl MemoryMerkleTree {
     ///
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
+    ///
+    /// **Note:** the caller MUST ENSURE that `d_data` lives long enough to be there
+    /// when the enqueued task actually starts.
     pub fn build_async(&mut self, d_data: &DeviceBuffer<u8>, addr_space: usize) {
         if addr_space < ADDR_SPACE_OFFSET as usize {
             return;
@@ -487,16 +490,21 @@ mod tests {
             1, // sbox_regs
         ));
         let mut gpu_merkle_tree = MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip);
-        for (i, mem) in initial_memory.memory.get_memory().iter().enumerate() {
-            let mem_slice = mem.as_slice();
-            gpu_merkle_tree.build_async(
-                &(if !mem_slice.is_empty() {
+        let mem_slices = initial_memory
+            .memory
+            .get_memory()
+            .iter()
+            .map(|mem| {
+                let mem_slice = mem.as_slice();
+                if !mem_slice.is_empty() {
                     mem_slice.to_device().unwrap()
                 } else {
                     DeviceBuffer::new()
-                }),
-                i,
-            );
+                }
+            })
+            .collect::<Vec<_>>();
+        for (i, mem_slice) in mem_slices.iter().enumerate() {
+            gpu_merkle_tree.build_async(mem_slice, i);
         }
         gpu_merkle_tree.finalize();
 
