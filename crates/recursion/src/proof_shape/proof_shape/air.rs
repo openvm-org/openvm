@@ -279,6 +279,10 @@ where
         let mut num_pvs = AB::Expr::ZERO;
         let mut has_pvs = AB::Expr::ZERO;
 
+        // Select values for CachedCommitBus
+        let mut current_air_found = AB::Expr::ZERO;
+        let mut global_cached_start_idx = AB::Expr::ZERO;
+
         for (i, air_data) in self.per_air.iter().enumerate() {
             // We keep a running tally of how many transcript reads there should be up to any
             // given point, and use that to constrain initial_tidx
@@ -332,9 +336,13 @@ where
                 });
             }
 
+            current_air_found += is_current_air.clone();
+            let global_cached_idx_increment = not::<AB::Expr>(current_air_found.clone());
+
             for (cached_idx, width) in air_data.cached_widths.iter().enumerate() {
                 cached_present[cached_idx] += is_current_air.clone();
                 cached_widths[cached_idx] += is_current_air.clone() * AB::Expr::from_usize(*width);
+                global_cached_start_idx += global_cached_idx_increment.clone();
             }
         }
 
@@ -671,12 +679,14 @@ where
             );
             cidx_offset += cached_present[cached_idx].clone();
 
+            let cached_idx_expr = AB::Expr::from_usize(cached_idx);
             self.cached_commit_bus.send(
                 builder,
                 local.proof_idx,
                 CachedCommitBusMessage {
                     air_idx: air_idx.clone(),
-                    cached_idx: AB::Expr::from_usize(cached_idx),
+                    cached_idx: cached_idx_expr.clone(),
+                    global_cached_idx: global_cached_start_idx.clone() + cached_idx_expr,
                     cached_commit: localv.cached_commits[cached_idx].map(Into::into),
                 },
                 cached_present[cached_idx].clone()
