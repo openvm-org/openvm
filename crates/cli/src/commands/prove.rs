@@ -349,7 +349,7 @@ fn with_required_agg_pk(
     let agg_pk_path = resolve_agg_pk_path(agg_pk, cargo_args)?;
     let agg_pk = read_object_from_file(&agg_pk_path).map_err(|e| {
         eyre!(
-            "Failed to read aggregation proving key from {}: {e}\nRun 'cargo openvm commit' first to generate it",
+            "Failed to read aggregation proving key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
             agg_pk_path.display()
         )
     })?;
@@ -361,7 +361,7 @@ fn with_required_root_pk(sdk: Sdk) -> Result<Sdk> {
     let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
     let root_pk = read_object_from_file(&root_pk_path).map_err(|e| {
         eyre!(
-            "Failed to read root proving key from {}: {e}\nRun 'cargo openvm commit' first to generate it",
+            "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
             root_pk_path.display()
         )
     })?;

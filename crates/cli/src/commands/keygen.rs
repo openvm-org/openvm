@@ -10,13 +10,13 @@ use openvm_sdk::{config::AggregationSystemParams, fs::write_object_to_file, Sdk}
 use crate::{
     default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
     util::{
-        get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_target_dir,
-        read_config_toml_or_default,
+        get_agg_pk_path, get_agg_vk_path, get_app_pk_path, get_app_vk_path,
+        get_manifest_path_and_dir, get_target_dir, read_config_toml_or_default,
     },
 };
 
 #[derive(Parser)]
-#[command(name = "keygen", about = "Generate an application proving key")]
+#[command(name = "keygen", about = "Generate application and aggregation keys")]
 pub struct KeygenCmd {
     #[arg(
         long,
@@ -31,6 +31,13 @@ pub struct KeygenCmd {
         help_heading = "OpenVM Options"
     )]
     output_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Only generate app keys (app.pk/app.vk), skip aggregation keys (agg.pk/agg.vk)",
+        help_heading = "OpenVM Options"
+    )]
+    app_only: bool,
 
     #[command(flatten)]
     cargo_args: KeygenCargoArgs,
@@ -62,6 +69,8 @@ impl KeygenCmd {
         let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
         let app_pk_path = get_app_pk_path(&target_dir);
         let app_vk_path = get_app_vk_path(&target_dir);
+        let agg_pk_path = get_agg_pk_path(&target_dir);
+        let agg_vk_path = get_agg_vk_path(&target_dir);
 
         keygen(
             self.config
@@ -69,10 +78,18 @@ impl KeygenCmd {
                 .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
             &app_pk_path,
             &app_vk_path,
+            &agg_pk_path,
+            &agg_vk_path,
             self.output_dir.as_ref(),
+            !self.app_only,
         )?;
         println!(
-            "Successfully generated app pk and vk in {}",
+            "Successfully generated {} in {}",
+            if self.app_only {
+                "app pk and vk"
+            } else {
+                "app/agg pk and vk"
+            },
             if let Some(output_dir) = self.output_dir.as_ref() {
                 output_dir.display()
             } else {
@@ -87,18 +104,31 @@ pub(crate) fn keygen(
     config: impl AsRef<Path>,
     app_pk_path: impl AsRef<Path>,
     app_vk_path: impl AsRef<Path>,
+    agg_pk_path: impl AsRef<Path>,
+    agg_vk_path: impl AsRef<Path>,
     output_dir: Option<impl AsRef<Path>>,
+    generate_agg: bool,
 ) -> Result<()> {
     let app_config = read_config_toml_or_default(config)?;
-    let (app_pk, app_vk) = Sdk::new(app_config, AggregationSystemParams::default())?.app_keygen();
+    let sdk = Sdk::new(app_config, AggregationSystemParams::default())?;
+    let (app_pk, app_vk) = sdk.app_keygen();
     write_object_to_file(&app_vk_path, app_vk)?;
     write_object_to_file(&app_pk_path, app_pk)?;
+    if generate_agg {
+        let (agg_pk, agg_vk) = sdk.agg_keygen();
+        write_object_to_file(&agg_pk_path, agg_pk)?;
+        write_object_to_file(&agg_vk_path, agg_vk)?;
+    }
 
     if let Some(output_dir) = output_dir {
         let output_dir = output_dir.as_ref();
         create_dir_all(output_dir)?;
         copy(&app_pk_path, output_dir.join(DEFAULT_APP_PK_NAME))?;
         copy(&app_vk_path, output_dir.join(DEFAULT_APP_VK_NAME))?;
+        if generate_agg {
+            copy(&agg_pk_path, output_dir.join("agg.pk"))?;
+            copy(&agg_vk_path, output_dir.join("agg.vk"))?;
+        }
     }
 
     Ok(())

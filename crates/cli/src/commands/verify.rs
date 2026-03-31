@@ -178,7 +178,7 @@ impl VerifyCmd {
                 let agg_vk_path = get_agg_vk_path(&target_dir);
                 let agg_vk = read_object_from_file(&agg_vk_path).map_err(|e| {
                     eyre::eyre!(
-                        "Failed to read aggregation verifying key from {}: {e}\nRun 'cargo openvm commit' first to generate it",
+                        "Failed to read aggregation verifying key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
                         agg_vk_path.display()
                     )
                 })?;
