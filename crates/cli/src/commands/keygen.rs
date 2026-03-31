@@ -129,8 +129,10 @@ pub(crate) fn keygen(
         copy(&app_vk_path, output_dir.join(DEFAULT_APP_VK_NAME))
             .with_context(|| format!("failed to copy app vk to {}", output_dir.display()))?;
         if generate_agg {
-            copy(&agg_pk_path, output_dir.join("agg.pk")).with_context(|| format!("failed to copy agg pk to {}", output_dir.display()))?;
-            copy(&agg_vk_path, output_dir.join("agg.vk")).with_context(|| format!("failed to copy agg vk to {}", output_dir.display()))?;
+            copy(&agg_pk_path, output_dir.join("agg.pk"))
+                .with_context(|| format!("failed to copy agg pk to {}", output_dir.display()))?;
+            copy(&agg_vk_path, output_dir.join("agg.vk"))
+                .with_context(|| format!("failed to copy agg vk to {}", output_dir.display()))?;
         }
     }
 

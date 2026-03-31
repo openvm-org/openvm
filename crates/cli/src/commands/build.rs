@@ -452,8 +452,13 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         if let Some(output_dir) = &build_args.output_dir {
             create_dir_all(output_dir)
                 .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
-            copy(&file_path, output_dir.join(&file_name))
-                .with_context(|| format!("failed to copy {} to {}", file_name.display(), output_dir.display()))?;
+            copy(&file_path, output_dir.join(&file_name)).with_context(|| {
+                format!(
+                    "failed to copy {} to {}",
+                    file_name.display(),
+                    output_dir.display()
+                )
+            })?;
         }
     }
 
