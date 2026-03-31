@@ -325,7 +325,7 @@ extern "C" int _deferral_output_tracegen(
     uint32_t *d_poseidon2_idx,
     size_t poseidon2_capacity
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     assert(width == sizeof(DeferralOutputCols<uint8_t>));
 
     // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
