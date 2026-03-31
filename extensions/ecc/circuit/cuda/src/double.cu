@@ -49,6 +49,113 @@ __device__ inline void write_signed_bigint_limb(
     row[col++] = value.is_negative ? (Fp::zero() - Fp(q_limb)) : Fp(q_limb);
 }
 
+__device__ inline void clear_result_limbs(int64_t result_limbs[MAX_LIMBS]) {
+    for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+        result_limbs[limb] = 0;
+    }
+}
+
+__device__ inline void add_biguint_limbs(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigUintGpu &value
+) {
+    for (uint32_t limb = 0; limb < value.num_limbs && limb < MAX_LIMBS; limb++) {
+        result_limbs[limb] += value.limbs[limb];
+    }
+}
+
+__device__ inline void subtract_biguint_limbs(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigUintGpu &value
+) {
+    for (uint32_t limb = 0; limb < value.num_limbs && limb < MAX_LIMBS; limb++) {
+        result_limbs[limb] -= value.limbs[limb];
+    }
+}
+
+__device__ inline void add_biguint_product(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigUintGpu &lhs,
+    const BigUintGpu &rhs
+) {
+    for (uint32_t i = 0; i < lhs.num_limbs; i++) {
+        for (uint32_t j = 0; j < rhs.num_limbs && i + j < MAX_LIMBS; j++) {
+            result_limbs[i + j] += (int64_t)lhs.limbs[i] * (int64_t)rhs.limbs[j];
+        }
+    }
+}
+
+__device__ inline void add_bigint_biguint_product(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigIntGpu &lhs,
+    const BigUintGpu &rhs
+) {
+    int64_t lhs_signed_limbs[MAX_LIMBS];
+    lhs.to_signed_limbs(lhs_signed_limbs);
+    for (uint32_t i = 0; i < lhs.mag.num_limbs && i < MAX_LIMBS; i++) {
+        for (uint32_t j = 0; j < rhs.num_limbs && i + j < MAX_LIMBS; j++) {
+            result_limbs[i + j] += lhs_signed_limbs[i] * (int64_t)rhs.limbs[j];
+        }
+    }
+}
+
+__device__ inline void subtract_signed_limbs_times_prime(
+    int64_t result_limbs[MAX_LIMBS],
+    const int64_t quotient_signed_limbs[MAX_LIMBS],
+    uint32_t quotient_limbs,
+    const uint8_t *prime_limbs,
+    uint32_t prime_num_limbs
+) {
+    for (uint32_t q_limb = 0; q_limb < quotient_limbs; q_limb++) {
+        int64_t q_signed = quotient_signed_limbs[q_limb];
+        for (uint32_t p_limb = 0; p_limb < prime_num_limbs && q_limb + p_limb < MAX_LIMBS;
+             p_limb++) {
+            result_limbs[q_limb + p_limb] -= q_signed * (int64_t)prime_limbs[p_limb];
+        }
+    }
+}
+
+__device__ inline void write_manual_carries(
+    RowSlice core_row,
+    size_t &carry_col,
+    VariableRangeChecker &range_checker,
+    bool track_range,
+    const int64_t result_limbs[MAX_LIMBS],
+    uint32_t carry_count,
+    uint32_t carry_min_abs,
+    uint32_t carry_bits
+) {
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_count; limb++) {
+        carry = (carry + result_limbs[limb]) >> 8;
+        int32_t carry_i32 = (int32_t)carry;
+        core_row[carry_col++] = carry_i32 >= 0 ? Fp((uint32_t)carry_i32)
+                                               : (Fp::zero() - Fp((uint32_t)(-carry_i32)));
+        if (track_range) {
+            range_checker.add_count((uint32_t)(carry_i32 + (int32_t)carry_min_abs), carry_bits);
+        }
+    }
+}
+
+__device__ inline uint32_t sum_counts4(const uint32_t counts[4]) {
+    return counts[0] + counts[1] + counts[2] + counts[3];
+}
+
+template <size_t NUM_LIMBS>
+__device__ inline OverflowInt make_double_lambda_den_overflow(bool is_setup, const BigUintGpu &y1) {
+    OverflowInt value;
+    if (is_setup) {
+        value = OverflowInt(1, 8);
+        value.num_limbs = NUM_LIMBS;
+        value.limb_max_abs = ((1u << value.limb_bits) - 1) * 2;
+        value.max_overflow_bits = log2_ceil_usize(value.limb_max_abs);
+    } else {
+        value = OverflowInt(y1, NUM_LIMBS);
+        value *= 2;
+    }
+    return value;
+}
+
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
 __global__ void ec_double_adapter_tracegen_kernel(
     Fp *trace,
@@ -101,6 +208,7 @@ __global__ void ec_double_compute_tracegen_kernel(
     const uint8_t *a_limbs,
     uint32_t a_limb_count,
     const uint8_t *barrett_mu,
+    uint32_t num_variables,
     uint32_t setup_opcode,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins
@@ -115,56 +223,74 @@ __global__ void ec_double_compute_tracegen_kernel(
     RowSlice row(trace + idx, height);
     RowSlice core_row = row.slice_from(ADAPTER_WIDTH);
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
-
-    if (idx >= num_records) {
-        core_row.fill_zero(0, core_width);
-        return;
-    }
-
-    const auto *record = reinterpret_cast<const EcDoubleRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
-        records + idx * record_stride
-    );
-    const bool is_setup = record->core.opcode == setup_opcode;
+    const bool is_real = idx < num_records;
+    const bool track_range = is_real;
+    const auto *record =
+        is_real ? reinterpret_cast<const EcDoubleRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
+                      records + idx * record_stride
+                  )
+                : nullptr;
+    const bool is_setup = is_real && record->core.opcode == setup_opcode;
+    const bool use_setup_arithmetic = !is_real || is_setup;
 
     BigUintGpu prime(prime_limbs, prime_limb_count, 8);
     prime.normalize();
     BigUintGpu a(a_limbs, a_limb_count, 8);
     a.normalize();
 
-    const uint8_t *input_limbs = record->core.input_limbs;
+    uint8_t zero_input_limbs[2 * NUM_LIMBS] = {0};
+    const uint8_t *input_limbs = is_real ? record->core.input_limbs : zero_input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
     BigUintGpu y1(input_limbs + 1 * NUM_LIMBS, NUM_LIMBS, 8);
+    x1.normalize();
+    y1.normalize();
+    x1 = x1.rem(prime);
+    y1 = y1.rem(prime);
 
     BigUintGpu one(1, 8);
     BigUintGpu two(2, 8);
     BigUintGpu three(3, 8);
 
-    BigUintGpu tmp0 = x1.mul(x1).mod_reduce(prime, barrett_mu);
-    BigUintGpu lambda_num = tmp0.mul(three).mod_reduce(prime, barrett_mu);
+    BigUintGpu tmp0 = x1.mul(x1);
+    tmp0 = tmp0.mod_reduce(prime, barrett_mu);
+    BigUintGpu lambda_num = tmp0.mul(three);
+    lambda_num = lambda_num.mod_reduce(prime, barrett_mu);
     lambda_num.add_in_place(a);
     lambda_num = lambda_num.mod_reduce(prime, barrett_mu);
-    BigUintGpu lambda_den =
-        is_setup ? one : y1.mul(two).mod_reduce(prime, barrett_mu);
+    BigUintGpu lambda_den = one;
+    if (!use_setup_arithmetic) {
+        lambda_den = y1.mul(two);
+        lambda_den = lambda_den.mod_reduce(prime, barrett_mu);
+    }
     BigUintGpu lambda = lambda_num.mod_div(lambda_den, prime, barrett_mu);
 
-    tmp0 = lambda.mul(lambda).mod_reduce(prime, barrett_mu);
-    BigUintGpu double_x1 = x1.mul(two).mod_reduce(prime, barrett_mu);
+    tmp0 = lambda.mul(lambda);
+    tmp0 = tmp0.mod_reduce(prime, barrett_mu);
+    BigUintGpu double_x1 = x1.mul(two);
+    double_x1 = double_x1.mod_reduce(prime, barrett_mu);
     BigUintGpu x3 = tmp0.mod_sub(double_x1, prime);
     tmp0 = x1.mod_sub(x3, prime);
-    BigUintGpu y3 = lambda.mul(tmp0).mod_reduce(prime, barrett_mu).mod_sub(y1, prime);
+    BigUintGpu y3 = lambda.mul(tmp0);
+    y3 = y3.mod_reduce(prime, barrett_mu);
+    y3 = y3.mod_sub(y1, prime);
 
     size_t col = 0;
-    core_row[col++] = Fp::one();
+    core_row[col++] = is_real ? Fp::one() : Fp::zero();
     for (size_t i = 0; i < 2 * NUM_LIMBS; i++) {
         core_row[col++] = Fp(input_limbs[i]);
     }
 
+    if (num_variables == 4) {
+        write_biguint<NUM_LIMBS>(core_row, col, lambda_num);
+    }
     write_biguint<NUM_LIMBS>(core_row, col, lambda);
     write_biguint<NUM_LIMBS>(core_row, col, x3);
     write_biguint<NUM_LIMBS>(core_row, col, y3);
 
-    for (size_t i = 0; i < 3 * NUM_LIMBS; i++) {
-        range_checker.add_count(core_row[1 + 2 * NUM_LIMBS + i].asUInt32(), 8);
+    for (size_t i = 0; i < num_variables * NUM_LIMBS; i++) {
+        if (track_range) {
+            range_checker.add_count(core_row[1 + 2 * NUM_LIMBS + i].asUInt32(), 8);
+        }
     }
 }
 
@@ -184,9 +310,12 @@ __global__ void ec_double_constraint_tracegen_kernel(
     uint32_t q0_limbs,
     uint32_t q1_limbs,
     uint32_t q2_limbs,
+    uint32_t q3_limbs,
     uint32_t c0_limbs,
     uint32_t c1_limbs,
     uint32_t c2_limbs,
+    uint32_t c3_limbs,
+    uint32_t num_variables,
     uint32_t setup_opcode,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins
@@ -201,15 +330,15 @@ __global__ void ec_double_constraint_tracegen_kernel(
     RowSlice row(trace + idx, height);
     RowSlice core_row = row.slice_from(ADAPTER_WIDTH);
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
-
-    if (idx >= num_records) {
-        return;
-    }
-
-    const auto *record = reinterpret_cast<const EcDoubleRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
-        records + idx * record_stride
-    );
-    const bool is_setup = record->core.opcode == setup_opcode;
+    const bool is_real = idx < num_records;
+    const bool track_range = is_real;
+    const auto *record =
+        is_real ? reinterpret_cast<const EcDoubleRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
+                      records + idx * record_stride
+                  )
+                : nullptr;
+    const bool is_setup = is_real && record->core.opcode == setup_opcode;
+    const bool use_setup_arithmetic = !is_real || is_setup;
 
     BigUintGpu prime(prime_limbs, prime_limb_count, 8);
     prime.normalize();
@@ -217,151 +346,326 @@ __global__ void ec_double_constraint_tracegen_kernel(
     a.normalize();
     OverflowInt prime_overflow(prime, prime.num_limbs);
 
-    const uint8_t *input_limbs = record->core.input_limbs;
+    uint8_t zero_input_limbs[2 * NUM_LIMBS] = {0};
+    const uint8_t *input_limbs = is_real ? record->core.input_limbs : zero_input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
     BigUintGpu y1(input_limbs + 1 * NUM_LIMBS, NUM_LIMBS, 8);
+    x1.normalize();
+    y1.normalize();
 
     BigUintGpu one(1, 8);
     BigUintGpu two(2, 8);
     BigUintGpu three(3, 8);
 
-    BigUintGpu tmp0 = x1.mul(x1).mod_reduce(prime, barrett_mu);
-    BigUintGpu lambda_num = tmp0.mul(three).mod_reduce(prime, barrett_mu);
-    lambda_num.add_in_place(a);
-    lambda_num = lambda_num.mod_reduce(prime, barrett_mu);
-    BigUintGpu lambda_den =
-        is_setup ? one : y1.mul(two).mod_reduce(prime, barrett_mu);
-
     const size_t vars_col = 1 + 2 * NUM_LIMBS;
-    BigUintGpu lambda = read_biguint<NUM_LIMBS>(core_row, vars_col + 0 * NUM_LIMBS);
-    BigUintGpu x3 = read_biguint<NUM_LIMBS>(core_row, vars_col + 1 * NUM_LIMBS);
-    BigUintGpu y3 = read_biguint<NUM_LIMBS>(core_row, vars_col + 2 * NUM_LIMBS);
-    tmp0 = lambda.mul(lambda).mod_reduce(prime, barrett_mu);
-    BigUintGpu double_x1 = x1.mul(two).mod_reduce(prime, barrett_mu);
-    BigUintGpu tmp1 = x1.mod_sub(x3, prime);
-    BigUintGpu tmp2 = lambda.mul(tmp1).mod_reduce(prime, barrett_mu);
+    size_t var_col = vars_col;
+    BigUintGpu lambda_num_var(prime.limb_bits);
+    if (num_variables == 4) {
+        lambda_num_var = read_biguint<NUM_LIMBS>(core_row, var_col);
+        var_col += NUM_LIMBS;
+    }
+    BigUintGpu lambda = read_biguint<NUM_LIMBS>(core_row, var_col);
+    var_col += NUM_LIMBS;
+    BigUintGpu x3 = read_biguint<NUM_LIMBS>(core_row, var_col);
+    var_col += NUM_LIMBS;
+    BigUintGpu y3 = read_biguint<NUM_LIMBS>(core_row, var_col);
+    BigIntGpu x1_big(x1);
+    BigIntGpu y1_big(y1);
+    BigIntGpu lambda_num_var_big(lambda_num_var);
+    BigIntGpu lambda_big(lambda);
+    BigIntGpu x3_big(x3);
+    BigIntGpu y3_big(y3);
+    BigIntGpu x1_minus_x3_big(x1);
+    x1_minus_x3_big -= x3_big;
+    BigUintGpu x1_square = x1.mul(x1);
+    BigUintGpu lambda_num = x1_square.mul(three);
+    lambda_num.add_in_place(a);
+    BigUintGpu lambda_den = one;
+    if (!use_setup_arithmetic) {
+        lambda_den = y1.mul(two);
+    }
+    BigUintGpu lambda_sq = lambda.mul(lambda);
+    BigUintGpu double_x1 = x1.mul(two);
 
-    const uint32_t q_counts[3] = {q0_limbs, q1_limbs, q2_limbs};
-    const uint32_t c_counts[3] = {c0_limbs, c1_limbs, c2_limbs};
+    const uint32_t q_counts[4] = {q0_limbs, q1_limbs, q2_limbs, q3_limbs};
+    const uint32_t c_counts[4] = {c0_limbs, c1_limbs, c2_limbs, c3_limbs};
 
-    size_t col = 1 + 2 * NUM_LIMBS + 3 * NUM_LIMBS;
-    size_t carry_col = col + q0_limbs + q1_limbs + q2_limbs;
+    size_t col = 1 + 2 * NUM_LIMBS + num_variables * NUM_LIMBS;
+    size_t carry_col = col + sum_counts4(q_counts);
+    uint32_t block = 0;
 
-    {
-        BigIntGpu constraint_big(lambda_den);
-        BigIntGpu tmp_big(lambda);
-        constraint_big *= tmp_big;
-        tmp_big = BigIntGpu(lambda_num);
-        constraint_big -= tmp_big;
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        for (uint32_t limb = 0; limb < q_counts[0]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
-        for (uint32_t limb = 0; limb < q_counts[0]; limb++) {
+    if (num_variables == 4) {
+        BigIntGpu constraint_big(lambda_num);
+        constraint_big -= lambda_num_var_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
+        for (uint32_t limb = 0; limb < q_counts[block]; limb++) {
             int32_t q_signed =
                 limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
             if (quotient.is_negative) {
                 q_signed = -q_signed;
             }
-            range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            write_signed_bigint_limb(core_row, col, quotient, limb);
+            if (track_range) {
+                range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            }
         }
-        OverflowInt constraint_ov(lambda_den, NUM_LIMBS);
-        OverflowInt tmp_ov(lambda, NUM_LIMBS);
+        OverflowInt constraint_ov(x1, NUM_LIMBS);
+        OverflowInt tmp_ov(x1, NUM_LIMBS);
         constraint_ov *= tmp_ov;
-        tmp_ov = OverflowInt(lambda_num, NUM_LIMBS);
+        constraint_ov *= 3;
+        tmp_ov = OverflowInt(a, NUM_LIMBS);
+        constraint_ov += tmp_ov;
+        tmp_ov = OverflowInt(lambda_num_var, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         OverflowInt result = constraint_ov;
-        tmp_ov = OverflowInt(quotient, q_counts[0]) * prime_overflow;
+        OverflowInt q_ov(quotient, q_counts[block]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
         result -= tmp_ov;
-        OverflowInt carries = result.carry_limbs(c_counts[0]);
         uint32_t carry_bits = result.max_overflow_bits - 8;
         uint32_t carry_min_abs = 1u << carry_bits;
         carry_bits++;
-        for (uint32_t limb = 0; limb < c_counts[0]; limb++) {
-            int32_t carry = carries.limbs[limb];
-            core_row[carry_col++] =
-                carry >= 0 ? Fp((uint32_t)carry) : (Fp::zero() - Fp((uint32_t)(-carry)));
-            range_checker.add_count((uint32_t)(carry + (int32_t)carry_min_abs), carry_bits);
+        int64_t result_limbs[MAX_LIMBS];
+        int64_t quotient_signed_limbs[MAX_LIMBS];
+        clear_result_limbs(result_limbs);
+        add_biguint_product(result_limbs, x1, x1);
+        for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+            result_limbs[limb] *= 3;
         }
+        add_biguint_limbs(result_limbs, a);
+        subtract_biguint_limbs(result_limbs, lambda_num_var);
+        quotient.to_signed_limbs(quotient_signed_limbs);
+        subtract_signed_limbs_times_prime(
+            result_limbs, quotient_signed_limbs, q_counts[block], prime_limbs, prime.num_limbs
+        );
+        write_manual_carries(
+            core_row,
+            carry_col,
+            range_checker,
+            track_range,
+            result_limbs,
+            c_counts[block],
+            carry_min_abs,
+            carry_bits
+        );
+        block++;
     }
 
     {
-        BigIntGpu constraint_big(tmp0);
-        BigIntGpu tmp_big(double_x1);
-        constraint_big -= tmp_big;
-        tmp_big = BigIntGpu(x3);
-        constraint_big -= tmp_big;
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        for (uint32_t limb = 0; limb < q_counts[1]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
-        for (uint32_t limb = 0; limb < q_counts[1]; limb++) {
+        BigIntGpu constraint_big(lambda_den);
+        BigIntGpu lambda_num_big(num_variables == 4 ? lambda_num_var : lambda_num);
+        constraint_big *= lambda_big;
+        constraint_big -= lambda_num_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
+        for (uint32_t limb = 0; limb < q_counts[block]; limb++) {
             int32_t q_signed =
                 limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
             if (quotient.is_negative) {
                 q_signed = -q_signed;
             }
-            range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            write_signed_bigint_limb(core_row, col, quotient, limb);
+            if (track_range) {
+                range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            }
         }
-        OverflowInt constraint_ov(tmp0, NUM_LIMBS);
-        OverflowInt tmp_ov(double_x1, NUM_LIMBS);
+        OverflowInt constraint_ov =
+            make_double_lambda_den_overflow<NUM_LIMBS>(use_setup_arithmetic, y1);
+        OverflowInt tmp_ov(lambda, NUM_LIMBS);
+        constraint_ov *= tmp_ov;
+        if (num_variables == 4) {
+            tmp_ov = OverflowInt(lambda_num_var, NUM_LIMBS);
+            constraint_ov -= tmp_ov;
+        } else {
+            tmp_ov = OverflowInt(x1, NUM_LIMBS);
+            tmp_ov *= tmp_ov;
+            tmp_ov *= 3;
+            constraint_ov -= tmp_ov;
+            tmp_ov = OverflowInt(a, NUM_LIMBS);
+            constraint_ov -= tmp_ov;
+        }
+        OverflowInt result = constraint_ov;
+        OverflowInt q_ov(quotient, q_counts[block]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
+        result -= tmp_ov;
+        uint32_t carry_bits = result.max_overflow_bits - 8;
+        uint32_t carry_min_abs = 1u << carry_bits;
+        carry_bits++;
+        int64_t result_limbs[MAX_LIMBS];
+        int64_t quotient_signed_limbs[MAX_LIMBS];
+        clear_result_limbs(result_limbs);
+        if (num_variables == 4) {
+            if (use_setup_arithmetic) {
+                add_biguint_limbs(result_limbs, lambda);
+            } else {
+                add_biguint_product(result_limbs, y1, lambda);
+                for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+                    result_limbs[limb] *= 2;
+                }
+            }
+            subtract_biguint_limbs(result_limbs, lambda_num_var);
+        } else {
+            if (use_setup_arithmetic) {
+                add_biguint_limbs(result_limbs, lambda);
+            } else {
+                add_biguint_product(result_limbs, y1, lambda);
+                for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+                    result_limbs[limb] *= 2;
+                }
+            }
+            for (uint32_t i = 0; i < x1.num_limbs && i < MAX_LIMBS; i++) {
+                for (uint32_t j = 0; j < x1.num_limbs && i + j < MAX_LIMBS; j++) {
+                    result_limbs[i + j] -= 3 * (int64_t)x1.limbs[i] * (int64_t)x1.limbs[j];
+                }
+            }
+            subtract_biguint_limbs(result_limbs, a);
+        }
+        quotient.to_signed_limbs(quotient_signed_limbs);
+        subtract_signed_limbs_times_prime(
+            result_limbs, quotient_signed_limbs, q_counts[block], prime_limbs, prime.num_limbs
+        );
+        write_manual_carries(
+            core_row,
+            carry_col,
+            range_checker,
+            track_range,
+            result_limbs,
+            c_counts[block],
+            carry_min_abs,
+            carry_bits
+        );
+        block++;
+    }
+
+    {
+        BigIntGpu constraint_big(lambda_sq);
+        BigIntGpu double_x1_big(double_x1);
+        BigIntGpu x3_big(x3);
+        constraint_big -= double_x1_big;
+        constraint_big -= x3_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
+        for (uint32_t limb = 0; limb < q_counts[block]; limb++) {
+            int32_t q_signed =
+                limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
+            if (quotient.is_negative) {
+                q_signed = -q_signed;
+            }
+            write_signed_bigint_limb(core_row, col, quotient, limb);
+            if (track_range) {
+                range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            }
+        }
+        OverflowInt constraint_ov(lambda, NUM_LIMBS);
+        OverflowInt tmp_ov(lambda, NUM_LIMBS);
+        constraint_ov *= tmp_ov;
+        tmp_ov = OverflowInt(x1, NUM_LIMBS);
+        tmp_ov *= 2;
         constraint_ov -= tmp_ov;
         tmp_ov = OverflowInt(x3, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         OverflowInt result = constraint_ov;
-        tmp_ov = OverflowInt(quotient, q_counts[1]) * prime_overflow;
+        OverflowInt q_ov(quotient, q_counts[block]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
         result -= tmp_ov;
-        OverflowInt carries = result.carry_limbs(c_counts[1]);
         uint32_t carry_bits = result.max_overflow_bits - 8;
         uint32_t carry_min_abs = 1u << carry_bits;
         carry_bits++;
-        for (uint32_t limb = 0; limb < c_counts[1]; limb++) {
-            int32_t carry = carries.limbs[limb];
-            core_row[carry_col++] =
-                carry >= 0 ? Fp((uint32_t)carry) : (Fp::zero() - Fp((uint32_t)(-carry)));
-            range_checker.add_count((uint32_t)(carry + (int32_t)carry_min_abs), carry_bits);
+        int64_t result_limbs[MAX_LIMBS];
+        int64_t quotient_signed_limbs[MAX_LIMBS];
+        clear_result_limbs(result_limbs);
+        add_biguint_product(result_limbs, lambda, lambda);
+        for (uint32_t limb = 0; limb < x1.num_limbs && limb < MAX_LIMBS; limb++) {
+            result_limbs[limb] -= 2 * (int64_t)x1.limbs[limb];
         }
+        subtract_biguint_limbs(result_limbs, x3);
+        quotient.to_signed_limbs(quotient_signed_limbs);
+        subtract_signed_limbs_times_prime(
+            result_limbs, quotient_signed_limbs, q_counts[block], prime_limbs, prime.num_limbs
+        );
+        write_manual_carries(
+            core_row,
+            carry_col,
+            range_checker,
+            track_range,
+            result_limbs,
+            c_counts[block],
+            carry_min_abs,
+            carry_bits
+        );
+        block++;
     }
 
     {
-        BigIntGpu constraint_big(tmp2);
-        BigIntGpu tmp_big(y1);
-        constraint_big -= tmp_big;
-        tmp_big = BigIntGpu(y3);
-        constraint_big -= tmp_big;
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        for (uint32_t limb = 0; limb < q_counts[2]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
-        for (uint32_t limb = 0; limb < q_counts[2]; limb++) {
+        BigIntGpu constraint_big(prime.limb_bits);
+        constraint_big = x1_minus_x3_big.mul(lambda_big);
+        constraint_big -= y1_big;
+        constraint_big -= y3_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
+        for (uint32_t limb = 0; limb < q_counts[block]; limb++) {
             int32_t q_signed =
                 limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
             if (quotient.is_negative) {
                 q_signed = -q_signed;
             }
-            range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            write_signed_bigint_limb(core_row, col, quotient, limb);
+            if (track_range) {
+                range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
+            }
         }
-        OverflowInt constraint_ov(tmp2, NUM_LIMBS);
-        OverflowInt tmp_ov(y1, NUM_LIMBS);
+        OverflowInt constraint_ov(x1, NUM_LIMBS);
+        OverflowInt tmp_ov(x3, NUM_LIMBS);
+        constraint_ov -= tmp_ov;
+        tmp_ov = OverflowInt(lambda, NUM_LIMBS);
+        constraint_ov *= tmp_ov;
+        tmp_ov = OverflowInt(y1, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         tmp_ov = OverflowInt(y3, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         OverflowInt result = constraint_ov;
-        tmp_ov = OverflowInt(quotient, q_counts[2]) * prime_overflow;
+        OverflowInt q_ov(quotient, q_counts[block]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
         result -= tmp_ov;
-        OverflowInt carries = result.carry_limbs(c_counts[2]);
         uint32_t carry_bits = result.max_overflow_bits - 8;
         uint32_t carry_min_abs = 1u << carry_bits;
         carry_bits++;
-        for (uint32_t limb = 0; limb < c_counts[2]; limb++) {
-            int32_t carry = carries.limbs[limb];
-            core_row[carry_col++] =
-                carry >= 0 ? Fp((uint32_t)carry) : (Fp::zero() - Fp((uint32_t)(-carry)));
-            range_checker.add_count((uint32_t)(carry + (int32_t)carry_min_abs), carry_bits);
+        int64_t result_limbs[MAX_LIMBS];
+        int64_t quotient_signed_limbs[MAX_LIMBS];
+        clear_result_limbs(result_limbs);
+        add_biguint_product(result_limbs, x1, lambda);
+        for (uint32_t i = 0; i < x3.num_limbs && i < MAX_LIMBS; i++) {
+            for (uint32_t j = 0; j < lambda.num_limbs && i + j < MAX_LIMBS; j++) {
+                result_limbs[i + j] -= (int64_t)x3.limbs[i] * (int64_t)lambda.limbs[j];
+            }
         }
+        subtract_biguint_limbs(result_limbs, y1);
+        subtract_biguint_limbs(result_limbs, y3);
+        quotient.to_signed_limbs(quotient_signed_limbs);
+        subtract_signed_limbs_times_prime(
+            result_limbs, quotient_signed_limbs, q_counts[block], prime_limbs, prime.num_limbs
+        );
+        write_manual_carries(
+            core_row,
+            carry_col,
+            range_checker,
+            track_range,
+            result_limbs,
+            c_counts[block],
+            carry_min_abs,
+            carry_bits
+        );
     }
 
-    core_row[carry_col++] = is_setup ? Fp::zero() : Fp::one();
+    core_row[carry_col++] = (is_real && !is_setup) ? Fp::one() : Fp::zero();
     while (carry_col < core_width) {
         core_row[carry_col++] = Fp::zero();
     }
@@ -381,9 +685,12 @@ extern "C" int launch_ec_double_tracegen(
     uint32_t q0_limbs,
     uint32_t q1_limbs,
     uint32_t q2_limbs,
+    uint32_t q3_limbs,
     uint32_t c0_limbs,
     uint32_t c1_limbs,
     uint32_t c2_limbs,
+    uint32_t c3_limbs,
+    uint32_t num_variables,
     uint32_t setup_opcode,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
@@ -399,9 +706,9 @@ extern "C" int launch_ec_double_tracegen(
         constexpr size_t BLOCKS = 16;
         constexpr size_t BLOCK_SIZE = 4;
         constexpr size_t NUM_LIMBS = 32;
-        const size_t core_width = 1 + 2 * NUM_LIMBS + 3 * NUM_LIMBS + q0_limbs + q1_limbs +
-                                  q2_limbs + c0_limbs + c1_limbs + c2_limbs + 1;
-
+        const size_t core_width = 1 + 2 * NUM_LIMBS + num_variables * NUM_LIMBS + q0_limbs +
+                                  q1_limbs + q2_limbs + q3_limbs + c0_limbs + c1_limbs +
+                                  c2_limbs + c3_limbs + 1;
         ec_double_adapter_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS><<<main_grid, main_block>>>(
             d_trace,
             trace_height,
@@ -432,6 +739,7 @@ extern "C" int launch_ec_double_tracegen(
             d_a,
             a_limb_count,
             d_barrett_mu,
+            num_variables,
             setup_opcode,
             d_range_checker,
             range_checker_num_bins
@@ -457,19 +765,27 @@ extern "C" int launch_ec_double_tracegen(
                 q0_limbs,
                 q1_limbs,
                 q2_limbs,
+                q3_limbs,
                 c0_limbs,
                 c1_limbs,
                 c2_limbs,
+                c3_limbs,
+                num_variables,
                 setup_opcode,
                 d_range_checker,
                 range_checker_num_bins
             );
+        ret = CHECK_KERNEL();
+        if (ret) {
+            return ret;
+        }
     } else {
         constexpr size_t BLOCKS = 24;
         constexpr size_t BLOCK_SIZE = 4;
         constexpr size_t NUM_LIMBS = 48;
-        const size_t core_width = 1 + 2 * NUM_LIMBS + 3 * NUM_LIMBS + q0_limbs + q1_limbs +
-                                  q2_limbs + c0_limbs + c1_limbs + c2_limbs + 1;
+        const size_t core_width = 1 + 2 * NUM_LIMBS + num_variables * NUM_LIMBS + q0_limbs +
+                                  q1_limbs + q2_limbs + q3_limbs + c0_limbs + c1_limbs +
+                                  c2_limbs + c3_limbs + 1;
 
         ec_double_adapter_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS><<<main_grid, main_block>>>(
             d_trace,
@@ -501,6 +817,7 @@ extern "C" int launch_ec_double_tracegen(
             d_a,
             a_limb_count,
             d_barrett_mu,
+            num_variables,
             setup_opcode,
             d_range_checker,
             range_checker_num_bins
@@ -526,13 +843,20 @@ extern "C" int launch_ec_double_tracegen(
                 q0_limbs,
                 q1_limbs,
                 q2_limbs,
+                q3_limbs,
                 c0_limbs,
                 c1_limbs,
                 c2_limbs,
+                c3_limbs,
+                num_variables,
                 setup_opcode,
                 d_range_checker,
                 range_checker_num_bins
             );
+        ret = CHECK_KERNEL();
+        if (ret) {
+            return ret;
+        }
     }
 
     return CHECK_KERNEL();

@@ -61,9 +61,12 @@ mod cuda_abi {
             q0_limbs: u32,
             q1_limbs: u32,
             q2_limbs: u32,
+            q3_limbs: u32,
             c0_limbs: u32,
             c1_limbs: u32,
             c2_limbs: u32,
+            c3_limbs: u32,
+            num_variables: u32,
             setup_opcode: u32,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
@@ -131,8 +134,9 @@ mod cuda_abi {
         d_a: &DeviceBuffer<u8>,
         a_limb_count: u32,
         d_barrett_mu: &DeviceBuffer<u8>,
-        q_limbs: [u32; 3],
-        carry_limbs: [u32; 3],
+        q_limbs: [u32; 4],
+        carry_limbs: [u32; 4],
+        num_variables: u32,
         setup_opcode: u32,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
@@ -154,9 +158,12 @@ mod cuda_abi {
             q_limbs[0],
             q_limbs[1],
             q_limbs[2],
+            q_limbs[3],
             carry_limbs[0],
             carry_limbs[1],
             carry_limbs[2],
+            carry_limbs[3],
+            num_variables,
             setup_opcode,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
@@ -303,9 +310,9 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let trace_width = adapter_width + core_width;
 
         let builder = &self.cpu.inner.expr.builder;
-        assert_eq!(builder.num_variables, 3);
-        assert_eq!(builder.q_limbs.len(), 3);
-        assert_eq!(builder.carry_limbs.len(), 3);
+        assert!((3..=4).contains(&builder.num_variables));
+        assert_eq!(builder.q_limbs.len(), builder.num_variables);
+        assert_eq!(builder.carry_limbs.len(), builder.num_variables);
 
         let prime_limb_count = builder.prime_limbs.len();
         let prime_bytes = bigint_to_padded_le_bytes(&builder.prime, prime_limb_count);
@@ -326,16 +333,14 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let d_a = a_bytes.to_device().unwrap();
         let d_barrett_mu = mu_bytes.to_device().unwrap();
 
-        let q_limbs = [
-            builder.q_limbs[0] as u32,
-            builder.q_limbs[1] as u32,
-            builder.q_limbs[2] as u32,
-        ];
-        let carry_limbs = [
-            builder.carry_limbs[0] as u32,
-            builder.carry_limbs[1] as u32,
-            builder.carry_limbs[2] as u32,
-        ];
+        let mut q_limbs = [0u32; 4];
+        for (dst, src) in q_limbs.iter_mut().zip(builder.q_limbs.iter()) {
+            *dst = *src as u32;
+        }
+        let mut carry_limbs = [0u32; 4];
+        for (dst, src) in carry_limbs.iter_mut().zip(builder.carry_limbs.iter()) {
+            *dst = *src as u32;
+        }
         let setup_opcode = self.cpu.inner.local_opcode_idx.last().copied().unwrap_or_default() as u32;
 
         unsafe {
@@ -352,6 +357,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
                 &d_barrett_mu,
                 q_limbs,
                 carry_limbs,
+                builder.num_variables as u32,
                 setup_opcode,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,

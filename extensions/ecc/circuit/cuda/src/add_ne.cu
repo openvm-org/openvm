@@ -49,6 +49,72 @@ __device__ inline void write_signed_bigint_limb(
     row[col++] = value.is_negative ? (Fp::zero() - Fp(q_limb)) : Fp(q_limb);
 }
 
+__device__ inline void clear_result_limbs(int64_t result_limbs[MAX_LIMBS]) {
+    for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+        result_limbs[limb] = 0;
+    }
+}
+
+__device__ inline void add_biguint_limbs(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigUintGpu &value
+) {
+    for (uint32_t limb = 0; limb < value.num_limbs && limb < MAX_LIMBS; limb++) {
+        result_limbs[limb] += value.limbs[limb];
+    }
+}
+
+__device__ inline void subtract_biguint_limbs(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigUintGpu &value
+) {
+    for (uint32_t limb = 0; limb < value.num_limbs && limb < MAX_LIMBS; limb++) {
+        result_limbs[limb] -= value.limbs[limb];
+    }
+}
+
+__device__ inline void add_biguint_product(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigUintGpu &lhs,
+    const BigUintGpu &rhs
+) {
+    for (uint32_t i = 0; i < lhs.num_limbs; i++) {
+        for (uint32_t j = 0; j < rhs.num_limbs && i + j < MAX_LIMBS; j++) {
+            result_limbs[i + j] += (int64_t)lhs.limbs[i] * (int64_t)rhs.limbs[j];
+        }
+    }
+}
+
+__device__ inline void add_bigint_biguint_product(
+    int64_t result_limbs[MAX_LIMBS],
+    const BigIntGpu &lhs,
+    const BigUintGpu &rhs
+) {
+    int64_t lhs_signed_limbs[MAX_LIMBS];
+    lhs.to_signed_limbs(lhs_signed_limbs);
+    for (uint32_t i = 0; i < lhs.mag.num_limbs && i < MAX_LIMBS; i++) {
+        for (uint32_t j = 0; j < rhs.num_limbs && i + j < MAX_LIMBS; j++) {
+            result_limbs[i + j] += lhs_signed_limbs[i] * (int64_t)rhs.limbs[j];
+        }
+    }
+}
+
+__device__ inline void subtract_signed_limbs_times_prime(
+    int64_t result_limbs[MAX_LIMBS],
+    const int64_t quotient_signed_limbs[MAX_LIMBS],
+    uint32_t quotient_limbs,
+    const uint8_t *prime_limbs,
+    uint32_t prime_num_limbs
+) {
+    for (uint32_t q_limb = 0; q_limb < quotient_limbs; q_limb++) {
+        int64_t q_signed = quotient_signed_limbs[q_limb];
+        for (uint32_t p_limb = 0; p_limb < prime_num_limbs && q_limb + p_limb < MAX_LIMBS;
+             p_limb++) {
+            result_limbs[q_limb + p_limb] -= q_signed * (int64_t)prime_limbs[p_limb];
+        }
+    }
+}
+
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
 __global__ void ec_add_ne_adapter_tracegen_kernel(
     Fp *trace,
@@ -130,15 +196,27 @@ __global__ void ec_add_ne_compute_tracegen_kernel(
     BigUintGpu y1(input_limbs + 1 * NUM_LIMBS, NUM_LIMBS, 8);
     BigUintGpu x2(input_limbs + 2 * NUM_LIMBS, NUM_LIMBS, 8);
     BigUintGpu y2(input_limbs + 3 * NUM_LIMBS, NUM_LIMBS, 8);
+    x1.normalize();
+    y1.normalize();
+    x2.normalize();
+    y2.normalize();
+    x1 = x1.rem(prime);
+    y1 = y1.rem(prime);
+    x2 = x2.rem(prime);
+    y2 = y2.rem(prime);
 
     BigUintGpu tmp0 = y2.mod_sub(y1, prime);
     BigUintGpu tmp1 = x2.mod_sub(x1, prime);
     BigUintGpu lambda = tmp0.mod_div(tmp1, prime, barrett_mu);
 
-    tmp0 = lambda.mul(lambda).mod_reduce(prime, barrett_mu);
-    BigUintGpu x3 = tmp0.mod_sub(x1, prime).mod_sub(x2, prime);
+    tmp0 = lambda.mul(lambda);
+    tmp0 = tmp0.mod_reduce(prime, barrett_mu);
+    BigUintGpu x3 = tmp0.mod_sub(x1, prime);
+    x3 = x3.mod_sub(x2, prime);
     tmp0 = x1.mod_sub(x3, prime);
-    BigUintGpu y3 = lambda.mul(tmp0).mod_reduce(prime, barrett_mu).mod_sub(y1, prime);
+    BigUintGpu y3 = lambda.mul(tmp0);
+    y3 = y3.mod_reduce(prime, barrett_mu);
+    y3 = y3.mod_sub(y1, prime);
 
     size_t col = 0;
     core_row[col++] = Fp::one();
@@ -188,6 +266,7 @@ __global__ void ec_add_ne_constraint_tracegen_kernel(
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
 
     if (idx >= num_records) {
+        core_row.fill_zero(0, core_width);
         return;
     }
 
@@ -205,16 +284,27 @@ __global__ void ec_add_ne_constraint_tracegen_kernel(
     BigUintGpu y1(input_limbs + 1 * NUM_LIMBS, NUM_LIMBS, 8);
     BigUintGpu x2(input_limbs + 2 * NUM_LIMBS, NUM_LIMBS, 8);
     BigUintGpu y2(input_limbs + 3 * NUM_LIMBS, NUM_LIMBS, 8);
-    BigUintGpu lambda_num = y2.mod_sub(y1, prime);
-    BigUintGpu lambda_den = x2.mod_sub(x1, prime);
+    x1.normalize();
+    y1.normalize();
+    x2.normalize();
+    y2.normalize();
 
     const size_t vars_col = 1 + 4 * NUM_LIMBS;
     BigUintGpu lambda = read_biguint<NUM_LIMBS>(core_row, vars_col + 0 * NUM_LIMBS);
     BigUintGpu x3 = read_biguint<NUM_LIMBS>(core_row, vars_col + 1 * NUM_LIMBS);
     BigUintGpu y3 = read_biguint<NUM_LIMBS>(core_row, vars_col + 2 * NUM_LIMBS);
-    BigUintGpu tmp0 = lambda.mul(lambda).mod_reduce(prime, barrett_mu);
-    BigUintGpu tmp1 = x1.mod_sub(x3, prime);
-    BigUintGpu tmp2 = lambda.mul(tmp1).mod_reduce(prime, barrett_mu);
+    BigIntGpu x1_big(x1);
+    BigIntGpu y1_big(y1);
+    BigIntGpu x2_big(x2);
+    BigIntGpu y2_big(y2);
+    BigIntGpu lambda_big(lambda);
+    BigIntGpu x3_big(x3);
+    BigIntGpu y3_big(y3);
+    BigIntGpu lambda_den_big(x2);
+    lambda_den_big -= x1_big;
+    BigIntGpu x1_minus_x3_big(x1);
+    x1_minus_x3_big -= x3_big;
+    BigUintGpu lambda_sq = lambda.mul(lambda);
 
     const uint32_t q_counts[3] = {q0_limbs, q1_limbs, q2_limbs};
     const uint32_t c_counts[3] = {c0_limbs, c1_limbs, c2_limbs};
@@ -223,30 +313,35 @@ __global__ void ec_add_ne_constraint_tracegen_kernel(
     size_t carry_col = col + q0_limbs + q1_limbs + q2_limbs;
 
     {
-        BigIntGpu constraint_big(lambda_den);
-        BigIntGpu tmp_big(lambda);
-        constraint_big *= tmp_big;
-        tmp_big = BigIntGpu(lambda_num);
-        constraint_big -= tmp_big;
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        for (uint32_t limb = 0; limb < q_counts[0]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
+        BigIntGpu constraint_big(prime.limb_bits);
+        constraint_big = lambda_den_big.mul(lambda_big);
+        constraint_big -= y2_big;
+        constraint_big += y1_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
         for (uint32_t limb = 0; limb < q_counts[0]; limb++) {
             int32_t q_signed =
                 limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
             if (quotient.is_negative) {
                 q_signed = -q_signed;
             }
+            write_signed_bigint_limb(core_row, col, quotient, limb);
             range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
         }
-        OverflowInt constraint_ov(lambda_den, NUM_LIMBS);
-        OverflowInt tmp_ov(lambda, NUM_LIMBS);
-        constraint_ov *= tmp_ov;
-        tmp_ov = OverflowInt(lambda_num, NUM_LIMBS);
+        OverflowInt constraint_ov(x2, NUM_LIMBS);
+        OverflowInt tmp_ov(x1, NUM_LIMBS);
         constraint_ov -= tmp_ov;
+        tmp_ov = OverflowInt(lambda, NUM_LIMBS);
+        constraint_ov *= tmp_ov;
+        tmp_ov = OverflowInt(y2, NUM_LIMBS);
+        constraint_ov -= tmp_ov;
+        tmp_ov = OverflowInt(y1, NUM_LIMBS);
+        constraint_ov += tmp_ov;
         OverflowInt result = constraint_ov;
-        tmp_ov = OverflowInt(quotient, q_counts[0]) * prime_overflow;
+        OverflowInt q_ov(quotient, q_counts[0]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
         result -= tmp_ov;
         OverflowInt carries = result.carry_limbs(c_counts[0]);
         uint32_t carry_bits = result.max_overflow_bits - 8;
@@ -261,34 +356,35 @@ __global__ void ec_add_ne_constraint_tracegen_kernel(
     }
 
     {
-        BigIntGpu constraint_big(tmp0);
-        BigIntGpu tmp_big(x1);
-        constraint_big -= tmp_big;
-        tmp_big = BigIntGpu(x2);
-        constraint_big -= tmp_big;
-        tmp_big = BigIntGpu(x3);
-        constraint_big -= tmp_big;
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        for (uint32_t limb = 0; limb < q_counts[1]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
+        BigIntGpu constraint_big(lambda_sq);
+        constraint_big -= x1_big;
+        constraint_big -= x2_big;
+        constraint_big -= x3_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
         for (uint32_t limb = 0; limb < q_counts[1]; limb++) {
             int32_t q_signed =
                 limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
             if (quotient.is_negative) {
                 q_signed = -q_signed;
             }
+            write_signed_bigint_limb(core_row, col, quotient, limb);
             range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
         }
-        OverflowInt constraint_ov(tmp0, NUM_LIMBS);
-        OverflowInt tmp_ov(x1, NUM_LIMBS);
+        OverflowInt constraint_ov(lambda, NUM_LIMBS);
+        OverflowInt tmp_ov(lambda, NUM_LIMBS);
+        constraint_ov *= tmp_ov;
+        tmp_ov = OverflowInt(x1, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         tmp_ov = OverflowInt(x2, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         tmp_ov = OverflowInt(x3, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         OverflowInt result = constraint_ov;
-        tmp_ov = OverflowInt(quotient, q_counts[1]) * prime_overflow;
+        OverflowInt q_ov(quotient, q_counts[1]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
         result -= tmp_ov;
         OverflowInt carries = result.carry_limbs(c_counts[1]);
         uint32_t carry_bits = result.max_overflow_bits - 8;
@@ -303,30 +399,35 @@ __global__ void ec_add_ne_constraint_tracegen_kernel(
     }
 
     {
-        BigIntGpu constraint_big(tmp2);
-        BigIntGpu tmp_big(y1);
-        constraint_big -= tmp_big;
-        tmp_big = BigIntGpu(y3);
-        constraint_big -= tmp_big;
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        for (uint32_t limb = 0; limb < q_counts[2]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
+        BigIntGpu constraint_big(prime.limb_bits);
+        constraint_big = x1_minus_x3_big.mul(lambda_big);
+        constraint_big -= y1_big;
+        constraint_big -= y3_big;
+        BigIntGpu quotient(prime.limb_bits);
+        quotient = constraint_big.div_biguint(prime);
+        quotient.normalize();
         for (uint32_t limb = 0; limb < q_counts[2]; limb++) {
             int32_t q_signed =
                 limb < quotient.mag.num_limbs ? (int32_t)quotient.mag.limbs[limb] : 0;
             if (quotient.is_negative) {
                 q_signed = -q_signed;
             }
+            write_signed_bigint_limb(core_row, col, quotient, limb);
             range_checker.add_count((uint32_t)(q_signed + (1 << 8)), 9);
         }
-        OverflowInt constraint_ov(tmp2, NUM_LIMBS);
-        OverflowInt tmp_ov(y1, NUM_LIMBS);
+        OverflowInt constraint_ov(x1, NUM_LIMBS);
+        OverflowInt tmp_ov(x3, NUM_LIMBS);
+        constraint_ov -= tmp_ov;
+        tmp_ov = OverflowInt(lambda, NUM_LIMBS);
+        constraint_ov *= tmp_ov;
+        tmp_ov = OverflowInt(y1, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         tmp_ov = OverflowInt(y3, NUM_LIMBS);
         constraint_ov -= tmp_ov;
         OverflowInt result = constraint_ov;
-        tmp_ov = OverflowInt(quotient, q_counts[2]) * prime_overflow;
+        OverflowInt q_ov(quotient, q_counts[2]);
+        tmp_ov = q_ov;
+        tmp_ov *= prime_overflow;
         result -= tmp_ov;
         OverflowInt carries = result.carry_limbs(c_counts[2]);
         uint32_t carry_bits = result.max_overflow_bits - 8;

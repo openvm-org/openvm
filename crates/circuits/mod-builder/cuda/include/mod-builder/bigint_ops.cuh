@@ -762,18 +762,15 @@ struct BigIntGpu {
 
     __device__ BigUintGpu abs() const { return mag; }
 
-    __device__ void to_signed_limbs(int64_t *limbs) const {
-        if (is_negative) {
-            for (uint32_t i = 0; i < mag.num_limbs; i++) {
-                limbs[i] = -(int64_t)mag.limbs[i];
-            }
-        } else {
-            for (uint32_t i = 0; i < mag.num_limbs; i++) {
-                limbs[i] = (int64_t)mag.limbs[i];
-            }
+    __device__ void to_signed_limbs(int64_t *out_limbs) const {
+        const bool negative = is_negative;
+        const uint32_t count = min(mag.num_limbs, (uint32_t)MAX_LIMBS);
+        for (uint32_t i = 0; i < count; i++) {
+            int64_t limb = (int64_t)(uint32_t)mag.limbs[i];
+            out_limbs[i] = negative ? -limb : limb;
         }
-        for (uint32_t i = mag.num_limbs; i < MAX_LIMBS; i++) {
-            limbs[i] = 0;
+        for (uint32_t i = count; i < MAX_LIMBS; i++) {
+            out_limbs[i] = 0;
         }
     }
 
