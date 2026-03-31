@@ -347,10 +347,7 @@ __global__ void deferral_call_tracegen(
     );
     BitwiseOperationLookup bitwise_buffer(bitwise_ptr, bitwise_num_bits);
     DeferralPoseidon2Buffer poseidon2_buffer(
-        poseidon2_records,
-        poseidon2_counts,
-        poseidon2_idx,
-        poseidon2_capacity
+        poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
 
     deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
@@ -385,7 +382,7 @@ extern "C" int _deferral_call_tracegen(
     size_t poseidon2_capacity,
     size_t address_bits
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     assert(width == sizeof(DeferralCallCols<uint8_t>));
 
     // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
