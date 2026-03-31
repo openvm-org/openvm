@@ -538,7 +538,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(&mem_slice, i);
+            gpu_merkle_tree.build_async(mem_slice, i);
         }
         gpu_merkle_tree.finalize();
 
