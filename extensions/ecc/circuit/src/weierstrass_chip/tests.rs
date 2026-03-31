@@ -31,7 +31,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::HybridWeierstrassChip,
+    crate::cuda::{EcAddNeChipGpu, EcDoubleChipGpu},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
         GpuTestChipHarness,
@@ -160,7 +160,7 @@ mod ec_addne_tests {
         F,
         EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
         WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
-        HybridWeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
+        EcAddNeChipGpu<F, BLOCKS, BLOCK_SIZE>,
         WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
     >;
 
@@ -202,15 +202,15 @@ mod ec_addne_tests {
             tester.address_bits(),
         );
 
-        let hybrid_chip = HybridWeierstrassChip::new(get_ec_addne_chip(
+        let gpu_chip = EcAddNeChipGpu::new(get_ec_addne_chip(
             config,
             tester.cpu_memory_helper(),
             tester.cpu_range_checker(),
             tester.cpu_bitwise_op_lookup(),
             tester.address_bits(),
-        ));
+        ), tester.range_checker(), tester.bitwise_op_lookup(), tester.address_bits(), tester.timestamp_max_bits());
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -605,7 +605,7 @@ mod ec_double_tests {
         F,
         EcDoubleExecutor<BLOCKS, BLOCK_SIZE>,
         WeierstrassAir<1, BLOCKS, BLOCK_SIZE>,
-        HybridWeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
+        EcDoubleChipGpu<F, BLOCKS, BLOCK_SIZE>,
         WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
     >;
 
@@ -651,16 +651,16 @@ mod ec_double_tests {
             tester.address_bits(),
             a_biguint.clone(),
         );
-        let hybrid_chip = HybridWeierstrassChip::new(get_ec_double_chip(
+        let gpu_chip = EcDoubleChipGpu::new(get_ec_double_chip(
             config,
             tester.cpu_memory_helper(),
             tester.cpu_range_checker(),
             tester.cpu_bitwise_op_lookup(),
             tester.address_bits(),
             a_biguint,
-        ));
+        ), tester.range_checker(), tester.bitwise_op_lookup(), tester.address_bits(), tester.timestamp_max_bits());
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[allow(clippy::too_many_arguments)]

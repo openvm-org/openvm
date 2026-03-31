@@ -11,6 +11,8 @@ use {
 
 mod extension;
 mod weierstrass_chip;
+#[cfg(feature = "cuda")]
+mod cuda;
 
 pub use extension::*;
 // Re-export limb constants from algebra for consistency

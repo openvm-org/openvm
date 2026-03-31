@@ -18,8 +18,8 @@ pub use weierstrass::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        mod hybrid;
-        pub use hybrid::*;
+        mod cuda;
+        pub use cuda::*;
         pub use {
             EccGpuProverExt as EccProverExt,
             Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,

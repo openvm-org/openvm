@@ -5,7 +5,7 @@ fn main() {
     #[cfg(feature = "cuda")]
     {
         if !cuda_available() {
-            return; // Skip CUDA compilation
+            return;
         }
 
         let builder = CudaBuilder::new()
@@ -19,12 +19,9 @@ fn main() {
             .watch("../../../crates/vm/cuda/include")
             .watch("../../../crates/circuits/mod-builder/cuda/include")
             .watch("../../rv32-adapters/cuda/include")
-            .library_name("tracegen_gpu_algebra")
-            .file("cuda/src/is_eq.cu")
-            .file("cuda/src/addsub.cu")
-            .file("cuda/src/muldiv.cu")
-            .file("cuda/src/fp2_addsub.cu")
-            .file("cuda/src/fp2_muldiv.cu");
+            .library_name("tracegen_gpu_ecc")
+            .file("cuda/src/add_ne.cu")
+            .file("cuda/src/double.cu");
 
         builder.emit_link_directives();
         builder.build();

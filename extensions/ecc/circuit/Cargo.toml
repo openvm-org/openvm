@@ -46,6 +46,9 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
 
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
+
 [features]
 default = []
 tco = ["openvm-algebra-circuit/tco"]
@@ -53,6 +56,7 @@ aot = ["openvm-circuit/aot", "openvm-algebra-circuit/aot", "halo2curves-axiom/as
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
+    "dep:openvm-cuda-builder",
     "dep:openvm-stark-sdk",
     "openvm-circuit-primitives/cuda",
     "openvm-mod-circuit-builder/cuda",

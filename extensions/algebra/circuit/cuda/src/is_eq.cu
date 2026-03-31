@@ -120,6 +120,9 @@ __global__ void modular_is_equal_tracegen_kernel(
     uint32_t timestamp_max_bits
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= height)
+        return;
+
     RowSlice row(d_trace + idx, height);
 
     if (idx < num_records) {
@@ -167,14 +170,14 @@ extern "C" int _modular_is_equal_tracegen(
 
     constexpr size_t NUM_READS = 2;
 
-    if (num_lanes == 1 && lane_size == 32 && total_limbs == 32) {
-        using RecordType = ModularIsEqualRecord<NUM_READS, 1, 32, 32>;
-        using ColsType = ModularIsEqualCols<uint8_t, NUM_READS, 1, 32, 32>;
+    if (num_lanes == 8 && lane_size == 4 && total_limbs == 32) {
+        using RecordType = ModularIsEqualRecord<NUM_READS, 8, 4, 32>;
+        using ColsType = ModularIsEqualCols<uint8_t, NUM_READS, 8, 4, 32>;
 
         assert(width == sizeof(ColsType));
         size_t num_records = record_len / sizeof(RecordType);
 
-        modular_is_equal_tracegen_kernel<NUM_READS, 1, 32, 32><<<grid, block>>>(
+        modular_is_equal_tracegen_kernel<NUM_READS, 8, 4, 32><<<grid, block>>>(
             d_trace,
             height,
             width,
@@ -188,14 +191,14 @@ extern "C" int _modular_is_equal_tracegen(
             pointer_max_bits,
             timestamp_max_bits
         );
-    } else if (num_lanes == 3 && lane_size == 16 && total_limbs == 48) {
-        using RecordType = ModularIsEqualRecord<NUM_READS, 3, 16, 48>;
-        using ColsType = ModularIsEqualCols<uint8_t, NUM_READS, 3, 16, 48>;
+    } else if (num_lanes == 12 && lane_size == 4 && total_limbs == 48) {
+        using RecordType = ModularIsEqualRecord<NUM_READS, 12, 4, 48>;
+        using ColsType = ModularIsEqualCols<uint8_t, NUM_READS, 12, 4, 48>;
 
         assert(width == sizeof(ColsType));
         size_t num_records = record_len / sizeof(RecordType);
 
-        modular_is_equal_tracegen_kernel<NUM_READS, 3, 16, 48><<<grid, block>>>(
+        modular_is_equal_tracegen_kernel<NUM_READS, 12, 4, 48><<<grid, block>>>(
             d_trace,
             height,
             width,

@@ -42,6 +42,8 @@ mod extension;
 pub use extension::*;
 pub mod fields;
 mod preflight;
+#[cfg(feature = "cuda")]
+mod cuda;
 
 use fields::{get_field_type, get_fp2_field_type, FieldType};
 

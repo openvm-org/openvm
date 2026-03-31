@@ -266,7 +266,7 @@ struct BigUintGpu {
                 }
             }
             if (i + other.num_limbs < MAX_LIMBS && carry > 0) {
-                result.limbs[i + other.num_limbs] = carry;
+                result.limbs[i + other.num_limbs] += carry;
             }
         }
 
@@ -685,7 +685,22 @@ struct BigIntGpu {
     __device__ BigIntGpu(const uint32_t *data, uint32_t n, uint32_t bits, bool negative = false)
         : mag(data, n, bits), is_negative(negative && !(mag.num_limbs == 1 && mag.limbs[0] == 0)) {}
 
-    __device__ void normalize() { mag.normalize(); }
+    __device__ BigIntGpu(const BigIntGpu &other) : mag(other.mag), is_negative(other.is_negative) {}
+
+    __device__ BigIntGpu &operator=(const BigIntGpu &other) {
+        if (this != &other) {
+            mag = other.mag;
+            is_negative = other.is_negative;
+        }
+        return *this;
+    }
+
+    __device__ void normalize() {
+        mag.normalize();
+        if (mag.is_zero()) {
+            is_negative = false;
+        }
+    }
 
     // Comparison method
     __device__ int compare(const BigIntGpu &other) const {
@@ -710,6 +725,7 @@ struct BigIntGpu {
                 result.is_negative = other.is_negative;
             }
         }
+        result.normalize();
         return result;
     }
 
@@ -727,11 +743,14 @@ struct BigIntGpu {
         BigIntGpu result(mag.limb_bits);
         result.mag = mag.div_quotient(divisor);
         result.is_negative = is_negative;
+        result.normalize();
         return result;
     }
 
     __device__ BigIntGpu mod_reduce(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
-        return BigIntGpu(mag.mod_reduce(modulus, barrett_mu), is_negative);
+        BigIntGpu result(mag.mod_reduce(modulus, barrett_mu), is_negative);
+        result.normalize();
+        return result;
     }
 
     __device__ BigIntGpu negate() const {

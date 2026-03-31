@@ -368,7 +368,7 @@ mod cuda_tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::extension::HybridFp2Chip;
+    use crate::cuda::{Fp2AddSubChipGpu, Fp2MulDivChipGpu};
 
     pub type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, T> = GpuTestChipHarness<
         F,
@@ -382,7 +382,7 @@ mod cuda_tests {
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, Fp2AddSubChipGpu<F, BLOCKS, BLOCK_SIZE>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -411,22 +411,28 @@ mod cuda_tests {
             dummy_bitwise_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(get_fp2_addsub_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
+        let gpu_chip = Fp2AddSubChipGpu::new(
+            get_fp2_addsub_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
             tester.address_bits(),
-        ));
+            tester.timestamp_max_bits(),
+        );
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn create_muldiv_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, Fp2MulDivChipGpu<F, BLOCKS, BLOCK_SIZE>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -455,15 +461,21 @@ mod cuda_tests {
             dummy_bitwise_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(get_fp2_muldiv_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
+        let gpu_chip = Fp2MulDivChipGpu::new(
+            get_fp2_muldiv_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
             tester.address_bits(),
-        ));
+            tester.timestamp_max_bits(),
+        );
 
-        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(

@@ -35,7 +35,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::{HybridModularChip, HybridModularIsEqualChip},
+    crate::cuda::{ModularAddSubChipGpu, ModularIsEqualChipGpu, ModularMulDivChipGpu},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
         GpuTestChipHarness,
@@ -118,7 +118,7 @@ mod addsub_tests {
         F,
         ModularExecutor<BLOCKS, BLOCK_SIZE>,
         ModularAir<BLOCKS, BLOCK_SIZE>,
-        HybridModularChip<F, BLOCKS, BLOCK_SIZE>,
+        ModularAddSubChipGpu<F, BLOCKS, BLOCK_SIZE>,
         ModularChip<F, BLOCKS, BLOCK_SIZE>,
     >;
 
@@ -157,16 +157,15 @@ mod addsub_tests {
             tester.address_bits(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(get_modular_addsub_chip(
+        let gpu_chip = ModularAddSubChipGpu::new(get_modular_addsub_chip(
             config,
             tester.cpu_memory_helper(),
             tester.cpu_range_checker(),
             tester.cpu_bitwise_op_lookup(),
             tester.address_bits(),
-        ));
+        ), tester.range_checker(), tester.bitwise_op_lookup(), tester.address_bits(), tester.timestamp_max_bits());
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn set_and_execute_addsub<
@@ -490,7 +489,7 @@ mod muldiv_tests {
         F,
         ModularExecutor<BLOCKS, BLOCK_SIZE>,
         ModularAir<BLOCKS, BLOCK_SIZE>,
-        HybridModularChip<F, BLOCKS, BLOCK_SIZE>,
+        ModularMulDivChipGpu<F, BLOCKS, BLOCK_SIZE>,
         ModularChip<F, BLOCKS, BLOCK_SIZE>,
     >;
 
@@ -529,16 +528,15 @@ mod muldiv_tests {
             tester.address_bits(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(get_modular_muldiv_chip(
+        let gpu_chip = ModularMulDivChipGpu::new(get_modular_muldiv_chip(
             config,
             tester.cpu_memory_helper(),
             tester.cpu_range_checker(),
             tester.cpu_bitwise_op_lookup(),
             tester.address_bits(),
-        ));
+        ), tester.range_checker(), tester.bitwise_op_lookup(), tester.address_bits(), tester.timestamp_max_bits());
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn set_and_execute_muldiv<
@@ -1003,7 +1001,7 @@ mod is_equal_tests {
             F,
             VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-            HybridModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualChipGpu<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         >;
 
@@ -1050,24 +1048,15 @@ mod is_equal_tests {
             tester.dummy_memory_helper(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip =
-            HybridModularIsEqualChip::new(
-                ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                    ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(
-                            tester.address_bits(),
-                            tester.cpu_bitwise_op_lookup(),
-                        ),
-                        offset,
-                        modulus_limbs,
-                        tester.cpu_bitwise_op_lookup(),
-                    ),
-                    tester.cpu_memory_helper(),
-                ),
-            );
+        let gpu_chip = ModularIsEqualChipGpu::new(
+            modulus_limbs,
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+        );
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[cfg(feature = "cuda")]
