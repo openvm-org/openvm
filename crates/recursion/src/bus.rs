@@ -515,6 +515,7 @@ define_typed_per_proof_lookup_bus!(CommitmentsBus, CommitmentsBusMessage);
 pub struct CachedCommitBusMessage<T> {
     pub air_idx: T,
     pub cached_idx: T,
+    pub global_cached_idx: T,
     pub cached_commit: [T; DIGEST_SIZE],
 }
 

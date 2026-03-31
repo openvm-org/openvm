@@ -274,6 +274,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             CachedCommitBusMessage {
                 air_idx: AB::Expr::from_usize(PROGRAM_AIR_ID),
                 cached_idx: AB::Expr::from_usize(PROGRAM_CACHED_TRACE_INDEX),
+                global_cached_idx: AB::Expr::ZERO,
                 cached_commit: local.child_pvs.program_commit.map(Into::into),
             },
             local.is_valid * is_leaf,
