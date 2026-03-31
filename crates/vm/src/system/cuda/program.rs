@@ -1,8 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_circuit::{
-    primitives::Chip, system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero,
-};
+use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::{
@@ -45,7 +43,7 @@ impl ProgramChipGPU {
             .collect::<Vec<_>>();
 
         let num_records = instructions.len();
-        let height = next_power_of_two_or_zero(num_records);
+        let height = num_records.next_power_of_two();
         let records = instructions
             .into_iter()
             .flatten()
