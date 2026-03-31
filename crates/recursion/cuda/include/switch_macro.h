@@ -25,6 +25,13 @@
 
 #define GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, NAME, ...) NAME
 
+// Dispatches a runtime `value` into a switch statement where each case binds the value as a
+// compile-time `constexpr`, allowing it to be used as a template parameter. The caller supplies
+// the set of allowed case values via __VA_ARGS__.
+//
+// The supported number of cases (currently up to 8) is sized for existing use sites, not for
+// generality. This is non-security-critical CUDA code — we can add more APPLY_CASES_N macros
+// if new use cases require additional cases.
 #define SWITCH_BLOCK(value, name, body, ...)                                                                                                            \
     switch (value) {                                                                                                                                    \
         GET_MACRO(__VA_ARGS__, APPLY_CASES_8, APPLY_CASES_7, APPLY_CASES_6, APPLY_CASES_5, APPLY_CASES_4, APPLY_CASES_3, APPLY_CASES_2, APPLY_CASES_1)( \
