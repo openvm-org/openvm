@@ -154,6 +154,8 @@ extern "C" int _poseidon2_deduplicate_records_get_temp_bytes(
 extern "C" int _poseidon2_deduplicate_records(
     Fp *d_records,
     Poseidon2Count *d_counts,
+    Fp *d_records_out,
+    Poseidon2Count *d_counts_out,
     size_t num_records,
     size_t *d_num_records,
     size_t num_prefix_perms,
@@ -168,6 +170,7 @@ extern "C" int _poseidon2_deduplicate_records(
     );
 
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
+    FpArray<16> *d_records_out_fp16 = reinterpret_cast<FpArray<16> *>(d_records_out);
 
     // TODO: We currently can't use DeviceRadixSort since each key is 64 bytes
     // which causes Fp16Decomposer usage to exceed shared memory. We need to
@@ -184,14 +187,14 @@ extern "C" int _poseidon2_deduplicate_records(
 
     // Removes duplicate values from d_records, and stores the number of times
     // they occur in d_counts. The number of unique values is stored into
-    // d_num_records.
+    // d_num_records. Output buffers must not alias the inputs (CUB requirement).
     cub::DeviceReduce::ReduceByKey(
         d_temp_storage,
         temp_storage_bytes,
         d_records_fp16,
-        d_records_fp16,
+        d_records_out_fp16,
         d_counts,
-        d_counts,
+        d_counts_out,
         d_num_records,
         Poseidon2CountCompose{},
         num_records,

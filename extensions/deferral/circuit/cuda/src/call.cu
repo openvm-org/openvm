@@ -388,6 +388,10 @@ extern "C" int _deferral_call_tracegen(
     auto [grid, block] = kernel_launch_params(height);
     assert(width == sizeof(DeferralCallCols<uint8_t>));
 
+    // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
+    assert(poseidon2_capacity % 16 == 0 && "poseidon2_capacity must be a multiple of 16");
+    size_t poseidon2_record_capacity = poseidon2_capacity / 16;
+
     deferral_call_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -403,7 +407,7 @@ extern "C" int _deferral_call_tracegen(
         reinterpret_cast<FpArray<16> *>(d_poseidon2_records),
         d_poseidon2_counts,
         d_poseidon2_idx,
-        poseidon2_capacity,
+        poseidon2_record_capacity,
         address_bits
     );
     return CHECK_KERNEL();
