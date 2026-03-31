@@ -185,8 +185,6 @@ impl VerifyCmd {
                 let baseline_path = if let Some(app_baseline) = app_baseline {
                     app_baseline.to_path_buf()
                 } else {
-                    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-                    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
                     let target_name = get_single_target_name_raw(
                         &cargo_args.bin,
