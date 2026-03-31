@@ -576,6 +576,9 @@ extern "C" int _update_merkle_tree(
     size_t poseidon2_capacity
 ) {
     assert(num_leaves > 0);
+    // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
+    assert(poseidon2_capacity % 16 == 0 && "poseidon2_capacity must be a multiple of 16");
+    size_t poseidon2_record_capacity = poseidon2_capacity / 16;
     uint32_t num_children = num_leaves;
     size_t const trace_height = [](uint32_t x) {
         return x ? (1u << (32 - __builtin_clz(x - 1))) : 0;
@@ -664,7 +667,7 @@ extern "C" int _update_merkle_tree(
             trace_height,
             d_poseidon2_raw_buffer,
             d_poseidon2_buffer_idx,
-            poseidon2_capacity
+            poseidon2_record_capacity
         );
         num_children = num_parents;
     }
@@ -681,7 +684,7 @@ extern "C" int _update_merkle_tree(
         subtree_height + __builtin_ctz(num_subtrees),
         d_poseidon2_raw_buffer,
         d_poseidon2_buffer_idx,
-        poseidon2_capacity
+        poseidon2_record_capacity
     );
 
     return CHECK_KERNEL();
