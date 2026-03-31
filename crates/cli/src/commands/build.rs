@@ -433,7 +433,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     println!("[openvm] Transpiling the package...");
     for (elf_path, target) in izip!(&elf_paths, &elf_targets) {
         let transpiler = app_config.app_vm_config.transpiler();
-        let data = read(&elf_path)
+        let data = read(elf_path)
             .with_context(|| format!("failed to read ELF at {}", elf_path.display()))?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)
             .with_context(|| format!("failed to decode ELF for target '{}'", target.name))?;
