@@ -154,7 +154,7 @@ pub unsafe fn poseidon2_deduplicate_records(
         d_records_out.as_raw_ptr(),
         records_bytes,
     )
-    .map_err(&map_err)?;
+    .map_err(map_err)?;
     cuda_memcpy::<true, true>(
         d_counts.as_mut_raw_ptr(),
         d_counts_out.as_raw_ptr(),
