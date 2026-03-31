@@ -167,6 +167,7 @@ pub mod merkle_tree {
             actual_heights.as_ptr(),
             hasher_buffer.buffer.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
+            // Length in F elements; the CUDA side converts to record count.
             hasher_buffer.buffer.len(),
         ))
     }

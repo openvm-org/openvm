@@ -31,6 +31,9 @@ pub mod count {
 }
 
 pub mod poseidon2 {
+    use openvm_cuda_common::{copy::cuda_memcpy, error::MemCopyError};
+    use openvm_poseidon2_air::POSEIDON2_WIDTH;
+
     use super::*;
 
     #[repr(C)]
@@ -62,6 +65,8 @@ pub mod poseidon2 {
         fn _deferral_poseidon2_deduplicate_records(
             d_records: *mut F,
             d_counts: *mut DeferralPoseidon2Count,
+            d_records_out: *mut F,
+            d_counts_out: *mut DeferralPoseidon2Count,
             num_records: usize,
             d_num_records: *mut usize,
             d_temp_storage: *mut std::ffi::c_void,
@@ -113,14 +118,39 @@ pub mod poseidon2 {
         d_temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
     ) -> Result<(), CudaError> {
+        // CUB ReduceByKey requires non-overlapping input and output ranges.
+        // Allocate separate output buffers, then copy results back.
+        let d_records_out = DeviceBuffer::<F>::with_capacity(num_records * POSEIDON2_WIDTH);
+        let d_counts_out = DeviceBuffer::<DeferralPoseidon2Count>::with_capacity(num_records);
         CudaError::from_result(_deferral_poseidon2_deduplicate_records(
             d_records.as_mut_ptr(),
             d_counts.as_mut_ptr(),
+            d_records_out.as_mut_ptr(),
+            d_counts_out.as_mut_ptr(),
             num_records,
             d_num_records.as_mut_ptr(),
             d_temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
-        ))
+        ))?;
+        let records_bytes = num_records * POSEIDON2_WIDTH * std::mem::size_of::<F>();
+        let counts_bytes = num_records * std::mem::size_of::<DeferralPoseidon2Count>();
+        let map_err = |e: MemCopyError| match e {
+            MemCopyError::Cuda(e) => e,
+            other => panic!("{other}"),
+        };
+        cuda_memcpy::<true, true>(
+            d_records.as_mut_raw_ptr(),
+            d_records_out.as_raw_ptr(),
+            records_bytes,
+        )
+        .map_err(map_err)?;
+        cuda_memcpy::<true, true>(
+            d_counts.as_mut_raw_ptr(),
+            d_counts_out.as_raw_ptr(),
+            counts_bytes,
+        )
+        .map_err(map_err)?;
+        Ok(())
     }
 }
 
