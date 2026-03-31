@@ -33,14 +33,17 @@ impl DeferralPoseidon2ChipGpu {
     /// Creates a new deferral Poseidon2 chip with a device buffer of `max_buffer_size` field
     /// elements. Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the
     /// buffer can hold `max_buffer_size / POSEIDON2_WIDTH` records.
-    pub fn new(max_buffer_size: usize, sbox_registers: usize) -> Self {
+    pub fn new(max_trace_height: usize, sbox_registers: usize) -> Self {
+        let max_num_records = max_trace_height.next_power_of_two();
+        let max_record_buf_size = max_num_records * (DIGEST_SIZE * 2);
+
         let idx = Arc::new(DeviceBuffer::<u32>::with_capacity(1));
         idx.fill_zero().unwrap();
 
         Self {
-            records: Arc::new(DeviceBuffer::<F>::with_capacity(max_buffer_size)),
+            records: Arc::new(DeviceBuffer::<F>::with_capacity(max_record_buf_size)),
             counts: Arc::new(DeviceBuffer::<DeferralPoseidon2Count>::with_capacity(
-                max_buffer_size,
+                max_num_records,
             )),
             idx,
             sbox_registers,
@@ -120,8 +123,4 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
 
         AirProvingContext::simple_no_pis(trace)
     }
-}
-
-pub fn poseidon2_buffer_capacity(max_trace_height: usize) -> usize {
-    max_trace_height.next_power_of_two() * 2 * (DIGEST_SIZE * 2)
 }
