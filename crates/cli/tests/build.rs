@@ -126,8 +126,8 @@ fn test_multi_target_transpile_default() -> Result<()> {
 
     build(&build_args, &cargo_args)?;
 
-    // Check for openvm directory
-    let openvm_dir = target_dir.join("openvm");
+    // OpenVM artifacts are written to a sibling of --target-dir for consistency.
+    let openvm_dir = target_dir.parent().unwrap_or(target_dir).join("openvm");
     assert!(openvm_dir.exists(),);
 
     // Check for release directory
@@ -169,8 +169,10 @@ fn test_output_dir_copy() -> Result<()> {
 
     build(&build_args, &cargo_args)?;
 
-    // Check for executable in target_dir
+    // OpenVM artifacts are written to a sibling of --target-dir.
     let default_target = target_dir
+        .parent()
+        .unwrap_or(target_dir)
         .join("openvm")
         .join("release")
         .join("openvm-cli-example-test.vmexe");

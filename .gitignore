@@ -43,6 +43,7 @@ guest.syms
 
 # openvm generated files
 crates/cli/openvm/
+crates/cli/tests/**/openvm/
 
 # samply profile
 profile.json.gz

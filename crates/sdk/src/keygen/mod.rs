@@ -5,6 +5,7 @@ use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
 };
+use openvm_continuations::RootSC;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     StarkEngine,
@@ -35,6 +36,12 @@ pub struct AggProvingKey {
     pub leaf_pk: Arc<MultiStarkProvingKey<SC>>,
     pub internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,
     pub internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RootProvingKey {
+    pub root_pk: Arc<MultiStarkProvingKey<RootSC>>,
+    pub trace_heights: Vec<usize>,
 }
 
 impl<VC> AppProvingKey<VC>
@@ -93,7 +100,7 @@ where
 
 /// Attention: the serialized size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
     pub verifier: Arc<openvm_static_verifier::StaticVerifierProvingKey>,

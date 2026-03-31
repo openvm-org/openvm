@@ -5,19 +5,14 @@ use eyre::{Context, Result};
 use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof,
-    types::VersionedNonRootStarkProof,
+    types::{VerificationBaselineJson, VersionedNonRootStarkProof},
     Sdk, OPENVM_VERSION,
 };
 
 use super::KeygenCargoArgs;
-#[cfg(feature = "evm-verify")]
-use crate::default::default_evm_halo2_verifier_path;
-use crate::{
-    default::default_agg_stark_vk_path,
-    util::{
-        get_app_commit_path, get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir,
-        get_single_target_name_raw, get_target_dir, get_target_output_dir,
-    },
+use crate::util::{
+    get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_files_with_ext,
+    get_manifest_path_and_dir, get_single_target_name_raw, get_target_dir, get_target_output_dir,
 };
 
 #[derive(Parser)]
@@ -33,7 +28,7 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app verifying key, by default will search for it in ${target_dir}/openvm/app.vk",
+            help = "Path to app verifying key, by default will search for it in ${openvm_dir}/app.vk",
             help_heading = "OpenVM Options"
         )]
         app_vk: Option<PathBuf>,
@@ -50,15 +45,15 @@ enum VerifySubCommand {
         cargo_args: KeygenCargoArgs,
     },
     Stark {
-        /// NOTE: if `openvm commit` was called with the `--exe` option, then `--app-commit` must
-        /// be specified so the command knows where to find the app commit.
+        /// NOTE: if `openvm commit` was called with the `--exe` option, then `--app-baseline` must
+        /// be specified so the command knows where to find the baseline file.
         #[arg(
             long,
             action,
-            help = "Path to app commit, by default will search for it using the binary target name",
+            help = "Path to app baseline (.baseline.json), by default will search for it using the binary target name",
             help_heading = "OpenVM Options"
         )]
-        app_commit: Option<PathBuf>,
+        app_baseline: Option<PathBuf>,
 
         #[arg(
             long,
@@ -174,21 +169,22 @@ impl VerifyCmd {
                 )?;
             }
             VerifySubCommand::Stark {
-                app_commit,
+                app_baseline,
                 proof,
                 cargo_args,
             } => {
-                let agg_vk = read_object_from_file(default_agg_stark_vk_path())
-                    .map_err(|e| {
-                        eyre::eyre!(
-                        "Failed to read aggregation STARK verifying key: {e}\nPlease run 'cargo openvm setup' first",
+                let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+                let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+                let agg_vk_path = get_agg_vk_path(&target_dir);
+                let agg_vk = read_object_from_file(&agg_vk_path).map_err(|e| {
+                    eyre::eyre!(
+                        "Failed to read aggregation verifying key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
+                        agg_vk_path.display()
                     )
-                    })?;
-                let app_commit_path = if let Some(app_commit) = app_commit {
-                    app_commit.to_path_buf()
+                })?;
+                let baseline_path = if let Some(app_baseline) = app_baseline {
+                    app_baseline.to_path_buf()
                 } else {
-                    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-                    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
                     let target_name = get_single_target_name_raw(
                         &cargo_args.bin,
@@ -196,9 +192,10 @@ impl VerifyCmd {
                         &cargo_args.manifest_path,
                         &cargo_args.package,
                     )?;
-                    get_app_commit_path(&target_output_dir, target_name)
+                    get_app_baseline_path(&target_output_dir, target_name)
                 };
-                let expected_app_commit = read_from_file_json(app_commit_path)?;
+                let baseline_json: VerificationBaselineJson = read_from_file_json(baseline_path)?;
+                let expected_app_commit = baseline_json.into();
 
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
@@ -225,13 +222,16 @@ impl VerifyCmd {
             VerifySubCommand::Evm { proof } => {
                 use openvm_sdk::{fs::read_evm_halo2_verifier_from_folder, types::EvmProof};
 
-                let evm_verifier =
-                    read_evm_halo2_verifier_from_folder(default_evm_halo2_verifier_path())
-                        .map_err(|e| {
-                            eyre::eyre!(
-                        "Failed to read EVM verifier: {e}\nPlease run 'cargo openvm setup' first"
-                    )
-                        })?;
+                let verifier_path =
+                    PathBuf::from(crate::default::default_evm_halo2_verifier_path());
+                let evm_verifier = read_evm_halo2_verifier_from_folder(&verifier_path).map_err(
+                    |e| {
+                        eyre::eyre!(
+                            "Failed to read EVM verifier from {}: {e}\nRun 'cargo openvm setup' to generate it",
+                            verifier_path.display()
+                        )
+                    },
+                )?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
