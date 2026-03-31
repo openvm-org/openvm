@@ -48,7 +48,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -74,7 +74,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -82,7 +82,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to aggregation proving key, by default will be ${target_dir}/openvm/agg.pk",
+            help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
             help_heading = "OpenVM Options"
         )]
         agg_pk: Option<PathBuf>,
@@ -112,7 +112,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -120,7 +120,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to aggregation proving key, by default will be ${target_dir}/openvm/agg.pk",
+            help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
             help_heading = "OpenVM Options"
         )]
         agg_pk: Option<PathBuf>,

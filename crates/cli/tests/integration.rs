@@ -29,7 +29,7 @@ fn build_fibonacci_once() -> Result<&'static str> {
             )
         })
         .as_ref()
-        .map(|_| "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe")
+        .map(|_| "tests/programs/fibonacci/openvm/release/openvm-cli-example-test.vmexe")
         .map_err(|e| eyre::eyre!("Failed to build fibonacci: {}", e))
 }
 

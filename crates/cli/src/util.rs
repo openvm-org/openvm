@@ -65,11 +65,11 @@ pub fn get_target_dir(target_dir: &Option<PathBuf>, manifest_path: &PathBuf) -> 
 }
 
 pub fn get_target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
-    target_dir.join("openvm").join(profile).to_path_buf()
+    get_openvm_dir(target_dir).join(profile)
 }
 
 pub fn get_openvm_dir(target_dir: &Path) -> PathBuf {
-    target_dir.join("openvm")
+    target_dir.parent().unwrap_or(target_dir).join("openvm")
 }
 
 pub fn get_app_pk_path(target_dir: &Path) -> PathBuf {

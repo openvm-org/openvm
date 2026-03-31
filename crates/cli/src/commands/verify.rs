@@ -28,7 +28,7 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app verifying key, by default will search for it in ${target_dir}/openvm/app.vk",
+            help = "Path to app verifying key, by default will search for it in ${openvm_dir}/app.vk",
             help_heading = "OpenVM Options"
         )]
         app_vk: Option<PathBuf>,
