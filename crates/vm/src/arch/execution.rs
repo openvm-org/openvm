@@ -38,6 +38,8 @@ pub enum ExecutionError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("at pc = {pc}")]
     HintOutOfBounds { pc: u32 },
+    #[error("at pc {pc}, hint buffer num_words is zero")]
+    HintBufferZeroWords { pc: u32 },
     #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_WORDS {max_hint_buffer_words}")]
     HintBufferTooLarge {
         pc: u32,
