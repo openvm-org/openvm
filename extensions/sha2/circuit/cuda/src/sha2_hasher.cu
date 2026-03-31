@@ -884,6 +884,10 @@ __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t
         SHA2_COL_INDEX(V, Sha2BlockHasherRoundCols, inner.schedule_helper.intermed_4);
     uint32_t intermed_8_offset =
         SHA2_COL_INDEX(V, Sha2BlockHasherRoundCols, inner.schedule_helper.intermed_8);
+    // Start from a zeroed padding row. This kernel rewrites request_id, row_idx/global_block_idx,
+    // dummy work vars, and carries below; the boolean padding flags intentionally stay zero.
+    // sha2_second_pass_dependencies later backfills only intermed_4 for the first dummy row. The
+    // schedule-helper tail starting at intermed_8 stays zero by design.
     row.fill_zero(0, intermed_4_offset);
     row.fill_zero(intermed_8_offset, Sha2Layout<V>::WIDTH - intermed_8_offset);
     SHA2_WRITE_ROUND(V, row, request_id, Fp::zero());
