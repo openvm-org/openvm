@@ -1,8 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_circuit::{
-    primitives::Chip, system::program::ProgramExecutionCols,
-};
+use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::{
