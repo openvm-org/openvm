@@ -137,6 +137,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 &self.poseidon2.records,
                 &self.poseidon2.counts,
                 &self.poseidon2.idx,
+                // Length in F elements; the CUDA side converts to record count.
                 self.poseidon2.records.len(),
             )
             .expect("Failed to generate deferral output trace");
