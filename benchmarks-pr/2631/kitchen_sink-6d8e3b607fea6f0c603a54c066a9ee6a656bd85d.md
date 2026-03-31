@@ -125,29 +125,29 @@
 | Module | Max (GB) | Max At |
 | --- | ---: | --- |
 | prover.rap_constraints | 16.50 | app_proof.prover.0 |
-| prover.batch_constraints.before_round0 | 15.52 | app_proof.prover.0 |
 | frac_sumcheck.gkr_rounds | 15.52 | app_proof.prover.0 |
-| prover.gkr_input_evals | 15.50 | app_proof.prover.0 |
+| prover.batch_constraints.before_round0 | 15.52 | app_proof.prover.0 |
 | frac_sumcheck.segment_tree | 15.50 | app_proof.prover.0 |
+| prover.gkr_input_evals | 15.50 | app_proof.prover.0 |
 | prover.merkle_tree | 14.65 | app_proof.prover.0 |
 | prover.prove_whir_opening | 14.65 | app_proof.prover.0 |
 | prover.openings | 14.65 | app_proof.prover.0 |
-| prover.batch_constraints.fold_ple_evals | 14.02 | app_proof.prover.0 |
 | prover.batch_constraints.round0 | 14.02 | app_proof.prover.0 |
+| prover.batch_constraints.fold_ple_evals | 14.02 | app_proof.prover.0 |
 | prover.before_gkr_input_evals | 11.39 | app_proof.prover.0 |
 | prover.stacked_commit | 11.39 | app_proof.prover.0 |
 | prover.rs_code_matrix | 11.37 | app_proof.prover.0 |
 | generate mem proving ctxs | 5.33 | app_proof.0 |
 | set initial memory | 5.32 | app_proof.1 |
-| tracegen.whir_final_poly_query_eval | 1.87 | leaf.0 |
-| tracegen.exp_bits_len | 1.87 | leaf.0 |
 | tracegen.pow_checker | 1.87 | leaf.0 |
+| tracegen.exp_bits_len | 1.87 | leaf.0 |
+| tracegen.whir_final_poly_query_eval | 1.87 | leaf.0 |
 | tracegen.whir_folding | 1.74 | leaf.0 |
 | tracegen.whir_non_initial_opened_values | 1.73 | leaf.0 |
 | tracegen.whir_initial_opened_values | 1.73 | leaf.0 |
-| tracegen.proof_shape | 1.62 | leaf.0 |
 | tracegen.public_values | 1.62 | leaf.0 |
 | tracegen.range_checker | 1.62 | leaf.0 |
+| tracegen.proof_shape | 1.62 | leaf.0 |
 
 <details>
 <summary>Detailed Metrics</summary>

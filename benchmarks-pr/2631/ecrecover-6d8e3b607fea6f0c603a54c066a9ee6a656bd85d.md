@@ -132,22 +132,22 @@
 | prover.gkr_input_evals | 1.62 | leaf.0.prover |
 | frac_sumcheck.segment_tree | 1.62 | leaf.0.prover |
 | prover.batch_constraints.fold_ple_evals | 1.41 | internal_for_leaf.0.prover |
-| prover.prove_whir_opening | 1.40 | internal_for_leaf.0.prover |
 | prover.openings | 1.40 | internal_for_leaf.0.prover |
+| prover.prove_whir_opening | 1.40 | internal_for_leaf.0.prover |
 | prover.merkle_tree | 1.40 | internal_for_leaf.0.prover |
 | prover.batch_constraints.round0 | 1.37 | internal_for_leaf.0.prover |
 | prover.before_gkr_input_evals | 1.24 | internal_for_leaf.0.prover |
 | prover.stacked_commit | 1.24 | internal_for_leaf.0.prover |
 | prover.rs_code_matrix | 1.23 | internal_for_leaf.0.prover |
 | tracegen.exp_bits_len | 0.50 | leaf.0 |
-| tracegen.pow_checker | 0.50 | leaf.0 |
 | tracegen.whir_final_poly_query_eval | 0.50 | leaf.0 |
+| tracegen.pow_checker | 0.50 | leaf.0 |
 | tracegen.whir_folding | 0.44 | leaf.0 |
 | tracegen.whir_non_initial_opened_values | 0.44 | leaf.0 |
 | tracegen.whir_initial_opened_values | 0.44 | leaf.0 |
 | tracegen.proof_shape | 0.43 | leaf.0 |
-| tracegen.range_checker | 0.43 | leaf.0 |
 | tracegen.public_values | 0.43 | leaf.0 |
+| tracegen.range_checker | 0.43 | leaf.0 |
 
 <details>
 <summary>Detailed Metrics</summary>

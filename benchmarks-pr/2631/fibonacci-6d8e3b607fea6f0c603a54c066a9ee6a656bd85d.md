@@ -127,27 +127,27 @@
 | generate mem proving ctxs | 4.83 | app_proof.6 |
 | set initial memory | 4.83 | app_proof.1 |
 | prover.rap_constraints | 3.78 | leaf.0.prover |
-| prover.batch_constraints.before_round0 | 3.76 | leaf.0.prover |
 | frac_sumcheck.gkr_rounds | 3.76 | leaf.0.prover |
+| prover.batch_constraints.before_round0 | 3.76 | leaf.0.prover |
 | prover.gkr_input_evals | 3.70 | leaf.0.prover |
 | frac_sumcheck.segment_tree | 3.70 | leaf.0.prover |
-| prover.batch_constraints.fold_ple_evals | 3.63 | leaf.0.prover |
 | prover.batch_constraints.round0 | 3.63 | leaf.0.prover |
+| prover.batch_constraints.fold_ple_evals | 3.63 | leaf.0.prover |
 | prover.merkle_tree | 3.57 | leaf.0.prover |
 | prover.openings | 3.57 | leaf.0.prover |
 | prover.prove_whir_opening | 3.57 | leaf.0.prover |
 | prover.before_gkr_input_evals | 3.14 | leaf.0.prover |
 | prover.stacked_commit | 3.14 | leaf.0.prover |
 | prover.rs_code_matrix | 3.10 | leaf.0.prover |
-| tracegen.whir_final_poly_query_eval | 0.98 | leaf.0 |
 | tracegen.exp_bits_len | 0.98 | leaf.0 |
 | tracegen.pow_checker | 0.98 | leaf.0 |
+| tracegen.whir_final_poly_query_eval | 0.98 | leaf.0 |
 | tracegen.whir_folding | 0.72 | leaf.0 |
 | tracegen.whir_non_initial_opened_values | 0.72 | leaf.0 |
 | tracegen.whir_initial_opened_values | 0.71 | leaf.0 |
-| tracegen.proof_shape | 0.66 | leaf.0 |
-| tracegen.public_values | 0.66 | leaf.0 |
 | tracegen.range_checker | 0.66 | leaf.0 |
+| tracegen.public_values | 0.66 | leaf.0 |
+| tracegen.proof_shape | 0.66 | leaf.0 |
 
 <details>
 <summary>Detailed Metrics</summary>
