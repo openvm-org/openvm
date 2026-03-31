@@ -30,9 +30,9 @@ pub struct DeferralPoseidon2ChipGpu {
 }
 
 impl DeferralPoseidon2ChipGpu {
-    /// Creates a new deferral Poseidon2 chip with a device buffer of `max_buffer_size` field
-    /// elements. Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the
-    /// buffer can hold `max_buffer_size / POSEIDON2_WIDTH` records.
+    /// Creates a new deferral Poseidon2 chip configured for `max_trace_height` records. Each
+    /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, and a buffer of
+    /// that size is allocated.
     pub fn new(max_trace_height: usize, sbox_registers: usize) -> Self {
         let max_num_records = max_trace_height.next_power_of_two();
         let max_record_buf_size = max_num_records * (DIGEST_SIZE * 2);
