@@ -193,7 +193,11 @@ impl<C: Config> Builder<C> {
 
     /// Asserts that a Usize is non-zero
     pub fn assert_nonzero(&mut self, u: &Usize<C::N>) {
-        self.operations.push(DslIr::AssertNonZero(u.clone()));
+        if self.flags.static_only {
+            assert_ne!(u.value(), 0, "assert_nonzero failed on constant zero");
+        } else {
+            self.operations.push(DslIr::AssertNonZero(u.clone()));
+        }
     }
 
     /// Asserts that two expressions are equal.
@@ -299,6 +303,27 @@ impl<C: Config> Builder<C> {
             builder.assign(&product, product.clone() * diff);
         });
         self.assert_usize_eq(product, RVar::from(0));
+    }
+
+    /// Asserts that lhs is less than rhs in time O(lhs).
+    pub fn assert_less_than_slow_small_lhs<
+        LhsExpr: Into<SymbolicVar<C::N>>,
+        RhsExpr: Into<SymbolicVar<C::N>>,
+    >(
+        &mut self,
+        lhs: LhsExpr,
+        rhs: RhsExpr,
+    ) {
+        let lhs: Usize<_> = self.eval(lhs.into());
+        let rhs: Usize<_> = self.eval(rhs.into());
+        let product: Usize<_> = self.eval(rhs.clone());
+        let lhs_plus_one: Usize<_> = self.eval(lhs.clone() + RVar::one());
+        self.range(1, lhs_plus_one).for_each(|i_vec, builder| {
+            let i = i_vec[0];
+            let diff: Usize<_> = builder.eval(rhs.clone() - i);
+            builder.assign(&product, product.clone() * diff);
+        });
+        self.assert_nonzero(&product);
     }
 
     /// Asserts that lhs is less than rhs in time O(log(lhs) + log(rhs)).

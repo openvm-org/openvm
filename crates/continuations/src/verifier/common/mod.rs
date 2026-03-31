@@ -104,6 +104,9 @@ pub fn get_program_commit<C: Config>(
     array::from_fn(|i| builder.get(&commit, i))
 }
 
+/// # Safety
+///
+/// `proof.per_air.len()` must be at least `CONNECTOR_AIR_ID + 1`.
 pub fn get_connector_pvs<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
@@ -111,6 +114,9 @@ pub fn get_connector_pvs<C: Config>(
     get_connector_pvs_impl(builder, proof, CONNECTOR_AIR_ID)
 }
 
+/// # Safety
+///
+/// `proof.per_air.len()` must be greater than `connector_air_id`.
 fn get_connector_pvs_impl<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
@@ -127,6 +133,9 @@ fn get_connector_pvs_impl<C: Config>(
     }
 }
 
+/// # Safety
+///
+/// `proof.per_air.len()` must be at least `MERKLE_AIR_ID + 1`.
 pub fn get_memory_pvs<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
@@ -140,6 +149,10 @@ pub fn get_memory_pvs<C: Config>(
 }
 
 /// Asserts that a single segment VM  exits successfully.
+///
+/// # Safety
+///
+/// `proof.per_air.len()` must be at least `CONNECTOR_AIR_ID + 1`.
 pub fn assert_single_segment_vm_exit_successfully<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
@@ -151,6 +164,9 @@ pub fn assert_single_segment_vm_exit_successfully<C: Config>(
     )
 }
 
+/// # Safety
+///
+/// `proof.per_air.len()` must be greater than `connector_air_id`.
 pub fn assert_single_segment_vm_exit_successfully_with_connector_air_id<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
@@ -165,12 +181,15 @@ pub fn assert_single_segment_vm_exit_successfully_with_connector_air_id<C: Confi
     builder.assert_felt_eq(connector_pvs.exit_code, C::F::ZERO);
 }
 
-// TODO: This is a temporary solution. VK should be able to specify which AIRs are required. Once
-// that is implemented in stark-backend, this function can be removed.
+/// Asserts that the aggregation VM proof contains the required fixed AIR slots.
+///
+/// This also establishes `proof.per_air.len() >= PUBLIC_VALUES_AIR_ID + 1`.
 pub fn assert_required_air_for_agg_vm_present<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
 ) {
+    builder.assert_less_than_slow_small_lhs(RVar::from(PUBLIC_VALUES_AIR_ID), proof.per_air.len());
+
     let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
     builder.assert_usize_eq(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
     let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
@@ -179,16 +198,19 @@ pub fn assert_required_air_for_agg_vm_present<C: Config>(
     builder.assert_usize_eq(public_values_air.air_id, RVar::from(PUBLIC_VALUES_AIR_ID));
 }
 
-// TODO: This is a temporary solution. VK should be able to specify which AIRs are required. Once
-// that is implemented, this function can be removed.
+/// Asserts that the app VM proof contains the required fixed AIR slots.
+///
+/// This also establishes `proof.per_air.len() >= MERKLE_AIR_ID + 1`.
 pub fn assert_required_air_for_app_vm_present<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
 ) {
+    builder.assert_less_than_slow_small_lhs(RVar::from(MERKLE_AIR_ID), proof.per_air.len());
+
     let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
     builder.assert_usize_eq(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
     let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
     builder.assert_usize_eq(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
-    let public_values_air = builder.get(&proof.per_air, MERKLE_AIR_ID);
-    builder.assert_usize_eq(public_values_air.air_id, RVar::from(MERKLE_AIR_ID));
+    let merkle_air = builder.get(&proof.per_air, MERKLE_AIR_ID);
+    builder.assert_usize_eq(merkle_air.air_id, RVar::from(MERKLE_AIR_ID));
 }

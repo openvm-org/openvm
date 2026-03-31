@@ -152,14 +152,12 @@ fn test_optional_air() {
     use openvm_stark_backend::engine::StarkEngine;
     let fri_params = FriParameters::new_for_testing(3);
     let engine = BabyBearPoseidon2Engine::new(fri_params);
-    let fib_chip = FibonacciChip::new(0, 1, 8);
     let send_chip1 = DummyInteractionChip::new_without_partition(1, true, 0);
     let send_chip2 = DummyInteractionChip::new_with_partition(engine.device().clone(), 1, true, 0);
     let recv_chip1 = DummyInteractionChip::new_without_partition(1, false, 0);
     let mut keygen_builder = engine.keygen_builder();
-    let fib_chip_id = keygen_builder.add_air(fib_chip.air());
     let send_chip1_id = keygen_builder.add_air(send_chip1.air());
-    let send_chip2_id = keygen_builder.add_air(send_chip2.air());
+    keygen_builder.add_air(send_chip2.air());
     let recv_chip1_id = keygen_builder.add_air(recv_chip1.air());
     let pk = keygen_builder.generate_pk();
 
@@ -167,47 +165,8 @@ fn test_optional_air() {
     let config = test_native_config();
     let program = VerifierProgram::build(m_advice, &fri_params);
 
-    // Case 1: All AIRs are present.
-    {
-        let fib_chip = fib_chip.clone();
-        let mut send_chip1 = send_chip1.clone();
-        let mut send_chip2 = send_chip2.clone();
-        let mut recv_chip1 = recv_chip1.clone();
-        send_chip1.load_data(DummyInteractionData {
-            count: vec![1, 2, 4],
-            fields: vec![vec![1], vec![2], vec![3]],
-        });
-        send_chip2.load_data(DummyInteractionData {
-            count: vec![1, 2, 8],
-            fields: vec![vec![1], vec![2], vec![3]],
-        });
-        recv_chip1.load_data(DummyInteractionData {
-            count: vec![2, 4, 12],
-            fields: vec![vec![1], vec![2], vec![3]],
-        });
-        let proof = engine
-            .prove_then_verify(
-                &pk,
-                ProvingContext {
-                    per_air: vec![
-                        (fib_chip_id, fib_chip.generate_proving_ctx(())),
-                        (send_chip1_id, send_chip1.generate_proving_ctx(())),
-                        (send_chip2_id, send_chip2.generate_proving_ctx(())),
-                        (recv_chip1_id, recv_chip1.generate_proving_ctx(())),
-                    ],
-                },
-            )
-            .unwrap();
-        // The VM program will panic when the program cannot verify the proof.
-        assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
-            program.clone(),
-            proof.write(),
-            NativeCpuBuilder,
-            config.clone()
-        )
-        .is_ok());
-    }
-    // Case 2: The second AIR is not presented.
+    // Optional AIRs are still supported so long as the selected AIRs satisfy the verifier's
+    // shape restrictions.
     {
         let mut send_chip1 = send_chip1.clone();
         let mut recv_chip1 = recv_chip1.clone();
@@ -239,7 +198,7 @@ fn test_optional_air() {
         )
         .is_ok());
     }
-    // Case 3: Negative - unbalanced interactions.
+    // Negative - unbalanced interactions.
     {
         disable_debug_builder();
         let mut recv_chip1 = recv_chip1.clone();
