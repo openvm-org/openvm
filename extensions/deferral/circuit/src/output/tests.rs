@@ -25,10 +25,7 @@ use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
     super::{DeferralOutputChipGpu, DeferralOutputRecordMut},
-    crate::{
-        count::DeferralCircuitCountChipGpu,
-        poseidon2::{poseidon2_buffer_capacity, DeferralPoseidon2ChipGpu},
-    },
+    crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         DenseRecordArena,
@@ -279,8 +276,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
 
     let count = Arc::new(DeviceBuffer::<u32>::with_capacity(num_deferrals));
     count.fill_zero().unwrap();
-    let poseidon2_chip_gpu =
-        DeferralPoseidon2ChipGpu::new(poseidon2_buffer_capacity(MAX_INS_CAPACITY.max(1)), 1);
+    let poseidon2_chip_gpu = DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1);
     let gpu_chip = DeferralOutputChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
