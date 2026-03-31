@@ -1,7 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{copy::cuda_memcpy, d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{
+    copy::cuda_memcpy,
+    d_buffer::DeviceBuffer,
+    error::{CudaError, MemCopyError},
+};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -141,10 +145,22 @@ pub unsafe fn poseidon2_deduplicate_records(
     ))?;
     let records_bytes = num_records * POSEIDON2_WIDTH * std::mem::size_of::<F>();
     let counts_bytes = num_records * std::mem::size_of::<Poseidon2Count>();
-    cuda_memcpy::<true, true>(d_records.as_mut_raw_ptr(), d_records_out.as_raw_ptr(), records_bytes)
-        .expect("Failed to copy deduplicated records");
-    cuda_memcpy::<true, true>(d_counts.as_mut_raw_ptr(), d_counts_out.as_raw_ptr(), counts_bytes)
-        .expect("Failed to copy deduplicated counts");
+    let map_err = |e: MemCopyError| match e {
+        MemCopyError::Cuda(e) => e,
+        other => panic!("{other}"),
+    };
+    cuda_memcpy::<true, true>(
+        d_records.as_mut_raw_ptr(),
+        d_records_out.as_raw_ptr(),
+        records_bytes,
+    )
+    .map_err(&map_err)?;
+    cuda_memcpy::<true, true>(
+        d_counts.as_mut_raw_ptr(),
+        d_counts_out.as_raw_ptr(),
+        counts_bytes,
+    )
+    .map_err(map_err)?;
     Ok(())
 }
 

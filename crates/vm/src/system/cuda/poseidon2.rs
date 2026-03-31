@@ -59,7 +59,6 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let mut num_records = self.idx.to_host().unwrap()[0] as usize;
         if num_records == 0 {
-            self.idx.fill_zero().unwrap();
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let counts = DeviceBuffer::<u32>::with_capacity(num_records);

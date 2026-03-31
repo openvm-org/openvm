@@ -31,7 +31,7 @@ pub mod count {
 }
 
 pub mod poseidon2 {
-    use openvm_cuda_common::copy::cuda_memcpy;
+    use openvm_cuda_common::{copy::cuda_memcpy, error::MemCopyError};
     use openvm_poseidon2_air::POSEIDON2_WIDTH;
 
     use super::*;
@@ -121,8 +121,7 @@ pub mod poseidon2 {
         // CUB ReduceByKey requires non-overlapping input and output ranges.
         // Allocate separate output buffers, then copy results back.
         let d_records_out = DeviceBuffer::<F>::with_capacity(num_records * POSEIDON2_WIDTH);
-        let d_counts_out =
-            DeviceBuffer::<DeferralPoseidon2Count>::with_capacity(num_records);
+        let d_counts_out = DeviceBuffer::<DeferralPoseidon2Count>::with_capacity(num_records);
         CudaError::from_result(_deferral_poseidon2_deduplicate_records(
             d_records.as_mut_ptr(),
             d_counts.as_mut_ptr(),
@@ -135,18 +134,22 @@ pub mod poseidon2 {
         ))?;
         let records_bytes = num_records * POSEIDON2_WIDTH * std::mem::size_of::<F>();
         let counts_bytes = num_records * std::mem::size_of::<DeferralPoseidon2Count>();
+        let map_err = |e: MemCopyError| match e {
+            MemCopyError::Cuda(e) => e,
+            other => panic!("{other}"),
+        };
         cuda_memcpy::<true, true>(
             d_records.as_mut_raw_ptr(),
             d_records_out.as_raw_ptr(),
             records_bytes,
         )
-        .expect("Failed to copy deduplicated records");
+        .map_err(&map_err)?;
         cuda_memcpy::<true, true>(
             d_counts.as_mut_raw_ptr(),
             d_counts_out.as_raw_ptr(),
             counts_bytes,
         )
-        .expect("Failed to copy deduplicated counts");
+        .map_err(map_err)?;
         Ok(())
     }
 }
