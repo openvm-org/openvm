@@ -164,12 +164,15 @@ extern "C" int _deferral_poseidon2_deduplicate_records_get_temp_bytes(
 extern "C" int _deferral_poseidon2_deduplicate_records(
     Fp *d_records,
     DeferralPoseidon2Count *d_counts,
+    Fp *d_records_out,
+    DeferralPoseidon2Count *d_counts_out,
     size_t num_records,
     size_t *d_num_records,
     void *d_temp_storage,
     size_t temp_storage_bytes
 ) {
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
+    FpArray<16> *d_records_out_fp16 = reinterpret_cast<FpArray<16> *>(d_records_out);
 
     cub::DeviceMergeSort::SortPairs(
         d_temp_storage,
@@ -181,13 +184,14 @@ extern "C" int _deferral_poseidon2_deduplicate_records(
         cudaStreamPerThread
     );
 
+    // Output buffers must not alias the inputs (CUB requirement).
     cub::DeviceReduce::ReduceByKey(
         d_temp_storage,
         temp_storage_bytes,
         d_records_fp16,
-        d_records_fp16,
+        d_records_out_fp16,
         d_counts,
-        d_counts,
+        d_counts_out,
         d_num_records,
         DeferralPoseidon2CountCompose{},
         num_records,
