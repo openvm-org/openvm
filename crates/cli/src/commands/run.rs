@@ -235,28 +235,16 @@ impl RunCmd {
 
         let (manifest_path, manifest_dir) =
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
-        let config_path = self
-            .run_args
-            .openvm_config
-            .config
-            .to_owned()
-            .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME));
-        let app_config = read_config_toml_or_default(&config_path)?;
         let exe: VmExe<F> = read_object_from_file(exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;
 
-        // Create SDK
-        let sdk = Sdk::new(app_config, AggregationSystemParams::default())?;
-
-        // For metered modes, load existing app pk from disk
-        if matches!(
+        let sdk = if matches!(
             self.run_args.mode,
             ExecutionMode::Segment | ExecutionMode::Meter
         ) {
             let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
             let app_pk_path = get_app_pk_path(&target_dir);
 
-            // Load the app pk and set it
             let app_pk: AppProvingKey<SdkVmConfig> =
                 read_object_from_file(&app_pk_path).map_err(|e| {
                     eyre!(
@@ -264,9 +252,20 @@ impl RunCmd {
                         app_pk_path.display()
                     )
                 })?;
-            sdk.set_app_pk(app_pk)
-                .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
-        }
+            Sdk::builder()
+                .app_pk(app_pk)
+                .agg_params(AggregationSystemParams::default())
+                .build()?
+        } else {
+            let config_path = self
+                .run_args
+                .openvm_config
+                .config
+                .to_owned()
+                .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME));
+            let app_config = read_config_toml_or_default(&config_path)?;
+            Sdk::new(app_config, AggregationSystemParams::default())?
+        };
 
         match self.run_args.mode {
             ExecutionMode::Pure => {

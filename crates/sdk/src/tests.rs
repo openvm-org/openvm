@@ -155,7 +155,11 @@ fn test_verify_stark_deferral() -> Result<()> {
     vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
     let vs_app_config = AppConfig::new(vs_config, app_params);
-    let vs_sdk = Sdk::new(vs_app_config, agg_params)?.with_deferral_prover(deferral_prover);
+    let vs_sdk = Sdk::builder()
+        .app_config(vs_app_config)
+        .agg_params(agg_params)
+        .deferral_prover(deferral_prover)
+        .build()?;
 
     // ---- Step 7: Build the verify-stark ELF ----
     let vs_elf = Elf::decode(
@@ -221,7 +225,11 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
 
     // ---- Step 2: Enable deferrals in SDK and prove ----
-    let sdk = Sdk::riscv32(app_params, agg_params.clone()).with_deferral_prover(deferral_prover);
+    let sdk = Sdk::builder()
+        .app_config(AppConfig::riscv32(app_params))
+        .agg_params(agg_params.clone())
+        .deferral_prover(deferral_prover)
+        .build()?;
 
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
