@@ -235,30 +235,28 @@ __global__ void ec_double_lambda_num_constraint_tracegen_kernel(
     uint32_t carry_bits = result.max_overflow_bits - 8;
     uint32_t carry_min_abs = 1u << carry_bits;
     carry_bits++;
-    int64_t result_limbs[MAX_LIMBS];
-    int64_t quotient_signed_limbs[MAX_LIMBS];
-    clear_result_limbs(result_limbs);
-    add_biguint_product(result_limbs, x1, x1);
-    for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
-        result_limbs[limb] *= 3;
-    }
-    add_biguint_limbs(result_limbs, a);
-    subtract_biguint_limbs(result_limbs, lambda_num_var);
-    quotient.to_signed_limbs(quotient_signed_limbs);
-    subtract_signed_limbs_times_prime(
-        result_limbs, quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs
-    );
     size_t carry_write_col = carry_col;
-    write_manual_carries(
-        core_row,
-        carry_write_col,
-        range_checker,
-        track_range,
-        result_limbs,
-        carry_count,
-        carry_min_abs,
-        carry_bits
-    );
+    int32_t quotient_signed_limbs[MAX_LIMBS];
+    read_signed_bigint_limbs(quotient, quotient_signed_limbs);
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_count; limb++) {
+        int64_t coeff = 3 * biguint_product_limb(x1, x1, limb);
+        coeff += biguint_limb_or_zero(a, limb);
+        coeff -= biguint_limb_or_zero(lambda_num_var, limb);
+        coeff += subtract_signed_limb_product_limb(
+            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+        );
+        carry = (carry + coeff) >> 8;
+        write_carry_limb(
+            core_row,
+            carry_write_col,
+            range_checker,
+            track_range,
+            carry,
+            carry_min_abs,
+            carry_bits
+        );
+    }
 }
 
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
@@ -365,50 +363,37 @@ __global__ void ec_double_lambda_den_constraint_tracegen_kernel(
     uint32_t carry_bits = result.max_overflow_bits - 8;
     uint32_t carry_min_abs = 1u << carry_bits;
     carry_bits++;
-    int64_t result_limbs[MAX_LIMBS];
-    int64_t quotient_signed_limbs[MAX_LIMBS];
-    clear_result_limbs(result_limbs);
-    if (has_lambda_num_var != 0) {
-        if (use_setup_arithmetic) {
-            add_biguint_limbs(result_limbs, lambda);
-        } else {
-            add_biguint_product(result_limbs, y1, lambda);
-            for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
-                result_limbs[limb] *= 2;
-            }
-        }
-        subtract_biguint_limbs(result_limbs, lambda_num_var);
-    } else {
-        if (use_setup_arithmetic) {
-            add_biguint_limbs(result_limbs, lambda);
-        } else {
-            add_biguint_product(result_limbs, y1, lambda);
-            for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
-                result_limbs[limb] *= 2;
-            }
-        }
-        for (uint32_t i = 0; i < x1.num_limbs && i < MAX_LIMBS; i++) {
-            for (uint32_t j = 0; j < x1.num_limbs && i + j < MAX_LIMBS; j++) {
-                result_limbs[i + j] -= 3 * (int64_t)x1.limbs[i] * (int64_t)x1.limbs[j];
-            }
-        }
-        subtract_biguint_limbs(result_limbs, a);
-    }
-    quotient.to_signed_limbs(quotient_signed_limbs);
-    subtract_signed_limbs_times_prime(
-        result_limbs, quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs
-    );
     size_t carry_write_col = carry_col;
-    write_manual_carries(
-        core_row,
-        carry_write_col,
-        range_checker,
-        track_range,
-        result_limbs,
-        carry_count,
-        carry_min_abs,
-        carry_bits
-    );
+    int32_t quotient_signed_limbs[MAX_LIMBS];
+    read_signed_bigint_limbs(quotient, quotient_signed_limbs);
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_count; limb++) {
+        int64_t coeff = 0;
+        if (use_setup_arithmetic) {
+            coeff += biguint_limb_or_zero(lambda, limb);
+        } else {
+            coeff += 2 * biguint_product_limb(y1, lambda, limb);
+        }
+        if (has_lambda_num_var != 0) {
+            coeff -= biguint_limb_or_zero(lambda_num_var, limb);
+        } else {
+            coeff -= 3 * biguint_product_limb(x1, x1, limb);
+            coeff -= biguint_limb_or_zero(a, limb);
+        }
+        coeff += subtract_signed_limb_product_limb(
+            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+        );
+        carry = (carry + coeff) >> 8;
+        write_carry_limb(
+            core_row,
+            carry_write_col,
+            range_checker,
+            track_range,
+            carry,
+            carry_min_abs,
+            carry_bits
+        );
+    }
 }
 
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
@@ -485,29 +470,28 @@ __global__ void ec_double_x3_constraint_tracegen_kernel(
     uint32_t carry_bits = result.max_overflow_bits - 8;
     uint32_t carry_min_abs = 1u << carry_bits;
     carry_bits++;
-    int64_t result_limbs[MAX_LIMBS];
-    int64_t quotient_signed_limbs[MAX_LIMBS];
-    clear_result_limbs(result_limbs);
-    add_biguint_product(result_limbs, lambda, lambda);
-    for (uint32_t limb = 0; limb < x1.num_limbs && limb < MAX_LIMBS; limb++) {
-        result_limbs[limb] -= 2 * (int64_t)x1.limbs[limb];
-    }
-    subtract_biguint_limbs(result_limbs, x3);
-    quotient.to_signed_limbs(quotient_signed_limbs);
-    subtract_signed_limbs_times_prime(
-        result_limbs, quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs
-    );
     size_t carry_write_col = carry_col;
-    write_manual_carries(
-        core_row,
-        carry_write_col,
-        range_checker,
-        track_range,
-        result_limbs,
-        carry_count,
-        carry_min_abs,
-        carry_bits
-    );
+    int32_t quotient_signed_limbs[MAX_LIMBS];
+    read_signed_bigint_limbs(quotient, quotient_signed_limbs);
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_count; limb++) {
+        int64_t coeff = biguint_product_limb(lambda, lambda, limb);
+        coeff -= 2 * biguint_limb_or_zero(x1, limb);
+        coeff -= biguint_limb_or_zero(x3, limb);
+        coeff += subtract_signed_limb_product_limb(
+            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+        );
+        carry = (carry + coeff) >> 8;
+        write_carry_limb(
+            core_row,
+            carry_write_col,
+            range_checker,
+            track_range,
+            carry,
+            carry_min_abs,
+            carry_bits
+        );
+    }
 }
 
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
@@ -593,32 +577,29 @@ __global__ void ec_double_y3_constraint_tracegen_kernel(
     uint32_t carry_bits = result.max_overflow_bits - 8;
     uint32_t carry_min_abs = 1u << carry_bits;
     carry_bits++;
-    int64_t result_limbs[MAX_LIMBS];
-    int64_t quotient_signed_limbs[MAX_LIMBS];
-    clear_result_limbs(result_limbs);
-    add_biguint_product(result_limbs, x1, lambda);
-    for (uint32_t i = 0; i < x3.num_limbs && i < MAX_LIMBS; i++) {
-        for (uint32_t j = 0; j < lambda.num_limbs && i + j < MAX_LIMBS; j++) {
-            result_limbs[i + j] -= (int64_t)x3.limbs[i] * (int64_t)lambda.limbs[j];
-        }
-    }
-    subtract_biguint_limbs(result_limbs, y1);
-    subtract_biguint_limbs(result_limbs, y3);
-    quotient.to_signed_limbs(quotient_signed_limbs);
-    subtract_signed_limbs_times_prime(
-        result_limbs, quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs
-    );
     size_t carry_write_col = carry_col;
-    write_manual_carries(
-        core_row,
-        carry_write_col,
-        range_checker,
-        track_range,
-        result_limbs,
-        carry_count,
-        carry_min_abs,
-        carry_bits
-    );
+    int32_t quotient_signed_limbs[MAX_LIMBS];
+    read_signed_bigint_limbs(quotient, quotient_signed_limbs);
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_count; limb++) {
+        int64_t coeff = biguint_product_limb(x1, lambda, limb);
+        coeff -= biguint_product_limb(x3, lambda, limb);
+        coeff -= biguint_limb_or_zero(y1, limb);
+        coeff -= biguint_limb_or_zero(y3, limb);
+        coeff += subtract_signed_limb_product_limb(
+            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+        );
+        carry = (carry + coeff) >> 8;
+        write_carry_limb(
+            core_row,
+            carry_write_col,
+            range_checker,
+            track_range,
+            carry,
+            carry_min_abs,
+            carry_bits
+        );
+    }
 
     core_row[final_flag_col] = (is_real && !is_setup) ? Fp::one() : Fp::zero();
 }

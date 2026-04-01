@@ -37,91 +37,66 @@ __device__ __forceinline__ void write_signed_bigint_limb(
     row[col++] = value.is_negative ? (Fp::zero() - Fp(q_limb)) : Fp(q_limb);
 }
 
-__device__ __forceinline__ void clear_result_limbs(int64_t result_limbs[MAX_LIMBS]) {
-    for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
-        result_limbs[limb] = 0;
-    }
+__device__ __forceinline__ int64_t biguint_limb_or_zero(const BigUintGpu &value, uint32_t limb) {
+    return limb < value.num_limbs ? (int64_t)value.limbs[limb] : 0;
 }
 
-__device__ __forceinline__ void add_biguint_limbs(
-    int64_t result_limbs[MAX_LIMBS],
-    const BigUintGpu &value
-) {
-    for (uint32_t limb = 0; limb < value.num_limbs && limb < MAX_LIMBS; limb++) {
-        result_limbs[limb] += value.limbs[limb];
-    }
-}
-
-__device__ __forceinline__ void subtract_biguint_limbs(
-    int64_t result_limbs[MAX_LIMBS],
-    const BigUintGpu &value
-) {
-    for (uint32_t limb = 0; limb < value.num_limbs && limb < MAX_LIMBS; limb++) {
-        result_limbs[limb] -= value.limbs[limb];
-    }
-}
-
-__device__ __forceinline__ void add_biguint_product(
-    int64_t result_limbs[MAX_LIMBS],
+__device__ __forceinline__ int64_t biguint_product_limb(
     const BigUintGpu &lhs,
-    const BigUintGpu &rhs
+    const BigUintGpu &rhs,
+    uint32_t limb
 ) {
-    for (uint32_t i = 0; i < lhs.num_limbs; i++) {
-        for (uint32_t j = 0; j < rhs.num_limbs && i + j < MAX_LIMBS; j++) {
-            result_limbs[i + j] += (int64_t)lhs.limbs[i] * (int64_t)rhs.limbs[j];
+    int64_t coeff = 0;
+    for (uint32_t i = 0; i < lhs.num_limbs && i <= limb; i++) {
+        uint32_t j = limb - i;
+        if (j < rhs.num_limbs) {
+            coeff += (int64_t)lhs.limbs[i] * (int64_t)rhs.limbs[j];
         }
+    }
+    return coeff;
+}
+
+__device__ __forceinline__ void read_signed_bigint_limbs(
+    const BigIntGpu &value,
+    int32_t out_limbs[MAX_LIMBS]
+) {
+    for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+        int32_t signed_limb = limb < value.mag.num_limbs ? (int32_t)value.mag.limbs[limb] : 0;
+        out_limbs[limb] = value.is_negative ? -signed_limb : signed_limb;
     }
 }
 
-__device__ __forceinline__ void add_bigint_biguint_product(
-    int64_t result_limbs[MAX_LIMBS],
-    const BigIntGpu &lhs,
-    const BigUintGpu &rhs
+__device__ __forceinline__ int64_t subtract_signed_limb_product_limb(
+    const int32_t *lhs_limbs,
+    uint32_t lhs_limb_count,
+    const uint8_t *rhs_limbs,
+    uint32_t rhs_limb_count,
+    uint32_t limb
 ) {
-    int64_t lhs_signed_limbs[MAX_LIMBS];
-    lhs.to_signed_limbs(lhs_signed_limbs);
-    for (uint32_t i = 0; i < lhs.mag.num_limbs && i < MAX_LIMBS; i++) {
-        for (uint32_t j = 0; j < rhs.num_limbs && i + j < MAX_LIMBS; j++) {
-            result_limbs[i + j] += lhs_signed_limbs[i] * (int64_t)rhs.limbs[j];
+    int64_t coeff = 0;
+    for (uint32_t lhs_limb = 0; lhs_limb < lhs_limb_count && lhs_limb <= limb; lhs_limb++) {
+        uint32_t rhs_limb = limb - lhs_limb;
+        if (rhs_limb < rhs_limb_count) {
+            coeff -= (int64_t)lhs_limbs[lhs_limb] * (int64_t)rhs_limbs[rhs_limb];
         }
     }
+    return coeff;
 }
 
-__device__ __forceinline__ void subtract_signed_limbs_times_prime(
-    int64_t result_limbs[MAX_LIMBS],
-    const int64_t quotient_signed_limbs[MAX_LIMBS],
-    uint32_t quotient_limbs,
-    const uint8_t *prime_limbs,
-    uint32_t prime_num_limbs
-) {
-    for (uint32_t q_limb = 0; q_limb < quotient_limbs; q_limb++) {
-        int64_t q_signed = quotient_signed_limbs[q_limb];
-        for (uint32_t p_limb = 0; p_limb < prime_num_limbs && q_limb + p_limb < MAX_LIMBS;
-             p_limb++) {
-            result_limbs[q_limb + p_limb] -= q_signed * (int64_t)prime_limbs[p_limb];
-        }
-    }
-}
-
-__device__ __forceinline__ void write_manual_carries(
+__device__ __forceinline__ void write_carry_limb(
     RowSlice core_row,
-    size_t &carry_col,
+    size_t &col,
     VariableRangeChecker &range_checker,
     bool track_range,
-    const int64_t result_limbs[MAX_LIMBS],
-    uint32_t carry_count,
+    int64_t carry,
     uint32_t carry_min_abs,
     uint32_t carry_bits
 ) {
-    int64_t carry = 0;
-    for (uint32_t limb = 0; limb < carry_count; limb++) {
-        carry = (carry + result_limbs[limb]) >> 8;
-        int32_t carry_i32 = (int32_t)carry;
-        core_row[carry_col++] =
-            carry_i32 >= 0 ? Fp((uint32_t)carry_i32) : (Fp::zero() - Fp((uint32_t)(-carry_i32)));
-        if (track_range) {
-            range_checker.add_count((uint32_t)(carry_i32 + (int32_t)carry_min_abs), carry_bits);
-        }
+    int32_t carry_i32 = (int32_t)carry;
+    core_row[col++] =
+        carry_i32 >= 0 ? Fp((uint32_t)carry_i32) : (Fp::zero() - Fp((uint32_t)(-carry_i32)));
+    if (track_range) {
+        range_checker.add_count((uint32_t)(carry_i32 + (int32_t)carry_min_abs), carry_bits);
     }
 }
 

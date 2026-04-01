@@ -49,6 +49,51 @@ __device__ inline void write_signed_bigint_limb(
     row[col++] = value.is_negative ? (Fp::zero() - Fp(q_limb)) : Fp(q_limb);
 }
 
+__device__ inline int64_t biguint_limb_or_zero(const BigUintGpu &value, uint32_t limb) {
+    return limb < value.num_limbs ? (int64_t)value.limbs[limb] : 0;
+}
+
+__device__ inline void read_signed_bigint_limbs(
+    const BigIntGpu &value,
+    int32_t out_limbs[MAX_LIMBS]
+) {
+    for (uint32_t limb = 0; limb < MAX_LIMBS; limb++) {
+        int32_t signed_limb = limb < value.mag.num_limbs ? (int32_t)value.mag.limbs[limb] : 0;
+        out_limbs[limb] = value.is_negative ? -signed_limb : signed_limb;
+    }
+}
+
+__device__ inline int64_t subtract_signed_limb_product_limb(
+    const int32_t *lhs_limbs,
+    uint32_t lhs_limb_count,
+    const uint8_t *rhs_limbs,
+    uint32_t rhs_limb_count,
+    uint32_t limb
+) {
+    int64_t coeff = 0;
+    for (uint32_t lhs_limb = 0; lhs_limb < lhs_limb_count && lhs_limb <= limb; lhs_limb++) {
+        uint32_t rhs_limb = limb - lhs_limb;
+        if (rhs_limb < rhs_limb_count) {
+            coeff -= (int64_t)lhs_limbs[lhs_limb] * (int64_t)rhs_limbs[rhs_limb];
+        }
+    }
+    return coeff;
+}
+
+__device__ inline void write_carry_limb(
+    RowSlice core_row,
+    size_t &col,
+    VariableRangeChecker &range_checker,
+    int64_t carry,
+    uint32_t carry_min_abs,
+    uint32_t carry_bits
+) {
+    int32_t carry_i32 = (int32_t)carry;
+    core_row[col++] =
+        carry_i32 >= 0 ? Fp((uint32_t)carry_i32) : (Fp::zero() - Fp((uint32_t)(-carry_i32)));
+    range_checker.add_count((uint32_t)(carry_i32 + (int32_t)carry_min_abs), carry_bits);
+}
+
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
 __global__ void fp2_addsub_adapter_tracegen_kernel(
     Fp *trace,
@@ -265,15 +310,24 @@ __global__ void fp2_addsub_constraint_tracegen_kernel(
         OverflowInt result = constraint_ov;
         tmp_ov = OverflowInt(quotient, q_counts[coord]) * prime_overflow;
         result -= tmp_ov;
-        OverflowInt carries = result.carry_limbs(c_counts[coord]);
         uint32_t carry_bits = result.max_overflow_bits - 8;
         uint32_t carry_min_abs = 1u << carry_bits;
         carry_bits++;
+        int32_t quotient_signed_limbs[MAX_LIMBS];
+        read_signed_bigint_limbs(quotient, quotient_signed_limbs);
+        int64_t carry = 0;
         for (uint32_t limb = 0; limb < c_counts[coord]; limb++) {
-            int32_t carry = carries.limbs[limb];
-            core_row[carry_col++] =
-                carry >= 0 ? Fp((uint32_t)carry) : (Fp::zero() - Fp((uint32_t)(-carry)));
-            range_checker.add_count((uint32_t)(carry + (int32_t)carry_min_abs), carry_bits);
+            int64_t coeff = biguint_limb_or_zero(x, limb) - biguint_limb_or_zero(z, limb);
+            if (is_add) {
+                coeff += biguint_limb_or_zero(y, limb);
+            } else if (is_sub) {
+                coeff -= biguint_limb_or_zero(y, limb);
+            }
+            coeff += subtract_signed_limb_product_limb(
+                quotient_signed_limbs, q_counts[coord], prime_limbs, prime.num_limbs, limb
+            );
+            carry = (carry + coeff) >> 8;
+            write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
         }
     }
 
