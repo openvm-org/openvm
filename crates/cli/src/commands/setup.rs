@@ -6,7 +6,7 @@ use std::{
 use aws_config::{defaults, BehaviorVersion, Region};
 use aws_sdk_s3::Client;
 use clap::Parser;
-use eyre::{eyre, Result};
+use eyre::{eyre, Context, Result};
 use openvm_sdk::{
     config::AggregationSystemParams,
     fs::{
@@ -166,7 +166,8 @@ impl SetupCmd {
 
     async fn download_params(min_k: u32, max_k: u32) -> Result<()> {
         let default_params_dir = default_params_dir();
-        create_dir_all(&default_params_dir)?;
+        create_dir_all(&default_params_dir)
+            .with_context(|| format!("failed to create params directory {default_params_dir}"))?;
 
         let config = defaults(BehaviorVersion::latest())
             .region(Region::new("us-east-1"))
@@ -186,9 +187,15 @@ impl SetupCmd {
                     .bucket("axiom-crypto")
                     .key(&key)
                     .send()
-                    .await?;
-                let data = resp.body.collect().await?;
-                write(local_file_path, data.into_bytes())?;
+                    .await
+                    .with_context(|| format!("failed to download {file_name} from S3"))?;
+                let data = resp
+                    .body
+                    .collect()
+                    .await
+                    .with_context(|| format!("failed to download {file_name} body from S3"))?;
+                write(&local_file_path, data.into_bytes())
+                    .with_context(|| format!("failed to write {}", local_file_path.display()))?;
             }
         }
 

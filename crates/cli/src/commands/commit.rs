@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{Context, Result};
 use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
 use openvm_continuations::CommitBytes;
 use openvm_sdk::{
@@ -151,11 +151,14 @@ impl CommitCmd {
         write_to_file_json(&baseline_path, &baseline_json)?;
 
         if let Some(output_dir) = &self.output_dir {
-            create_dir_all(output_dir)?;
+            create_dir_all(output_dir)
+                .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
             let commit_name = commit_path.file_name().unwrap();
-            copy(&commit_path, output_dir.join(commit_name))?;
+            copy(&commit_path, output_dir.join(commit_name))
+                .with_context(|| format!("failed to copy commit to {}", output_dir.display()))?;
             let baseline_name = baseline_path.file_name().unwrap();
-            copy(&baseline_path, output_dir.join(baseline_name))?;
+            copy(&baseline_path, output_dir.join(baseline_name))
+                .with_context(|| format!("failed to copy baseline to {}", output_dir.display()))?;
         }
 
         Ok(())
