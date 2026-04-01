@@ -1,32 +1,42 @@
 use std::path::PathBuf;
 
-use cargo_openvm::commands::{build, BuildArgs, BuildCargoArgs};
+use cargo_openvm::{
+    args::{ManifestArgs, OpenVmConfigArgs},
+    commands::{build, BuildArgs, BuildCargoArgs},
+};
 use eyre::Result;
 use openvm_build::RUSTC_TARGET;
 
 fn default_build_test_args(example: &str) -> BuildArgs {
-    let mut args = BuildArgs::default();
-    args.no_transpile = true;
-    args.openvm_config.config = Some(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("programs")
-            .join(example)
-            .join("openvm.toml"),
-    );
-    args
+    BuildArgs {
+        no_transpile: true,
+        openvm_config: OpenVmConfigArgs {
+            config: Some(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests")
+                    .join("programs")
+                    .join(example)
+                    .join("openvm.toml"),
+            ),
+            ..Default::default()
+        },
+    }
 }
 
 fn default_cargo_test_args(example: &str) -> BuildCargoArgs {
-    let mut args = BuildCargoArgs::default();
-    args.manifest.manifest_path = Some(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("programs")
-            .join(example)
-            .join("Cargo.toml"),
-    );
-    args
+    BuildCargoArgs {
+        manifest: ManifestArgs {
+            manifest_path: Some(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests")
+                    .join("programs")
+                    .join(example)
+                    .join("Cargo.toml"),
+            ),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }
 
 #[test]
