@@ -274,6 +274,32 @@ struct BigUintGpu {
         return result;
     }
 
+    __device__ BigUintGpu mul_scalar(uint8_t scalar) const {
+        BigUintGpu result(limb_bits);
+        if (scalar == 0 || is_zero()) {
+            return result;
+        }
+
+        uint32_t mask = get_limb_mask(limb_bits);
+        uint64_t carry = 0;
+        uint32_t out_limbs = num_limbs;
+
+        for (uint32_t i = 0; i < num_limbs; i++) {
+            uint64_t prod = (uint64_t)limbs[i] * scalar + carry;
+            result.limbs[i] = prod & mask;
+            carry = prod >> limb_bits;
+        }
+
+        while (carry > 0 && out_limbs < MAX_LIMBS) {
+            result.limbs[out_limbs++] = carry & mask;
+            carry >>= limb_bits;
+        }
+
+        result.num_limbs = out_limbs;
+        result.normalize();
+        return result;
+    }
+
     __device__ BigUintGpu mod_sub(const BigUintGpu &other, const BigUintGpu &prime) const {
         BigUintGpu result(limb_bits);
         int32_t borrow = 0;
