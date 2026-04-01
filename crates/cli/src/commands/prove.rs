@@ -8,22 +8,24 @@ use openvm_circuit::arch::{
     },
     instructions::exe::VmExe,
 };
+use openvm_continuations::CommitBytes;
 use openvm_sdk::{
     config::{AggregationSystemParams, AggregationTreeConfig, AppConfig},
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
     keygen::AppProvingKey,
-    types::VersionedNonRootStarkProof,
+    types::{AppExecutionCommit, VerificationBaselineJson, VersionedNonRootStarkProof},
     Sdk, F,
 };
 use openvm_sdk_config::SdkVmConfig;
+use p3_bn254::Bn254;
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
     commands::build,
     input::read_to_stdin,
     util::{
-        get_agg_pk_path, get_app_pk_path, get_manifest_path_and_dir, get_single_target_name,
-        get_target_dir,
+        get_agg_pk_path, get_app_baseline_path, get_app_pk_path, get_manifest_path_and_dir,
+        get_single_target_name, get_target_dir, get_target_output_dir,
     },
 };
 
@@ -212,11 +214,29 @@ impl ProveCmd {
                 )?;
                 let mut prover = sdk.prover(exe)?;
                 let baseline = prover.generate_baseline();
-                println!("exe commit: {:?}", baseline.app_exe_commit);
+                let app_vk_commit = prover.app_vk_commit();
+
+                let app_commit = AppExecutionCommit {
+                    app_exe_commit: CommitBytes::from(baseline.app_exe_commit),
+                    app_vk_commit: CommitBytes::from(app_vk_commit),
+                };
+                let exe_commit_bn254 = Bn254::from(app_commit.app_exe_commit);
+                let vk_commit_bn254 = Bn254::from(app_commit.app_vk_commit);
+                println!("exe commit: {:?}", exe_commit_bn254);
+                println!("vk commit: {:?}", vk_commit_bn254);
 
                 let (stark_proof, _metadata) =
                     prover.prove(read_to_stdin(&run_args.input)?, &[])?;
                 let stark_proof_bytes = VersionedNonRootStarkProof::new(stark_proof)?;
+
+                let target_dir = target_dir_from_cargo_args(cargo_args)?;
+                let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
+                let target_name_path =
+                    get_single_target_name(cargo_args).unwrap_or(PathBuf::from(&target_name));
+                let baseline_path = get_app_baseline_path(&target_output_dir, target_name_path);
+                println!("Writing baseline to {}", baseline_path.display());
+                let baseline_json: VerificationBaselineJson = baseline.into();
+                write_to_file_json(&baseline_path, &baseline_json)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
