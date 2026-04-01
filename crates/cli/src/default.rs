@@ -8,6 +8,18 @@ pub const DEFAULT_MANIFEST_DIR: &str = ".";
 
 pub const DEFAULT_APP_PK_NAME: &str = "app.pk";
 pub const DEFAULT_APP_VK_NAME: &str = "app.vk";
+pub const DEFAULT_AGG_PK_NAME: &str = "agg.pk";
+pub const DEFAULT_AGG_VK_NAME: &str = "agg.vk";
+
+pub const VMEXE_EXT: &str = "vmexe";
+pub const OPENVM_CONFIG_FILENAME: &str = "openvm.toml";
+
+pub const APP_PROOF_EXT: &str = "app.proof";
+pub const STARK_PROOF_EXT: &str = "stark.proof";
+pub const EVM_PROOF_EXT: &str = "evm.proof";
+
+pub const COMMIT_JSON_EXT: &str = "commit.json";
+pub const BASELINE_JSON_EXT: &str = "baseline.json";
 
 pub fn default_params_dir() -> String {
     env::var("HOME").unwrap() + "/.openvm/params/"

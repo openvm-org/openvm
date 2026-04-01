@@ -1,32 +1,40 @@
 use std::path::PathBuf;
 
-use cargo_openvm::commands::{build, BuildArgs, BuildCargoArgs};
+use cargo_openvm::{
+    args::{ManifestArgs, OpenVmConfigArgs},
+    commands::{build, BuildArgs, BuildCargoArgs},
+};
 use eyre::Result;
 use openvm_build::RUSTC_TARGET;
 
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
         no_transpile: true,
-        config: Some(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("tests")
-                .join("programs")
-                .join(example)
-                .join("openvm.toml"),
-        ),
-        ..Default::default()
+        openvm_config: OpenVmConfigArgs {
+            config: Some(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests")
+                    .join("programs")
+                    .join(example)
+                    .join("openvm.toml"),
+            ),
+            ..Default::default()
+        },
     }
 }
 
 fn default_cargo_test_args(example: &str) -> BuildCargoArgs {
     BuildCargoArgs {
-        manifest_path: Some(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("tests")
-                .join("programs")
-                .join(example)
-                .join("Cargo.toml"),
-        ),
+        manifest: ManifestArgs {
+            manifest_path: Some(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests")
+                    .join("programs")
+                    .join(example)
+                    .join("Cargo.toml"),
+            ),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -38,7 +46,7 @@ fn test_build_with_profile() -> Result<()> {
 
     let build_args = default_build_test_args("fibonacci");
     let mut cargo_args = default_cargo_test_args("fibonacci");
-    cargo_args.target_dir = Some(target_dir.to_path_buf());
+    cargo_args.manifest.target_dir = Some(target_dir.to_path_buf());
     cargo_args.profile = "dev".to_string();
 
     build(&build_args, &cargo_args)?;
@@ -57,7 +65,7 @@ fn test_multi_target_build() -> Result<()> {
 
     let build_args = default_build_test_args("multi");
     let mut cargo_args = default_cargo_test_args("multi");
-    cargo_args.target_dir = Some(target_dir.to_path_buf());
+    cargo_args.manifest.target_dir = Some(target_dir.to_path_buf());
 
     // Build lib
     cargo_args.lib = true;
@@ -121,7 +129,7 @@ fn test_multi_target_transpile_default() -> Result<()> {
     let mut build_args = default_build_test_args("multi");
     let mut cargo_args = default_cargo_test_args("multi");
     build_args.no_transpile = false;
-    cargo_args.target_dir = Some(target_dir.to_path_buf());
+    cargo_args.manifest.target_dir = Some(target_dir.to_path_buf());
     cargo_args.all_targets = true;
 
     build(&build_args, &cargo_args)?;
@@ -163,9 +171,9 @@ fn test_output_dir_copy() -> Result<()> {
 
     let mut build_args = default_build_test_args("fibonacci");
     let mut cargo_args = default_cargo_test_args("fibonacci");
-    build_args.output_dir = Some(output_dir.to_path_buf());
+    build_args.openvm_config.output_dir = Some(output_dir.to_path_buf());
     build_args.no_transpile = false;
-    cargo_args.target_dir = Some(target_dir.to_path_buf());
+    cargo_args.manifest.target_dir = Some(target_dir.to_path_buf());
 
     build(&build_args, &cargo_args)?;
 
