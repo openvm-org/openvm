@@ -133,7 +133,7 @@ impl InitCmd {
         }
 
         // Write template openvm.toml
-        write_template_file("openvm.toml", &path)?;
+        write_template_file(crate::default::OPENVM_CONFIG_FILENAME, &path)?;
 
         Ok(())
     }
