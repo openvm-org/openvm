@@ -69,7 +69,7 @@ impl CommitCmd {
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
 
-        let mut builder = Sdk::builder().app_pk(app_pk).default_transpiler();
+        let mut builder = Sdk::builder().app_pk(app_pk);
         let agg_pk_path = get_agg_pk_path(&target_dir);
         if agg_pk_path.exists() {
             builder = builder.agg_pk(read_object_from_file(&agg_pk_path)?);

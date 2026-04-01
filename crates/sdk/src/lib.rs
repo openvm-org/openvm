@@ -208,7 +208,6 @@ where
         Self::builder()
             .app_config(app_config)
             .agg_params(agg_params)
-            .default_transpiler()
             .build()
     }
 
@@ -224,7 +223,7 @@ where
         Self::builder()
             .app_config(app_config)
             .agg_params(agg_params)
-            .build()
+            .build_without_transpiler()
     }
 
     /// Returns the def_hook_prover cached commit.

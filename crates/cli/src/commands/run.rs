@@ -255,7 +255,6 @@ impl RunCmd {
             Sdk::builder()
                 .app_pk(app_pk)
                 .agg_params(AggregationSystemParams::default())
-                .default_transpiler()
                 .build()?
         } else {
             let config_path = self

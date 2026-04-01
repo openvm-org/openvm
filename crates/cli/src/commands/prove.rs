@@ -9,10 +9,12 @@ use openvm_circuit::arch::{
     instructions::exe::VmExe,
 };
 use openvm_continuations::CommitBytes;
+#[cfg(feature = "evm-prove")]
+use openvm_sdk::keygen::RootProvingKey;
 use openvm_sdk::{
     config::{AggregationSystemParams, AggregationTreeConfig},
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
-    keygen::{AggProvingKey, AppProvingKey, RootProvingKey},
+    keygen::{AggProvingKey, AppProvingKey},
     types::{AppExecutionCommit, VerificationBaselineJson, VersionedNonRootStarkProof},
     Sdk, F,
 };
@@ -153,7 +155,6 @@ impl ProveCmd {
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_params(AggregationSystemParams::default())
-                    .default_transpiler()
                     .build()?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
@@ -188,7 +189,6 @@ impl ProveCmd {
                     .app_pk(app_pk)
                     .agg_pk(agg_pk)
                     .agg_tree_config(*agg_tree_config)
-                    .default_transpiler()
                     .build()?;
                 let mut prover = sdk.prover(exe)?;
                 let baseline = prover.generate_baseline();
@@ -248,7 +248,6 @@ impl ProveCmd {
                     .agg_pk(agg_pk)
                     .root_pk(root_pk.root_pk, root_pk.trace_heights)
                     .agg_tree_config(*agg_tree_config)
-                    .default_transpiler()
                     .build()?;
                 let mut prover = sdk.evm_prover(exe)?;
                 let exe_commit = prover.stark_prover.app_prover.app_exe_commit();

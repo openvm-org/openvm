@@ -60,7 +60,6 @@ fn main() -> eyre::Result<()> {
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_params(Default::default())
-                    .default_transpiler()
                     .build()?;
                 let mut prover = sdk.app_prover(exe)?;
                 let proof = prover.prove(stdin)?;

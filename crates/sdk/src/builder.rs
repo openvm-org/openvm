@@ -271,59 +271,12 @@ where
         self
     }
 
-    pub fn default_transpiler(mut self) -> Self
-    where
-        VB::VmConfig: TranspilerConfig<F>,
-    {
-        let transpiler = match self.app_source.as_ref() {
-            Some(AppSource::Config(app_config)) => app_config.app_vm_config.transpiler(),
-            Some(AppSource::Pk(app_pk)) => app_pk.app_vm_pk.vm_config.transpiler(),
-            None => panic!("default_transpiler requires app_source to be set first"),
-        };
-        Self::set_once(&mut self.transpiler, "transpiler", transpiler);
-        self
-    }
-
-    pub fn deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
-        Self::set_once(
-            &mut self.deferral_prover,
-            "deferral_prover",
-            deferral_prover,
-        );
-        self
-    }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn halo2_config(mut self, shape: StaticVerifierShape, config: Halo2Config) -> Self {
-        Self::set_once(
-            &mut self.halo2_source,
-            "halo2_source",
-            Halo2Source::Config { shape, config },
-        );
-        self
-    }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn halo2_pk(mut self, halo2_pk: Halo2ProvingKey) -> Self {
-        Self::set_once(
-            &mut self.halo2_source,
-            "halo2_source",
-            Halo2Source::Pk(halo2_pk),
-        );
-        self
-    }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn halo2_params_dir(mut self, params_dir: impl AsRef<Path>) -> Self {
-        Self::set_once(
-            &mut self.halo2_params_reader,
-            "halo2_params_reader",
-            CacheHalo2ParamsReader::new(params_dir),
-        );
-        self
-    }
-
-    pub fn build(self) -> Result<GenericSdk<E, VB>, SdkError>
+    /// Builds the SDK without inferring a transpiler from the app source.
+    ///
+    /// This is useful when callers only operate on pre-transpiled [`VmExe`] values and want ELF
+    /// conversion to remain unavailable unless a transpiler was explicitly supplied via
+    /// [`Self::transpiler`].
+    pub fn build_without_transpiler(self) -> Result<GenericSdk<E, VB>, SdkError>
     where
         VB: Default,
     {
@@ -467,6 +420,61 @@ where
             halo2_prover: Self::init_once_lock(halo2_prover_seed, "halo2_prover"),
             _phantom: PhantomData,
         })
+    }
+
+    /// Builds the SDK, deriving a default transpiler from the app source when one was not
+    /// explicitly supplied via [`Self::transpiler`].
+    pub fn build(mut self) -> Result<GenericSdk<E, VB>, SdkError>
+    where
+        VB: Default,
+        VB::VmConfig: TranspilerConfig<F>,
+    {
+        if self.transpiler.is_none() {
+            self.transpiler = self.app_source.as_ref().map(|app_source| match app_source {
+                AppSource::Config(app_config) => app_config.app_vm_config.transpiler(),
+                AppSource::Pk(app_pk) => app_pk.app_vm_pk.vm_config.transpiler(),
+            });
+        }
+        self.build_without_transpiler()
+    }
+
+    pub fn deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
+        Self::set_once(
+            &mut self.deferral_prover,
+            "deferral_prover",
+            deferral_prover,
+        );
+        self
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn halo2_config(mut self, shape: StaticVerifierShape, config: Halo2Config) -> Self {
+        Self::set_once(
+            &mut self.halo2_source,
+            "halo2_source",
+            Halo2Source::Config { shape, config },
+        );
+        self
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn halo2_pk(mut self, halo2_pk: Halo2ProvingKey) -> Self {
+        Self::set_once(
+            &mut self.halo2_source,
+            "halo2_source",
+            Halo2Source::Pk(halo2_pk),
+        );
+        self
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn halo2_params_dir(mut self, params_dir: impl AsRef<Path>) -> Self {
+        Self::set_once(
+            &mut self.halo2_params_reader,
+            "halo2_params_reader",
+            CacheHalo2ParamsReader::new(params_dir),
+        );
+        self
     }
 }
 

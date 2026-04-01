@@ -159,7 +159,6 @@ fn test_verify_stark_deferral() -> Result<()> {
         .app_config(vs_app_config)
         .agg_params(agg_params)
         .deferral_prover(deferral_prover)
-        .default_transpiler()
         .build()?;
 
     // ---- Step 7: Build the verify-stark ELF ----
@@ -230,7 +229,6 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
         .app_config(AppConfig::riscv32(app_params))
         .agg_params(agg_params.clone())
         .deferral_prover(deferral_prover)
-        .default_transpiler()
         .build()?;
 
     let elf = Elf::decode(
