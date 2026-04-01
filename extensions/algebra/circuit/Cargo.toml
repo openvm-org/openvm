@@ -45,9 +45,6 @@ openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 test-case = { workspace = true }
 
-[build-dependencies]
-openvm-cuda-builder = { workspace = true, optional = true }
-
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco"]
@@ -55,9 +52,7 @@ aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "halo2curves-axiom/asm
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
-    "dep:openvm-cuda-builder",
     "openvm-circuit-primitives/cuda",
-    "openvm-mod-circuit-builder/cuda",
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
 ]
