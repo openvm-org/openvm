@@ -50,7 +50,6 @@ fn main() -> eyre::Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
         let mut handles = vec![];
         for _ in 0..concurrency {
-            let app_config = app_config.clone();
             let app_pk = app_pk.clone();
             let app_vk = app_vk.clone();
             let exe = exe.clone();
@@ -58,9 +57,11 @@ fn main() -> eyre::Result<()> {
             let handle = std::thread::spawn(move || -> eyre::Result<_> {
                 // Sdk uses OnceLock for internal caching and is not Clone/Sync,
                 // so each thread creates its own instance with the shared app_pk.
-                let sdk = Sdk::new(app_config, Default::default())?;
-                sdk.set_app_pk(app_pk)
-                    .map_err(|_| eyre::eyre!("Error setting app pk"))?;
+                let sdk = Sdk::builder()
+                    .app_pk(app_pk)
+                    .agg_params(Default::default())
+                    .default_transpiler()
+                    .build()?;
                 let mut prover = sdk.app_prover(exe)?;
                 let proof = prover.prove(stdin)?;
                 let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk.vk, memory_dims, &proof)?;

@@ -10,9 +10,9 @@ use openvm_circuit::arch::{
 };
 use openvm_continuations::CommitBytes;
 use openvm_sdk::{
-    config::{AggregationSystemParams, AggregationTreeConfig, AppConfig},
+    config::{AggregationSystemParams, AggregationTreeConfig},
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
-    keygen::AppProvingKey,
+    keygen::{AggProvingKey, AppProvingKey, RootProvingKey},
     types::{AppExecutionCommit, VerificationBaselineJson, VersionedNonRootStarkProof},
     Sdk, F,
 };
@@ -149,9 +149,12 @@ impl ProveCmd {
                 segmentation_args,
             } => {
                 let mut app_pk = load_app_pk(app_pk, cargo_args)?;
-                let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk =
-                    Sdk::new(app_config, AggregationSystemParams::default())?.with_app_pk(app_pk);
+                configure_app_pk(&mut app_pk, segmentation_args);
+                let sdk = Sdk::builder()
+                    .app_pk(app_pk)
+                    .agg_params(AggregationSystemParams::default())
+                    .default_transpiler()
+                    .build()?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let app_proof = sdk
@@ -179,14 +182,14 @@ impl ProveCmd {
             } => {
                 let mut app_pk = load_app_pk(&keys.app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
-                let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = with_required_agg_pk(
-                    Sdk::new(app_config, AggregationSystemParams::default())?
-                        .with_agg_tree_config(*agg_tree_config)
-                        .with_app_pk(app_pk),
-                    &keys.agg_pk,
-                    cargo_args,
-                )?;
+                configure_app_pk(&mut app_pk, segmentation_args);
+                let agg_pk = load_required_agg_pk(&keys.agg_pk, cargo_args)?;
+                let sdk = Sdk::builder()
+                    .app_pk(app_pk)
+                    .agg_pk(agg_pk)
+                    .agg_tree_config(*agg_tree_config)
+                    .default_transpiler()
+                    .build()?;
                 let mut prover = sdk.prover(exe)?;
                 let baseline = prover.generate_baseline();
                 let app_vk_commit = prover.app_vk_commit();
@@ -237,15 +240,16 @@ impl ProveCmd {
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
-                let app_config = get_app_config(&mut app_pk, segmentation_args);
-                let sdk = with_required_agg_pk(
-                    Sdk::new(app_config, AggregationSystemParams::default())?
-                        .with_agg_tree_config(*agg_tree_config)
-                        .with_app_pk(app_pk),
-                    &keys.agg_pk,
-                    cargo_args,
-                )?;
-                let sdk = with_required_root_pk(sdk)?;
+                configure_app_pk(&mut app_pk, segmentation_args);
+                let agg_pk = load_required_agg_pk(&keys.agg_pk, cargo_args)?;
+                let root_pk = load_required_root_pk()?;
+                let sdk = Sdk::builder()
+                    .app_pk(app_pk)
+                    .agg_pk(agg_pk)
+                    .root_pk(root_pk.root_pk, root_pk.trace_heights)
+                    .agg_tree_config(*agg_tree_config)
+                    .default_transpiler()
+                    .build()?;
                 let mut prover = sdk.evm_prover(exe)?;
                 let exe_commit = prover.stark_prover.app_prover.app_exe_commit();
                 println!("exe commit: {:?}", exe_commit);
@@ -307,18 +311,14 @@ pub(crate) fn load_or_build_exe(
 }
 
 /// Should only be called when `app_pk` has only a single reference internally.
-/// Mutates the `SystemConfig` within `app_pk` and then returns the updated `AppConfig`.
-fn get_app_config(
-    app_pk: &mut AppProvingKey<SdkVmConfig>,
-    segmentation_args: &SegmentationArgs,
-) -> AppConfig<SdkVmConfig> {
+/// Mutates the `SystemConfig` within `app_pk`.
+fn configure_app_pk(app_pk: &mut AppProvingKey<SdkVmConfig>, segmentation_args: &SegmentationArgs) {
     Arc::get_mut(&mut app_pk.app_vm_pk)
         .unwrap()
         .vm_config
         .system
         .config
         .set_segmentation_config((*segmentation_args).into());
-    app_pk.app_config()
 }
 
 fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
@@ -338,31 +338,28 @@ fn resolve_agg_pk_path(agg_pk: &Option<PathBuf>, cargo_args: &RunCargoArgs) -> R
     }
 }
 
-fn with_required_agg_pk(
-    sdk: Sdk,
+fn load_required_agg_pk(
     agg_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
-) -> Result<Sdk> {
+) -> Result<AggProvingKey> {
     let agg_pk_path = resolve_agg_pk_path(agg_pk, cargo_args)?;
-    let agg_pk = read_object_from_file(&agg_pk_path).map_err(|e| {
+    read_object_from_file(&agg_pk_path).map_err(|e| {
         eyre!(
             "Failed to read aggregation proving key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
             agg_pk_path.display()
         )
-    })?;
-    Ok(sdk.with_agg_pk(agg_pk))
+    })
 }
 
 #[cfg(feature = "evm-prove")]
-fn with_required_root_pk(sdk: Sdk) -> Result<Sdk> {
+fn load_required_root_pk() -> Result<RootProvingKey> {
     let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
-    let root_pk = read_object_from_file(&root_pk_path).map_err(|e| {
+    read_object_from_file(&root_pk_path).map_err(|e| {
         eyre!(
             "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
             root_pk_path.display()
         )
-    })?;
-    Ok(sdk.with_root_pk(root_pk))
+    })
 }
 
 impl From<SegmentationArgs> for SegmentationConfig {

@@ -9,7 +9,7 @@ use std::{
 };
 
 use config::AppConfig;
-use getset::{Getters, MutGetters, WithSetters};
+use getset::Getters;
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
@@ -27,9 +27,8 @@ use openvm_circuit::{
 };
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine, SystemParams};
-use openvm_stark_sdk::config::{
-    baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, Digest},
-    root_params_with_100_bits_security,
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, Digest,
 };
 #[cfg(feature = "evm-prove")]
 use openvm_static_verifier::StaticVerifierShape;
@@ -45,10 +44,7 @@ use openvm_verify_stark_host::{
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{dummy::compute_root_proof_heights, AggProvingKey, RootProvingKey},
-    prover::{
-        AggProver, AppProver, DeferralPathProver, DeferralProver, EvmProver, RootProver,
-        StarkProver,
-    },
+    prover::{AggProver, AppProver, DeferralPathProver, EvmProver, RootProver, StarkProver},
     types::ExecutableFormat,
 };
 #[cfg(feature = "evm-prove")]
@@ -68,6 +64,7 @@ cfg_if::cfg_if! {
 
 pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config as SC, F};
 
+pub mod builder;
 pub mod config;
 pub mod fs;
 #[cfg(feature = "evm-prove")]
@@ -97,31 +94,39 @@ pub const OPENVM_VERSION: &str = concat!(
 // BabyBearPoseidon2RootEngine right now.
 /// The SDK provides convenience methods and constructors for provers.
 ///
-/// The SDK is stateful to cache results of computations that depend only on the App VM config and
-/// aggregation config. The SDK will not cache any state that depends on the program executable.
+/// A built SDK is an immutable proving environment: user-supplied config, params, and pre-generated
+/// keys are fixed after construction. Use [`builder`](Self::builder) for advanced initialization,
+/// or [`new`](Self::new) / [`new_without_transpiler`](Self::new_without_transpiler) for the
+/// common config-driven paths.
+///
+/// Internally, the SDK lazily caches proving state that depends only on the app VM config,
+/// aggregation config, root params, and optional pre-generated keys. It does not cache any state
+/// that depends on the program executable.
 ///
 /// Some commonly used methods are:
 /// - [`execute`](Self::execute)
 /// - [`prove`](Self::prove)
 /// - [`verify_proof`](Self::verify_proof)
-#[derive(Getters, MutGetters, WithSetters)]
+#[derive(Getters)]
 pub struct GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
     VB::VmConfig: VmExecutionConfig<F>,
 {
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get = "pub")]
     app_config: AppConfig<VB::VmConfig>,
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get = "pub")]
     agg_config: AggregationConfig,
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get = "pub")]
     agg_tree_config: AggregationTreeConfig,
+    #[getset(get = "pub")]
+    root_params: SystemParams,
     #[cfg(feature = "evm-prove")]
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get = "pub")]
     halo2_shape: StaticVerifierShape,
     #[cfg(feature = "evm-prove")]
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get = "pub")]
     halo2_config: config::Halo2Config,
 
     #[getset(get = "pub")]
@@ -142,7 +147,7 @@ where
     def_path_prover: Option<Arc<DeferralPathProver>>,
 
     #[cfg(feature = "evm-prove")]
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get = "pub")]
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
     halo2_prover: OnceLock<Halo2Prover>,
@@ -200,9 +205,11 @@ where
         VB: Default,
         VB::VmConfig: TranspilerConfig<F>,
     {
-        let transpiler = app_config.app_vm_config.transpiler();
-        let sdk = Self::new_without_transpiler(app_config, agg_params)?.with_transpiler(transpiler);
-        Ok(sdk)
+        Self::builder()
+            .app_config(app_config)
+            .agg_params(agg_params)
+            .default_transpiler()
+            .build()
     }
 
     /// **Note**: This function does not set the transpiler, which must be done separately to
@@ -214,65 +221,10 @@ where
     where
         VB: Default,
     {
-        let executor = VmExecutor::new(app_config.app_vm_config.clone())
-            .map_err(|e| SdkError::Vm(e.into()))?;
-        let agg_config = AggregationConfig { params: agg_params };
-        Ok(Self {
-            app_config,
-            agg_config,
-            agg_tree_config: Default::default(),
-            #[cfg(feature = "evm-prove")]
-            halo2_shape: StaticVerifierShape::default(),
-            #[cfg(feature = "evm-prove")]
-            halo2_config: config::Halo2Config {
-                wrapper_k: None,
-                profiling: false,
-            },
-            app_vm_builder: Default::default(),
-            transpiler: None,
-            executor,
-            app_pk: OnceLock::new(),
-            agg_prover: OnceLock::new(),
-            root_prover: OnceLock::new(),
-            def_path_prover: None,
-            #[cfg(feature = "evm-prove")]
-            halo2_params_reader: CacheHalo2ParamsReader::new_with_default_params_dir(),
-            #[cfg(feature = "evm-prove")]
-            halo2_prover: OnceLock::new(),
-            _phantom: Default::default(),
-        })
-    }
-
-    /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
-    /// because the DeferralExtension should be created using DeferralProver::make_extension, as
-    /// it has the capability to generate def_vk_commits.
-    pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
-        assert!(
-            self.def_path_prover.is_none(),
-            "Deferral prover already defined"
-        );
-        assert!(
-            self.agg_prover.get().is_none(),
-            "Agg prover has already been initialized without deferrals"
-        );
-
-        let deferral_tree_config = AggregationTreeConfig {
-            num_children_leaf: 2,
-            num_children_internal: 2,
-        };
-        let agg_prover = AggProver::new(
-            deferral_prover.def_hook_prover.get_vk(),
-            self.agg_config.clone(),
-            deferral_tree_config,
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
-        );
-        let def_path_prover = DeferralPathProver {
-            deferral_prover: Arc::new(deferral_prover),
-            agg_prover: Arc::new(agg_prover),
-        };
-
-        self.def_path_prover = Some(Arc::new(def_path_prover));
-        self
+        Self::builder()
+            .app_config(app_config)
+            .agg_params(agg_params)
+            .build()
     }
 
     /// Returns the def_hook_prover cached commit.
@@ -323,13 +275,6 @@ where
         self.transpiler
             .as_ref()
             .ok_or(SdkError::TranspilerNotAvailable)
-    }
-    pub fn set_transpiler(&mut self, transpiler: Transpiler<F>) {
-        self.transpiler = Some(transpiler);
-    }
-    pub fn with_transpiler(mut self, transpiler: Transpiler<F>) -> Self {
-        self.set_transpiler(transpiler);
-        self
     }
 
     pub fn convert_to_exe(
@@ -553,9 +498,8 @@ where
     pub fn root_prover(&self) -> Arc<RootProver> {
         self.root_prover
             .get_or_init(|| {
-                // TODO[INT-6073]: store root_params
                 let system_config = self.app_config.app_vm_config.as_ref();
-                let root_params = root_params_with_100_bits_security();
+                let root_params = self.root_params.clone();
                 let app_pk = self.app_pk();
                 let agg_prover = self.agg_prover();
 
@@ -644,67 +588,11 @@ where
             AppProvingKey::keygen(self.app_config.clone()).expect("app_keygen failed")
         })
     }
-    /// Sets the app proving key. Returns `Ok(())` if app keygen has not been called and
-    /// `Err(app_pk)` if keygen has already been called.
-    pub fn set_app_pk(
-        &self,
-        app_pk: AppProvingKey<VB::VmConfig>,
-    ) -> Result<(), AppProvingKey<VB::VmConfig>> {
-        self.app_pk.set(app_pk)
-    }
-
-    /// See [`set_app_pk`](Self::set_app_pk). This should only be used in a constructor, and panics
-    /// if app keygen has already been called.
-    pub fn with_app_pk(self, app_pk: AppProvingKey<VB::VmConfig>) -> Self {
-        let _ = self
-            .set_app_pk(app_pk)
-            .map_err(|_| panic!("app_pk already set"));
-        self
-    }
 
     pub fn agg_keygen(&self) -> (AggProvingKey, MultiStarkVerifyingKey<SC>) {
         let pk = self.agg_pk();
         let vk = self.agg_vk().as_ref().clone();
         (pk, vk)
-    }
-
-    pub fn with_agg_pk(self, agg_pk: AggProvingKey) -> Self {
-        let app_pk = self.app_pk();
-        let _ = self
-            .agg_prover
-            .set(Arc::new(AggProver::from_pk(
-                Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
-                agg_pk,
-                self.agg_tree_config,
-                self.def_hook_cached_commit(),
-            )))
-            .map_err(|_| panic!("agg_pk already set"));
-        self
-    }
-
-    pub fn with_root_pk(self, root_pk: RootProvingKey) -> Self {
-        let system_config = self.app_config.app_vm_config.as_ref();
-        let memory_dimensions = system_config.memory_config.memory_dimensions();
-        let num_user_pvs = system_config.num_public_values;
-        let agg_prover = self.agg_prover();
-        let _ = self
-            .root_prover
-            .set(Arc::new(RootProver::from_pk(
-                agg_prover.internal_recursive_prover.get_vk(),
-                agg_prover
-                    .internal_recursive_prover
-                    .get_self_vk_pcs_data()
-                    .unwrap()
-                    .commitment
-                    .into(),
-                root_pk.root_pk,
-                memory_dimensions,
-                num_user_pvs,
-                self.def_hook_vk_commit(),
-                Some(root_pk.trace_heights),
-            )))
-            .map_err(|_| panic!("root_pk already set"));
-        self
     }
 
     pub fn root_pk(&self) -> RootProvingKey {
@@ -739,17 +627,6 @@ where
     #[cfg(feature = "evm-prove")]
     pub fn halo2_pk(&self) -> Halo2ProvingKey {
         self.halo2_prover().pk()
-    }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn with_halo2_params_dir(mut self, params_dir: impl AsRef<Path>) -> Self {
-        self.set_halo2_params_dir(params_dir);
-        self
-    }
-
-    #[cfg(feature = "evm-prove")]
-    pub fn set_halo2_params_dir(&mut self, params_dir: impl AsRef<Path>) {
-        self.halo2_params_reader = CacheHalo2ParamsReader::new(params_dir);
     }
 
     // ======================== Verification Methods ========================
