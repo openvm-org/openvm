@@ -34,7 +34,7 @@ jobs:
           - { name: "ff_derive", path: "ff_derive", runner: "64cpu-linux-x64" }
           - { name: "k256", path: "k256", runner: "64cpu-linux-x64" }
           - { name: "p256", path: "p256", runner: "64cpu-linux-x64" }
-          - { name: "ruint", path: "ruint", runner: "96cpu-linux-x64" }
+          - { name: "ruint", path: "ruint", runner: "64cpu-linux-x64" }
           - { name: "pairing", path: "pairing", runner: "64cpu-linux-x64" }
           - { name: "verify-stark", path: "verify-stark/circuit", runner: "64cpu-linux-x64" }
       # Ensure tests run in parallel even if one fails
