@@ -7,11 +7,11 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
+#      - "crates/circuits/**"
+#      - "crates/vm/**"
+#      - "crates/toolchain/**"
       - "extensions/**"
-      - "Cargo.toml"
+#      - "Cargo.toml"
       - ".github/workflows/extension-tests.yml"
 
 concurrency:
