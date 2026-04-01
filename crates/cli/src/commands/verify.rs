@@ -12,7 +12,7 @@ use openvm_sdk::{
 use super::KeygenCargoArgs;
 use crate::{
     args::ManifestArgs,
-    default::{APP_PROOF_EXT, EVM_PROOF_EXT, STARK_PROOF_EXT},
+    default::{APP_PROOF_EXT, STARK_PROOF_EXT},
     util::{
         get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_manifest_path_and_dir,
         get_single_target_name_raw, get_target_dir, get_target_output_dir, resolve_proof_path,
@@ -207,7 +207,7 @@ impl VerifyCmd {
                     },
                 )?;
 
-                let proof_path = resolve_proof_path(proof, EVM_PROOF_EXT)?;
+                let proof_path = resolve_proof_path(proof, crate::default::EVM_PROOF_EXT)?;
                 // The app config used here doesn't matter, it is ignored in verification
                 println!("Verifying EVM proof at {}", proof_path.display());
                 let evm_proof: EvmProof = read_from_file_json(proof_path).with_context(|| {

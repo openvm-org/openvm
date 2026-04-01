@@ -23,7 +23,7 @@ use super::{RunArgs, RunCargoArgs};
 use crate::{
     args::ProvingKeyArgs,
     commands::build,
-    default::{APP_PROOF_EXT, EVM_PROOF_EXT, STARK_PROOF_EXT, VMEXE_EXT},
+    default::{APP_PROOF_EXT, STARK_PROOF_EXT, VMEXE_EXT},
     input::read_to_stdin,
     util::{
         get_agg_pk_path, get_app_baseline_path, get_app_pk_path, get_manifest_path_and_dir,
@@ -254,7 +254,7 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(target_name).with_extension(EVM_PROOF_EXT)
+                    &PathBuf::from(target_name).with_extension(crate::default::EVM_PROOF_EXT)
                 };
                 println!(
                     "EVM proof completed! Writing EVM proof to {}",
