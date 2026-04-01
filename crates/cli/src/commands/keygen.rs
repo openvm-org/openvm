@@ -8,6 +8,7 @@ use eyre::{Context, Result};
 use openvm_sdk::{config::AggregationSystemParams, fs::write_object_to_file, Sdk};
 
 use crate::{
+    args::ManifestArgs,
     default::{
         DEFAULT_AGG_PK_NAME, DEFAULT_AGG_VK_NAME, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
         OPENVM_CONFIG_FILENAME,
@@ -48,28 +49,15 @@ pub struct KeygenCmd {
 
 #[derive(Parser)]
 pub struct KeygenCargoArgs {
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Directory for all Cargo-generated artifacts and intermediate files",
-        help_heading = "Cargo Options"
-    )]
-    pub(crate) target_dir: Option<PathBuf>,
-
-    #[arg(
-        long,
-        value_name = "PATH",
-        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
-        help_heading = "Cargo Options"
-    )]
-    pub(crate) manifest_path: Option<PathBuf>,
+    #[clap(flatten)]
+    pub(crate) manifest: ManifestArgs,
 }
 
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
         let (manifest_path, manifest_dir) =
-            get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
-        let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+            get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
+        let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
         let app_pk_path = get_app_pk_path(&target_dir);
         let app_vk_path = get_app_vk_path(&target_dir);
         let agg_pk_path = get_agg_pk_path(&target_dir);

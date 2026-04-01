@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
-use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
+use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_sdk::{
     config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
 };
@@ -10,6 +10,7 @@ use openvm_sdk_config::SdkVmConfig;
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
+    args::{ManifestArgs, OpenVmConfigArgs},
     default::{OPENVM_CONFIG_FILENAME, VMEXE_EXT},
     input::{read_to_stdin, Input},
     util::{
@@ -49,19 +50,8 @@ pub struct RunArgs {
     )]
     pub exe: Option<PathBuf>,
 
-    #[arg(
-        long,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
-        help_heading = "OpenVM Options"
-    )]
-    pub config: Option<PathBuf>,
-
-    #[arg(
-        long,
-        help = "Output directory that OpenVM proving artifacts will be copied to",
-        help_heading = "OpenVM Options"
-    )]
-    pub output_dir: Option<PathBuf>,
+    #[clap(flatten)]
+    pub openvm_config: OpenVmConfigArgs,
 
     #[arg(
         long,
@@ -70,14 +60,6 @@ pub struct RunArgs {
         help_heading = "OpenVM Options"
     )]
     pub input: Option<Input>,
-
-    #[arg(
-        long,
-        default_value = OPENVM_DEFAULT_INIT_FILE_NAME,
-        help = "Name of the init file",
-        help_heading = "OpenVM Options"
-    )]
-    pub init_file_name: String,
 
     #[arg(
         long,
@@ -92,9 +74,7 @@ pub struct RunArgs {
 impl From<RunArgs> for BuildArgs {
     fn from(args: RunArgs) -> Self {
         BuildArgs {
-            config: args.config,
-            output_dir: args.output_dir,
-            init_file_name: args.init_file_name,
+            openvm_config: args.openvm_config,
             ..Default::default()
         }
     }
@@ -160,13 +140,8 @@ pub struct RunCargoArgs {
     )]
     pub profile: String,
 
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Directory for all generated artifacts and intermediate files",
-        help_heading = "Output Options"
-    )]
-    pub target_dir: Option<PathBuf>,
+    #[clap(flatten)]
+    pub manifest: ManifestArgs,
 
     #[arg(
         long,
@@ -192,14 +167,6 @@ pub struct RunCargoArgs {
         help_heading = "Display Options"
     )]
     pub color: String,
-
-    #[arg(
-        long,
-        value_name = "PATH",
-        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
-        help_heading = "Manifest Options"
-    )]
-    pub manifest_path: Option<PathBuf>,
 
     #[arg(
         long,
@@ -240,11 +207,10 @@ impl From<RunCargoArgs> for BuildCargoArgs {
             all_features: args.all_features,
             no_default_features: args.no_default_features,
             profile: args.profile,
-            target_dir: args.target_dir,
+            manifest: args.manifest,
             verbose: args.verbose,
             quiet: args.quiet,
             color: args.color,
-            manifest_path: args.manifest_path,
             ignore_rust_version: args.ignore_rust_version,
             locked: args.locked,
             offline: args.offline,
@@ -268,9 +234,10 @@ impl RunCmd {
         };
 
         let (manifest_path, manifest_dir) =
-            get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
+            get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
         let config_path = self
             .run_args
+            .openvm_config
             .config
             .to_owned()
             .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME));
@@ -286,7 +253,7 @@ impl RunCmd {
             self.run_args.mode,
             ExecutionMode::Segment | ExecutionMode::Meter
         ) {
-            let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+            let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
             let app_pk_path = get_app_pk_path(&target_dir);
 
             // Load the app pk and set it

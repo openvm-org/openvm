@@ -116,7 +116,7 @@ pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
     get_single_target_name_raw(
         &cargo_args.bin,
         &cargo_args.example,
-        &cargo_args.manifest_path,
+        &cargo_args.manifest.manifest_path,
         &cargo_args.package,
     )
 }
@@ -175,6 +175,23 @@ pub fn get_single_target_name_raw(
         PathBuf::from(bin[0].clone())
     };
     Ok(single_target_name)
+}
+
+pub fn resolve_proof_path(proof: &Option<PathBuf>, extension: &str) -> Result<PathBuf> {
+    if let Some(proof) = proof {
+        return Ok(proof.clone());
+    }
+    let files = get_files_with_ext(Path::new("."), extension)?;
+    if files.len() > 1 {
+        return Err(eyre::eyre!(
+            "multiple .{extension} files found, please specify the path using option --proof"
+        ));
+    } else if files.is_empty() {
+        return Err(eyre::eyre!(
+            "no .{extension} file found, please specify the path using option --proof"
+        ));
+    }
+    Ok(files[0].clone())
 }
 
 pub fn get_files_with_ext(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {

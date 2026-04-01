@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clap::Parser;
 use eyre::{Context, Result};
@@ -11,11 +11,11 @@ use openvm_sdk::{
 
 use super::KeygenCargoArgs;
 use crate::{
+    args::ManifestArgs,
     default::{APP_PROOF_EXT, EVM_PROOF_EXT, STARK_PROOF_EXT},
     util::{
-        get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_files_with_ext,
-        get_manifest_path_and_dir, get_single_target_name_raw, get_target_dir,
-        get_target_output_dir,
+        get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_manifest_path_and_dir,
+        get_single_target_name_raw, get_target_dir, get_target_output_dir, resolve_proof_path,
     },
 };
 
@@ -118,21 +118,8 @@ pub struct SingleTargetCargoArgs {
     )]
     pub profile: String,
 
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Directory for all generated artifacts and intermediate files",
-        help_heading = "Output Options"
-    )]
-    pub target_dir: Option<PathBuf>,
-
-    #[arg(
-        long,
-        value_name = "PATH",
-        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
-        help_heading = "Manifest Options"
-    )]
-    pub manifest_path: Option<PathBuf>,
+    #[clap(flatten)]
+    pub manifest: ManifestArgs,
 }
 
 impl VerifyCmd {
@@ -146,24 +133,16 @@ impl VerifyCmd {
                 let app_vk_path = if let Some(app_vk) = app_vk {
                     app_vk.to_path_buf()
                 } else {
-                    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-                    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+                    let (manifest_path, _) =
+                        get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+                    let target_dir =
+                        get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
                     get_app_vk_path(&target_dir)
                 };
                 let app_vk: openvm_sdk::keygen::AppVerifyingKey =
                     read_object_from_file(app_vk_path)?;
 
-                let proof_path = if let Some(proof) = proof {
-                    proof.clone()
-                } else {
-                    let files = get_files_with_ext(Path::new("."), APP_PROOF_EXT)?;
-                    if files.len() > 1 {
-                        return Err(eyre::eyre!("multiple .{APP_PROOF_EXT} files found, please specify the path using option --proof"));
-                    } else if files.is_empty() {
-                        return Err(eyre::eyre!("no .{APP_PROOF_EXT} file found, please specify the path using option --proof"));
-                    }
-                    files[0].clone()
-                };
+                let proof_path = resolve_proof_path(proof, APP_PROOF_EXT)?;
                 println!("Verifying application proof at {}", proof_path.display());
                 let app_proof = read_object_from_file(proof_path)?;
                 let _exe_commit = verify_app_proof::<openvm_sdk::DefaultStarkEngine>(
@@ -177,8 +156,9 @@ impl VerifyCmd {
                 proof,
                 cargo_args,
             } => {
-                let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-                let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+                let (manifest_path, _) =
+                    get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+                let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
                 let agg_vk_path = get_agg_vk_path(&target_dir);
                 let agg_vk = read_object_from_file(&agg_vk_path).map_err(|e| {
                     eyre::eyre!(
@@ -193,7 +173,7 @@ impl VerifyCmd {
                     let target_name = get_single_target_name_raw(
                         &cargo_args.bin,
                         &cargo_args.example,
-                        &cargo_args.manifest_path,
+                        &cargo_args.manifest.manifest_path,
                         &cargo_args.package,
                     )?;
                     get_app_baseline_path(&target_output_dir, target_name)
@@ -201,17 +181,7 @@ impl VerifyCmd {
                 let baseline_json: VerificationBaselineJson = read_from_file_json(baseline_path)?;
                 let expected_app_commit = baseline_json.into();
 
-                let proof_path = if let Some(proof) = proof {
-                    proof.clone()
-                } else {
-                    let files = get_files_with_ext(Path::new("."), STARK_PROOF_EXT)?;
-                    if files.len() > 1 {
-                        return Err(eyre::eyre!("multiple .{STARK_PROOF_EXT} files found, please specify the path using option --proof"));
-                    } else if files.is_empty() {
-                        return Err(eyre::eyre!("no .{STARK_PROOF_EXT} file found, please specify the path using option --proof"));
-                    }
-                    files[0].clone()
-                };
+                let proof_path = resolve_proof_path(proof, STARK_PROOF_EXT)?;
                 println!("Verifying STARK proof at {}", proof_path.display());
                 let stark_proof: VersionedNonRootStarkProof = read_from_file_json(proof_path)
                     .with_context(|| {
@@ -237,17 +207,7 @@ impl VerifyCmd {
                     },
                 )?;
 
-                let proof_path = if let Some(proof) = proof {
-                    proof.clone()
-                } else {
-                    let files = get_files_with_ext(Path::new("."), EVM_PROOF_EXT)?;
-                    if files.len() > 1 {
-                        return Err(eyre::eyre!("multiple .{EVM_PROOF_EXT} files found, please specify the path using option --proof"));
-                    } else if files.is_empty() {
-                        return Err(eyre::eyre!("no .{EVM_PROOF_EXT} file found, please specify the path using option --proof"));
-                    }
-                    files[0].clone()
-                };
+                let proof_path = resolve_proof_path(proof, EVM_PROOF_EXT)?;
                 // The app config used here doesn't matter, it is ignored in verification
                 println!("Verifying EVM proof at {}", proof_path.display());
                 let evm_proof: EvmProof = read_from_file_json(proof_path).with_context(|| {

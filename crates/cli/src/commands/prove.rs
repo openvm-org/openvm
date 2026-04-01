@@ -21,6 +21,7 @@ use p3_bn254::Bn254;
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
+    args::ProvingKeyArgs,
     commands::build,
     default::{APP_PROOF_EXT, EVM_PROOF_EXT, STARK_PROOF_EXT, VMEXE_EXT},
     input::read_to_stdin,
@@ -74,21 +75,8 @@ enum ProveSubCommand {
         )]
         proof: Option<PathBuf>,
 
-        #[arg(
-            long,
-            action,
-            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
-            help_heading = "OpenVM Options"
-        )]
-        app_pk: Option<PathBuf>,
-
-        #[arg(
-            long,
-            action,
-            help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
-            help_heading = "OpenVM Options"
-        )]
-        agg_pk: Option<PathBuf>,
+        #[command(flatten)]
+        keys: ProvingKeyArgs,
 
         #[command(flatten)]
         run_args: RunArgs,
@@ -112,21 +100,8 @@ enum ProveSubCommand {
         )]
         proof: Option<PathBuf>,
 
-        #[arg(
-            long,
-            action,
-            help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
-            help_heading = "OpenVM Options"
-        )]
-        app_pk: Option<PathBuf>,
-
-        #[arg(
-            long,
-            action,
-            help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
-            help_heading = "OpenVM Options"
-        )]
-        agg_pk: Option<PathBuf>,
+        #[command(flatten)]
+        keys: ProvingKeyArgs,
 
         #[command(flatten)]
         run_args: RunArgs,
@@ -195,22 +170,21 @@ impl ProveCmd {
                 write_object_to_file(proof_path, app_proof)?;
             }
             ProveSubCommand::Stark {
-                app_pk,
-                agg_pk,
+                keys,
                 proof,
                 run_args,
                 cargo_args,
                 segmentation_args,
                 agg_tree_config,
             } => {
-                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut app_pk = load_app_pk(&keys.app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
                 let sdk = with_required_agg_pk(
                     Sdk::new(app_config, AggregationSystemParams::default())?
                         .with_agg_tree_config(*agg_tree_config)
                         .with_app_pk(app_pk),
-                    agg_pk,
+                    &keys.agg_pk,
                     cargo_args,
                 )?;
                 let mut prover = sdk.prover(exe)?;
@@ -252,15 +226,14 @@ impl ProveCmd {
             }
             #[cfg(feature = "evm-prove")]
             ProveSubCommand::Evm {
-                app_pk,
-                agg_pk,
+                keys,
                 proof,
                 run_args,
                 cargo_args,
                 segmentation_args,
                 agg_tree_config,
             } => {
-                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut app_pk = load_app_pk(&keys.app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
@@ -269,7 +242,7 @@ impl ProveCmd {
                     Sdk::new(app_config, AggregationSystemParams::default())?
                         .with_agg_tree_config(*agg_tree_config)
                         .with_app_pk(app_pk),
-                    agg_pk,
+                    &keys.agg_pk,
                     cargo_args,
                 )?;
                 let sdk = with_required_root_pk(sdk)?;
@@ -301,8 +274,8 @@ pub(crate) fn load_app_pk(
     let app_pk_path = if let Some(app_pk) = app_pk {
         app_pk.to_path_buf()
     } else {
-        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-        let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+        let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
         get_app_pk_path(&target_dir)
     };
 
@@ -349,8 +322,11 @@ fn get_app_config(
 }
 
 fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
-    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-    Ok(get_target_dir(&cargo_args.target_dir, &manifest_path))
+    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+    Ok(get_target_dir(
+        &cargo_args.manifest.target_dir,
+        &manifest_path,
+    ))
 }
 
 fn resolve_agg_pk_path(agg_pk: &Option<PathBuf>, cargo_args: &RunCargoArgs) -> Result<PathBuf> {
