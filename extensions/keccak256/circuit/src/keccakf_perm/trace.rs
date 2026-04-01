@@ -34,6 +34,12 @@ where
     /// Generates trace and clears internal records state.
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let records: Vec<_> = std::mem::take(&mut self.shared_records.lock().unwrap());
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(RowMajorMatrix::new(
+                Vec::new(),
+                NUM_KECCAKF_PERM_COLS,
+            ));
+        }
         let states = records
             .iter()
             .map(|record| {
