@@ -12,6 +12,7 @@ use openvm_sdk::{
     fs::{
         write_evm_halo2_verifier_to_folder, EVM_HALO2_VERIFIER_BASE_NAME,
         EVM_HALO2_VERIFIER_INTERFACE_NAME, EVM_HALO2_VERIFIER_PARENT_NAME,
+        EVM_VERIFIER_ARTIFACT_FILENAME,
     },
     Sdk, OPENVM_VERSION,
 };
@@ -35,11 +36,18 @@ pub struct SetupCmd {
         help = "Force verifier regeneration even if the verifier contract already exists"
     )]
     pub force: bool,
+
+    #[arg(
+        long,
+        default_value = "false",
+        help = "Download pre-built verifier artifacts from S3 instead of generating locally"
+    )]
+    pub download: bool,
 }
 
 impl SetupCmd {
     pub async fn run(&self) -> Result<()> {
-        if !Self::check_solc_installed() {
+        if !Self::check_solc_installed() && !self.download {
             return Err(eyre!(
                 "solc is not installed, please install solc to continue"
             ));
@@ -58,6 +66,9 @@ impl SetupCmd {
             && versioned_verifier_dir
                 .join(EVM_HALO2_VERIFIER_BASE_NAME)
                 .exists()
+            && versioned_verifier_dir
+                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
+                .exists()
             && interface_dir
                 .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
                 .exists()
@@ -69,16 +80,22 @@ impl SetupCmd {
             return Ok(());
         }
 
-        let sdk = Sdk::standard(
-            app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT),
-            AggregationSystemParams::default(),
-        );
+        if self.download {
+            Self::download_verifier(&versioned_verifier_dir).await?;
+        } else {
+            let sdk = Sdk::standard(
+                app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT),
+                AggregationSystemParams::default(),
+            );
 
-        println!("Generating verifier contract...");
-        let verifier = sdk.generate_halo2_verifier_solidity()?;
+            println!(
+                "Generating verifier contract. Use --download to download pre-generated contract instead."
+            );
+            let verifier = sdk.generate_halo2_verifier_solidity()?;
 
-        println!("Writing verifier contract to {}", verifier_dir.display());
-        write_evm_halo2_verifier_to_folder(verifier, &verifier_dir)?;
+            println!("Writing verifier contract to {}", verifier_dir.display());
+            write_evm_halo2_verifier_to_folder(verifier, &verifier_dir)?;
+        }
         Ok(())
     }
 
@@ -87,6 +104,64 @@ impl SetupCmd {
             .arg("--version")
             .output()
             .is_ok()
+    }
+
+    async fn download_verifier(versioned_verifier_dir: &PathBuf) -> Result<()> {
+        create_dir_all(versioned_verifier_dir)?;
+        let interface_dir = versioned_verifier_dir.join("interfaces");
+        create_dir_all(&interface_dir)?;
+
+        let config = defaults(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .no_credentials()
+            .load()
+            .await;
+        let client = Client::new(&config);
+
+        const ARTIFACTS_BUCKET: &str = "openvm-public-artifacts-us-east-1";
+        const FULL_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+        let halo2_s3_prefix = format!("v{FULL_VERSION}/halo2/src/v{OPENVM_VERSION}");
+        let files = [
+            (
+                EVM_HALO2_VERIFIER_PARENT_NAME,
+                versioned_verifier_dir.join(EVM_HALO2_VERIFIER_PARENT_NAME),
+            ),
+            (
+                EVM_HALO2_VERIFIER_BASE_NAME,
+                versioned_verifier_dir.join(EVM_HALO2_VERIFIER_BASE_NAME),
+            ),
+            (
+                EVM_VERIFIER_ARTIFACT_FILENAME,
+                versioned_verifier_dir.join(EVM_VERIFIER_ARTIFACT_FILENAME),
+            ),
+            (
+                EVM_HALO2_VERIFIER_INTERFACE_NAME,
+                interface_dir.join(EVM_HALO2_VERIFIER_INTERFACE_NAME),
+            ),
+        ];
+
+        for (name, local_path) in &files {
+            if !local_path.exists() {
+                let key = if *name == EVM_HALO2_VERIFIER_INTERFACE_NAME {
+                    format!("{halo2_s3_prefix}/interfaces/{name}")
+                } else {
+                    format!("{halo2_s3_prefix}/{name}")
+                };
+                println!("Downloading {name}");
+                let resp = client
+                    .get_object()
+                    .bucket(ARTIFACTS_BUCKET)
+                    .key(&key)
+                    .send()
+                    .await
+                    .map_err(|e| eyre!("Failed to download s3://{ARTIFACTS_BUCKET}/{key}: {e}"))?;
+                let data = resp.body.collect().await?;
+                write(local_path, data.into_bytes())?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn download_params(min_k: u32, max_k: u32) -> Result<()> {
