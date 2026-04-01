@@ -246,7 +246,7 @@ impl ProveCmd {
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_pk(agg_pk)
-                    .root_pk(root_pk.root_pk, root_pk.trace_heights)
+                    .root_pk(root_pk)
                     .agg_tree_config(*agg_tree_config)
                     .build()?;
                 let mut prover = sdk.evm_prover(exe)?;

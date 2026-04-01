@@ -7,9 +7,8 @@ use std::{
 
 use eyre::eyre;
 use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
-use openvm_continuations::RootSC;
 use openvm_sdk_config::TranspilerConfig;
-use openvm_stark_backend::{keygen::types::MultiStarkProvingKey, StarkEngine, SystemParams};
+use openvm_stark_backend::{StarkEngine, SystemParams};
 use openvm_stark_sdk::config::root_params_with_100_bits_security;
 #[cfg(feature = "evm-prove")]
 use openvm_static_verifier::StaticVerifierShape;
@@ -21,7 +20,7 @@ use crate::halo2_params::CacheHalo2ParamsReader;
 use crate::{config::Halo2Config, keygen::Halo2ProvingKey, prover::Halo2Prover};
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
-    keygen::{AggProvingKey, AppProvingKey},
+    keygen::{AggProvingKey, AppProvingKey, RootProvingKey},
     prover::{AggProver, DeferralPathProver, DeferralProver, RootProver},
     GenericSdk, SdkError, F, SC,
 };
@@ -37,14 +36,9 @@ enum AggSource {
     Pk(AggProvingKey),
 }
 
-struct PrebuiltRootPk {
-    pk: Arc<MultiStarkProvingKey<RootSC>>,
-    trace_heights: Vec<usize>,
-}
-
 enum RootSource {
     Params(SystemParams),
-    Pk(PrebuiltRootPk),
+    Pk(RootProvingKey),
 }
 
 #[cfg(feature = "evm-prove")]
@@ -183,10 +177,10 @@ where
         }
     }
 
-    fn normalize_root_source(root_source: RootSource) -> (SystemParams, Option<PrebuiltRootPk>) {
+    fn normalize_root_source(root_source: RootSource) -> (SystemParams, Option<RootProvingKey>) {
         match root_source {
             RootSource::Params(root_params) => (root_params, None),
-            RootSource::Pk(root_pk) => (root_pk.pk.params.clone(), Some(root_pk)),
+            RootSource::Pk(root_pk) => (root_pk.root_pk.params.clone(), Some(root_pk)),
         }
     }
 
@@ -241,18 +235,11 @@ where
         self
     }
 
-    pub fn root_pk(
-        mut self,
-        root_pk: Arc<MultiStarkProvingKey<RootSC>>,
-        trace_heights: Vec<usize>,
-    ) -> Self {
+    pub fn root_pk(mut self, root_pk: RootProvingKey) -> Self {
         Self::set_once(
             &mut self.root_source,
             "root_source",
-            RootSource::Pk(PrebuiltRootPk {
-                pk: root_pk,
-                trace_heights,
-            }),
+            RootSource::Pk(root_pk),
         );
         self
     }
@@ -381,7 +368,7 @@ where
             Arc::new(RootProver::from_pk(
                 agg_prover.internal_recursive_prover.get_vk(),
                 internal_recursive_dag_commit,
-                root_pk.pk,
+                root_pk.root_pk,
                 memory_dimensions,
                 num_user_pvs,
                 def_hook_vk_commit,

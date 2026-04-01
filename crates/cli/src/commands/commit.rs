@@ -9,7 +9,6 @@ use openvm_continuations::CommitBytes;
 use openvm_sdk::{
     config::AggregationSystemParams,
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
-    keygen::RootProvingKey,
     types::{AppExecutionCommit, VerificationBaselineJson},
     Sdk,
 };
@@ -78,11 +77,7 @@ impl CommitCmd {
         }
         let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
         if root_pk_path.exists() {
-            let RootProvingKey {
-                root_pk,
-                trace_heights,
-            } = read_object_from_file(&root_pk_path)?;
-            builder = builder.root_pk(root_pk, trace_heights);
+            builder = builder.root_pk(read_object_from_file(&root_pk_path)?);
         }
         let sdk = builder.build()?;
 
