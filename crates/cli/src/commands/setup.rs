@@ -66,6 +66,9 @@ impl SetupCmd {
             && versioned_verifier_dir
                 .join(EVM_HALO2_VERIFIER_BASE_NAME)
                 .exists()
+            && versioned_verifier_dir
+                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
+                .exists()
             && interface_dir
                 .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
                 .exists()
@@ -85,7 +88,9 @@ impl SetupCmd {
                 AggregationSystemParams::default(),
             );
 
-            println!("Generating verifier contract...");
+            println!(
+                "Generating verifier contract. Use --download to download pre-generated contract instead."
+            );
             let verifier = sdk.generate_halo2_verifier_solidity()?;
 
             println!("Writing verifier contract to {}", verifier_dir.display());
