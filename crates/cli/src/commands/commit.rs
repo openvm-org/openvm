@@ -5,7 +5,6 @@ use std::{
 
 use clap::Parser;
 use eyre::{Context, Result};
-use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
 use openvm_continuations::CommitBytes;
 use openvm_sdk::{
     config::AggregationSystemParams,
@@ -17,6 +16,7 @@ use p3_bn254::Bn254;
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
+    args::OpenVmConfigArgs,
     commands::{load_app_pk, load_or_build_exe, ExecutionMode},
     util::{
         get_agg_pk_path, get_agg_vk_path, get_app_baseline_path, get_app_commit_path,
@@ -46,27 +46,8 @@ pub struct CommitCmd {
     )]
     pub exe: Option<PathBuf>,
 
-    #[arg(
-        long,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
-        help_heading = "OpenVM Options"
-    )]
-    pub config: Option<PathBuf>,
-
-    #[arg(
-        long,
-        help = "Output directory that OpenVM proving artifacts will be copied to",
-        help_heading = "OpenVM Options"
-    )]
-    pub output_dir: Option<PathBuf>,
-
-    #[arg(
-        long,
-        default_value = OPENVM_DEFAULT_INIT_FILE_NAME,
-        help = "Name of the init file",
-        help_heading = "OpenVM Options"
-    )]
-    pub init_file_name: String,
+    #[clap(flatten)]
+    pub openvm_config: OpenVmConfigArgs,
 
     #[command(flatten)]
     cargo_args: RunCargoArgs,
@@ -78,15 +59,14 @@ impl CommitCmd {
 
         let run_args = RunArgs {
             exe: self.exe.clone(),
-            config: self.config.clone(),
-            output_dir: self.output_dir.clone(),
-            init_file_name: self.init_file_name.clone(),
+            openvm_config: self.openvm_config.clone(),
             input: None,
             mode: ExecutionMode::Pure,
         };
         let (exe, target_name_stem) = load_or_build_exe(&run_args, &self.cargo_args)?;
-        let (manifest_path, _) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
-        let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+        let (manifest_path, _) =
+            get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
+        let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
 
         let mut sdk =
             Sdk::new(app_pk.app_config(), AggregationSystemParams::default())?.with_app_pk(app_pk);
@@ -150,7 +130,7 @@ impl CommitCmd {
         let baseline_json: VerificationBaselineJson = baseline.into();
         write_to_file_json(&baseline_path, &baseline_json)?;
 
-        if let Some(output_dir) = &self.output_dir {
+        if let Some(output_dir) = &self.openvm_config.output_dir {
             create_dir_all(output_dir)
                 .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
             let commit_name = commit_path.file_name().unwrap();
