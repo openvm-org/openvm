@@ -38,7 +38,7 @@ impl Default for OpenVmConfigArgs {
     }
 }
 
-#[derive(Clone, Parser)]
+#[derive(Clone, Default, Parser)]
 pub struct ManifestArgs {
     #[arg(
         long,
@@ -57,16 +57,7 @@ pub struct ManifestArgs {
     pub manifest_path: Option<PathBuf>,
 }
 
-impl Default for ManifestArgs {
-    fn default() -> Self {
-        Self {
-            target_dir: None,
-            manifest_path: None,
-        }
-    }
-}
-
-#[derive(Clone, Parser)]
+#[derive(Clone, Default, Parser)]
 pub struct ProvingKeyArgs {
     #[arg(
         long,

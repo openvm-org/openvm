@@ -41,7 +41,7 @@ impl BuildCmd {
     }
 }
 
-#[derive(Clone, Parser)]
+#[derive(Clone, Default, Parser)]
 pub struct BuildArgs {
     #[arg(
         long,
@@ -52,15 +52,6 @@ pub struct BuildArgs {
 
     #[clap(flatten)]
     pub openvm_config: OpenVmConfigArgs,
-}
-
-impl Default for BuildArgs {
-    fn default() -> Self {
-        Self {
-            no_transpile: false,
-            openvm_config: OpenVmConfigArgs::default(),
-        }
-    }
 }
 
 #[derive(Clone, Parser)]
