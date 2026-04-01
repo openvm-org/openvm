@@ -41,8 +41,13 @@ template <typename T> struct KeccakfOpCols {
 
 inline constexpr size_t NUM_KECCAKF_OP_COLS = sizeof(KeccakfOpCols<uint8_t>);
 
-// Helper to rotate left a 64-bit value
-__device__ __forceinline__ uint64_t rotl64(uint64_t x, int n) { return (x << n) | (x >> (64 - n)); }
+// Helper to rotate left a 64-bit value.
+// Guard: when n == 0, (x >> 64) is undefined behavior per C++ standard.
+// R[0][0] == 0 in the Keccak rho step, so this path is reachable.
+__device__ __forceinline__ uint64_t rotl64(uint64_t x, int n) {
+    n &= 63;
+    return n ? ((x << n) | (x >> (64 - n))) : x;
+}
 
 // Compute keccak-f permutation on a 200-byte state
 __device__ __forceinline__ void keccakf_permutation(uint64_t state[25]) {
