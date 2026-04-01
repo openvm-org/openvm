@@ -8,7 +8,10 @@ use eyre::{Context, Result};
 use openvm_sdk::{config::AggregationSystemParams, fs::write_object_to_file, Sdk};
 
 use crate::{
-    default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
+    default::{
+        DEFAULT_AGG_PK_NAME, DEFAULT_AGG_VK_NAME, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
+        OPENVM_CONFIG_FILENAME,
+    },
     util::{
         get_agg_pk_path, get_agg_vk_path, get_app_pk_path, get_app_vk_path,
         get_manifest_path_and_dir, get_target_dir, read_config_toml_or_default,
@@ -75,7 +78,7 @@ impl KeygenCmd {
         keygen(
             self.config
                 .to_owned()
-                .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+                .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME)),
             &app_pk_path,
             &app_vk_path,
             &agg_pk_path,
@@ -129,9 +132,9 @@ pub(crate) fn keygen(
         copy(&app_vk_path, output_dir.join(DEFAULT_APP_VK_NAME))
             .with_context(|| format!("failed to copy app vk to {}", output_dir.display()))?;
         if generate_agg {
-            copy(&agg_pk_path, output_dir.join("agg.pk"))
+            copy(&agg_pk_path, output_dir.join(DEFAULT_AGG_PK_NAME))
                 .with_context(|| format!("failed to copy agg pk to {}", output_dir.display()))?;
-            copy(&agg_vk_path, output_dir.join("agg.vk"))
+            copy(&agg_vk_path, output_dir.join(DEFAULT_AGG_VK_NAME))
                 .with_context(|| format!("failed to copy agg vk to {}", output_dir.display()))?;
         }
     }

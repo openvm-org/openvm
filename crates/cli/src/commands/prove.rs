@@ -22,6 +22,7 @@ use p3_bn254::Bn254;
 use super::{RunArgs, RunCargoArgs};
 use crate::{
     commands::build,
+    default::{APP_PROOF_EXT, EVM_PROOF_EXT, STARK_PROOF_EXT, VMEXE_EXT},
     input::read_to_stdin,
     util::{
         get_agg_pk_path, get_app_baseline_path, get_app_pk_path, get_manifest_path_and_dir,
@@ -185,7 +186,7 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(target_name).with_extension("app.proof")
+                    &PathBuf::from(target_name).with_extension(APP_PROOF_EXT)
                 };
                 println!(
                     "App proof completed! Writing App proof to {}",
@@ -241,7 +242,7 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(target_name).with_extension("stark.proof")
+                    &PathBuf::from(target_name).with_extension(STARK_PROOF_EXT)
                 };
                 println!(
                     "STARK proof completed! Writing STARK proof to {}",
@@ -280,7 +281,7 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(target_name).with_extension("evm.proof")
+                    &PathBuf::from(target_name).with_extension(EVM_PROOF_EXT)
                 };
                 println!(
                     "EVM proof completed! Writing EVM proof to {}",
@@ -322,7 +323,7 @@ pub(crate) fn load_or_build_exe(
         let build_args = run_args.clone().into();
         let cargo_args = cargo_args.clone().into();
         let output_dir = build(&build_args, &cargo_args)?;
-        &output_dir.join(target_name.with_extension("vmexe"))
+        &output_dir.join(target_name.with_extension(VMEXE_EXT))
     };
 
     let app_exe = read_object_from_file(exe_path)?;

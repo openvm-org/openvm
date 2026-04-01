@@ -17,8 +17,12 @@ use openvm_sdk::fs::write_object_to_file;
 use openvm_sdk_config::TranspilerConfig;
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, FromElf};
 
-use crate::util::{
-    get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
+use crate::{
+    default::{OPENVM_CONFIG_FILENAME, VMEXE_EXT},
+    util::{
+        get_manifest_path_and_dir, get_target_dir, get_target_output_dir,
+        read_config_toml_or_default,
+    },
 };
 
 #[derive(Parser)]
@@ -353,7 +357,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         build_args
             .config
             .to_owned()
-            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+            .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME)),
     )?;
     app_config
         .app_vm_config
@@ -445,7 +449,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         } else {
             PathBuf::from(&target.name)
         };
-        let file_name = target_name.with_extension("vmexe");
+        let file_name = target_name.with_extension(VMEXE_EXT);
         let file_path = target_output_dir.join(&file_name);
 
         write_object_to_file(&file_path, exe)?;

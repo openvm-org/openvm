@@ -11,7 +11,10 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     commands::RunCargoArgs,
-    default::{default_app_config, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
+    default::{
+        default_app_config, BASELINE_JSON_EXT, COMMIT_JSON_EXT, DEFAULT_AGG_PK_NAME,
+        DEFAULT_AGG_VK_NAME, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
+    },
 };
 
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
@@ -88,20 +91,20 @@ pub fn get_app_vk_path(target_dir: &Path) -> PathBuf {
 }
 
 pub fn get_agg_pk_path(target_dir: &Path) -> PathBuf {
-    get_openvm_dir(target_dir).join("agg.pk")
+    get_openvm_dir(target_dir).join(DEFAULT_AGG_PK_NAME)
 }
 
 pub fn get_agg_vk_path(target_dir: &Path) -> PathBuf {
-    get_openvm_dir(target_dir).join("agg.vk")
+    get_openvm_dir(target_dir).join(DEFAULT_AGG_VK_NAME)
 }
 
 pub fn get_app_commit_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
-    let commit_name = target_name.with_extension("commit.json");
+    let commit_name = target_name.with_extension(COMMIT_JSON_EXT);
     target_output_dir.join(commit_name)
 }
 
 pub fn get_app_baseline_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
-    let baseline_name = target_name.with_extension("baseline.json");
+    let baseline_name = target_name.with_extension(BASELINE_JSON_EXT);
     target_output_dir.join(baseline_name)
 }
 

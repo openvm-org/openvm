@@ -10,6 +10,7 @@ use openvm_sdk_config::SdkVmConfig;
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
+    default::{OPENVM_CONFIG_FILENAME, VMEXE_EXT},
     input::{read_to_stdin, Input},
     util::{
         get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir,
@@ -263,7 +264,7 @@ impl RunCmd {
             let build_args = self.run_args.clone().into();
             let cargo_args = self.cargo_args.clone().into();
             let output_dir = build(&build_args, &cargo_args)?;
-            &output_dir.join(target_name.with_extension("vmexe"))
+            &output_dir.join(target_name.with_extension(VMEXE_EXT))
         };
 
         let (manifest_path, manifest_dir) =
@@ -272,7 +273,7 @@ impl RunCmd {
             .run_args
             .config
             .to_owned()
-            .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
+            .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME));
         let app_config = read_config_toml_or_default(&config_path)?;
         let exe: VmExe<F> = read_object_from_file(exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;

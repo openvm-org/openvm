@@ -10,9 +10,13 @@ use openvm_sdk::{
 };
 
 use super::KeygenCargoArgs;
-use crate::util::{
-    get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_files_with_ext,
-    get_manifest_path_and_dir, get_single_target_name_raw, get_target_dir, get_target_output_dir,
+use crate::{
+    default::{APP_PROOF_EXT, EVM_PROOF_EXT, STARK_PROOF_EXT},
+    util::{
+        get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_files_with_ext,
+        get_manifest_path_and_dir, get_single_target_name_raw, get_target_dir,
+        get_target_output_dir,
+    },
 };
 
 #[derive(Parser)]
@@ -152,11 +156,11 @@ impl VerifyCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
                 } else {
-                    let files = get_files_with_ext(Path::new("."), "app.proof")?;
+                    let files = get_files_with_ext(Path::new("."), APP_PROOF_EXT)?;
                     if files.len() > 1 {
-                        return Err(eyre::eyre!("multiple .app.proof files found, please specify the path using option --proof"));
+                        return Err(eyre::eyre!("multiple .{APP_PROOF_EXT} files found, please specify the path using option --proof"));
                     } else if files.is_empty() {
-                        return Err(eyre::eyre!("no .app.proof file found, please specify the path using option --proof"));
+                        return Err(eyre::eyre!("no .{APP_PROOF_EXT} file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
                 };
@@ -200,11 +204,11 @@ impl VerifyCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
                 } else {
-                    let files = get_files_with_ext(Path::new("."), "stark.proof")?;
+                    let files = get_files_with_ext(Path::new("."), STARK_PROOF_EXT)?;
                     if files.len() > 1 {
-                        return Err(eyre::eyre!("multiple .stark.proof files found, please specify the path using option --proof"));
+                        return Err(eyre::eyre!("multiple .{STARK_PROOF_EXT} files found, please specify the path using option --proof"));
                     } else if files.is_empty() {
-                        return Err(eyre::eyre!("no .stark.proof file found, please specify the path using option --proof"));
+                        return Err(eyre::eyre!("no .{STARK_PROOF_EXT} file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
                 };
@@ -236,11 +240,11 @@ impl VerifyCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof.clone()
                 } else {
-                    let files = get_files_with_ext(Path::new("."), "evm.proof")?;
+                    let files = get_files_with_ext(Path::new("."), EVM_PROOF_EXT)?;
                     if files.len() > 1 {
-                        return Err(eyre::eyre!("multiple .evm.proof files found, please specify the path using option --proof"));
+                        return Err(eyre::eyre!("multiple .{EVM_PROOF_EXT} files found, please specify the path using option --proof"));
                     } else if files.is_empty() {
-                        return Err(eyre::eyre!("no .evm.proof file found, please specify the path using option --proof"));
+                        return Err(eyre::eyre!("no .{EVM_PROOF_EXT} file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
                 };
