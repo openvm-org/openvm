@@ -41,6 +41,7 @@ __global__ void transcript_air_tracegen_kernel(
     const Array<uint32_t, NUM_PROOFS> poseidon2_buffer_offsets
 ) {
     uint32_t global_row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (global_row_idx >= height) return;
     RowSlice row(trace + global_row_idx, height);
 
     uint32_t row_idx, num_rows, last_row_bound = 0;
