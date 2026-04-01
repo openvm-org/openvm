@@ -11,7 +11,10 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     commands::RunCargoArgs,
-    default::{default_app_config, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
+    default::{
+        default_app_config, BASELINE_JSON_EXT, COMMIT_JSON_EXT, DEFAULT_AGG_PK_NAME,
+        DEFAULT_AGG_VK_NAME, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
+    },
 };
 
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
@@ -88,20 +91,20 @@ pub fn get_app_vk_path(target_dir: &Path) -> PathBuf {
 }
 
 pub fn get_agg_pk_path(target_dir: &Path) -> PathBuf {
-    get_openvm_dir(target_dir).join("agg.pk")
+    get_openvm_dir(target_dir).join(DEFAULT_AGG_PK_NAME)
 }
 
 pub fn get_agg_vk_path(target_dir: &Path) -> PathBuf {
-    get_openvm_dir(target_dir).join("agg.vk")
+    get_openvm_dir(target_dir).join(DEFAULT_AGG_VK_NAME)
 }
 
 pub fn get_app_commit_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
-    let commit_name = target_name.with_extension("commit.json");
+    let commit_name = target_name.with_extension(COMMIT_JSON_EXT);
     target_output_dir.join(commit_name)
 }
 
 pub fn get_app_baseline_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
-    let baseline_name = target_name.with_extension("baseline.json");
+    let baseline_name = target_name.with_extension(BASELINE_JSON_EXT);
     target_output_dir.join(baseline_name)
 }
 
@@ -113,7 +116,7 @@ pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
     get_single_target_name_raw(
         &cargo_args.bin,
         &cargo_args.example,
-        &cargo_args.manifest_path,
+        &cargo_args.manifest.manifest_path,
         &cargo_args.package,
     )
 }
@@ -172,6 +175,23 @@ pub fn get_single_target_name_raw(
         PathBuf::from(bin[0].clone())
     };
     Ok(single_target_name)
+}
+
+pub fn resolve_proof_path(proof: &Option<PathBuf>, extension: &str) -> Result<PathBuf> {
+    if let Some(proof) = proof {
+        return Ok(proof.clone());
+    }
+    let files = get_files_with_ext(Path::new("."), extension)?;
+    if files.len() > 1 {
+        return Err(eyre::eyre!(
+            "multiple .{extension} files found, please specify the path using option --proof"
+        ));
+    } else if files.is_empty() {
+        return Err(eyre::eyre!(
+            "no .{extension} file found, please specify the path using option --proof"
+        ));
+    }
+    Ok(files[0].clone())
 }
 
 pub fn get_files_with_ext(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {

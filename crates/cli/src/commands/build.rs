@@ -10,15 +10,18 @@ use itertools::izip;
 use openvm_build::{
     build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
 };
-use openvm_circuit::arch::{
-    instructions::exe::VmExe, InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, InitFileGenerator};
 use openvm_sdk::fs::write_object_to_file;
 use openvm_sdk_config::TranspilerConfig;
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, FromElf};
 
-use crate::util::{
-    get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
+use crate::{
+    args::{ManifestArgs, OpenVmConfigArgs},
+    default::{OPENVM_CONFIG_FILENAME, VMEXE_EXT},
+    util::{
+        get_manifest_path_and_dir, get_target_dir, get_target_output_dir,
+        read_config_toml_or_default,
+    },
 };
 
 #[derive(Parser)]
@@ -38,7 +41,7 @@ impl BuildCmd {
     }
 }
 
-#[derive(Clone, Parser)]
+#[derive(Clone, Default, Parser)]
 pub struct BuildArgs {
     #[arg(
         long,
@@ -47,38 +50,8 @@ pub struct BuildArgs {
     )]
     pub no_transpile: bool,
 
-    #[arg(
-        long,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
-        help_heading = "OpenVM Options"
-    )]
-    pub config: Option<PathBuf>,
-
-    #[arg(
-        long,
-        help = "Output directory that OpenVM proving artifacts will be copied to",
-        help_heading = "OpenVM Options"
-    )]
-    pub output_dir: Option<PathBuf>,
-
-    #[arg(
-        long,
-        default_value = OPENVM_DEFAULT_INIT_FILE_NAME,
-        help = "Name of the init file",
-        help_heading = "OpenVM Options"
-    )]
-    pub init_file_name: String,
-}
-
-impl Default for BuildArgs {
-    fn default() -> Self {
-        Self {
-            no_transpile: false,
-            config: None,
-            output_dir: None,
-            init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
-        }
-    }
+    #[clap(flatten)]
+    pub openvm_config: OpenVmConfigArgs,
 }
 
 #[derive(Clone, Parser)]
@@ -185,13 +158,8 @@ pub struct BuildCargoArgs {
     )]
     pub profile: String,
 
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Directory for all generated artifacts and intermediate files",
-        help_heading = "Output Options"
-    )]
-    pub target_dir: Option<PathBuf>,
+    #[clap(flatten)]
+    pub manifest: ManifestArgs,
 
     #[arg(
         long,
@@ -217,14 +185,6 @@ pub struct BuildCargoArgs {
         help_heading = "Display Options"
     )]
     pub color: String,
-
-    #[arg(
-        long,
-        value_name = "PATH",
-        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
-        help_heading = "Manifest Options"
-    )]
-    pub manifest_path: Option<PathBuf>,
 
     #[arg(
         long,
@@ -271,11 +231,10 @@ impl Default for BuildCargoArgs {
             all_features: false,
             no_default_features: false,
             profile: "release".to_string(),
-            target_dir: None,
+            manifest: ManifestArgs::default(),
             verbose: false,
             quiet: false,
             color: "always".to_string(),
-            manifest_path: None,
             ignore_rust_version: false,
             locked: false,
             offline: false,
@@ -290,8 +249,9 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     println!("[openvm] Building the package...");
 
     // Find manifest_path, manifest_dir, and target_dir
-    let (manifest_path, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+    let (manifest_path, manifest_dir) =
+        get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+    let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
 
     // Set guest options using build arguments; use found manifest directory for consistency
     let mut guest_options = GuestOptions::default()
@@ -351,13 +311,15 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     // Write to init file
     let app_config = read_config_toml_or_default(
         build_args
+            .openvm_config
             .config
             .to_owned()
-            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+            .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME)),
     )?;
-    app_config
-        .app_vm_config
-        .write_to_init_file(&manifest_dir, Some(&build_args.init_file_name))?;
+    app_config.app_vm_config.write_to_init_file(
+        &manifest_dir,
+        Some(&build_args.openvm_config.init_file_name),
+    )?;
 
     // Build (allowing passed options to decide what gets built)
     let elf_target_dir = match build_generic(&guest_options) {
@@ -373,7 +335,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
 
     // If transpilation is skipped, return the raw target directory
     if build_args.no_transpile {
-        if build_args.output_dir.is_some() {
+        if build_args.openvm_config.output_dir.is_some() {
             println!("[openvm] WARNING: Output directory set but transpilation skipped");
         }
         return Ok(elf_target_dir);
@@ -445,11 +407,11 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         } else {
             PathBuf::from(&target.name)
         };
-        let file_name = target_name.with_extension("vmexe");
+        let file_name = target_name.with_extension(VMEXE_EXT);
         let file_path = target_output_dir.join(&file_name);
 
         write_object_to_file(&file_path, exe)?;
-        if let Some(output_dir) = &build_args.output_dir {
+        if let Some(output_dir) = &build_args.openvm_config.output_dir {
             create_dir_all(output_dir)
                 .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
             copy(&file_path, output_dir.join(&file_name)).with_context(|| {
@@ -462,7 +424,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         }
     }
 
-    let final_output_dir = if let Some(output_dir) = &build_args.output_dir {
+    let final_output_dir = if let Some(output_dir) = &build_args.openvm_config.output_dir {
         output_dir
     } else {
         &target_output_dir

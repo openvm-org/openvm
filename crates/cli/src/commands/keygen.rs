@@ -8,7 +8,11 @@ use eyre::{Context, Result};
 use openvm_sdk::{config::AggregationSystemParams, fs::write_object_to_file, Sdk};
 
 use crate::{
-    default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
+    args::ManifestArgs,
+    default::{
+        DEFAULT_AGG_PK_NAME, DEFAULT_AGG_VK_NAME, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
+        OPENVM_CONFIG_FILENAME,
+    },
     util::{
         get_agg_pk_path, get_agg_vk_path, get_app_pk_path, get_app_vk_path,
         get_manifest_path_and_dir, get_target_dir, read_config_toml_or_default,
@@ -45,28 +49,15 @@ pub struct KeygenCmd {
 
 #[derive(Parser)]
 pub struct KeygenCargoArgs {
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Directory for all Cargo-generated artifacts and intermediate files",
-        help_heading = "Cargo Options"
-    )]
-    pub(crate) target_dir: Option<PathBuf>,
-
-    #[arg(
-        long,
-        value_name = "PATH",
-        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
-        help_heading = "Cargo Options"
-    )]
-    pub(crate) manifest_path: Option<PathBuf>,
+    #[clap(flatten)]
+    pub(crate) manifest: ManifestArgs,
 }
 
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
         let (manifest_path, manifest_dir) =
-            get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
-        let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+            get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
+        let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
         let app_pk_path = get_app_pk_path(&target_dir);
         let app_vk_path = get_app_vk_path(&target_dir);
         let agg_pk_path = get_agg_pk_path(&target_dir);
@@ -75,7 +66,7 @@ impl KeygenCmd {
         keygen(
             self.config
                 .to_owned()
-                .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+                .unwrap_or_else(|| manifest_dir.join(OPENVM_CONFIG_FILENAME)),
             &app_pk_path,
             &app_vk_path,
             &agg_pk_path,
@@ -129,9 +120,9 @@ pub(crate) fn keygen(
         copy(&app_vk_path, output_dir.join(DEFAULT_APP_VK_NAME))
             .with_context(|| format!("failed to copy app vk to {}", output_dir.display()))?;
         if generate_agg {
-            copy(&agg_pk_path, output_dir.join("agg.pk"))
+            copy(&agg_pk_path, output_dir.join(DEFAULT_AGG_PK_NAME))
                 .with_context(|| format!("failed to copy agg pk to {}", output_dir.display()))?;
-            copy(&agg_vk_path, output_dir.join("agg.vk"))
+            copy(&agg_vk_path, output_dir.join(DEFAULT_AGG_VK_NAME))
                 .with_context(|| format!("failed to copy agg vk to {}", output_dir.display()))?;
         }
     }
