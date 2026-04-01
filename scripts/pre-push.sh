@@ -2,6 +2,9 @@
 # Local pre-CI check: runs fmt, clippy, and tests only on crates changed vs a target branch.
 # Usage: ./scripts/pre-push.sh [target-branch]  (default: develop-v2.0.0-beta)
 #
+# Guest program builds are cached in target/ for fast re-runs.
+# To reclaim disk space: ./scripts/clean-guest-builds.sh
+#
 # To install as a git pre-push hook:
 #
 #   ln -sf ../../scripts/pre-push.sh .git/hooks/pre-push

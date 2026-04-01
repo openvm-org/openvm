@@ -6092,7 +6092,6 @@ dependencies = [
  "eyre",
  "openvm-build",
  "openvm-transpiler",
- "tempfile",
  "tracing",
  "tracing-subscriber 0.3.23",
 ]
@@ -7256,7 +7255,6 @@ dependencies = [
  "openvm-transpiler",
  "rand 0.9.2",
  "serde",
- "tempfile",
  "test-case",
 ]
 
