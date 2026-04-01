@@ -26,6 +26,13 @@ __device__ inline Rv32VecHeapConfig get_rv32_vec_heap_config(const FieldExprMeta
             } else {
                 return Rv32VecHeapConfig(2, 2, 2, 32, 32);
             }
+        } else if (meta->adapter_blocks == 24) {
+            // Projective ECC with block_size=4, 32-limb curves (3 * 32/4 = 24 blocks)
+            if (meta->num_inputs == 3) {
+                return Rv32VecHeapConfig(1, 24, 24, 4, 4);
+            } else {
+                return Rv32VecHeapConfig(2, 24, 24, 4, 4);
+            }
         }
     } else if (meta->adapter_blocks == 3) {
         return Rv32VecHeapConfig(2, 3, 3, 16, 16);
@@ -34,6 +41,13 @@ __device__ inline Rv32VecHeapConfig get_rv32_vec_heap_config(const FieldExprMeta
             return Rv32VecHeapConfig(1, 6, 6, 16, 16);
         } else {
             return Rv32VecHeapConfig(2, 6, 6, 16, 16);
+        }
+    } else if (meta->adapter_blocks == 36) {
+        // Projective ECC with block_size=4, 48-limb curves (3 * 48/4 = 36 blocks)
+        if (meta->num_inputs == 3) {
+            return Rv32VecHeapConfig(1, 36, 36, 4, 4);
+        } else {
+            return Rv32VecHeapConfig(2, 36, 36, 4, 4);
         }
     }
 
@@ -143,6 +157,50 @@ __device__ inline void route_rv32_vec_heap_adapter(
     } else if (config.num_reads == 1 && config.blocks_per_read == 6 &&
                config.blocks_per_write == 6 && config.read_size == 16 && config.write_size == 16) {
         instantiate_rv32_vec_heap_adapter<1, 6, 6, 16, 16>(
+            row,
+            rec_bytes,
+            pointer_max_bits,
+            range_checker,
+            bitwise_lookup,
+            timestamp_max_bits,
+            adapter_size
+        );
+    } else if (config.num_reads == 1 && config.blocks_per_read == 24 &&
+               config.blocks_per_write == 24 && config.read_size == 4 && config.write_size == 4) {
+        instantiate_rv32_vec_heap_adapter<1, 24, 24, 4, 4>(
+            row,
+            rec_bytes,
+            pointer_max_bits,
+            range_checker,
+            bitwise_lookup,
+            timestamp_max_bits,
+            adapter_size
+        );
+    } else if (config.num_reads == 2 && config.blocks_per_read == 24 &&
+               config.blocks_per_write == 24 && config.read_size == 4 && config.write_size == 4) {
+        instantiate_rv32_vec_heap_adapter<2, 24, 24, 4, 4>(
+            row,
+            rec_bytes,
+            pointer_max_bits,
+            range_checker,
+            bitwise_lookup,
+            timestamp_max_bits,
+            adapter_size
+        );
+    } else if (config.num_reads == 1 && config.blocks_per_read == 36 &&
+               config.blocks_per_write == 36 && config.read_size == 4 && config.write_size == 4) {
+        instantiate_rv32_vec_heap_adapter<1, 36, 36, 4, 4>(
+            row,
+            rec_bytes,
+            pointer_max_bits,
+            range_checker,
+            bitwise_lookup,
+            timestamp_max_bits,
+            adapter_size
+        );
+    } else if (config.num_reads == 2 && config.blocks_per_read == 36 &&
+               config.blocks_per_write == 36 && config.read_size == 4 && config.write_size == 4) {
+        instantiate_rv32_vec_heap_adapter<2, 36, 36, 4, 4>(
             row,
             rec_bytes,
             pointer_max_bits,
