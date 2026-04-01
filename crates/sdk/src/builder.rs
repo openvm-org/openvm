@@ -31,6 +31,7 @@ enum AppSource<VC> {
     Pk(AppProvingKey<VC>),
 }
 
+#[allow(clippy::large_enum_variant)]
 enum AggSource {
     Params(AggregationSystemParams),
     Pk(AggProvingKey),
@@ -85,19 +86,7 @@ where
     VB::VmConfig: VmExecutionConfig<F>,
 {
     pub fn new() -> Self {
-        Self {
-            app_source: None,
-            agg_source: None,
-            root_source: None,
-            agg_tree_config: None,
-            transpiler: None,
-            deferral_prover: None,
-            #[cfg(feature = "evm-prove")]
-            halo2_source: None,
-            #[cfg(feature = "evm-prove")]
-            halo2_params_reader: None,
-            _phantom: PhantomData,
-        }
+        Self::default()
     }
 
     fn set_once<T>(slot: &mut Option<T>, field_name: &str, value: T) {
@@ -478,6 +467,29 @@ where
             halo2_prover: Self::init_once_lock(halo2_prover_seed, "halo2_prover"),
             _phantom: PhantomData,
         })
+    }
+}
+
+impl<E, VB> Default for GenericSdkBuilder<E, VB>
+where
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E>,
+    VB::VmConfig: VmExecutionConfig<F>,
+{
+    fn default() -> Self {
+        Self {
+            app_source: None,
+            agg_source: None,
+            root_source: None,
+            agg_tree_config: None,
+            transpiler: None,
+            deferral_prover: None,
+            #[cfg(feature = "evm-prove")]
+            halo2_source: None,
+            #[cfg(feature = "evm-prove")]
+            halo2_params_reader: None,
+            _phantom: PhantomData,
+        }
     }
 }
 
