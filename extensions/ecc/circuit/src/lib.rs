@@ -17,11 +17,11 @@ pub use extension::*;
 pub use openvm_algebra_circuit::{NUM_LIMBS_32, NUM_LIMBS_48};
 pub use weierstrass_chip::*;
 
-// Blocks per ECC operation (2 coordinates per point)
-/// Blocks for ECC with 32-limb coordinates: 2 * (32 / 4) = 16 blocks
-pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / DEFAULT_BLOCK_SIZE);
-/// Blocks for ECC with 48-limb coordinates: 2 * (48 / 4) = 24 blocks
-pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / DEFAULT_BLOCK_SIZE);
+// Blocks per ECC operation (3 projective coordinates per point: X, Y, Z)
+/// Blocks for ECC with 32-limb coordinates: 3 * (32 / 4) = 24 blocks
+pub const ECC_BLOCKS_32: usize = 3 * (NUM_LIMBS_32 / DEFAULT_BLOCK_SIZE);
+/// Blocks for ECC with 48-limb coordinates: 3 * (48 / 4) = 36 blocks
+pub const ECC_BLOCKS_48: usize = 3 * (NUM_LIMBS_48 / DEFAULT_BLOCK_SIZE);
 
 #[cfg(feature = "cuda")]
 pub(crate) type EccRecord<
