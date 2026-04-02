@@ -11,8 +11,8 @@ autoexamples = false
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
-openvm-cuda-backend = { workspace = true, optional = true, features = ["baby-bear-bn254-poseidon2"] }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
+openvm-cuda-backend = { workspace = true, optional = true }
 
 openvm-build = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -22,8 +22,7 @@ openvm = { workspace = true }
 openvm-sdk-config = { workspace = true }
 openvm-recursion-circuit = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
-# TODO[INT-6957]: evm-prove should enable root-prover
-openvm-continuations = { workspace = true, features = ["root-prover"] }
+openvm-continuations = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 openvm-static-verifier = { workspace = true, optional = true }
 halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
@@ -60,7 +59,13 @@ openvm-toolchain-tests = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
+root-prover = [
+    "openvm-continuations/root-prover",
+    "openvm-stark-sdk/baby-bear-bn254-poseidon2",
+    "openvm-cuda-backend?/baby-bear-bn254-poseidon2",
+]
 evm-prove = [
+    "root-prover",
     "dep:openvm-static-verifier",
     "dep:halo2-base",
     "dep:p3-bn254",
@@ -111,7 +116,6 @@ cuda = [
     "openvm-sdk-config/cuda",
     "openvm-continuations/cuda",
     "openvm-verify-stark-circuit/cuda",
-    "openvm-cuda-backend/baby-bear-bn254-poseidon2",
 ]
 cell-profiling = [
     "evm-prove",

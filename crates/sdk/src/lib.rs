@@ -43,12 +43,17 @@ use openvm_verify_stark_host::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
-    keygen::{dummy::compute_root_proof_heights, AggProvingKey, RootProvingKey},
-    prover::{AggProver, AppProver, DeferralPathProver, EvmProver, RootProver, StarkProver},
+    keygen::AggProvingKey,
+    prover::{AggProver, AppProver, DeferralPathProver, DeferralProver, StarkProver},
     types::ExecutableFormat,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};
+#[cfg(feature = "root-prover")]
+use crate::{
+    keygen::{dummy::compute_root_proof_heights, RootProvingKey},
+    prover::{EvmProver, RootProver},
+};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -76,7 +81,7 @@ mod solidity;
 pub mod types;
 pub mod util;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "root-prover"))]
 mod tests;
 
 mod error;
@@ -120,6 +125,7 @@ where
     agg_config: AggregationConfig,
     #[getset(get = "pub")]
     agg_tree_config: AggregationTreeConfig,
+    #[cfg(feature = "root-prover")]
     #[getset(get = "pub")]
     root_params: SystemParams,
     #[cfg(feature = "evm-prove")]
@@ -142,6 +148,7 @@ where
 
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     agg_prover: OnceLock<Arc<AggProver>>,
+    #[cfg(feature = "root-prover")]
     root_prover: OnceLock<Arc<RootProver>>,
 
     def_path_prover: Option<Arc<DeferralPathProver>>,
@@ -224,6 +231,38 @@ where
             .app_config(app_config)
             .agg_params(agg_params)
             .build_without_transpiler()
+    }
+
+    /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
+    /// because the DeferralExtension should be created using DeferralProver::make_extension, as
+    /// it has the capability to generate def_vk_commits.
+    pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
+        assert!(
+            self.def_path_prover.is_none(),
+            "Deferral prover already defined"
+        );
+        assert!(
+            self.agg_prover.get().is_none(),
+            "Agg prover has already been initialized without deferrals"
+        );
+
+        let deferral_tree_config = AggregationTreeConfig {
+            num_children_leaf: 2,
+            num_children_internal: 2,
+        };
+        let agg_prover = AggProver::new(
+            deferral_prover.def_hook_prover.get_vk(),
+            self.agg_config.clone(),
+            deferral_tree_config,
+            Some(deferral_prover.def_hook_prover.get_cached_commit()),
+        );
+        let def_path_prover = DeferralPathProver {
+            deferral_prover: Arc::new(deferral_prover),
+            agg_prover: Arc::new(agg_prover),
+        };
+
+        self.def_path_prover = Some(Arc::new(def_path_prover));
+        self
     }
 
     /// Returns the def_hook_prover cached commit.
@@ -460,6 +499,7 @@ where
         Ok(stark_prover)
     }
 
+    #[cfg(feature = "root-prover")]
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -478,6 +518,7 @@ where
         )?;
         Ok(evm_prover)
     }
+
     // ===================== Component Prover Constructors =====================
 
     pub fn agg_prover(&self) -> Arc<AggProver> {
@@ -494,6 +535,7 @@ where
             .clone()
     }
 
+    #[cfg(feature = "root-prover")]
     pub fn root_prover(&self) -> Arc<RootProver> {
         self.root_prover
             .get_or_init(|| {
@@ -594,6 +636,7 @@ where
         (pk, vk)
     }
 
+    #[cfg(feature = "root-prover")]
     pub fn root_pk(&self) -> RootProvingKey {
         let root_prover = self.root_prover();
         RootProvingKey {
