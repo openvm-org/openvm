@@ -239,13 +239,9 @@ mod ec_add_tests {
         );
         let gpu_chip = HybridWeierstrassChip::new(get_ec_add_chip(
             config,
-            tester.dummy_memory_helper(),
-            Arc::new(VariableRangeCheckerChip::new(
-                default_var_range_checker_bus(),
-            )),
-            Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-                default_bitwise_lookup_bus(),
-            )),
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
             tester.address_bits(),
             a,
             b,
@@ -796,13 +792,9 @@ mod ec_double_tests {
         );
         let gpu_chip = HybridWeierstrassChip::new(get_ec_double_chip(
             config,
-            tester.dummy_memory_helper(),
-            Arc::new(VariableRangeCheckerChip::new(
-                default_var_range_checker_bus(),
-            )),
-            Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-                default_bitwise_lookup_bus(),
-            )),
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
             tester.address_bits(),
             a_biguint,
             b,
