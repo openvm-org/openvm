@@ -274,9 +274,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     use openvm_stark_backend::{
         codec::{Decode, Encode},
         proof::Proof,
-        SystemParams, WhirProximityStrategy,
     };
-    use openvm_stark_sdk::config::log_up_params::log_up_security_params_baby_bear_100_bits;
     use openvm_static_verifier::{
         compute_dag_onion_commit,
         field::baby_bear::{BabyBearChip, BabyBearExtChip},
