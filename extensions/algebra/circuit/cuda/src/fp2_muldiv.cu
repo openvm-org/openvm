@@ -244,19 +244,125 @@ __global__ void fp2_muldiv_compute_tracegen_kernel(
 }
 
 template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
-__global__ void fp2_muldiv_constraint_tracegen_kernel(
+__global__ void fp2_muldiv_constraint0_tracegen_kernel(
     Fp *trace,
     size_t height,
-    size_t core_width,
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
     const uint8_t *prime_limbs,
     uint32_t prime_limb_count,
-    uint32_t q0_limbs,
-    uint32_t q1_limbs,
-    uint32_t c0_limbs,
-    uint32_t c1_limbs,
+    size_t q_col,
+    size_t carry_col,
+    uint32_t q_limbs,
+    uint32_t carry_limbs,
+    uint32_t mul_opcode,
+    uint32_t div_opcode,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins
+) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= height)
+        return;
+
+    constexpr size_t ADAPTER_WIDTH =
+        sizeof(Rv32VecHeapAdapterCols<uint8_t, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>);
+    RowSlice row(trace + idx, height);
+    RowSlice core_row = row.slice_from(ADAPTER_WIDTH);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+
+    if (idx >= num_records)
+        return;
+
+    const auto *record = reinterpret_cast<const Fp2MulDivRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
+        records + idx * record_stride
+    );
+    const bool is_mul = record->core.opcode == mul_opcode;
+
+    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
+    prime.normalize();
+    OverflowInt prime_overflow(prime, prime.num_limbs);
+
+    const uint8_t *input_limbs = record->core.input_limbs;
+    BigUintGpu x0(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
+    BigUintGpu x1(input_limbs + 1 * NUM_LIMBS, NUM_LIMBS, 8);
+    BigUintGpu y0(input_limbs + 2 * NUM_LIMBS, NUM_LIMBS, 8);
+    BigUintGpu y1(input_limbs + 3 * NUM_LIMBS, NUM_LIMBS, 8);
+    x0.normalize();
+    x1.normalize();
+    y0.normalize();
+    y1.normalize();
+    const size_t vars_col = 1 + 4 * NUM_LIMBS;
+    BigUintGpu z0 = read_biguint<NUM_LIMBS>(core_row, vars_col + 0 * NUM_LIMBS);
+    BigUintGpu z1 = read_biguint<NUM_LIMBS>(core_row, vars_col + 1 * NUM_LIMBS);
+
+    const BigUintGpu &l0 = is_mul ? x0 : z0;
+    const BigUintGpu &l1 = is_mul ? x1 : z1;
+    const BigUintGpu &r0 = is_mul ? z0 : x0;
+
+    BigIntGpu constraint_big(l0);
+    BigIntGpu tmp_big(y0);
+    OverflowInt constraint_ov(l0, NUM_LIMBS);
+    OverflowInt tmp_ov(y0, NUM_LIMBS);
+    constraint_big *= tmp_big;
+    constraint_ov *= tmp_ov;
+    BigIntGpu l1y1(l1);
+    tmp_big = BigIntGpu(y1);
+    l1y1 *= tmp_big;
+    constraint_big -= l1y1;
+    tmp_big = BigIntGpu(r0);
+    constraint_big -= tmp_big;
+
+    OverflowInt l1y1_ov(l1, NUM_LIMBS);
+    tmp_ov = OverflowInt(y1, NUM_LIMBS);
+    l1y1_ov *= tmp_ov;
+    constraint_ov -= l1y1_ov;
+    tmp_ov = OverflowInt(r0, NUM_LIMBS);
+    constraint_ov -= tmp_ov;
+
+    BigIntGpu quotient = constraint_big.div_biguint(prime);
+    int32_t q_signed_limbs[MAX_LIMBS];
+    read_signed_bigint_limbs(quotient, q_signed_limbs);
+    for (uint32_t limb = 0; limb < q_limbs; limb++) {
+        write_signed_bigint_limb(core_row, q_col, quotient, limb);
+    }
+    for (uint32_t limb = 0; limb < q_limbs; limb++) {
+        range_checker.add_count((uint32_t)(q_signed_limbs[limb] + (1 << 8)), 9);
+    }
+
+    OverflowInt result = constraint_ov;
+    OverflowInt q_overflow(quotient, q_limbs);
+    tmp_ov = q_overflow * prime_overflow;
+    result -= tmp_ov;
+    uint32_t carry_bits = result.max_overflow_bits - 8;
+    uint32_t carry_min_abs = 1u << carry_bits;
+    carry_bits++;
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_limbs; limb++) {
+        int64_t coeff = biguint_product_limb(l0, y0, limb);
+        coeff -= biguint_product_limb(l1, y1, limb);
+        coeff -= biguint_limb_or_zero(r0, limb);
+        coeff += subtract_signed_limb_product_limb(
+            q_signed_limbs, q_limbs, prime_limbs, prime.num_limbs, limb
+        );
+        carry = (carry + coeff) >> 8;
+        write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
+    }
+}
+
+template <size_t BLOCKS, size_t BLOCK_SIZE, size_t NUM_LIMBS>
+__global__ void fp2_muldiv_constraint1_tracegen_kernel(
+    Fp *trace,
+    size_t height,
+    const uint8_t *records,
+    size_t num_records,
+    size_t record_stride,
+    const uint8_t *prime_limbs,
+    uint32_t prime_limb_count,
+    size_t q_col,
+    size_t carry_col,
+    uint32_t q_limbs,
+    uint32_t carry_limbs,
     uint32_t mul_opcode,
     uint32_t div_opcode,
     uint32_t *range_checker_ptr,
@@ -300,119 +406,60 @@ __global__ void fp2_muldiv_constraint_tracegen_kernel(
 
     const BigUintGpu &l0 = is_mul ? x0 : z0;
     const BigUintGpu &l1 = is_mul ? x1 : z1;
-    const BigUintGpu &r0 = is_mul ? z0 : x0;
     const BigUintGpu &r1 = is_mul ? z1 : x1;
 
-    const uint32_t q_counts[2] = {q0_limbs, q1_limbs};
-    const uint32_t c_counts[2] = {c0_limbs, c1_limbs};
-    size_t col = vars_col + 2 * NUM_LIMBS;
-    size_t carry_col = col + q0_limbs + q1_limbs;
+    BigIntGpu constraint_big(l0);
+    BigIntGpu tmp_big(y1);
+    OverflowInt constraint_ov(l0, NUM_LIMBS);
+    OverflowInt tmp_ov(y1, NUM_LIMBS);
+    constraint_big *= tmp_big;
+    constraint_ov *= tmp_ov;
 
-    {
-        BigIntGpu constraint_big(l0);
-        BigIntGpu tmp_big(y0);
-        constraint_big *= tmp_big;
-        BigIntGpu l1y1(l1);
-        tmp_big = BigIntGpu(y1);
-        l1y1 *= tmp_big;
-        constraint_big -= l1y1;
-        tmp_big = BigIntGpu(r0);
-        constraint_big -= tmp_big;
+    BigIntGpu l1y0(l1);
+    tmp_big = BigIntGpu(y0);
+    l1y0 *= tmp_big;
+    constraint_big += l1y0;
+    tmp_big = BigIntGpu(r1);
+    constraint_big -= tmp_big;
 
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        int32_t q_signed_limbs[MAX_LIMBS];
-        read_signed_bigint_limbs(quotient, q_signed_limbs);
-        for (uint32_t limb = 0; limb < q_counts[0]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
-        for (uint32_t limb = 0; limb < q_counts[0]; limb++) {
-            range_checker.add_count((uint32_t)(q_signed_limbs[limb] + (1 << 8)), 9);
-        }
+    OverflowInt l1y0_ov(l1, NUM_LIMBS);
+    tmp_ov = OverflowInt(y0, NUM_LIMBS);
+    l1y0_ov *= tmp_ov;
+    constraint_ov += l1y0_ov;
+    tmp_ov = OverflowInt(r1, NUM_LIMBS);
+    constraint_ov -= tmp_ov;
 
-        OverflowInt constraint_ov(l0, NUM_LIMBS);
-        OverflowInt tmp_ov(y0, NUM_LIMBS);
-        constraint_ov *= tmp_ov;
-        OverflowInt l1y1_ov(l1, NUM_LIMBS);
-        tmp_ov = OverflowInt(y1, NUM_LIMBS);
-        l1y1_ov *= tmp_ov;
-        constraint_ov -= l1y1_ov;
-        tmp_ov = OverflowInt(r0, NUM_LIMBS);
-        constraint_ov -= tmp_ov;
-        OverflowInt result = constraint_ov;
-        OverflowInt q_overflow(quotient, q_counts[0]);
-        tmp_ov = q_overflow * prime_overflow;
-        result -= tmp_ov;
-        uint32_t carry_bits = result.max_overflow_bits - 8;
-        uint32_t carry_min_abs = 1u << carry_bits;
-        carry_bits++;
-        int64_t carry = 0;
-        for (uint32_t limb = 0; limb < c_counts[0]; limb++) {
-            int64_t coeff = biguint_product_limb(l0, y0, limb);
-            coeff -= biguint_product_limb(l1, y1, limb);
-            coeff -= biguint_limb_or_zero(r0, limb);
-            coeff += subtract_signed_limb_product_limb(
-                q_signed_limbs, q_counts[0], prime_limbs, prime.num_limbs, limb
-            );
-            carry = (carry + coeff) >> 8;
-            write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
-        }
+    BigIntGpu quotient = constraint_big.div_biguint(prime);
+    int32_t q_signed_limbs[MAX_LIMBS];
+    read_signed_bigint_limbs(quotient, q_signed_limbs);
+    for (uint32_t limb = 0; limb < q_limbs; limb++) {
+        write_signed_bigint_limb(core_row, q_col, quotient, limb);
+    }
+    for (uint32_t limb = 0; limb < q_limbs; limb++) {
+        range_checker.add_count((uint32_t)(q_signed_limbs[limb] + (1 << 8)), 9);
     }
 
-    {
-        BigIntGpu constraint_big(l0);
-        BigIntGpu tmp_big(y1);
-        constraint_big *= tmp_big;
-        BigIntGpu l1y0(l1);
-        tmp_big = BigIntGpu(y0);
-        l1y0 *= tmp_big;
-        constraint_big += l1y0;
-        tmp_big = BigIntGpu(r1);
-        constraint_big -= tmp_big;
-
-        BigIntGpu quotient = constraint_big.div_biguint(prime);
-        int32_t q_signed_limbs[MAX_LIMBS];
-        read_signed_bigint_limbs(quotient, q_signed_limbs);
-        for (uint32_t limb = 0; limb < q_counts[1]; limb++) {
-            write_signed_bigint_limb(core_row, col, quotient, limb);
-        }
-        for (uint32_t limb = 0; limb < q_counts[1]; limb++) {
-            range_checker.add_count((uint32_t)(q_signed_limbs[limb] + (1 << 8)), 9);
-        }
-
-        OverflowInt constraint_ov(l0, NUM_LIMBS);
-        OverflowInt tmp_ov(y1, NUM_LIMBS);
-        constraint_ov *= tmp_ov;
-        OverflowInt l1y0_ov(l1, NUM_LIMBS);
-        tmp_ov = OverflowInt(y0, NUM_LIMBS);
-        l1y0_ov *= tmp_ov;
-        constraint_ov += l1y0_ov;
-        tmp_ov = OverflowInt(r1, NUM_LIMBS);
-        constraint_ov -= tmp_ov;
-        OverflowInt result = constraint_ov;
-        OverflowInt q_overflow(quotient, q_counts[1]);
-        tmp_ov = q_overflow * prime_overflow;
-        result -= tmp_ov;
-        uint32_t carry_bits = result.max_overflow_bits - 8;
-        uint32_t carry_min_abs = 1u << carry_bits;
-        carry_bits++;
-        int64_t carry = 0;
-        for (uint32_t limb = 0; limb < c_counts[1]; limb++) {
-            int64_t coeff = biguint_product_limb(l0, y1, limb);
-            coeff += biguint_product_limb(l1, y0, limb);
-            coeff -= biguint_limb_or_zero(r1, limb);
-            coeff += subtract_signed_limb_product_limb(
-                q_signed_limbs, q_counts[1], prime_limbs, prime.num_limbs, limb
-            );
-            carry = (carry + coeff) >> 8;
-            write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
-        }
+    OverflowInt result = constraint_ov;
+    OverflowInt q_overflow(quotient, q_limbs);
+    tmp_ov = q_overflow * prime_overflow;
+    result -= tmp_ov;
+    uint32_t carry_bits = result.max_overflow_bits - 8;
+    uint32_t carry_min_abs = 1u << carry_bits;
+    carry_bits++;
+    int64_t carry = 0;
+    for (uint32_t limb = 0; limb < carry_limbs; limb++) {
+        int64_t coeff = biguint_product_limb(l0, y1, limb);
+        coeff += biguint_product_limb(l1, y0, limb);
+        coeff -= biguint_limb_or_zero(r1, limb);
+        coeff += subtract_signed_limb_product_limb(
+            q_signed_limbs, q_limbs, prime_limbs, prime.num_limbs, limb
+        );
+        carry = (carry + coeff) >> 8;
+        write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
     }
 
     core_row[carry_col++] = is_mul ? Fp::one() : Fp::zero();
     core_row[carry_col++] = is_div ? Fp::one() : Fp::zero();
-    while (carry_col < core_width) {
-        core_row[carry_col++] = Fp::zero();
-    }
 }
 
 extern "C" int launch_fp2_muldiv_tracegen(
@@ -446,6 +493,10 @@ extern "C" int launch_fp2_muldiv_tracegen(
         constexpr size_t NUM_LIMBS = 32;
         const size_t core_width =
             1 + 4 * NUM_LIMBS + 2 * NUM_LIMBS + q0_limbs + q1_limbs + c0_limbs + c1_limbs + 2;
+        const size_t q0_col = 1 + 6 * NUM_LIMBS;
+        const size_t q1_col = q0_col + q0_limbs;
+        const size_t c0_col = q1_col + q1_limbs;
+        const size_t c1_col = c0_col + c0_limbs;
 
         fp2_muldiv_adapter_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
             <<<main_grid, main_block>>>(
@@ -485,19 +536,40 @@ extern "C" int launch_fp2_muldiv_tracegen(
         if (ret)
             return ret;
 
-        fp2_muldiv_constraint_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
+        fp2_muldiv_constraint0_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
             <<<constraint_grid, constraint_block>>>(
                 d_trace,
                 trace_height,
-                core_width,
                 d_records,
                 num_records,
                 record_stride,
                 d_prime,
                 prime_limb_count,
+                q0_col,
+                c0_col,
                 q0_limbs,
-                q1_limbs,
                 c0_limbs,
+                mul_opcode,
+                div_opcode,
+                d_range_checker,
+                range_checker_num_bins
+            );
+        ret = CHECK_KERNEL();
+        if (ret)
+            return ret;
+
+        fp2_muldiv_constraint1_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
+            <<<constraint_grid, constraint_block>>>(
+                d_trace,
+                trace_height,
+                d_records,
+                num_records,
+                record_stride,
+                d_prime,
+                prime_limb_count,
+                q1_col,
+                c1_col,
+                q1_limbs,
                 c1_limbs,
                 mul_opcode,
                 div_opcode,
@@ -510,6 +582,10 @@ extern "C" int launch_fp2_muldiv_tracegen(
         constexpr size_t NUM_LIMBS = 48;
         const size_t core_width =
             1 + 4 * NUM_LIMBS + 2 * NUM_LIMBS + q0_limbs + q1_limbs + c0_limbs + c1_limbs + 2;
+        const size_t q0_col = 1 + 6 * NUM_LIMBS;
+        const size_t q1_col = q0_col + q0_limbs;
+        const size_t c0_col = q1_col + q1_limbs;
+        const size_t c1_col = c0_col + c0_limbs;
 
         fp2_muldiv_adapter_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
             <<<main_grid, main_block>>>(
@@ -549,19 +625,40 @@ extern "C" int launch_fp2_muldiv_tracegen(
         if (ret)
             return ret;
 
-        fp2_muldiv_constraint_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
+        fp2_muldiv_constraint0_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
             <<<constraint_grid, constraint_block>>>(
                 d_trace,
                 trace_height,
-                core_width,
                 d_records,
                 num_records,
                 record_stride,
                 d_prime,
                 prime_limb_count,
+                q0_col,
+                c0_col,
                 q0_limbs,
-                q1_limbs,
                 c0_limbs,
+                mul_opcode,
+                div_opcode,
+                d_range_checker,
+                range_checker_num_bins
+            );
+        ret = CHECK_KERNEL();
+        if (ret)
+            return ret;
+
+        fp2_muldiv_constraint1_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS>
+            <<<constraint_grid, constraint_block>>>(
+                d_trace,
+                trace_height,
+                d_records,
+                num_records,
+                record_stride,
+                d_prime,
+                prime_limb_count,
+                q1_col,
+                c1_col,
+                q1_limbs,
                 c1_limbs,
                 mul_opcode,
                 div_opcode,
