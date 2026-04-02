@@ -5,7 +5,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use openvm_verify_stark_host::pvs::{
-    DagCommit, VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID,
+    VkCommit, VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID,
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -31,7 +31,7 @@ pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
     proofs_type: ProofsType,
     child_is_app: bool,
-    child_dag_commit: DagCommit<F>,
+    child_vk_commit: VkCommit<F>,
     deferral_enabled: bool,
 ) -> SingleAirTraceData<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
@@ -118,19 +118,19 @@ pub fn generate_proving_ctx(
 
     match child_level {
         VerifierChildLevel::App => {
-            base_pvs.app_dag_commit = child_dag_commit;
+            base_pvs.app_vk_commit = child_vk_commit;
         }
         VerifierChildLevel::Leaf => {
-            base_pvs.leaf_dag_commit = child_dag_commit;
+            base_pvs.leaf_vk_commit = child_vk_commit;
             base_pvs.internal_flag = F::ONE;
         }
         VerifierChildLevel::InternalForLeaf => {
-            base_pvs.internal_for_leaf_dag_commit = child_dag_commit;
+            base_pvs.internal_for_leaf_vk_commit = child_vk_commit;
             base_pvs.internal_flag = F::TWO;
             base_pvs.recursion_flag = F::ONE;
         }
         VerifierChildLevel::InternalRecursive => {
-            base_pvs.internal_recursive_dag_commit = child_dag_commit;
+            base_pvs.internal_recursive_vk_commit = child_vk_commit;
             base_pvs.internal_flag = F::TWO;
             base_pvs.recursion_flag = F::TWO;
         }
@@ -152,12 +152,12 @@ pub fn generate_proving_ctx(
     let mut def_hook_commit = None;
     if deferral_enabled && deferral_flag_pv == F::ONE && base_pvs.internal_flag == F::TWO {
         let hash_elements = [
-            base_pvs.app_dag_commit.cached_commit,
-            base_pvs.app_dag_commit.vk_pre_hash,
-            base_pvs.leaf_dag_commit.cached_commit,
-            base_pvs.leaf_dag_commit.vk_pre_hash,
-            base_pvs.internal_for_leaf_dag_commit.cached_commit,
-            base_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+            base_pvs.app_vk_commit.cached_commit,
+            base_pvs.app_vk_commit.vk_pre_hash,
+            base_pvs.leaf_vk_commit.cached_commit,
+            base_pvs.leaf_vk_commit.vk_pre_hash,
+            base_pvs.internal_for_leaf_vk_commit.cached_commit,
+            base_pvs.internal_for_leaf_vk_commit.vk_pre_hash,
         ];
 
         let mut row_compress_inputs = vec![];

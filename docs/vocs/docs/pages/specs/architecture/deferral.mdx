@@ -93,7 +93,7 @@ The proofs for each `C_i` are aggregated separately. The leaf, internal-for-leaf
 
 - Constrains the validity of each child proof
 - Exposes the Merkle hashes of the child proofs' input and output commits
-- Exposes the `def_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit`
+- Exposes the `def_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit`
 
 Note that because we are building a Merkle tree of input and output commits, tail proofs are combined with "non-present" proofs. The input and output commit of a non-present proof at a particular depth is the Merkle root of a zeroed tree of that depth.
 

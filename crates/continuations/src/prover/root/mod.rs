@@ -23,7 +23,7 @@ use crate::{
         Circuit,
     },
     prover::trace_heights_tracing_info,
-    CommitBytes, DagCommitBytes, RootSC, SC,
+    CommitBytes, VkCommitBytes, RootSC, SC,
 };
 
 mod trace;
@@ -97,13 +97,13 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let engine = E::new(system_params);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             def_hook_commit,
             memory_dimensions,
             num_user_pvs,
@@ -146,13 +146,13 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             },
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             def_hook_commit,
             memory_dimensions,
             num_user_pvs,

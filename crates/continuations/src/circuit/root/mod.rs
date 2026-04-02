@@ -13,7 +13,7 @@ use crate::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
         Circuit,
     },
-    CommitBytes, DagCommitBytes,
+    CommitBytes, VkCommitBytes,
 };
 
 pub mod bus;
@@ -33,7 +33,7 @@ pub const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
 #[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub(crate) internal_recursive_dag_commit: DagCommitBytes,
+    pub(crate) internal_recursive_vk_commit: VkCommitBytes,
     pub(crate) def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
@@ -62,7 +62,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
                 compress_bus: bus_inventory.poseidon2_compress_bus,
                 permute_bus: bus_inventory.poseidon2_permute_bus,
             },
-            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
+            expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit,
             expected_def_hook_commit: self.def_hook_commit,
         };
         let user_pvs_commit_air = commit::UserPvsCommitAir::new(

@@ -9,7 +9,7 @@ use crate::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
         Circuit,
     },
-    DagCommitBytes,
+    VkCommitBytes,
 };
 
 pub mod bus;
@@ -23,7 +23,7 @@ pub use trace::*;
 #[derive(derive_new::new, Clone)]
 pub struct DeferralHookCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub(crate) internal_recursive_dag_commit: DagCommitBytes,
+    pub(crate) internal_recursive_vk_commit: VkCommitBytes,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
@@ -50,7 +50,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             def_circuit_commit_bus,
             merkle_root_bus,
             onion_res_bus,
-            self.internal_recursive_dag_commit,
+            self.internal_recursive_vk_commit,
         );
 
         let decommit_air = decommit::MerkleDecommitAir {

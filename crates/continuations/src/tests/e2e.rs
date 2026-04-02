@@ -274,24 +274,24 @@ fn test_deferral_e2e() -> Result<()> {
     );
     let hook_prover_for_commit = DeferralHookProver::new::<GpuEngine>(
         def_i1_prover.get_vk(),
-        def_i1_prover.get_dag_commit(true).cached_commit.into(),
+        def_i1_prover.get_vk_commit(true).cached_commit.into(),
         root_system_params(),
     );
     let def_hook_cached_commit = hook_prover_for_commit.get_cached_commit();
 
     // Compute vk commit using [cached_commit, vk_pre_hash] for def/leaf/i4l.
-    let def_circuit_dag_commit = def_leaf_prover.get_dag_commit(false);
-    let def_leaf_dag_commit = def_i0_prover.get_dag_commit(false);
-    let def_i4l_dag_commit = def_i1_prover.get_dag_commit(false);
+    let def_circuit_vk_commit = def_leaf_prover.get_vk_commit(false);
+    let def_leaf_vk_commit = def_i0_prover.get_vk_commit(false);
+    let def_i4l_vk_commit = def_i1_prover.get_vk_commit(false);
 
     let def_circuit_commit = poseidon2_hash_slice_with_states(
         &[
-            def_circuit_dag_commit.cached_commit,
-            def_circuit_dag_commit.vk_pre_hash,
-            def_leaf_dag_commit.cached_commit,
-            def_leaf_dag_commit.vk_pre_hash,
-            def_i4l_dag_commit.cached_commit,
-            def_i4l_dag_commit.vk_pre_hash,
+            def_circuit_vk_commit.cached_commit,
+            def_circuit_vk_commit.vk_pre_hash,
+            def_leaf_vk_commit.cached_commit,
+            def_leaf_vk_commit.vk_pre_hash,
+            def_i4l_vk_commit.cached_commit,
+            def_i4l_vk_commit.vk_pre_hash,
         ]
         .into_iter()
         .flatten()
@@ -537,7 +537,7 @@ fn test_deferral_e2e() -> Result<()> {
 
         let hook_prover = DeferralHookProver::new::<GpuEngine>(
             ir_prover.get_vk(),
-            ir_prover.get_dag_commit(true).cached_commit.into(),
+            ir_prover.get_vk_commit(true).cached_commit.into(),
             root_system_params(),
         );
         warn!("proving deferral hook");
@@ -713,18 +713,18 @@ fn test_deferral_e2e() -> Result<()> {
     let vm_ir_vk = ir_prover.get_vk();
     let vm_ir_pcs_data = ir_prover.get_self_vk_pcs_data().unwrap();
 
-    let def_hook_dag_commit = deferral_leaf_prover.get_dag_commit(false);
-    let def_leaf_dag_commit = def_i4l_prover.get_dag_commit(false);
-    let def_i4l_dag_commit = def_ir_prover.get_dag_commit(false);
+    let def_hook_vk_commit = deferral_leaf_prover.get_vk_commit(false);
+    let def_leaf_vk_commit = def_i4l_prover.get_vk_commit(false);
+    let def_i4l_vk_commit = def_ir_prover.get_vk_commit(false);
 
     let def_hook_commit = poseidon2_hash_slice_with_states(
         &[
-            def_hook_dag_commit.cached_commit,
-            def_hook_dag_commit.vk_pre_hash,
-            def_leaf_dag_commit.cached_commit,
-            def_leaf_dag_commit.vk_pre_hash,
-            def_i4l_dag_commit.cached_commit,
-            def_i4l_dag_commit.vk_pre_hash,
+            def_hook_vk_commit.cached_commit,
+            def_hook_vk_commit.vk_pre_hash,
+            def_leaf_vk_commit.cached_commit,
+            def_leaf_vk_commit.vk_pre_hash,
+            def_i4l_vk_commit.cached_commit,
+            def_i4l_vk_commit.vk_pre_hash,
         ]
         .into_iter()
         .flatten()

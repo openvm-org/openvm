@@ -344,7 +344,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 .internal_recursive_prover
                 .get_self_vk_pcs_data()
                 .unwrap();
-            let dag_commit: CommitBytes = ir_pcs_data.commitment.into();
+            let vk_commit: CommitBytes = ir_pcs_data.commitment.into();
             let onion_commit = compute_dag_onion_commit(&ir_vk);
 
             let memory_dimensions = system_config.memory_config.memory_dimensions();
@@ -352,7 +352,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
             let root_prover = Arc::new(RootProver::from_pk(
                 ir_vk,
-                dag_commit,
+                vk_commit,
                 root_pk,
                 memory_dimensions,
                 num_user_pvs,

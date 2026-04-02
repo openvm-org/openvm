@@ -20,7 +20,7 @@ use crate::{
         Circuit,
     },
     prover::trace_heights_tracing_info,
-    CommitBytes, DagCommitBytes, SC,
+    CommitBytes, VkCommitBytes, SC,
 };
 
 mod trace;
@@ -98,13 +98,13 @@ impl<
         );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(DeferralHookCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
         ));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
@@ -139,13 +139,13 @@ impl<
         );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(DeferralHookCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
         ));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(pk.as_ref());

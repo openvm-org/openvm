@@ -30,12 +30,12 @@ pub struct DeferralHookVerifierTraceCtx {
 
 pub fn def_circuit_commit_from_verifier_pvs(verifier_pvs: &VerifierBasePvs<F>) -> [F; DIGEST_SIZE] {
     let hash_elements = [
-        verifier_pvs.app_dag_commit.cached_commit,
-        verifier_pvs.app_dag_commit.vk_pre_hash,
-        verifier_pvs.leaf_dag_commit.cached_commit,
-        verifier_pvs.leaf_dag_commit.vk_pre_hash,
-        verifier_pvs.internal_for_leaf_dag_commit.cached_commit,
-        verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+        verifier_pvs.app_vk_commit.cached_commit,
+        verifier_pvs.app_vk_commit.vk_pre_hash,
+        verifier_pvs.leaf_vk_commit.cached_commit,
+        verifier_pvs.leaf_vk_commit.vk_pre_hash,
+        verifier_pvs.internal_for_leaf_vk_commit.cached_commit,
+        verifier_pvs.internal_for_leaf_vk_commit.vk_pre_hash,
     ];
     hash_slice_trace(&hash_elements, None, None).1
 }
@@ -52,12 +52,12 @@ pub fn generate_proving_ctx(
         proof.public_values[DEF_AGG_PVS_AIR_ID].as_slice().borrow();
 
     let hash_elements = [
-        verifier_pvs.app_dag_commit.cached_commit,
-        verifier_pvs.app_dag_commit.vk_pre_hash,
-        verifier_pvs.leaf_dag_commit.cached_commit,
-        verifier_pvs.leaf_dag_commit.vk_pre_hash,
-        verifier_pvs.internal_for_leaf_dag_commit.cached_commit,
-        verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+        verifier_pvs.app_vk_commit.cached_commit,
+        verifier_pvs.app_vk_commit.vk_pre_hash,
+        verifier_pvs.leaf_vk_commit.cached_commit,
+        verifier_pvs.leaf_vk_commit.vk_pre_hash,
+        verifier_pvs.internal_for_leaf_vk_commit.cached_commit,
+        verifier_pvs.internal_for_leaf_vk_commit.vk_pre_hash,
     ];
 
     let width = DeferralHookPvsCols::<u8>::width();

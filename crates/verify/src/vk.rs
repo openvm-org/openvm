@@ -9,7 +9,7 @@ use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 use serde::{Deserialize, Serialize};
 
-use crate::DagCommit;
+use crate::VkCommit;
 
 /// Verifying key and artifacts used to verify a STARK proof for a fixed VM and executable
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -28,16 +28,16 @@ pub struct VerificationBaseline {
     /// VM memory metadata used to verify the user public values merkle proof
     pub memory_dimensions: MemoryDimensions,
     /// Commit to the app_vk's DAG and its pre-hash, first exposed by the leaf verifier.
-    pub app_dag_commit: DagCommit,
+    pub app_vk_commit: VkCommit,
     /// Commit to the leaf_vk's DAG and its pre-hash, first exposed by the internal-for-leaf
     /// verifier.
-    pub leaf_dag_commit: DagCommit,
+    pub leaf_vk_commit: VkCommit,
     /// Commit to the internal_for_leaf_vk's DAG and its pre-hash, first exposed by the first
     /// (i.e. index 0) internal-recursive layer verifier.
-    pub internal_for_leaf_dag_commit: DagCommit,
+    pub internal_for_leaf_vk_commit: VkCommit,
     /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
     /// index > 0) internal-recursive layer verifiers.
-    pub internal_recursive_dag_commit: DagCommit,
+    pub internal_recursive_vk_commit: VkCommit,
     /// Expected deferral VK commit (hash of the deferral aggregation prover's DAG commits).
     /// When `Some`, the proof must have `deferral_flag == 2` with a matching
     /// `def_hook_commit` and valid deferral Merkle proofs. When `None`, the proof must

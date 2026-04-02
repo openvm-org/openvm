@@ -39,21 +39,21 @@ pub mod utils {
     use openvm_circuit_primitives::utils::assert_array_eq;
     use openvm_recursion_circuit::utils::assert_zeros;
     use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-    use openvm_verify_stark_host::pvs::{DagCommit, VerifierBasePvs};
+    use openvm_verify_stark_host::pvs::{VkCommit, VerifierBasePvs};
     use p3_air::AirBuilder;
 
-    pub fn assert_dag_commit_eq<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
+    pub fn assert_vk_commit_eq<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
         builder: &mut AB,
-        x: DagCommit<I1>,
-        y: DagCommit<I2>,
+        x: VkCommit<I1>,
+        y: VkCommit<I2>,
     ) {
         assert_array_eq(builder, x.cached_commit, y.cached_commit);
         assert_array_eq(builder, x.vk_pre_hash, y.vk_pre_hash);
     }
 
-    pub fn assert_dag_commit_unset<AB: AirBuilder, I1: Into<AB::Expr>>(
+    pub fn assert_vk_commit_unset<AB: AirBuilder, I1: Into<AB::Expr>>(
         builder: &mut AB,
-        x: DagCommit<I1>,
+        x: VkCommit<I1>,
     ) {
         assert_zeros(builder, x.cached_commit);
         assert_zeros(builder, x.vk_pre_hash);
@@ -61,12 +61,12 @@ pub mod utils {
 
     pub fn vk_commit_components<F: Copy>(pvs: &VerifierBasePvs<F>) -> Vec<[F; DIGEST_SIZE]> {
         vec![
-            pvs.app_dag_commit.cached_commit,
-            pvs.app_dag_commit.vk_pre_hash,
-            pvs.leaf_dag_commit.cached_commit,
-            pvs.leaf_dag_commit.vk_pre_hash,
-            pvs.internal_for_leaf_dag_commit.cached_commit,
-            pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+            pvs.app_vk_commit.cached_commit,
+            pvs.app_vk_commit.vk_pre_hash,
+            pvs.leaf_vk_commit.cached_commit,
+            pvs.leaf_vk_commit.vk_pre_hash,
+            pvs.internal_for_leaf_vk_commit.cached_commit,
+            pvs.internal_for_leaf_vk_commit.vk_pre_hash,
         ]
     }
 }

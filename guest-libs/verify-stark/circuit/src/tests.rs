@@ -164,8 +164,8 @@ fn run_full_aggregation(
     ))
 }
 
-#[test_case(0 ; "internal_recursive_dag_commit not set")]
-#[test_case(1 ; "internal_recursive_dag_commit set")]
+#[test_case(0 ; "internal_recursive_vk_commit not set")]
+#[test_case(1 ; "internal_recursive_vk_commit set")]
 fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (

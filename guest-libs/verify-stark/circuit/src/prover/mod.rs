@@ -7,7 +7,7 @@ use openvm_circuit::system::memory::{
 use openvm_continuations::{
     circuit::{deferral::DeferralMerkleProofs, Circuit},
     prover::{debug_constraints, DeferralCircuitProver},
-    CommitBytes, DagCommitBytes, SC,
+    CommitBytes, VkCommitBytes, SC,
 };
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
@@ -132,7 +132,7 @@ impl<
             },
         );
         let engine = E::new(system_params);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
@@ -140,7 +140,7 @@ impl<
         let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             def_hook_commit,
             memory_dimensions,
             num_user_pvs,
@@ -182,7 +182,7 @@ impl<
             },
         );
         let def_hook_commit = def_hook_commit.map(Into::into);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
             pre_hash: child_vk.pre_hash.into(),
         };
@@ -192,7 +192,7 @@ impl<
         // or else the generated proof will be incorrect.
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             def_hook_commit,
             memory_dimensions,
             num_user_pvs,

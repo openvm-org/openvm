@@ -55,7 +55,7 @@ pub struct RootProver(pub RootInnerProver);
 impl RootProver {
     pub fn new(
         internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_dag_commit: CommitBytes,
+        internal_recursive_vk_commit: CommitBytes,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -64,7 +64,7 @@ impl RootProver {
     ) -> Self {
         let inner = RootInnerProver::new::<E>(
             internal_recursive_vk,
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             system_params,
             memory_dimensions,
             num_user_pvs,
@@ -76,7 +76,7 @@ impl RootProver {
 
     pub fn from_pk(
         internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_dag_commit: CommitBytes,
+        internal_recursive_vk_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -85,7 +85,7 @@ impl RootProver {
     ) -> Self {
         let inner = RootInnerProver::from_pk::<E>(
             internal_recursive_vk,
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             pk,
             memory_dimensions,
             num_user_pvs,

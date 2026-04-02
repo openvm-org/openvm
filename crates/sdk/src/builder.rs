@@ -375,7 +375,7 @@ where
             let system_config = app_config.app_vm_config.as_ref();
             let memory_dimensions = system_config.memory_config.memory_dimensions();
             let num_user_pvs = system_config.num_public_values;
-            let internal_recursive_dag_commit = agg_prover
+            let internal_recursive_vk_commit = agg_prover
                 .internal_recursive_prover
                 .get_self_vk_pcs_data()
                 .unwrap()
@@ -384,7 +384,7 @@ where
 
             Arc::new(RootProver::from_pk(
                 agg_prover.internal_recursive_prover.get_vk(),
-                internal_recursive_dag_commit,
+                internal_recursive_vk_commit,
                 root_pk.root_pk,
                 memory_dimensions,
                 num_user_pvs,
