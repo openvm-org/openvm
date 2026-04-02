@@ -72,8 +72,9 @@ jobs:
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
-          EXTRA_ARGS=""
+          EXTRA_ARGS=()
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            EXTRA_ARGS="--features=bn254,bls12_381,aot -E 'not test(fallback)'"
+            EXTRA_ARGS+=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
           fi
-          eval cargo nextest run --cargo-profile=fast $EXTRA_ARGS --no-tests=pass --test-threads=1
+
+          cargo nextest run --cargo-profile=fast "${EXTRA_ARGS[@]}" --no-tests=pass --test-threads=1
