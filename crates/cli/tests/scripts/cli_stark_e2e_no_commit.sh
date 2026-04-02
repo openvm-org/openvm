@@ -9,6 +9,8 @@ proof_path="$temp_dir/fibonacci.stark.proof"
 cargo openvm keygen \
   --manifest-path tests/programs/multi/Cargo.toml
 
+cargo openvm setup
+
 cargo openvm prove stark \
   --manifest-path tests/programs/multi/Cargo.toml \
   --example fibonacci \

@@ -6,15 +6,16 @@ use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof,
     types::{VerificationBaselineJson, VersionedNonRootStarkProof},
-    Sdk, OPENVM_VERSION,
+    Sdk, OPENVM_VERSION, SC,
 };
+use openvm_stark_backend::keygen::types::MultiStarkProvingKey;
 
 use super::KeygenCargoArgs;
 use crate::{
     args::ManifestArgs,
     default::{APP_PROOF_EXT, STARK_PROOF_EXT},
     util::{
-        get_agg_vk_path, get_app_baseline_path, get_app_vk_path, get_manifest_path_and_dir,
+        get_app_baseline_path, get_app_vk_path, get_manifest_path_and_dir,
         get_single_target_name_raw, get_target_dir, get_target_output_dir, resolve_proof_path,
     },
 };
@@ -159,13 +160,16 @@ impl VerifyCmd {
                 let (manifest_path, _) =
                     get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
                 let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
-                let agg_vk_path = get_agg_vk_path(&target_dir);
-                let agg_vk = read_object_from_file(&agg_vk_path).map_err(|e| {
+                let internal_recursive_pk_path =
+                    PathBuf::from(crate::default::default_internal_recursive_pk_path());
+                let internal_recursive_pk: std::sync::Arc<MultiStarkProvingKey<SC>> =
+                    read_object_from_file(&internal_recursive_pk_path).map_err(|e| {
                     eyre::eyre!(
-                        "Failed to read aggregation verifying key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
-                        agg_vk_path.display()
+                        "Failed to read internal-recursive proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
+                        internal_recursive_pk_path.display()
                     )
                 })?;
+                let agg_vk = internal_recursive_pk.get_vk();
                 let baseline_path = if let Some(app_baseline) = app_baseline {
                     app_baseline.to_path_buf()
                 } else {

@@ -1,6 +1,6 @@
 use std::{
     fs::{create_dir_all, write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use aws_config::{defaults, BehaviorVersion, Region};
@@ -10,15 +10,16 @@ use eyre::{eyre, Context, Result};
 use openvm_sdk::{
     config::AggregationSystemParams,
     fs::{
-        write_evm_halo2_verifier_to_folder, EVM_HALO2_VERIFIER_BASE_NAME,
-        EVM_HALO2_VERIFIER_INTERFACE_NAME, EVM_HALO2_VERIFIER_PARENT_NAME,
-        EVM_VERIFIER_ARTIFACT_FILENAME,
+        write_object_to_file, EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
+        EVM_HALO2_VERIFIER_PARENT_NAME, EVM_VERIFIER_ARTIFACT_FILENAME,
     },
     Sdk, OPENVM_VERSION,
 };
-use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 
-use crate::default::{default_evm_halo2_verifier_path, default_params_dir};
+use crate::default::{
+    default_app_config, default_evm_halo2_verifier_path, default_internal_recursive_pk_path,
+    default_params_dir, default_root_pk_path,
+};
 
 /// The maximum value of `k` to download Halo2 KZG trusted setup parameters for. This depends on the
 /// default verifier circuit and wrapper circuit sizes.
@@ -27,52 +28,58 @@ const MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD: usize = 24;
 #[derive(Parser)]
 #[command(
     name = "setup",
-    about = "Set up for generating EVM proofs. ATTENTION: this requires large amounts of computation and memory. "
+    about = "Set up OpenVM recursive proving artifacts. ATTENTION: this requires large amounts of computation and memory."
 )]
 pub struct SetupCmd {
     #[arg(
         long,
         default_value = "false",
-        help = "Force verifier regeneration even if the verifier contract already exists"
+        help = "Force verifier regeneration even if the verifier artifacts already exist"
     )]
     pub force: bool,
 
     #[arg(
         long,
         default_value = "false",
-        help = "Download pre-built verifier artifacts from S3 instead of generating locally"
+        help = "Also cache the root proving key and download EVM verifier artifacts"
+    )]
+    pub evm: bool,
+
+    #[arg(
+        long,
+        default_value = "false",
+        help = "Download pre-built EVM verifier artifacts from S3 instead of generating locally"
     )]
     pub download: bool,
 }
 
 impl SetupCmd {
     pub async fn run(&self) -> Result<()> {
-        if !Self::check_solc_installed() && !self.download {
-            return Err(eyre!(
-                "solc is not installed, please install solc to continue"
-            ));
+        let sdk = Sdk::new(default_app_config(), AggregationSystemParams::default())?;
+
+        let internal_recursive_pk_path = PathBuf::from(default_internal_recursive_pk_path());
+        println!(
+            "Writing internal-recursive proving key to {}",
+            internal_recursive_pk_path.display()
+        );
+        write_object_to_file(
+            &internal_recursive_pk_path,
+            sdk.agg_pk().internal_recursive_pk,
+        )?;
+
+        if !self.evm {
+            return Ok(());
         }
+
+        let root_pk_path = PathBuf::from(default_root_pk_path());
+        println!("Writing root proving key to {}", root_pk_path.display());
+        write_object_to_file(&root_pk_path, sdk.root_pk())?;
 
         Self::download_params(10, MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD as u32).await?;
 
         let verifier_dir = PathBuf::from(default_evm_halo2_verifier_path());
         let versioned_verifier_dir = verifier_dir.join("src").join(format!("v{OPENVM_VERSION}"));
-        let interface_dir = versioned_verifier_dir.join("interfaces");
-
-        if !self.force
-            && versioned_verifier_dir
-                .join(EVM_HALO2_VERIFIER_PARENT_NAME)
-                .exists()
-            && versioned_verifier_dir
-                .join(EVM_HALO2_VERIFIER_BASE_NAME)
-                .exists()
-            && versioned_verifier_dir
-                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
-                .exists()
-            && interface_dir
-                .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
-                .exists()
-        {
+        if !self.force && Self::verifier_artifacts_exist(&versioned_verifier_dir) {
             println!(
                 "EVM verifier artifacts already exist in {}",
                 verifier_dir.display()
@@ -83,20 +90,26 @@ impl SetupCmd {
         if self.download {
             Self::download_verifier(&versioned_verifier_dir).await?;
         } else {
-            let sdk = Sdk::standard(
-                app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT),
-                AggregationSystemParams::default(),
-            );
-
-            println!(
-                "Generating verifier contract. Use --download to download pre-generated contract instead."
-            );
-            let verifier = sdk.generate_halo2_verifier_solidity()?;
-
-            println!("Writing verifier contract to {}", verifier_dir.display());
-            write_evm_halo2_verifier_to_folder(verifier, &verifier_dir)?;
+            Self::generate_verifier(&sdk, &verifier_dir)?;
         }
+
         Ok(())
+    }
+
+    fn verifier_artifacts_exist(versioned_verifier_dir: &Path) -> bool {
+        versioned_verifier_dir
+            .join(EVM_HALO2_VERIFIER_PARENT_NAME)
+            .exists()
+            && versioned_verifier_dir
+                .join(EVM_HALO2_VERIFIER_BASE_NAME)
+                .exists()
+            && versioned_verifier_dir
+                .join(EVM_VERIFIER_ARTIFACT_FILENAME)
+                .exists()
+            && versioned_verifier_dir
+                .join("interfaces")
+                .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
+                .exists()
     }
 
     fn check_solc_installed() -> bool {
@@ -104,6 +117,34 @@ impl SetupCmd {
             .arg("--version")
             .output()
             .is_ok()
+    }
+
+    fn generate_verifier(sdk: &Sdk, verifier_dir: &Path) -> Result<()> {
+        if !Self::check_solc_installed() {
+            return Err(eyre!(
+                "solc is not installed, please install solc or rerun with --download"
+            ));
+        }
+
+        #[cfg(feature = "evm-verify")]
+        {
+            use openvm_sdk::fs::write_evm_halo2_verifier_to_folder;
+
+            println!("Generating verifier contract locally.");
+            let verifier = sdk.generate_halo2_verifier_solidity()?;
+            println!("Writing verifier contract to {}", verifier_dir.display());
+            write_evm_halo2_verifier_to_folder(verifier, verifier_dir)?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "evm-verify"))]
+        {
+            let _ = sdk;
+            let _ = verifier_dir;
+            Err(eyre!(
+                "this cargo-openvm build does not include local EVM verifier generation support; rerun with --download"
+            ))
+        }
     }
 
     async fn download_verifier(versioned_verifier_dir: &PathBuf) -> Result<()> {

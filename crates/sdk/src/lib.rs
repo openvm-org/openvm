@@ -43,7 +43,7 @@ use openvm_verify_stark_host::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
-    keygen::AggProvingKey,
+    keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::{AggProver, AppProver, DeferralPathProver, DeferralProver, StarkProver},
     types::ExecutableFormat,
 };
@@ -636,6 +636,22 @@ where
         (pk, vk)
     }
 
+    pub fn agg_prefix_pk(&self) -> AggPrefixProvingKey {
+        if let Some(agg_prover) = self.agg_prover.get() {
+            return AggPrefixProvingKey {
+                leaf_pk: agg_prover.leaf_prover.get_pk(),
+                internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
+            };
+        }
+
+        let app_pk = self.app_pk();
+        AggProver::keygen_prefix(
+            Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
+            self.agg_config.clone(),
+            self.def_hook_cached_commit(),
+        )
+    }
+
     #[cfg(feature = "root-prover")]
     pub fn root_pk(&self) -> RootProvingKey {
         let root_prover = self.root_prover();
@@ -648,8 +664,10 @@ where
     pub fn agg_pk(&self) -> AggProvingKey {
         let agg_prover = self.agg_prover();
         AggProvingKey {
-            leaf_pk: agg_prover.leaf_prover.get_pk(),
-            internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
+            prefix_pk: AggPrefixProvingKey {
+                leaf_pk: agg_prover.leaf_prover.get_pk(),
+                internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
+            },
             internal_recursive_pk: agg_prover.internal_recursive_prover.get_pk(),
         }
     }
