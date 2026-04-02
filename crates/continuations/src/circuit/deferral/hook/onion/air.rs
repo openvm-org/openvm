@@ -15,7 +15,7 @@ use p3_matrix::Matrix;
 
 use crate::{
     circuit::deferral::hook::bus::{
-        DefVkCommitBus, DefVkCommitMessage, IoCommitBus, IoCommitMessage, OnionResultBus,
+        DefCircuitCommitBus, DefCircuitCommitMessage, IoCommitBus, IoCommitMessage, OnionResultBus,
         OnionResultMessage,
     },
     utils::digests_to_poseidon2_input,
@@ -37,7 +37,7 @@ pub struct OnionHashCols<F> {
 
 pub struct OnionHashAir {
     pub poseidon2_bus: Poseidon2CompressBus,
-    pub def_vk_commit_bus: DefVkCommitBus,
+    pub def_circuit_commit_bus: DefCircuitCommitBus,
     pub io_commit_bus: IoCommitBus,
     pub onion_res_bus: OnionResultBus,
 }
@@ -81,14 +81,14 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .assert_one(next.row_idx - local.row_idx);
 
         /*
-         * On the first row we want input_onion to initially be def_vk_commit and
+         * On the first row we want input_onion to initially be def_circuit_commit and
          * output_onion to be all zeroes.
          */
         assert_zeros(&mut builder.when(local.is_first), local.output_onion);
-        self.def_vk_commit_bus.receive(
+        self.def_circuit_commit_bus.receive(
             builder,
-            DefVkCommitMessage {
-                def_vk_commit: local.input_onion,
+            DefCircuitCommitMessage {
+                def_circuit_commit: local.input_onion,
             },
             local.is_first,
         );

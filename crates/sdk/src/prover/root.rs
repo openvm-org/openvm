@@ -23,7 +23,7 @@ use openvm_stark_sdk::config::{
     baby_bear_poseidon2::{Digest, F},
     MAX_APP_LOG_STACKED_HEIGHT,
 };
-use openvm_verify_stark_host::NonRootStarkProof;
+use openvm_verify_stark_host::VmStarkProof;
 use tracing::info_span;
 
 use crate::{
@@ -55,20 +55,20 @@ pub struct RootProver(pub RootInnerProver);
 impl RootProver {
     pub fn new(
         internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_dag_commit: CommitBytes,
+        internal_recursive_vk_commit: CommitBytes,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_vk_commit: Option<Digest>,
+        def_hook_commit: Option<Digest>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
         let inner = RootInnerProver::new::<E>(
             internal_recursive_vk,
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             system_params,
             memory_dimensions,
             num_user_pvs,
-            def_hook_vk_commit.map(Into::into),
+            def_hook_commit.map(Into::into),
             trace_heights,
         );
         Self(inner)
@@ -76,20 +76,20 @@ impl RootProver {
 
     pub fn from_pk(
         internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_dag_commit: CommitBytes,
+        internal_recursive_vk_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_vk_commit: Option<Digest>,
+        def_hook_commit: Option<Digest>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
         let inner = RootInnerProver::from_pk::<E>(
             internal_recursive_vk,
-            internal_recursive_dag_commit,
+            internal_recursive_vk_commit,
             pk,
             memory_dimensions,
             num_user_pvs,
-            def_hook_vk_commit.map(Into::into),
+            def_hook_commit.map(Into::into),
             trace_heights,
         );
         Self(inner)
@@ -97,7 +97,7 @@ impl RootProver {
 
     pub fn generate_proving_ctx(
         &self,
-        input: NonRootStarkProof,
+        input: VmStarkProof,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0.generate_proving_ctx(
@@ -145,7 +145,7 @@ pub fn compute_root_proof_heights(
     app_config.app_vm_config.system.config = system_config;
 
     let def_hook_cached_commit = def_prover.as_ref().map(|p| p.def_hook_cached_commit());
-    let def_hook_vk_commit = def_prover.as_ref().map(|p| p.def_hook_vk_commit().into());
+    let def_hook_commit = def_prover.as_ref().map(|p| p.def_hook_commit().into());
 
     let app_pk = AppProvingKey::keygen(app_config)?;
 
@@ -178,7 +178,7 @@ pub fn compute_root_proof_heights(
         root_params,
         memory_dimensions,
         num_user_pvs,
-        def_hook_vk_commit,
+        def_hook_commit,
         None,
     );
     let root_proving_ctx: ProvingContext<<CpuRootE as StarkEngine>::PB> = root_prover

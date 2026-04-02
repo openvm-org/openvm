@@ -37,8 +37,8 @@ use openvm_transpiler::{
 };
 use openvm_verify_stark_host::{
     verify_vm_stark_proof_decoded,
-    vk::{NonRootStarkVerifyingKey, VerificationBaseline},
-    NonRootStarkProof,
+    vk::{VerificationBaseline, VmStarkVerifyingKey},
+    VmStarkProof,
 };
 
 use crate::{
@@ -235,7 +235,7 @@ where
 
     /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
     /// because the DeferralExtension should be created using DeferralProver::make_extension, as
-    /// it has the capability to generate def_vk_commits.
+    /// it has the capability to generate def_circuit_commits.
     pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
         assert!(
             self.def_path_prover.is_none(),
@@ -273,10 +273,8 @@ where
     }
 
     /// Returns the def_hook_prover vk commit.
-    pub fn def_hook_vk_commit(&self) -> Option<Digest> {
-        self.def_path_prover
-            .as_ref()
-            .map(|p| p.def_hook_vk_commit())
+    pub fn def_hook_commit(&self) -> Option<Digest> {
+        self.def_path_prover.as_ref().map(|p| p.def_hook_commit())
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target
@@ -441,7 +439,7 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
         def_inputs: &[DeferralInput],
-    ) -> Result<(NonRootStarkProof, VerificationBaseline), SdkError> {
+    ) -> Result<(VmStarkProof, VerificationBaseline), SdkError> {
         let mut prover = self.prover(app_exe)?;
         let proof = prover.prove(inputs, def_inputs)?.0;
         let baseline = prover.generate_baseline();
@@ -567,7 +565,7 @@ where
                     root_pk,
                     memory_dimensions,
                     num_user_pvs,
-                    self.def_hook_vk_commit(),
+                    self.def_hook_commit(),
                     Some(trace_heights),
                 ))
             })
@@ -679,7 +677,7 @@ where
     /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
     ///
     /// The flow:
-    /// 1. Get the root VK and internal recursive DAG cached commit
+    /// 1. Get the root VK and internal recursive VK cached commit
     /// 2. Generate a dummy root proof via the EVM prover pipeline
     /// 3. Keygen the static verifier circuit
     /// 4. Generate a dummy snark from the verifier
@@ -698,9 +696,9 @@ where
     pub fn verify_proof(
         agg_vk: MultiStarkVerifyingKey<SC>,
         baseline: VerificationBaseline,
-        proof: &NonRootStarkProof,
+        proof: &VmStarkProof,
     ) -> Result<(), SdkError> {
-        let vk = NonRootStarkVerifyingKey {
+        let vk = VmStarkVerifyingKey {
             mvk: agg_vk,
             baseline,
         };

@@ -348,9 +348,9 @@ where
             .as_ref()
             .map(|def_path_prover| def_path_prover.def_hook_cached_commit());
         #[cfg(feature = "root-prover")]
-        let def_hook_vk_commit = def_path_prover
+        let def_hook_commit = def_path_prover
             .as_ref()
-            .map(|def_path_prover| def_path_prover.def_hook_vk_commit());
+            .map(|def_path_prover| def_path_prover.def_hook_commit());
 
         let app_vm_vk = app_pk_seed
             .as_ref()
@@ -375,7 +375,7 @@ where
             let system_config = app_config.app_vm_config.as_ref();
             let memory_dimensions = system_config.memory_config.memory_dimensions();
             let num_user_pvs = system_config.num_public_values;
-            let internal_recursive_dag_commit = agg_prover
+            let internal_recursive_vk_commit = agg_prover
                 .internal_recursive_prover
                 .get_self_vk_pcs_data()
                 .unwrap()
@@ -384,11 +384,11 @@ where
 
             Arc::new(RootProver::from_pk(
                 agg_prover.internal_recursive_prover.get_vk(),
-                internal_recursive_dag_commit,
+                internal_recursive_vk_commit,
                 root_pk.root_pk,
                 memory_dimensions,
                 num_user_pvs,
-                def_hook_vk_commit,
+                def_hook_commit,
                 Some(root_pk.trace_heights),
             ))
         });

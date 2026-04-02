@@ -15,7 +15,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
-use openvm_verify_stark_host::pvs::DagCommit;
+use openvm_verify_stark_host::pvs::VkCommit;
 
 use crate::{
     circuit::deferral::{
@@ -116,7 +116,7 @@ pub trait DeferralInnerTraceGen<PB: ProverBackend> {
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_agg: bool,
-        child_dag_commit: DagCommit<F>,
+        child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
     ) -> DeferralInnerPreCtx<PB>;
 }
@@ -132,7 +132,7 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInne
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_agg: bool,
-        child_dag_commit: DagCommit<F>,
+        child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (poseidon2_compress_inputs, poseidon2_permute_inputs) =
@@ -141,7 +141,7 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInne
             verifier_pvs_ctx: super::verifier::generate_proving_ctx(
                 proofs,
                 child_is_agg,
-                child_dag_commit,
+                child_vk_commit,
             ),
             def_pvs_ctx: super::def_pvs::generate_proving_ctx(
                 proofs,
@@ -165,7 +165,7 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_agg: bool,
-        child_dag_commit: DagCommit<F>,
+        child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
     ) -> DeferralInnerPreCtx<GpuBackend> {
         let DeferralInnerPreCtx {
@@ -178,7 +178,7 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
             self,
             proofs,
             child_is_agg,
-            child_dag_commit,
+            child_vk_commit,
             child_merkle_depth,
         );
         DeferralInnerPreCtx {

@@ -14,7 +14,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::{
     pvs::{DeferralPvs, DEF_PVS_AIR_ID},
     vk::VerificationBaseline,
-    NonRootStarkProof,
+    VmStarkProof,
 };
 
 use crate::{
@@ -65,7 +65,7 @@ where
         &mut self,
         vm_input: StdIn<Val<SC>>,
         def_inputs: &[DeferralInput],
-    ) -> Result<(NonRootStarkProof, InternalLayerMetadata)>
+    ) -> Result<(VmStarkProof, InternalLayerMetadata)>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
@@ -149,40 +149,40 @@ where
         VerificationBaseline {
             app_exe_commit: self.app_prover.app_exe_commit(),
             memory_dimensions: self.app_prover.memory_dimensions(),
-            app_dag_commit: self.agg_prover.leaf_prover.get_dag_commit(false),
-            leaf_dag_commit: self
+            app_vk_commit: self.agg_prover.leaf_prover.get_vk_commit(false),
+            leaf_vk_commit: self
                 .agg_prover
                 .internal_for_leaf_prover
-                .get_dag_commit(false),
-            internal_for_leaf_dag_commit: self
+                .get_vk_commit(false),
+            internal_for_leaf_vk_commit: self
                 .agg_prover
                 .internal_recursive_prover
-                .get_dag_commit(false),
-            internal_recursive_dag_commit: self
+                .get_vk_commit(false),
+            internal_recursive_vk_commit: self
                 .agg_prover
                 .internal_recursive_prover
-                .get_dag_commit(true),
-            expected_def_vk_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_vk_commit()),
+                .get_vk_commit(true),
+            expected_def_hook_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_commit()),
         }
     }
 
-    pub fn app_vk_commit(&self) -> Digest {
-        let app_dag_commit = self.agg_prover.leaf_prover.get_dag_commit(false);
-        let leaf_dag_commit = self
+    pub fn app_vm_commit(&self) -> Digest {
+        let app_vk_commit = self.agg_prover.leaf_prover.get_vk_commit(false);
+        let leaf_vk_commit = self
             .agg_prover
             .internal_for_leaf_prover
-            .get_dag_commit(false);
-        let internal_for_leaf_dag_commit = self
+            .get_vk_commit(false);
+        let internal_for_leaf_vk_commit = self
             .agg_prover
             .internal_recursive_prover
-            .get_dag_commit(false);
+            .get_vk_commit(false);
         let components = vec![
-            app_dag_commit.cached_commit,
-            app_dag_commit.vk_pre_hash,
-            leaf_dag_commit.cached_commit,
-            leaf_dag_commit.vk_pre_hash,
-            internal_for_leaf_dag_commit.cached_commit,
-            internal_for_leaf_dag_commit.vk_pre_hash,
+            app_vk_commit.cached_commit,
+            app_vk_commit.vk_pre_hash,
+            leaf_vk_commit.cached_commit,
+            leaf_vk_commit.vk_pre_hash,
+            internal_for_leaf_vk_commit.cached_commit,
+            internal_for_leaf_vk_commit.vk_pre_hash,
         ]
         .into_flattened();
         poseidon2_hash_slice(&components).0
@@ -194,23 +194,23 @@ impl DeferralPathProver {
         self.deferral_prover.def_hook_prover.get_cached_commit()
     }
 
-    pub fn def_hook_vk_commit(&self) -> Digest {
-        let def_dag_commit = self.agg_prover.leaf_prover.get_dag_commit(false);
-        let leaf_dag_commit = self
+    pub fn def_hook_commit(&self) -> Digest {
+        let def_vk_commit = self.agg_prover.leaf_prover.get_vk_commit(false);
+        let leaf_vk_commit = self
             .agg_prover
             .internal_for_leaf_prover
-            .get_dag_commit(false);
-        let internal_for_leaf_dag_commit = self
+            .get_vk_commit(false);
+        let internal_for_leaf_vk_commit = self
             .agg_prover
             .internal_recursive_prover
-            .get_dag_commit(false);
+            .get_vk_commit(false);
         let components = vec![
-            def_dag_commit.cached_commit,
-            def_dag_commit.vk_pre_hash,
-            leaf_dag_commit.cached_commit,
-            leaf_dag_commit.vk_pre_hash,
-            internal_for_leaf_dag_commit.cached_commit,
-            internal_for_leaf_dag_commit.vk_pre_hash,
+            def_vk_commit.cached_commit,
+            def_vk_commit.vk_pre_hash,
+            leaf_vk_commit.cached_commit,
+            leaf_vk_commit.vk_pre_hash,
+            internal_for_leaf_vk_commit.cached_commit,
+            internal_for_leaf_vk_commit.vk_pre_hash,
         ]
         .into_flattened();
         poseidon2_hash_slice(&components).0

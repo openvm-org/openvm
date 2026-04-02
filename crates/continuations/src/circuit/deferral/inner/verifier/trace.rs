@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
-use openvm_verify_stark_host::pvs::{DagCommit, VerifierBasePvs, VERIFIER_PVS_AIR_ID};
+use openvm_verify_stark_host::pvs::{VerifierBasePvs, VkCommit, VERIFIER_PVS_AIR_ID};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -12,7 +12,7 @@ use crate::circuit::deferral::inner::verifier::air::{DeferralChildLevel, Deferra
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
     child_is_agg: bool,
-    child_dag_commit: DagCommit<F>,
+    child_vk_commit: VkCommit<F>,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();
@@ -49,22 +49,22 @@ pub fn generate_proving_ctx(
         trace[(num_proofs - 1) * width..num_proofs * width].borrow();
     let mut pvs = last_row.child_pvs;
 
-    // Note app_dag_commit is def_dag_commit here
+    // Note app_vk_commit is def_vk_commit here
     match child_level {
         DeferralChildLevel::App => {
-            pvs.app_dag_commit = child_dag_commit;
+            pvs.app_vk_commit = child_vk_commit;
         }
         DeferralChildLevel::Leaf => {
-            pvs.leaf_dag_commit = child_dag_commit;
+            pvs.leaf_vk_commit = child_vk_commit;
             pvs.internal_flag = F::ONE;
         }
         DeferralChildLevel::InternalForLeaf => {
-            pvs.internal_for_leaf_dag_commit = child_dag_commit;
+            pvs.internal_for_leaf_vk_commit = child_vk_commit;
             pvs.internal_flag = F::TWO;
             pvs.recursion_flag = F::ONE;
         }
         DeferralChildLevel::InternalRecursive => {
-            pvs.internal_recursive_dag_commit = child_dag_commit;
+            pvs.internal_recursive_vk_commit = child_vk_commit;
             pvs.internal_flag = F::TWO;
             pvs.recursion_flag = F::TWO;
         }

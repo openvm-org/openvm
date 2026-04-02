@@ -69,7 +69,7 @@ impl DeferralProver {
             true,
         );
         let internal_recursive_cached_commit = internal_recursive_prover
-            .get_dag_commit(true)
+            .get_vk_commit(true)
             .cached_commit
             .into();
         let def_hook_prover = DeferralHookProver::new::<E>(
@@ -150,9 +150,9 @@ impl DeferralProver {
             .map(|(circuit_idx, res)| {
                 let mut proofs = res.internal_for_leaf_proofs;
                 if proofs.is_empty() {
-                    let def_vk_commit = self.single_circuit_provers[circuit_idx]
-                        .vk_commit(self.internal_recursive_prover.get_dag_commit(false));
-                    let input_acc_hash = poseidon2_hash_slice(&def_vk_commit).0;
+                    let def_circuit_commit = self.single_circuit_provers[circuit_idx]
+                        .circuit_commit(self.internal_recursive_prover.get_vk_commit(false));
+                    let input_acc_hash = poseidon2_hash_slice(&def_circuit_commit).0;
                     let output_acc_hash = poseidon2_hash_slice(&[F::ZERO]).0;
                     let combined_hash =
                         poseidon2_compress_with_capacity(input_acc_hash, output_acc_hash).0;
@@ -221,12 +221,12 @@ impl DeferralProver {
     }
 
     pub fn make_extension(&self, fns: Vec<Arc<DeferralFn>>) -> DeferralExtension {
-        let dag_commit = self.internal_recursive_prover.get_dag_commit(false);
-        let def_vk_commits = self
+        let vk_commit = self.internal_recursive_prover.get_vk_commit(false);
+        let def_circuit_commits = self
             .single_circuit_provers
             .iter()
             .map(|p| {
-                p.vk_commit(dag_commit)
+                p.circuit_commit(vk_commit)
                     .iter()
                     .flat_map(|f| f.to_unique_u32().to_le_bytes())
                     .collect::<Vec<_>>()
@@ -236,7 +236,7 @@ impl DeferralProver {
             .collect();
         DeferralExtension {
             fns,
-            def_vk_commits,
+            def_circuit_commits,
         }
     }
 }

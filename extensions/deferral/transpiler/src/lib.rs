@@ -37,13 +37,15 @@ pub enum DeferralOpcode {
 
 #[derive(Default)]
 pub struct DeferralTranspilerExtension {
-    def_vk_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
+    def_circuit_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
 }
 
 impl DeferralTranspilerExtension {
-    pub fn new(def_vk_commits: Vec<[u8; COMMIT_NUM_BYTES]>) -> Self {
-        assert!(def_vk_commits.len() <= MAX_DEF_CIRCUITS as usize);
-        Self { def_vk_commits }
+    pub fn new(def_circuit_commits: Vec<[u8; COMMIT_NUM_BYTES]>) -> Self {
+        assert!(def_circuit_commits.len() <= MAX_DEF_CIRCUITS as usize);
+        Self {
+            def_circuit_commits,
+        }
     }
 }
 
@@ -107,9 +109,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
         const COMMIT_SIZE: usize = COMMIT_NUM_BYTES / F_NUM_BYTES;
 
         // Each input_acc starts at cell 2 * def_idx * COMMIT_SIZE, and each output_acc
-        // immediately follows it. The initial input_acc must be the def_vk_commit, and
-        // the initial output_acc must be all 0 (i.e. untouched).
-        for (def_idx, commit) in self.def_vk_commits.iter().enumerate() {
+        // immediately follows it. The initial input_acc must be the def_circuit_commit,
+        // and the initial output_acc must be all 0 (i.e. untouched).
+        for (def_idx, commit) in self.def_circuit_commits.iter().enumerate() {
             let start_cell = 2 * def_idx * COMMIT_SIZE;
             let start_byte = start_cell * F_NUM_BYTES;
 

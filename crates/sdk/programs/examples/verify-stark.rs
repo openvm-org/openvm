@@ -13,12 +13,12 @@ openvm::entry!(main);
 
 pub fn main() {
     let app_exe_commit: Commit = read();
-    let app_vk_commit: Commit = read();
+    let app_vm_commit: Commit = read();
     let user_public_values: Vec<u8> = read();
 
     let expected = ProofOutput {
         app_exe_commit,
-        app_vk_commit,
+        app_vm_commit,
         user_public_values,
     };
 

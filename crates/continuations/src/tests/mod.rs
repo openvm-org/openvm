@@ -250,8 +250,8 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
         def_hook_cached_commit,
     );
     assert_eq!(
-        test_prover.get_dag_commit(false),
-        test_prover.get_dag_commit(true)
+        test_prover.get_vk_commit(false),
+        test_prover.get_vk_commit(true)
     );
     Ok(())
 }
@@ -268,8 +268,8 @@ fn test_internal_recursive_deep_layers() -> Result<()> {
 }
 
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
-#[test_case(0 ; "internal_recursive_dag_commit not set")]
-#[test_case(1 ; "internal_recursive_dag_commit set")]
+#[test_case(0 ; "internal_recursive_vk_commit not set")]
+#[test_case(1 ; "internal_recursive_vk_commit set")]
 fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (
@@ -453,7 +453,7 @@ pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
             return Ok((
                 internal_recursive_prover.get_vk(),
                 internal_recursive_prover
-                    .get_dag_commit(true)
+                    .get_vk_commit(true)
                     .cached_commit
                     .into(),
                 wrapped,
@@ -606,8 +606,8 @@ fn test_deferral_internal_recursive_vk_stabilization() -> Result<()> {
     );
 
     assert_eq!(
-        test_prover.get_dag_commit(false),
-        test_prover.get_dag_commit(true)
+        test_prover.get_vk_commit(false),
+        test_prover.get_vk_commit(true)
     );
     Ok(())
 }
@@ -647,7 +647,7 @@ fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
     let child_verifier_pvs: &VerifierBasePvs<F> =
         final_inner_proof.public_values[0].as_slice().borrow();
 
-    // app_dag_commit is def_dag_commit here
+    // app_vk_commit is def_vk_commit here
     let def_vk = poseidon2_hash_slice_with_states(
         &vk_commit_components(child_verifier_pvs)
             .into_iter()

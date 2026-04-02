@@ -9,7 +9,7 @@ use crate::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
         Circuit,
     },
-    DagCommitBytes,
+    VkCommitBytes,
 };
 
 pub mod bus;
@@ -23,7 +23,7 @@ pub use trace::*;
 #[derive(derive_new::new, Clone)]
 pub struct DeferralHookCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub(crate) internal_recursive_dag_commit: DagCommitBytes,
+    pub(crate) internal_recursive_vk_commit: VkCommitBytes,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
@@ -34,7 +34,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
         let io_commit_bus = bus::IoCommitBus::new(next_bus_idx);
         let onion_res_bus = bus::OnionResultBus::new(next_bus_idx + 1);
-        let def_vk_commit_bus = bus::DefVkCommitBus::new(next_bus_idx + 2);
+        let def_circuit_commit_bus = bus::DefCircuitCommitBus::new(next_bus_idx + 2);
         let merkle_root_bus = MerkleRootBus::new(next_bus_idx + 3);
         let merkle_tree_internal_bus = MerkleTreeInternalBus::new(next_bus_idx + 4);
 
@@ -47,10 +47,10 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
                 compress_bus: bus_inventory.poseidon2_compress_bus,
                 permute_bus: bus_inventory.poseidon2_permute_bus,
             },
-            def_vk_commit_bus,
+            def_circuit_commit_bus,
             merkle_root_bus,
             onion_res_bus,
-            self.internal_recursive_dag_commit,
+            self.internal_recursive_vk_commit,
         );
 
         let decommit_air = decommit::MerkleDecommitAir {
@@ -65,7 +65,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
 
         let onion_air = onion::OnionHashAir {
             poseidon2_bus: bus_inventory.poseidon2_compress_bus,
-            def_vk_commit_bus,
+            def_circuit_commit_bus,
             io_commit_bus,
             onion_res_bus,
         };

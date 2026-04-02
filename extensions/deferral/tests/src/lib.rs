@@ -92,7 +92,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(DeferralTranspilerExtension::new(
-                    config.deferral.def_vk_commits.clone(),
+                    config.deferral.def_circuit_commits.clone(),
                 )),
         )?;
         air_test_with_min_segments(Rv32DeferralBuilder, config, exe, streams, 1).unwrap();

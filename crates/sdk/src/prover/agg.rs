@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
-use openvm_verify_stark_host::{pvs::DeferralPvs, NonRootStarkProof};
+use openvm_verify_stark_host::{pvs::DeferralPvs, VmStarkProof};
 use tracing::info_span;
 
 use crate::{
@@ -137,7 +137,7 @@ impl AggProver {
     pub fn prove_vm(
         &self,
         continuation_proof: ContinuationVmProof<SC>,
-    ) -> Result<(NonRootStarkProof, InternalLayerMetadata)> {
+    ) -> Result<(VmStarkProof, InternalLayerMetadata)> {
         // Verify app-layer proofs and generate leaf-layer proofs
         let leaf_proofs = info_span!("agg_layer", group = "leaf").in_scope(|| {
             continuation_proof
@@ -207,7 +207,7 @@ impl AggProver {
         }
 
         Ok((
-            NonRootStarkProof {
+            VmStarkProof {
                 inner: internal_proofs.pop().unwrap(),
                 user_pvs_proof: continuation_proof.user_public_values,
                 deferral_merkle_proofs: None,
@@ -267,10 +267,10 @@ impl AggProver {
 
     pub fn prove_mixed(
         &self,
-        mut vm_proof: NonRootStarkProof,
+        mut vm_proof: VmStarkProof,
         def_proof: DeferralProof,
         metadata: &mut InternalLayerMetadata,
-    ) -> Result<NonRootStarkProof> {
+    ) -> Result<VmStarkProof> {
         let DeferralProof::Present(def_inner) = def_proof else {
             return Ok(vm_proof);
         };
@@ -298,9 +298,9 @@ impl AggProver {
 
     pub fn wrap_proof(
         &self,
-        mut proof: NonRootStarkProof,
+        mut proof: VmStarkProof,
         metadata: &mut InternalLayerMetadata,
-    ) -> Result<NonRootStarkProof> {
+    ) -> Result<VmStarkProof> {
         proof.inner = info_span!(
             "agg_layer",
             group = format!("internal_recursive.{}", metadata.internal_recursive_layer)

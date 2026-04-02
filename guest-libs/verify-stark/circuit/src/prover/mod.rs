@@ -7,7 +7,7 @@ use openvm_circuit::system::memory::{
 use openvm_continuations::{
     circuit::{deferral::DeferralMerkleProofs, Circuit},
     prover::{debug_constraints, DeferralCircuitProver},
-    CommitBytes, DagCommitBytes, SC,
+    CommitBytes, VkCommitBytes, SC,
 };
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2CpuEngine, Digest, DIGEST_SIZE, EF, F,
 };
-use openvm_verify_stark_host::NonRootStarkProof;
+use openvm_verify_stark_host::VmStarkProof;
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
 
@@ -114,7 +114,7 @@ impl<
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_vk_commit: Option<PB::Commitment>,
+        def_hook_commit: Option<PB::Commitment>,
         def_idx: usize,
     ) -> Self
     where
@@ -132,16 +132,16 @@ impl<
             },
         );
         let engine = E::new(system_params);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let def_hook_vk_commit = def_hook_vk_commit.map(Into::into);
+        let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
-            def_hook_vk_commit,
+            internal_recursive_vk_commit,
+            def_hook_commit,
             memory_dimensions,
             num_user_pvs,
             def_idx,
@@ -150,7 +150,7 @@ impl<
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -164,7 +164,7 @@ impl<
         pk: Arc<MultiStarkProvingKey<SC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_vk_commit: Option<PB::Commitment>,
+        def_hook_commit: Option<PB::Commitment>,
         def_idx: usize,
     ) -> Self
     where
@@ -181,10 +181,10 @@ impl<
                 has_cached: true,
             },
         );
-        let def_hook_vk_commit = def_hook_vk_commit.map(Into::into);
-        let internal_recursive_dag_commit = DagCommitBytes {
+        let def_hook_commit = def_hook_commit.map(Into::into);
+        let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
@@ -192,8 +192,8 @@ impl<
         // or else the generated proof will be incorrect.
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_dag_commit,
-            def_hook_vk_commit,
+            internal_recursive_vk_commit,
+            def_hook_commit,
             memory_dimensions,
             num_user_pvs,
             def_idx,
@@ -202,7 +202,7 @@ impl<
         Self {
             pk,
             vk,
-            agg_node_tracegen: T::new(def_hook_vk_commit.is_some()),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -263,9 +263,9 @@ where
     }
 
     fn prove(&self, input_bytes: &[u8]) -> Proof<SC> {
-        let non_root_proof = NonRootStarkProof::decode_from_bytes(input_bytes).unwrap();
+        let vm_proof = VmStarkProof::decode_from_bytes(input_bytes).unwrap();
         self.prover
-            .prove_no_def::<E>(non_root_proof.inner, &non_root_proof.user_pvs_proof)
+            .prove_no_def::<E>(vm_proof.inner, &vm_proof.user_pvs_proof)
             .expect("DeferredVerifyProver::prove_no_def failed")
     }
 

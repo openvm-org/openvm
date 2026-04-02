@@ -78,16 +78,14 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     ));
 
     let vk_elements = [
-        child_verifier_pvs.app_dag_commit.cached_commit,
-        child_verifier_pvs.app_dag_commit.vk_pre_hash,
-        child_verifier_pvs.leaf_dag_commit.cached_commit,
-        child_verifier_pvs.leaf_dag_commit.vk_pre_hash,
-        child_verifier_pvs
-            .internal_for_leaf_dag_commit
-            .cached_commit,
-        child_verifier_pvs.internal_for_leaf_dag_commit.vk_pre_hash,
+        child_verifier_pvs.app_vk_commit.cached_commit,
+        child_verifier_pvs.app_vk_commit.vk_pre_hash,
+        child_verifier_pvs.leaf_vk_commit.cached_commit,
+        child_verifier_pvs.leaf_vk_commit.vk_pre_hash,
+        child_verifier_pvs.internal_for_leaf_vk_commit.cached_commit,
+        child_verifier_pvs.internal_for_leaf_vk_commit.vk_pre_hash,
     ];
-    let (intermediate_vk_states, app_vk_commit) = hash_slice_trace(
+    let (intermediate_vk_states, app_vm_commit) = hash_slice_trace(
         &vk_elements,
         Some(&mut poseidon2_permute_inputs),
         Some(&mut poseidon2_compress_inputs),
@@ -104,7 +102,7 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         cols.initial_pc_hash,
     ));
 
-    root_pvs.app_vk_commit = app_vk_commit;
+    root_pvs.app_vm_commit = app_vm_commit;
 
     if deferral_enabled {
         let def_verifier_pvs: &VerifierDefPvs<F> = def_pvs_slice.borrow();

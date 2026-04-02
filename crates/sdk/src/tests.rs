@@ -16,7 +16,7 @@ use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_circuit::extension::{
     get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
 };
-use openvm_verify_stark_host::vk::NonRootStarkVerifyingKey;
+use openvm_verify_stark_host::vk::VmStarkVerifyingKey;
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
@@ -132,7 +132,7 @@ fn test_verify_stark_deferral() -> Result<()> {
         deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
 
     // ---- Step 5: Compute deferral state and guest stdin values ----
-    let fib_vk = NonRootStarkVerifyingKey {
+    let fib_vk = VmStarkVerifyingKey {
         mvk: fib_sdk.agg_vk().as_ref().clone(),
         baseline: fib_baseline,
     };
@@ -143,7 +143,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
     let output_raw = &raw_results[0].output_raw;
     let app_exe_commit: [u8; 32] = output_raw[..32].try_into().unwrap();
-    let app_vk_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
+    let app_vm_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
     let user_public_values = output_raw[64..].to_vec();
 
     // Build the deferral state for execution
@@ -171,7 +171,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     // ---- Step 8: Set up stdin for the verify-stark guest program ----
     let mut vs_stdin = StdIn::default();
     vs_stdin.write(&app_exe_commit);
-    vs_stdin.write(&app_vk_commit);
+    vs_stdin.write(&app_vm_commit);
     vs_stdin.write(&user_public_values);
     vs_stdin.write(&input_commit);
     vs_stdin.deferrals = vec![deferral_state];
@@ -344,7 +344,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 .internal_recursive_prover
                 .get_self_vk_pcs_data()
                 .unwrap();
-            let dag_commit: CommitBytes = ir_pcs_data.commitment.into();
+            let vk_commit: CommitBytes = ir_pcs_data.commitment.into();
             let onion_commit = compute_dag_onion_commit(&ir_vk);
 
             let memory_dimensions = system_config.memory_config.memory_dimensions();
@@ -352,7 +352,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
             let root_prover = Arc::new(RootProver::from_pk(
                 ir_vk,
-                dag_commit,
+                vk_commit,
                 root_pk,
                 memory_dimensions,
                 num_user_pvs,

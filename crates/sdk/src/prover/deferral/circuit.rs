@@ -10,7 +10,7 @@ use openvm_continuations::{
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{keygen::types::MultiStarkProvingKey, proof::Proof, SystemParams};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
-use openvm_verify_stark_host::pvs::DagCommit;
+use openvm_verify_stark_host::pvs::VkCommit;
 use tracing::info_span;
 
 use crate::DeferralInput;
@@ -145,17 +145,17 @@ impl SingleDefCircuitProver {
         })
     }
 
-    pub fn vk_commit(&self, internal_for_leaf_dag_commit: DagCommit<F>) -> Digest {
-        let def_dag_commit = self.leaf_prover.get_dag_commit(false);
-        let leaf_dag_commit = self.internal_for_leaf_prover.get_dag_commit(false);
+    pub fn circuit_commit(&self, internal_for_leaf_vk_commit: VkCommit<F>) -> Digest {
+        let def_vk_commit = self.leaf_prover.get_vk_commit(false);
+        let leaf_vk_commit = self.internal_for_leaf_prover.get_vk_commit(false);
 
         let vk_commit_components = vec![
-            def_dag_commit.cached_commit,
-            def_dag_commit.vk_pre_hash,
-            leaf_dag_commit.cached_commit,
-            leaf_dag_commit.vk_pre_hash,
-            internal_for_leaf_dag_commit.cached_commit,
-            internal_for_leaf_dag_commit.vk_pre_hash,
+            def_vk_commit.cached_commit,
+            def_vk_commit.vk_pre_hash,
+            leaf_vk_commit.cached_commit,
+            leaf_vk_commit.vk_pre_hash,
+            internal_for_leaf_vk_commit.cached_commit,
+            internal_for_leaf_vk_commit.vk_pre_hash,
         ];
         poseidon2_hash_slice(&vk_commit_components.into_flattened()).0
     }
