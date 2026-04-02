@@ -49,6 +49,11 @@ cuda = [
 ]
 
 [[bin]]
+name = "fib_e2e"
+path = "src/bin/fib_e2e.rs"
+required-features = ["evm"]
+
+[[bin]]
 name = "fibonacci"
 path = "src/bin/fibonacci.rs"
 

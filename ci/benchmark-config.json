@@ -72,6 +72,18 @@
           "max_segment_length": 4194304
         }
       ]
+    },
+    {
+      "name": "fib_e2e",
+      "id": "fib_e2e",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "m7a.8xlarge",
+          "memory_allocator": "jemalloc"
+        }
+      ]
     }
   ]
 }

@@ -22,15 +22,11 @@ on:
         required: false
         description: Max segment length for continuations (default 2^20 = 1048576)
         default: 1048576
-      # e2e_bench:
-      #   type: boolean
-      #   required: false
-      #   description: Whether to run full e2e benchmark (aggregation + halo2)
-      #   default: false
-      # kzg_params_dir:
-      #   type: string
-      #   required: false
-      #   description: Directory containing KZG trusted setup files
+      e2e_bench:
+        type: boolean
+        required: false
+        description: Whether to run full e2e benchmark (aggregation + halo2)
+        default: false
       features:
         type: string
         required: false
@@ -60,11 +56,11 @@ on:
         required: false
         description: Max segment length for continuations (default 2^20 = 1048576)
         default: 1048576
-      # e2e_bench:
-      #   type: boolean
-      #   required: false
-      #   description: Whether to run full e2e benchmark (aggregation + halo2)
-      #   default: false
+      e2e_bench:
+        type: boolean
+        required: false
+        description: Whether to run full e2e benchmark (aggregation + halo2)
+        default: false
       features:
         type: string
         required: false
@@ -124,10 +120,6 @@ jobs:
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
           if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
             FEATURE_FLAGS=${FEATURE_FLAGS}
-            # TODO[INT-7054]: uncomment when evm-verify is ported to v2
-            # if [[ "${{ inputs.e2e_bench }}" == "true" ]]; then
-            #   FEATURE_FLAGS=${FEATURE_FLAGS},evm
-            # fi
           else
             FEATURE_FLAGS=${FEATURE_FLAGS},cuda
           fi
@@ -138,17 +130,16 @@ jobs:
           EXTRA_FEATURES=${{ inputs.features || github.event.inputs.features }}
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},$EXTRA_FEATURES" >> $GITHUB_ENV
 
-      # TODO[INT-7054]: Re-enable e2e halo2 proving when evm-verify feature is ported to v2
-      # - name: Setup e2e (halo2 and arguments)
-      #   run: |
-      #     E2E_BENCH=${{ inputs.e2e_bench }}
-      #     echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
-      #
-      #     if [[ "${E2E_BENCH}" == "true" ]]; then
-      #       FEATURE_FLAGS=${FEATURE_FLAGS},evm
-      #       echo "FEATURE_FLAGS=${FEATURE_FLAGS}" >> $GITHUB_ENV
-      #       bash ./scripts/trusted_setup_s3.sh
-      #     fi
+      - name: Setup e2e (halo2 and arguments)
+        run: |
+          E2E_BENCH=${{ inputs.e2e_bench }}
+          echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
+
+          if [[ "${E2E_BENCH}" == "true" ]]; then
+            FEATURE_FLAGS=${FEATURE_FLAGS},evm
+            echo "FEATURE_FLAGS=${FEATURE_FLAGS}" >> $GITHUB_ENV
+            bash ./scripts/trusted_setup_s3.sh
+          fi
 
       - name: Set BIN_NAME
         run: |
