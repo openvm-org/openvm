@@ -73,25 +73,47 @@ fn transcript_outputs_match_native_interleaved_flow() {
     let observed_ext_coeffs = [5, 7, 11, 13];
     let digest = [Bn254Scalar::from_u64(0x1234_5678)];
 
+    // Convenience alias for trait method disambiguation.
+    fn fs_observe_ext(t: &mut impl FiatShamirTranscript<RootConfig>, val: RootEF) {
+        FiatShamirTranscript::<RootConfig>::observe_ext(t, val);
+    }
+    fn fs_observe_commit(t: &mut impl FiatShamirTranscript<RootConfig>, digest: [Bn254Scalar; 1]) {
+        FiatShamirTranscript::<RootConfig>::observe_commit(t, digest);
+    }
+    fn fs_sample_ext(t: &mut impl FiatShamirTranscript<RootConfig>) -> RootEF {
+        FiatShamirTranscript::<RootConfig>::sample_ext(t)
+    }
+    fn fs_sample_bits(t: &mut impl FiatShamirTranscript<RootConfig>, bits: usize) -> u64 {
+        FiatShamirTranscript::<RootConfig>::sample_bits(t, bits)
+    }
+    fn fs_check_witness(
+        t: &mut impl FiatShamirTranscript<RootConfig>,
+        bits: usize,
+        witness: RootF,
+    ) -> bool {
+        FiatShamirTranscript::<RootConfig>::check_witness(t, bits, witness)
+    }
+
     // Build transcript state up to the PoW check, then grind for a valid witness.
     let build_transcript_before_pow = || {
         let mut t = default_transcript();
         t.observe(RootF::from_u64(1));
         t.observe(RootF::from_u64(2));
         t.observe(RootF::from_u64(3));
-        t.observe_ext(RootEF::from_basis_coefficients_fn(|i| {
-            RootF::from_u64(observed_ext_coeffs[i])
-        }));
-        t.observe_commit(digest);
+        fs_observe_ext(
+            &mut t,
+            RootEF::from_basis_coefficients_fn(|i| RootF::from_u64(observed_ext_coeffs[i])),
+        );
+        fs_observe_commit(&mut t, digest);
         let _ = t.sample();
-        let _ = FiatShamirTranscript::<RootConfig>::sample_ext(&mut t);
-        let _ = t.sample_bits(17);
+        let _ = fs_sample_ext(&mut t);
+        let _ = fs_sample_bits(&mut t, 17);
         t
     };
     let witness_for_pow = (0u64..)
         .find(|&w| {
             let mut t = build_transcript_before_pow();
-            t.check_witness(9, RootF::from_u64(w))
+            fs_check_witness(&mut t, 9, RootF::from_u64(w))
         })
         .expect("should find a valid PoW witness by grinding");
 
@@ -99,15 +121,20 @@ fn transcript_outputs_match_native_interleaved_flow() {
     native.observe(RootF::from_u64(1));
     native.observe(RootF::from_u64(2));
     native.observe(RootF::from_u64(3));
-    native.observe_ext(RootEF::from_basis_coefficients_fn(|i| {
-        RootF::from_u64(observed_ext_coeffs[i])
-    }));
-    native.observe_commit(digest);
+    fs_observe_ext(
+        &mut native,
+        RootEF::from_basis_coefficients_fn(|i| RootF::from_u64(observed_ext_coeffs[i])),
+    );
+    fs_observe_commit(&mut native, digest);
 
     let expected_sample = native.sample().as_canonical_u64();
-    let expected_ext = ext_to_u64(FiatShamirTranscript::<RootConfig>::sample_ext(&mut native));
-    let expected_bits = native.sample_bits(17) as u64;
-    assert!(native.check_witness(9, RootF::from_u64(witness_for_pow)));
+    let expected_ext = ext_to_u64(fs_sample_ext(&mut native));
+    let expected_bits = fs_sample_bits(&mut native, 17) as u64;
+    assert!(fs_check_witness(
+        &mut native,
+        9,
+        RootF::from_u64(witness_for_pow)
+    ));
     let expected_followup = native.sample().as_canonical_u64();
 
     run_mock(true, |builder| {
@@ -146,7 +173,6 @@ fn transcript_outputs_match_native_interleaved_flow() {
         gate.assert_is_const(ctx, &sampled_bits, &Fr::from(expected_bits));
 
         let pow_witness = baby_bear.load_witness(ctx, RootF::from_u64(witness_for_pow));
-        // check_witness now returns () and asserts internally
         transcript.check_witness(ctx, 9, &pow_witness);
 
         let followup = transcript.sample(ctx);
@@ -159,8 +185,7 @@ fn transcript_check_witness_zero_bits_matches_native() {
     let mut native = default_transcript();
     native.observe(RootF::from_u64(99));
     let expected_first = native.sample().as_canonical_u64();
-    // check_witness now asserts internally; just call it for its side effect on the transcript
-    let _ = native.check_witness(0, RootF::from_u64(7));
+    let _ = FiatShamirTranscript::<RootConfig>::check_witness(&mut native, 0, RootF::from_u64(7));
     let expected_second = native.sample().as_canonical_u64();
 
     run_mock(true, |builder| {
@@ -179,7 +204,6 @@ fn transcript_check_witness_zero_bits_matches_native() {
         gate.assert_is_const(ctx, &first.value, &Fr::from(expected_first));
 
         let witness = baby_bear.load_witness(ctx, RootF::from_u64(7));
-        // check_witness now returns () and asserts internally
         transcript.check_witness(ctx, 0, &witness);
 
         let second = transcript.sample(ctx);
