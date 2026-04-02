@@ -31,7 +31,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{EccRecord, WeierstrassAddChipGpu},
+    crate::{EccRecord, HybridWeierstrassChip},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
         GpuTestChipHarness,
@@ -131,7 +131,7 @@ mod ec_add_tests {
         F,
         EcAddExecutor<BLOCKS, BLOCK_SIZE>,
         WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
-        WeierstrassAddChipGpu<BLOCKS, BLOCK_SIZE>,
+        HybridWeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
         WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
     >;
 
@@ -237,16 +237,19 @@ mod ec_add_tests {
             a.clone(),
             b.clone(),
         );
-        let gpu_chip = WeierstrassAddChipGpu::new(
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
+        let gpu_chip = HybridWeierstrassChip::new(get_ec_add_chip(
             config,
-            offset,
+            tester.dummy_memory_helper(),
+            Arc::new(VariableRangeCheckerChip::new(
+                default_var_range_checker_bus(),
+            )),
+            Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+                default_bitwise_lookup_bus(),
+            )),
+            tester.address_bits(),
             a,
             b,
-            tester.address_bits() as u32,
-            tester.timestamp_max_bits() as u32,
-        );
+        ));
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -687,14 +690,11 @@ mod ec_double_tests {
     >;
 
     #[cfg(feature = "cuda")]
-    use crate::WeierstrassDoubleChipGpu;
-
-    #[cfg(feature = "cuda")]
     type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
         F,
         EcDoubleExecutor<BLOCKS, BLOCK_SIZE>,
         WeierstrassAir<1, BLOCKS, BLOCK_SIZE>,
-        WeierstrassDoubleChipGpu<BLOCKS, BLOCK_SIZE>,
+        HybridWeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
         WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
     >;
 
@@ -794,16 +794,19 @@ mod ec_double_tests {
             a_biguint.clone(),
             b.clone(),
         );
-        let gpu_chip = WeierstrassDoubleChipGpu::new(
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
+        let gpu_chip = HybridWeierstrassChip::new(get_ec_double_chip(
             config,
-            offset,
+            tester.dummy_memory_helper(),
+            Arc::new(VariableRangeCheckerChip::new(
+                default_var_range_checker_bus(),
+            )),
+            Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+                default_bitwise_lookup_bus(),
+            )),
+            tester.address_bits(),
             a_biguint,
             b,
-            tester.address_bits() as u32,
-            tester.timestamp_max_bits() as u32,
-        );
+        ));
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }

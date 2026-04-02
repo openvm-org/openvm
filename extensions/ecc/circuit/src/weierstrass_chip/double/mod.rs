@@ -24,11 +24,6 @@ use super::{WeierstrassAir, WeierstrassChip};
 
 mod execution;
 
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
-
 pub fn ec_double_proj_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,

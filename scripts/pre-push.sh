@@ -175,7 +175,7 @@ for i in "${!CRATE_NAMES[@]}"; do
 
     echo -n "  clippy $name "
     [ -n "$feats" ] && echo -n "(+$feats) "
-    if cargo clippy -p "$name" --all-targets --tests "${feat_args[@]}" -- -D warnings; then
+    if cargo clippy -p "$name" --all-targets --tests ${feat_args[@]+"${feat_args[@]}"} -- -D warnings; then
         pass ""
     else
         fail ""
@@ -210,14 +210,14 @@ for i in "${!CRATE_NAMES[@]}"; do
             profile_args=(--profile=heavy)
             echo -n "(heavy) "
         fi
-        if cargo nextest run --cargo-profile=fast -p "$name" "${feat_args[@]}" "${profile_args[@]}"; then
+        if cargo nextest run --cargo-profile=fast -p "$name" ${feat_args[@]+"${feat_args[@]}"} ${profile_args[@]+"${profile_args[@]}"}; then
             pass ""
         else
             fail ""
             ERRORS=$((ERRORS + 1))
         fi
     else
-        if cargo test --profile fast -p "$name" "${feat_args[@]}"; then
+        if cargo test --profile fast -p "$name" ${feat_args[@]+"${feat_args[@]}"}; then
             pass ""
         else
             fail ""
