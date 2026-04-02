@@ -54,4 +54,4 @@ jobs:
         working-directory: crates/sdk
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
-          cargo nextest run --cargo-profile=fast --features cuda --test-threads=1
+          cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1
