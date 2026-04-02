@@ -15,7 +15,7 @@ use crate::{
             hook::verifier::air::DeferralHookPvsCols, DeferralAggregationPvs, DEF_AGG_PVS_AIR_ID,
             DEF_AGG_VERIFIER_AIR_ID,
         },
-        root::NUM_DIGESTS_IN_VK_COMMIT,
+        root::NUM_DIGESTS_IN_VM_COMMIT,
         subair::hash_slice_trace,
         SingleAirTraceData,
     },
@@ -69,7 +69,7 @@ pub fn generate_proving_ctx(
     cols.output_onion = output_onion;
 
     let mut poseidon2_compress_inputs = Vec::with_capacity(6);
-    let mut poseidon2_permute_inputs = Vec::with_capacity(NUM_DIGESTS_IN_VK_COMMIT - 1);
+    let mut poseidon2_permute_inputs = Vec::with_capacity(NUM_DIGESTS_IN_VM_COMMIT - 1);
     let (intermediate_vk_states, def_circuit_commit) = hash_slice_trace(
         &hash_elements,
         Some(&mut poseidon2_permute_inputs),
@@ -79,7 +79,8 @@ pub fn generate_proving_ctx(
     cols.def_circuit_commit = def_circuit_commit;
 
     const ZERO_DIGEST: [F; DIGEST_SIZE] = [F::ZERO; DIGEST_SIZE];
-    let def_circuit_commit_padded = poseidon2_compress_with_capacity(def_circuit_commit, ZERO_DIGEST).0;
+    let def_circuit_commit_padded =
+        poseidon2_compress_with_capacity(def_circuit_commit, ZERO_DIGEST).0;
     let input_onion_padded = poseidon2_compress_with_capacity(input_onion, ZERO_DIGEST).0;
     let output_onion_padded = poseidon2_compress_with_capacity(output_onion, ZERO_DIGEST).0;
     cols.def_circuit_commit_padded = def_circuit_commit_padded;

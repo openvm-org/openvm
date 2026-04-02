@@ -26,7 +26,7 @@ use p3_matrix::Matrix;
 
 use crate::circuit::{
     inner::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
-    root::NUM_DIGESTS_IN_VK_COMMIT,
+    root::NUM_DIGESTS_IN_VM_COMMIT,
     subair::{HashSliceCtx, HashSliceSubAir},
     utils::{assert_vk_commit_eq, assert_vk_commit_unset, vk_commit_components},
 };
@@ -378,8 +378,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             is_internal_flag_zero.clone() * app_vk_commit.vk_pre_hash[i].into()
                 + is_internal_flag_one.clone() * leaf_vk_commit.vk_pre_hash[i].into()
                 + is_recursion_flag_one.clone() * internal_for_leaf_vk_commit.vk_pre_hash[i].into()
-                + is_recursion_flag_two.clone()
-                    * internal_recursive_vk_commit.vk_pre_hash[i].into()
+                + is_recursion_flag_two.clone() * internal_recursive_vk_commit.vk_pre_hash[i].into()
         });
 
         self.pre_hash_bus.receive(
@@ -420,7 +419,7 @@ impl VerifierDeferralConfig {
 #[derive(AlignedBorrow)]
 pub struct VerifierDeferralCols<F> {
     pub is_last: F,
-    pub intermediate_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
+    pub intermediate_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
     pub child_pvs: VerifierDefPvs<F>,
 }
 

@@ -28,7 +28,7 @@ mod trace;
 pub use trace::*;
 
 pub const USER_PVS_COMMIT_AIR_ID: usize = 1;
-pub const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
+pub const NUM_DIGESTS_IN_VM_COMMIT: usize = 6;
 
 #[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {

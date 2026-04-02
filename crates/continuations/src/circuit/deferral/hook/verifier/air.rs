@@ -27,7 +27,7 @@ use crate::{
             },
             DeferralAggregationPvs, DEF_AGG_PVS_AIR_ID,
         },
-        root::NUM_DIGESTS_IN_VK_COMMIT,
+        root::NUM_DIGESTS_IN_VM_COMMIT,
         subair::{HashSliceCtx, HashSliceSubAir, MerkleRootBus, MerkleRootMessage},
         utils::{assert_vk_commit_eq, assert_vk_commit_unset, vk_commit_components},
     },
@@ -41,7 +41,7 @@ pub struct DeferralHookPvsCols<F> {
     pub verifier_pvs: VerifierBasePvs<F>,
     pub def_pvs: DeferralAggregationPvs<F>,
 
-    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
+    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
     pub def_circuit_commit: [F; DIGEST_SIZE],
 
     pub input_onion: [F; DIGEST_SIZE],

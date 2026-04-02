@@ -29,7 +29,7 @@ use crate::{
                 DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
                 DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
             },
-            RootVerifierPvs, NUM_DIGESTS_IN_VK_COMMIT,
+            RootVerifierPvs, NUM_DIGESTS_IN_VM_COMMIT,
         },
         subair::{HashSliceCtx, HashSliceSubAir},
         utils::{assert_vk_commit_eq, assert_vk_commit_unset, vk_commit_components},
@@ -49,7 +49,7 @@ pub struct RootVerifierPvsCols<F> {
     pub initial_pc_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
 
-    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
+    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
 }
 
 pub struct RootVerifierPvsAir {

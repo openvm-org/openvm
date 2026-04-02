@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_continuations::{
     circuit::{
-        deferral::DeferralCircuitPvs, root::NUM_DIGESTS_IN_VK_COMMIT, subair::hash_slice_trace,
+        deferral::DeferralCircuitPvs, root::NUM_DIGESTS_IN_VM_COMMIT, subair::hash_slice_trace,
         utils::vk_commit_components,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, poseidon2_input_to_digests},
@@ -30,7 +30,7 @@ pub struct DeferredVerifyPvsRecord<F> {
     pub initial_root_hash: [F; DIGEST_SIZE],
     pub initial_pc_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
-    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
+    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
     pub app_exe_commit: [F; DIGEST_SIZE],
     pub app_vm_commit: [F; DIGEST_SIZE],
 }
