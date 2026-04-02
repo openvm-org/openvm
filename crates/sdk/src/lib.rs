@@ -218,6 +218,8 @@ where
             .build()
     }
 
+    /// Creates an SDK custom to the given [AppConfig] without configuring a transpiler.
+    ///
     /// **Note**: This function does not set the transpiler, which must be done separately to
     /// support RISC-V ELFs.
     pub fn new_without_transpiler(
@@ -281,6 +283,7 @@ where
             .ok_or(SdkError::TranspilerNotAvailable)
     }
 
+    /// Normalizes an ELF or executable handle into a shared [`VmExe`].
     pub fn convert_to_exe(
         &self,
         executable: impl Into<ExecutableFormat>,
@@ -415,6 +418,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Generates an EVM-verifiable proof for the given executable and inputs.
     pub fn prove_evm(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -466,6 +470,7 @@ where
     }
 
     #[cfg(feature = "root-prover")]
+    /// Constructs an [`EvmProver`] for the given executable, generating prerequisite keys lazily.
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -487,6 +492,7 @@ where
 
     // ===================== Component Prover Constructors =====================
 
+    /// Returns the cached aggregation prover, generating it on first use if needed.
     pub fn agg_prover(&self) -> Arc<AggProver> {
         let app_pk = self.app_pk();
         self.agg_prover
@@ -502,6 +508,7 @@ where
     }
 
     #[cfg(feature = "root-prover")]
+    /// Returns the cached root prover, generating it on first use if needed.
     pub fn root_prover(&self) -> Arc<RootProver> {
         self.root_prover
             .get_or_init(|| {
@@ -541,6 +548,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Returns the cached Halo2 prover, generating it on first use if needed.
     pub fn halo2_prover(&self) -> Halo2Prover {
         self.halo2_prover
             .get_or_init(|| {
@@ -596,16 +604,20 @@ where
         })
     }
 
+    /// Returns the app verifying key derived from the cached app proving key.
     pub fn app_vk(&self) -> AppVerifyingKey {
         self.app_pk().get_app_vk()
     }
 
+    /// Generates or retrieves the aggregation proving and verifying keys as a pair.
     pub fn agg_keygen(&self) -> (AggProvingKey, MultiStarkVerifyingKey<SC>) {
         let pk = self.agg_pk();
         let vk = self.agg_vk().as_ref().clone();
         (pk, vk)
     }
 
+    /// Generates or retrieves the aggregation prefix proving key without the internal-recursive
+    /// key.
     pub fn agg_prefix_pk(&self) -> AggPrefixProvingKey {
         if let Some(agg_prover) = self.agg_prover.get() {
             return AggPrefixProvingKey {
@@ -621,6 +633,8 @@ where
             self.def_hook_cached_commit(),
         )
     }
+
+    /// Generates or retrieves the full aggregation proving key.
     pub fn agg_pk(&self) -> AggProvingKey {
         let agg_prover = self.agg_prover();
         AggProvingKey {
@@ -632,11 +646,13 @@ where
         }
     }
 
+    /// Returns the aggregation verifying key for the recursive aggregation layer.
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.agg_prover().internal_recursive_prover.get_vk()
     }
 
     #[cfg(feature = "root-prover")]
+    /// Generates or retrieves the root proving key and recorded trace heights.
     pub fn root_pk(&self) -> RootProvingKey {
         let root_prover = self.root_prover();
         RootProvingKey {
@@ -678,6 +694,7 @@ where
     }
 
     #[cfg(feature = "evm-verify")]
+    /// Generates Solidity verifier artifacts for the cached Halo2 proving key.
     pub fn generate_halo2_verifier_solidity(&self) -> Result<types::EvmHalo2Verifier, SdkError> {
         solidity::generate_halo2_verifier_solidity(&self.halo2_pk(), &self.halo2_params_reader)
     }
