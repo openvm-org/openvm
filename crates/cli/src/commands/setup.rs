@@ -26,10 +26,7 @@ use crate::default::{
 const MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD: usize = 24;
 
 #[derive(Parser)]
-#[command(
-    name = "setup",
-    about = "Set up OpenVM recursive proving artifacts. ATTENTION: this requires large amounts of computation and memory."
-)]
+#[command(name = "setup", about = "Set up OpenVM recursive proving artifacts.")]
 pub struct SetupCmd {
     #[arg(
         long,
@@ -41,7 +38,7 @@ pub struct SetupCmd {
     #[arg(
         long,
         default_value = "false",
-        help = "Also cache the root proving key and download EVM verifier artifacts"
+        help = "Also cache the root proving key and download EVM verifier artifacts. ATTENTION: this requires large amounts of computation and memory."
     )]
     pub evm: bool,
 
@@ -62,10 +59,7 @@ impl SetupCmd {
             "Writing internal-recursive proving key to {}",
             internal_recursive_pk_path.display()
         );
-        write_object_to_file(
-            &internal_recursive_pk_path,
-            sdk.agg_pk().internal_recursive_pk,
-        )?;
+        write_object_to_file(&internal_recursive_pk_path, sdk.agg_pk().internal_recursive)?;
 
         if !self.evm {
             return Ok(());

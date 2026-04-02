@@ -348,8 +348,8 @@ pub(crate) fn load_required_agg_pk(
     let prefix_pk = load_required_agg_prefix_pk(agg_prefix_pk, cargo_args)?;
     let internal_recursive_pk = load_required_internal_recursive_pk()?;
     Ok(AggProvingKey {
-        prefix_pk,
-        internal_recursive_pk,
+        prefix: prefix_pk,
+        internal_recursive: internal_recursive_pk,
     })
 }
 

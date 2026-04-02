@@ -62,8 +62,8 @@ impl AggProver {
             def_hook_cached_commit,
         );
         AggPrefixProvingKey {
-            leaf_pk: leaf_prover.get_pk(),
-            internal_for_leaf_pk: internal_for_leaf_prover.get_pk(),
+            leaf: leaf_prover.get_pk(),
+            internal_for_leaf: internal_for_leaf_prover.get_pk(),
         }
     }
 
@@ -110,19 +110,19 @@ impl AggProver {
     ) -> Self {
         let leaf_prover = InnerAggregationProver::from_pk::<E>(
             app_or_def_vk,
-            agg_pk.prefix_pk.leaf_pk,
+            agg_pk.prefix.leaf,
             false,
             def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
-            agg_pk.prefix_pk.internal_for_leaf_pk,
+            agg_pk.prefix.internal_for_leaf,
             false,
             def_hook_cached_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
-            agg_pk.internal_recursive_pk,
+            agg_pk.internal_recursive,
             true,
             def_hook_cached_commit,
         );

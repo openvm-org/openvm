@@ -639,8 +639,8 @@ where
     pub fn agg_prefix_pk(&self) -> AggPrefixProvingKey {
         if let Some(agg_prover) = self.agg_prover.get() {
             return AggPrefixProvingKey {
-                leaf_pk: agg_prover.leaf_prover.get_pk(),
-                internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
+                leaf: agg_prover.leaf_prover.get_pk(),
+                internal_for_leaf: agg_prover.internal_for_leaf_prover.get_pk(),
             };
         }
 
@@ -664,11 +664,11 @@ where
     pub fn agg_pk(&self) -> AggProvingKey {
         let agg_prover = self.agg_prover();
         AggProvingKey {
-            prefix_pk: AggPrefixProvingKey {
-                leaf_pk: agg_prover.leaf_prover.get_pk(),
-                internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
+            prefix: AggPrefixProvingKey {
+                leaf: agg_prover.leaf_prover.get_pk(),
+                internal_for_leaf: agg_prover.internal_for_leaf_prover.get_pk(),
             },
-            internal_recursive_pk: agg_prover.internal_recursive_prover.get_pk(),
+            internal_recursive: agg_prover.internal_recursive_prover.get_pk(),
         }
     }
 
