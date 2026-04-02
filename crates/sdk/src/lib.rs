@@ -596,6 +596,10 @@ where
         })
     }
 
+    pub fn app_vk(&self) -> AppVerifyingKey {
+        self.app_pk().get_app_vk()
+    }
+
     pub fn agg_keygen(&self) -> (AggProvingKey, MultiStarkVerifyingKey<SC>) {
         let pk = self.agg_pk();
         let vk = self.agg_vk().as_ref().clone();
@@ -617,16 +621,6 @@ where
             self.def_hook_cached_commit(),
         )
     }
-
-    #[cfg(feature = "root-prover")]
-    pub fn root_pk(&self) -> RootProvingKey {
-        let root_prover = self.root_prover();
-        RootProvingKey {
-            root_pk: root_prover.0.get_pk(),
-            trace_heights: root_prover.0.get_trace_heights().unwrap_or_default(),
-        }
-    }
-
     pub fn agg_pk(&self) -> AggProvingKey {
         let agg_prover = self.agg_prover();
         AggProvingKey {
@@ -640,6 +634,15 @@ where
 
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.agg_prover().internal_recursive_prover.get_vk()
+    }
+
+    #[cfg(feature = "root-prover")]
+    pub fn root_pk(&self) -> RootProvingKey {
+        let root_prover = self.root_prover();
+        RootProvingKey {
+            root_pk: root_prover.0.get_pk(),
+            trace_heights: root_prover.0.get_trace_heights().unwrap_or_default(),
+        }
     }
 
     /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
