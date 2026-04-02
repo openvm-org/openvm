@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
     },
 };
 use openvm_transpiler::{elf::Elf, FromElf};
-use openvm_verify_stark_host::{verify_vm_stark_proof_decoded, vk::NonRootStarkVerifyingKey};
+use openvm_verify_stark_host::{verify_vm_stark_proof_decoded, vk::VmStarkVerifyingKey};
 
 pub const DEFAULT_MAX_SEGMENT: u32 = 1 << 20;
 pub const DEFAULT_LOG_STACKED_HEIGHT: usize = 21;
@@ -100,7 +100,7 @@ pub fn run_benchmark(
             metrics::gauge!("proof_size_bytes.total").set(encoded.len() as f64);
             metrics::gauge!("proof_size_bytes.compressed").set(compressed.len() as f64);
         }
-        let vk = NonRootStarkVerifyingKey {
+        let vk = VmStarkVerifyingKey {
             mvk: (*sdk.agg_vk()).clone(),
             baseline,
         };

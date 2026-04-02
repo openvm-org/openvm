@@ -13,7 +13,7 @@ use crate::DagCommit;
 
 /// Verifying key and artifacts used to verify a STARK proof for a fixed VM and executable
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NonRootStarkVerifyingKey {
+pub struct VmStarkVerifyingKey {
     pub mvk: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub baseline: VerificationBaseline,
 }
@@ -45,7 +45,7 @@ pub struct VerificationBaseline {
     pub expected_def_vk_commit: Option<Digest>,
 }
 
-pub fn read_vk_from_file<P: AsRef<Path>>(path: P) -> Result<NonRootStarkVerifyingKey> {
+pub fn read_vk_from_file<P: AsRef<Path>>(path: P) -> Result<VmStarkVerifyingKey> {
     let ret = read(&path)
         .map_err(|e| read_error(&path, e.into()))
         .and_then(|data| {
@@ -54,7 +54,7 @@ pub fn read_vk_from_file<P: AsRef<Path>>(path: P) -> Result<NonRootStarkVerifyin
     Ok(ret)
 }
 
-pub fn write_vk_to_file<P: AsRef<Path>>(path: P, vk: &NonRootStarkVerifyingKey) -> Result<()> {
+pub fn write_vk_to_file<P: AsRef<Path>>(path: P, vk: &VmStarkVerifyingKey) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent).map_err(|e| write_error(&path, e.into()))?;
     }

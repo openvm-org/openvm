@@ -37,8 +37,8 @@ use openvm_transpiler::{
 };
 use openvm_verify_stark_host::{
     verify_vm_stark_proof_decoded,
-    vk::{NonRootStarkVerifyingKey, VerificationBaseline},
-    NonRootStarkProof,
+    vk::{VmStarkVerifyingKey, VerificationBaseline},
+    VmStarkProof,
 };
 
 use crate::{
@@ -441,7 +441,7 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
         def_inputs: &[DeferralInput],
-    ) -> Result<(NonRootStarkProof, VerificationBaseline), SdkError> {
+    ) -> Result<(VmStarkProof, VerificationBaseline), SdkError> {
         let mut prover = self.prover(app_exe)?;
         let proof = prover.prove(inputs, def_inputs)?.0;
         let baseline = prover.generate_baseline();
@@ -698,9 +698,9 @@ where
     pub fn verify_proof(
         agg_vk: MultiStarkVerifyingKey<SC>,
         baseline: VerificationBaseline,
-        proof: &NonRootStarkProof,
+        proof: &VmStarkProof,
     ) -> Result<(), SdkError> {
-        let vk = NonRootStarkVerifyingKey {
+        let vk = VmStarkVerifyingKey {
             mvk: agg_vk,
             baseline,
         };

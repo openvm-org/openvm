@@ -30,7 +30,7 @@ A **circuit** is a set of AIRs that collectively constrain one or more trace mat
 A **prover** is a struct that generates a proof for a specific circuit given appropriate inputs. We distinguish:
 
 - **Basic provers** — generate a single aggregated `Proof` from child `Proof`s. Each basic prover corresponds to a specific aggregation subcircuit (see [Layer Architecture](#layer-architecture) for more information).
-- **SDK provers** — orchestrate basic provers to produce client-facing proof formats (`ContinuationVmProof`, `NonRootStarkProof`, `EvmProof`) or their intermediate forms.
+- **SDK provers** — orchestrate basic provers to produce client-facing proof formats (`ContinuationVmProof`, `VmStarkProof`, `EvmProof`) or their intermediate forms.
 
 ## Client-Facing Proofs
 
@@ -39,7 +39,7 @@ There are three **client-facing proof** types:
 | Type | Struct | Description |
 |------|--------|-------------|
 | App proof | `ContinuationVmProof` | Non-aggregated segment `Proof`s plus the user public values Merkle proof |
-| STARK proof | `NonRootStarkProof` | A single aggregated `Proof` plus the user public values Merkle proof |
+| STARK proof | `VmStarkProof` | A single aggregated `Proof` plus the user public values Merkle proof |
 | EVM proof | `EvmProof` | A single, constant-sized aggregated `Proof` formatted for verification by a fixed on-chain verifier |
 
 ### Aggregation Pipelines
@@ -69,15 +69,15 @@ For convenience the SDK provides several **SDK provers**, which orchestrate basi
 | Component SDK Prover | Aggregation Pipeline Section | Input | Output |
 |-------|-----------------|------------------|-------|
 | `AppProver` | app | Executable and `StdIn` input | `ContinuationVmProof` (i.e. app proof) |
-| `AggProver` | leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) | `ContinuationVmProof` | `NonRootStarkProof` (i.e. STARK proof) |
-| `RootProver` | root | `NonRootStarkProof` | `Proof` (EVM input) |
+| `AggProver` | leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) | `ContinuationVmProof` | `VmStarkProof` (i.e. STARK proof) |
+| `RootProver` | root | `VmStarkProof` | `Proof` (EVM input) |
 | `StaticProver` | static | `Proof` | `EvmProof` (EVM proof) |
 
 `StarkProver` and `EvmProver` use these component SDK provers to encapsulate end-to-end STARK and EVM proving.
 
 | E2E SDK Prover | Component Prover Pipeline | Input | Output |
 |-------|-----------------|-------|-------|
-| `StarkProver` | `AppProver` → `AggProver` | Executable and `StdIn` input | `NonRootStarkProof` |
+| `StarkProver` | `AppProver` → `AggProver` | Executable and `StdIn` input | `VmStarkProof` |
 | `EvmProver` | `AppProver` → `AggProver` → `RootProver` → `StaticProver` | Executable and `StdIn` input | `EvmProof` |
 
 ## Layer Architecture
@@ -191,7 +191,7 @@ Layers with a single child `Proof` practically only need to constrain 3.
 
 ### Inner Aggregation Subcircuit
 
-The inner subcircuit takes up to $N$ child `Proof`s and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to either be recursively aggregated or used as the `Proof` component in a `NonRootStarkProof`.
+The inner subcircuit takes up to $N$ child `Proof`s and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to either be recursively aggregated or used as the `Proof` component in a `VmStarkProof`.
 
 #### Public Values
 

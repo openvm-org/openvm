@@ -23,7 +23,7 @@ use openvm_stark_sdk::config::{
     baby_bear_poseidon2::{Digest, F},
     MAX_APP_LOG_STACKED_HEIGHT,
 };
-use openvm_verify_stark_host::NonRootStarkProof;
+use openvm_verify_stark_host::VmStarkProof;
 use tracing::info_span;
 
 use crate::{
@@ -97,7 +97,7 @@ impl RootProver {
 
     pub fn generate_proving_ctx(
         &self,
-        input: NonRootStarkProof,
+        input: VmStarkProof,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0.generate_proving_ctx(

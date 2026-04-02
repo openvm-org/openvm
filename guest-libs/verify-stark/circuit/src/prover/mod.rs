@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2CpuEngine, Digest, DIGEST_SIZE, EF, F,
 };
-use openvm_verify_stark_host::NonRootStarkProof;
+use openvm_verify_stark_host::VmStarkProof;
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
 
@@ -263,9 +263,9 @@ where
     }
 
     fn prove(&self, input_bytes: &[u8]) -> Proof<SC> {
-        let non_root_proof = NonRootStarkProof::decode_from_bytes(input_bytes).unwrap();
+        let vm_proof = VmStarkProof::decode_from_bytes(input_bytes).unwrap();
         self.prover
-            .prove_no_def::<E>(non_root_proof.inner, &non_root_proof.user_pvs_proof)
+            .prove_no_def::<E>(vm_proof.inner, &vm_proof.user_pvs_proof)
             .expect("DeferredVerifyProver::prove_no_def failed")
     }
 

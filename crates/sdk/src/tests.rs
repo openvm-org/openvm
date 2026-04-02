@@ -16,7 +16,7 @@ use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_circuit::extension::{
     get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
 };
-use openvm_verify_stark_host::vk::NonRootStarkVerifyingKey;
+use openvm_verify_stark_host::vk::VmStarkVerifyingKey;
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
@@ -132,7 +132,7 @@ fn test_verify_stark_deferral() -> Result<()> {
         deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
 
     // ---- Step 5: Compute deferral state and guest stdin values ----
-    let fib_vk = NonRootStarkVerifyingKey {
+    let fib_vk = VmStarkVerifyingKey {
         mvk: fib_sdk.agg_vk().as_ref().clone(),
         baseline: fib_baseline,
     };

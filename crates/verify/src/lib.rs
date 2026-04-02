@@ -24,7 +24,7 @@ use crate::{
         DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID,
         CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
     },
-    vk::NonRootStarkVerifyingKey,
+    vk::VmStarkVerifyingKey,
 };
 
 pub mod deferral;
@@ -36,13 +36,13 @@ pub(crate) type DagCommit = pvs::DagCommit<F>;
 
 // Final internal recursive STARK proof to be verified against the baseline
 #[derive(Clone, Debug)]
-pub struct NonRootStarkProof {
+pub struct VmStarkProof {
     pub inner: Proof<SC>,
     pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
     pub deferral_merkle_proofs: Option<DeferralMerkleProofs<F>>,
 }
 
-impl Encode for NonRootStarkProof {
+impl Encode for VmStarkProof {
     fn encode<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         self.inner.encode(writer)?;
         self.user_pvs_proof.encode::<SC, _>(writer)?;
@@ -54,7 +54,7 @@ impl Encode for NonRootStarkProof {
     }
 }
 
-impl Decode for NonRootStarkProof {
+impl Decode for VmStarkProof {
     fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let inner = Proof::<SC>::decode(reader)?;
         let user_pvs_proof = UserPublicValuesProof::decode::<SC, _>(reader)?;
@@ -74,18 +74,18 @@ impl Decode for NonRootStarkProof {
 /// Verifies a non-root VM STARK proof (as a byte stream) given the internal-recursive
 /// layer verifying key and VM- and exe-specific baseline artifacts.
 pub fn verify_vm_stark_proof(
-    vk: &NonRootStarkVerifyingKey,
+    vk: &VmStarkVerifyingKey,
     encoded_proof: &[u8],
 ) -> Result<(), VerifyStarkError> {
     let decompressed = zstd::decode_all(encoded_proof)?;
-    verify_vm_stark_proof_decoded(vk, &NonRootStarkProof::decode_from_bytes(&decompressed)?)
+    verify_vm_stark_proof_decoded(vk, &VmStarkProof::decode_from_bytes(&decompressed)?)
 }
 
 /// Verifies a non-root VM STARK proof given the internal-recursive layer verifying
 /// key and VM- and exe-specific baseline artifacts.
 pub fn verify_vm_stark_proof_decoded(
-    vk: &NonRootStarkVerifyingKey,
-    proof: &NonRootStarkProof,
+    vk: &VmStarkVerifyingKey,
+    proof: &VmStarkProof,
 ) -> Result<(), VerifyStarkError> {
     // Verify the STARK proof.
     let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(vk.mvk.inner.params.clone());
@@ -94,8 +94,8 @@ pub fn verify_vm_stark_proof_decoded(
 }
 
 pub fn verify_vm_stark_proof_pvs(
-    vk: &NonRootStarkVerifyingKey,
-    proof: &NonRootStarkProof,
+    vk: &VmStarkVerifyingKey,
+    proof: &VmStarkProof,
 ) -> Result<(), VerifyStarkError> {
     let (verifier_base_pvs_slice, verifier_def_pvs_slice) = proof.inner.public_values
         [VERIFIER_PVS_AIR_ID]

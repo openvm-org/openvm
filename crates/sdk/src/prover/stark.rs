@@ -14,7 +14,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::{
     pvs::{DeferralPvs, DEF_PVS_AIR_ID},
     vk::VerificationBaseline,
-    NonRootStarkProof,
+    VmStarkProof,
 };
 
 use crate::{
@@ -65,7 +65,7 @@ where
         &mut self,
         vm_input: StdIn<Val<SC>>,
         def_inputs: &[DeferralInput],
-    ) -> Result<(NonRootStarkProof, InternalLayerMetadata)>
+    ) -> Result<(VmStarkProof, InternalLayerMetadata)>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>

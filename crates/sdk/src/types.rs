@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 };
 use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_host::{
-    deferral::DeferralMerkleProofs, pvs::DagCommit, vk::VerificationBaseline, NonRootStarkProof,
+    deferral::DeferralMerkleProofs, pvs::DagCommit, vk::VerificationBaseline, VmStarkProof,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -305,10 +305,10 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
 
 // =================== Non-EVM types ===================
 
-/// Struct purely for encoding and decoding of [NonRootStarkProof].
+/// Struct purely for encoding and decoding of [VmStarkProof].
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize, Encode, Decode)]
-pub struct VersionedNonRootStarkProof {
+pub struct VersionedVmStarkProof {
     /// The openvm major and minor version v{}.{}. The proof format will not change on patch
     /// versions.
     pub version: String,
@@ -321,8 +321,8 @@ pub struct VersionedNonRootStarkProof {
     pub deferral_merkle_proofs: Option<Vec<u8>>,
 }
 
-impl VersionedNonRootStarkProof {
-    pub fn new(proof: NonRootStarkProof) -> Result<Self> {
+impl VersionedVmStarkProof {
+    pub fn new(proof: VmStarkProof) -> Result<Self> {
         Ok(Self {
             version: format!("v{}", OPENVM_VERSION),
             proof: proof.inner.encode_to_vec()?,
@@ -343,10 +343,10 @@ impl VersionedNonRootStarkProof {
     }
 }
 
-impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
+impl TryFrom<VersionedVmStarkProof> for VmStarkProof {
     type Error = std::io::Error;
-    fn try_from(proof: VersionedNonRootStarkProof) -> Result<Self, std::io::Error> {
-        let VersionedNonRootStarkProof {
+    fn try_from(proof: VersionedVmStarkProof) -> Result<Self, std::io::Error> {
+        let VersionedVmStarkProof {
             proof,
             user_pvs_proof,
             deferral_merkle_proofs,
