@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
-use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
+use openvm_verify_stark_host::pvs::{DeferralPvs, VkCommit};
 use tracing::instrument;
 
 use crate::{
@@ -196,14 +196,14 @@ impl<
         self.circuit.def_hook_cached_commit.is_some()
     }
 
-    pub fn get_dag_commit(&self, is_self_recursive: bool) -> DagCommit<PB::Val> {
+    pub fn get_vk_commit(&self, is_self_recursive: bool) -> VkCommit<PB::Val> {
         if is_self_recursive {
-            DagCommit {
+            VkCommit {
                 cached_commit: self.self_vk_pcs_data.as_ref().unwrap().commitment,
                 vk_pre_hash: self.vk.pre_hash,
             }
         } else {
-            DagCommit {
+            VkCommit {
                 cached_commit: self.child_vk_pcs_data.commitment,
                 vk_pre_hash: self.child_vk.pre_hash,
             }
