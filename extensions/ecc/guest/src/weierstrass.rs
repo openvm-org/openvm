@@ -247,13 +247,22 @@ macro_rules! impl_sw_proj {
     ($struct_name:ident, $field:ty, $b:expr) => {
         /// A projective point on a short Weierstrass curve, implementing elliptic curve operations
         /// using complete formulas from [ePrint 2015/1060](https://eprint.iacr.org/2015/1060).
-        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
         #[repr(C)]
         pub struct $struct_name {
             pub x: $field,
             pub y: $field,
             pub z: $field,
         }
+
+        impl core::cmp::PartialEq for $struct_name {
+            fn eq(&self, other: &Self) -> bool {
+                (&self.x * &other.z) == (&other.x * &self.z)
+                    && (&self.y * &other.z) == (&other.y * &self.z)
+            }
+        }
+
+        impl core::cmp::Eq for $struct_name {}
 
         impl $struct_name {
             pub const fn new(x: $field, y: $field, z: $field) -> Self {
