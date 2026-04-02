@@ -30,7 +30,6 @@ pub enum VmCliCommands {
     Init(InitCmd),
     Prove(ProveCmd),
     Run(RunCmd),
-    #[cfg(feature = "evm-verify")]
     Setup(SetupCmd),
     Verify(VerifyCmd),
 }
@@ -53,7 +52,6 @@ async fn main() -> Result<()> {
         VmCliCommands::Init(cmd) => cmd.run(),
         VmCliCommands::Prove(cmd) => cmd.run(),
         VmCliCommands::Run(cmd) => cmd.run(),
-        #[cfg(feature = "evm-verify")]
         VmCliCommands::Setup(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),
     }
