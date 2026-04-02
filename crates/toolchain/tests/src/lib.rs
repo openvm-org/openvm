@@ -4,12 +4,9 @@ use std::{
 };
 
 use eyre::{Context, Result};
-use openvm_build::{
-    build_guest_package, get_dir_with_profile, get_package, GuestOptions, TargetFilter,
-};
+use openvm_build::{build_guest_package, get_package, GuestOptions, TargetFilter};
 use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_BASENAME};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
-use tempfile::tempdir;
 
 #[macro_export]
 macro_rules! get_programs_dir {
@@ -67,11 +64,7 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     init_config: &impl InitFileGenerator,
 ) -> Result<Elf> {
     let pkg = get_package(&manifest_dir);
-    let target_dir = tempdir()?;
-    // Build guest with default features
-    let guest_opts = GuestOptions::default()
-        .with_features(features.clone())
-        .with_target_dir(target_dir.path());
+    let guest_opts = GuestOptions::default().with_features(features.clone());
     let features = features
         .into_iter()
         .map(|x| x.as_ref().to_string())
@@ -87,7 +80,7 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
             "{OPENVM_DEFAULT_INIT_FILE_BASENAME}_{example_name}{features_str}.rs"
         )),
     )?;
-    if let Err(Some(code)) = build_guest_package(
+    let output_dir = match build_guest_package(
         &pkg,
         &guest_opts,
         None,
@@ -96,21 +89,11 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
             kind: "example".to_string(),
         }),
     ) {
-        std::process::exit(code);
-    }
-    // Assumes the package has a single target binary
-    let profile = "release";
-    let elf_path = pkg
-        .targets
-        .iter()
-        .find(|target| target.name == example_name)
-        .map(|target| {
-            get_dir_with_profile(&target_dir, profile, true)
-                .join(&target.name)
-                .to_path_buf()
-        })
-        .expect("Could not find target binary");
+        Ok(dir) => dir,
+        Err(Some(code)) => std::process::exit(code),
+        Err(None) => eyre::bail!("Guest build was skipped"),
+    };
+    let elf_path = output_dir.join(example_name);
     let data = read(&elf_path).with_context(|| format!("Path not found: {elf_path:?}"))?;
-    target_dir.close()?;
     Elf::decode(&data, MEM_SIZE as u32)
 }
