@@ -104,7 +104,9 @@ fn main() -> Result<()> {
             }
         }
         if name.is_empty() {
-            *name = aggregated.name();
+            if let Some(n) = aggregated.name() {
+                *name = n;
+            }
         }
         output.insert(name, aggregated.to_bencher_metrics());
         let mut writer = Vec::new();

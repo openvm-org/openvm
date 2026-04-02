@@ -595,18 +595,13 @@ impl AggregateMetrics {
         Ok(())
     }
 
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> Option<String> {
         // A hacky way to determine the app name
         self.by_group
             .keys()
             .find(|k| group_weight(k) == 0)
-            .unwrap_or_else(|| {
-                self.by_group
-                    .keys()
-                    .next()
-                    .expect("by_group should contain at least one group")
-            })
-            .clone()
+            .or_else(|| self.by_group.keys().next())
+            .cloned()
     }
 }
 
