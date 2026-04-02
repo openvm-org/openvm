@@ -44,7 +44,7 @@ use openvm_verify_stark_host::{
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
-    prover::{AggProver, AppProver, DeferralPathProver, DeferralProver, StarkProver},
+    prover::{AggProver, AppProver, DeferralPathProver, StarkProver},
     types::ExecutableFormat,
 };
 #[cfg(feature = "evm-prove")]
@@ -231,38 +231,6 @@ where
             .app_config(app_config)
             .agg_params(agg_params)
             .build_without_transpiler()
-    }
-
-    /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
-    /// because the DeferralExtension should be created using DeferralProver::make_extension, as
-    /// it has the capability to generate def_circuit_commits.
-    pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
-        assert!(
-            self.def_path_prover.is_none(),
-            "Deferral prover already defined"
-        );
-        assert!(
-            self.agg_prover.get().is_none(),
-            "Agg prover has already been initialized without deferrals"
-        );
-
-        let deferral_tree_config = AggregationTreeConfig {
-            num_children_leaf: 2,
-            num_children_internal: 2,
-        };
-        let agg_prover = AggProver::new(
-            deferral_prover.def_hook_prover.get_vk(),
-            self.agg_config.clone(),
-            deferral_tree_config,
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
-        );
-        let def_path_prover = DeferralPathProver {
-            deferral_prover: Arc::new(deferral_prover),
-            agg_prover: Arc::new(agg_prover),
-        };
-
-        self.def_path_prover = Some(Arc::new(def_path_prover));
-        self
     }
 
     /// Returns the def_hook_prover cached commit.

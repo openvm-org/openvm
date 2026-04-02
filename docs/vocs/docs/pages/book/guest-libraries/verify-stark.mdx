@@ -56,7 +56,7 @@ It is **highly** recommended that guest programs that use deferrals are proved u
 1. Build a `DeferralProver` whose single-circuit prover is `VerifyCircuitProver`.
 2. Create the extension with `make_extension`, passing the deferral function(s).
 3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
-4. Build your SDK with `.with_deferral_prover(deferral_prover)`.
+4. Build your SDK with `Sdk::builder().deferral_prover(deferral_prover)`.
 
 For example, to initialize the SDK with the `verify-stark` deferral circuit:
 
@@ -80,8 +80,11 @@ let deferral_ext =
 let mut vm_config = SdkVmConfig::riscv32();
 vm_config.deferral = Some(deferral_ext);
 
-let sdk = CpuSdk::new(AppConfig::new(vm_config, app_params), agg_params)?
-    .with_deferral_prover(deferral_prover);
+let sdk = CpuSdk::builder()
+    .app_config(AppConfig::new(vm_config, app_params))
+    .agg_params(agg_params)
+    .deferral_prover(deferral_prover)
+    .build()?;
 ```
 
 Each guest call using `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.
