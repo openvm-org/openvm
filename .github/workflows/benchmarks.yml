@@ -67,7 +67,6 @@ jobs:
       - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
-      run_e2e: ${{ steps.create-matrix.outputs.run_e2e }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -93,16 +92,17 @@ jobs:
             FEATURE_FLAGS="perf-metrics,${FEATURE_FLAGS}"
           fi
 
-          echo "run_e2e=$RUN_E2E" >> $GITHUB_OUTPUT
-
-          matrix=$(jq -c --arg features "$FEATURE_FLAGS" '
+          matrix=$(jq -c --argjson run_e2e $RUN_E2E --arg features "$FEATURE_FLAGS" '
             [
               .benchmarks[] |
               .name as $name |
               .id as $id |
+              .e2e_bench as $e2e_bench |
+              select($run_e2e or .e2e_bench != true) |
               .run_params[] |
               {
                 name: $name,
+                e2e_bench: $e2e_bench,
                 features: $features,
                 id: $id,
                 instance_type: .instance_type,
@@ -129,7 +129,7 @@ jobs:
       instance_type: ${{ matrix.benchmark_run.instance_type }}
       memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
       max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
-      e2e_bench: ${{ needs.create-matrix.outputs.run_e2e == 'true' }}
+      e2e_bench: ${{ matrix.benchmark_run.e2e_bench || false }}
       features: ${{ matrix.benchmark_run.features }}
       is_merge_queue: ${{ inputs.is_merge_queue || false }}
       job_index: ${{ strategy.job-index }}
