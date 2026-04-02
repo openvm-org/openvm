@@ -86,18 +86,6 @@
       ]
     },
     {
-      "name": "keccak",
-      "id": "keccak_e2e",
-      "working_directory": "benchmarks/prove",
-      "e2e_bench": true,
-      "run_params": [
-        {
-          "instance_type": "m7a.8xlarge",
-          "memory_allocator": "jemalloc"
-        }
-      ]
-    },
-    {
       "name": "regex",
       "id": "regex_e2e",
       "working_directory": "benchmarks/prove",
