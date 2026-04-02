@@ -32,7 +32,7 @@ pub struct DeferredVerifyPvsRecord<F> {
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
     pub app_exe_commit: [F; DIGEST_SIZE],
-    pub app_vk_commit: [F; DIGEST_SIZE],
+    pub app_vm_commit: [F; DIGEST_SIZE],
 }
 
 pub fn generate_record(
@@ -78,7 +78,7 @@ pub fn generate_record(
         initial_root_hash,
     ));
 
-    let (intermediate_vk_states_vec, app_vk_commit) = hash_slice_trace(
+    let (intermediate_vk_states_vec, app_vm_commit) = hash_slice_trace(
         &vk_commit_components(child_verifier_pvs),
         Some(&mut poseidon2_permute_inputs),
         Some(&mut poseidon2_compress_inputs),
@@ -100,7 +100,7 @@ pub fn generate_record(
             intermediate_exe_commit,
             intermediate_vk_states,
             app_exe_commit,
-            app_vk_commit,
+            app_vm_commit,
         },
         poseidon2_compress_inputs,
         poseidon2_permute_inputs,
@@ -136,7 +136,7 @@ pub fn generate_proving_ctx(
     cols.intermediate_exe_commit = record.intermediate_exe_commit;
     cols.intermediate_vk_states = record.intermediate_vk_states;
     cols.app_exe_commit = record.app_exe_commit;
-    cols.app_vk_commit = record.app_vk_commit;
+    cols.app_vm_commit = record.app_vm_commit;
     cols.final_transcript_state = final_transcript_state;
 
     if deferral_enabled {

@@ -218,11 +218,11 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         &vm_pvs.initial_root,
         vm_pvs.initial_pc,
     );
-    let app_vk_commit =
+    let app_vm_commit =
         poseidon2_hash_slice(&vk_commit_components(verifier_pvs).into_flattened()).0;
     let expected_output_commit = crate::output::generate_proving_ctx(
         app_exe_commit,
-        app_vk_commit,
+        app_vm_commit,
         user_pvs_proof.public_values,
         0,
     )

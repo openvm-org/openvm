@@ -58,7 +58,7 @@ pub struct DeferredVerifyPvsCols<F> {
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
 
     pub app_exe_commit: [F; DIGEST_SIZE],
-    pub app_vk_commit: [F; DIGEST_SIZE],
+    pub app_vm_commit: [F; DIGEST_SIZE],
     pub final_transcript_state: [F; POSEIDON2_WIDTH],
 }
 
@@ -230,7 +230,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * We need to verify the commits to the app executable and vk. The app_vk_commit is
+         * We need to verify the commits to the app executable and vk. The app_vm_commit is
          * constrained to be hash_slice of the 6 vk_commit_components (cached_commit and
          * vk_pre_hash for each of the child's app, leaf, and internal-for-leaf DAG commits).
          */
@@ -246,7 +246,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     .intermediate_vk_states
                     .map(|v| v.map(Into::into))
                     .as_slice(),
-                result: &local.app_vk_commit.map(Into::into),
+                result: &local.app_vm_commit.map(Into::into),
                 enabled: &AB::Expr::ONE,
             },
         );
@@ -320,7 +320,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * Finally, we constrain the public values of this AIR - input_commit should be the
          * compression of the final verifier sub-circuit transcript state, and output_commit
          * should be the Poseidon2 sponge hash of the byte representations of app_exe_commit,
-         * app_vk_commit, and the user public values. The latter is constrained by the
+         * app_vm_commit, and the user public values. The latter is constrained by the
          * DeferralOutputCommitAir, to which we need to send the app commits.
          */
         let &DeferralCircuitPvs::<_> {
@@ -359,7 +359,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             output_idx += 1;
         }
 
-        for vk_val in local.app_vk_commit.chunks_exact(VALS_IN_DIGEST) {
+        for vk_val in local.app_vm_commit.chunks_exact(VALS_IN_DIGEST) {
             self.output_val_bus.send(
                 builder,
                 OutputValMessage {

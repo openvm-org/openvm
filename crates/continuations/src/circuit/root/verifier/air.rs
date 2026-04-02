@@ -216,13 +216,13 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
-         * with the child's. The app_vk_commit is constrained to be hash_slice of the 6
+         * with the child's. The app_vm_commit is constrained to be hash_slice of the 6
          * vk_commit_components (cached_commit and vk_pre_hash for each of app, leaf, and
          * internal-for-leaf DAG commits).
          */
         let &RootVerifierPvs::<_> {
             app_exe_commit,
-            app_vk_commit,
+            app_vm_commit,
         } = builder.public_values().borrow();
 
         let vk_commit_components: Vec<_> = vk_commit_components(&local.child_verifier_pvs)
@@ -238,7 +238,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     .intermediate_vk_states
                     .map(|v| v.map(Into::into))
                     .as_slice(),
-                result: &app_vk_commit.map(Into::into),
+                result: &app_vm_commit.map(Into::into),
                 enabled: &AB::Expr::ONE,
             },
         );

@@ -166,7 +166,7 @@ where
         }
     }
 
-    pub fn app_vk_commit(&self) -> Digest {
+    pub fn app_vm_commit(&self) -> Digest {
         let app_dag_commit = self.agg_prover.leaf_prover.get_dag_commit(false);
         let leaf_dag_commit = self
             .agg_prover

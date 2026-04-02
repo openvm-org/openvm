@@ -248,7 +248,7 @@ The root subcircuit exposes a new set of public values for the static verifier. 
   - The app-level `ProgramAir` cached trace commit
   - The Merkle root of the starting app memory state (`initial_root`)
   - The initial app program counter (`initial_pc`)
-- `app_vk_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf DAG commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
+- `app_vm_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf DAG commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
 
 #### Constraints
 
@@ -265,7 +265,7 @@ The root subcircuit also constrains its own public values:
     - Computing the Merkle root of `user_public_values`, denoted `user_pvs_commit`
     - Constraining that a Merkle proof (where the path to the root depends on the `MemoryDimensions`) exists between `user_pvs_commit` and `final_root`
 - `app_exe_commit` is computed as specified above
-- `app_vk_commit` is computed from the child proof's `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` (using all 6 `cached_commit` and `vk_pre_hash` components) as specified above
+- `app_vm_commit` is computed from the child proof's `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` (using all 6 `cached_commit` and `vk_pre_hash` components) as specified above
 
 ## Deferral Integration
 

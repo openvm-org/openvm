@@ -117,7 +117,7 @@ Deferral circuits that are not used are still included in the Merklization of ac
 STARK proof verification is implemented using the deferral framework. See the [Verify STARK guest library](/book/guest-libraries/verify-stark) for usage details.
 
 - `Input_i`: `Proof`
-- `Output_i`: `(app_exe_commit, app_vk_commit, user_pvs)` tuple
+- `Output_i`: `(app_exe_commit, app_vm_commit, user_pvs)` tuple
 - `C_i`: a recursion circuit that exposes the compressed final transcript state as `input_i_commit` **and** constrains the listed public values against the `Proof`'s
 
 The compressed final transcript state serves as `input_i_commit` because it deterministically binds the entire proof — any change to the proof produces a different transcript, so committing to it is equivalent to committing to the `Proof`.

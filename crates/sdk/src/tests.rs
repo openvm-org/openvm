@@ -143,7 +143,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
     let output_raw = &raw_results[0].output_raw;
     let app_exe_commit: [u8; 32] = output_raw[..32].try_into().unwrap();
-    let app_vk_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
+    let app_vm_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
     let user_public_values = output_raw[64..].to_vec();
 
     // Build the deferral state for execution
@@ -171,7 +171,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     // ---- Step 8: Set up stdin for the verify-stark guest program ----
     let mut vs_stdin = StdIn::default();
     vs_stdin.write(&app_exe_commit);
-    vs_stdin.write(&app_vk_commit);
+    vs_stdin.write(&app_vm_commit);
     vs_stdin.write(&user_public_values);
     vs_stdin.write(&input_commit);
     vs_stdin.deferrals = vec![deferral_state];

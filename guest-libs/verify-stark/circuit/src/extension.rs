@@ -39,7 +39,7 @@ pub fn verify_stark_deferral_fn(encoded_proof: &[u8]) -> OutputRaw {
 }
 
 fn output_raw_from_proof(proof: &NonRootStarkProof) -> OutputRaw {
-    // get (app_exe_commit, app_vk_commit, public values)
+    // get (app_exe_commit, app_vm_commit, public values)
     let (base_pvs_slice, _) = proof.inner.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
         .split_at(VerifierBasePvs::<u8>::width());
@@ -52,12 +52,12 @@ fn output_raw_from_proof(proof: &NonRootStarkProof) -> OutputRaw {
         &vm_pvs.initial_root,
         vm_pvs.initial_pc,
     );
-    let app_vk_commit =
+    let app_vm_commit =
         poseidon2_hash_slice(&vk_commit_components(verifier_pvs).into_flattened()).0;
 
     let output_f = app_exe_commit
         .into_iter()
-        .chain(app_vk_commit)
+        .chain(app_vm_commit)
         .chain(proof.user_pvs_proof.public_values.iter().copied())
         .collect_vec();
     f_slice_to_bytes(&output_f)

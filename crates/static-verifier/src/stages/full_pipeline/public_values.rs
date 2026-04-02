@@ -21,7 +21,7 @@ pub struct StaticVerifierPvs<T> {
     pub app_exe_commit: T,
     /// Commit to the app-level verifying key, computed by hashing the cached_commit and
     /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits.
-    pub app_vk_commit: T,
+    pub app_vm_commit: T,
     /// The number of user public values is a configuration parameter in the App VM. This parameter
     /// is treated as a constant in the static verifier circuit.
     pub user_public_values: Vec<T>,
@@ -29,7 +29,7 @@ pub struct StaticVerifierPvs<T> {
 
 impl<T: Clone> StaticVerifierPvs<T> {
     pub fn to_vec(&self) -> Vec<T> {
-        let mut vec = vec![self.app_exe_commit.clone(), self.app_vk_commit.clone()];
+        let mut vec = vec![self.app_exe_commit.clone(), self.app_vm_commit.clone()];
         vec.extend_from_slice(&self.user_public_values);
         vec
     }
@@ -37,7 +37,7 @@ impl<T: Clone> StaticVerifierPvs<T> {
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
             app_exe_commit: slice[0].clone(),
-            app_vk_commit: slice[1].clone(),
+            app_vm_commit: slice[1].clone(),
             user_public_values: slice[2..].to_vec(),
         }
     }
@@ -54,7 +54,7 @@ pub fn extract_public_values(
     let root_pvs: &RootVerifierPvs<BabyBearWire> =
         proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
     let app_exe_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_exe_commit);
-    let app_vk_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_vk_commit);
+    let app_vm_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_vm_commit);
     // not reduced:
     let user_pvs_nr = &proof.public_values[USER_PVS_COMMIT_AIR_ID];
     let user_public_values = user_pvs_nr
@@ -64,7 +64,7 @@ pub fn extract_public_values(
 
     StaticVerifierPvs {
         app_exe_commit,
-        app_vk_commit,
+        app_vm_commit,
         user_public_values,
     }
 }

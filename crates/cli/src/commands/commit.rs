@@ -67,16 +67,16 @@ impl CommitCmd {
 
         let prover = sdk.prover(exe)?;
         let baseline = prover.generate_baseline();
-        let app_vk_commit = prover.app_vk_commit();
+        let app_vm_commit = prover.app_vm_commit();
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::from(baseline.app_exe_commit),
-            app_vk_commit: CommitBytes::from(app_vk_commit),
+            app_vm_commit: CommitBytes::from(app_vm_commit),
         };
         let exe_commit_bn254 = Bn254::from(app_commit.app_exe_commit);
-        let vk_commit_bn254 = Bn254::from(app_commit.app_vk_commit);
+        let vm_commit_bn254 = Bn254::from(app_commit.app_vm_commit);
         println!("exe commit: {:?}", exe_commit_bn254);
-        println!("vk commit: {:?}", vk_commit_bn254);
+        println!("vm commit: {:?}", vm_commit_bn254);
 
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
 

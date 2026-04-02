@@ -102,7 +102,7 @@ pub struct AppExecutionCommit {
     #[serde(with = "hex_bytes32")]
     pub app_exe_commit: openvm_continuations::CommitBytes,
     #[serde(with = "hex_bytes32")]
-    pub app_vk_commit: openvm_continuations::CommitBytes,
+    pub app_vm_commit: openvm_continuations::CommitBytes,
 }
 
 #[cfg(feature = "evm-prove")]
@@ -156,7 +156,7 @@ impl EvmProof {
             publicValues: user_public_values.into(),
             proofData: proof_data_bytes.into(),
             appExeCommit: (*app_commit.app_exe_commit.as_slice()).into(),
-            appVmCommit: (*app_commit.app_vk_commit.as_slice()).into(),
+            appVmCommit: (*app_commit.app_vm_commit.as_slice()).into(),
         }
         .abi_encode()
     }
@@ -192,7 +192,7 @@ pub fn encode_raw_evm_proof_calldata(
 /// Instance layout (with KZG accumulator from wrapper circuit):
 /// - `instances[0..12]`: KZG accumulator (12 Fr values)
 /// - `instances[12]`: app_exe_commit (Fr)
-/// - `instances[13]`: app_vk_commit (Fr)
+/// - `instances[13]`: app_vm_commit (Fr)
 /// - `instances[14..]`: user public values (each byte as Fr)
 #[cfg(feature = "evm-prove")]
 impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
@@ -235,7 +235,7 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::new(app_exe_bytes),
-            app_vk_commit: CommitBytes::new(app_vm_bytes),
+            app_vm_commit: CommitBytes::new(app_vm_bytes),
         };
 
         Self {
@@ -276,7 +276,7 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         app_exe_bytes.reverse();
         let app_exe_fr = Fr::from_bytes(&app_exe_bytes).unwrap();
 
-        let mut app_vm_bytes = *app_commit.app_vk_commit.as_slice();
+        let mut app_vm_bytes = *app_commit.app_vm_commit.as_slice();
         app_vm_bytes.reverse();
         let app_vm_fr = Fr::from_bytes(&app_vm_bytes).unwrap();
 

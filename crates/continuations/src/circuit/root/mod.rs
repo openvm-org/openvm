@@ -106,5 +106,5 @@ pub struct RootVerifierPvs<F> {
     pub app_exe_commit: [F; DIGEST_SIZE],
     /// Commit to the app-level verifying key, computed by hashing the cached_commit and
     /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits.
-    pub app_vk_commit: [F; DIGEST_SIZE],
+    pub app_vm_commit: [F; DIGEST_SIZE],
 }

@@ -23,7 +23,7 @@ pub struct DeferralOutputCtx<PB: ProverBackend> {
 
 pub fn generate_proving_ctx(
     app_exe_commit: [F; DIGEST_SIZE],
-    app_vk_commit: [F; DIGEST_SIZE],
+    app_vm_commit: [F; DIGEST_SIZE],
     user_pvs: Vec<F>,
     def_idx: usize,
 ) -> DeferralOutputCtx<CpuBackend<BabyBearPoseidon2Config>> {
@@ -32,7 +32,7 @@ pub fn generate_proving_ctx(
     debug_assert!(user_pvs.len().is_multiple_of(VALS_IN_DIGEST));
 
     let mut input_val_rows = values_to_rows(&app_exe_commit);
-    input_val_rows.extend(values_to_rows(&app_vk_commit));
+    input_val_rows.extend(values_to_rows(&app_vm_commit));
     input_val_rows.extend(values_to_rows(&user_pvs));
 
     let num_rows = input_val_rows.len() + 1;
