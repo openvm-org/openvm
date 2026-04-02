@@ -11,7 +11,6 @@ def run_cargo_command(
     output_path,
     app_only,
     evm,
-    kzg_params_dir,
     profile="release",
 ):
     toolchain = "+1.90"
@@ -40,8 +39,6 @@ def run_cargo_command(
         command.extend(["--app-only"])
     if evm:
         command.extend(["--evm"])
-    if kzg_params_dir is not None:
-        command.extend(["--kzg-params-dir", kzg_params_dir])
     if "perf-metrics" in feature_flags:
         command.extend(["--profiling"])
 
@@ -75,11 +72,6 @@ def bench():
     parser.add_argument(
         "--max_segment_length", type=str, help="Max segment length for continuations"
     )
-    parser.add_argument(
-        "--kzg-params-dir",
-        type=str,
-        help="Directory containing KZG trusted setup files",
-    )
     parser.add_argument("--features", type=str, help="Additional features")
     parser.add_argument(
         "--output_path",
@@ -111,7 +103,6 @@ def bench():
         args.output_path,
         args.app_only,
         args.evm,
-        args.kzg_params_dir,
     )
 
 

@@ -115,7 +115,7 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
-      - name: "Feature flags: memory allocator + e2e"
+      - name: "Feature flags: memory allocator"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
           if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
