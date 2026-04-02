@@ -7,20 +7,19 @@ use clap::Parser;
 use eyre::{Context, Result};
 use openvm_continuations::CommitBytes;
 use openvm_sdk::{
-    config::AggregationSystemParams,
-    fs::{read_object_from_file, write_object_to_file, write_to_file_json},
+    fs::write_to_file_json,
     types::{AppExecutionCommit, VerificationBaselineJson},
     Sdk,
 };
 use p3_bn254::Bn254;
 
-use super::{RunArgs, RunCargoArgs};
+use super::{prove::load_required_agg_pk, RunArgs, RunCargoArgs};
 use crate::{
-    args::OpenVmConfigArgs,
+    args::{OpenVmConfigArgs, ProvingKeyArgs},
     commands::{load_app_pk, load_or_build_exe, ExecutionMode},
     util::{
-        get_agg_pk_path, get_agg_vk_path, get_app_baseline_path, get_app_commit_path,
-        get_manifest_path_and_dir, get_single_target_name, get_target_dir, get_target_output_dir,
+        get_app_baseline_path, get_app_commit_path, get_manifest_path_and_dir,
+        get_single_target_name, get_target_dir, get_target_output_dir,
     },
 };
 
@@ -33,18 +32,13 @@ pub struct CommitCmd {
     #[arg(
         long,
         action,
-        help = "Path to app proving key, by default will be ${openvm_dir}/app.pk",
-        help_heading = "OpenVM Options"
-    )]
-    pub app_pk: Option<PathBuf>,
-
-    #[arg(
-        long,
-        action,
         help = "Path to OpenVM executable, if specified build will be skipped",
         help_heading = "OpenVM Options"
     )]
     pub exe: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub keys: ProvingKeyArgs,
 
     #[clap(flatten)]
     pub openvm_config: OpenVmConfigArgs,
@@ -55,7 +49,7 @@ pub struct CommitCmd {
 
 impl CommitCmd {
     pub fn run(&self) -> Result<()> {
-        let app_pk = load_app_pk(&self.app_pk, &self.cargo_args)?;
+        let app_pk = load_app_pk(&self.keys.app_pk, &self.cargo_args)?;
 
         let run_args = RunArgs {
             exe: self.exe.clone(),
@@ -68,18 +62,8 @@ impl CommitCmd {
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
 
-        let mut builder = Sdk::builder().app_pk(app_pk);
-        let agg_pk_path = get_agg_pk_path(&target_dir);
-        if agg_pk_path.exists() {
-            builder = builder.agg_pk(read_object_from_file(&agg_pk_path)?);
-        } else {
-            builder = builder.agg_params(AggregationSystemParams::default());
-        }
-        let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
-        if root_pk_path.exists() {
-            builder = builder.root_pk(read_object_from_file(&root_pk_path)?);
-        }
-        let sdk = builder.build()?;
+        let agg_pk = load_required_agg_pk(&self.keys.agg_prefix_pk, &self.cargo_args)?;
+        let sdk = Sdk::builder().app_pk(app_pk).agg_pk(agg_pk).build()?;
 
         let prover = sdk.prover(exe)?;
         let baseline = prover.generate_baseline();
@@ -93,27 +77,6 @@ impl CommitCmd {
         let vk_commit_bn254 = Bn254::from(app_commit.app_vk_commit);
         println!("exe commit: {:?}", exe_commit_bn254);
         println!("vk commit: {:?}", vk_commit_bn254);
-
-        // Save keys for reuse
-        let agg_vk_path = get_agg_vk_path(&target_dir);
-        if !agg_pk_path.exists() {
-            println!(
-                "Writing aggregation proving key to {}",
-                agg_pk_path.display()
-            );
-            write_object_to_file(&agg_pk_path, sdk.agg_pk())?;
-        }
-        if !agg_vk_path.exists() {
-            println!(
-                "Writing aggregation verifying key to {}",
-                agg_vk_path.display()
-            );
-            write_object_to_file(&agg_vk_path, sdk.agg_vk().as_ref().clone())?;
-        }
-        if !root_pk_path.exists() {
-            println!("Writing root proving key to {}", root_pk_path.display());
-            write_object_to_file(&root_pk_path, sdk.root_pk())?;
-        }
 
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
 

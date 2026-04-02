@@ -70,8 +70,8 @@ pub struct ProvingKeyArgs {
     #[arg(
         long,
         action,
-        help = "Path to aggregation proving key, by default will be ${openvm_dir}/agg.pk",
+        help = "Path to aggregation prefix proving key, by default will be ${openvm_dir}/agg_prefix.pk",
         help_heading = "OpenVM Options"
     )]
-    pub agg_pk: Option<PathBuf>,
+    pub agg_prefix_pk: Option<PathBuf>,
 }
