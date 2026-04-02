@@ -5,6 +5,7 @@ use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
 };
+#[cfg(feature = "root-prover")]
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
@@ -15,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 
+#[cfg(feature = "root-prover")]
 pub mod dummy;
 #[cfg(feature = "evm-prove")]
 pub mod static_verifier;
@@ -38,6 +40,7 @@ pub struct AggProvingKey {
     pub internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
 }
 
+#[cfg(feature = "root-prover")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RootProvingKey {
     pub root_pk: Arc<MultiStarkProvingKey<RootSC>>,
