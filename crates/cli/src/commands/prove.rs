@@ -14,21 +14,22 @@ use openvm_sdk::keygen::RootProvingKey;
 use openvm_sdk::{
     config::{AggregationSystemParams, AggregationTreeConfig},
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
-    keygen::{AggProvingKey, AppProvingKey},
+    keygen::{AggPrefixProvingKey, AggProvingKey, AppProvingKey},
     types::{AppExecutionCommit, VerificationBaselineJson, VersionedNonRootStarkProof},
-    Sdk, F,
+    Sdk, F, SC,
 };
 use openvm_sdk_config::SdkVmConfig;
+use openvm_stark_backend::keygen::types::MultiStarkProvingKey;
 use p3_bn254::Bn254;
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
     args::ProvingKeyArgs,
     commands::build,
-    default::{APP_PROOF_EXT, STARK_PROOF_EXT, VMEXE_EXT},
+    default::{default_internal_recursive_pk_path, APP_PROOF_EXT, STARK_PROOF_EXT, VMEXE_EXT},
     input::read_to_stdin,
     util::{
-        get_agg_pk_path, get_app_baseline_path, get_app_pk_path, get_manifest_path_and_dir,
+        get_agg_prefix_pk_path, get_app_baseline_path, get_app_pk_path, get_manifest_path_and_dir,
         get_single_target_name, get_target_dir, get_target_output_dir,
     },
 };
@@ -184,7 +185,7 @@ impl ProveCmd {
                 let mut app_pk = load_app_pk(&keys.app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
                 configure_app_pk(&mut app_pk, segmentation_args);
-                let agg_pk = load_required_agg_pk(&keys.agg_pk, cargo_args)?;
+                let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, cargo_args)?;
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_pk(agg_pk)
@@ -241,7 +242,7 @@ impl ProveCmd {
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 configure_app_pk(&mut app_pk, segmentation_args);
-                let agg_pk = load_required_agg_pk(&keys.agg_pk, cargo_args)?;
+                let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, cargo_args)?;
                 let root_pk = load_required_root_pk()?;
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
@@ -328,24 +329,49 @@ fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
     ))
 }
 
-fn resolve_agg_pk_path(agg_pk: &Option<PathBuf>, cargo_args: &RunCargoArgs) -> Result<PathBuf> {
-    if let Some(agg_pk) = agg_pk {
-        Ok(agg_pk.to_path_buf())
+fn resolve_agg_prefix_pk_path(
+    agg_prefix_pk: &Option<PathBuf>,
+    cargo_args: &RunCargoArgs,
+) -> Result<PathBuf> {
+    if let Some(agg_prefix_pk) = agg_prefix_pk {
+        Ok(agg_prefix_pk.to_path_buf())
     } else {
         let target_dir = target_dir_from_cargo_args(cargo_args)?;
-        Ok(get_agg_pk_path(&target_dir))
+        Ok(get_agg_prefix_pk_path(&target_dir))
     }
 }
 
-fn load_required_agg_pk(
-    agg_pk: &Option<PathBuf>,
+pub(crate) fn load_required_agg_pk(
+    agg_prefix_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
 ) -> Result<AggProvingKey> {
-    let agg_pk_path = resolve_agg_pk_path(agg_pk, cargo_args)?;
-    read_object_from_file(&agg_pk_path).map_err(|e| {
+    let prefix_pk = load_required_agg_prefix_pk(agg_prefix_pk, cargo_args)?;
+    let internal_recursive_pk = load_required_internal_recursive_pk()?;
+    Ok(AggProvingKey {
+        prefix: prefix_pk,
+        internal_recursive: internal_recursive_pk,
+    })
+}
+
+pub(crate) fn load_required_agg_prefix_pk(
+    agg_prefix_pk: &Option<PathBuf>,
+    cargo_args: &RunCargoArgs,
+) -> Result<AggPrefixProvingKey> {
+    let agg_prefix_pk_path = resolve_agg_prefix_pk_path(agg_prefix_pk, cargo_args)?;
+    read_object_from_file(&agg_prefix_pk_path).map_err(|e| {
         eyre!(
-            "Failed to read aggregation proving key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
-            agg_pk_path.display()
+            "Failed to read aggregation prefix proving key from {}: {e}\nRun 'cargo openvm keygen' first to generate it",
+            agg_prefix_pk_path.display()
+        )
+    })
+}
+
+pub(crate) fn load_required_internal_recursive_pk() -> Result<Arc<MultiStarkProvingKey<SC>>> {
+    let internal_recursive_pk_path = PathBuf::from(default_internal_recursive_pk_path());
+    read_object_from_file(&internal_recursive_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read internal-recursive proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
+            internal_recursive_pk_path.display()
         )
     })
 }
@@ -355,7 +381,7 @@ fn load_required_root_pk() -> Result<RootProvingKey> {
     let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
     read_object_from_file(&root_pk_path).map_err(|e| {
         eyre!(
-            "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
+            "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup --evm' first to generate it",
             root_pk_path.display()
         )
     })

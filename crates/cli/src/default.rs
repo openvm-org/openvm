@@ -8,8 +8,7 @@ pub const DEFAULT_MANIFEST_DIR: &str = ".";
 
 pub const DEFAULT_APP_PK_NAME: &str = "app.pk";
 pub const DEFAULT_APP_VK_NAME: &str = "app.vk";
-pub const DEFAULT_AGG_PK_NAME: &str = "agg.pk";
-pub const DEFAULT_AGG_VK_NAME: &str = "agg.vk";
+pub const DEFAULT_AGG_PREFIX_PK_NAME: &str = "agg_prefix.pk";
 
 pub const VMEXE_EXT: &str = "vmexe";
 pub const OPENVM_CONFIG_FILENAME: &str = "openvm.toml";
@@ -23,6 +22,10 @@ pub const BASELINE_JSON_EXT: &str = "baseline.json";
 
 pub fn default_params_dir() -> String {
     env::var("HOME").unwrap() + "/.openvm/params/"
+}
+
+pub fn default_internal_recursive_pk_path() -> String {
+    env::var("HOME").unwrap() + "/.openvm/internal_recursive.pk"
 }
 
 pub fn default_root_pk_path() -> String {
