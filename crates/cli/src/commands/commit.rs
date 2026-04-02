@@ -13,10 +13,7 @@ use openvm_sdk::{
 };
 use p3_bn254::Bn254;
 
-use super::{
-    prove::load_required_agg_pk,
-    RunArgs, RunCargoArgs
-};
+use super::{prove::load_required_agg_pk, RunArgs, RunCargoArgs};
 use crate::{
     args::{OpenVmConfigArgs, ProvingKeyArgs},
     commands::{load_app_pk, load_or_build_exe, ExecutionMode},
@@ -66,10 +63,7 @@ impl CommitCmd {
         let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
 
         let agg_pk = load_required_agg_pk(&self.keys.agg_prefix_pk, &self.cargo_args)?;
-        let sdk = Sdk::builder()
-            .app_pk(app_pk)
-            .agg_pk(agg_pk)
-            .build()?;
+        let sdk = Sdk::builder().app_pk(app_pk).agg_pk(agg_pk).build()?;
 
         let prover = sdk.prover(exe)?;
         let baseline = prover.generate_baseline();
