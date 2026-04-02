@@ -6050,7 +6050,6 @@ dependencies = [
  "openvm-bigint-circuit",
  "openvm-bigint-transpiler",
  "openvm-circuit",
- "openvm-continuations",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
@@ -6060,7 +6059,6 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sdk",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-sdk",
@@ -6097,17 +6095,11 @@ dependencies = [
 name = "openvm-benchmarks-utils"
 version = "2.0.0-alpha"
 dependencies = [
- "bitcode",
  "cargo_metadata",
  "clap",
  "eyre",
  "openvm-build",
- "openvm-circuit",
- "openvm-continuations",
- "openvm-sdk",
- "openvm-stark-sdk",
  "openvm-transpiler",
- "serde",
  "tracing",
  "tracing-subscriber 0.3.23",
 ]
