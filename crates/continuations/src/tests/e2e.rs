@@ -707,7 +707,7 @@ fn test_deferral_e2e() -> Result<()> {
     // =========================================================================
     // SECTION 9: Root prover (CPU) and final verification.
     //
-    // The root verifier checks def_hook_vk_commit from the deferral path's
+    // The root verifier checks def_hook_commit from the deferral path's
     // [cached_commit, vk_pre_hash] tuples for app/leaf/i4l.
     // =========================================================================
     let vm_ir_vk = ir_prover.get_vk();
@@ -717,7 +717,7 @@ fn test_deferral_e2e() -> Result<()> {
     let def_leaf_dag_commit = def_i4l_prover.get_dag_commit(false);
     let def_i4l_dag_commit = def_ir_prover.get_dag_commit(false);
 
-    let def_hook_vk_commit = poseidon2_hash_slice_with_states(
+    let def_hook_commit = poseidon2_hash_slice_with_states(
         &[
             def_hook_dag_commit.cached_commit,
             def_hook_dag_commit.vk_pre_hash,
@@ -738,7 +738,7 @@ fn test_deferral_e2e() -> Result<()> {
         root_system_params(),
         system.memory_config.memory_dimensions(),
         system.num_public_values,
-        Some(def_hook_vk_commit.into()),
+        Some(def_hook_commit.into()),
         None,
     );
     let ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB>(

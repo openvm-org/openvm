@@ -280,7 +280,7 @@ The final internal-recursive proof for each `C_i` is then passed to a **deferral
 1. Verifies the child proof
 2. Converts the input and output commit Merkle roots into **onion hashes** (the hash-onion accumulators used by the VM)
 3. Exposes `initial_acc_hash` and `final_acc_hash` — the initial and final deferral accumulator values as memory subtree Merkle leaves
-4. Computes and exposes a `def_hook_vk_commit` from the deferral circuit's DAG commits
+4. Computes and exposes a `def_hook_commit` from the deferral circuit's DAG commits
 
 ### Combined VM-Deferral Tree
 
@@ -306,11 +306,11 @@ When multiple deferral hook proofs are combined, the inner subcircuit Merklizes 
 
 ### Root Verifier Deferral Constraints
 
-The inner aggregation subcircuit also computes and propagates a `def_hook_vk_commit` — a commitment to the deferral hook verifying key, derived by hashing the DAG commit components of deferral-only child proofs. This is computed at the internal-for-leaf layer (when `internal_flag == 2`) and propagated unchanged through subsequent layers. The `def_hook_vk_commit` ensures that the correct deferral circuits were used.
+The inner aggregation subcircuit also computes and propagates a `def_hook_commit` — a commitment to the deferral hook verifying key, derived by hashing the DAG commit components of deferral-only child proofs. This is computed at the internal-for-leaf layer (when `internal_flag == 2`) and propagated unchanged through subsequent layers. The `def_hook_commit` ensures that the correct deferral circuits were used.
 
 When deferral is enabled, the root subcircuit additionally constrains:
 
-- The child proof's `def_hook_vk_commit` matches a pre-generated constant
+- The child proof's `def_hook_commit` matches a pre-generated constant
 - The child proof's `initial_acc_hash` was present in the **initial** memory state at the deferral address space region
 - The child proof's `final_acc_hash` was present in the **final** memory state at the deferral address space region
 

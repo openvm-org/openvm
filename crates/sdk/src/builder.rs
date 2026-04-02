@@ -348,9 +348,9 @@ where
             .as_ref()
             .map(|def_path_prover| def_path_prover.def_hook_cached_commit());
         #[cfg(feature = "root-prover")]
-        let def_hook_vk_commit = def_path_prover
+        let def_hook_commit = def_path_prover
             .as_ref()
-            .map(|def_path_prover| def_path_prover.def_hook_vk_commit());
+            .map(|def_path_prover| def_path_prover.def_hook_commit());
 
         let app_vm_vk = app_pk_seed
             .as_ref()
@@ -388,7 +388,7 @@ where
                 root_pk.root_pk,
                 memory_dimensions,
                 num_user_pvs,
-                def_hook_vk_commit,
+                def_hook_commit,
                 Some(root_pk.trace_heights),
             ))
         });

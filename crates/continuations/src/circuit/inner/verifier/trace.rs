@@ -149,7 +149,7 @@ pub fn generate_proving_ctx(
         }
     };
 
-    let mut def_hook_vk_commit = None;
+    let mut def_hook_commit = None;
     if deferral_enabled && deferral_flag_pv == F::ONE && base_pvs.internal_flag == F::TWO {
         let hash_elements = [
             base_pvs.app_dag_commit.cached_commit,
@@ -162,7 +162,7 @@ pub fn generate_proving_ctx(
 
         let mut row_compress_inputs = vec![];
         let mut row_permute_inputs = vec![];
-        let (intermediate_states_vec, computed_def_hook_vk_commit) = hash_slice_trace(
+        let (intermediate_states_vec, computed_def_hook_commit) = hash_slice_trace(
             &hash_elements,
             Some(&mut row_permute_inputs),
             Some(&mut row_compress_inputs),
@@ -182,7 +182,7 @@ pub fn generate_proving_ctx(
         for &input in &row_permute_inputs {
             poseidon2_permute_inputs.extend((0..height).map(|_| input));
         }
-        def_hook_vk_commit = Some(computed_def_hook_vk_commit);
+        def_hook_commit = Some(computed_def_hook_commit);
     }
 
     let public_values = if deferral_enabled {
@@ -191,8 +191,8 @@ pub fn generate_proving_ctx(
         let mut def_pvs = last_row_def.child_pvs;
         def_pvs.deferral_flag = deferral_flag_pv;
 
-        if let Some(def_hook_vk_commit) = def_hook_vk_commit {
-            def_pvs.def_hook_vk_commit = def_hook_vk_commit;
+        if let Some(def_hook_commit) = def_hook_commit {
+            def_pvs.def_hook_commit = def_hook_commit;
         }
 
         let mut combined = vec![F::ZERO; VerifierCombinedPvs::<u8>::width()];

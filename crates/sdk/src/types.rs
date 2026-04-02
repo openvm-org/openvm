@@ -389,7 +389,7 @@ pub struct VerificationBaselineJson {
     pub internal_for_leaf_dag_commit: DagCommitJson,
     pub internal_recursive_dag_commit: DagCommitJson,
     #[serde(with = "option_hex_bytes32")]
-    pub expected_def_vk_commit: Option<CommitBytes>,
+    pub expected_def_hook_commit: Option<CommitBytes>,
 }
 
 impl From<VerificationBaseline> for VerificationBaselineJson {
@@ -405,7 +405,7 @@ impl From<VerificationBaseline> for VerificationBaselineJson {
             leaf_dag_commit: dag(b.leaf_dag_commit),
             internal_for_leaf_dag_commit: dag(b.internal_for_leaf_dag_commit),
             internal_recursive_dag_commit: dag(b.internal_recursive_dag_commit),
-            expected_def_vk_commit: b.expected_def_vk_commit.map(CommitBytes::from),
+            expected_def_hook_commit: b.expected_def_hook_commit.map(CommitBytes::from),
         }
     }
 }
@@ -424,7 +424,7 @@ impl From<VerificationBaselineJson> for VerificationBaseline {
             leaf_dag_commit: dag(b.leaf_dag_commit),
             internal_for_leaf_dag_commit: dag(b.internal_for_leaf_dag_commit),
             internal_recursive_dag_commit: dag(b.internal_recursive_dag_commit),
-            expected_def_vk_commit: b.expected_def_vk_commit.map(|c| c.into()),
+            expected_def_hook_commit: b.expected_def_hook_commit.map(|c| c.into()),
         }
     }
 }

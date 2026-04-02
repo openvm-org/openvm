@@ -501,7 +501,7 @@ impl VerifierPvsAir {
 
         /*
          * We also need to constrain the deferral-related public values. In particular, the
-         * def_hook_vk_commit should be defined exactly when internal_for_leaf_dag_commit
+         * def_hook_commit should be defined exactly when internal_for_leaf_dag_commit
          * is for deferral_flag == 1.
          */
         // constrain that delta == 1 only at some internal_recursive layer
@@ -513,10 +513,10 @@ impl VerifierPvsAir {
             .when_ne(def_local.child_pvs.deferral_flag, AB::F::ONE)
             .assert_eq(base_local.child_pvs.internal_flag, AB::F::TWO);
 
-        // constrain that def_hook_vk_commit is unset when internal_flag < 2
+        // constrain that def_hook_commit is unset when internal_flag < 2
         assert_zeros(
             &mut builder.when(base_local.child_pvs.internal_flag - AB::F::TWO),
-            def_local.child_pvs.def_hook_vk_commit,
+            def_local.child_pvs.def_hook_commit,
         );
 
         /*
@@ -553,7 +553,7 @@ impl VerifierPvsAir {
 
         let &VerifierDefPvs::<_> {
             deferral_flag,
-            def_hook_vk_commit,
+            def_hook_commit,
         } = def_pvs.as_slice().borrow();
 
         // constrain deferral_flag either matches each row, or is 2 when delta is non-zero
@@ -565,16 +565,16 @@ impl VerifierPvsAir {
             .when_ne(delta.clone(), -AB::F::ONE)
             .assert_eq(deferral_flag, def_local.child_pvs.deferral_flag);
 
-        // constrain def_hook_vk_commit matches if set in child_pvs
+        // constrain def_hook_commit matches if set in child_pvs
         assert_array_eq(
             &mut builder
                 .when(base_local.child_pvs.recursion_flag)
                 .when(def_local.child_pvs.deferral_flag),
-            def_local.child_pvs.def_hook_vk_commit,
-            def_hook_vk_commit,
+            def_local.child_pvs.def_hook_commit,
+            def_hook_commit,
         );
 
-        // constrain the child def_hook_vk_commit is defined when internal_flag is 2 and
+        // constrain the child def_hook_commit is defined when internal_flag is 2 and
         // deferral_flag is non-zero
         let is_child_def_hook_vk_defined = base_local.child_pvs.internal_flag
             * (base_local.child_pvs.internal_flag - AB::Expr::ONE)
@@ -582,13 +582,13 @@ impl VerifierPvsAir {
 
         assert_array_eq(
             &mut builder.when(is_child_def_hook_vk_defined),
-            def_local.child_pvs.def_hook_vk_commit,
-            def_hook_vk_commit,
+            def_local.child_pvs.def_hook_commit,
+            def_hook_commit,
         );
 
-        // constrain def_hook_vk_commit = hash_slice(vk_commit_components) when
+        // constrain def_hook_commit = hash_slice(vk_commit_components) when
         // internal_flag is 2 and deferral_flag is 1
-        let compute_def_hook_vk_commit = internal_flag.into()
+        let compute_def_hook_commit = internal_flag.into()
             * (internal_flag.into() - AB::Expr::ONE)
             * deferral_flag.into()
             * (AB::Expr::TWO - deferral_flag.into())
@@ -605,8 +605,8 @@ impl VerifierPvsAir {
                     .intermediate_states
                     .map(|v| v.map(Into::into))
                     .as_slice(),
-                result: &def_hook_vk_commit.map(Into::into),
-                enabled: &compute_def_hook_vk_commit,
+                result: &def_hook_commit.map(Into::into),
+                enabled: &compute_def_hook_commit,
             },
         );
 

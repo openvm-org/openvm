@@ -266,10 +266,10 @@ pub fn verify_vm_stark_proof_pvs(
     }
 
     // Deferral verification
-    if let Some(expected_def_vk_commit) = vk.baseline.expected_def_vk_commit {
+    if let Some(expected_def_hook_commit) = vk.baseline.expected_def_hook_commit {
         let &VerifierDefPvs {
             deferral_flag,
-            def_hook_vk_commit,
+            def_hook_commit,
         } = verifier_def_pvs_slice.borrow();
 
         let &DeferralPvs {
@@ -281,9 +281,9 @@ pub fn verify_vm_stark_proof_pvs(
             .borrow();
 
         if deferral_flag == F::ZERO {
-            if !is_unset(&def_hook_vk_commit) {
-                return Err(VerifyStarkError::DefHookVkCommitSet {
-                    actual: def_hook_vk_commit,
+            if !is_unset(&def_hook_commit) {
+                return Err(VerifyStarkError::DefHookCommitSet {
+                    actual: def_hook_commit,
                 });
             } else if !is_unset(&initial_acc_hash) {
                 return Err(VerifyStarkError::DefInitialAccHashCommitSet {
@@ -297,10 +297,10 @@ pub fn verify_vm_stark_proof_pvs(
                 return Err(VerifyStarkError::DefDepthSet { actual: depth });
             }
         } else if deferral_flag == F::TWO {
-            if def_hook_vk_commit != expected_def_vk_commit {
-                return Err(VerifyStarkError::DefHookVkCommitMismatch {
-                    expected: expected_def_vk_commit,
-                    actual: def_hook_vk_commit,
+            if def_hook_commit != expected_def_hook_commit {
+                return Err(VerifyStarkError::DefHookCommitMismatch {
+                    expected: expected_def_hook_commit,
+                    actual: def_hook_commit,
                 });
             }
             let deferral_merkle_proofs = proof

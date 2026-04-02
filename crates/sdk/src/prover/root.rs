@@ -59,7 +59,7 @@ impl RootProver {
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_vk_commit: Option<Digest>,
+        def_hook_commit: Option<Digest>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
         let inner = RootInnerProver::new::<E>(
@@ -68,7 +68,7 @@ impl RootProver {
             system_params,
             memory_dimensions,
             num_user_pvs,
-            def_hook_vk_commit.map(Into::into),
+            def_hook_commit.map(Into::into),
             trace_heights,
         );
         Self(inner)
@@ -80,7 +80,7 @@ impl RootProver {
         pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_vk_commit: Option<Digest>,
+        def_hook_commit: Option<Digest>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
         let inner = RootInnerProver::from_pk::<E>(
@@ -89,7 +89,7 @@ impl RootProver {
             pk,
             memory_dimensions,
             num_user_pvs,
-            def_hook_vk_commit.map(Into::into),
+            def_hook_commit.map(Into::into),
             trace_heights,
         );
         Self(inner)
@@ -145,7 +145,7 @@ pub fn compute_root_proof_heights(
     app_config.app_vm_config.system.config = system_config;
 
     let def_hook_cached_commit = def_prover.as_ref().map(|p| p.def_hook_cached_commit());
-    let def_hook_vk_commit = def_prover.as_ref().map(|p| p.def_hook_vk_commit().into());
+    let def_hook_commit = def_prover.as_ref().map(|p| p.def_hook_commit().into());
 
     let app_pk = AppProvingKey::keygen(app_config)?;
 
@@ -178,7 +178,7 @@ pub fn compute_root_proof_heights(
         root_params,
         memory_dimensions,
         num_user_pvs,
-        def_hook_vk_commit,
+        def_hook_commit,
         None,
     );
     let root_proving_ctx: ProvingContext<<CpuRootE as StarkEngine>::PB> = root_prover

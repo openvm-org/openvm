@@ -273,10 +273,10 @@ where
     }
 
     /// Returns the def_hook_prover vk commit.
-    pub fn def_hook_vk_commit(&self) -> Option<Digest> {
+    pub fn def_hook_commit(&self) -> Option<Digest> {
         self.def_path_prover
             .as_ref()
-            .map(|p| p.def_hook_vk_commit())
+            .map(|p| p.def_hook_commit())
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target
@@ -567,7 +567,7 @@ where
                     root_pk,
                     memory_dimensions,
                     num_user_pvs,
-                    self.def_hook_vk_commit(),
+                    self.def_hook_commit(),
                     Some(trace_heights),
                 ))
             })

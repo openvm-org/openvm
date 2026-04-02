@@ -56,13 +56,13 @@ pub enum VerifyStarkError {
     #[error("Invalid deferral flag {0}, should be 0 or 2")]
     InvalidDeferralFlag(F),
     #[error("Deferral hook VK commit mismatch: expected {expected:?}, actual {actual:?}")]
-    DefHookVkCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Proof has deferrals but baseline has no expected_def_hook_vk_commit")]
+    DefHookCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Proof has deferrals but baseline has no expected_def_hook_commit")]
     UnexpectedDeferralDisabled,
     #[error("Baseline expects deferrals but proof has no deferral Merkle proofs")]
     MissingDeferralMerkleProofs,
-    #[error("Proof has deferral_flag=0 but def_hook_vk_commit is set, actual {actual:?}")]
-    DefHookVkCommitSet { actual: Digest },
+    #[error("Proof has deferral_flag=0 but def_hook_commit is set, actual {actual:?}")]
+    DefHookCommitSet { actual: Digest },
     #[error("Proof has deferral_flag=0 but initial_acc_hash is set, actual {actual:?}")]
     DefInitialAccHashCommitSet { actual: Digest },
     #[error("Proof has deferral_flag=0 but final_acc_hash is set, actual {actual:?}")]

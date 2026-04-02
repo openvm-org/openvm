@@ -64,13 +64,13 @@ pub struct RootVerifierPvsAir {
     pub hash_slice_subair: HashSliceSubAir,
 
     pub expected_internal_recursive_dag_commit: DagCommitBytes,
-    pub expected_def_hook_vk_commit: Option<CommitBytes>,
+    pub expected_def_hook_commit: Option<CommitBytes>,
 }
 
 impl<F: Field> BaseAir<F> for RootVerifierPvsAir {
     fn width(&self) -> usize {
         RootVerifierPvsCols::<u8>::width()
-            + if self.expected_def_hook_vk_commit.is_some() {
+            + if self.expected_def_hook_commit.is_some() {
                 RootDefVerifierCols::<u8>::width()
             } else {
                 0
@@ -94,9 +94,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let (base_local, rec_local) = local.split_at(base_cols_width);
         let local: &RootVerifierPvsCols<AB::Var> = (*base_local).borrow();
 
-        if let Some(def_hook_vk_commit) = self.expected_def_hook_vk_commit {
+        if let Some(def_hook_commit) = self.expected_def_hook_commit {
             let def: &RootDefVerifierCols<AB::Var> = (*rec_local).borrow();
-            self.eval_deferrals(builder, local, def, def_hook_vk_commit);
+            self.eval_deferrals(builder, local, def, def_hook_commit);
         }
 
         /*
@@ -331,7 +331,7 @@ impl RootVerifierPvsAir {
         builder: &mut AB,
         base: &RootVerifierPvsCols<AB::Var>,
         def: &RootDefVerifierCols<AB::Var>,
-        expected_def_hook_vk_commit: CommitBytes,
+        expected_def_hook_commit: CommitBytes,
     ) where
         AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues,
     {
@@ -373,14 +373,14 @@ impl RootVerifierPvsAir {
 
         /*
          * The final internal-recursive proof's deferral_flag must be either 0 or 2, and
-         * in the latter case the def_hook_vk_commit must match the expected one.
+         * in the latter case the def_hook_commit must match the expected one.
          */
         builder
             .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
         assert_array_eq::<_, _, AB::Expr, _>(
             &mut builder.when(verifier_pvs.deferral_flag),
-            verifier_pvs.def_hook_vk_commit,
-            expected_def_hook_vk_commit.into(),
+            verifier_pvs.def_hook_commit,
+            expected_def_hook_commit.into(),
         );
 
         /*

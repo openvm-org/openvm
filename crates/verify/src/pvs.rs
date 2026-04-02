@@ -62,7 +62,7 @@ pub struct VerifierDefPvs<F> {
     /// Commit to the deferral hook verifying key, computed by hashing the cached_commit and
     /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits when
     /// deferral_flag == 1. Is set exactly when internal_for_leaf_dag_commit is set.
-    pub def_hook_vk_commit: [F; DIGEST_SIZE],
+    pub def_hook_commit: [F; DIGEST_SIZE],
 }
 
 #[repr(C)]

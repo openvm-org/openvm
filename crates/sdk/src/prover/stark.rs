@@ -162,7 +162,7 @@ where
                 .agg_prover
                 .internal_recursive_prover
                 .get_dag_commit(true),
-            expected_def_vk_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_vk_commit()),
+            expected_def_hook_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_commit()),
         }
     }
 
@@ -194,7 +194,7 @@ impl DeferralPathProver {
         self.deferral_prover.def_hook_prover.get_cached_commit()
     }
 
-    pub fn def_hook_vk_commit(&self) -> Digest {
+    pub fn def_hook_commit(&self) -> Digest {
         let def_dag_commit = self.agg_prover.leaf_prover.get_dag_commit(false);
         let leaf_dag_commit = self
             .agg_prover
