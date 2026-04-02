@@ -151,13 +151,13 @@ pub fn verify_vm_stark_proof_pvs(
 
     // Check app_vk_commit against expected_commits.
     if app_vk_commit.cached_commit != vk.baseline.app_vk_commit.cached_commit {
-        return Err(VerifyStarkError::AppDagCachedCommitMismatch {
+        return Err(VerifyStarkError::AppVkCachedCommitMismatch {
             expected: vk.baseline.app_vk_commit.cached_commit,
             actual: app_vk_commit.cached_commit,
         });
     }
     if app_vk_commit.vk_pre_hash != vk.baseline.app_vk_commit.vk_pre_hash {
-        return Err(VerifyStarkError::AppDagPreHashMismatch {
+        return Err(VerifyStarkError::AppVkPreHashMismatch {
             expected: vk.baseline.app_vk_commit.vk_pre_hash,
             actual: app_vk_commit.vk_pre_hash,
         });
@@ -165,13 +165,13 @@ pub fn verify_vm_stark_proof_pvs(
 
     // Check leaf_vk_commit against expected_commits.
     if leaf_vk_commit.cached_commit != vk.baseline.leaf_vk_commit.cached_commit {
-        return Err(VerifyStarkError::LeafDagCachedCommitMismatch {
+        return Err(VerifyStarkError::LeafVkCachedCommitMismatch {
             expected: vk.baseline.leaf_vk_commit.cached_commit,
             actual: leaf_vk_commit.cached_commit,
         });
     }
     if leaf_vk_commit.vk_pre_hash != vk.baseline.leaf_vk_commit.vk_pre_hash {
-        return Err(VerifyStarkError::LeafDagPreHashMismatch {
+        return Err(VerifyStarkError::LeafVkPreHashMismatch {
             expected: vk.baseline.leaf_vk_commit.vk_pre_hash,
             actual: leaf_vk_commit.vk_pre_hash,
         });
@@ -181,7 +181,7 @@ pub fn verify_vm_stark_proof_pvs(
     if internal_for_leaf_vk_commit.cached_commit
         != vk.baseline.internal_for_leaf_vk_commit.cached_commit
     {
-        return Err(VerifyStarkError::InternalForLeafDagCachedCommitMismatch {
+        return Err(VerifyStarkError::InternalForLeafVkCachedCommitMismatch {
             expected: vk.baseline.internal_for_leaf_vk_commit.cached_commit,
             actual: internal_for_leaf_vk_commit.cached_commit,
         });
@@ -189,7 +189,7 @@ pub fn verify_vm_stark_proof_pvs(
     if internal_for_leaf_vk_commit.vk_pre_hash
         != vk.baseline.internal_for_leaf_vk_commit.vk_pre_hash
     {
-        return Err(VerifyStarkError::InternalForLeafDagPreHashMismatch {
+        return Err(VerifyStarkError::InternalForLeafVkPreHashMismatch {
             expected: vk.baseline.internal_for_leaf_vk_commit.vk_pre_hash,
             actual: internal_for_leaf_vk_commit.vk_pre_hash,
         });
@@ -227,7 +227,7 @@ pub fn verify_vm_stark_proof_pvs(
         if internal_recursive_vk_commit.cached_commit
             != vk.baseline.internal_recursive_vk_commit.cached_commit
         {
-            return Err(VerifyStarkError::InternalRecursiveDagCachedCommitMismatch {
+            return Err(VerifyStarkError::InternalRecursiveVkCachedCommitMismatch {
                 expected: vk.baseline.internal_recursive_vk_commit.cached_commit,
                 actual: internal_recursive_vk_commit.cached_commit,
             });
@@ -235,7 +235,7 @@ pub fn verify_vm_stark_proof_pvs(
         if internal_recursive_vk_commit.vk_pre_hash
             != vk.baseline.internal_recursive_vk_commit.vk_pre_hash
         {
-            return Err(VerifyStarkError::InternalRecursiveDagPreHashMismatch {
+            return Err(VerifyStarkError::InternalRecursiveVkPreHashMismatch {
                 expected: vk.baseline.internal_recursive_vk_commit.vk_pre_hash,
                 actual: internal_recursive_vk_commit.vk_pre_hash,
             });
@@ -248,12 +248,12 @@ pub fn verify_vm_stark_proof_pvs(
         }
     } else {
         if !is_unset(&internal_recursive_vk_commit.cached_commit) {
-            return Err(VerifyStarkError::InternalRecursiveDagCachedCommitSet {
+            return Err(VerifyStarkError::InternalRecursiveVkCachedCommitSet {
                 actual: internal_recursive_vk_commit.cached_commit,
             });
         }
         if !is_unset(&internal_recursive_vk_commit.vk_pre_hash) {
-            return Err(VerifyStarkError::InternalRecursiveDagPreHashSet {
+            return Err(VerifyStarkError::InternalRecursiveVkPreHashSet {
                 actual: internal_recursive_vk_commit.vk_pre_hash,
             });
         }

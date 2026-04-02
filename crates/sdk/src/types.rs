@@ -394,17 +394,17 @@ pub struct VerificationBaselineJson {
 
 impl From<VerificationBaseline> for VerificationBaselineJson {
     fn from(b: VerificationBaseline) -> Self {
-        let dag = |d: VkCommit<crate::F>| VkCommitJson {
+        let vk = |d: VkCommit<crate::F>| VkCommitJson {
             cached_commit: CommitBytes::from(d.cached_commit),
             vk_pre_hash: CommitBytes::from(d.vk_pre_hash),
         };
         Self {
             app_exe_commit: CommitBytes::from(b.app_exe_commit),
             memory_dimensions: b.memory_dimensions,
-            app_vk_commit: dag(b.app_vk_commit),
-            leaf_vk_commit: dag(b.leaf_vk_commit),
-            internal_for_leaf_vk_commit: dag(b.internal_for_leaf_vk_commit),
-            internal_recursive_vk_commit: dag(b.internal_recursive_vk_commit),
+            app_vk_commit: vk(b.app_vk_commit),
+            leaf_vk_commit: vk(b.leaf_vk_commit),
+            internal_for_leaf_vk_commit: vk(b.internal_for_leaf_vk_commit),
+            internal_recursive_vk_commit: vk(b.internal_recursive_vk_commit),
             expected_def_hook_commit: b.expected_def_hook_commit.map(CommitBytes::from),
         }
     }
@@ -413,17 +413,17 @@ impl From<VerificationBaseline> for VerificationBaselineJson {
 impl From<VerificationBaselineJson> for VerificationBaseline {
     fn from(b: VerificationBaselineJson) -> Self {
         use openvm_verify_stark_host::pvs::VkCommit;
-        let dag = |d: VkCommitJson| VkCommit {
+        let vk = |d: VkCommitJson| VkCommit {
             cached_commit: d.cached_commit.into(),
             vk_pre_hash: d.vk_pre_hash.into(),
         };
         Self {
             app_exe_commit: b.app_exe_commit.into(),
             memory_dimensions: b.memory_dimensions,
-            app_vk_commit: dag(b.app_vk_commit),
-            leaf_vk_commit: dag(b.leaf_vk_commit),
-            internal_for_leaf_vk_commit: dag(b.internal_for_leaf_vk_commit),
-            internal_recursive_vk_commit: dag(b.internal_recursive_vk_commit),
+            app_vk_commit: vk(b.app_vk_commit),
+            leaf_vk_commit: vk(b.leaf_vk_commit),
+            internal_for_leaf_vk_commit: vk(b.internal_for_leaf_vk_commit),
+            internal_recursive_vk_commit: vk(b.internal_recursive_vk_commit),
             expected_def_hook_commit: b.expected_def_hook_commit.map(|c| c.into()),
         }
     }

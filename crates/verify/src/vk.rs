@@ -38,7 +38,7 @@ pub struct VerificationBaseline {
     /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
     /// index > 0) internal-recursive layer verifiers.
     pub internal_recursive_vk_commit: VkCommit,
-    /// Expected deferral VK commit (hash of the deferral aggregation prover's DAG commits).
+    /// Expected deferral VK commit (hash of the deferral aggregation prover's vk commits).
     /// When `Some`, the proof must have `deferral_flag == 2` with a matching
     /// `def_hook_commit` and valid deferral Merkle proofs. When `None`, the proof must
     /// have no deferral public values.

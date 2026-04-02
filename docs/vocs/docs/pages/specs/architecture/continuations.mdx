@@ -130,7 +130,7 @@ Because of the dependency on `child_vk`, different layers have different verifie
 
 A verifier subcircuit must verify that a child proof satisfies the constraints defined by `child_vk`. These constraints are encoded as a **constraint DAG**, where each node represents a symbolic expression over trace values. This DAG includes interaction constraints.
 
-To avoid recomputing the DAG in-circuit, verifier subcircuits use a **cached trace**: before proving, the DAG is serialized per-node into a cached trace, committed via SWIRL's stacked PCS, and the commitment is exposed as a public value. Each such commitment is paired with the child VK's **field pre-hash** (`vk_pre_hash`) to form a **DAG commit** (`VkCommit`):
+To avoid recomputing the DAG in-circuit, verifier subcircuits use a **cached trace**: before proving, the DAG is serialized per-node into a cached trace, committed via SWIRL's stacked PCS, and the commitment is exposed as a public value. Each such commitment is paired with the child VK's **field pre-hash** (`vk_pre_hash`) to form a **VK commit** (`VkCommit`):
 
 ```
 VkCommit {
@@ -139,7 +139,7 @@ VkCommit {
 }
 ```
 
-The four DAG commits are:
+The four VK commits are:
 
 | Public Value | Commits to |
 |--------------|------------|
@@ -204,15 +204,15 @@ Public values are processed by `VerifierPvsAir`. The inner subcircuit re-exposes
       - `0` for leaf
       - `1` for internal-for-leaf
       - `2` for internal-recursive
-    - `app_vk_commit: VkCommit` — DAG commit (cached trace commit + VK pre-hash) for the leaf verifier subcircuit, derived from `app_vk`
-    - `leaf_vk_commit: VkCommit` — DAG commit for the internal-for-leaf verifier subcircuit, derived from `leaf_vk`
-    - `internal_for_leaf_vk_commit: VkCommit` — DAG commit for the first (index 0) internal-recursive layer verifier subcircuit, derived from `internal_for_leaf_vk`
+    - `app_vk_commit: VkCommit` — VK commit (cached trace commit + VK pre-hash) for the leaf verifier subcircuit, derived from `app_vk`
+    - `leaf_vk_commit: VkCommit` — VK commit for the internal-for-leaf verifier subcircuit, derived from `leaf_vk`
+    - `internal_for_leaf_vk_commit: VkCommit` — VK commit for the first (index 0) internal-recursive layer verifier subcircuit, derived from `internal_for_leaf_vk`
 - **Internal Recursion-Related Public Values**
     - `recursion_flag: F` — ternary flag indicating which internal-recursive layer this proof is for:
       - `0` for non-internal-recursive layers
       - `1` for the first (index 0) internal-recursive layer
       - `2` for subsequent internal-recursive layers
-    - `internal_recursive_vk_commit: VkCommit` — DAG commit for each subsequent (index > 0) internal-recursive layer verifier subcircuit, derived from `internal_recursive_vk`
+    - `internal_recursive_vk_commit: VkCommit` — VK commit for each subsequent (index > 0) internal-recursive layer verifier subcircuit, derived from `internal_recursive_vk`
 
 The `program_commit` should be set at every layer, but the flags and `*_vk_commits` should be set according to which layer we are currently proving for. Unset `*_vk_commits` are filled with 0s.
 
@@ -248,7 +248,7 @@ The root subcircuit exposes a new set of public values for the static verifier. 
   - The app-level `ProgramAir` cached trace commit
   - The Merkle root of the starting app memory state (`initial_root`)
   - The initial app program counter (`initial_pc`)
-- `app_vm_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf DAG commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
+- `app_vm_commit: Digest` — commitment to the app VM verifier key, computed by hashing the 6 components of the child proof's app, leaf, and internal-for-leaf VK commits (`cached_commit` and `vk_pre_hash` for each) via `hash_slice`
 
 #### Constraints
 
@@ -273,14 +273,14 @@ When the VM uses the [deferral framework](/specs/architecture/deferral), deferra
 
 ### Deferral Aggregation Overview
 
-Each deferral circuit `C_i` produces its own proofs, which are aggregated through a **separate** per-circuit aggregation tree (leaf → internal-for-leaf → internal-recursive) using a deferral-specific inner aggregation subcircuit. This subcircuit builds Merkle trees of the input and output commits and propagates deferral DAG commits.
+Each deferral circuit `C_i` produces its own proofs, which are aggregated through a **separate** per-circuit aggregation tree (leaf → internal-for-leaf → internal-recursive) using a deferral-specific inner aggregation subcircuit. This subcircuit builds Merkle trees of the input and output commits and propagates deferral VK commits.
 
 The final internal-recursive proof for each `C_i` is then passed to a **deferral hook** layer, which:
 
 1. Verifies the child proof
 2. Converts the input and output commit Merkle roots into **onion hashes** (the hash-onion accumulators used by the VM)
 3. Exposes `initial_acc_hash` and `final_acc_hash` — the initial and final deferral accumulator values as memory subtree Merkle leaves
-4. Computes and exposes a `def_hook_commit` from the deferral circuit's DAG commits
+4. Computes and exposes a `def_hook_commit` from the deferral circuit's VK commits
 
 ### Combined VM-Deferral Tree
 
@@ -306,7 +306,7 @@ When multiple deferral hook proofs are combined, the inner subcircuit Merklizes 
 
 ### Root Verifier Deferral Constraints
 
-The inner aggregation subcircuit also computes and propagates a `def_hook_commit` — a commitment to the deferral hook verifying key, derived by hashing the DAG commit components of deferral-only child proofs. This is computed at the internal-for-leaf layer (when `internal_flag == 2`) and propagated unchanged through subsequent layers. The `def_hook_commit` ensures that the correct deferral circuits were used.
+The inner aggregation subcircuit also computes and propagates a `def_hook_commit` — a commitment to the deferral hook verifying key, derived by hashing the VK commit components of deferral-only child proofs. This is computed at the internal-for-leaf layer (when `internal_flag == 2`) and propagated unchanged through subsequent layers. The `def_hook_commit` ensures that the correct deferral circuits were used.
 
 When deferral is enabled, the root subcircuit additionally constrains:
 

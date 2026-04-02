@@ -101,7 +101,7 @@ The final internal-recursive layer is passed to a **deferral hook** layer, which
 
 - Constrains its validity
 - Reconciles the input and output Merkle hashes into the input and output **onion hashes**, which are exposed as public values
-- Exposes `initial_acc_hash = π(π(def_circuit_commit, 0), π(0, 0))` and `final_acc_hash = π(π(input_onion, 0), π(output_onion, 0))`, where `def_circuit_commit` is computed by combining the DAG commits above
+- Exposes `initial_acc_hash = π(π(def_circuit_commit, 0), π(0, 0))` and `final_acc_hash = π(π(input_onion, 0), π(output_onion, 0))`, where `def_circuit_commit` is computed by combining the vk commits above
     - Note that `initial_acc_hash` and `final_acc_hash` are memory subtree Merkle leaves, with each leaf zero-padded before Merklization
 
 ![Deferral Aggregation Diagram](/deferral-aggregation-diagram.png)

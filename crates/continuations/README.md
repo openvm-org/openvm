@@ -22,7 +22,7 @@ pub fn new(
 - `system_params` — parent system parameters
 - `self_recursion_enabled` — indicates whether this prover is internal-recursive (i.e., can use its own `vk` as `child_vk`)
 
-Constructing the prover pre-generates the child layer's **cached trace commit** (and, together with the child VK's pre-hash, the **DAG commit**) as well as the parent layer's proving and verifying keys. Functions to construct the prover from a saved `pk` and cached trace are available.
+Constructing the prover pre-generates the child layer's **cached trace commit** (and, together with the child VK's pre-hash, the **vk commit**) as well as the parent layer's proving and verifying keys. Functions to construct the prover from a saved `pk` and cached trace are available.
 
 Each inner layer should use the following constructor arguments:
 

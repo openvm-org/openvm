@@ -78,7 +78,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         /*
          * This AIR can optionally handle deferrals, the constraints for which are defined in
          * function eval_deferrals. We expect vk_commit_cond to be a boolean value that is
-         * true iff local and next's app, leaf, and internal-for-leaf DAG commits should be
+         * true iff local and next's app, leaf, and internal-for-leaf vk commits should be
          * constrained for equality.
          */
         let (vk_commit_cond, deferral_flag, consistency_mult) = match &self.deferral_config {
@@ -149,20 +149,20 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         );
 
         // constrain the other commits are the same when needed
-        let mut when_dag_compare = builder.when(vk_commit_cond);
+        let mut when_vk_compare = builder.when(vk_commit_cond);
 
         assert_vk_commit_eq(
-            &mut when_dag_compare,
+            &mut when_vk_compare,
             local.child_pvs.app_vk_commit,
             next.child_pvs.app_vk_commit,
         );
         assert_vk_commit_eq(
-            &mut when_dag_compare,
+            &mut when_vk_compare,
             local.child_pvs.leaf_vk_commit,
             next.child_pvs.leaf_vk_commit,
         );
         assert_vk_commit_eq(
-            &mut when_dag_compare,
+            &mut when_vk_compare,
             local.child_pvs.internal_for_leaf_vk_commit,
             next.child_pvs.internal_for_leaf_vk_commit,
         );

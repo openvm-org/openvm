@@ -12,25 +12,25 @@ pub enum VerifyStarkError {
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
     AppExeCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app cached commit: expected {expected:?}, actual {actual:?}")]
-    AppDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    AppVkCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app vk pre-hash: expected {expected:?}, actual {actual:?}")]
-    AppDagPreHashMismatch { expected: Digest, actual: Digest },
+    AppVkPreHashMismatch { expected: Digest, actual: Digest },
     #[error("Invalid leaf cached commit: expected {expected:?}, actual {actual:?}")]
-    LeafDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    LeafVkCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid leaf vk pre-hash: expected {expected:?}, actual {actual:?}")]
-    LeafDagPreHashMismatch { expected: Digest, actual: Digest },
+    LeafVkPreHashMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal for leaf cached commit: expected {expected:?}, actual {actual:?}")]
-    InternalForLeafDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    InternalForLeafVkCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal for leaf vk pre-hash: expected {expected:?}, actual {actual:?}")]
-    InternalForLeafDagPreHashMismatch { expected: Digest, actual: Digest },
+    InternalForLeafVkPreHashMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal recursive cached commit: expected {expected:?}, actual {actual:?}")]
-    InternalRecursiveDagCachedCommitMismatch { expected: Digest, actual: Digest },
+    InternalRecursiveVkCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal recursive vk pre-hash: expected {expected:?}, actual {actual:?}")]
-    InternalRecursiveDagPreHashMismatch { expected: Digest, actual: Digest },
+    InternalRecursiveVkPreHashMismatch { expected: Digest, actual: Digest },
     #[error("Internal recursive cached commit should be unset, actual {actual:?}")]
-    InternalRecursiveDagCachedCommitSet { actual: Digest },
+    InternalRecursiveVkCachedCommitSet { actual: Digest },
     #[error("Internal recursive vk pre-hash should be unset, actual {actual:?}")]
-    InternalRecursiveDagPreHashSet { actual: Digest },
+    InternalRecursiveVkPreHashSet { actual: Digest },
     #[error("Invalid proof cached commit: expected {expected:?}, actual {actual:?}")]
     ProofCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Missing constraint-eval trace vdata, expected at AIR idx {air_idx}")]

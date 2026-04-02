@@ -679,7 +679,7 @@ where
     /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
     ///
     /// The flow:
-    /// 1. Get the root VK and internal recursive DAG cached commit
+    /// 1. Get the root VK and internal recursive VK cached commit
     /// 2. Generate a dummy root proof via the EVM prover pipeline
     /// 3. Keygen the static verifier circuit
     /// 4. Generate a dummy snark from the verifier
