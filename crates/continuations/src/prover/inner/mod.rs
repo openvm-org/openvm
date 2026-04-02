@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
-use openvm_verify_stark_host::pvs::{VkCommit, DeferralPvs};
+use openvm_verify_stark_host::pvs::{DeferralPvs, VkCommit};
 use tracing::instrument;
 
 use crate::{

@@ -207,10 +207,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Commit def_circuit_commit is hash_slice of the 6 vk_commit_components (cached_commit and
-         * vk_pre_hash for each of def_vk_commit (called app_vk_commit in the struct), leaf_vk_commit,
-         * and internal_for_leaf_vk_commit). We constrain this here and send def_circuit_commit to its
-         * bus.
+         * Commit def_circuit_commit is hash_slice of the 6 vk_commit_components (cached_commit
+         * and vk_pre_hash for each of def_vk_commit (called app_vk_commit in the
+         * struct), leaf_vk_commit, and internal_for_leaf_vk_commit). We constrain this
+         * here and send def_circuit_commit to its bus.
          */
         let vk_commit_components: Vec<_> = vk_commit_components(&local.verifier_pvs)
             .into_iter()

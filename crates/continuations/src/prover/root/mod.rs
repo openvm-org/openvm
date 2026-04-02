@@ -23,7 +23,7 @@ use crate::{
         Circuit,
     },
     prover::trace_heights_tracing_info,
-    CommitBytes, VkCommitBytes, RootSC, SC,
+    CommitBytes, RootSC, VkCommitBytes, SC,
 };
 
 mod trace;

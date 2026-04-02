@@ -5,7 +5,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use openvm_verify_stark_host::pvs::{
-    VkCommit, VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID,
+    VerifierBasePvs, VerifierDefPvs, VkCommit, VERIFIER_PVS_AIR_ID,
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
