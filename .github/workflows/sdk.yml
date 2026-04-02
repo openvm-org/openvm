@@ -79,7 +79,7 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
       - name: Run openvm-sdk crate tests (AOT)
         if: ${{ matrix.mode == 'aot' }}
@@ -87,11 +87,11 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify,aot
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
 
       - name: Run ignored tests
         if: ${{ matrix.mode == 'ignored' }}
         working-directory: crates/sdk
         # if: ${{ github.event_name == 'push' }}
         run: |
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler

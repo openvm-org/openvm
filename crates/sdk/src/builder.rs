@@ -1,5 +1,3 @@
-#[cfg(feature = "evm-prove")]
-use std::path::Path;
 use std::{
     marker::PhantomData,
     sync::{Arc, OnceLock},
@@ -8,20 +6,28 @@ use std::{
 use eyre::eyre;
 use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
 use openvm_sdk_config::TranspilerConfig;
-use openvm_stark_backend::{StarkEngine, SystemParams};
-use openvm_stark_sdk::config::root_params_with_100_bits_security;
-#[cfg(feature = "evm-prove")]
-use openvm_static_verifier::StaticVerifierShape;
+use openvm_stark_backend::StarkEngine;
 use openvm_transpiler::transpiler::Transpiler;
+#[cfg(feature = "evm-prove")]
+use {
+    crate::{
+        config::Halo2Config, halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey,
+        prover::Halo2Prover,
+    },
+    openvm_static_verifier::StaticVerifierShape,
+    std::path::Path,
+};
+#[cfg(feature = "root-prover")]
+use {
+    crate::{keygen::RootProvingKey, prover::RootProver},
+    openvm_stark_backend::SystemParams,
+    openvm_stark_sdk::config::root_params_with_100_bits_security,
+};
 
-#[cfg(feature = "evm-prove")]
-use crate::halo2_params::CacheHalo2ParamsReader;
-#[cfg(feature = "evm-prove")]
-use crate::{config::Halo2Config, keygen::Halo2ProvingKey, prover::Halo2Prover};
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
-    keygen::{AggProvingKey, AppProvingKey, RootProvingKey},
-    prover::{AggProver, DeferralPathProver, DeferralProver, RootProver},
+    keygen::{AggProvingKey, AppProvingKey},
+    prover::{AggProver, DeferralPathProver, DeferralProver},
     GenericSdk, SdkError, F, SC,
 };
 
@@ -36,6 +42,7 @@ enum AggSource {
     Pk(AggProvingKey),
 }
 
+#[cfg(feature = "root-prover")]
 enum RootSource {
     Params(SystemParams),
     Pk(RootProvingKey),
@@ -62,6 +69,7 @@ where
 {
     app_source: Option<AppSource<VB::VmConfig>>,
     agg_source: Option<AggSource>,
+    #[cfg(feature = "root-prover")]
     root_source: Option<RootSource>,
     agg_tree_config: Option<AggregationTreeConfig>,
     transpiler: Option<Transpiler<F>>,
@@ -177,6 +185,7 @@ where
         }
     }
 
+    #[cfg(feature = "root-prover")]
     fn normalize_root_source(root_source: RootSource) -> (SystemParams, Option<RootProvingKey>) {
         match root_source {
             RootSource::Params(root_params) => (root_params, None),
@@ -226,6 +235,7 @@ where
         self
     }
 
+    #[cfg(feature = "root-prover")]
     pub fn root_params(mut self, root_params: SystemParams) -> Self {
         Self::set_once(
             &mut self.root_source,
@@ -235,6 +245,7 @@ where
         self
     }
 
+    #[cfg(feature = "root-prover")]
     pub fn root_pk(mut self, root_pk: RootProvingKey) -> Self {
         Self::set_once(
             &mut self.root_source,
@@ -273,6 +284,7 @@ where
         let agg_source = self
             .agg_source
             .ok_or_else(|| SdkError::Other(eyre!("`agg_params` or `agg_pk` must be set")))?;
+        #[cfg(feature = "root-prover")]
         let root_source = self
             .root_source
             .unwrap_or_else(|| RootSource::Params(root_params_with_100_bits_security()));
@@ -292,6 +304,7 @@ where
             matches!(root_source, RootSource::Pk(_)),
             "root_pk",
         )?;
+        #[cfg(feature = "root-prover")]
         Self::require_dependency(
             matches!(root_source, RootSource::Pk(_)),
             "root_pk",
@@ -308,7 +321,8 @@ where
         let Self {
             app_source: _,
             agg_source: _,
-            root_source: _,
+            #[cfg(feature = "root-prover")]
+                root_source: _,
             agg_tree_config,
             transpiler,
             deferral_prover,
@@ -321,6 +335,7 @@ where
 
         let (app_config, app_pk_seed) = Self::normalize_app_source(app_source);
         let (agg_config, agg_pk_seed) = Self::normalize_agg_source(agg_source);
+        #[cfg(feature = "root-prover")]
         let (root_params, root_pk_seed) = Self::normalize_root_source(root_source);
 
         let executor = VmExecutor::new(app_config.app_vm_config.clone())
@@ -332,6 +347,7 @@ where
         let def_hook_cached_commit = def_path_prover
             .as_ref()
             .map(|def_path_prover| def_path_prover.def_hook_cached_commit());
+        #[cfg(feature = "root-prover")]
         let def_hook_vk_commit = def_path_prover
             .as_ref()
             .map(|def_path_prover| def_path_prover.def_hook_vk_commit());
@@ -351,6 +367,7 @@ where
             ))
         });
 
+        #[cfg(feature = "root-prover")]
         let root_prover_seed = root_pk_seed.map(|root_pk| {
             let agg_prover = agg_prover_seed
                 .as_ref()
@@ -389,6 +406,7 @@ where
             app_config,
             agg_config,
             agg_tree_config,
+            #[cfg(feature = "root-prover")]
             root_params,
             #[cfg(feature = "evm-prove")]
             halo2_shape,
@@ -399,6 +417,7 @@ where
             executor,
             app_pk,
             agg_prover: Self::init_once_lock(agg_prover_seed, "agg_prover"),
+            #[cfg(feature = "root-prover")]
             root_prover: Self::init_once_lock(root_prover_seed, "root_prover"),
             def_path_prover,
             #[cfg(feature = "evm-prove")]
@@ -475,6 +494,7 @@ where
         Self {
             app_source: None,
             agg_source: None,
+            #[cfg(feature = "root-prover")]
             root_source: None,
             agg_tree_config: None,
             transpiler: None,
