@@ -190,7 +190,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             AB::F::ZERO,
             PreHashMessage::<AB::F> {
-                vk_pre_hash: self.expected_internal_recursive_vk_commit.pre_hash.into(),
+                vk_pre_hash: self
+                    .expected_internal_recursive_vk_commit
+                    .vk_pre_hash
+                    .into(),
             },
             AB::F::ONE,
         );

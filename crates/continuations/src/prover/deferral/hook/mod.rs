@@ -100,7 +100,7 @@ impl<
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(DeferralHookCircuit::new(
             Arc::new(verifier_circuit),
@@ -141,7 +141,7 @@ impl<
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(DeferralHookCircuit::new(
             Arc::new(verifier_circuit),

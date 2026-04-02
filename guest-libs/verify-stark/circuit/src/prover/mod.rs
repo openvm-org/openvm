@@ -134,7 +134,7 @@ impl<
         let engine = E::new(system_params);
         let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let def_hook_commit = def_hook_commit.map(Into::into);
@@ -184,7 +184,7 @@ impl<
         let def_hook_commit = def_hook_commit.map(Into::into);
         let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);

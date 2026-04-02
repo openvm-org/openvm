@@ -99,7 +99,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         let engine = E::new(system_params);
         let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
@@ -148,7 +148,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let internal_recursive_vk_commit = VkCommitBytes {
             cached_commit: internal_recursive_cached_commit,
-            pre_hash: child_vk.pre_hash.into(),
+            vk_pre_hash: child_vk.pre_hash.into(),
         };
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),

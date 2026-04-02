@@ -30,14 +30,14 @@ impl CommitBytes {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct VkCommitBytes {
     pub cached_commit: CommitBytes,
-    pub pre_hash: CommitBytes,
+    pub vk_pre_hash: CommitBytes,
 }
 
 impl<F: PrimeCharacteristicRing> From<VkCommitBytes> for VkCommit<F> {
     fn from(value: VkCommitBytes) -> Self {
         VkCommit {
             cached_commit: value.cached_commit.into(),
-            vk_pre_hash: value.pre_hash.into(),
+            vk_pre_hash: value.vk_pre_hash.into(),
         }
     }
 }
