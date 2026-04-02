@@ -11,7 +11,7 @@ pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
-pub struct DagCommit<F> {
+pub struct VkCommit<F> {
     /// Cached trace commit of this verifier circuit's SymbolicExpressionAir, which is derived
     /// from its child_vk.
     pub cached_commit: [F; DIGEST_SIZE],
@@ -30,13 +30,13 @@ pub struct VerifierBasePvs<F> {
     /// recursive verifier.
     pub internal_flag: F,
     /// Commit to the app_vk's DAG and its pre-hash, first exposed by the leaf verifier.
-    pub app_dag_commit: DagCommit<F>,
+    pub app_vk_commit: VkCommit<F>,
     /// Commit to the leaf_vk's DAG and its pre-hash, first exposed by the internal-for-leaf
     /// verifier.
-    pub leaf_dag_commit: DagCommit<F>,
+    pub leaf_vk_commit: VkCommit<F>,
     /// Commit to the internal_for_leaf_vk's DAG and its pre-hash, first exposed by the first
     /// (i.e. index 0) internal-recursive layer verifier.
-    pub internal_for_leaf_dag_commit: DagCommit<F>,
+    pub internal_for_leaf_vk_commit: VkCommit<F>,
 
     //////////////////////////////////////////////////////////////////////
     /// VERIFIER-SPECIFIC RECURSION PVS
@@ -47,7 +47,7 @@ pub struct VerifierBasePvs<F> {
     pub recursion_flag: F,
     /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
     /// index > 0) internal-recursive layer verifiers.
-    pub internal_recursive_dag_commit: DagCommit<F>,
+    pub internal_recursive_vk_commit: VkCommit<F>,
 }
 
 #[repr(C)]
@@ -60,9 +60,9 @@ pub struct VerifierDefPvs<F> {
     /// has only VM public values defined, 1 if only deferral public values, and 2 if both.
     pub deferral_flag: F,
     /// Commit to the deferral hook verifying key, computed by hashing the cached_commit and
-    /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits when
-    /// deferral_flag == 1. Is set exactly when internal_for_leaf_dag_commit is set.
-    pub def_hook_vk_commit: [F; DIGEST_SIZE],
+    /// vk_pre_hash components of the app, leaf, and internal-for-leaf vk commits when
+    /// deferral_flag == 1. Is set exactly when internal_for_leaf_vk_commit is set.
+    pub def_hook_commit: [F; DIGEST_SIZE],
 }
 
 #[repr(C)]

@@ -13,7 +13,7 @@ use crate::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
         Circuit,
     },
-    CommitBytes, DagCommitBytes,
+    CommitBytes, VkCommitBytes,
 };
 
 pub mod bus;
@@ -28,13 +28,13 @@ mod trace;
 pub use trace::*;
 
 pub const USER_PVS_COMMIT_AIR_ID: usize = 1;
-pub const NUM_DIGESTS_IN_VK_COMMIT: usize = 6;
+pub const NUM_DIGESTS_IN_VM_COMMIT: usize = 6;
 
 #[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    pub(crate) internal_recursive_dag_commit: DagCommitBytes,
-    pub(crate) def_hook_vk_commit: Option<CommitBytes>,
+    pub(crate) internal_recursive_vk_commit: VkCommitBytes,
+    pub(crate) def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
 }
@@ -62,8 +62,8 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
                 compress_bus: bus_inventory.poseidon2_compress_bus,
                 permute_bus: bus_inventory.poseidon2_permute_bus,
             },
-            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
-            expected_def_hook_vk_commit: self.def_hook_vk_commit,
+            expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit,
+            expected_def_hook_commit: self.def_hook_commit,
         };
         let user_pvs_commit_air = commit::UserPvsCommitAir::new(
             bus_inventory.poseidon2_compress_bus,
@@ -78,7 +78,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
             self.memory_dimensions,
             self.num_user_pvs,
         );
-        let acc_paths_air = self.def_hook_vk_commit.map(|_| {
+        let acc_paths_air = self.def_hook_commit.map(|_| {
             Arc::new(def_paths::DeferralAccMerklePathsAir::new(
                 bus_inventory.poseidon2_compress_bus,
                 def_acc_paths_bus,
@@ -105,6 +105,6 @@ pub struct RootVerifierPvs<F> {
     /// (i.e. initial_pc).
     pub app_exe_commit: [F; DIGEST_SIZE],
     /// Commit to the app-level verifying key, computed by hashing the cached_commit and
-    /// vk_pre_hash components of the app, leaf, and internal-for-leaf DAG commits.
-    pub app_vk_commit: [F; DIGEST_SIZE],
+    /// vk_pre_hash components of the app, leaf, and internal-for-leaf vk commits.
+    pub app_vm_commit: [F; DIGEST_SIZE],
 }

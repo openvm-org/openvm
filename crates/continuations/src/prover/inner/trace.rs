@@ -9,7 +9,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
+use openvm_verify_stark_host::pvs::{DeferralPvs, VkCommit};
 use tracing::instrument;
 
 use super::{ChildVkKind, InnerAggregationProver};
@@ -41,7 +41,7 @@ where
             _ => (&self.child_vk, self.child_vk_pcs_data.clone()),
         };
         let child_is_app = matches!(child_vk_kind, ChildVkKind::App);
-        let child_dag_commit = DagCommit {
+        let child_vk_commit = VkCommit {
             cached_commit: child_vk_pcs_data.commitment,
             vk_pre_hash: child_vk.pre_hash,
         };
@@ -53,7 +53,7 @@ where
                 proofs_type,
                 absent_trace_pvs,
                 child_is_app,
-                child_dag_commit,
+                child_vk_commit,
             );
 
         let range_check_inputs = vec![];

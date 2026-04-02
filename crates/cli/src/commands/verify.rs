@@ -5,7 +5,7 @@ use eyre::{Context, Result};
 use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
     prover::verify_app_proof,
-    types::{VerificationBaselineJson, VersionedNonRootStarkProof},
+    types::{VerificationBaselineJson, VersionedVmStarkProof},
     Sdk, OPENVM_VERSION, SC,
 };
 use openvm_stark_backend::keygen::types::MultiStarkProvingKey;
@@ -187,7 +187,7 @@ impl VerifyCmd {
 
                 let proof_path = resolve_proof_path(proof, STARK_PROOF_EXT)?;
                 println!("Verifying STARK proof at {}", proof_path.display());
-                let stark_proof: VersionedNonRootStarkProof = read_from_file_json(proof_path)
+                let stark_proof: VersionedVmStarkProof = read_from_file_json(proof_path)
                     .with_context(|| {
                         format!("Proof needs to be compatible with openvm v{OPENVM_VERSION}",)
                     })?;

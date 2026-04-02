@@ -23,7 +23,7 @@ pub struct OnionTraceCtx {
 }
 
 pub fn generate_proving_ctx(
-    def_vk_commit: [F; DIGEST_SIZE],
+    def_circuit_commit: [F; DIGEST_SIZE],
     io_commits: Vec<IoCommit>,
 ) -> OnionTraceCtx {
     let num_commits = io_commits.len();
@@ -34,7 +34,7 @@ pub fn generate_proving_ctx(
     let mut trace = vec![F::ZERO; height * width];
     let mut poseidon2_inputs = Vec::with_capacity(2 * num_commits);
 
-    let mut current_input_onion = def_vk_commit;
+    let mut current_input_onion = def_circuit_commit;
     let mut current_output_onion = [F::ZERO; DIGEST_SIZE];
 
     for (row_idx, (input_commit, output_commit)) in io_commits.iter().copied().enumerate() {

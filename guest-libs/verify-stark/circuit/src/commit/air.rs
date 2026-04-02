@@ -89,7 +89,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * Send the left_child of each leaf node to output_values to be processed
          * elsewhere. Note that in this case, this AIR has no public values. Also,
-         * output_val_bus expects to receive the app_exe_commit and app_vk_commit
+         * output_val_bus expects to receive the app_exe_commit and app_vm_commit
          * at indices 0..OUTPUT_USER_PVS_START_IDX. Note a row is a leaf node if
          * its receive_type == 1.
          */

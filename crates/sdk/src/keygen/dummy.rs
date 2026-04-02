@@ -66,7 +66,7 @@ where
     let memory_dimensions = system_config.memory_config.memory_dimensions();
     let num_user_pvs = system_config.num_public_values;
 
-    let def_hook_vk_commit = def_prover.as_ref().map(|p| p.def_hook_vk_commit().into());
+    let def_hook_commit = def_prover.as_ref().map(|p| p.def_hook_commit().into());
 
     let mut stark_prover = StarkProver::<E, VB>::new(
         vm_builder,
@@ -88,7 +88,7 @@ where
         root_params,
         memory_dimensions,
         num_user_pvs,
-        def_hook_vk_commit,
+        def_hook_commit,
         None,
     );
 

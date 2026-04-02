@@ -62,7 +62,7 @@ pub(crate) const OUTPUT_AIR_REL_IDX: usize = 3;
 pub struct DeferralExtension {
     #[serde(skip)]
     pub fns: Vec<Arc<DeferralFn>>,
-    pub def_vk_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
+    pub def_circuit_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]

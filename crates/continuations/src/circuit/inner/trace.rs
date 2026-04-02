@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ProverBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
-use openvm_verify_stark_host::pvs::{DagCommit, DeferralPvs};
+use openvm_verify_stark_host::pvs::{DeferralPvs, VkCommit};
 
 use crate::circuit::{SingleAirTraceData, SubCircuitTraceData};
 
@@ -30,7 +30,7 @@ pub trait InnerTraceGen<PB: ProverBackend> {
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
-        child_dag_commit: DagCommit<F>,
+        child_vk_commit: VkCommit<F>,
     ) -> SubCircuitTraceData<PB>;
     fn generate_post_verifier_subcircuit_ctxs(
         &self,
@@ -55,7 +55,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
-        child_dag_commit: DagCommit<F>,
+        child_vk_commit: VkCommit<F>,
     ) -> SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> {
         let SingleAirTraceData {
             air_proving_ctx: verifier_pvs_ctx,
@@ -65,7 +65,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
             proofs,
             proofs_type,
             child_is_app,
-            child_dag_commit,
+            child_vk_commit,
             self.deferral_enabled,
         );
         let vm_pvs_ctx = super::vm_pvs::generate_proving_ctx(
@@ -136,14 +136,14 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
-        child_dag_commit: DagCommit<F>,
+        child_vk_commit: VkCommit<F>,
     ) -> SubCircuitTraceData<GpuBackend> {
         let data = self.generate_pre_verifier_subcircuit_ctxs(
             proofs,
             proofs_type,
             absent_trace_pvs,
             child_is_app,
-            child_dag_commit,
+            child_vk_commit,
         );
         SubCircuitTraceData {
             air_proving_ctxs: data

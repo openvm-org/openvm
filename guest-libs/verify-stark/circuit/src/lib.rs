@@ -11,7 +11,7 @@ use openvm_continuations::{
         subair::{HashSliceSubAir, MerkleRootBus, MerkleTreeInternalBus},
         Circuit,
     },
-    CommitBytes, DagCommitBytes,
+    CommitBytes, VkCommitBytes,
 };
 use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
@@ -42,8 +42,8 @@ mod tests;
 #[derive(derive_new::new, Clone)]
 pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    internal_recursive_dag_commit: DagCommitBytes,
-    def_hook_vk_commit: Option<CommitBytes>,
+    internal_recursive_vk_commit: VkCommitBytes,
+    def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
     pub(crate) def_idx: usize,
@@ -79,8 +79,8 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             final_state_bus: bus_inventory.final_state_bus,
             def_acc_paths_bus,
             def_merkle_roots_bus: memory_merkle_roots_bus,
-            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
-            expected_def_hook_vk_commit: self.def_hook_vk_commit,
+            expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit,
+            expected_def_hook_commit: self.def_hook_commit,
         };
         let user_pvs_commit_air = UserPvsCommitValuesAir::new(
             bus_inventory.poseidon2_compress_bus,
@@ -104,7 +104,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             def_idx: self.def_idx,
         };
 
-        let acc_paths_air = self.def_hook_vk_commit.map(|_| {
+        let acc_paths_air = self.def_hook_commit.map(|_| {
             Arc::new(DeferralAccMerklePathsAir::new(
                 bus_inventory.poseidon2_compress_bus,
                 def_acc_paths_bus,

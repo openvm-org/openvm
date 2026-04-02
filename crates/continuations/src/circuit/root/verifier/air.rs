@@ -15,7 +15,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use openvm_verify_stark_host::pvs::{
-    DagCommit, DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID,
+    DeferralPvs, VerifierBasePvs, VerifierDefPvs, VkCommit, VmPvs, CONSTRAINT_EVAL_AIR_ID,
     CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
@@ -29,13 +29,13 @@ use crate::{
                 DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
                 DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
             },
-            RootVerifierPvs, NUM_DIGESTS_IN_VK_COMMIT,
+            RootVerifierPvs, NUM_DIGESTS_IN_VM_COMMIT,
         },
         subair::{HashSliceCtx, HashSliceSubAir},
-        utils::{assert_dag_commit_eq, assert_dag_commit_unset, vk_commit_components},
+        utils::{assert_vk_commit_eq, assert_vk_commit_unset, vk_commit_components},
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
-    CommitBytes, DagCommitBytes,
+    CommitBytes, VkCommitBytes,
 };
 
 #[repr(C)]
@@ -49,7 +49,7 @@ pub struct RootVerifierPvsCols<F> {
     pub initial_pc_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
 
-    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
+    pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
 }
 
 pub struct RootVerifierPvsAir {
@@ -63,14 +63,14 @@ pub struct RootVerifierPvsAir {
 
     pub hash_slice_subair: HashSliceSubAir,
 
-    pub expected_internal_recursive_dag_commit: DagCommitBytes,
-    pub expected_def_hook_vk_commit: Option<CommitBytes>,
+    pub expected_internal_recursive_vk_commit: VkCommitBytes,
+    pub expected_def_hook_commit: Option<CommitBytes>,
 }
 
 impl<F: Field> BaseAir<F> for RootVerifierPvsAir {
     fn width(&self) -> usize {
         RootVerifierPvsCols::<u8>::width()
-            + if self.expected_def_hook_vk_commit.is_some() {
+            + if self.expected_def_hook_commit.is_some() {
                 RootDefVerifierCols::<u8>::width()
             } else {
                 0
@@ -94,9 +94,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let (base_local, rec_local) = local.split_at(base_cols_width);
         let local: &RootVerifierPvsCols<AB::Var> = (*base_local).borrow();
 
-        if let Some(def_hook_vk_commit) = self.expected_def_hook_vk_commit {
+        if let Some(def_hook_commit) = self.expected_def_hook_commit {
             let def: &RootDefVerifierCols<AB::Var> = (*rec_local).borrow();
-            self.eval_deferrals(builder, local, def, def_hook_vk_commit);
+            self.eval_deferrals(builder, local, def, def_hook_commit);
         }
 
         /*
@@ -165,7 +165,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * We also need to receive the cached commit from ProofShapeModule, which is either for
          * the internal-for-leaf (i.e. if recursion_flag == 1) or internal-recursive layer. In
-         * the former case we constrain child_pvs.internal_recursive_dag_commit to be unset (i.e.
+         * the former case we constrain child_pvs.internal_recursive_vk_commit to be unset (i.e.
          * all 0), and in the latter we constrain it to be equal to a pre-generated constant as
          * it should be the same regardless of app_vk (provided internal system params are the
          * same).
@@ -173,12 +173,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let cached_commit = from_fn(|i| {
             local
                 .child_verifier_pvs
-                .internal_for_leaf_dag_commit
+                .internal_for_leaf_vk_commit
                 .cached_commit[i]
                 * (AB::Expr::TWO - local.child_verifier_pvs.recursion_flag)
                 + local
                     .child_verifier_pvs
-                    .internal_recursive_dag_commit
+                    .internal_recursive_vk_commit
                     .cached_commit[i]
                     * (local.child_verifier_pvs.recursion_flag - AB::F::ONE)
         });
@@ -198,31 +198,34 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             AB::F::ZERO,
             PreHashMessage::<AB::F> {
-                vk_pre_hash: self.expected_internal_recursive_dag_commit.pre_hash.into(),
+                vk_pre_hash: self
+                    .expected_internal_recursive_vk_commit
+                    .vk_pre_hash
+                    .into(),
             },
             AB::F::ONE,
         );
 
-        assert_dag_commit_unset(
+        assert_vk_commit_unset(
             &mut builder.when_ne(local.child_verifier_pvs.recursion_flag, AB::F::TWO),
-            local.child_verifier_pvs.internal_recursive_dag_commit,
+            local.child_verifier_pvs.internal_recursive_vk_commit,
         );
 
-        assert_dag_commit_eq(
+        assert_vk_commit_eq(
             &mut builder.when_ne(local.child_verifier_pvs.recursion_flag, AB::F::ONE),
-            local.child_verifier_pvs.internal_recursive_dag_commit,
-            DagCommit::<AB::Expr>::from(self.expected_internal_recursive_dag_commit),
+            local.child_verifier_pvs.internal_recursive_vk_commit,
+            VkCommit::<AB::Expr>::from(self.expected_internal_recursive_vk_commit),
         );
 
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
-         * with the child's. The app_vk_commit is constrained to be hash_slice of the 6
+         * with the child's. The app_vm_commit is constrained to be hash_slice of the 6
          * vk_commit_components (cached_commit and vk_pre_hash for each of app, leaf, and
-         * internal-for-leaf DAG commits).
+         * internal-for-leaf vk commits).
          */
         let &RootVerifierPvs::<_> {
             app_exe_commit,
-            app_vk_commit,
+            app_vm_commit,
         } = builder.public_values().borrow();
 
         let vk_commit_components: Vec<_> = vk_commit_components(&local.child_verifier_pvs)
@@ -238,7 +241,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     .intermediate_vk_states
                     .map(|v| v.map(Into::into))
                     .as_slice(),
-                result: &app_vk_commit.map(Into::into),
+                result: &app_vm_commit.map(Into::into),
                 enabled: &AB::Expr::ONE,
             },
         );
@@ -331,7 +334,7 @@ impl RootVerifierPvsAir {
         builder: &mut AB,
         base: &RootVerifierPvsCols<AB::Var>,
         def: &RootDefVerifierCols<AB::Var>,
-        expected_def_hook_vk_commit: CommitBytes,
+        expected_def_hook_commit: CommitBytes,
     ) where
         AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues,
     {
@@ -373,14 +376,14 @@ impl RootVerifierPvsAir {
 
         /*
          * The final internal-recursive proof's deferral_flag must be either 0 or 2, and
-         * in the latter case the def_hook_vk_commit must match the expected one.
+         * in the latter case the def_hook_commit must match the expected one.
          */
         builder
             .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
         assert_array_eq::<_, _, AB::Expr, _>(
             &mut builder.when(verifier_pvs.deferral_flag),
-            verifier_pvs.def_hook_vk_commit,
-            expected_def_hook_vk_commit.into(),
+            verifier_pvs.def_hook_commit,
+            expected_def_hook_commit.into(),
         );
 
         /*
