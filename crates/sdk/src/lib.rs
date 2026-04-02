@@ -636,46 +636,6 @@ where
         (pk, vk)
     }
 
-    pub fn with_agg_pk(self, agg_pk: AggProvingKey) -> Self {
-        let app_pk = self.app_pk();
-        let _ = self
-            .agg_prover
-            .set(Arc::new(AggProver::from_pk(
-                Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
-                agg_pk,
-                self.agg_tree_config,
-                self.def_hook_cached_commit(),
-            )))
-            .map_err(|_| panic!("agg_pk already set"));
-        self
-    }
-
-    #[cfg(feature = "root-prover")]
-    pub fn with_root_pk(self, root_pk: RootProvingKey) -> Self {
-        let system_config = self.app_config.app_vm_config.as_ref();
-        let memory_dimensions = system_config.memory_config.memory_dimensions();
-        let num_user_pvs = system_config.num_public_values;
-        let agg_prover = self.agg_prover();
-        let _ = self
-            .root_prover
-            .set(Arc::new(RootProver::from_pk(
-                agg_prover.internal_recursive_prover.get_vk(),
-                agg_prover
-                    .internal_recursive_prover
-                    .get_self_vk_pcs_data()
-                    .unwrap()
-                    .commitment
-                    .into(),
-                root_pk.root_pk,
-                memory_dimensions,
-                num_user_pvs,
-                self.def_hook_vk_commit(),
-                Some(root_pk.trace_heights),
-            )))
-            .map_err(|_| panic!("root_pk already set"));
-        self
-    }
-
     #[cfg(feature = "root-prover")]
     pub fn root_pk(&self) -> RootProvingKey {
         let root_prover = self.root_prover();
