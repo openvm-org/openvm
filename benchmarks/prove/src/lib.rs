@@ -31,17 +31,13 @@ pub struct BenchmarkCli {
     #[arg(long)]
     pub app_only: bool,
 
+    /// Run full e2e proving (app → aggregation → root → halo2 wrapping)
+    #[arg(long)]
+    pub evm: bool,
+
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
     pub profiling: bool,
-
-    /// Halo2 wrapper circuit degree `k` (for e2e proving). If omitted, auto-tuned.
-    #[arg(long)]
-    pub halo2_wrapper_k: Option<usize>,
-
-    /// Directory containing KZG trusted setup files (for e2e halo2 proving)
-    #[arg(long)]
-    pub kzg_params_dir: Option<std::path::PathBuf>,
 }
 
 impl BenchmarkCli {
@@ -64,24 +60,14 @@ impl BenchmarkCli {
         self.apply_config(&mut vm_config);
         if self.app_only {
             run_default_app_benchmark(vm_config, elf, stdin)
+        } else if self.evm {
+            #[cfg(feature = "evm")]
+            return run_default_evm_benchmark(vm_config, elf, stdin);
+            #[cfg(not(feature = "evm"))]
+            eyre::bail!("--evm requires the `evm` feature flag")
         } else {
             run_default_benchmark(vm_config, elf, stdin)
         }
-    }
-
-    #[cfg(feature = "evm")]
-    pub fn run_evm(&self, mut vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> eyre::Result<()> {
-        self.apply_config(&mut vm_config);
-        run_evm_benchmark(
-            vm_config,
-            elf,
-            stdin,
-            default_bench_app_params(),
-            leaf_params_with_100_bits_security(),
-            internal_params_with_100_bits_security(),
-            self.halo2_wrapper_k,
-            self.kzg_params_dir.clone(),
-        )
     }
 }
 
@@ -163,41 +149,19 @@ pub fn run_default_app_benchmark(
 }
 
 #[cfg(feature = "evm")]
-pub fn run_evm_benchmark(
+pub fn run_default_evm_benchmark(
     vm_config: SdkVmConfig,
     elf: Elf,
     stdin: StdIn,
-    app_params: SystemParams,
-    leaf_params: SystemParams,
-    internal_params: SystemParams,
-    halo2_wrapper_k: Option<usize>,
-    kzg_params_dir: Option<std::path::PathBuf>,
 ) -> eyre::Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
         let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-        let app_config = AppConfig::new(vm_config, app_params);
+        let app_config = AppConfig::new(vm_config, default_bench_app_params());
         let agg_params = AggregationSystemParams {
-            leaf: leaf_params,
-            internal: internal_params,
+            leaf: leaf_params_with_100_bits_security(),
+            internal: internal_params_with_100_bits_security(),
         };
-        let mut builder = Sdk::builder().app_config(app_config).agg_params(agg_params);
-        if halo2_wrapper_k.is_some() {
-            use openvm_sdk::config::Halo2Config;
-            builder = builder.halo2_config(
-                Default::default(),
-                Halo2Config {
-                    wrapper_k: halo2_wrapper_k,
-                    profiling: false,
-                },
-            );
-        }
-        if let Some(dir) = kzg_params_dir {
-            builder = builder.halo2_params_dir(dir);
-        }
-        let sdk = builder.build()?;
-        // prove_evm runs the full pipeline: app → aggregation → root → halo2 wrapping.
-        // EVM proof verification requires deploying a Solidity verifier contract, so we
-        // only benchmark proving here.
+        let sdk = Sdk::new(app_config, agg_params)?;
         let _proof = sdk.prove_evm(exe, stdin, &[])?;
         Ok(())
     })

@@ -4,7 +4,6 @@
       "name": "fibonacci",
       "id": "fibonacci",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
@@ -16,7 +15,6 @@
       "name": "keccak",
       "id": "keccak",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
@@ -28,7 +26,6 @@
       "name": "regex",
       "id": "regex",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
@@ -40,7 +37,6 @@
       "name": "ecrecover",
       "id": "ecrecover",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
@@ -52,7 +48,6 @@
       "name": "pairing",
       "id": "pairing",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
@@ -64,24 +59,11 @@
       "name": "kitchen_sink",
       "id": "kitchen_sink",
       "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "g6e.2xlarge",
           "memory_allocator": "jemalloc",
           "max_segment_length": 4194304
-        }
-      ]
-    },
-    {
-      "name": "fib_e2e",
-      "id": "fib_e2e",
-      "working_directory": "benchmarks/prove",
-      "e2e_bench": true,
-      "run_params": [
-        {
-          "instance_type": "m7a.8xlarge",
-          "memory_allocator": "jemalloc"
         }
       ]
     }

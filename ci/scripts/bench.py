@@ -10,6 +10,7 @@ def run_cargo_command(
     max_segment_length,
     output_path,
     app_only,
+    evm,
     kzg_params_dir,
     profile="release",
 ):
@@ -37,6 +38,8 @@ def run_cargo_command(
         command.extend(["--max_segment_length", max_segment_length])
     if app_only:
         command.extend(["--app-only"])
+    if evm:
+        command.extend(["--evm"])
     if kzg_params_dir is not None:
         command.extend(["--kzg-params-dir", kzg_params_dir])
     if "perf-metrics" in feature_flags:
@@ -89,6 +92,11 @@ def bench():
         action="store_true",
         help="Only run the app proof (skip aggregation)",
     )
+    parser.add_argument(
+        "--evm",
+        action="store_true",
+        help="Run full e2e proving (app + aggregation + root + halo2)",
+    )
     args = parser.parse_args()
 
     feature_flags = ["metrics", "parallel"] + (
@@ -102,6 +110,7 @@ def bench():
         args.max_segment_length,
         args.output_path,
         args.app_only,
+        args.evm,
         args.kzg_params_dir,
     )
 

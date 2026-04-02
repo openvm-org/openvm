@@ -138,6 +138,8 @@ jobs:
           if [[ "${E2E_BENCH}" == "true" ]]; then
             FEATURE_FLAGS=${FEATURE_FLAGS},evm
             echo "FEATURE_FLAGS=${FEATURE_FLAGS}" >> $GITHUB_ENV
+            INPUT_ARGS="${INPUT_ARGS} --evm"
+            echo "INPUT_ARGS=${INPUT_ARGS}" >> $GITHUB_ENV
             bash ./scripts/trusted_setup_s3.sh
           fi
 
