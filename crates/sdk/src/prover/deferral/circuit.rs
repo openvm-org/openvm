@@ -145,7 +145,7 @@ impl SingleDefCircuitProver {
         })
     }
 
-    pub fn vk_commit(&self, internal_for_leaf_dag_commit: DagCommit<F>) -> Digest {
+    pub fn circuit_commit(&self, internal_for_leaf_dag_commit: DagCommit<F>) -> Digest {
         let def_dag_commit = self.leaf_prover.get_dag_commit(false);
         let leaf_dag_commit = self.internal_for_leaf_prover.get_dag_commit(false);
 

@@ -235,7 +235,7 @@ where
 
     /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
     /// because the DeferralExtension should be created using DeferralProver::make_extension, as
-    /// it has the capability to generate def_vk_commits.
+    /// it has the capability to generate def_circuit_commits.
     pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
         assert!(
             self.def_path_prover.is_none(),

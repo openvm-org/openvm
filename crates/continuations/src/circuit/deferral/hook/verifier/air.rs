@@ -22,7 +22,7 @@ use p3_matrix::Matrix;
 use crate::{
     circuit::{
         deferral::{
-            hook::bus::{DefVkCommitBus, DefVkCommitMessage, OnionResultBus, OnionResultMessage},
+            hook::bus::{DefCircuitCommitBus, DefCircuitCommitMessage, OnionResultBus, OnionResultMessage},
             DeferralAggregationPvs, DEF_AGG_PVS_AIR_ID,
         },
         root::NUM_DIGESTS_IN_VK_COMMIT,
@@ -40,12 +40,12 @@ pub struct DeferralHookPvsCols<F> {
     pub def_pvs: DeferralAggregationPvs<F>,
 
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VK_COMMIT - 1],
-    pub def_vk_commit: [F; DIGEST_SIZE],
+    pub def_circuit_commit: [F; DIGEST_SIZE],
 
     pub input_onion: [F; DIGEST_SIZE],
     pub output_onion: [F; DIGEST_SIZE],
 
-    pub def_vk_commit_padded: [F; DIGEST_SIZE],
+    pub def_circuit_commit_padded: [F; DIGEST_SIZE],
     pub input_onion_padded: [F; DIGEST_SIZE],
     pub output_onion_padded: [F; DIGEST_SIZE],
 }
@@ -57,7 +57,7 @@ pub struct DeferralHookPvsAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub hash_slice_subair: HashSliceSubAir,
 
-    pub def_vk_commit_bus: DefVkCommitBus,
+    pub def_circuit_commit_bus: DefCircuitCommitBus,
     pub merkle_root_bus: MerkleRootBus,
     pub onion_res_bus: OnionResultBus,
 
@@ -73,7 +73,7 @@ impl DeferralHookPvsAir {
         pre_hash_bus: PreHashBus,
         poseidon2_compress_bus: Poseidon2CompressBus,
         hash_slice_subair: HashSliceSubAir,
-        def_vk_commit_bus: DefVkCommitBus,
+        def_circuit_commit_bus: DefCircuitCommitBus,
         merkle_root_bus: MerkleRootBus,
         onion_res_bus: OnionResultBus,
         expected_internal_recursive_dag_commit: DagCommitBytes,
@@ -85,7 +85,7 @@ impl DeferralHookPvsAir {
             pre_hash_bus,
             poseidon2_compress_bus,
             hash_slice_subair,
-            def_vk_commit_bus,
+            def_circuit_commit_bus,
             merkle_root_bus,
             onion_res_bus,
             expected_internal_recursive_dag_commit,
@@ -208,10 +208,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Commit def_vk_commit is hash_slice of the 6 vk_commit_components (cached_commit and
+         * Commit def_circuit_commit is hash_slice of the 6 vk_commit_components (cached_commit and
          * vk_pre_hash for each of def_dag_commit (called app_dag_commit in the struct),
          * leaf_dag_commit, and internal_for_leaf_dag_commit).
-         * We constrain this here and send def_vk_commit to its bus.
+         * We constrain this here and send def_circuit_commit to its bus.
          */
         let vk_commit_components: Vec<_> = vk_commit_components(&local.verifier_pvs)
             .into_iter()
@@ -225,15 +225,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     .intermediate_vk_states
                     .map(|v| v.map(Into::into))
                     .as_slice(),
-                result: &local.def_vk_commit.map(Into::into),
+                result: &local.def_circuit_commit.map(Into::into),
                 enabled: &AB::Expr::ONE,
             },
         );
 
-        self.def_vk_commit_bus.send(
+        self.def_circuit_commit_bus.send(
             builder,
-            DefVkCommitMessage {
-                def_vk_commit: local.def_vk_commit,
+            DefCircuitCommitMessage {
+                def_circuit_commit: local.def_circuit_commit,
             },
             AB::F::ONE,
         );
@@ -265,7 +265,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
          * with the child's. initial_acc_hash should be the compression of a padded
-         * def_vk_commit, and final_acc_hash should be the compression of the input and
+         * def_circuit_commit, and final_acc_hash should be the compression of the input and
          * output onions. Note that the Merkle root computation hashes each leaf with the
          * zero digest prior.
          */
@@ -281,10 +281,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: pad_slice_to_poseidon2_input(
-                    &local.def_vk_commit.map(Into::into),
+                    &local.def_circuit_commit.map(Into::into),
                     AB::Expr::ZERO,
                 ),
-                output: local.def_vk_commit_padded.map(Into::into),
+                output: local.def_circuit_commit_padded.map(Into::into),
             },
             AB::F::ONE,
         );
@@ -317,7 +317,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
-                    local.def_vk_commit_padded.map(Into::into),
+                    local.def_circuit_commit_padded.map(Into::into),
                     self.zero_hash.into(),
                 ),
                 output: initial_acc_hash.map(Into::into),

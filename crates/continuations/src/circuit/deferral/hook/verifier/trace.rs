@@ -25,10 +25,10 @@ use crate::{
 
 pub struct DeferralHookVerifierTraceCtx {
     pub trace_data: SingleAirTraceData<CpuBackend<BabyBearPoseidon2Config>>,
-    pub def_vk_commit: [F; DIGEST_SIZE],
+    pub def_circuit_commit: [F; DIGEST_SIZE],
 }
 
-pub fn def_vk_commit_from_verifier_pvs(verifier_pvs: &VerifierBasePvs<F>) -> [F; DIGEST_SIZE] {
+pub fn def_circuit_commit_from_verifier_pvs(verifier_pvs: &VerifierBasePvs<F>) -> [F; DIGEST_SIZE] {
     let hash_elements = [
         verifier_pvs.app_dag_commit.cached_commit,
         verifier_pvs.app_dag_commit.vk_pre_hash,
@@ -70,24 +70,24 @@ pub fn generate_proving_ctx(
 
     let mut poseidon2_compress_inputs = Vec::with_capacity(6);
     let mut poseidon2_permute_inputs = Vec::with_capacity(NUM_DIGESTS_IN_VK_COMMIT - 1);
-    let (intermediate_vk_states, def_vk_commit) = hash_slice_trace(
+    let (intermediate_vk_states, def_circuit_commit) = hash_slice_trace(
         &hash_elements,
         Some(&mut poseidon2_permute_inputs),
         Some(&mut poseidon2_compress_inputs),
     );
     cols.intermediate_vk_states = intermediate_vk_states.try_into().unwrap();
-    cols.def_vk_commit = def_vk_commit;
+    cols.def_circuit_commit = def_circuit_commit;
 
     const ZERO_DIGEST: [F; DIGEST_SIZE] = [F::ZERO; DIGEST_SIZE];
-    let def_vk_commit_padded = poseidon2_compress_with_capacity(def_vk_commit, ZERO_DIGEST).0;
+    let def_circuit_commit_padded = poseidon2_compress_with_capacity(def_circuit_commit, ZERO_DIGEST).0;
     let input_onion_padded = poseidon2_compress_with_capacity(input_onion, ZERO_DIGEST).0;
     let output_onion_padded = poseidon2_compress_with_capacity(output_onion, ZERO_DIGEST).0;
-    cols.def_vk_commit_padded = def_vk_commit_padded;
+    cols.def_circuit_commit_padded = def_circuit_commit_padded;
     cols.input_onion_padded = input_onion_padded;
     cols.output_onion_padded = output_onion_padded;
 
     let zero_hash = zero_hash(1);
-    let initial_acc_hash = poseidon2_compress_with_capacity(def_vk_commit_padded, zero_hash).0;
+    let initial_acc_hash = poseidon2_compress_with_capacity(def_circuit_commit_padded, zero_hash).0;
     let final_acc_hash =
         poseidon2_compress_with_capacity(input_onion_padded, output_onion_padded).0;
 
@@ -98,10 +98,10 @@ pub fn generate_proving_ctx(
     root_pvs.depth = F::ONE;
 
     poseidon2_compress_inputs.extend_from_slice(&[
-        pad_slice_to_poseidon2_input(&def_vk_commit, F::ZERO),
+        pad_slice_to_poseidon2_input(&def_circuit_commit, F::ZERO),
         pad_slice_to_poseidon2_input(&input_onion, F::ZERO),
         pad_slice_to_poseidon2_input(&output_onion, F::ZERO),
-        digests_to_poseidon2_input(def_vk_commit_padded, zero_hash),
+        digests_to_poseidon2_input(def_circuit_commit_padded, zero_hash),
         digests_to_poseidon2_input(input_onion_padded, output_onion_padded),
     ]);
 
@@ -115,6 +115,6 @@ pub fn generate_proving_ctx(
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
         },
-        def_vk_commit,
+        def_circuit_commit,
     }
 }

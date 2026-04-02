@@ -24,8 +24,8 @@ define_typed_permutation_bus!(OnionResultBus, OnionResultMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct DefVkCommitMessage<T> {
-    pub def_vk_commit: [T; DIGEST_SIZE],
+pub struct DefCircuitCommitMessage<T> {
+    pub def_circuit_commit: [T; DIGEST_SIZE],
 }
 
-define_typed_permutation_bus!(DefVkCommitBus, DefVkCommitMessage);
+define_typed_permutation_bus!(DefCircuitCommitBus, DefCircuitCommitMessage);

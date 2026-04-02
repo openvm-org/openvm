@@ -199,7 +199,7 @@ impl TranspilerConfig<F> for SdkVmConfig {
         }
         if let Some(ext) = &self.deferral {
             transpiler = transpiler
-                .with_extension(DeferralTranspilerExtension::new(ext.def_vk_commits.clone()));
+                .with_extension(DeferralTranspilerExtension::new(ext.def_circuit_commits.clone()));
         }
         transpiler
     }

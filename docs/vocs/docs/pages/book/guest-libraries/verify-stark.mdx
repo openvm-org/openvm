@@ -47,7 +47,7 @@ There should be a unique `DeferredVerifyCircuit` for each STARK verifying key yo
 To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralExtension`. A VM config can support up to 1024 different deferral circuits at one time. `DeferralExtension` stores:
 
 - `fns: Vec<Arc<DeferralFn>>` - one function per deferral circuit
-- `def_vk_commits: Vec<[u8; 32]>` - the corresponding deferral-circuit VK commitments
+- `def_circuit_commits: Vec<[u8; 32]>` - the corresponding deferral-circuit VK commitments
 
 These vectors are aligned by index.
 

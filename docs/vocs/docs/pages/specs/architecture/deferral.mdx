@@ -10,7 +10,7 @@ Suppose we have a collection of standalone circuits `C_0, C_1, ..` each handling
 
 We model each `C_i` as a function `f_i: Input_i -> Output_i`, where `Input_i` and `Output_i` are types such that there exist hash functions `g_i: Input_i -> Digest` and `h_i: Output_i -> Digest`. Given a raw `input_i_raw: Input_i` and `output_i_raw: Output_i`, we call `g_i(input_i_raw)` and `h_i(output_i_raw)` the **input commit** and **output commit** respectively.
 
-We also define the **circuit commit** as the `def_vk_commit` [defined below](#aggregation-subcircuit-and-tree).
+We also define the **circuit commit** as the `def_circuit_commit` [defined below](#aggregation-subcircuit-and-tree).
 
 ### High Level Summary
 
@@ -24,7 +24,7 @@ We also define the **circuit commit** as the `def_vk_commit` [defined below](#ag
 
 During guest program execution, we maintain an `input_i_accumulator: Digest` and `output_i_accumulator: Digest` for each `C_i`. These accumulators are stored in order at the beginning of the **deferral address space** (address space `4`), meaning that the accumulators for some `C_i` will be stored starting at `[2 * i * DIGEST_SIZE]_4`.
 
-Each accumulator is a **hash onion**, i.e. the result of folding `π` (Poseidon2 compression) over the sequence of commits seen so far. `input_i_accumulator` and `output_i_accumulator` accumulate the input and output commits for calls to `C_i` specifically. `input_i_accumulator` will initially be the `def_vk_commit`, and `output_i_accumulator` all zero — this is required to [constrain that the correct deferral circuits were used](#aggregation-subcircuit-and-tree).
+Each accumulator is a **hash onion**, i.e. the result of folding `π` (Poseidon2 compression) over the sequence of commits seen so far. `input_i_accumulator` and `output_i_accumulator` accumulate the input and output commits for calls to `C_i` specifically. `input_i_accumulator` will initially be the `def_circuit_commit`, and `output_i_accumulator` all zero — this is required to [constrain that the correct deferral circuits were used](#aggregation-subcircuit-and-tree).
 
 ### New Opcodes
 
@@ -71,7 +71,7 @@ We provide the following guarantees on the opcodes defined above:
 
 ### Extension Chips and Constraints
 
-The deferral extension contains several executor and peripheral chips to constrain the opcode functions and contracts above. It is configured with a `Vec<DeferralFn>` defining the `f_i` functions and a `Vec<def_vk_commit>` for the circuit commits of each `C_i`.
+The deferral extension contains several executor and peripheral chips to constrain the opcode functions and contracts above. It is configured with a `Vec<DeferralFn>` defining the `f_i` functions and a `Vec<def_circuit_commit>` for the circuit commits of each `C_i`.
 
 :::info
 Because the deferral extension has a single opcode for all deferral operations, in practice the `h_i` hash function is the Poseidon2 sponge hash of `Output_i` represented as bytes.
@@ -101,7 +101,7 @@ The final internal-recursive layer is passed to a **deferral hook** layer, which
 
 - Constrains its validity
 - Reconciles the input and output Merkle hashes into the input and output **onion hashes**, which are exposed as public values
-- Exposes `initial_acc_hash = π(π(def_vk_commit, 0), π(0, 0))` and `final_acc_hash = π(π(input_onion, 0), π(output_onion, 0))`, where `def_vk_commit` is computed by combining the DAG commits above
+- Exposes `initial_acc_hash = π(π(def_circuit_commit, 0), π(0, 0))` and `final_acc_hash = π(π(input_onion, 0), π(output_onion, 0))`, where `def_circuit_commit` is computed by combining the DAG commits above
     - Note that `initial_acc_hash` and `final_acc_hash` are memory subtree Merkle leaves, with each leaf zero-padded before Merklization
 
 ![Deferral Aggregation Diagram](/deferral-aggregation-diagram.png)
