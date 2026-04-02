@@ -95,7 +95,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
             output_commit,
         } = super::output::generate_proving_ctx(
             verifier_pvs_record.app_exe_commit,
-            verifier_pvs_record.app_vk_commit,
+            verifier_pvs_record.app_vm_commit,
             user_pvs_proof.public_values.clone(),
             def_idx,
         );

@@ -78,14 +78,15 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookT
         );
 
         let verifier_pvs: &VerifierBasePvs<F> = proof.public_values[0].as_slice().borrow();
-        let def_vk_commit = super::verifier::def_vk_commit_from_verifier_pvs(verifier_pvs);
+        let def_circuit_commit =
+            super::verifier::def_circuit_commit_from_verifier_pvs(verifier_pvs);
 
         let super::onion::OnionTraceCtx {
             proving_ctx: onion_ctx,
             poseidon2_inputs: onion_p2_inputs,
             input_onion,
             output_onion,
-        } = super::onion::generate_proving_ctx(def_vk_commit, io_commits);
+        } = super::onion::generate_proving_ctx(def_circuit_commit, io_commits);
 
         let super::verifier::DeferralHookVerifierTraceCtx {
             trace_data:

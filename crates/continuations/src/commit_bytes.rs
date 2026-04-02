@@ -2,7 +2,7 @@ use std::array::from_fn;
 
 use num_bigint::BigUint;
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
-use openvm_verify_stark_host::pvs::DagCommit;
+use openvm_verify_stark_host::pvs::VkCommit;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 pub const COMMIT_NUM_BYTES: usize = 32;
@@ -28,16 +28,16 @@ impl CommitBytes {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct DagCommitBytes {
+pub struct VkCommitBytes {
     pub cached_commit: CommitBytes,
-    pub pre_hash: CommitBytes,
+    pub vk_pre_hash: CommitBytes,
 }
 
-impl<F: PrimeCharacteristicRing> From<DagCommitBytes> for DagCommit<F> {
-    fn from(value: DagCommitBytes) -> Self {
-        DagCommit {
+impl<F: PrimeCharacteristicRing> From<VkCommitBytes> for VkCommit<F> {
+    fn from(value: VkCommitBytes) -> Self {
+        VkCommit {
             cached_commit: value.cached_commit.into(),
-            vk_pre_hash: value.pre_hash.into(),
+            vk_pre_hash: value.vk_pre_hash.into(),
         }
     }
 }

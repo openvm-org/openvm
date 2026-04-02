@@ -17,7 +17,7 @@ pub fn verify_stark_unchecked<const DEF_IDX: u16>(input_commit: &Commit) -> Proo
 Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit` (a 32-byte commitment identifying the proof). Returns a `ProofOutput` containing:
 
 - `app_exe_commit: Commit` — commitment to the app executable whose execution is being verified
-- `app_vk_commit: Commit` — commitment to the app VM configuration
+- `app_vm_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — public values revealed by the verified app
 
 When correctly configured with the [`DeferredVerifyCircuit`](#circuit), verification is performed outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). From the guest perspective, this establishes that **there exists a proof** matching `input_commit` that verifies and yields the returned `ProofOutput`; the proof itself is never accessible from the guest program.
@@ -38,7 +38,7 @@ The circuit crate (`openvm-verify-stark-circuit`) provides the `DeferredVerifyCi
 
 1. Verifies the child STARK proof using the recursion verifier sub-circuit
 2. Constrains that the user public values are present in the final memory state
-3. Produces the output commitment containing `app_exe_commit`, `app_vk_commit`, and `user_public_values`
+3. Produces the output commitment containing `app_exe_commit`, `app_vm_commit`, and `user_public_values`
 
 There should be a unique `DeferredVerifyCircuit` for each STARK verifying key you want to support.
 
@@ -47,7 +47,7 @@ There should be a unique `DeferredVerifyCircuit` for each STARK verifying key yo
 To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralExtension`. A VM config can support up to 1024 different deferral circuits at one time. `DeferralExtension` stores:
 
 - `fns: Vec<Arc<DeferralFn>>` - one function per deferral circuit
-- `def_vk_commits: Vec<[u8; 32]>` - the corresponding deferral-circuit VK commitments
+- `def_circuit_commits: Vec<[u8; 32]>` - the corresponding deferral-circuit vk commitments
 
 These vectors are aligned by index.
 

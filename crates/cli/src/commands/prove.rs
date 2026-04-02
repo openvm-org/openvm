@@ -15,7 +15,7 @@ use openvm_sdk::{
     config::{AggregationSystemParams, AggregationTreeConfig},
     fs::{read_object_from_file, write_object_to_file, write_to_file_json},
     keygen::{AggPrefixProvingKey, AggProvingKey, AppProvingKey},
-    types::{AppExecutionCommit, VerificationBaselineJson, VersionedNonRootStarkProof},
+    types::{AppExecutionCommit, VerificationBaselineJson, VersionedVmStarkProof},
     Sdk, F, SC,
 };
 use openvm_sdk_config::SdkVmConfig;
@@ -193,20 +193,20 @@ impl ProveCmd {
                     .build()?;
                 let mut prover = sdk.prover(exe)?;
                 let baseline = prover.generate_baseline();
-                let app_vk_commit = prover.app_vk_commit();
+                let app_vm_commit = prover.app_vm_commit();
 
                 let app_commit = AppExecutionCommit {
                     app_exe_commit: CommitBytes::from(baseline.app_exe_commit),
-                    app_vk_commit: CommitBytes::from(app_vk_commit),
+                    app_vm_commit: CommitBytes::from(app_vm_commit),
                 };
                 let exe_commit_bn254 = Bn254::from(app_commit.app_exe_commit);
-                let vk_commit_bn254 = Bn254::from(app_commit.app_vk_commit);
+                let vm_commit_bn254 = Bn254::from(app_commit.app_vm_commit);
                 println!("exe commit: {:?}", exe_commit_bn254);
-                println!("vk commit: {:?}", vk_commit_bn254);
+                println!("vm commit: {:?}", vm_commit_bn254);
 
                 let (stark_proof, _metadata) =
                     prover.prove(read_to_stdin(&run_args.input)?, &[])?;
-                let stark_proof_bytes = VersionedNonRootStarkProof::new(stark_proof)?;
+                let stark_proof_bytes = VersionedVmStarkProof::new(stark_proof)?;
 
                 let target_dir = target_dir_from_cargo_args(cargo_args)?;
                 let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);

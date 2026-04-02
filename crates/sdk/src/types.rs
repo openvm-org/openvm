@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 };
 use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_host::{
-    deferral::DeferralMerkleProofs, pvs::DagCommit, vk::VerificationBaseline, NonRootStarkProof,
+    deferral::DeferralMerkleProofs, pvs::VkCommit, vk::VerificationBaseline, VmStarkProof,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -102,7 +102,7 @@ pub struct AppExecutionCommit {
     #[serde(with = "hex_bytes32")]
     pub app_exe_commit: openvm_continuations::CommitBytes,
     #[serde(with = "hex_bytes32")]
-    pub app_vk_commit: openvm_continuations::CommitBytes,
+    pub app_vm_commit: openvm_continuations::CommitBytes,
 }
 
 #[cfg(feature = "evm-prove")]
@@ -156,7 +156,7 @@ impl EvmProof {
             publicValues: user_public_values.into(),
             proofData: proof_data_bytes.into(),
             appExeCommit: (*app_commit.app_exe_commit.as_slice()).into(),
-            appVmCommit: (*app_commit.app_vk_commit.as_slice()).into(),
+            appVmCommit: (*app_commit.app_vm_commit.as_slice()).into(),
         }
         .abi_encode()
     }
@@ -192,7 +192,7 @@ pub fn encode_raw_evm_proof_calldata(
 /// Instance layout (with KZG accumulator from wrapper circuit):
 /// - `instances[0..12]`: KZG accumulator (12 Fr values)
 /// - `instances[12]`: app_exe_commit (Fr)
-/// - `instances[13]`: app_vk_commit (Fr)
+/// - `instances[13]`: app_vm_commit (Fr)
 /// - `instances[14..]`: user public values (each byte as Fr)
 #[cfg(feature = "evm-prove")]
 impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
@@ -235,7 +235,7 @@ impl From<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::new(app_exe_bytes),
-            app_vk_commit: CommitBytes::new(app_vm_bytes),
+            app_vm_commit: CommitBytes::new(app_vm_bytes),
         };
 
         Self {
@@ -276,7 +276,7 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         app_exe_bytes.reverse();
         let app_exe_fr = Fr::from_bytes(&app_exe_bytes).unwrap();
 
-        let mut app_vm_bytes = *app_commit.app_vk_commit.as_slice();
+        let mut app_vm_bytes = *app_commit.app_vm_commit.as_slice();
         app_vm_bytes.reverse();
         let app_vm_fr = Fr::from_bytes(&app_vm_bytes).unwrap();
 
@@ -305,10 +305,10 @@ impl From<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
 
 // =================== Non-EVM types ===================
 
-/// Struct purely for encoding and decoding of [NonRootStarkProof].
+/// Struct purely for encoding and decoding of [VmStarkProof].
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize, Encode, Decode)]
-pub struct VersionedNonRootStarkProof {
+pub struct VersionedVmStarkProof {
     /// The openvm major and minor version v{}.{}. The proof format will not change on patch
     /// versions.
     pub version: String,
@@ -321,8 +321,8 @@ pub struct VersionedNonRootStarkProof {
     pub deferral_merkle_proofs: Option<Vec<u8>>,
 }
 
-impl VersionedNonRootStarkProof {
-    pub fn new(proof: NonRootStarkProof) -> Result<Self> {
+impl VersionedVmStarkProof {
+    pub fn new(proof: VmStarkProof) -> Result<Self> {
         Ok(Self {
             version: format!("v{}", OPENVM_VERSION),
             proof: proof.inner.encode_to_vec()?,
@@ -343,10 +343,10 @@ impl VersionedNonRootStarkProof {
     }
 }
 
-impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
+impl TryFrom<VersionedVmStarkProof> for VmStarkProof {
     type Error = std::io::Error;
-    fn try_from(proof: VersionedNonRootStarkProof) -> Result<Self, std::io::Error> {
-        let VersionedNonRootStarkProof {
+    fn try_from(proof: VersionedVmStarkProof) -> Result<Self, std::io::Error> {
+        let VersionedVmStarkProof {
             proof,
             user_pvs_proof,
             deferral_merkle_proofs,
@@ -366,9 +366,9 @@ impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
 
 // =================== Verification baseline JSON types ===================
 
-/// Hex-formatted [`DagCommit`](openvm_verify_stark_host::pvs::DagCommit) for JSON serialization.
+/// Hex-formatted [`VkCommit`](openvm_verify_stark_host::pvs::VkCommit) for JSON serialization.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DagCommitJson {
+pub struct VkCommitJson {
     #[serde(with = "hex_bytes32")]
     pub cached_commit: CommitBytes,
     #[serde(with = "hex_bytes32")]
@@ -384,47 +384,47 @@ pub struct VerificationBaselineJson {
     #[serde(with = "hex_bytes32")]
     pub app_exe_commit: CommitBytes,
     pub memory_dimensions: MemoryDimensions,
-    pub app_dag_commit: DagCommitJson,
-    pub leaf_dag_commit: DagCommitJson,
-    pub internal_for_leaf_dag_commit: DagCommitJson,
-    pub internal_recursive_dag_commit: DagCommitJson,
+    pub app_vk_commit: VkCommitJson,
+    pub leaf_vk_commit: VkCommitJson,
+    pub internal_for_leaf_vk_commit: VkCommitJson,
+    pub internal_recursive_vk_commit: VkCommitJson,
     #[serde(with = "option_hex_bytes32")]
-    pub expected_def_vk_commit: Option<CommitBytes>,
+    pub expected_def_hook_commit: Option<CommitBytes>,
 }
 
 impl From<VerificationBaseline> for VerificationBaselineJson {
     fn from(b: VerificationBaseline) -> Self {
-        let dag = |d: DagCommit<crate::F>| DagCommitJson {
+        let vk = |d: VkCommit<crate::F>| VkCommitJson {
             cached_commit: CommitBytes::from(d.cached_commit),
             vk_pre_hash: CommitBytes::from(d.vk_pre_hash),
         };
         Self {
             app_exe_commit: CommitBytes::from(b.app_exe_commit),
             memory_dimensions: b.memory_dimensions,
-            app_dag_commit: dag(b.app_dag_commit),
-            leaf_dag_commit: dag(b.leaf_dag_commit),
-            internal_for_leaf_dag_commit: dag(b.internal_for_leaf_dag_commit),
-            internal_recursive_dag_commit: dag(b.internal_recursive_dag_commit),
-            expected_def_vk_commit: b.expected_def_vk_commit.map(CommitBytes::from),
+            app_vk_commit: vk(b.app_vk_commit),
+            leaf_vk_commit: vk(b.leaf_vk_commit),
+            internal_for_leaf_vk_commit: vk(b.internal_for_leaf_vk_commit),
+            internal_recursive_vk_commit: vk(b.internal_recursive_vk_commit),
+            expected_def_hook_commit: b.expected_def_hook_commit.map(CommitBytes::from),
         }
     }
 }
 
 impl From<VerificationBaselineJson> for VerificationBaseline {
     fn from(b: VerificationBaselineJson) -> Self {
-        use openvm_verify_stark_host::pvs::DagCommit;
-        let dag = |d: DagCommitJson| DagCommit {
+        use openvm_verify_stark_host::pvs::VkCommit;
+        let vk = |d: VkCommitJson| VkCommit {
             cached_commit: d.cached_commit.into(),
             vk_pre_hash: d.vk_pre_hash.into(),
         };
         Self {
             app_exe_commit: b.app_exe_commit.into(),
             memory_dimensions: b.memory_dimensions,
-            app_dag_commit: dag(b.app_dag_commit),
-            leaf_dag_commit: dag(b.leaf_dag_commit),
-            internal_for_leaf_dag_commit: dag(b.internal_for_leaf_dag_commit),
-            internal_recursive_dag_commit: dag(b.internal_recursive_dag_commit),
-            expected_def_vk_commit: b.expected_def_vk_commit.map(|c| c.into()),
+            app_vk_commit: vk(b.app_vk_commit),
+            leaf_vk_commit: vk(b.leaf_vk_commit),
+            internal_for_leaf_vk_commit: vk(b.internal_for_leaf_vk_commit),
+            internal_recursive_vk_commit: vk(b.internal_recursive_vk_commit),
+            expected_def_hook_commit: b.expected_def_hook_commit.map(|c| c.into()),
         }
     }
 }
