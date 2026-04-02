@@ -15,7 +15,7 @@ use crate::{
     config::{
         AggregationConfig, AggregationTreeConfig, MAX_NUM_CHILDREN_INTERNAL, MAX_NUM_CHILDREN_LEAF,
     },
-    keygen::AggProvingKey,
+    keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::deferral::DeferralProof,
     SC,
 };
@@ -44,6 +44,29 @@ pub struct InternalLayerMetadata {
 }
 
 impl AggProver {
+    pub fn keygen_prefix(
+        app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        agg_config: AggregationConfig,
+        def_hook_cached_commit: Option<Digest>,
+    ) -> AggPrefixProvingKey {
+        let leaf_prover = InnerAggregationProver::<MAX_NUM_CHILDREN_LEAF>::new::<E>(
+            app_or_def_vk,
+            agg_config.params.leaf.clone(),
+            false,
+            def_hook_cached_commit,
+        );
+        let internal_for_leaf_prover = InnerAggregationProver::<MAX_NUM_CHILDREN_INTERNAL>::new::<E>(
+            leaf_prover.get_vk(),
+            agg_config.params.internal,
+            false,
+            def_hook_cached_commit,
+        );
+        AggPrefixProvingKey {
+            leaf: leaf_prover.get_pk(),
+            internal_for_leaf: internal_for_leaf_prover.get_pk(),
+        }
+    }
+
     #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
     pub fn new(
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -87,19 +110,19 @@ impl AggProver {
     ) -> Self {
         let leaf_prover = InnerAggregationProver::from_pk::<E>(
             app_or_def_vk,
-            agg_pk.leaf_pk,
+            agg_pk.prefix.leaf,
             false,
             def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
-            agg_pk.internal_for_leaf_pk,
+            agg_pk.prefix.internal_for_leaf,
             false,
             def_hook_cached_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
-            agg_pk.internal_recursive_pk,
+            agg_pk.internal_recursive,
             true,
             def_hook_cached_commit,
         );

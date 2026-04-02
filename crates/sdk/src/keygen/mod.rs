@@ -34,10 +34,15 @@ pub struct AppVerifyingKey {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct AggPrefixProvingKey {
+    pub leaf: Arc<MultiStarkProvingKey<SC>>,
+    pub internal_for_leaf: Arc<MultiStarkProvingKey<SC>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
-    pub leaf_pk: Arc<MultiStarkProvingKey<SC>>,
-    pub internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,
-    pub internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
+    pub prefix: AggPrefixProvingKey,
+    pub internal_recursive: Arc<MultiStarkProvingKey<SC>>,
 }
 
 #[cfg(feature = "root-prover")]

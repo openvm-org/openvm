@@ -93,12 +93,12 @@ impl DeferralProver {
         assert_eq!(def_circuit_prover.get_def_idx(), 0);
         let single_circuit_prover = SingleDefCircuitProver::from_pks(
             def_circuit_prover,
-            def_agg_pk.leaf_pk,
-            def_agg_pk.internal_for_leaf_pk,
+            def_agg_pk.prefix.leaf,
+            def_agg_pk.prefix.internal_for_leaf,
         );
         let internal_recursive_prover = DeferralInnerProver::from_pk::<E>(
             single_circuit_prover.internal_for_leaf_prover.get_vk(),
-            def_agg_pk.internal_recursive_pk,
+            def_agg_pk.internal_recursive,
             false,
         );
         let def_hook_prover = DeferralHookProver::from_pk::<E>(

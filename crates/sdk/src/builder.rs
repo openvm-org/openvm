@@ -110,8 +110,8 @@ where
     fn agg_config_from_pk(agg_pk: &AggProvingKey) -> AggregationConfig {
         AggregationConfig {
             params: AggregationSystemParams {
-                leaf: agg_pk.leaf_pk.params.clone(),
-                internal: agg_pk.internal_recursive_pk.params.clone(),
+                leaf: agg_pk.prefix.leaf.params.clone(),
+                internal: agg_pk.internal_recursive.params.clone(),
             },
         }
     }

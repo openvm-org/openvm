@@ -12,8 +12,8 @@ use serde::de::DeserializeOwned;
 use crate::{
     commands::RunCargoArgs,
     default::{
-        default_app_config, BASELINE_JSON_EXT, COMMIT_JSON_EXT, DEFAULT_AGG_PK_NAME,
-        DEFAULT_AGG_VK_NAME, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
+        default_app_config, BASELINE_JSON_EXT, COMMIT_JSON_EXT, DEFAULT_AGG_PREFIX_PK_NAME,
+        DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
     },
 };
 
@@ -90,12 +90,8 @@ pub fn get_app_vk_path(target_dir: &Path) -> PathBuf {
     get_openvm_dir(target_dir).join(DEFAULT_APP_VK_NAME)
 }
 
-pub fn get_agg_pk_path(target_dir: &Path) -> PathBuf {
-    get_openvm_dir(target_dir).join(DEFAULT_AGG_PK_NAME)
-}
-
-pub fn get_agg_vk_path(target_dir: &Path) -> PathBuf {
-    get_openvm_dir(target_dir).join(DEFAULT_AGG_VK_NAME)
+pub fn get_agg_prefix_pk_path(target_dir: &Path) -> PathBuf {
+    get_openvm_dir(target_dir).join(DEFAULT_AGG_PREFIX_PK_NAME)
 }
 
 pub fn get_app_commit_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
