@@ -7,6 +7,16 @@ filter = 'test(~persistent)'
 # Give these tests 5x the default weight because they use more memory
 threads-required = 16
 
+# CUDA tests each allocate 5-9 GiB GPU memory for the merkle tree,
+# so they must run serially to avoid GPU OOM when run in parallel.
+# Other tests are unaffected and still run with full parallelism.
+[test-groups.cuda-serial]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = 'package(openvm-ecc-circuit) & test(~cuda)'
+test-group = 'cuda-serial'
+
 # custom profile for heavy tests
 [profile.heavy]
 # Run fewer tests in parallel for heavy workloads

@@ -41,7 +41,8 @@ use {
 
 use crate::{
     get_ec_add_air, get_ec_add_chip, get_ec_add_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
+    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip, ECC_BLOCKS_32,
+    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 const LIMB_BITS: usize = 8;
@@ -481,7 +482,7 @@ mod ec_add_tests {
     #[test]
     fn test_ec_add_2x32() {
         // secp256k1: a=0, b=7, b3=21
-        run_ec_add_test::<3, 32, 32>(
+        run_ec_add_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             BigUint::zero(),
@@ -492,7 +493,7 @@ mod ec_add_tests {
     #[test]
     fn test_ec_add_6x16() {
         // BLS12-381: a=0, b=4, b3=12
-        run_ec_add_test::<9, 16, 48>(
+        run_ec_add_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             BigUint::zero(),
@@ -587,7 +588,7 @@ mod ec_add_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn test_weierstrass_add_cuda_2x32() {
-        run_cuda_ec_add::<3, 32, 32>(
+        run_cuda_ec_add::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             BigUint::zero(),
@@ -598,7 +599,7 @@ mod ec_add_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn test_weierstrass_add_cuda_6x16() {
-        run_cuda_ec_add::<9, 16, 48>(
+        run_cuda_ec_add::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             BigUint::zero(),
@@ -636,7 +637,7 @@ mod ec_add_tests {
         };
 
         // secp256k1: a=0, b=7
-        let executor = get_ec_add_step::<3, 32>(
+        let executor = get_ec_add_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -1020,7 +1021,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_2x32() {
         // secp256k1: a=0, b=7, b3=21
-        run_ec_double_test::<3, 32, 32>(
+        run_ec_double_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
@@ -1042,7 +1043,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        run_ec_double_test::<3, 32, 32>(
+        run_ec_double_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
@@ -1054,7 +1055,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_6x16() {
         // BLS12-381: a=0, b=4, b3=12
-        run_ec_double_test::<9, 16, 48>(
+        run_ec_double_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
@@ -1184,7 +1185,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_cuda_2x32() {
         // secp256k1: a=0, b=7, b3=21
-        run_ec_double_cuda_test::<3, 32, 32>(
+        run_ec_double_cuda_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
@@ -1207,7 +1208,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        run_ec_double_cuda_test::<3, 32, 32>(
+        run_ec_double_cuda_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
@@ -1220,7 +1221,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_cuda_6x16() {
         // BLS12-381: a=0, b=4, b3=12
-        run_ec_double_cuda_test::<9, 16, 48>(
+        run_ec_double_cuda_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
@@ -1260,7 +1261,7 @@ mod ec_double_tests {
         };
 
         // secp256k1: a=0, b=7, b3=21
-        let executor = get_ec_double_step::<3, 32>(
+        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -1309,7 +1310,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        let executor = get_ec_double_step::<3, 32>(
+        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),

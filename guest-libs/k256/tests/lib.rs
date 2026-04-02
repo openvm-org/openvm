@@ -106,7 +106,7 @@ mod guest_tests {
             openvm_circuit::{
                 arch::DenseRecordArena,
                 openvm_cuda_backend::{
-                    engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend,
+                    BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
                 },
                 system::cuda::SystemChipInventoryGPU,
             },
