@@ -59,15 +59,22 @@ impl GithubSummary {
             .iter()
             .zip_eq(md_paths.iter())
             .zip_eq(names)
-            .map(|(((aggregated, prev_aggregated), md_path), name)| {
+            .filter_map(|(((aggregated, prev_aggregated), md_path), name)| {
                 let md_filename = md_path
                     .file_name()
                     .expect("Path should have a filename")
                     .to_str()
                     .expect("Filename should be valid UTF-8");
-                let mut row = aggregated.get_summary_row(md_filename).unwrap_or_else(|| {
-                    panic!("Failed to get summary row for file '{md_filename}'")
-                });
+                let mut row = match aggregated.get_summary_row(md_filename) {
+                    Some(row) => row,
+                    None => {
+                        eprintln!(
+                            "Warning: skipping benchmark '{}' ({}): no grouped metrics found",
+                            name, md_filename
+                        );
+                        return None;
+                    }
+                };
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
                     if let Some(prev_row) = prev_aggregated.get_summary_row(md_filename) {
@@ -77,7 +84,7 @@ impl GithubSummary {
                     }
                 }
                 row.name = name.clone();
-                row
+                Some(row)
             })
             .collect();
 
@@ -277,7 +284,7 @@ impl AggregateMetrics {
 
     /// Returns `None` if no group for app is found.
     pub fn get_summary_row(&self, md_filename: &str) -> Option<SummaryRow> {
-        let app_name = self.name();
+        let app_name = self.name()?;
         let app = self.get_single_summary(&app_name)?;
         let leaf = self.get_single_summary("leaf");
         let mut internals = Vec::new();
@@ -290,7 +297,7 @@ impl AggregateMetrics {
         let halo2_outer = self.get_single_summary("halo2_outer");
         let halo2_wrapper = self.get_single_summary("halo2_wrapper");
         Some(SummaryRow {
-            name: app_name.to_string(),
+            name: app_name,
             md_filename: md_filename.to_string(),
             metrics: BenchSummaryMetrics {
                 app,
