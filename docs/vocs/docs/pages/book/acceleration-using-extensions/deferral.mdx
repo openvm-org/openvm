@@ -9,8 +9,8 @@ For the full technical specification, see the [Deferral Framework spec](/specs/a
 ## How It Works
 
 1. The guest program calls `deferred_compute`, passing an **input commitment** (a 32-byte hash identifying the input). The VM records this commitment and returns an **output key** containing the output commitment and output length.
-2. The guest calls `get_deferred_output` with the output key to retrieve the raw output bytes.
-3. During aggregation, each deferred computation is independently proven by its corresponding deferral circuit, and the accumulators are reconciled with the VM's memory state.
+2. The guest allocates a buffer based on the output length from the output key, then calls `get_deferred_output` to have the VM write the raw output bytes into that buffer.
+3. During aggregation, each deferred computation is independently proven by its corresponding deferral circuit, and the accumulators are reconciled with the VM's final memory state.
 
 From the guest's perspective, the deferral acts like a black-box function call: given an input commitment, it produces a verified output. The guest never sees the proof or the raw input — only the commitments and the output.
 

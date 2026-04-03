@@ -62,7 +62,7 @@ Before generating proofs, we will also need to generate the proving and verifica
 cargo openvm keygen
 ```
 
-This will output a serialized proving key `app.pk`, a verification key `app.vk`, and an aggregation prefix proving key `agg_prefix.pk` into `${target-dir}/../openvm/` (by default `./openvm/`). Use `--app-only` to skip generating the aggregation key, which is used in STARK and EVM proving.
+This will output a serialized proving key `app.pk`, a verification key `app.vk`, and an aggregation prefix proving key `agg_prefix.pk` into `${target-dir}/../openvm/` (by default `./openvm/`). Use `--app-only` to skip generating the aggregation key, which is only needed for STARK and EVM proving.
 
 ## Proof Generation
 

@@ -29,7 +29,7 @@ Similarly to `build`, `run`, and `prove`, options `--manifest-path`, `--target-d
 
 If `--config` is not specified, the command will search for `openvm.toml` in the manifest directory. If the file isn't found, a default configuration will be used.
 
-The proving key, verification key, and aggregation prefix proving key will be written to `${target-dir}/../openvm/` (by default `./openvm/`), and also to `--output-dir` if specified. Use `--app-only` to skip generating the aggregation prefix key, which is used in STARK and EVM proving.
+The proving key, verification key, and aggregation prefix proving key will be written to `${target-dir}/../openvm/` (by default `./openvm/`), and also to `--output-dir` if specified. Use `--app-only` to skip generating the aggregation prefix key, which is only needed for STARK and EVM proving.
 
 :::info
 `cargo openvm keygen` requires that `num_public_values` and `memory_dimensions` (derived from `memory_config`) match the defaults. These can be customized via `[app_vm_config.system.config]` in your `openvm.toml`, but non-default values will cause `keygen` to fail. Use the [SDK](/book/advanced-usage/sdk) directly for custom configurations.
