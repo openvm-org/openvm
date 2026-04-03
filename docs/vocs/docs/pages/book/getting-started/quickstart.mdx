@@ -52,7 +52,7 @@ cargo openvm build
 This will output:
 
 - an RV32IM ELF containing [custom OpenVM instructions](/specs/reference/riscv-custom-code) at `./target/riscv32im-risc0-zkvm-elf/release/fibonacci`
-- an OpenVM executable binary at `./target/openvm/release/fibonacci.vmexe`
+- an OpenVM executable binary at `${target-dir}/../openvm/release/fibonacci.vmexe` (by default `./openvm/release/fibonacci.vmexe`)
 
 ## Keygen
 
@@ -62,7 +62,7 @@ Before generating proofs, we will also need to generate the proving and verifica
 cargo openvm keygen
 ```
 
-This will output a serialized proving key to `./target/openvm/app.pk` and a verification key to `./target/openvm/app.vk`.
+This will output a serialized proving key `app.pk`, a verification key `app.vk`, and an aggregation prefix proving key `agg_prefix.pk` into `${target-dir}/../openvm/` (by default `./openvm/`). Use `--app-only` to skip generating the aggregation key, which is only needed for STARK and EVM proving.
 
 ## Proof Generation
 
