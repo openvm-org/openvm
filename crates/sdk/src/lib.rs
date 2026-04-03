@@ -242,7 +242,7 @@ where
             .map(|p| p.def_hook_cached_commit())
     }
 
-    /// Returns the def_hook_prover vk commit.
+    /// Returns the deferral hook commit derived from the deferral aggregation path.
     pub fn def_hook_commit(&self) -> Option<Digest> {
         self.def_path_prover.as_ref().map(|p| p.def_hook_commit())
     }

@@ -456,8 +456,8 @@ where
 
     /// Enables deferrals in this SDK build. The [`DeferralProver`] must be created ahead of time
     /// because the [`openvm_deferral_circuit::DeferralExtension`] should be created using
-    /// [`DeferralProver::make_extension`], which generates the `def_vk_commits` needed by the VM
-    /// config.
+    /// [`DeferralProver::make_extension`], which generates the `def_circuit_commits` needed by the
+    /// VM config.
     pub fn deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
         Self::set_once(
             &mut self.deferral_prover,

@@ -18,21 +18,21 @@ If you have a guest program and would like to try running the **host program** s
 
 The following convenience methods are available to construct a `GenericSdk` object with a preset config:
 
-- `Sdk::riscv32()` returns a `GenericSdk` supporting the RV32IM extension.
-- `Sdk::standard()` returns a `GenericSdk` supporting all default OpenVM extensions, including RV32IM.
+- `Sdk::riscv32(app_params, agg_params)` returns a `GenericSdk` supporting the RV32IM extension.
+- `Sdk::standard(app_params, agg_params)` returns a `GenericSdk` supporting all default OpenVM extensions, including RV32IM.
 
-Note that to use `Sdk::riscv32()` or `Sdk::standard()` the `app_vm_config` field of your `openvm.toml` must exactly match a specific set configuration.
+Note that to use `Sdk::riscv32(app_params, agg_params)` or `Sdk::standard(app_params, agg_params)` the `app_vm_config` field of your `openvm.toml` must exactly match a specific set configuration.
 
-`Sdk::riscv32()` supports normal Rust compiled to the `rv32im` target (for more information see [OpenVM Rust Frontend](/specs/reference/rust-frontend)) and `openvm::io` functions. To use it, the `app_vm_config` field of your `openvm.toml` must be:
+`Sdk::riscv32(app_params, agg_params)` supports normal Rust compiled to the `rv32im` target (for more information see [OpenVM Rust Frontend](/specs/reference/rust-frontend)) and `openvm::io` functions. To use it, the `app_vm_config` field of your `openvm.toml` must be:
 
 ```toml [openvm_riscv32.toml]
 // [!include ~/snippets/examples_sdk_toml/openvm_riscv32.toml]
 ```
 
-`Sdk::standard()` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. The `app_vm_config` section of the `openvm.toml` of any guest program that uses `Sdk::standard()` must also match a specific preset configuration.
+`Sdk::standard(app_params, agg_params)` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. The `app_vm_config` section of the `openvm.toml` of any guest program that uses `Sdk::standard(app_params, agg_params)` must also match a specific preset configuration.
 
 <details>
-<summary> Click here to view the `Sdk::standard()` `openvm.toml`</summary>
+<summary> Click here to view the `Sdk::standard(app_params, agg_params)` `openvm.toml`</summary>
 ```toml [openvm_standard.toml]
 // [!include ~/snippets/examples_sdk_toml/openvm_standard.toml]
 ```
@@ -58,15 +58,18 @@ extensions and system configuration your VM will use. To do this, you can use th
         .io(Default::default())
         .build()
         .optimize();
-    let sdk = Sdk::new(
-        AppConfig::new(FriParameters::standard_fast(), vm_config)
-    )?;
+    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let agg_params = AggregationSystemParams::default();
+    let sdk = Sdk::new(AppConfig::new(vm_config, app_params), agg_params)?;
 ```
 
 A custom OpenVM configuration can also be specified in an `openvm.toml` file and read to create a `GenericSdk`.
 
 ```rust
-    Sdk::new(SdkVmConfig::from_toml(include_str!("your_path_project_root/openvm.toml"))?)?;
+    let app_vm_config = SdkVmConfig::from_toml(include_str!("your_path_project_root/openvm.toml"))?;
+    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let agg_params = AggregationSystemParams::default();
+    Sdk::new(AppConfig::new(app_vm_config, app_params), agg_params)?;
 ```
 
 <details>
@@ -74,10 +77,10 @@ A custom OpenVM configuration can also be specified in an `openvm.toml` file and
 
 ```rust
 use openvm_sdk::{
-    config::{AppConfig, SdkVmConfig},
+    config::{AggregationSystemParams, AppConfig, SdkVmConfig},
     Sdk,
 };
-use openvm_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 ```
 
 </details>
@@ -161,7 +164,7 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 
 ### STARK Proof Generation and Verification
 
-You can now run the aggregation keygen, proof, and verification functions for the STARK proof by either (a) calling `sdk.prove(...)` directly or (b) creating a prover with custom fields. You should also generate an app commit, e.g. hashes of both the app config and executable used to generate the proof.
+You can now run the aggregation keygen, proof, and verification functions for the STARK proof by either (a) calling `sdk.prove(...)` directly or (b) creating a prover with custom fields. STARK verification uses the `VerificationBaseline` returned by the proof flow, together with the aggregation verifying key.
 
 ```rust 
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:proof_generation]
@@ -173,7 +176,7 @@ Once the proof is generated, you can verify it using the SDK as follows:
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:verification]
 ```
 
-Note that STARK verification requires the app commit to confirm that the submitted proof is for the app config and executable specified.
+Note that STARK verification requires the verification baseline to confirm that the submitted proof matches the app executable, VM configuration, and aggregation verifier configuration.
 
 :::info
 Note that the aggregation proving and verifying keys will be generated (a) once and (b) only when needed. Calling one of `sdk.prove(...)`, `sdk.prover(...)`, and `sdk.agg_keygen(...)` for the first time will initialize key generation.
@@ -213,7 +216,7 @@ Note that `cargo openvm setup --evm` CLI command will also download these parame
 
 You can now run the aggregation keygen, proof, and verification functions for the EVM proof.
 
-**Note**: you **do not** need to generate the app proof with the `generate_app_proof` function, as the EVM proof function will handle this automatically.
+**Note**: you do not need to generate an app proof separately; the EVM proof flow handles the full proving pipeline automatically.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_evm.rs:evm_verification]
@@ -244,7 +247,7 @@ Take, for example, this toy program that checks if several guest library impleme
 
 Its `openvm.toml` follows the [preset configuration](/book/advanced-usage/sdk#preset-configurations) specified above.
 
-Simply initialize `Sdk` using `Sdk::standard()` and build, prove, and verify as above.
+Simply initialize `Sdk` using `Sdk::standard(app_params, agg_params)` and build, prove, and verify as above.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_app.rs:init]
