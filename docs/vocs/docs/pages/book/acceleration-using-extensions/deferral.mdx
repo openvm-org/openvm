@@ -1,0 +1,55 @@
+# Deferral
+
+The deferral extension enables guest programs to offload expensive computations to standalone circuits that are proven separately during the aggregation phase. Rather than executing the computation inside the VM, the guest issues a **deferred call** that records an input commitment and receives an output commitment back. The actual computation is proven outside the VM and linked back via cryptographic accumulators.
+
+This is particularly useful for recursive STARK verification, where verifying a proof inside the VM would be prohibitively expensive. See the [Verify STARK guest library](/book/guest-libraries/verify-stark) for the primary use case.
+
+For the full technical specification, see the [Deferral Framework spec](/specs/architecture/deferral).
+
+## How It Works
+
+1. The guest program calls `deferred_compute`, passing an **input commitment** (a 32-byte hash identifying the input). The VM records this commitment and returns an **output key** containing the output commitment and output length.
+2. The guest calls `get_deferred_output` with the output key to retrieve the raw output bytes.
+3. During aggregation, each deferred computation is independently proven by its corresponding deferral circuit, and the accumulators are reconciled with the VM's memory state.
+
+From the guest's perspective, the deferral acts like a black-box function call: given an input commitment, it produces a verified output. The guest never sees the proof or the raw input — only the commitments and the output.
+
+## Guest Library
+
+The guest crate `openvm-deferral-guest` provides the following functions:
+
+### `deferred_compute`
+
+```rust
+pub fn deferred_compute<const DEFERRAL_IDX: u16>(input_commit: &Commit) -> OutputKey
+```
+
+Issues a deferred call at compile-time deferral index `DEFERRAL_IDX`. Returns an `OutputKey` containing the output commitment and length.
+
+### `get_deferred_output`
+
+```rust
+pub fn get_deferred_output<const DEFERRAL_IDX: u16>(output: &mut [u8], output_key: &OutputKey)
+```
+
+Retrieves the raw output bytes for a previous deferred call. The caller must allocate a buffer of exactly `output_key.output_len` bytes.
+
+### Types
+
+- `Commit = [u8; 32]` — a 32-byte commitment used as input/output identifier
+- `OutputKey { output_commit: Commit, output_len: u64 }` — returned by `deferred_compute`, passed to `get_deferred_output`
+
+`DEFERRAL_IDX` is a compile-time constant that identifies which deferral circuit to invoke. A VM configuration can support up to 1024 deferral circuits. Each index corresponds to a specific `DeferralFn` registered in the `DeferralExtension`.
+
+## Configuration
+
+The deferral extension cannot be configured via `openvm.toml` alone — it requires programmatic setup through the [SDK](/book/advanced-usage/sdk) because each deferral circuit needs a `DeferralFn` (the function that computes outputs from inputs) and corresponding proving infrastructure.
+
+To enable deferrals in your VM configuration:
+
+1. Build a `DeferralProver` with the appropriate single-circuit prover for your use case.
+2. Create the extension with `DeferralProver::make_extension`, passing the deferral function(s).
+3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
+4. Build the SDK with `Sdk::builder().deferral_prover(deferral_prover)`.
+
+See the [Verify STARK guest library](/book/guest-libraries/verify-stark#using-deferralextension) for a complete example of wiring up the deferral extension with the STARK verification circuit.

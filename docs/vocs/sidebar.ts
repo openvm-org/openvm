@@ -155,6 +155,10 @@ export const bookSidebar: SidebarItem[] = [
             {
                 text: "Elliptic Curve Pairing",
                 link: "/book/acceleration-using-extensions/elliptic-curve-pairing"
+            },
+            {
+                text: "Deferral",
+                link: "/book/acceleration-using-extensions/deferral"
             }
         ]
     },
