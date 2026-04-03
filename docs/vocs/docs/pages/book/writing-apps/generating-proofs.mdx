@@ -3,14 +3,16 @@
 Generating a proof using the CLI is simple - first generate a key, then generate your proof. Using command defaults, this looks like:
 
 ```bash
-cargo openvm keygen         # generate proving and verification keys for app proofs
-cargo openvm prove app      # generate the app proof
+cargo openvm keygen --app-only  # generate proving and verification keys for app proofs
+cargo openvm prove app          # generate the app proof
 
-cargo openvm setup          # generate proving and verification keys for STARK aggregation
-cargo openvm prove stark    # generate the STARK proof
+cargo openvm setup              # generate internal-recursive aggregation key
+cargo openvm keygen             # generate app keys and aggregation prefix key
+cargo openvm prove stark        # generate the STARK proof
 
-cargo openvm setup --evm    # generate proving and verification keys for EVM proofs
-cargo openvm prove evm      # generate the EVM proof
+cargo openvm setup --evm        # generate aggregation and EVM proving keys
+cargo openvm keygen             # generate app keys and aggregation prefix key
+cargo openvm prove evm          # generate the EVM proof
 ```
 
 Note that if your program takes inputs, you will have to pass them to the `cargo openvm prove` command using the `--input` option.
