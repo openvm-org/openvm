@@ -25,7 +25,7 @@ The following flags are available for the `cargo openvm build` command. You can 
 
 Generally, outputs will always be built to the **target directory**, which will either be determined by the manifest path or explicitly set using the `--target-dir` option. By default Cargo sets this to be `<workspace_or_package_root>/target/`. 
 
-OpenVM-specific artifacts will be placed in `${target_dir}/openvm/`, but if `--output-dir` is specified they will be copied to `${output-dir}/` as well.
+OpenVM-specific artifacts will be placed in `${target-dir}/../openvm/` (by default `./openvm/`, a sibling of the target directory), but if `--output-dir` is specified they will be copied to `${output-dir}/` as well.
 
 ### OpenVM Options
 
