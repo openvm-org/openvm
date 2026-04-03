@@ -200,7 +200,7 @@ done
 Note that `cargo openvm setup --evm` CLI command will also download these parameters into the `~/.openvm/params/` directory. For more information on the setup process, see [STARK and EVM Key Generation](/book/writing-apps/generating-proofs#stark-and-evm-key-generation).
 
 :::warning
-`cargo openvm setup --evm` requires a large amount of computation and memory (~70 GB).
+`cargo openvm setup --evm` requires a large amount of computation and memory (~16 GB). Use `--download` to download pre-built verifier artifacts from S3 instead of generating them locally.
 :::
 
 <details>

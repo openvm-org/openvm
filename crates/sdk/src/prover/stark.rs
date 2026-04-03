@@ -61,6 +61,16 @@ where
         })
     }
 
+    pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
+        self.app_prover.set_program_name(program_name);
+        self
+    }
+
+    pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
+        self.set_program_name(program_name);
+        self
+    }
+
     pub fn prove(
         &mut self,
         vm_input: StdIn<Val<SC>>,
