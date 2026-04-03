@@ -115,10 +115,10 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
     }
 
     fn matmul_external(&mut self, ctx: &mut Context<F>, gate: &impl GateInstructions<F>) {
-        // Only doing T = 3 case
-        assert_eq!(T, 3);
+        // M_E for T=2: circ(2, 1) = [[2,1],[1,2]]
+        // M_E for T=3: circ(2, 1, 1)
+        assert!(T == 2 || T == 3);
 
-        // Matrix is circ(2, 1, 1)
         let sum = gate.sum(ctx, self.s.iter().copied());
         for (i, x) in self.s.iter_mut().enumerate() {
             // This is the same as `*x = gate.add(ctx, *x, sum)` but we save a cell by reusing
@@ -165,7 +165,7 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         gate: &impl GateInstructions<F>,
         mat_internal_diag_m_1: [F; T],
     ) {
-        assert_eq!(T, 3);
+        assert!(T == 2 || T == 3);
         let sum = gate.sum(ctx, self.s.iter().copied());
         #[allow(clippy::needless_range_loop)]
         for i in 0..T {
@@ -201,12 +201,12 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
     }
 }
 
-pub(crate) fn reduce_32_cells(
+pub(crate) fn pack_base_2_31_cells(
     ctx: &mut Context<Fr>,
     gate: &impl GateInstructions<Fr>,
     values: &[AssignedValue<Fr>],
 ) -> AssignedValue<Fr> {
-    let base = Fr::from(1u64 << 32);
+    let base = Fr::from(1u64 << 31);
     gate.inner_product(
         ctx,
         values.iter().copied(),
@@ -228,7 +228,7 @@ pub(crate) fn hash_babybear_slice_to_digest(
     for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
         for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
             let cells = chunk.iter().map(|value| value.value).collect::<Vec<_>>();
-            state.s[chunk_id] = reduce_32_cells(ctx, gate, &cells);
+            state.s[chunk_id] = pack_base_2_31_cells(ctx, gate, &cells);
         }
         state.permutation(ctx, gate, params);
     }
@@ -242,9 +242,8 @@ pub(crate) fn compress_bn254_digests(
     right: AssignedValue<Fr>,
 ) -> AssignedValue<Fr> {
     let gate = range.gate();
-    let params = &*super::POSEIDON2_PARAMS;
-    let zero = ctx.load_zero();
-    let mut state = Poseidon2State::new([left, right, zero]);
+    let params = &*super::POSEIDON2_COMPRESS_PARAMS;
+    let mut state = Poseidon2State::new([left, right]);
     state.permutation(ctx, gate, params);
     state.s[0]
 }
