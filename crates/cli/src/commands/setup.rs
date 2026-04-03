@@ -124,7 +124,7 @@ impl SetupCmd {
         {
             use openvm_sdk::fs::write_evm_halo2_verifier_to_folder;
 
-            println!("Generating verifier contract locally.");
+            println!("Generating verifier contract locally. Tip: use `--download` to download pre-built artifacts from S3 instead.");
             let verifier = sdk.generate_halo2_verifier_solidity()?;
             println!("Writing verifier contract to {}", verifier_dir.display());
             write_evm_halo2_verifier_to_folder(verifier, verifier_dir)?;
