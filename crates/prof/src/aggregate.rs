@@ -597,11 +597,16 @@ impl AggregateMetrics {
 
     pub fn name(&self) -> Option<String> {
         // A hacky way to determine the app name
-        self.by_group
+        let name = self
+            .by_group
             .keys()
             .find(|k| group_weight(k) == 0)
             .or_else(|| self.by_group.keys().next())
-            .cloned()
+            .cloned();
+        if name.is_none() {
+            eprintln!("Warning: no group found to determine app name; by_group is empty");
+        }
+        name
     }
 }
 

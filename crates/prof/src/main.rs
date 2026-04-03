@@ -106,6 +106,8 @@ fn main() -> Result<()> {
         if name.is_empty() {
             if let Some(n) = aggregated.name() {
                 *name = n;
+            } else {
+                eprintln!("Warning: no app name could be determined from metrics in {:?}; name will be empty", metrics_path);
             }
         }
         output.insert(name, aggregated.to_bencher_metrics());

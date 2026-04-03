@@ -38,6 +38,14 @@ pub struct BenchmarkCli {
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
     pub profiling: bool,
+
+    /// Halo2 wrapper circuit degree `k` (for e2e proving). If omitted, auto-tuned.
+    #[arg(long)]
+    pub halo2_wrapper_k: Option<usize>,
+
+    /// Directory containing KZG trusted setup files (for e2e halo2 proving)
+    #[arg(long)]
+    pub kzg_params_dir: Option<std::path::PathBuf>,
 }
 
 impl BenchmarkCli {
@@ -62,7 +70,13 @@ impl BenchmarkCli {
             run_default_app_benchmark(vm_config, elf, stdin)
         } else if self.evm {
             #[cfg(feature = "evm")]
-            return run_default_evm_benchmark(vm_config, elf, stdin);
+            return run_evm_benchmark(
+                vm_config,
+                elf,
+                stdin,
+                self.halo2_wrapper_k,
+                self.kzg_params_dir.clone(),
+            );
             #[cfg(not(feature = "evm"))]
             eyre::bail!("--evm requires the `evm` feature flag")
         } else {
@@ -149,11 +163,15 @@ pub fn run_default_app_benchmark(
 }
 
 #[cfg(feature = "evm")]
-pub fn run_default_evm_benchmark(
+pub fn run_evm_benchmark(
     vm_config: SdkVmConfig,
     elf: Elf,
     stdin: StdIn,
+    halo2_wrapper_k: Option<usize>,
+    kzg_params_dir: Option<std::path::PathBuf>,
 ) -> eyre::Result<()> {
+    use openvm_sdk::config::Halo2Config;
+
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
         let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
         let app_config = AppConfig::new(vm_config, default_bench_app_params());
@@ -161,8 +179,24 @@ pub fn run_default_evm_benchmark(
             leaf: leaf_params_with_100_bits_security(),
             internal: internal_params_with_100_bits_security(),
         };
-        let sdk = Sdk::new(app_config, agg_params)?;
-        let _proof = sdk.prove_evm(exe, stdin, &[])?;
+        let mut builder = Sdk::builder().app_config(app_config).agg_params(agg_params);
+        if halo2_wrapper_k.is_some() {
+            builder = builder.halo2_config(
+                Default::default(),
+                Halo2Config {
+                    wrapper_k: halo2_wrapper_k,
+                    profiling: false,
+                },
+            );
+        }
+        if let Some(dir) = kzg_params_dir {
+            builder = builder.halo2_params_dir(dir);
+        }
+        let sdk = builder.build()?;
+        let evm_proof = sdk.prove_evm(exe, stdin, &[])?;
+        let verifier = sdk.generate_halo2_verifier_solidity()?;
+        let gas_cost = Sdk::verify_evm_halo2_proof(&verifier, evm_proof)?;
+        tracing::info!("EVM verification gas cost: {gas_cost}");
         Ok(())
     })
 }

@@ -65,7 +65,16 @@ impl GithubSummary {
                     .expect("Path should have a filename")
                     .to_str()
                     .expect("Filename should be valid UTF-8");
-                let mut row = aggregated.get_summary_row(md_filename)?;
+                let mut row = match aggregated.get_summary_row(md_filename) {
+                    Some(row) => row,
+                    None => {
+                        eprintln!(
+                            "Warning: skipping benchmark '{}' ({}): no grouped metrics found",
+                            name, md_filename
+                        );
+                        return None;
+                    }
+                };
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
                     if let Some(prev_row) = prev_aggregated.get_summary_row(md_filename) {
