@@ -138,9 +138,11 @@ jobs:
           if [[ "${E2E_BENCH}" == "true" ]]; then
             FEATURE_FLAGS=${FEATURE_FLAGS},evm
             echo "FEATURE_FLAGS=${FEATURE_FLAGS}" >> $GITHUB_ENV
-            INPUT_ARGS="${INPUT_ARGS} --evm"
-            echo "INPUT_ARGS=${INPUT_ARGS}" >> $GITHUB_ENV
+            # trusted_setup_s3.sh downloads to ~/.openvm/params/
             bash ./scripts/trusted_setup_s3.sh
+            PARAMS_DIR=$HOME/.openvm/params
+            INPUT_ARGS="${INPUT_ARGS} --evm --kzg-params-dir $PARAMS_DIR"
+            echo "INPUT_ARGS=${INPUT_ARGS}" >> $GITHUB_ENV
           fi
 
       - name: Set BIN_NAME
