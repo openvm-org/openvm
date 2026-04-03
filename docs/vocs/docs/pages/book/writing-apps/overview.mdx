@@ -115,7 +115,7 @@ cargo openvm setup [--evm]
 This will write the files necessary for STARK aggregation and EVM proving to `~/.openvm/`.
 
 :::warning
-This command requires a large amount of compute and memory (~70 GB).
+This command requires a large amount of compute and memory (~16 GB). Use `--download` to download pre-built verifier artifacts from S3 instead of generating them locally.
 :::
 
 To generate and verify aggregated STARK or EVM proofs, you can run the following commands:
