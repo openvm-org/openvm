@@ -27,6 +27,10 @@ on:
         required: false
         description: Whether to run full e2e benchmark (aggregation + halo2)
         default: false
+      kzg_params_dir:
+        type: string
+        required: false
+        description: Directory containing KZG trusted setup files
       features:
         type: string
         required: false
@@ -61,6 +65,10 @@ on:
         required: false
         description: Whether to run full e2e benchmark (aggregation + halo2)
         default: false
+      kzg_params_dir:
+        type: string
+        required: false
+        description: Directory containing KZG trusted setup files
       features:
         type: string
         required: false
@@ -115,7 +123,7 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
-      - name: "Feature flags: memory allocator"
+      - name: "Feature flags: memory allocator + e2e"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
           if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
@@ -138,9 +146,8 @@ jobs:
           if [[ "${E2E_BENCH}" == "true" ]]; then
             FEATURE_FLAGS=${FEATURE_FLAGS},evm
             echo "FEATURE_FLAGS=${FEATURE_FLAGS}" >> $GITHUB_ENV
-            # trusted_setup_s3.sh downloads to ~/.openvm/params/
             bash ./scripts/trusted_setup_s3.sh
-            PARAMS_DIR=$HOME/.openvm/params
+            PARAMS_DIR=${{ inputs.kzg_params_dir || github.event.inputs.kzg_params_dir || '$HOME/.openvm/params' }}
             INPUT_ARGS="${INPUT_ARGS} --evm --kzg-params-dir $PARAMS_DIR"
             echo "INPUT_ARGS=${INPUT_ARGS}" >> $GITHUB_ENV
           fi
