@@ -72,6 +72,67 @@
           "max_segment_length": 4194304
         }
       ]
+    },
+    {
+      "name": "fibonacci",
+      "id": "fibonacci_e2e",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "g6e.4xlarge",
+          "memory_allocator": "jemalloc"
+        }
+      ]
+    },
+    {
+      "name": "regex",
+      "id": "regex_e2e",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "g6e.4xlarge",
+          "memory_allocator": "jemalloc"
+        }
+      ]
+    },
+    {
+      "name": "ecrecover",
+      "id": "ecrecover_e2e",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "g6e.4xlarge",
+          "memory_allocator": "jemalloc"
+        }
+      ]
+    },
+    {
+      "name": "pairing",
+      "id": "pairing_e2e",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "g6e.4xlarge",
+          "memory_allocator": "jemalloc"
+        }
+      ]
+    },
+    {
+      "name": "kitchen_sink",
+      "id": "kitchen_sink_e2e",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": true,
+      "run_params": [
+        {
+          "instance_type": "g6e.4xlarge",
+          "memory_allocator": "jemalloc",
+          "max_segment_length": 4194304
+        }
+      ]
     }
   ]
 }
