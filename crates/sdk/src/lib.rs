@@ -44,7 +44,7 @@ use openvm_verify_stark_host::{
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
-    prover::{AggProver, AppProver, DeferralPathProver, DeferralProver, StarkProver},
+    prover::{AggProver, AppProver, DeferralPathProver, StarkProver},
     types::ExecutableFormat,
 };
 #[cfg(feature = "evm-prove")]
@@ -218,6 +218,8 @@ where
             .build()
     }
 
+    /// Creates an SDK custom to the given [AppConfig] without configuring a transpiler.
+    ///
     /// **Note**: This function does not set the transpiler, which must be done separately to
     /// support RISC-V ELFs.
     pub fn new_without_transpiler(
@@ -233,38 +235,6 @@ where
             .build_without_transpiler()
     }
 
-    /// Enables deferrals in this GenericSdk. The DeferralProver must be created ahead of time
-    /// because the DeferralExtension should be created using DeferralProver::make_extension, as
-    /// it has the capability to generate def_circuit_commits.
-    pub fn with_deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
-        assert!(
-            self.def_path_prover.is_none(),
-            "Deferral prover already defined"
-        );
-        assert!(
-            self.agg_prover.get().is_none(),
-            "Agg prover has already been initialized without deferrals"
-        );
-
-        let deferral_tree_config = AggregationTreeConfig {
-            num_children_leaf: 2,
-            num_children_internal: 2,
-        };
-        let agg_prover = AggProver::new(
-            deferral_prover.def_hook_prover.get_vk(),
-            self.agg_config.clone(),
-            deferral_tree_config,
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
-        );
-        let def_path_prover = DeferralPathProver {
-            deferral_prover: Arc::new(deferral_prover),
-            agg_prover: Arc::new(agg_prover),
-        };
-
-        self.def_path_prover = Some(Arc::new(def_path_prover));
-        self
-    }
-
     /// Returns the def_hook_prover cached commit.
     pub fn def_hook_cached_commit(&self) -> Option<Digest> {
         self.def_path_prover
@@ -272,7 +242,7 @@ where
             .map(|p| p.def_hook_cached_commit())
     }
 
-    /// Returns the def_hook_prover vk commit.
+    /// Returns the deferral hook commit derived from the deferral aggregation path.
     pub fn def_hook_commit(&self) -> Option<Digest> {
         self.def_path_prover.as_ref().map(|p| p.def_hook_commit())
     }
@@ -313,6 +283,7 @@ where
             .ok_or(SdkError::TranspilerNotAvailable)
     }
 
+    /// Normalizes an ELF or executable handle into a shared [`VmExe`].
     pub fn convert_to_exe(
         &self,
         executable: impl Into<ExecutableFormat>,
@@ -447,6 +418,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Generates an EVM-verifiable proof for the given executable and inputs.
     pub fn prove_evm(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -498,6 +470,7 @@ where
     }
 
     #[cfg(feature = "root-prover")]
+    /// Constructs an [`EvmProver`] for the given executable, generating prerequisite keys lazily.
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -519,6 +492,7 @@ where
 
     // ===================== Component Prover Constructors =====================
 
+    /// Returns the cached aggregation prover, generating it on first use if needed.
     pub fn agg_prover(&self) -> Arc<AggProver> {
         let app_pk = self.app_pk();
         self.agg_prover
@@ -534,6 +508,7 @@ where
     }
 
     #[cfg(feature = "root-prover")]
+    /// Returns the cached root prover, generating it on first use if needed.
     pub fn root_prover(&self) -> Arc<RootProver> {
         self.root_prover
             .get_or_init(|| {
@@ -573,6 +548,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Returns the cached Halo2 prover, generating it on first use if needed.
     pub fn halo2_prover(&self) -> Halo2Prover {
         self.halo2_prover
             .get_or_init(|| {
@@ -628,12 +604,20 @@ where
         })
     }
 
+    /// Returns the app verifying key derived from the cached app proving key.
+    pub fn app_vk(&self) -> AppVerifyingKey {
+        self.app_pk().get_app_vk()
+    }
+
+    /// Generates or retrieves the aggregation proving and verifying keys as a pair.
     pub fn agg_keygen(&self) -> (AggProvingKey, MultiStarkVerifyingKey<SC>) {
         let pk = self.agg_pk();
         let vk = self.agg_vk().as_ref().clone();
         (pk, vk)
     }
 
+    /// Generates or retrieves the aggregation prefix proving key without the internal-recursive
+    /// key.
     pub fn agg_prefix_pk(&self) -> AggPrefixProvingKey {
         if let Some(agg_prover) = self.agg_prover.get() {
             return AggPrefixProvingKey {
@@ -650,15 +634,7 @@ where
         )
     }
 
-    #[cfg(feature = "root-prover")]
-    pub fn root_pk(&self) -> RootProvingKey {
-        let root_prover = self.root_prover();
-        RootProvingKey {
-            root_pk: root_prover.0.get_pk(),
-            trace_heights: root_prover.0.get_trace_heights().unwrap_or_default(),
-        }
-    }
-
+    /// Generates or retrieves the full aggregation proving key.
     pub fn agg_pk(&self) -> AggProvingKey {
         let agg_prover = self.agg_prover();
         AggProvingKey {
@@ -670,8 +646,19 @@ where
         }
     }
 
+    /// Returns the aggregation verifying key for the recursive aggregation layer.
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.agg_prover().internal_recursive_prover.get_vk()
+    }
+
+    #[cfg(feature = "root-prover")]
+    /// Generates or retrieves the root proving key and recorded trace heights.
+    pub fn root_pk(&self) -> RootProvingKey {
+        let root_prover = self.root_prover();
+        RootProvingKey {
+            root_pk: root_prover.0.get_pk(),
+            trace_heights: root_prover.0.get_trace_heights().unwrap_or_default(),
+        }
     }
 
     /// Generates the Halo2 (static verifier + wrapper) proving key once and caches it.
@@ -707,6 +694,7 @@ where
     }
 
     #[cfg(feature = "evm-verify")]
+    /// Generates Solidity verifier artifacts for the cached Halo2 proving key.
     pub fn generate_halo2_verifier_solidity(&self) -> Result<types::EvmHalo2Verifier, SdkError> {
         solidity::generate_halo2_verifier_solidity(&self.halo2_pk(), &self.halo2_params_reader)
     }

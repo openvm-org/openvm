@@ -87,6 +87,7 @@ where
     VB: VmBuilder<E>,
     VB::VmConfig: VmExecutionConfig<F>,
 {
+    /// Creates an empty builder with no configured proving layers.
     pub fn new() -> Self {
         Self::default()
     }
@@ -207,6 +208,7 @@ where
         }
     }
 
+    /// Uses the provided app configuration as the source of truth for app key generation.
     pub fn app_config(mut self, app_config: AppConfig<VB::VmConfig>) -> Self {
         Self::set_once(
             &mut self.app_source,
@@ -216,11 +218,13 @@ where
         self
     }
 
+    /// Seeds the SDK with a pre-generated app proving key and derives the app config from it.
     pub fn app_pk(mut self, app_pk: AppProvingKey<VB::VmConfig>) -> Self {
         Self::set_once(&mut self.app_source, "app_source", AppSource::Pk(app_pk));
         self
     }
 
+    /// Uses the provided aggregation parameters to generate aggregation proving material lazily.
     pub fn agg_params(mut self, agg_params: AggregationSystemParams) -> Self {
         Self::set_once(
             &mut self.agg_source,
@@ -230,12 +234,14 @@ where
         self
     }
 
+    /// Seeds the SDK with a pre-generated aggregation proving key.
     pub fn agg_pk(mut self, agg_pk: AggProvingKey) -> Self {
         Self::set_once(&mut self.agg_source, "agg_source", AggSource::Pk(agg_pk));
         self
     }
 
     #[cfg(feature = "root-prover")]
+    /// Uses the provided root prover parameters to generate the root proving key lazily.
     pub fn root_params(mut self, root_params: SystemParams) -> Self {
         Self::set_once(
             &mut self.root_source,
@@ -246,6 +252,7 @@ where
     }
 
     #[cfg(feature = "root-prover")]
+    /// Seeds the SDK with a pre-generated root proving key.
     pub fn root_pk(mut self, root_pk: RootProvingKey) -> Self {
         Self::set_once(
             &mut self.root_source,
@@ -255,6 +262,7 @@ where
         self
     }
 
+    /// Overrides the aggregation tree fanout used when constructing aggregation provers.
     pub fn agg_tree_config(mut self, agg_tree_config: AggregationTreeConfig) -> Self {
         Self::set_once(
             &mut self.agg_tree_config,
@@ -264,6 +272,8 @@ where
         self
     }
 
+    /// Sets the transpiler used to convert guest ELFs into
+    /// [`VmExe`](openvm_circuit::arch::instructions::exe::VmExe)s.
     pub fn transpiler(mut self, transpiler: Transpiler<F>) -> Self {
         Self::set_once(&mut self.transpiler, "transpiler", transpiler);
         self
@@ -444,6 +454,10 @@ where
         self.build_without_transpiler()
     }
 
+    /// Enables deferrals in this SDK build. The [`DeferralProver`] must be created ahead of time
+    /// because the [`openvm_deferral_circuit::DeferralExtension`] should be created using
+    /// [`DeferralProver::make_extension`], which generates the `def_circuit_commits` needed by the
+    /// VM config.
     pub fn deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
         Self::set_once(
             &mut self.deferral_prover,
@@ -454,6 +468,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Uses the provided Halo2 verifier shape and config to generate Halo2 proving material lazily.
     pub fn halo2_config(mut self, shape: StaticVerifierShape, config: Halo2Config) -> Self {
         Self::set_once(
             &mut self.halo2_source,
@@ -464,6 +479,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Seeds the SDK with a pre-generated Halo2 proving key.
     pub fn halo2_pk(mut self, halo2_pk: Halo2ProvingKey) -> Self {
         Self::set_once(
             &mut self.halo2_source,
@@ -474,6 +490,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    /// Overrides the directory used to read or cache Halo2 parameters.
     pub fn halo2_params_dir(mut self, params_dir: impl AsRef<Path>) -> Self {
         Self::set_once(
             &mut self.halo2_params_reader,
@@ -514,6 +531,7 @@ where
     VB: VmBuilder<E>,
     VB::VmConfig: VmExecutionConfig<F>,
 {
+    /// Returns a builder for constructing an immutable [`GenericSdk`].
     pub fn builder() -> GenericSdkBuilder<E, VB> {
         GenericSdkBuilder::new()
     }

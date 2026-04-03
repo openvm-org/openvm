@@ -3,7 +3,8 @@ use std::fs;
 
 use eyre::Result;
 use openvm_build::GuestOptions;
-use openvm_sdk::{Sdk, StdIn};
+use openvm_sdk::{config::AggregationSystemParams, Sdk, StdIn};
+use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -33,8 +34,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let target_path = path.to_str().unwrap();
     /// ```
     // [!region build]
-    // 1. Build the VmConfig with the extensions needed.
-    let sdk = Sdk::riscv32();
+    // 1. Initialize the SDK with the RV32IM preset and default aggregation parameters.
+    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let agg_params = AggregationSystemParams::default();
+    let sdk = Sdk::riscv32(app_params, agg_params);
 
     // 2a. Build the ELF with guest options and a target filter.
     let guest_opts = GuestOptions::default();
@@ -54,10 +57,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let verifier = sdk.generate_halo2_verifier_solidity()?;
 
     // 6. Generate an EVM proof
-    // NOTE: this will do app_keygen, agg_keygen, halo2_keygen automatically if they have never been
-    // called before. As a consequence, the first call to `prove_evm` will take longer if you do not
-    // explicitly call `app_keygen`, `agg_keygen`, and `halo2_keygen` before calling `prove_evm`.
-    let proof = sdk.prove_evm(elf, stdin)?;
+    // NOTE: if they have not been initialized already, this call will lazily generate the app,
+    // aggregation, root, and Halo2 proving keys before producing the final EVM proof.
+    let proof = sdk.prove_evm(elf, stdin, &[])?;
 
     // 7. Verify the EVM proof
     Sdk::verify_evm_halo2_proof(&verifier, proof)?;

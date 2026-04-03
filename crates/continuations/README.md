@@ -15,18 +15,20 @@ pub fn new(
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     system_params: SystemParams,
     is_self_recursive: bool,
+    def_hook_cached_commit: Option<Digest>,
 ) -> Self
 ```
 
 - `child_vk` — verifying key for child proofs
 - `system_params` — parent system parameters
-- `self_recursion_enabled` — indicates whether this prover is internal-recursive (i.e., can use its own `vk` as `child_vk`)
+- `is_self_recursive` — indicates whether this prover is internal-recursive (i.e., can use its own `vk` as `child_vk`)
+- `def_hook_cached_commit` — optional cached trace commit for the deferral hook verifier; use `None` for VM-only aggregation
 
 Constructing the prover pre-generates the child layer's **cached trace commit** (and, together with the child VK's pre-hash, the **vk commit**) as well as the parent layer's proving and verifying keys. Functions to construct the prover from a saved `pk` and cached trace are available.
 
 Each inner layer should use the following constructor arguments:
 
-| Layer | `child_vk` | `system_params` | `self_recursion_enabled` |
+| Layer | `child_vk` | `system_params` | `is_self_recursive` |
 |-------|-----------------|------------------|-------|
 | leaf | `app_vk` | leaf | false |
 | internal-for-leaf | `leaf_vk` | internal | false |
@@ -36,16 +38,32 @@ Note that internal-for-leaf and internal-recursive share the same system paramet
 
 ### Prove API
 
+For VM-only aggregation, call:
+
+```rust
+pub fn agg_prove_no_def(
+    &self,
+    proofs: &[Proof<SC>],
+    child_vk_kind: ChildVkKind,
+) -> Result<Proof<SC>>
+```
+
+For mixed VM/deferral aggregation in the combined tree, call:
+
 ```rust
 pub fn agg_prove(
     &self,
     proofs: &[Proof<SC>],
     child_vk_kind: ChildVkKind,
-) -> Result
+    proofs_type: ProofsType,
+    absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
+) -> Result<Proof<SC>>
 ```
 
 - `proofs` — child `Proof`s to aggregate
-- `child_vk_kind` — enum that indicates whether the child proofs are from the app layer (`App`), the same layer recursively (`Recursive`), or a different layer (`Standard`)
+- `child_vk_kind` — enum that indicates whether the child proofs are from the app layer (`App`), the same layer recursively (`RecursiveSelf`), or a different layer (`Standard`)
+- `proofs_type` — distinguishes VM-only, deferral-only, and mixed aggregation in the combined tree
+- `absent_trace_pvs` — optional absent-proof public values used when padding deferral proofs in the mixed tree
 
 Each layer uses the following inputs:
 
@@ -54,7 +72,7 @@ Each layer uses the following inputs:
 | leaf | app proofs | `App` |
 | internal-for-leaf | leaf proofs | `Standard` |
 | internal-recursive (layer 0) | internal-for-leaf proofs | `Standard` |
-| internal-recursive (layer 1+) | internal-recursive proofs | `Recursive` |
+| internal-recursive (layer 1+) | internal-recursive proofs | `RecursiveSelf` |
 
 ## Root Basic Prover
 
@@ -86,13 +104,20 @@ The constructor pre-generates the parent proving and verifying keys, which can b
 
 ### Prove API
 
+Root proving is a two-step flow:
+
 ```rust
-pub fn root_prove(
+pub fn generate_proving_ctx_no_def<PB>(
     &self,
     proof: Proof<SC>,
     user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-) -> Result
+) -> Option<ProvingContext<PB>>
+
+pub fn root_prove_from_ctx<E>(&self, ctx: ProvingContext<E::PB>) -> Result<Proof<RootSC>>
 ```
 
-- `proof` — reference to the child internal-recursive `Proof`
+If deferrals are enabled, use `generate_proving_ctx(...)` instead and pass the deferral Merkle proofs.
+
+- `proof` — the child internal-recursive `Proof`
 - `user_pvs_proof` — the user public values Merkle proof (proving presence in memory); generated at the app layer
+- `ctx` — the fully assembled proving context returned by `generate_proving_ctx*`

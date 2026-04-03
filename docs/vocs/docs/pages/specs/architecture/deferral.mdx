@@ -71,7 +71,7 @@ We provide the following guarantees on the opcodes defined above:
 
 ### Extension Chips and Constraints
 
-The deferral extension contains several executor and peripheral chips to constrain the opcode functions and contracts above. It is configured with a `Vec<DeferralFn>` defining the `f_i` functions and a `Vec<def_circuit_commit>` for the circuit commits of each `C_i`.
+The deferral extension contains several executor and peripheral chips to constrain the opcode functions and contracts above. It is configured with a `Vec<DeferralFn>` defining the `f_i` functions and a `Vec<[u8; 32]>` containing the `def_circuit_commit` for each `C_i`.
 
 :::info
 Because the deferral extension has a single opcode for all deferral operations, in practice the `h_i` hash function is the Poseidon2 sponge hash of `Output_i` represented as bytes.
