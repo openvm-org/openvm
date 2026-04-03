@@ -1,13 +1,16 @@
 // [!region dependencies]
 use openvm_build::GuestOptions;
-use openvm_sdk::{prover::verify_app_proof, Sdk, StdIn};
+use openvm_sdk::{config::AggregationSystemParams, prover::verify_app_proof, Sdk, StdIn};
+use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 // [!endregion dependencies]
 
 #[allow(unused_variables, unused_doc_comments)]
 fn main() -> eyre::Result<()> {
     // [!region init]
-    // 1. Initialize Sdk with the standard configuration.
-    let sdk = Sdk::standard();
+    // 1. Initialize the SDK with the standard configuration.
+    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let agg_params = AggregationSystemParams::default();
+    let sdk = Sdk::standard(app_params, agg_params);
     // [!endregion init]
 
     // [!region build]
@@ -35,7 +38,11 @@ fn main() -> eyre::Result<()> {
     // 6. Do this once to save the app_vk, independent of the proof.
     let (_app_pk, app_vk) = sdk.app_keygen();
     // 7. Verify your program.
-    verify_app_proof(&app_vk, &proof)?;
+    verify_app_proof::<openvm_sdk::DefaultStarkEngine>(
+        &app_vk.vk,
+        app_vk.memory_dimensions,
+        &proof,
+    )?;
     // [!endregion verification]
 
     Ok(())
