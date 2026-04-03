@@ -19,6 +19,27 @@ use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use crate::{EccRecord, WeierstrassChip};
 
+const CUDA_PREPARED_PRIME_MAX_LIMBS: usize = 49;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct BigUintGpuLayout {
+    limbs: [u8; CUDA_PREPARED_PRIME_MAX_LIMBS],
+    padding: [u8; 3],
+    num_limbs: u32,
+    limb_bits: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct OverflowIntLayout {
+    limbs: [i32; CUDA_PREPARED_PRIME_MAX_LIMBS],
+    num_limbs: u32,
+    limb_bits: u32,
+    limb_max_abs: u32,
+    max_overflow_bits: u32,
+}
+
 mod cuda_abi {
     use super::*;
 
@@ -30,6 +51,8 @@ mod cuda_abi {
             num_records: usize,
             record_stride: usize,
             d_prime: *const u8,
+            d_prepared_prime: *mut BigUintGpuLayout,
+            d_prepared_prime_overflow: *mut OverflowIntLayout,
             prime_limb_count: u32,
             d_barrett_mu: *const u8,
             q0_limbs: u32,
@@ -54,6 +77,8 @@ mod cuda_abi {
             num_records: usize,
             record_stride: usize,
             d_prime: *const u8,
+            d_prepared_prime: *mut BigUintGpuLayout,
+            d_prepared_prime_overflow: *mut OverflowIntLayout,
             prime_limb_count: u32,
             d_a: *const u8,
             a_limb_count: u32,
@@ -85,6 +110,8 @@ mod cuda_abi {
         num_records: usize,
         record_stride: usize,
         d_prime: &DeviceBuffer<u8>,
+        d_prepared_prime: &DeviceBuffer<BigUintGpuLayout>,
+        d_prepared_prime_overflow: &DeviceBuffer<OverflowIntLayout>,
         prime_limb_count: u32,
         d_barrett_mu: &DeviceBuffer<u8>,
         q_limbs: [u32; 3],
@@ -103,6 +130,8 @@ mod cuda_abi {
             num_records,
             record_stride,
             d_prime.as_ptr(),
+            d_prepared_prime.as_mut_ptr(),
+            d_prepared_prime_overflow.as_mut_ptr(),
             prime_limb_count,
             d_barrett_mu.as_ptr(),
             q_limbs[0],
@@ -130,6 +159,8 @@ mod cuda_abi {
         num_records: usize,
         record_stride: usize,
         d_prime: &DeviceBuffer<u8>,
+        d_prepared_prime: &DeviceBuffer<BigUintGpuLayout>,
+        d_prepared_prime_overflow: &DeviceBuffer<OverflowIntLayout>,
         prime_limb_count: u32,
         d_a: &DeviceBuffer<u8>,
         a_limb_count: u32,
@@ -151,6 +182,8 @@ mod cuda_abi {
             num_records,
             record_stride,
             d_prime.as_ptr(),
+            d_prepared_prime.as_mut_ptr(),
+            d_prepared_prime_overflow.as_mut_ptr(),
             prime_limb_count,
             d_a.as_ptr(),
             a_limb_count,
@@ -232,6 +265,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let d_records = records.to_device().unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
         let d_prime = prime_bytes.to_device().unwrap();
+        let d_prepared_prime = DeviceBuffer::<BigUintGpuLayout>::with_capacity(1);
+        let d_prepared_prime_overflow = DeviceBuffer::<OverflowIntLayout>::with_capacity(1);
         let d_barrett_mu = mu_bytes.to_device().unwrap();
 
         let q_limbs = [
@@ -254,6 +289,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
                 num_records,
                 record_size,
                 &d_prime,
+                &d_prepared_prime,
+                &d_prepared_prime_overflow,
                 prime_limb_count as u32,
                 &d_barrett_mu,
                 q_limbs,
@@ -330,6 +367,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let d_records = records.to_device().unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
         let d_prime = prime_bytes.to_device().unwrap();
+        let d_prepared_prime = DeviceBuffer::<BigUintGpuLayout>::with_capacity(1);
+        let d_prepared_prime_overflow = DeviceBuffer::<OverflowIntLayout>::with_capacity(1);
         let d_a = a_bytes.to_device().unwrap();
         let d_barrett_mu = mu_bytes.to_device().unwrap();
 
@@ -351,6 +390,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
                 num_records,
                 record_size,
                 &d_prime,
+                &d_prepared_prime,
+                &d_prepared_prime_overflow,
                 prime_limb_count as u32,
                 &d_a,
                 builder.num_limbs as u32,

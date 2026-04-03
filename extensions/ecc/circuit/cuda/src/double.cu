@@ -3,6 +3,7 @@
 #include "launcher.cuh"
 #include "mod-builder/bigint_ops.cuh"
 #include "mod-builder/overflow_ops.cuh"
+#include "mod-builder/prepared_prime.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "rv32-adapters/vec_heap.cuh"
@@ -69,8 +70,7 @@ __global__ void ec_double_compute_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
     const uint8_t *a_limbs,
     uint32_t a_limb_count,
     const uint8_t *barrett_mu,
@@ -99,8 +99,7 @@ __global__ void ec_double_compute_tracegen_kernel(
     const bool is_setup = is_real && record->core.opcode == setup_opcode;
     const bool use_setup_arithmetic = !is_real || is_setup;
 
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
     BigUintGpu a(a_limbs, a_limb_count, 8);
     a.normalize();
 
@@ -163,8 +162,8 @@ __global__ void ec_double_lambda_num_constraint_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     const uint8_t *a_limbs,
     uint32_t a_limb_count,
     size_t lambda_num_var_col,
@@ -188,8 +187,7 @@ __global__ void ec_double_lambda_num_constraint_tracegen_kernel(
     const bool is_real = idx < num_records;
     const bool track_range = is_real;
 
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
 
     uint8_t zero_input_limbs[2 * NUM_LIMBS] = {0};
     const uint8_t *input_limbs =
@@ -227,7 +225,7 @@ __global__ void ec_double_lambda_num_constraint_tracegen_kernel(
     constraint_ov -= tmp_ov;
     OverflowInt result = constraint_ov;
     OverflowInt q_ov(quotient, q_limb_count);
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
     tmp_ov = q_ov;
     tmp_ov *= prime_overflow;
     result -= tmp_ov;
@@ -244,7 +242,7 @@ __global__ void ec_double_lambda_num_constraint_tracegen_kernel(
         coeff += biguint_limb_or_zero(a, limb);
         coeff -= biguint_limb_or_zero(lambda_num_var, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limb_count, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(
@@ -266,8 +264,8 @@ __global__ void ec_double_lambda_den_constraint_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     const uint8_t *a_limbs,
     uint32_t a_limb_count,
     size_t lambda_num_var_col,
@@ -301,8 +299,7 @@ __global__ void ec_double_lambda_den_constraint_tracegen_kernel(
     const bool is_setup = is_real && record->core.opcode == setup_opcode;
     const bool use_setup_arithmetic = !is_real || is_setup;
 
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
     uint8_t zero_input_limbs[2 * NUM_LIMBS] = {0};
     const uint8_t *input_limbs = is_real ? record->core.input_limbs : zero_input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -355,7 +352,7 @@ __global__ void ec_double_lambda_den_constraint_tracegen_kernel(
     }
     OverflowInt result = constraint_ov;
     OverflowInt q_ov(quotient, q_limb_count);
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
     tmp_ov = q_ov;
     tmp_ov *= prime_overflow;
     result -= tmp_ov;
@@ -381,7 +378,7 @@ __global__ void ec_double_lambda_den_constraint_tracegen_kernel(
             coeff -= biguint_limb_or_zero(a, limb);
         }
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limb_count, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(
@@ -403,8 +400,8 @@ __global__ void ec_double_x3_constraint_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     size_t lambda_col,
     size_t x3_col,
     size_t quotient_col,
@@ -427,8 +424,7 @@ __global__ void ec_double_x3_constraint_tracegen_kernel(
     const bool is_real = idx < num_records;
     const bool track_range = is_real;
 
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
     uint8_t zero_input_limbs[2 * NUM_LIMBS] = {0};
     const uint8_t *input_limbs =
         is_real ? reinterpret_cast<const EcDoubleRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
@@ -462,7 +458,7 @@ __global__ void ec_double_x3_constraint_tracegen_kernel(
     constraint_ov -= tmp_ov;
     OverflowInt result = constraint_ov;
     OverflowInt q_ov(quotient, q_limb_count);
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
     tmp_ov = q_ov;
     tmp_ov *= prime_overflow;
     result -= tmp_ov;
@@ -479,7 +475,7 @@ __global__ void ec_double_x3_constraint_tracegen_kernel(
         coeff -= 2 * biguint_limb_or_zero(x1, limb);
         coeff -= biguint_limb_or_zero(x3, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limb_count, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(
@@ -501,8 +497,8 @@ __global__ void ec_double_y3_constraint_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     size_t lambda_col,
     size_t x3_col,
     size_t y3_col,
@@ -534,8 +530,7 @@ __global__ void ec_double_y3_constraint_tracegen_kernel(
                 : nullptr;
     const bool is_setup = is_real && record->core.opcode == setup_opcode;
 
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
     uint8_t zero_input_limbs[2 * NUM_LIMBS] = {0};
     const uint8_t *input_limbs = is_real ? record->core.input_limbs : zero_input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -569,7 +564,7 @@ __global__ void ec_double_y3_constraint_tracegen_kernel(
     constraint_ov -= tmp_ov;
     OverflowInt result = constraint_ov;
     OverflowInt q_ov(quotient, q_limb_count);
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
     tmp_ov = q_ov;
     tmp_ov *= prime_overflow;
     result -= tmp_ov;
@@ -587,7 +582,7 @@ __global__ void ec_double_y3_constraint_tracegen_kernel(
         coeff -= biguint_limb_or_zero(y1, limb);
         coeff -= biguint_limb_or_zero(y3, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limb_count, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limb_count, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(
@@ -611,8 +606,8 @@ int launch_ec_double_constraint_tracegen_kernels(
     const uint8_t *d_records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *d_prime,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prepared_prime,
+    const OverflowInt *prepared_prime_overflow,
     const uint8_t *d_a,
     uint32_t a_limb_count,
     uint32_t q0_limbs,
@@ -658,8 +653,8 @@ int launch_ec_double_constraint_tracegen_kernels(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 d_a,
                 a_limb_count,
                 lambda_num_var_col,
@@ -686,8 +681,8 @@ int launch_ec_double_constraint_tracegen_kernels(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
+            prepared_prime_overflow,
             d_a,
             a_limb_count,
             lambda_num_var_col,
@@ -716,8 +711,8 @@ int launch_ec_double_constraint_tracegen_kernels(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
+            prepared_prime_overflow,
             lambda_col,
             x3_col,
             quotient_col,
@@ -742,8 +737,8 @@ int launch_ec_double_constraint_tracegen_kernels(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
+            prepared_prime_overflow,
             lambda_col,
             x3_col,
             y3_col,
@@ -771,6 +766,8 @@ extern "C" int launch_ec_double_tracegen(
     size_t num_records,
     size_t record_stride,
     const uint8_t *d_prime,
+    BigUintGpu *prepared_prime,
+    OverflowInt *prepared_prime_overflow,
     uint32_t prime_limb_count,
     const uint8_t *d_a,
     uint32_t a_limb_count,
@@ -793,6 +790,11 @@ extern "C" int launch_ec_double_tracegen(
     uint32_t timestamp_max_bits
 ) {
     auto [main_grid, main_block] = kernel_launch_params(trace_height, 256);
+    int ret = 0;
+    init_prepared_prime_buffers_kernel<<<1, 1>>>(
+        prepared_prime, prepared_prime_overflow, d_prime, prime_limb_count
+    );
+    CUDA_OK(cudaGetLastError());
 
     if (prime_limb_count <= 32) {
         constexpr size_t BLOCKS = 16;
@@ -814,23 +816,22 @@ extern "C" int launch_ec_double_tracegen(
             pointer_max_bits,
             timestamp_max_bits
         );
-        int ret = CHECK_KERNEL();
+        ret = CHECK_KERNEL();
         if (ret) {
             return ret;
         }
 
         ec_double_compute_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS><<<main_grid, main_block>>>(
-            d_trace,
-            trace_height,
-            core_width,
-            d_records,
-            num_records,
-            record_stride,
-            d_prime,
-            prime_limb_count,
-            d_a,
-            a_limb_count,
-            d_barrett_mu,
+                d_trace,
+                trace_height,
+                core_width,
+                d_records,
+                num_records,
+                record_stride,
+                prepared_prime,
+                d_a,
+                a_limb_count,
+                d_barrett_mu,
             num_variables,
             setup_opcode,
             d_range_checker,
@@ -847,8 +848,8 @@ extern "C" int launch_ec_double_tracegen(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
+            prepared_prime_overflow,
             d_a,
             a_limb_count,
             q0_limbs,
@@ -888,23 +889,22 @@ extern "C" int launch_ec_double_tracegen(
             pointer_max_bits,
             timestamp_max_bits
         );
-        int ret = CHECK_KERNEL();
+        ret = CHECK_KERNEL();
         if (ret) {
             return ret;
         }
 
         ec_double_compute_tracegen_kernel<BLOCKS, BLOCK_SIZE, NUM_LIMBS><<<main_grid, main_block>>>(
-            d_trace,
-            trace_height,
-            core_width,
-            d_records,
-            num_records,
-            record_stride,
-            d_prime,
-            prime_limb_count,
-            d_a,
-            a_limb_count,
-            d_barrett_mu,
+                d_trace,
+                trace_height,
+                core_width,
+                d_records,
+                num_records,
+                record_stride,
+                prepared_prime,
+                d_a,
+                a_limb_count,
+                d_barrett_mu,
             num_variables,
             setup_opcode,
             d_range_checker,
@@ -921,8 +921,8 @@ extern "C" int launch_ec_double_tracegen(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
+            prepared_prime_overflow,
             d_a,
             a_limb_count,
             q0_limbs,

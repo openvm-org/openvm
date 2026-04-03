@@ -2,6 +2,7 @@
 #include "launcher.cuh"
 #include "mod-builder/bigint_ops.cuh"
 #include "mod-builder/overflow_ops.cuh"
+#include "mod-builder/prepared_prime.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "rv32-adapters/vec_heap.cuh"
@@ -156,8 +157,7 @@ __global__ void ec_add_ne_compute_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
     const uint8_t *barrett_mu,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins
@@ -181,9 +181,7 @@ __global__ void ec_add_ne_compute_tracegen_kernel(
     const auto *record = reinterpret_cast<const EcAddNeRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
         records + idx * record_stride
     );
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -240,8 +238,8 @@ __global__ void ec_add_ne_constraint0_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     size_t q_col,
     size_t carry_col,
     uint32_t q_limbs,
@@ -267,10 +265,8 @@ __global__ void ec_add_ne_constraint0_tracegen_kernel(
     const auto *record = reinterpret_cast<const EcAddNeRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
         records + idx * record_stride
     );
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const BigUintGpu &prime = *prime_ptr;
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -334,7 +330,7 @@ __global__ void ec_add_ne_constraint0_tracegen_kernel(
         coeff -= biguint_limb_or_zero(y2, limb);
         coeff += biguint_limb_or_zero(y1, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limbs, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limbs, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
@@ -348,8 +344,8 @@ __global__ void ec_add_ne_constraint1_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     size_t q_col,
     size_t carry_col,
     uint32_t q_limbs,
@@ -375,10 +371,8 @@ __global__ void ec_add_ne_constraint1_tracegen_kernel(
     const auto *record = reinterpret_cast<const EcAddNeRecord<BLOCKS, BLOCK_SIZE, NUM_LIMBS> *>(
         records + idx * record_stride
     );
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const BigUintGpu &prime = *prime_ptr;
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -440,7 +434,7 @@ __global__ void ec_add_ne_constraint1_tracegen_kernel(
         coeff -= biguint_limb_or_zero(x2, limb);
         coeff -= biguint_limb_or_zero(x3, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limbs, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limbs, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
@@ -454,8 +448,8 @@ __global__ void ec_add_ne_constraint2_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     size_t q_col,
     size_t carry_col,
     uint32_t q_limbs,
@@ -483,10 +477,8 @@ __global__ void ec_add_ne_constraint2_tracegen_kernel(
         records + idx * record_stride
     );
     const bool is_setup = record->core.opcode == setup_opcode;
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const BigUintGpu &prime = *prime_ptr;
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
     BigUintGpu x1(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -549,7 +541,7 @@ __global__ void ec_add_ne_constraint2_tracegen_kernel(
         coeff -= biguint_limb_or_zero(y1, limb);
         coeff -= biguint_limb_or_zero(y3, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limbs, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limbs, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
@@ -565,6 +557,8 @@ extern "C" int launch_ec_add_ne_tracegen(
     size_t num_records,
     size_t record_stride,
     const uint8_t *d_prime,
+    BigUintGpu *prepared_prime,
+    OverflowInt *prepared_prime_overflow,
     uint32_t prime_limb_count,
     const uint8_t *d_barrett_mu,
     uint32_t q0_limbs,
@@ -583,6 +577,11 @@ extern "C" int launch_ec_add_ne_tracegen(
 ) {
     auto [main_grid, main_block] = kernel_launch_params(trace_height, 256);
     auto [constraint_grid, constraint_block] = kernel_launch_params(trace_height, 128);
+    int ret = 0;
+    init_prepared_prime_buffers_kernel<<<1, 1>>>(
+        prepared_prime, prepared_prime_overflow, d_prime, prime_limb_count
+    );
+    CUDA_OK(cudaGetLastError());
 
     if (prime_limb_count <= 32) {
         constexpr size_t BLOCKS = 16;
@@ -610,7 +609,7 @@ extern "C" int launch_ec_add_ne_tracegen(
             pointer_max_bits,
             timestamp_max_bits
         );
-        int ret = CHECK_KERNEL();
+        ret = CHECK_KERNEL();
         if (ret) {
             return ret;
         }
@@ -622,8 +621,7 @@ extern "C" int launch_ec_add_ne_tracegen(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
             d_barrett_mu,
             d_range_checker,
             range_checker_num_bins
@@ -640,8 +638,8 @@ extern "C" int launch_ec_add_ne_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q0_col,
                 c0_col,
                 q0_limbs,
@@ -661,8 +659,8 @@ extern "C" int launch_ec_add_ne_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q1_col,
                 c1_col,
                 q1_limbs,
@@ -682,8 +680,8 @@ extern "C" int launch_ec_add_ne_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q2_col,
                 c2_col,
                 q2_limbs,
@@ -718,7 +716,7 @@ extern "C" int launch_ec_add_ne_tracegen(
             pointer_max_bits,
             timestamp_max_bits
         );
-        int ret = CHECK_KERNEL();
+        ret = CHECK_KERNEL();
         if (ret) {
             return ret;
         }
@@ -730,8 +728,7 @@ extern "C" int launch_ec_add_ne_tracegen(
             d_records,
             num_records,
             record_stride,
-            d_prime,
-            prime_limb_count,
+            prepared_prime,
             d_barrett_mu,
             d_range_checker,
             range_checker_num_bins
@@ -748,8 +745,8 @@ extern "C" int launch_ec_add_ne_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q0_col,
                 c0_col,
                 q0_limbs,
@@ -769,8 +766,8 @@ extern "C" int launch_ec_add_ne_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q1_col,
                 c1_col,
                 q1_limbs,
@@ -790,8 +787,8 @@ extern "C" int launch_ec_add_ne_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q2_col,
                 c2_col,
                 q2_limbs,

@@ -2,6 +2,7 @@
 #include "launcher.cuh"
 #include "mod-builder/bigint_ops.cuh"
 #include "mod-builder/overflow_ops.cuh"
+#include "mod-builder/prepared_prime.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "rv32-adapters/vec_heap.cuh"
@@ -35,6 +36,37 @@ template <size_t NUM_LIMBS> __device__ inline BigUintGpu read_biguint(RowSlice r
         limbs[limb] = row[col + limb].asUInt32();
     }
     BigUintGpu value(limbs, NUM_LIMBS, 8);
+    value.normalize();
+    return value;
+}
+
+template <size_t NUM_LIMBS>
+__device__ inline BigIntGpu make_bigint_from_bytes(const uint8_t *data) {
+    BigIntGpu value(8);
+    value.mag.num_limbs = NUM_LIMBS;
+    value.mag.limb_bits = 8;
+    value.is_negative = false;
+    for (size_t limb = 0; limb < NUM_LIMBS; limb++) {
+        value.mag.limbs[limb] = data[limb];
+    }
+    for (size_t limb = NUM_LIMBS; limb < MAX_LIMBS; limb++) {
+        value.mag.limbs[limb] = 0;
+    }
+    value.normalize();
+    return value;
+}
+
+template <size_t NUM_LIMBS> __device__ inline BigIntGpu read_bigint(RowSlice row, size_t col) {
+    BigIntGpu value(8);
+    value.mag.num_limbs = NUM_LIMBS;
+    value.mag.limb_bits = 8;
+    value.is_negative = false;
+    for (size_t limb = 0; limb < NUM_LIMBS; limb++) {
+        value.mag.limbs[limb] = row[col + limb].asUInt32();
+    }
+    for (size_t limb = NUM_LIMBS; limb < MAX_LIMBS; limb++) {
+        value.mag.limbs[limb] = 0;
+    }
     value.normalize();
     return value;
 }
@@ -192,8 +224,7 @@ __global__ void modular_muldiv_compute_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
     const uint8_t *barrett_mu,
     uint32_t mul_opcode,
     uint32_t div_opcode,
@@ -222,9 +253,7 @@ __global__ void modular_muldiv_compute_tracegen_kernel(
         );
     const bool is_mul = record->core.opcode == mul_opcode;
     const bool is_div = record->core.opcode == div_opcode;
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
     BigUintGpu x(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -260,8 +289,7 @@ __global__ void modular_muldiv_quotient_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
     size_t q_col,
     uint32_t q_limbs,
     uint32_t mul_opcode,
@@ -290,22 +318,17 @@ __global__ void modular_muldiv_quotient_tracegen_kernel(
         );
     const bool is_mul = record->core.opcode == mul_opcode;
     const bool is_div = record->core.opcode == div_opcode;
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
+    const BigUintGpu &prime = *prime_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
-    BigUintGpu x(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
-    BigUintGpu y(input_limbs + 1 * NUM_LIMBS, NUM_LIMBS, 8);
-    x.normalize();
-    y.normalize();
     const size_t vars_col = 1 + 2 * NUM_LIMBS;
-    BigUintGpu z = read_biguint<NUM_LIMBS>(core_row, vars_col);
-
-    BigIntGpu lvar_big(is_mul ? x : z);
-    BigIntGpu tmp_big(y);
+    BigIntGpu lvar_big =
+        is_mul ? make_bigint_from_bytes<NUM_LIMBS>(input_limbs + 0 * NUM_LIMBS)
+               : read_bigint<NUM_LIMBS>(core_row, vars_col);
+    BigIntGpu tmp_big = make_bigint_from_bytes<NUM_LIMBS>(input_limbs + 1 * NUM_LIMBS);
     lvar_big *= tmp_big;
-    tmp_big = BigIntGpu(is_mul ? z : x);
+    tmp_big = is_mul ? read_bigint<NUM_LIMBS>(core_row, vars_col)
+                     : make_bigint_from_bytes<NUM_LIMBS>(input_limbs + 0 * NUM_LIMBS);
     lvar_big -= tmp_big;
 
     BigIntGpu quotient = lvar_big.div_biguint(prime);
@@ -328,8 +351,8 @@ __global__ void modular_muldiv_carry_tracegen_kernel(
     const uint8_t *records,
     size_t num_records,
     size_t record_stride,
-    const uint8_t *prime_limbs,
-    uint32_t prime_limb_count,
+    const BigUintGpu *prime_ptr,
+    const OverflowInt *prime_overflow_ptr,
     size_t q_col,
     size_t carry_col,
     uint32_t q_limbs,
@@ -360,10 +383,8 @@ __global__ void modular_muldiv_carry_tracegen_kernel(
         );
     const bool is_mul = record->core.opcode == mul_opcode;
     const bool is_div = record->core.opcode == div_opcode;
-
-    BigUintGpu prime(prime_limbs, prime_limb_count, 8);
-    prime.normalize();
-    OverflowInt prime_overflow(prime, prime.num_limbs);
+    const BigUintGpu &prime = *prime_ptr;
+    const OverflowInt &prime_overflow = *prime_overflow_ptr;
 
     const uint8_t *input_limbs = record->core.input_limbs;
     BigUintGpu x(input_limbs + 0 * NUM_LIMBS, NUM_LIMBS, 8);
@@ -394,7 +415,7 @@ __global__ void modular_muldiv_carry_tracegen_kernel(
         int64_t coeff = is_mul ? biguint_product_limb(x, y, limb) : biguint_product_limb(z, y, limb);
         coeff -= is_mul ? biguint_limb_or_zero(z, limb) : biguint_limb_or_zero(x, limb);
         coeff += subtract_signed_limb_product_limb(
-            quotient_signed_limbs, q_limbs, prime_limbs, prime.num_limbs, limb
+            quotient_signed_limbs, q_limbs, prime.limbs, prime.num_limbs, limb
         );
         carry = (carry + coeff) >> 8;
         write_carry_limb(core_row, carry_col, range_checker, carry, carry_min_abs, carry_bits);
@@ -411,6 +432,8 @@ extern "C" int launch_modular_muldiv_tracegen(
     size_t num_records,
     size_t record_stride,
     const uint8_t *d_prime,
+    BigUintGpu *prepared_prime,
+    OverflowInt *prepared_prime_overflow,
     uint32_t prime_limb_count,
     const uint8_t *d_barrett_mu,
     uint32_t q_limbs,
@@ -426,6 +449,11 @@ extern "C" int launch_modular_muldiv_tracegen(
 ) {
     auto [main_grid, main_block] = kernel_launch_params(trace_height, 256);
     auto [constraint_grid, constraint_block] = kernel_launch_params(trace_height, 128);
+    int ret = 0;
+    init_prepared_prime_buffers_kernel<<<1, 1>>>(
+        prepared_prime, prepared_prime_overflow, d_prime, prime_limb_count
+    );
+    CUDA_OK(cudaGetLastError());
 
     if (prime_limb_count <= 32) {
         constexpr size_t BLOCKS = 8;
@@ -449,7 +477,7 @@ extern "C" int launch_modular_muldiv_tracegen(
                 pointer_max_bits,
                 timestamp_max_bits
             );
-        int ret = CHECK_KERNEL();
+        ret = CHECK_KERNEL();
         if (ret) {
             return ret;
         }
@@ -462,8 +490,7 @@ extern "C" int launch_modular_muldiv_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
                 d_barrett_mu,
                 mul_opcode,
                 div_opcode,
@@ -482,8 +509,7 @@ extern "C" int launch_modular_muldiv_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
                 q_col,
                 q_limbs,
                 mul_opcode,
@@ -503,8 +529,8 @@ extern "C" int launch_modular_muldiv_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q_col,
                 carry_col,
                 q_limbs,
@@ -536,7 +562,7 @@ extern "C" int launch_modular_muldiv_tracegen(
                 pointer_max_bits,
                 timestamp_max_bits
             );
-        int ret = CHECK_KERNEL();
+        ret = CHECK_KERNEL();
         if (ret) {
             return ret;
         }
@@ -549,8 +575,7 @@ extern "C" int launch_modular_muldiv_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
                 d_barrett_mu,
                 mul_opcode,
                 div_opcode,
@@ -569,8 +594,7 @@ extern "C" int launch_modular_muldiv_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
                 q_col,
                 q_limbs,
                 mul_opcode,
@@ -590,8 +614,8 @@ extern "C" int launch_modular_muldiv_tracegen(
                 d_records,
                 num_records,
                 record_stride,
-                d_prime,
-                prime_limb_count,
+                prepared_prime,
+                prepared_prime_overflow,
                 q_col,
                 carry_col,
                 q_limbs,
