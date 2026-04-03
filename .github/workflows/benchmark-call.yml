@@ -145,6 +145,10 @@ jobs:
             echo "INPUT_ARGS=${INPUT_ARGS}" >> $GITHUB_ENV
           fi
 
+      - name: Install solc
+        if: env.E2E_BENCH == 'true'
+        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
       - name: Set BIN_NAME
         run: |
           echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
