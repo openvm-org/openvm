@@ -50,6 +50,7 @@ moduli_init! {
 ```
 
 This step enumerates the declared moduli (e.g., `0` for the first one, `1` for the second one) and sets up internal linkage so the compiler can generate the appropriate RISC-V instructions associated with each modulus.
+During `cargo openvm build`, OpenVM generates an `openvm_init.rs` file, and `openvm::init!()` includes that file in the final guest binary.
 
 **Summary**:
 
@@ -80,7 +81,7 @@ moduli_init! {
     "21888242871839275222246405745257275088696311157297823662689037894645226208583"
 }
 complex_init! {
-    "Bn254Fp2" { mod_idx = 0 },
+    "Bn254Fp2" { mod_idx = 1 },
 }
 */
 ```
