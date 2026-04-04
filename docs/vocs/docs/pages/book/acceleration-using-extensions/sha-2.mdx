@@ -50,6 +50,10 @@ fn sha256(input: &[u8]) -> [u8; 32] {
 }
 ```
 
+:::tip
+Most users should prefer the [SHA-2 guest library](/book/guest-libraries/sha2) (`openvm-sha2`), which provides high-level `Sha256`, `Sha512`, and `Sha384` structs implementing the `sha2::Digest` trait.
+:::
+
 ### Config parameters
 
 For the guest program to build successfully add the following to your `.toml` file:
