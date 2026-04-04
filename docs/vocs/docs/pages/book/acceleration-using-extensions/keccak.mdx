@@ -3,7 +3,7 @@
 The Keccak256 extension guest provides functions that are meant to be linked to other external libraries. The external libraries can use these functions as hooks for the Keccak-256 intrinsics. This is enabled only when the target is `zkvm`.
 
 We provide the following functions for the low-level Keccak sponge operations:
-- `native_xorin(buffer: *mut u8, input: *const u8, len: usize)`: XORs `len` input bytes into a state buffer in-place. `len` must be a positive multiple of 4 and at most 136.
+- `native_xorin(buffer: *mut u8, input: *const u8, len: usize)`: XORs `len` input bytes into a state buffer in-place. `len` is constrained to be a positive multiple of 4 and at most 136.
 - `native_keccakf(buffer: *mut u8)`: Applies the keccak-f[1600] permutation in-place on a 200-byte state buffer.
 
 The `openvm-keccak256` guest library builds on these to provide `native_keccak256`, a C ABI function that implements the full Keccak-256 hash:
