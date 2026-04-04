@@ -45,9 +45,11 @@ We also have access to each of the specific functions that the pairing check uti
 
 ### Multi-Miller loop
 
-The multi-Miller loop requires the MultiMillerLoop trait can also be run separately via:
+The multi-Miller loop can also be run separately by importing the `MultiMillerLoop` trait:
 
 ```rust
+use openvm_pairing_guest::pairing::MultiMillerLoop;
+
 let f = Bls12_381::multi_miller_loop(
     &[p0, p1],
     &[q0, q1],

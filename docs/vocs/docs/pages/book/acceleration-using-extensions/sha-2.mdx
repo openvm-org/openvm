@@ -9,32 +9,50 @@ In the external library, you can do something like the following:
 
 ```rust
 extern "C" {
-    fn zkvm_sha256_impl(input: *const u8, len: usize, output: *mut u8);
+    fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *mut u8);
 }
 
 fn sha256(input: &[u8]) -> [u8; 32] {
     #[cfg(target_os = "zkvm")]
     {
-        let mut state = [0u32; 8];
+        let mut state = [
+            0x6a09e667,
+            0xbb67ae85,
+            0x3c6ef372,
+            0xa54ff53a,
+            0x510e527f,
+            0x9b05688c,
+            0x1f83d9ab,
+            0x5be0cd19,
+        ];
         let padded_input = add_padding(input);
-        padded_input
-            .chunks_exact(32)
-            .for_each(|input_block| {
-                unsafe {
-                    zkvm_sha256_impl(state.as_ptr() as *const u8, input_block.as_ptr(), output.as_mut_ptr() as *mut u8);
-                }
-            })
-        state
-            .map(|word| word.to_be_bytes())
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap()
+        for input_block in padded_input.chunks_exact(64) {
+            let mut output = [0u32; 8];
+            unsafe {
+                zkvm_sha256_impl(
+                    state.as_ptr() as *const u8,
+                    input_block.as_ptr(),
+                    output.as_mut_ptr() as *mut u8,
+                );
+            }
+            state = output;
+        }
+
+        let mut digest = [0u8; 32];
+        for (i, word) in state.iter().enumerate() {
+            digest[i * 4..(i + 1) * 4].copy_from_slice(&word.to_be_bytes());
+        }
+        digest
     }
     #[cfg(not(target_os = "zkvm"))] {
         // Regular SHA-256 implementation
     }
 }
 ```
+
+:::tip
+Most users should prefer the [SHA-2 guest library](/book/guest-libraries/sha2) (`openvm-sha2`), which provides high-level `Sha256`, `Sha512`, and `Sha384` structs implementing the `sha2::Digest` trait.
+:::
 
 ### Config parameters
 
