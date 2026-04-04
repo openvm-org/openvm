@@ -137,8 +137,8 @@ export const bookSidebar: SidebarItem[] = [
                 link: "/book/acceleration-using-extensions/keccak"
             },
             {
-                text: "SHA-256",
-                link: "/book/acceleration-using-extensions/sha-256"
+                text: "SHA-2",
+                link: "/book/acceleration-using-extensions/sha-2"
             },
             {
                 text: "Big Integer",
