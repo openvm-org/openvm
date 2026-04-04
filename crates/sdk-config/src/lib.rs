@@ -61,7 +61,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
 
     /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv32m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
@@ -100,7 +100,7 @@ impl SdkVmConfig {
             .rv32m(Default::default())
             .io(Default::default())
             .keccak(Default::default())
-            .sha256(Default::default())
+            .sha2(Default::default())
             .bigint(Default::default())
             .modular(ModularExtension::new(vec![
                 bn_config.modulus.clone(),
@@ -176,7 +176,7 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
-        if self.sha256.is_some() {
+        if self.sha2.is_some() {
             transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
         if self.rv32m.is_some() {
@@ -243,7 +243,7 @@ impl SdkVmConfig {
         let rv32i = config.rv32i.map(|_| Rv32I);
         let io = config.io.map(|_| Rv32Io);
         let keccak = config.keccak.map(|_| Keccak256);
-        let sha256 = config.sha256.map(|_| Sha2);
+        let sha2 = config.sha2.map(|_| Sha2);
         let rv32m = config.rv32m;
         let bigint = config.bigint;
         let modular = config.modular.clone();
@@ -257,7 +257,7 @@ impl SdkVmConfig {
             rv32i,
             io,
             keccak,
-            sha256,
+            sha2,
             rv32m,
             bigint,
             modular,
@@ -288,7 +288,7 @@ pub struct SdkVmConfigInner {
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha2Executor")]
-    pub sha256: Option<Sha2>,
+    pub sha2: Option<Sha2>,
 
     #[extension(executor = "Rv32MExecutor")]
     pub rv32m: Option<Rv32M>,
@@ -363,8 +363,8 @@ where
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
-        if let Some(sha256) = &config.sha256 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
+        if let Some(sha2) = &config.sha2 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
@@ -428,8 +428,8 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
         }
-        if let Some(sha256) = &config.sha256 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha256, inventory)?;
+        if let Some(sha2) = &config.sha2 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32m, inventory)?;
@@ -549,7 +549,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
 
     pub rv32m: Option<Rv32M>,
     pub bigint: Option<Int256>,
@@ -568,7 +568,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             rv32i: config.rv32i,
             io: config.io,
             keccak: config.keccak,
-            sha256: config.sha256,
+            sha2: config.sha2,
             rv32m: config.rv32m,
             bigint: config.bigint,
             modular: config.modular,
