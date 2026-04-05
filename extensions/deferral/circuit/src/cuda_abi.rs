@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 pub mod count {
     use super::*;
@@ -12,6 +12,7 @@ pub mod count {
             height: usize,
             d_count: *const u32,
             num_def_circuits: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -20,12 +21,14 @@ pub mod count {
         height: usize,
         d_count: &DeviceBuffer<u32>,
         num_def_circuits: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_deferral_count_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_count.as_ptr(),
             num_def_circuits,
+            stream,
         ))
     }
 }
@@ -52,6 +55,7 @@ pub mod poseidon2 {
             d_counts: *mut DeferralPoseidon2Count,
             num_records: usize,
             sbox_regs: usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _deferral_poseidon2_deduplicate_records_get_temp_bytes(
@@ -60,6 +64,7 @@ pub mod poseidon2 {
             num_records: usize,
             d_num_records: *mut usize,
             h_temp_bytes_out: *mut usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _deferral_poseidon2_deduplicate_records(
@@ -71,6 +76,7 @@ pub mod poseidon2 {
             d_num_records: *mut usize,
             d_temp_storage: *mut std::ffi::c_void,
             temp_storage_bytes: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -82,6 +88,7 @@ pub mod poseidon2 {
         d_counts: &DeviceBuffer<DeferralPoseidon2Count>,
         num_records: usize,
         sbox_regs: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_deferral_poseidon2_tracegen(
             d_trace.as_mut_ptr(),
@@ -91,6 +98,7 @@ pub mod poseidon2 {
             d_counts.as_mut_ptr(),
             num_records,
             sbox_regs,
+            stream,
         ))
     }
 
@@ -100,6 +108,7 @@ pub mod poseidon2 {
         num_records: usize,
         d_num_records: &DeviceBuffer<usize>,
         h_temp_bytes_out: &mut usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_deferral_poseidon2_deduplicate_records_get_temp_bytes(
             d_records.as_mut_ptr(),
@@ -107,6 +116,7 @@ pub mod poseidon2 {
             num_records,
             d_num_records.as_mut_ptr(),
             h_temp_bytes_out,
+            stream,
         ))
     }
 
@@ -117,6 +127,7 @@ pub mod poseidon2 {
         d_num_records: &DeviceBuffer<usize>,
         d_temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         // CUB ReduceByKey requires non-overlapping input and output ranges.
         // Allocate separate output buffers, then copy results back.
@@ -131,6 +142,7 @@ pub mod poseidon2 {
             d_num_records.as_mut_ptr(),
             d_temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
+            stream,
         ))?;
         let records_bytes = num_records * POSEIDON2_WIDTH * std::mem::size_of::<F>();
         let counts_bytes = num_records * std::mem::size_of::<DeferralPoseidon2Count>();
@@ -178,6 +190,7 @@ pub mod call {
             d_poseidon2_idx: *mut u32,
             poseidon2_capacity: usize,
             address_bits: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -199,6 +212,7 @@ pub mod call {
         d_poseidon2_idx: &DeviceBuffer<u32>,
         poseidon2_capacity: usize,
         address_bits: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_deferral_call_tracegen(
             d_trace.as_mut_ptr(),
@@ -218,6 +232,7 @@ pub mod call {
             d_poseidon2_idx.as_mut_ptr(),
             poseidon2_capacity,
             address_bits,
+            stream,
         ))
     }
 }
@@ -267,6 +282,7 @@ pub mod output {
             d_poseidon2_counts: *mut DeferralPoseidon2Count,
             d_poseidon2_idx: *mut u32,
             poseidon2_capacity: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -290,6 +306,7 @@ pub mod output {
         d_poseidon2_counts: &DeviceBuffer<DeferralPoseidon2Count>,
         d_poseidon2_idx: &DeviceBuffer<u32>,
         poseidon2_capacity: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_deferral_output_tracegen(
             d_trace.as_mut_ptr(),
@@ -311,6 +328,7 @@ pub mod output {
             d_poseidon2_counts.as_mut_ptr(),
             d_poseidon2_idx.as_mut_ptr(),
             poseidon2_capacity,
+            stream,
         ))
     }
 }

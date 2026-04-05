@@ -2,6 +2,7 @@
 
 use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::stream::cudaStream_t;
 
 pub mod sha256 {
     use super::*;
@@ -19,6 +20,7 @@ pub mod sha256 {
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha256_hash_computation(
@@ -27,6 +29,7 @@ pub mod sha256 {
             d_record_offsets: *const usize,
             d_prev_hashes: *mut u32,
             total_num_blocks: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha256_first_pass_tracegen(
@@ -43,12 +46,14 @@ pub mod sha256 {
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha256_second_pass_dependencies(
             d_trace: *mut F,
             trace_height: usize,
             rows_used: usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha256_fill_invalid_rows(
@@ -56,6 +61,7 @@ pub mod sha256 {
             trace_height: usize,
             rows_used: usize,
             d_prev_hashes: *const u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -71,6 +77,7 @@ pub mod sha256 {
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha256_main_tracegen(
             d_trace.as_mut_ptr(),
@@ -84,6 +91,7 @@ pub mod sha256 {
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             timestamp_max_bits,
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -94,6 +102,7 @@ pub mod sha256 {
         d_record_offsets: &DeviceBuffer<usize>,
         d_prev_hashes: &DeviceBuffer<u32>,
         num_blocks: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha256_hash_computation(
             d_records.as_ptr(),
@@ -101,6 +110,7 @@ pub mod sha256 {
             d_record_offsets.as_ptr(),
             d_prev_hashes.as_mut_ptr(),
             num_blocks,
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -119,6 +129,7 @@ pub mod sha256 {
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha256_first_pass_tracegen(
             d_trace.as_mut_ptr(),
@@ -134,6 +145,7 @@ pub mod sha256 {
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             timestamp_max_bits,
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -142,9 +154,10 @@ pub mod sha256 {
         d_trace: &DeviceBuffer<F>,
         height: usize,
         rows_used: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result =
-            launch_sha256_second_pass_dependencies(d_trace.as_mut_ptr(), height, rows_used);
+            launch_sha256_second_pass_dependencies(d_trace.as_mut_ptr(), height, rows_used, stream);
         CudaError::from_result(result)
     }
 
@@ -153,12 +166,14 @@ pub mod sha256 {
         height: usize,
         rows_used: usize,
         d_prev_hashes: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha256_fill_invalid_rows(
             d_trace.as_mut_ptr(),
             height,
             rows_used,
             d_prev_hashes.as_ptr(),
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -180,6 +195,7 @@ pub mod sha512 {
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha512_hash_computation(
@@ -188,6 +204,7 @@ pub mod sha512 {
             d_record_offsets: *const usize,
             d_prev_hashes: *mut u64,
             total_num_blocks: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha512_first_pass_tracegen(
@@ -204,12 +221,14 @@ pub mod sha512 {
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha512_second_pass_dependencies(
             d_trace: *mut F,
             trace_height: usize,
             rows_used: usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn launch_sha512_fill_invalid_rows(
@@ -217,6 +236,7 @@ pub mod sha512 {
             trace_height: usize,
             rows_used: usize,
             d_prev_hashes: *const u64,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -232,6 +252,7 @@ pub mod sha512 {
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha512_main_tracegen(
             d_trace.as_mut_ptr(),
@@ -245,6 +266,7 @@ pub mod sha512 {
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             timestamp_max_bits,
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -255,6 +277,7 @@ pub mod sha512 {
         d_record_offsets: &DeviceBuffer<usize>,
         d_prev_hashes: &DeviceBuffer<u64>,
         num_blocks: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha512_hash_computation(
             d_records.as_ptr(),
@@ -262,6 +285,7 @@ pub mod sha512 {
             d_record_offsets.as_ptr(),
             d_prev_hashes.as_mut_ptr(),
             num_blocks,
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -280,6 +304,7 @@ pub mod sha512 {
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha512_first_pass_tracegen(
             d_trace.as_mut_ptr(),
@@ -295,6 +320,7 @@ pub mod sha512 {
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             timestamp_max_bits,
+            stream,
         );
         CudaError::from_result(result)
     }
@@ -303,9 +329,10 @@ pub mod sha512 {
         d_trace: &DeviceBuffer<F>,
         height: usize,
         rows_used: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result =
-            launch_sha512_second_pass_dependencies(d_trace.as_mut_ptr(), height, rows_used);
+            launch_sha512_second_pass_dependencies(d_trace.as_mut_ptr(), height, rows_used, stream);
         CudaError::from_result(result)
     }
 
@@ -314,12 +341,14 @@ pub mod sha512 {
         height: usize,
         rows_used: usize,
         d_prev_hashes: &DeviceBuffer<u64>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha512_fill_invalid_rows(
             d_trace.as_mut_ptr(),
             height,
             rows_used,
             d_prev_hashes.as_ptr(),
+            stream,
         );
         CudaError::from_result(result)
     }
