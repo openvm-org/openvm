@@ -199,7 +199,7 @@ extern "C" int _stacking_claims_tracegen_temp_bytes(
     Fp *d_proof_idx = d_trace + COL_INDEX(StackingClaimsCols, proof_idx) * height;
     Fp *d_claim_accums = d_trace + COL_INDEX(StackingClaimsCols, final_s_eval) * height;
     return prefix_scan_by_key_n_arrays_temp_bytes<2 * D_EF>(
-        d_proof_idx, d_claim_accums, height, *h_temp_bytes_out, FpEqual{}
+        d_proof_idx, d_claim_accums, height, *h_temp_bytes_out, FpEqual{}, stream
     );
 }
 
@@ -240,7 +240,7 @@ extern "C" int _stacking_claims_tracegen(
             Fp *d_proof_idx = d_trace + COL_INDEX(StackingClaimsCols, proof_idx) * height;
             Fp *d_claim_accums = d_trace + COL_INDEX(StackingClaimsCols, final_s_eval) * height;
             ret = prefix_scan_by_key_n_arrays<2 * D_EF>(
-                d_proof_idx, d_claim_accums, height, d_temp_buffer, temp_bytes, FpEqual{}
+                d_proof_idx, d_claim_accums, height, d_temp_buffer, temp_bytes, FpEqual{}, stream
             );
             if (ret) return ret;
         }

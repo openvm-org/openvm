@@ -194,7 +194,7 @@ extern "C" int _interaction_folding_tracegen_temp_bytes(
 ) {
     size_t affine_scan_temp_bytes;
     int ret = get_affine_scan_by_key_temp_bytes(
-        d_idx_keys, d_cur_sum_evals, num_valid_rows, affine_scan_temp_bytes
+        d_idx_keys, d_cur_sum_evals, num_valid_rows, affine_scan_temp_bytes, stream
     );
     if (ret) {
         return ret;
@@ -203,7 +203,7 @@ extern "C" int _interaction_folding_tracegen_temp_bytes(
     Fp *d_final_acc_num = d_trace + COL_INDEX(InteractionsFoldingCols, final_acc_num) * height;
     size_t num_scan_temp_bytes;
     ret = suffix_scan_by_key_temp_bytes(
-        d_idx_keys, d_final_acc_num, num_valid_rows, num_scan_temp_bytes, UInt2Equal{}
+        d_idx_keys, d_final_acc_num, num_valid_rows, num_scan_temp_bytes, UInt2Equal{}, stream
     );
     if (ret) {
         return ret;
@@ -212,7 +212,7 @@ extern "C" int _interaction_folding_tracegen_temp_bytes(
     Fp *d_final_acc_denom = d_trace + COL_INDEX(InteractionsFoldingCols, final_acc_denom) * height;
     size_t denom_scan_temp_bytes;
     ret = suffix_scan_by_key_temp_bytes(
-        d_idx_keys, d_final_acc_denom, num_valid_rows, denom_scan_temp_bytes, UInt2Equal{}
+        d_idx_keys, d_final_acc_denom, num_valid_rows, denom_scan_temp_bytes, UInt2Equal{}, stream
     );
     if (ret) {
         return ret;
@@ -269,7 +269,7 @@ extern "C" int _interactions_folding_tracegen(
          int ret = CHECK_KERNEL();
          if (ret) return ret;
          ret = affine_scan_by_key(
-             d_idx_keys, d_cur_sum_evals, num_valid_rows, d_temp_buffer, temp_bytes
+             d_idx_keys, d_cur_sum_evals, num_valid_rows, d_temp_buffer, temp_bytes, stream
          );
          if (ret) return ret;
          interactions_folding_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(
@@ -312,7 +312,8 @@ extern "C" int _interactions_folding_tracegen(
             num_valid_rows,
             d_temp_buffer,
             temp_bytes,
-            UInt2Equal{}
+            UInt2Equal{},
+            stream
         );
         if (ret) {
             return ret;
@@ -323,7 +324,8 @@ extern "C" int _interactions_folding_tracegen(
             num_valid_rows,
             d_temp_buffer,
             temp_bytes,
-            UInt2Equal{}
+            UInt2Equal{},
+            stream
         );
         if (ret) {
             return ret;

@@ -111,7 +111,7 @@ extern "C" int _constraints_folding_tracegen_temp_bytes(
 ) {
     size_t temp_bytes;
     int ret = get_affine_scan_by_key_temp_bytes(
-        d_proof_and_sort_idxs, d_cur_sum_evals, num_valid_rows, temp_bytes
+        d_proof_and_sort_idxs, d_cur_sum_evals, num_valid_rows, temp_bytes, stream
     );
     if (ret) {
         return ret;
@@ -163,7 +163,7 @@ extern "C" int _constraints_folding_tracegen(
          int ret = CHECK_KERNEL();
          if (ret) return ret;
          ret = affine_scan_by_key(
-             d_proof_and_sort_idxs, d_cur_sum_evals, num_valid_rows, d_temp_buffer, temp_bytes
+             d_proof_and_sort_idxs, d_cur_sum_evals, num_valid_rows, d_temp_buffer, temp_bytes, stream
          );
          if (ret) return ret;
          constraints_folding_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(

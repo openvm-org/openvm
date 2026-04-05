@@ -209,7 +209,7 @@ extern "C" int _opening_claims_tracegen_temp_bytes(
     Fp *d_coeffs = d_trace + COL_INDEX(OpeningClaimsCols, stacking_claim_coefficient) * height;
     size_t coeffs_temp_bytes;
     ret = prefix_scan_by_key_n_arrays_temp_bytes<D_EF>(
-        d_keys_buffer, d_coeffs, height, coeffs_temp_bytes, FpEqual{}
+        d_keys_buffer, d_coeffs, height, coeffs_temp_bytes, FpEqual{}, stream
     );
     if (ret) {
         return ret;
@@ -219,7 +219,7 @@ extern "C" int _opening_claims_tracegen_temp_bytes(
     Fp *d_s_0 = d_trace + COL_INDEX(OpeningClaimsCols, s_0) * height;
     size_t s_0_temp_bytes;
     ret = prefix_scan_by_key_n_arrays_temp_bytes<D_EF>(
-        d_proof_idx, d_s_0, height, s_0_temp_bytes, FpEqual{}
+        d_proof_idx, d_s_0, height, s_0_temp_bytes, FpEqual{}, stream
     );
     if (ret) {
         return ret;
@@ -290,7 +290,7 @@ extern "C" int _opening_claims_tracegen(
 
     Fp *d_coeffs = d_trace + COL_INDEX(OpeningClaimsCols, stacking_claim_coefficient) * height;
     ret = prefix_scan_by_key_n_arrays<D_EF>(
-        d_keys_buffer, d_coeffs, height, d_temp_buffer, temp_bytes, FpEqual{}
+        d_keys_buffer, d_coeffs, height, d_temp_buffer, temp_bytes, FpEqual{}, stream
     );
     if (ret) {
         return ret;
@@ -299,7 +299,7 @@ extern "C" int _opening_claims_tracegen(
     Fp *d_proof_idx = d_trace + COL_INDEX(OpeningClaimsCols, proof_idx) * height;
     Fp *d_s_0 = d_trace + COL_INDEX(OpeningClaimsCols, s_0) * height;
     ret = prefix_scan_by_key_n_arrays<D_EF>(
-        d_proof_idx, d_s_0, height, d_temp_buffer, temp_bytes, FpEqual{}
+        d_proof_idx, d_s_0, height, d_temp_buffer, temp_bytes, FpEqual{}, stream
     );
     return ret;
 }
