@@ -188,7 +188,8 @@ extern "C" int _opening_claims_tracegen_temp_bytes(
     Fp *d_trace,
     size_t height,
     Fp *d_keys_buffer,
-    size_t *h_temp_bytes_out
+    size_t *h_temp_bytes_out,
+    cudaStream_t stream
 ) {
     Fp *d_last_for_claim = d_trace + COL_INDEX(OpeningClaimsCols, is_last_for_claim) * height;
     size_t exclusive_scan_temp_bytes;
@@ -198,7 +199,7 @@ extern "C" int _opening_claims_tracegen_temp_bytes(
         d_last_for_claim,
         d_keys_buffer,
         height,
-        cudaStreamPerThread
+        stream
     );
     int ret = CHECK_KERNEL();
     if (ret) {
@@ -243,7 +244,8 @@ extern "C" int _opening_claims_tracegen(
     uint32_t l_skip,
     Fp *d_keys_buffer,
     void *d_temp_buffer,
-    size_t temp_bytes
+    size_t temp_bytes,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(OpeningClaimsCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -251,7 +253,7 @@ extern "C" int _opening_claims_tracegen(
     SWITCH_BLOCK(
         num_proofs,
         NUM_PROOFS,
-        (opening_claims_tracegen<NUM_PROOFS><<<grid, block>>>(
+        (opening_claims_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_trace,
              height,
              Array<uint32_t, NUM_PROOFS>(h_row_bounds),
@@ -279,7 +281,7 @@ extern "C" int _opening_claims_tracegen(
 
     Fp *d_last_for_claim = d_trace + COL_INDEX(OpeningClaimsCols, is_last_for_claim) * height;
     cub::DeviceScan::ExclusiveSum(
-        d_temp_buffer, temp_bytes, d_last_for_claim, d_keys_buffer, height, cudaStreamPerThread
+        d_temp_buffer, temp_bytes, d_last_for_claim, d_keys_buffer, height, stream
     );
     ret = CHECK_KERNEL();
     if (ret) {

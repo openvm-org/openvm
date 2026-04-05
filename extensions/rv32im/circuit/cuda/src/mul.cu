@@ -63,14 +63,15 @@ extern "C" int _mul_tracegen(
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(Rv32MultiplicationCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
-    mul_tracegen<<<grid, block>>>(
+    mul_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

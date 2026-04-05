@@ -193,7 +193,8 @@ __global__ void stacking_claims_zero_padding_accums(
 extern "C" int _stacking_claims_tracegen_temp_bytes(
     Fp *d_trace,
     size_t height,
-    size_t *h_temp_bytes_out
+    size_t *h_temp_bytes_out,
+    cudaStream_t stream
 ) {
     Fp *d_proof_idx = d_trace + COL_INDEX(StackingClaimsCols, proof_idx) * height;
     Fp *d_claim_accums = d_trace + COL_INDEX(StackingClaimsCols, final_s_eval) * height;
@@ -213,7 +214,8 @@ extern "C" int _stacking_claims_tracegen(
     ClaimsRecordsPerProof *d_records,
     uint32_t num_proofs,
     void *d_temp_buffer,
-    size_t temp_bytes
+    size_t temp_bytes,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(StackingClaimsCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -223,7 +225,7 @@ extern "C" int _stacking_claims_tracegen(
     SWITCH_BLOCK(
         num_proofs,
         NUM_PROOFS,
-        (stacking_claims_tracegen<NUM_PROOFS><<<grid, block>>>(
+        (stacking_claims_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_trace,
              height,
              Array<uint32_t, NUM_PROOFS>(h_row_bounds),
@@ -242,7 +244,7 @@ extern "C" int _stacking_claims_tracegen(
             );
             if (ret) return ret;
         }
-        stacking_claims_zero_padding_accums<NUM_PROOFS><<<grid, block>>>(
+        stacking_claims_zero_padding_accums<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_trace, height, Array<uint32_t, NUM_PROOFS>(h_row_bounds), d_records
         );),
         1,

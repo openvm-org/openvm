@@ -106,7 +106,8 @@ extern "C" int _constraints_folding_tracegen_temp_bytes(
     const uint2 *d_proof_and_sort_idxs,
     AffineFpExt *d_cur_sum_evals,
     uint32_t num_valid_rows,
-    size_t *h_temp_bytes_out
+    size_t *h_temp_bytes_out,
+    cudaStream_t stream
 ) {
     size_t temp_bytes;
     int ret = get_affine_scan_by_key_temp_bytes(
@@ -136,7 +137,8 @@ extern "C" int _constraints_folding_tracegen(
     uint32_t num_valid_rows,
     uint32_t l_skip,
     void *d_temp_buffer,
-    size_t temp_bytes
+    size_t temp_bytes,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(ConstraintsFoldingCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -149,7 +151,7 @@ extern "C" int _constraints_folding_tracegen(
     SWITCH_BLOCK(
         num_proofs,
         NUM_PROOFS,
-        (reverse_affines_setup<NUM_PROOFS><<<grid, block>>>(
+        (reverse_affines_setup<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_proof_and_sort_idxs,
              d_cur_sum_evals,
              d_per_proof,
@@ -164,7 +166,7 @@ extern "C" int _constraints_folding_tracegen(
              d_proof_and_sort_idxs, d_cur_sum_evals, num_valid_rows, d_temp_buffer, temp_bytes
          );
          if (ret) return ret;
-         constraints_folding_tracegen<NUM_PROOFS><<<grid, block>>>(
+         constraints_folding_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_trace,
              height,
              d_proof_and_sort_idxs,

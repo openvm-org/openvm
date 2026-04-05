@@ -323,7 +323,8 @@ extern "C" int _deferral_output_tracegen(
     Fp *d_poseidon2_records,
     DeferralPoseidon2Count *d_poseidon2_counts,
     uint32_t *d_poseidon2_idx,
-    size_t poseidon2_capacity
+    size_t poseidon2_capacity,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(height, 256);
     assert(width == sizeof(DeferralOutputCols<uint8_t>));
@@ -332,7 +333,7 @@ extern "C" int _deferral_output_tracegen(
     assert(poseidon2_capacity % 16 == 0 && "poseidon2_capacity must be a multiple of 16");
     size_t poseidon2_record_capacity = poseidon2_capacity / 16;
 
-    deferral_output_tracegen<<<grid, block>>>(
+    deferral_output_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_raw_records,

@@ -219,7 +219,7 @@ int launch_sha2_main_tracegen(
     uint32_t timestamp_max_bits
 ) {
     auto [grid_size, block_size] = kernel_launch_params(trace_height, 256);
-    sha2_main_tracegen<V><<<grid_size, block_size>>>(
+    sha2_main_tracegen<V><<<grid_size, block_size, 0, stream>>>(
         d_trace,
         trace_height,
         d_records,

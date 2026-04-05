@@ -45,10 +45,11 @@ extern "C" int _execution_testing_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<DummyExecutionInteractionCols<Fp>> d_records
+    DeviceBufferConstView<DummyExecutionInteractionCols<Fp>> d_records,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(DummyExecutionInteractionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    execution_testing_tracegen<<<grid, block>>>(d_trace, height, d_records);
+    execution_testing_tracegen<<<grid, block, 0, stream>>>(d_trace, height, d_records);
     return CHECK_KERNEL();
 }

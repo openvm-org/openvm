@@ -985,7 +985,7 @@ int launch_sha2_hash_computation(
 ) {
     auto [grid_size, block_size] = kernel_launch_params(num_records, 256);
 
-    sha2_hash_computation<V><<<grid_size, block_size>>>(
+    sha2_hash_computation<V><<<grid_size, block_size, 0, stream>>>(
         d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks
     );
 
@@ -1010,7 +1010,7 @@ int launch_sha2_first_pass_tracegen(
 ) {
     auto [grid_size, block_size] = kernel_launch_params(total_num_blocks, 256);
 
-    sha2_first_pass_tracegen<V><<<grid_size, block_size>>>(
+    sha2_first_pass_tracegen<V><<<grid_size, block_size, 0, stream>>>(
         d_trace,
         trace_height,
         d_records,
@@ -1034,12 +1034,12 @@ int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_
     size_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
     auto [grid_size, block_size] = kernel_launch_params(total_blocks, 256);
     sha2_second_pass_dependencies<V>
-        <<<grid_size, block_size>>>(d_trace, trace_height, total_blocks);
+        <<<grid_size, block_size, 0, stream>>>(d_trace, trace_height, total_blocks);
     if (auto err = CHECK_KERNEL() != 0) {
         return err;
     }
 
-    sha2_fill_wraparound<V><<<1, 1>>>(d_trace, trace_height);
+    sha2_fill_wraparound<V><<<1, 1, 0, stream>>>(d_trace, trace_height);
     return CHECK_KERNEL();
 }
 
@@ -1050,14 +1050,14 @@ int launch_sha2_fill_invalid_rows(
     size_t rows_used,
     typename V::Word *d_prev_hashes
 ) {
-    sha2_fill_first_dummy_row<V><<<1, 1>>>(d_trace, trace_height, rows_used);
+    sha2_fill_first_dummy_row<V><<<1, 1, 0, stream>>>(d_trace, trace_height, rows_used);
     if (CHECK_KERNEL() != 0) {
         return -1;
     }
 
     auto [grid_size, block_size] = kernel_launch_params(trace_height - rows_used, 256);
     sha2_fill_invalid_rows<V>
-        <<<grid_size, block_size>>>(d_trace, trace_height, rows_used, d_prev_hashes);
+        <<<grid_size, block_size, 0, stream>>>(d_trace, trace_height, rows_used, d_prev_hashes);
     return CHECK_KERNEL();
 }
 

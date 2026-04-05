@@ -37,10 +37,11 @@ extern "C" int _program_testing_tracegen(
     size_t height,
     size_t width,
     uint8_t *d_records,
-    size_t num_records
+    size_t num_records,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(ProgramCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    program_testing_tracegen<<<grid, block>>>(d_trace, height, d_records, num_records);
+    program_testing_tracegen<<<grid, block, 0, stream>>>(d_trace, height, d_records, num_records);
     return CHECK_KERNEL();
 }

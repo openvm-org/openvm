@@ -119,10 +119,11 @@ extern "C" int _assert_less_than_tracegen(
     uint32_t max_bits,
     uint32_t aux_len,
     uint32_t *rc_count,
-    uint32_t rc_num_bins
+    uint32_t rc_num_bins,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(trace_height);
-    cukernel_assert_less_than_tracegen<<<grid, block>>>(
+    cukernel_assert_less_than_tracegen<<<grid, block, 0, stream>>>(
         trace, trace_height, (uint2 *)pairs, max_bits, aux_len, rc_count, rc_num_bins
     );
     return CHECK_KERNEL();
@@ -135,10 +136,11 @@ extern "C" int _less_than_tracegen(
     uint32_t max_bits,
     uint32_t aux_len,
     uint32_t *rc_count,
-    uint32_t rc_num_bins
+    uint32_t rc_num_bins,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(trace_height);
-    cukernel_less_than_tracegen<<<grid, block>>>(
+    cukernel_less_than_tracegen<<<grid, block, 0, stream>>>(
         trace, trace_height, (uint2 *)pairs, max_bits, aux_len, rc_count, rc_num_bins
     );
     return CHECK_KERNEL();
@@ -152,10 +154,11 @@ extern "C" int _less_than_array_tracegen(
     uint32_t array_len,
     uint32_t aux_len,
     uint32_t *rc_count,
-    uint32_t rc_num_bins
+    uint32_t rc_num_bins,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(trace_height);
-    cukernel_less_than_array_tracegen<<<grid, block>>>(
+    cukernel_less_than_array_tracegen<<<grid, block, 0, stream>>>(
         trace, trace_height, pairs, max_bits, array_len, aux_len, rc_count, rc_num_bins
     );
     return CHECK_KERNEL();
