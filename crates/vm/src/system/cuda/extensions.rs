@@ -38,6 +38,7 @@ pub fn get_inventory_range_checker(
 pub fn get_or_create_bitwise_op_lookup(
     inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
 ) -> Result<Arc<BitwiseOperationLookupChipGPU<8>>, ChipInventoryError> {
+    let ctx = get_inventory_range_checker(inventory).ctx.clone();
     let bitwise_lu = {
         let existing_chip = inventory
             .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
@@ -47,9 +48,10 @@ pub fn get_or_create_bitwise_op_lookup(
         } else {
             let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
 
-            let chip = Arc::new(BitwiseOperationLookupChipGPU::hybrid(Arc::new(
-                BitwiseOperationLookupChip::new(air.bus),
-            )));
+            let chip = Arc::new(BitwiseOperationLookupChipGPU::hybrid(
+                Arc::new(BitwiseOperationLookupChip::new(air.bus)),
+                ctx,
+            ));
             inventory.add_periphery_chip(chip.clone());
             chip
         }
@@ -74,7 +76,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         &self,
         config: &SystemConfig,
         airs: AirInventory<BabyBearPoseidon2Config>,
-        _device: &openvm_cuda_backend::GpuDevice,
+        device: &openvm_cuda_backend::GpuDevice,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -84,10 +86,12 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         >,
         ChipInventoryError,
     > {
+        let ctx = device.ctx.clone();
         let range_bus = airs.range_checker().bus;
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(range_bus),
-        )));
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
+            Arc::new(VariableRangeCheckerChip::new(range_bus)),
+            ctx.clone(),
+        ));
 
         let mut inventory = ChipInventory::new(airs);
         inventory.next_air::<VariableRangeCheckerAir>()?;
@@ -115,9 +119,10 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
             max_buffer_size,
             sbox_registers,
+            ctx.clone(),
         ));
         inventory.add_periphery_chip(hasher_chip.clone());
-        let system = SystemChipInventoryGPU::new(config, range_checker, hasher_chip);
+        let system = SystemChipInventoryGPU::new(config, range_checker, hasher_chip, ctx);
 
         let phantom_chip = PhantomChipGPU::new();
         inventory.add_executor_chip(phantom_chip);

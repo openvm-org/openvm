@@ -6,7 +6,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::cudaStreamPerThread,
+    stream::DeviceContext,
 };
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -24,6 +24,7 @@ pub struct DeferralPoseidon2SharedBuffer {
 }
 
 pub struct DeferralPoseidon2ChipGpu {
+    pub ctx: DeviceContext,
     pub records: Arc<DeviceBuffer<F>>,
     pub counts: Arc<DeviceBuffer<DeferralPoseidon2Count>>,
     pub idx: Arc<DeviceBuffer<u32>>,
@@ -34,17 +35,19 @@ impl DeferralPoseidon2ChipGpu {
     /// Creates a new deferral Poseidon2 chip configured for `max_trace_height` records. Each
     /// Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, and a buffer of that
     /// size is allocated.
-    pub fn new(max_trace_height: usize, sbox_registers: usize) -> Self {
+    pub fn new(max_trace_height: usize, sbox_registers: usize, ctx: DeviceContext) -> Self {
         let max_num_records = max_trace_height.next_power_of_two();
         let max_record_buf_size = max_num_records * (DIGEST_SIZE * 2);
 
-        let idx = Arc::new(DeviceBuffer::<u32>::with_capacity(1));
-        idx.fill_zero().unwrap();
+        let idx = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, &ctx));
+        idx.fill_zero_on(&ctx).unwrap();
 
         Self {
-            records: Arc::new(DeviceBuffer::<F>::with_capacity(max_record_buf_size)),
-            counts: Arc::new(DeviceBuffer::<DeferralPoseidon2Count>::with_capacity(
+            ctx: ctx.clone(),
+            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(max_record_buf_size, &ctx)),
+            counts: Arc::new(DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(
                 max_num_records,
+                &ctx,
             )),
             idx,
             sbox_registers,
@@ -66,13 +69,13 @@ impl DeferralPoseidon2ChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
     fn generate_proving_ctx(&self, _: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let mut num_records = self.idx.to_host().unwrap()[0] as usize;
+        let mut num_records = self.idx.to_host_on(&self.ctx).unwrap()[0] as usize;
         if num_records == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
 
         unsafe {
-            let d_num_records = [num_records].to_device().unwrap();
+            let d_num_records = [num_records].to_device_on(&self.ctx).unwrap();
             let mut temp_bytes = 0;
             poseidon2::deduplicate_records_get_temp_bytes(
                 &self.records,
@@ -80,14 +83,14 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 num_records,
                 &d_num_records,
                 &mut temp_bytes,
-                cudaStreamPerThread,
+                self.ctx.stream.as_raw(),
             )
             .expect("Failed to get deferral poseidon2 temp bytes");
 
             let d_temp_storage = if temp_bytes == 0 {
                 DeviceBuffer::<u8>::new()
             } else {
-                DeviceBuffer::<u8>::with_capacity(temp_bytes)
+                DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.ctx)
             };
 
             poseidon2::deduplicate_records(
@@ -97,15 +100,15 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 &d_num_records,
                 &d_temp_storage,
                 temp_bytes,
-                cudaStreamPerThread,
+                self.ctx.stream.as_raw(),
             )
             .expect("Failed to deduplicate deferral poseidon2 records");
 
-            num_records = *d_num_records.to_host().unwrap().first().unwrap();
+            num_records = *d_num_records.to_host_on(&self.ctx).unwrap().first().unwrap();
         }
 
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, Self::trace_width());
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
 
         unsafe {
             poseidon2::tracegen(
@@ -116,13 +119,13 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 &self.counts,
                 num_records,
                 self.sbox_registers,
-                cudaStreamPerThread,
+                self.ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral poseidon2 trace");
         }
 
         self.idx
-            .fill_zero()
+            .fill_zero_on(&self.ctx)
             .expect("Failed to reset deferral poseidon2 record index");
 
         AirProvingContext::simple_no_pis(trace)

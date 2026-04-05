@@ -10,7 +10,7 @@ use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
-    stream::cudaStreamPerThread,
+    stream::DeviceContext,
 };
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
@@ -23,6 +23,7 @@ use super::{
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
+    pub ctx: DeviceContext,
     pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
@@ -55,10 +56,15 @@ impl MemoryInventoryGPU {
         unsafe { std::mem::transmute::<F, u32>(value) }
     }
 
-    pub fn new(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
+    pub fn new(
+        config: MemoryConfig,
+        hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
+        ctx: DeviceContext,
+    ) -> Self {
         Self {
+            ctx: ctx.clone(),
             boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer()),
-            merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
+            merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone(), ctx),
             initial_memory: Vec::new(),
             merkle_records: None,
             #[cfg(feature = "metrics")]
@@ -188,7 +194,7 @@ impl MemoryInventoryGPU {
                     &d_flags,
                     in_num_records,
                     &mut temp_bytes,
-                    cudaStreamPerThread,
+                    self.ctx.stream.as_raw(),
                 )
                 .expect("merge_records_get_temp_bytes failed");
             }
@@ -209,7 +215,7 @@ impl MemoryInventoryGPU {
                     &d_temp_storage,
                     temp_bytes,
                     &d_out_num_records,
-                    cudaStreamPerThread,
+                    self.ctx.stream.as_raw(),
                 )
                 .expect("merge_records failed");
             }

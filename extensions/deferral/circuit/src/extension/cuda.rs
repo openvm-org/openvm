@@ -47,10 +47,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         let count = Arc::new(if num_deferral_circuits == 0 {
             DeviceBuffer::<u32>::new()
         } else {
-            DeviceBuffer::<u32>::with_capacity(num_deferral_circuits)
+            DeviceBuffer::<u32>::with_capacity_on(num_deferral_circuits, &range_checker.ctx)
         });
         if num_deferral_circuits > 0 {
-            count.fill_zero().unwrap();
+            count.fill_zero_on(&range_checker.ctx).unwrap();
         }
 
         inventory.next_air::<DeferralCircuitCountAir>()?;
@@ -66,7 +66,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
             .segmentation_config
             .limits
             .max_trace_height as usize;
-        let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(max_trace_height.max(1), 1));
+        let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(
+            max_trace_height.max(1),
+            1,
+            range_checker.ctx.clone(),
+        ));
         let poseidon2_shared = poseidon2_chip.shared_buffer();
         inventory.add_periphery_chip(poseidon2_chip);
 

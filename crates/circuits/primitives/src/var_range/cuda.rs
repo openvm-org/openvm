@@ -1,9 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{
-    copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-};
+use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::DeviceContext};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -13,6 +11,7 @@ use crate::{
 };
 
 pub struct VariableRangeCheckerChipGPU {
+    pub ctx: DeviceContext,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<VariableRangeCheckerChip>>,
 }
@@ -20,20 +19,22 @@ pub struct VariableRangeCheckerChipGPU {
 /// [value, bits] are in preprocessed trace
 /// generate_trace returns [count]
 impl VariableRangeCheckerChipGPU {
-    pub fn new(bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, ctx: DeviceContext) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
-        let count = Arc::new(DeviceBuffer::<F>::with_capacity(num_rows));
-        count.fill_zero().unwrap();
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(num_rows, &ctx));
+        count.fill_zero_on(&ctx).unwrap();
         Self {
+            ctx,
             count,
             cpu_chip: None,
         }
     }
 
-    pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>) -> Self {
-        let count = Arc::new(DeviceBuffer::<F>::with_capacity(cpu_chip.count.len()));
-        count.fill_zero().unwrap();
+    pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>, ctx: DeviceContext) -> Self {
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(cpu_chip.count.len(), &ctx));
+        count.fill_zero_on(&ctx).unwrap();
         Self {
+            ctx,
             count,
             cpu_chip: Some(cpu_chip),
         }
@@ -49,17 +50,18 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
                 .iter()
                 .map(|c| c.swap(0, Ordering::Relaxed))
                 .collect::<Vec<_>>()
-                .to_device()
+                .to_device_on(&self.ctx)
                 .unwrap()
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
         // `count` will be reused.
-        let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), NUM_VARIABLE_RANGE_COLS);
+        let trace =
+            DeviceMatrix::<F>::with_capacity_on(self.count.len(), NUM_VARIABLE_RANGE_COLS, &self.ctx);
         unsafe {
-            tracegen(&self.count, &cpu_count, trace.buffer(), cudaStreamPerThread).unwrap();
+            tracegen(&self.count, &cpu_count, trace.buffer(), self.ctx.stream.as_raw()).unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
-        self.count.fill_zero().unwrap();
+        self.count.fill_zero_on(&self.ctx).unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 

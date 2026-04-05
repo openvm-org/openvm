@@ -10,6 +10,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
@@ -38,6 +39,7 @@ impl SystemChipInventoryGPU {
         config: &SystemConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
+        ctx: DeviceContext,
     ) -> Self {
         let cpu_range_checker = range_checker.cpu_chip.clone().unwrap();
 
@@ -49,7 +51,7 @@ impl SystemChipInventoryGPU {
             config.memory_config.timestamp_max_bits,
         ));
 
-        let memory_inventory = MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip);
+        let memory_inventory = MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip, ctx);
 
         Self {
             program: program_chip,
