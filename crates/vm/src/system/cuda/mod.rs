@@ -45,13 +45,14 @@ impl SystemChipInventoryGPU {
 
         // We create an empty program chip: the program should be loaded later (and can be swapped
         // out). The execution frequencies are supplied only after execution.
-        let program_chip = ProgramChipGPU::new();
+        let program_chip = ProgramChipGPU::new(ctx.clone());
         let connector_chip = VmConnectorChipGPU::new(VmConnectorChip::new(
             cpu_range_checker.clone(),
             config.memory_config.timestamp_max_bits,
         ));
 
-        let memory_inventory = MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip, ctx);
+        let memory_inventory =
+            MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip, ctx.clone());
 
         Self {
             program: program_chip,

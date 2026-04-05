@@ -1,35 +1,44 @@
 use std::ops::Deref;
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
-use crate::{cuda::to_device_or_nullptr, primitives::cuda_abi::exp_bits_len_tracegen};
+use crate::{cuda::to_device_or_nullptr_on, primitives::cuda_abi::exp_bits_len_tracegen};
 
-#[derive(Debug, Default)]
-pub struct ExpBitsLenGpuTraceGenerator(pub ExpBitsLenCpuTraceGenerator);
+pub struct ExpBitsLenGpuTraceGenerator {
+    pub cpu: ExpBitsLenCpuTraceGenerator,
+    pub ctx: DeviceContext,
+}
 
 impl Deref for ExpBitsLenGpuTraceGenerator {
     type Target = ExpBitsLenCpuTraceGenerator;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.cpu
     }
 }
 
 impl ExpBitsLenGpuTraceGenerator {
+    pub fn new(ctx: DeviceContext) -> Self {
+        Self {
+            cpu: ExpBitsLenCpuTraceGenerator::default(),
+            ctx,
+        }
+    }
+
     pub fn generate_trace_row_major(
         self,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        self.0.generate_trace_row_major(required_height)
+        self.cpu.generate_trace_row_major(required_height)
     }
 
     #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
     pub fn generate_trace_device(self, required_height: Option<usize>) -> Option<DeviceMatrix<F>> {
         let mem = MemTracker::start("tracegen.exp_bits_len");
-        let records = self.0.requests.into_inner().unwrap();
+        let records = self.cpu.requests.into_inner().unwrap();
         let num_valid_rows = records.last().map(|record| record.end_row()).unwrap_or(0);
         let height = if let Some(height) = required_height {
             if height < num_valid_rows {
@@ -41,10 +50,10 @@ impl ExpBitsLenGpuTraceGenerator {
         };
         let width = ExpBitsLenCols::<u8>::width();
 
-        let trace = DeviceMatrix::with_capacity(height, width);
-        trace.buffer().fill_zero().unwrap();
+        let trace = DeviceMatrix::with_capacity_on(height, width, &self.ctx);
+        trace.buffer().fill_zero_on(&self.ctx).unwrap();
 
-        let records = to_device_or_nullptr(&records).unwrap();
+        let records = to_device_or_nullptr_on(&records, &self.ctx).unwrap();
         unsafe {
             exp_bits_len_tracegen(
                 &records,
@@ -52,12 +61,18 @@ impl ExpBitsLenGpuTraceGenerator {
                 trace.buffer(),
                 height,
                 num_valid_rows,
-                cudaStreamPerThread,
+                self.ctx.stream.as_raw(),
             )
             .unwrap();
         }
 
         mem.emit_metrics();
         Some(trace)
+    }
+}
+
+impl Default for ExpBitsLenGpuTraceGenerator {
+    fn default() -> Self {
+        Self::new(crate::cuda::temp_device_ctx())
     }
 }

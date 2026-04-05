@@ -92,13 +92,18 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 self.ctx.stream.as_raw(),
             )
             .expect("Failed to deduplicate records");
-            num_records = *d_num_records.to_host_on(&self.ctx).unwrap().first().unwrap();
+            num_records = *d_num_records
+                .to_host_on(&self.ctx)
+                .unwrap()
+                .first()
+                .unwrap();
         }
         #[cfg(feature = "metrics")]
         self.current_trace_height
             .store(num_records, std::sync::atomic::Ordering::Relaxed);
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
+        let trace =
+            DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
         unsafe {
             poseidon2::tracegen(
                 trace.buffer(),

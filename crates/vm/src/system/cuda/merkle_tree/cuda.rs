@@ -2,7 +2,10 @@
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{
-    copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t,
+    copy::MemCopyH2D,
+    d_buffer::DeviceBuffer,
+    error::CudaError,
+    stream::{cudaStream_t, DeviceContext},
 };
 
 use super::{SharedBuffer, DIGEST_WIDTH, MERKLE_TOUCHED_BLOCK_WIDTH};
@@ -142,14 +145,15 @@ pub mod merkle_tree {
         actual_heights: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
+        ctx: &DeviceContext,
     ) -> Result<(), CudaError> {
         let num_leaves = touched_blocks.len() / MERKLE_TOUCHED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
-        let tmp_buffer = DeviceBuffer::<u32>::with_capacity(5 * num_leaves);
+        let tmp_buffer = DeviceBuffer::<u32>::with_capacity_on(5 * num_leaves, ctx);
         let mut need_tmp_storage_bytes = 0;
         get_prefix_scan_temp_bytes(&tmp_buffer, num_leaves, &mut need_tmp_storage_bytes)?;
-        let tmp_storage = DeviceBuffer::<u8>::with_capacity(need_tmp_storage_bytes);
-        let actual_heights = actual_heights.to_device().unwrap();
+        let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, ctx);
+        let actual_heights = actual_heights.to_device_on(ctx).unwrap();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
             touched_blocks.as_mut_ptr(),

@@ -1,5 +1,5 @@
 use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
 pub struct PublicValuesGpuTraceGenerator;
 
 impl ModuleChip<GpuBackend> for PublicValuesGpuTraceGenerator {
-    type Ctx<'a> = (&'a [ProofGpu], &'a [PreflightGpu]);
+    type Ctx<'a> = (&'a [ProofGpu], &'a [PreflightGpu], &'a DeviceContext);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_proving_ctx(
@@ -19,7 +19,7 @@ impl ModuleChip<GpuBackend> for PublicValuesGpuTraceGenerator {
         ctx: &Self::Ctx<'_>,
         height: Option<usize>,
     ) -> Option<AirProvingContext<GpuBackend>> {
-        let (proofs_gpu, preflights_gpu) = ctx;
+        let (proofs_gpu, preflights_gpu, device_ctx) = ctx;
         let mem = MemTracker::start("tracegen.public_values");
         debug_assert_eq!(proofs_gpu.len(), preflights_gpu.len());
 
@@ -38,7 +38,7 @@ impl ModuleChip<GpuBackend> for PublicValuesGpuTraceGenerator {
             num_valid_rows.next_power_of_two()
         };
         let width = PublicValuesCols::<u8>::width();
-        let trace = DeviceMatrix::with_capacity(height, width);
+        let trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         let pvs_data = proofs_gpu
             .iter()
@@ -57,7 +57,7 @@ impl ModuleChip<GpuBackend> for PublicValuesGpuTraceGenerator {
                 pvs_tidx,
                 proofs_gpu.len(),
                 num_pvs,
-                cudaStreamPerThread,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

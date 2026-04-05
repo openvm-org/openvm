@@ -424,7 +424,7 @@ mod cuda_tracegen {
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
-        stream::cudaStreamPerThread,
+        stream::DeviceContext,
     };
     use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -460,10 +460,15 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            external_poseidon2_inputs: &(&Vec<[F; POSEIDON2_WIDTH]>, &Vec<[F; POSEIDON2_WIDTH]>),
+            external_poseidon2_inputs: &(
+                &Vec<[F; POSEIDON2_WIDTH]>,
+                &Vec<[F; POSEIDON2_WIDTH]>,
+                &DeviceContext,
+            ),
         ) -> Self {
             let external_poseidon2_permute_inputs = external_poseidon2_inputs.0;
             let external_poseidon2_compress_inputs = external_poseidon2_inputs.1;
+            let device_ctx = external_poseidon2_inputs.2;
             let poseidon2_perm_inputs = preflights
                 .iter()
                 .flat_map(|preflight| preflight.cpu.poseidon2_perm_inputs.clone())
@@ -489,15 +494,16 @@ mod cuda_tracegen {
                 TranscriptAirBlob::new(preflights, (num_prefix_perms + num_compress_inputs) as u32);
             let num_suffix_perms = transcript_air_blob.num_poseidon2_perms;
 
-            let mut poseidon2_buffer = DeviceBuffer::with_capacity(
+            let mut poseidon2_buffer = DeviceBuffer::with_capacity_on(
                 (num_prefix_perms + num_compress_inputs + num_suffix_perms) * POSEIDON2_WIDTH,
+                device_ctx,
             );
             poseidon2_perm_inputs
                 .into_iter()
                 .flatten()
                 .chain(poseidon2_compress_inputs.into_iter().flatten())
                 .collect_vec()
-                .copy_to(&mut poseidon2_buffer)
+                .copy_to_on(&mut poseidon2_buffer, device_ctx)
                 .unwrap();
 
             Self {
@@ -512,7 +518,11 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for TranscriptModule {
-        type ModuleSpecificCtx<'a> = (&'a Vec<[F; POSEIDON2_WIDTH]>, &'a Vec<[F; POSEIDON2_WIDTH]>);
+        type ModuleSpecificCtx<'a> = (
+            &'a Vec<[F; POSEIDON2_WIDTH]>,
+            &'a Vec<[F; POSEIDON2_WIDTH]>,
+            &'a openvm_cuda_common::stream::DeviceContext,
+        );
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -523,6 +533,7 @@ mod cuda_tracegen {
             ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
+            let device_ctx = ctx.2;
             let (required_transcript, required_poseidon2, required_merkle_verify) =
                 if let Some(heights) = required_heights {
                     if heights.len() != 3 {
@@ -535,11 +546,16 @@ mod cuda_tracegen {
             let blob = TranscriptBlob::new(child_vk, proofs, preflights, ctx);
 
             let merkle_trace = tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify")
-                .in_scope(|| merkle_verify::cuda::generate_trace(&blob, required_merkle_verify))?;
-            let transcript_trace =
-                tracing::trace_span!("wrapper.generate_trace", air = "Transcript").in_scope(
-                    || transcript::cuda::generate_trace(preflights, &blob, required_transcript),
-                )?;
+                .in_scope(|| {
+                    merkle_verify::cuda::generate_trace(&blob, device_ctx, required_merkle_verify)
+                })?;
+            let transcript_trace = tracing::trace_span!(
+                "wrapper.generate_trace",
+                air = "Transcript"
+            )
+            .in_scope(|| {
+                transcript::cuda::generate_trace(preflights, &blob, device_ctx, required_transcript)
+            })?;
             let poseidon_trace = trace_span!("wrapper.generate_trace", air = "Poseidon2")
                 .in_scope(|| {
                     trace_span!("generate_trace").in_scope(|| {
@@ -551,13 +567,16 @@ mod cuda_tracegen {
                         let d_counts = if total_poseidon2_inputs == 0 {
                             DeviceBuffer::<Poseidon2Count>::new()
                         } else {
-                            DeviceBuffer::<Poseidon2Count>::with_capacity(total_poseidon2_inputs)
+                            DeviceBuffer::<Poseidon2Count>::with_capacity_on(
+                                total_poseidon2_inputs,
+                                device_ctx,
+                            )
                         };
 
                         let mut num_records = total_poseidon2_inputs;
                         if num_records > 0 {
                             unsafe {
-                                let d_num_records = [num_records].to_device().unwrap();
+                                let d_num_records = [num_records].to_device_on(device_ctx).unwrap();
                                 let mut temp_bytes = 0;
                                 cuda_abi::poseidon2_deduplicate_records_get_temp_bytes(
                                     &blob.poseidon2_buffer,
@@ -565,13 +584,13 @@ mod cuda_tracegen {
                                     num_records,
                                     &d_num_records,
                                     &mut temp_bytes,
-                                    cudaStreamPerThread,
+                                    device_ctx.stream.as_raw(),
                                 )
                                 .unwrap();
                                 let d_temp_storage = if temp_bytes == 0 {
                                     DeviceBuffer::<u8>::new()
                                 } else {
-                                    DeviceBuffer::<u8>::with_capacity(temp_bytes)
+                                    DeviceBuffer::<u8>::with_capacity_on(temp_bytes, device_ctx)
                                 };
                                 cuda_abi::poseidon2_deduplicate_records(
                                     &blob.poseidon2_buffer,
@@ -583,10 +602,14 @@ mod cuda_tracegen {
                                     blob.num_suffix_perms,
                                     &d_temp_storage,
                                     temp_bytes,
-                                    cudaStreamPerThread,
+                                    device_ctx.stream.as_raw(),
                                 )
                                 .unwrap();
-                                num_records = *d_num_records.to_host().unwrap().first().unwrap();
+                                num_records = *d_num_records
+                                    .to_host_on(device_ctx)
+                                    .unwrap()
+                                    .first()
+                                    .unwrap();
                             }
                         }
                         let poseidon2_num_rows = if let Some(height) = required_poseidon2 {
@@ -599,8 +622,11 @@ mod cuda_tracegen {
                         } else {
                             num_records.next_power_of_two()
                         };
-                        let poseidon_trace_gpu =
-                            DeviceMatrix::<F>::with_capacity(poseidon2_num_rows, poseidon2_width);
+                        let poseidon_trace_gpu = DeviceMatrix::<F>::with_capacity_on(
+                            poseidon2_num_rows,
+                            poseidon2_width,
+                            device_ctx,
+                        );
                         unsafe {
                             cuda_abi::poseidon2_tracegen(
                                 poseidon_trace_gpu.buffer(),
@@ -610,7 +636,7 @@ mod cuda_tracegen {
                                 &d_counts,
                                 num_records,
                                 SBOX_REGISTERS,
-                                cudaStreamPerThread,
+                                device_ctx.stream.as_raw(),
                             )
                             .unwrap();
                         }

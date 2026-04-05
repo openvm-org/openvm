@@ -1,4 +1,10 @@
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::MemCopyError};
+use openvm_cuda_common::{
+    common::get_device,
+    copy::MemCopyH2D,
+    d_buffer::DeviceBuffer,
+    error::MemCopyError,
+    stream::{CudaStream, DeviceContext, StreamGuard},
+};
 
 use crate::{
     cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
@@ -19,10 +25,20 @@ impl GlobalTraceGenCtx for GlobalCtxGpu {
     type PreflightRecords = [PreflightGpu];
 }
 
-pub fn to_device_or_nullptr<T>(h2d: &[T]) -> Result<DeviceBuffer<T>, MemCopyError> {
+pub fn temp_device_ctx() -> DeviceContext {
+    DeviceContext {
+        device_id: get_device().unwrap() as u32,
+        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+    }
+}
+
+pub fn to_device_or_nullptr_on<T>(
+    h2d: &[T],
+    ctx: &DeviceContext,
+) -> Result<DeviceBuffer<T>, MemCopyError> {
     if h2d.is_empty() {
         Ok(DeviceBuffer::new())
     } else {
-        h2d.to_device()
+        h2d.to_device_on(ctx)
     }
 }

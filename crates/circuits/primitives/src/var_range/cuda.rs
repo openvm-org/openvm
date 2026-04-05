@@ -31,7 +31,10 @@ impl VariableRangeCheckerChipGPU {
     }
 
     pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>, ctx: DeviceContext) -> Self {
-        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(cpu_chip.count.len(), &ctx));
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
+            cpu_chip.count.len(),
+            &ctx,
+        ));
         count.fill_zero_on(&ctx).unwrap();
         Self {
             ctx,
@@ -55,10 +58,19 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
         // `count` will be reused.
-        let trace =
-            DeviceMatrix::<F>::with_capacity_on(self.count.len(), NUM_VARIABLE_RANGE_COLS, &self.ctx);
+        let trace = DeviceMatrix::<F>::with_capacity_on(
+            self.count.len(),
+            NUM_VARIABLE_RANGE_COLS,
+            &self.ctx,
+        );
         unsafe {
-            tracegen(&self.count, &cpu_count, trace.buffer(), self.ctx.stream.as_raw()).unwrap();
+            tracegen(
+                &self.count,
+                &cpu_count,
+                trace.buffer(),
+                self.ctx.stream.as_raw(),
+            )
+            .unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
         self.count.fill_zero_on(&self.ctx).unwrap();

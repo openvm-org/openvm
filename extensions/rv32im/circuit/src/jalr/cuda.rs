@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -32,9 +32,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32JalrChipGpu {
 
         let trace_width = Rv32JalrCoreCols::<F>::width() + Rv32JalrAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             tracegen(
@@ -45,7 +46,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32JalrChipGpu {
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }

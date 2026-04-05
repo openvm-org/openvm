@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -56,12 +56,13 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 offsets.push(OffsetInfo::new(prev_offset as u32, idx));
             }
         }
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_record_offsets = offsets.to_device().unwrap();
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_record_offsets = offsets.to_device_on(ctx).unwrap();
 
         let trace_height = next_power_of_two_or_zero(offsets.len());
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, width);
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, width, ctx);
 
         unsafe {
             tracegen(
@@ -75,7 +76,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }

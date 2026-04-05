@@ -651,10 +651,7 @@ impl RowMajorChip<F> for GkrModuleChip {
 mod cuda_tracegen {
     use itertools::Itertools;
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
-    use openvm_cuda_common::{
-        common::get_device,
-        stream::{CudaStream, DeviceContext, StreamGuard},
-    };
+    use openvm_cuda_common::stream::DeviceContext;
     use openvm_stark_backend::{p3_maybe_rayon::prelude::*, prover::AirProvingContext};
 
     use super::*;
@@ -662,15 +659,8 @@ mod cuda_tracegen {
         preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu,
     };
 
-    fn ptds_ctx() -> DeviceContext {
-        DeviceContext {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::ptds()),
-        }
-    }
-
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for GkrModule {
-        type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+        type ModuleSpecificCtx<'a> = (&'a ExpBitsLenTraceGenerator, &'a DeviceContext);
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -678,9 +668,11 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+            module_ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
+            let exp_bits_len_gen = module_ctx.0;
+            let ctx = module_ctx.1;
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()
@@ -713,7 +705,6 @@ mod cuda_tracegen {
                 .collect();
 
             // Phase 2: H2D transfer serially on main thread
-            let ctx = ptds_ctx();
             cpu_traces
                 .into_iter()
                 .map(|trace| {

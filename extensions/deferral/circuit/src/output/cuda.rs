@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -112,11 +112,12 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
         let rows_used = per_row.len();
         let trace_height = next_power_of_two_or_zero(rows_used);
         let trace_width = DeferralOutputCols::<F>::width();
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let ctx = &self.range_checker.ctx;
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
-        let d_raw_records = records.to_device().unwrap();
-        let d_per_call = per_call.to_device().unwrap();
-        let d_per_row = per_row.to_device().unwrap();
+        let d_raw_records = records.to_device_on(ctx).unwrap();
+        let d_per_call = per_call.to_device_on(ctx).unwrap();
+        let d_per_row = per_row.to_device_on(ctx).unwrap();
 
         unsafe {
             output::tracegen(
@@ -139,7 +140,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 &self.poseidon2.idx,
                 // Length in F elements; the CUDA side converts to record count.
                 self.poseidon2.records.len(),
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral output trace");
         }

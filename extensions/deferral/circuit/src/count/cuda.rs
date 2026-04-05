@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::DeviceContext};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{count::DeferralCircuitCountCols, cuda_abi::count};
@@ -13,6 +13,7 @@ use crate::{count::DeferralCircuitCountCols, cuda_abi::count};
 pub struct DeferralCircuitCountChipGpu {
     pub count: Arc<DeviceBuffer<u32>>,
     pub num_deferral_circuits: usize,
+    pub ctx: DeviceContext,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
@@ -27,7 +28,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
 
         let trace_width = DeferralCircuitCountCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(self.num_deferral_circuits);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, &self.ctx);
 
         unsafe {
             count::tracegen(
@@ -35,13 +36,13 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
                 trace_height,
                 &self.count,
                 self.num_deferral_circuits,
-                cudaStreamPerThread,
+                self.ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral count trace");
         }
 
         self.count
-            .fill_zero()
+            .fill_zero_on(&self.ctx)
             .expect("Failed to reset deferral count");
         AirProvingContext::simple_no_pis(trace)
     }

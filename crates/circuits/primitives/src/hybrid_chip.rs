@@ -13,10 +13,10 @@ use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix};
 
 use crate::Chip;
 
-fn ptds_ctx() -> DeviceContext {
+fn temp_device_ctx() -> DeviceContext {
     DeviceContext {
         device_id: get_device().unwrap() as u32,
-        stream: StreamGuard::new(CudaStream::ptds()),
+        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     }
 }
 
@@ -58,7 +58,7 @@ pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
         "CPU to GPU transfer of cached traces not supported"
     );
     let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
-    let ctx = ptds_ctx();
+    let ctx = temp_device_ctx();
     let trace = transport_matrix_h2d_col_major(&cm, &ctx).unwrap();
     AirProvingContext {
         cached_mains: vec![],

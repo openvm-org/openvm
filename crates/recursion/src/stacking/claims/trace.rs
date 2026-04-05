@@ -164,9 +164,7 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -193,6 +191,7 @@ pub(crate) mod cuda {
         ) -> Option<openvm_stark_backend::prover::AirProvingContext<GpuBackend>> {
             let proofs_gpu = ctx.0.proofs;
             let preflights_gpu = ctx.0.preflights;
+            let device_ctx = ctx.0.ctx;
             let blob = ctx.1;
             let w_stack = ctx.0.vk.system_params.w_stack;
 
@@ -226,7 +225,7 @@ pub(crate) mod cuda {
                     );
                     row_bounds.push(((proof_idx + 1) * w_stack) as u32);
 
-                    claims.to_device().unwrap()
+                    claims.to_device_on(device_ctx).unwrap()
                 })
                 .collect_vec();
 
@@ -238,7 +237,7 @@ pub(crate) mod cuda {
                     mu.powers()
                         .take(claims[proof_idx].len())
                         .collect_vec()
-                        .to_device()
+                        .to_device_on(device_ctx)
                         .unwrap()
                 })
                 .collect_vec();
@@ -253,7 +252,7 @@ pub(crate) mod cuda {
                 minimum_height.next_power_of_two()
             };
             let width = StackingClaimsCols::<usize>::width();
-            let d_trace = DeviceMatrix::with_capacity(height, width);
+            let d_trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
             let d_claims = claims.iter().map(|buf| buf.as_ptr()).collect_vec();
             let d_coeffs = blob.coeffs.iter().map(|buf| buf.as_ptr()).collect_vec();
@@ -269,17 +268,17 @@ pub(crate) mod cuda {
                     mu_pow_sample: preflight.cpu.stacking.mu_pow_sample,
                 })
                 .collect_vec()
-                .to_device()
+                .to_device_on(device_ctx)
                 .unwrap();
 
             unsafe {
                 let temp_bytes = stacking_claims_tracegen_temp_bytes(
                     d_trace.buffer(),
                     height,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
-                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity_on(temp_bytes, device_ctx);
                 stacking_claims_tracegen(
                     d_trace.buffer(),
                     height,
@@ -292,7 +291,7 @@ pub(crate) mod cuda {
                     proofs_gpu.len() as u32,
                     &d_temp_buffer,
                     temp_bytes,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

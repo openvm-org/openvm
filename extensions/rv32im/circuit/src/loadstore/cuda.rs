@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -37,9 +37,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
             + LoadStoreCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(padded_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, ctx);
 
         unsafe {
             tracegen(
@@ -50,7 +51,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }

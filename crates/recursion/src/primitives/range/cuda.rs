@@ -1,26 +1,23 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{
-    copy::cuda_memcpy, memory_manager::MemTracker, stream::cudaStreamPerThread,
-};
+use openvm_cuda_common::{copy::cuda_memcpy_on, memory_manager::MemTracker, stream::DeviceContext};
 
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};
 
-#[derive(Debug)]
 pub struct RangeCheckerGpuTraceGenerator<const NUM_BITS: usize> {
     trace: DeviceMatrix<F>,
-}
-
-impl<const NUM_BITS: usize> Default for RangeCheckerGpuTraceGenerator<NUM_BITS> {
-    fn default() -> Self {
-        let trace = DeviceMatrix::with_capacity(1 << NUM_BITS, RangeCheckerCols::<u8>::width());
-        trace.buffer().fill_zero().unwrap();
-        Self { trace }
-    }
+    ctx: DeviceContext,
 }
 
 impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
-    pub fn from_vals(vals: &[usize]) -> Self {
-        let res = Self::default();
+    pub fn new(ctx: DeviceContext) -> Self {
+        let trace =
+            DeviceMatrix::with_capacity_on(1 << NUM_BITS, RangeCheckerCols::<u8>::width(), &ctx);
+        trace.buffer().fill_zero_on(&ctx).unwrap();
+        Self { trace, ctx }
+    }
+
+    pub fn from_vals(vals: &[usize], ctx: DeviceContext) -> Self {
+        let res = Self::new(ctx);
         if vals.is_empty() {
             return res;
         }
@@ -31,10 +28,11 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
         }
 
         unsafe {
-            cuda_memcpy::<false, true>(
+            cuda_memcpy_on::<false, true>(
                 res.count_mut_ptr().cast(),
                 count.as_ptr().cast(),
                 std::mem::size_of_val(count.as_slice()),
+                &res.ctx,
             )
             .unwrap();
         }
@@ -56,7 +54,7 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
                 self.count_ptr(),
                 self.trace.buffer(),
                 NUM_BITS,
-                cudaStreamPerThread,
+                self.ctx.stream.as_raw(),
             )
             .unwrap();
         }

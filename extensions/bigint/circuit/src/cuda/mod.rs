@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord, Rv32VecHeapBranchAdapterCols,
     Rv32VecHeapBranchAdapterRecord,
@@ -66,9 +66,10 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
                 DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             cuda_abi::alu256::tracegen(
@@ -80,7 +81,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -117,9 +118,10 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
         let trace_width = BranchEqualCoreCols::<F, INT256_NUM_LIMBS>::width()
             + Rv32VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             cuda_abi::beq256::tracegen(
@@ -131,7 +133,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -179,9 +181,10 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
                 DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             cuda_abi::lt256::tracegen(
@@ -193,7 +196,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -230,9 +233,10 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
         let trace_width = BranchLessThanCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
             + Rv32VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             cuda_abi::blt256::tracegen(
@@ -244,7 +248,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -292,9 +296,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
                 DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             cuda_abi::shift256::tracegen(
@@ -306,7 +311,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -356,9 +361,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
                 DEFAULT_BLOCK_SIZE,
             >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         let sizes = self.range_tuple_checker.sizes;
         let d_sizes = UInt2 {
@@ -377,7 +383,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
                 d_sizes,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }

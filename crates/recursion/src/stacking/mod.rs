@@ -342,12 +342,7 @@ mod cuda_tracegen {
     use openvm_cuda_backend::{
         data_transporter::transport_matrix_h2d_row, prelude::EF, GpuBackend,
     };
-    use openvm_cuda_common::{
-        common::get_device,
-        copy::MemCopyH2D,
-        d_buffer::DeviceBuffer,
-        stream::{CudaStream, DeviceContext, StreamGuard, cudaStreamPerThread},
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
@@ -363,13 +358,6 @@ mod cuda_tracegen {
         },
         tracegen::{cuda::StandardTracegenGpuCtx, RowMajorChip, StandardTracegenCtx},
     };
-
-    fn ptds_ctx() -> DeviceContext {
-        DeviceContext {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::ptds()),
-        }
-    }
 
     impl ModuleChip<GpuBackend> for StackingModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
@@ -387,7 +375,6 @@ mod cuda_tracegen {
                     StackingClaimsTraceGeneratorGpu.generate_proving_ctx(ctx, required_height)
                 }
                 _ => {
-                    let transport_ctx = ptds_ctx();
                     let proofs_cpu = ctx.0.proofs.iter().map(|p| &p.cpu).collect_vec();
                     let preflights_cpu = ctx.0.preflights.iter().map(|p| &p.cpu).collect_vec();
                     let cpu_ctx = StandardTracegenCtx {
@@ -398,7 +385,7 @@ mod cuda_tracegen {
                     let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
                     trace.map(|m| {
                         AirProvingContext::simple_no_pis(
-                            transport_matrix_h2d_row(&m, &transport_ctx).unwrap(),
+                            transport_matrix_h2d_row(&m, ctx.0.ctx).unwrap(),
                         )
                     })
                 }
@@ -417,6 +404,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            ctx: &DeviceContext,
         ) -> Self {
             let l_skip = child_vk.system_params.l_skip as u32;
             let n_stack = child_vk.system_params.n_stack as u32;
@@ -493,11 +481,11 @@ mod cuda_tracegen {
                     })
                     .collect_vec();
 
-                let d_slice_offsets = slice_offsets.to_device().unwrap();
-                let d_stacked_trace_data = stacked_trace_data.to_device().unwrap();
+                let d_slice_offsets = slice_offsets.to_device_on(ctx).unwrap();
+                let d_stacked_trace_data = stacked_trace_data.to_device_on(ctx).unwrap();
 
                 let d_slice_data =
-                    DeviceBuffer::<StackedSliceData>::with_capacity(num_slices as usize);
+                    DeviceBuffer::<StackedSliceData>::with_capacity_on(num_slices as usize, ctx);
 
                 unsafe {
                     stacked_slice_data(
@@ -509,7 +497,7 @@ mod cuda_tracegen {
                         num_slices,
                         n_stack,
                         l_skip,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
@@ -521,14 +509,15 @@ mod cuda_tracegen {
                     .powers()
                     .take((num_slices << 1) as usize)
                     .collect_vec()
-                    .to_device()
+                    .to_device_on(ctx)
                     .unwrap();
 
-                let d_coeff_terms = DeviceBuffer::<EF>::with_capacity(num_slices as usize);
-                let d_coeff_term_keys = DeviceBuffer::<u64>::with_capacity(num_slices as usize);
+                let d_coeff_terms = DeviceBuffer::<EF>::with_capacity_on(num_slices as usize, ctx);
+                let d_coeff_term_keys =
+                    DeviceBuffer::<u64>::with_capacity_on(num_slices as usize, ctx);
                 let d_precomps =
-                    DeviceBuffer::<PolyPrecomputation>::with_capacity(num_slices as usize);
-                let d_num_coeffs = DeviceBuffer::<usize>::with_capacity(1);
+                    DeviceBuffer::<PolyPrecomputation>::with_capacity_on(num_slices as usize, ctx);
+                let d_num_coeffs = DeviceBuffer::<usize>::with_capacity_on(1, ctx);
 
                 let num_claims = proof
                     .cpu
@@ -536,8 +525,8 @@ mod cuda_tracegen {
                     .stacking_openings
                     .iter()
                     .fold(0, |acc, v| acc + v.len());
-                let d_coeffs = DeviceBuffer::<EF>::with_capacity(num_claims);
-                let d_coeff_keys = DeviceBuffer::<u64>::with_capacity(num_claims);
+                let d_coeffs = DeviceBuffer::<EF>::with_capacity_on(num_claims, ctx);
+                let d_coeff_keys = DeviceBuffer::<u64>::with_capacity_on(num_claims, ctx);
 
                 unsafe {
                     let temp_bytes = compute_coefficients_temp_bytes(
@@ -547,10 +536,10 @@ mod cuda_tracegen {
                         &d_coeff_keys,
                         num_slices,
                         &d_num_coeffs,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
-                    let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                    let d_temp_buffer = DeviceBuffer::<u8>::with_capacity_on(temp_bytes, ctx);
                     compute_coefficients(
                         &d_coeff_terms,
                         &d_coeff_term_keys,
@@ -568,7 +557,7 @@ mod cuda_tracegen {
                         &d_temp_buffer,
                         temp_bytes,
                         &d_num_coeffs,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
@@ -587,7 +576,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for StackingModule {
-        type ModuleSpecificCtx<'a> = ();
+        type ModuleSpecificCtx<'a> = &'a openvm_cuda_common::stream::DeviceContext;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -595,15 +584,16 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            _module_ctx: &(),
+            device_ctx: &&openvm_cuda_common::stream::DeviceContext,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
-            let blob = StackingBlob::new(child_vk, proofs, preflights);
+            let blob = StackingBlob::new(child_vk, proofs, preflights, device_ctx);
             let ctx = (
                 StandardTracegenGpuCtx {
                     vk: child_vk,
                     proofs,
                     preflights,
+                    ctx: device_ctx,
                 },
                 &blob,
             );
@@ -658,7 +648,6 @@ mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
-            let transport_ctx = ptds_ctx();
             let indexed_cpu_gpu_ctxs = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
@@ -666,7 +655,7 @@ mod cuda_tracegen {
                         idx,
                         trace.map(|m| {
                             AirProvingContext::simple_no_pis(
-                                transport_matrix_h2d_row(&m, &transport_ctx).unwrap(),
+                                transport_matrix_h2d_row(&m, device_ctx).unwrap(),
                             )
                         }),
                     )

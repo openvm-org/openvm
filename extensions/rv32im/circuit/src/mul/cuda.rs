@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -44,9 +44,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
 
         let tuple_checker_sizes = self.range_tuple_checker.sizes;
         let tuple_checker_sizes = UInt2::new(tuple_checker_sizes[0], tuple_checker_sizes[1]);
+        let ctx = &self.range_checker.ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         unsafe {
             tracegen(
@@ -58,7 +59,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
                 self.timestamp_max_bits as u32,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }

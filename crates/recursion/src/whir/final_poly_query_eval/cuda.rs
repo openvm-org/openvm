@@ -1,10 +1,10 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 
 use super::{compute_round_offsets, FinalPolyQueryEvalCols, FinalPolyQueryEvalRecord};
 use crate::{
-    cuda::{preflight::PreflightGpu, to_device_or_nullptr},
+    cuda::{preflight::PreflightGpu, to_device_or_nullptr_on},
     tracegen::ModuleChip,
     whir::{cuda_abi::final_poly_query_eval_tracegen, num_queries_per_round},
 };
@@ -13,6 +13,7 @@ pub(in crate::whir) struct FinalPolyQueryEvalGpuCtx<'a> {
     pub records: &'a [FinalPolyQueryEvalRecord],
     pub params: &'a SystemParams,
     pub preflights: &'a [PreflightGpu],
+    pub ctx: &'a DeviceContext,
 }
 
 pub(in crate::whir) struct FinalPolyQueryEvalGpuTraceGenerator;
@@ -29,6 +30,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
         let records = ctx.records;
         let params = ctx.params;
         let preflights = ctx.preflights;
+        let device_ctx = ctx.ctx;
 
         let mem = MemTracker::start("tracegen.whir_final_poly_query_eval");
         let num_valid_rows = records.len();
@@ -41,7 +43,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
             num_valid_rows.next_power_of_two()
         };
         let width = FinalPolyQueryEvalCols::<F>::width();
-        let trace_d = DeviceMatrix::with_capacity(height, width);
+        let trace_d = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         let num_queries_per_round = num_queries_per_round(params);
         let final_poly_len = 1usize << params.log_final_poly_len();
@@ -54,14 +56,15 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
         let rows_per_proof = *round_offsets
             .last()
             .expect("round offsets vector must include sentinel");
-        let round_offsets_d = to_device_or_nullptr(&round_offsets).unwrap();
-        let num_queries_per_round_d = to_device_or_nullptr(&num_queries_per_round).unwrap();
+        let round_offsets_d = to_device_or_nullptr_on(&round_offsets, device_ctx).unwrap();
+        let num_queries_per_round_d =
+            to_device_or_nullptr_on(&num_queries_per_round, device_ctx).unwrap();
         let gammas_host = preflights
             .iter()
             .flat_map(|preflight| preflight.cpu.whir.gammas.iter().copied())
             .collect::<Vec<_>>();
-        let gammas_d = to_device_or_nullptr(&gammas_host).unwrap();
-        let records_d = to_device_or_nullptr(records).unwrap();
+        let gammas_d = to_device_or_nullptr_on(&gammas_host, device_ctx).unwrap();
+        let records_d = to_device_or_nullptr_on(records, device_ctx).unwrap();
 
         unsafe {
             final_poly_query_eval_tracegen(
@@ -75,7 +78,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
                 &round_offsets_d,
                 params.log_final_poly_len(),
                 &num_queries_per_round_d,
-                cudaStreamPerThread,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

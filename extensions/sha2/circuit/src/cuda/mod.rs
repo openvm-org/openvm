@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha512Config};
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -76,10 +76,11 @@ where
 
         let num_records = record_offsets.len();
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::MAIN_CHIP_WIDTH);
+        let ctx = &self.range_checker.ctx;
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, C::MAIN_CHIP_WIDTH, ctx);
 
-        let d_records = records.to_device().unwrap();
-        let d_record_offsets = record_offsets.to_device().unwrap();
+        let d_records = records.to_device_on(ctx).unwrap();
+        let d_record_offsets = record_offsets.to_device_on(ctx).unwrap();
 
         unsafe {
             match C::VARIANT {
@@ -95,7 +96,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
@@ -111,7 +112,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
@@ -164,7 +165,8 @@ where
 
         let rows_used = num_records * C::ROWS_PER_BLOCK;
         let trace_height = next_power_of_two_or_zero(rows_used);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
+        let ctx = &self.range_checker.ctx;
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, C::BLOCK_HASHER_WIDTH, ctx);
 
         // one record per block, right now
         let num_blocks: u32 = num_records as u32;
@@ -173,15 +175,17 @@ where
         unsafe {
             match C::VARIANT {
                 Sha2Variant::Sha256 => {
-                    let d_prev_hashes =
-                        DeviceBuffer::<u32>::with_capacity(num_blocks as usize * C::HASH_WORDS);
+                    let d_prev_hashes = DeviceBuffer::<u32>::with_capacity_on(
+                        num_blocks as usize * C::HASH_WORDS,
+                        ctx,
+                    );
                     cuda_abi::sha256::sha256_hash_computation(
                         &d_records,
                         num_records,
                         &d_record_offsets,
                         &d_prev_hashes,
                         num_blocks,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
 
@@ -198,7 +202,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
 
@@ -207,27 +211,29 @@ where
                         trace_height,
                         rows_used,
                         &d_prev_hashes,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                     cuda_abi::sha256::sha256_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
                         rows_used,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
                 Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
-                    let d_prev_hashes =
-                        DeviceBuffer::<u64>::with_capacity(num_blocks as usize * C::HASH_WORDS);
+                    let d_prev_hashes = DeviceBuffer::<u64>::with_capacity_on(
+                        num_blocks as usize * C::HASH_WORDS,
+                        ctx,
+                    );
                     cuda_abi::sha512::sha512_hash_computation(
                         &d_records,
                         num_records,
                         &d_record_offsets,
                         &d_prev_hashes,
                         num_blocks,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
 
@@ -244,7 +250,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
 
@@ -253,14 +259,14 @@ where
                         trace_height,
                         rows_used,
                         &d_prev_hashes,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                     cuda_abi::sha512::sha512_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
                         rows_used,
-                        cudaStreamPerThread,
+                        ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }

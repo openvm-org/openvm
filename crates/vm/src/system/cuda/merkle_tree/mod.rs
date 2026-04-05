@@ -40,9 +40,9 @@ pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
 /// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size`
 ///   leaves and `2 * size - 1` total nodes.
 ///
-/// All GPU work is issued on the per-thread default stream (`cudaStreamPerThread`).
-/// `build_completion_event` records when the build kernels finish so that downstream
-/// consumers can synchronize.
+/// All GPU work is issued on the subtree's `DeviceContext` stream.
+/// `build_completion_event` records when the build kernels finish so that downstream consumers can
+/// synchronize.
 pub struct MemoryMerkleSubTree {
     build_completion_event: Option<CudaEvent>,
     pub buf: DeviceBuffer<H>,
@@ -100,7 +100,7 @@ impl MemoryMerkleSubTree {
         }
     }
 
-    /// Builds the Merkle subtree on the per-thread default stream (`cudaStreamPerThread`).
+    /// Builds the Merkle subtree on the provided `DeviceContext` stream.
     /// Also reconstructs the vertical path if `path_len > 0`, and records a completion event.
     ///
     /// Here `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
@@ -185,8 +185,8 @@ impl MemoryMerkleSubTree {
 ///     - if we have > 4 address spaces, top_roots will be extended with the next hash, etc.
 ///
 /// Execution:
-/// - Subtrees are built on the per-thread default stream (`cudaStreamPerThread`).
-/// - The final root is computed after all subtrees complete, on the same default stream.
+/// - Subtrees are built on the tree's `DeviceContext` stream.
+/// - The final root is computed after all subtrees complete on that same stream.
 pub struct MemoryMerkleTree {
     pub ctx: DeviceContext,
     pub subtrees: Vec<MemoryMerkleSubTree>,
@@ -256,7 +256,7 @@ impl MemoryMerkleTree {
     }
 
     /// Starts construction of the specified address space's Merkle subtree.
-    /// Uses internal zero hashes and launches kernels on `cudaStreamPerThread`.
+    /// Uses internal zero hashes and launches kernels on the tree's `DeviceContext` stream.
     ///
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
@@ -282,8 +282,8 @@ impl MemoryMerkleTree {
     }
 
     /// Finalizes the Merkle tree by collecting all subtree roots and computing the final root.
-    /// All subtree builds were issued on `cudaStreamPerThread`, so stream ordering guarantees
-    /// they are complete before the finalize kernel runs on the same stream.
+    /// All subtree builds were issued on the same `DeviceContext` stream, so stream ordering
+    /// guarantees they are complete before the finalize kernel runs.
     pub fn finalize(&mut self) {
         let roots: Vec<usize> = self
             .subtrees
@@ -305,7 +305,8 @@ impl MemoryMerkleTree {
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.
     ///
-    /// Synchronizes the default stream before deallocating buffers and destroying events.
+    /// Synchronizes the tree's `DeviceContext` stream before deallocating buffers and destroying
+    /// events.
     pub fn drop_subtrees(&mut self) {
         self.ctx.stream.synchronize().unwrap();
         self.subtrees.clear();
@@ -349,6 +350,7 @@ impl MemoryMerkleTree {
                     &actual_heights,
                     unpadded_height,
                     &self.hasher_buffer,
+                    &self.ctx,
                 )
                 .unwrap();
             }

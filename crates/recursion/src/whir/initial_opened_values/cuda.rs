@@ -1,5 +1,5 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use p3_field::TwoAdicField;
 
@@ -15,6 +15,7 @@ pub(in crate::whir) struct InitialOpenedValuesGpuCtx<'a> {
     pub num_proofs: usize,
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
+    pub ctx: &'a DeviceContext,
 }
 
 pub(in crate::whir) struct InitialOpenedValuesGpuTraceGenerator;
@@ -31,6 +32,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
         let num_proofs = ctx.num_proofs;
         let blob = ctx.blob;
         let params = ctx.params;
+        let device_ctx = ctx.ctx;
 
         let mem = MemTracker::start("tracegen.whir_initial_opened_values");
         let num_valid_rows = blob.codeword_value_accs.len();
@@ -44,7 +46,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
             num_valid_rows.next_power_of_two()
         };
         let width = InitialOpenedValuesCols::<F>::width();
-        let trace_d = DeviceMatrix::with_capacity(height, width);
+        let trace_d = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         let num_queries_per_round = num_queries_per_round(params);
         let query_layout = WhirQueryLayout::new(1, &num_queries_per_round);
@@ -72,7 +74,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
                 &blob.stacking_widths_offsets,
                 &blob.mu_pows,
                 num_proofs,
-                cudaStreamPerThread,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

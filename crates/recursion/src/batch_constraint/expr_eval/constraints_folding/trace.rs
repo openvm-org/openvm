@@ -187,9 +187,7 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
 pub(in crate::batch_constraint) mod cuda {
     use openvm_circuit_primitives::cuda_abi::UInt2;
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -216,6 +214,7 @@ pub(in crate::batch_constraint) mod cuda {
             vk: &VerifyingKeyGpu,
             expr_evals: &MultiVecWithBounds<EF, 2>,
             preflights: &[PreflightGpu],
+            _ctx: &DeviceContext,
         ) -> Self {
             let constraints = vk
                 .cpu
@@ -282,6 +281,7 @@ pub(in crate::batch_constraint) mod cuda {
             &'a VerifyingKeyGpu,
             &'a [PreflightGpu],
             &'a ConstraintsFoldingBlobGpu,
+            &'a DeviceContext,
         );
 
         #[tracing::instrument(level = "trace", skip_all)]
@@ -290,7 +290,7 @@ pub(in crate::batch_constraint) mod cuda {
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
         ) -> Option<AirProvingContext<GpuBackend>> {
-            let (child_vk, preflights_gpu, blob) = ctx;
+            let (child_vk, preflights_gpu, blob, device_ctx) = ctx;
 
             let mut num_valid_rows = 0u32;
             let mut row_bounds = Vec::with_capacity(preflights_gpu.len());
@@ -318,7 +318,8 @@ pub(in crate::batch_constraint) mod cuda {
                     }
                     num_valid_rows += num_constraints_in_proof;
                     row_bounds.push(num_valid_rows);
-                    constraint_bounds.push(proof_constraint_bounds.to_device().unwrap());
+                    constraint_bounds
+                        .push(proof_constraint_bounds.to_device_on(device_ctx).unwrap());
                     proof_values.iter().flatten().copied()
                 })
                 .collect_vec();
@@ -329,7 +330,7 @@ pub(in crate::batch_constraint) mod cuda {
                         .cpu
                         .batch_constraint
                         .eq_ns_frontloaded
-                        .to_device()
+                        .to_device_on(device_ctx)
                         .unwrap()
                 })
                 .collect_vec();
@@ -343,11 +344,12 @@ pub(in crate::batch_constraint) mod cuda {
                 (num_valid_rows as usize).next_power_of_two()
             };
             let width = ConstraintsFoldingCols::<F>::width();
-            let d_trace = DeviceMatrix::<F>::with_capacity(height, width);
+            let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
 
-            let d_proof_and_sort_idxs = proof_and_sort_idxs.to_device().unwrap();
-            let d_values = flat_values.to_device().unwrap();
-            let d_cur_sum_evals = DeviceBuffer::<AffineFpExt>::with_capacity(d_values.len());
+            let d_proof_and_sort_idxs = proof_and_sort_idxs.to_device_on(device_ctx).unwrap();
+            let d_values = flat_values.to_device_on(device_ctx).unwrap();
+            let d_cur_sum_evals =
+                DeviceBuffer::<AffineFpExt>::with_capacity_on(d_values.len(), device_ctx);
 
             let d_constraint_bounds = constraint_bounds.iter().map(|b| b.as_ptr()).collect_vec();
             let d_sorted_trace_heights = preflights_gpu
@@ -356,17 +358,20 @@ pub(in crate::batch_constraint) mod cuda {
                 .collect_vec();
             let d_eq_ns = eq_ns.iter().map(|b| b.as_ptr()).collect_vec();
 
-            let d_per_proof = blob.constraints_folding_per_proof.to_device().unwrap();
+            let d_per_proof = blob
+                .constraints_folding_per_proof
+                .to_device_on(device_ctx)
+                .unwrap();
 
             unsafe {
                 let temp_bytes = constraints_folding_tracegen_temp_bytes(
                     &d_proof_and_sort_idxs,
                     &d_cur_sum_evals,
                     num_valid_rows,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
-                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity_on(temp_bytes, device_ctx);
                 constraints_folding_tracegen(
                     d_trace.buffer(),
                     height,
@@ -385,7 +390,7 @@ pub(in crate::batch_constraint) mod cuda {
                     child_vk.system_params.l_skip as u32,
                     &d_temp_buffer,
                     temp_bytes,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

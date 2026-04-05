@@ -315,9 +315,7 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
 pub(in crate::batch_constraint) mod cuda {
     use openvm_circuit_primitives::cuda_abi::UInt2;
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -350,6 +348,7 @@ pub(in crate::batch_constraint) mod cuda {
             expr_evals: &MultiVecWithBounds<EF, 2>,
             eq_3b_blob: &Eq3bBlob,
             preflights: &[PreflightGpu],
+            _ctx: &DeviceContext,
         ) -> Self {
             let l_skip = vk.system_params.l_skip;
             let interactions = vk
@@ -470,6 +469,7 @@ pub(in crate::batch_constraint) mod cuda {
             &'a VerifyingKeyGpu,
             &'a [PreflightGpu],
             &'a InteractionsFoldingBlobGpu,
+            &'a DeviceContext,
         );
 
         #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
@@ -478,7 +478,7 @@ pub(in crate::batch_constraint) mod cuda {
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
         ) -> Option<AirProvingContext<GpuBackend>> {
-            let (child_vk, preflights_gpu, blob) = ctx;
+            let (child_vk, preflights_gpu, blob, device_ctx) = ctx;
 
             let num_airs = preflights_gpu
                 .iter()
@@ -524,8 +524,16 @@ pub(in crate::batch_constraint) mod cuda {
 
                 num_valid_rows += proof_num_rows;
                 row_bounds.push(num_valid_rows);
-                air_interaction_bounds.push(proof_air_interaction_bounds.to_device().unwrap());
-                interaction_row_bounds.push(proof_interaction_row_bounds.to_device().unwrap());
+                air_interaction_bounds.push(
+                    proof_air_interaction_bounds
+                        .to_device_on(device_ctx)
+                        .unwrap(),
+                );
+                interaction_row_bounds.push(
+                    proof_interaction_row_bounds
+                        .to_device_on(device_ctx)
+                        .unwrap(),
+                );
             }
 
             assert_eq!(num_valid_rows as usize, expected_num_valid_rows);
@@ -533,11 +541,18 @@ pub(in crate::batch_constraint) mod cuda {
             let records = blob
                 .interaction_records
                 .iter()
-                .map(|records| records.to_device().unwrap())
+                .map(|records| records.to_device_on(device_ctx).unwrap())
                 .collect_vec();
             let xis = preflights_gpu
                 .iter()
-                .map(|preflight| preflight.cpu.batch_constraint.xi.to_device().unwrap())
+                .map(|preflight| {
+                    preflight
+                        .cpu
+                        .batch_constraint
+                        .xi
+                        .to_device_on(device_ctx)
+                        .unwrap()
+                })
                 .collect_vec();
 
             let height = if let Some(height) = required_height {
@@ -549,11 +564,12 @@ pub(in crate::batch_constraint) mod cuda {
                 (num_valid_rows as usize).next_power_of_two()
             };
             let width = InteractionsFoldingCols::<F>::width();
-            let d_trace = DeviceMatrix::<F>::with_capacity(height, width);
+            let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
 
-            let d_idx_keys = idx_keys.to_device().unwrap();
-            let d_values = flat_values.to_device().unwrap();
-            let d_cur_sum_evals = DeviceBuffer::<AffineFpExt>::with_capacity(d_values.len());
+            let d_idx_keys = idx_keys.to_device_on(device_ctx).unwrap();
+            let d_values = flat_values.to_device_on(device_ctx).unwrap();
+            let d_cur_sum_evals =
+                DeviceBuffer::<AffineFpExt>::with_capacity_on(d_values.len(), device_ctx);
 
             let d_air_interaction_bounds = air_interaction_bounds
                 .iter()
@@ -570,7 +586,10 @@ pub(in crate::batch_constraint) mod cuda {
             let d_records = records.iter().map(|b| b.as_ptr()).collect_vec();
             let d_xis = xis.iter().map(|b| b.as_ptr()).collect_vec();
 
-            let d_per_proof = blob.interactions_folding_per_proof.to_device().unwrap();
+            let d_per_proof = blob
+                .interactions_folding_per_proof
+                .to_device_on(device_ctx)
+                .unwrap();
 
             unsafe {
                 let temp_bytes = interactions_folding_tracegen_temp_bytes(
@@ -579,10 +598,10 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_idx_keys,
                     &d_cur_sum_evals,
                     num_valid_rows,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
-                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity_on(temp_bytes, device_ctx);
                 interactions_folding_tracegen(
                     d_trace.buffer(),
                     height,
@@ -604,7 +623,7 @@ pub(in crate::batch_constraint) mod cuda {
                     child_vk.system_params.l_skip as u32,
                     &d_temp_buffer,
                     temp_bytes,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

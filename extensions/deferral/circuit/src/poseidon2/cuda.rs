@@ -44,7 +44,10 @@ impl DeferralPoseidon2ChipGpu {
 
         Self {
             ctx: ctx.clone(),
-            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(max_record_buf_size, &ctx)),
+            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(
+                max_record_buf_size,
+                &ctx,
+            )),
             counts: Arc::new(DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(
                 max_num_records,
                 &ctx,
@@ -104,11 +107,16 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
             )
             .expect("Failed to deduplicate deferral poseidon2 records");
 
-            num_records = *d_num_records.to_host_on(&self.ctx).unwrap().first().unwrap();
+            num_records = *d_num_records
+                .to_host_on(&self.ctx)
+                .unwrap()
+                .first()
+                .unwrap();
         }
 
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
+        let trace =
+            DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
 
         unsafe {
             poseidon2::tracegen(

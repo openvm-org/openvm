@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
@@ -16,14 +16,15 @@ use crate::cuda_abi::program;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
+    pub ctx: DeviceContext,
 }
 
 impl ProgramChipGPU {
-    pub fn new() -> Self {
-        Self { cached: None }
+    pub fn new(ctx: DeviceContext) -> Self {
+        Self { cached: None, ctx }
     }
 
-    pub fn generate_cached_trace(program: Program<F>) -> DeviceMatrix<F> {
+    pub fn generate_cached_trace(program: Program<F>, ctx: &DeviceContext) -> DeviceMatrix<F> {
         let instructions = program
             .enumerate_by_pc()
             .into_iter()
@@ -48,10 +49,11 @@ impl ProgramChipGPU {
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
-            .to_device()
+            .to_device_on(ctx)
             .unwrap();
 
-        let trace = DeviceMatrix::<F>::with_capacity(height, size_of::<ProgramExecutionCols<u8>>());
+        let trace =
+            DeviceMatrix::<F>::with_capacity_on(height, size_of::<ProgramExecutionCols<u8>>(), ctx);
         unsafe {
             program::cached_tracegen(
                 trace.buffer(),
@@ -61,7 +63,7 @@ impl ProgramChipGPU {
                 program.pc_base,
                 DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .expect("Failed to generate cached trace");
         }
@@ -83,7 +85,7 @@ impl ProgramChipGPU {
 
 impl Default for ProgramChipGPU {
     fn default() -> Self {
-        Self::new()
+        panic!("ProgramChipGPU requires an explicit DeviceContext")
     }
 }
 
@@ -96,17 +98,17 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
             filtered_len <= height,
             "filtered_exec_freqs len={filtered_len} > cached trace height={height}"
         );
-        let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity(height);
+        let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity_on(height, &self.ctx);
 
         filtered_exec_freqs
             .into_iter()
             .map(F::from_u32)
             .collect::<Vec<_>>()
-            .copy_to(&mut buffer)
+            .copy_to_on(&mut buffer, &self.ctx)
             .unwrap();
         // Making sure to zero-out the untouched part of the buffer.
         if filtered_len < height {
-            buffer.fill_zero_suffix(filtered_len).unwrap();
+            buffer.fill_zero_suffix_on(filtered_len, &self.ctx).unwrap();
         }
 
         let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);
@@ -144,7 +146,7 @@ mod tests {
     fn test_cached_committed_trace_data(program: Program<F>) {
         let gpu_engine = test_gpu_engine();
         let gpu_device = gpu_engine.device();
-        let gpu_trace = ProgramChipGPU::generate_cached_trace(program.clone());
+        let gpu_trace = ProgramChipGPU::generate_cached_trace(program.clone(), &gpu_device.ctx);
         let gpu_cached = ProgramChipGPU::get_committed_trace(gpu_trace, gpu_device);
 
         let cpu_engine = test_cpu_engine();

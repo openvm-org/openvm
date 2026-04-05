@@ -57,6 +57,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         let count_chip = Arc::new(DeferralCircuitCountChipGpu::new(
             count.clone(),
             num_deferral_circuits,
+            range_checker.ctx.clone(),
         ));
         inventory.add_periphery_chip(count_chip);
 

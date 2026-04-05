@@ -897,10 +897,7 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
-    use openvm_cuda_common::{
-        common::get_device,
-        stream::{CudaStream, DeviceContext, StreamGuard},
-    };
+    use openvm_cuda_common::stream::DeviceContext;
 
     use super::*;
     use crate::{
@@ -908,16 +905,12 @@ pub mod cuda_tracegen {
             build_cached_trace_record, constraints_folding::cuda::ConstraintsFoldingBlobGpu,
             interactions_folding::cuda::InteractionsFoldingBlobGpu,
         },
-        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
+        cuda::{
+            preflight::PreflightGpu, proof::ProofGpu, temp_device_ctx, vk::VerifyingKeyGpu,
+            GlobalCtxGpu,
+        },
         tracegen::cuda::StandardTracegenGpuCtx,
     };
-
-    fn ptds_ctx() -> DeviceContext {
-        DeviceContext {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::ptds()),
-        }
-    }
 
     impl ModuleChip<GpuBackend> for BatchConstraintModuleChip {
         type Ctx<'a> = (
@@ -939,7 +932,12 @@ pub mod cuda_tracegen {
             let cached_trace_record = ctx.2;
             match self {
                 Eq3b => eq_airs::Eq3bTraceGenerator.generate_proving_ctx(
-                    &(&child_vk.cpu, &blob.common_blob.eq_3b_blob, preflights),
+                    &(
+                        &child_vk.cpu,
+                        &blob.common_blob.eq_3b_blob,
+                        preflights,
+                        ctx.0.ctx,
+                    ),
                     required_height,
                 ),
                 SymbolicExpression {
@@ -956,13 +954,20 @@ pub mod cuda_tracegen {
                         preflights,
                         expr_evals: &blob.common_blob.expr_evals,
                         cached_trace_record: &cached_trace_record,
+                        ctx: ctx.0.ctx,
                     },
                     required_height,
                 ),
                 InteractionsFolding => expr_eval::InteractionsFoldingTraceGenerator
-                    .generate_proving_ctx(&(child_vk, preflights, &blob.if_blob), required_height),
+                    .generate_proving_ctx(
+                        &(child_vk, preflights, &blob.if_blob, ctx.0.ctx),
+                        required_height,
+                    ),
                 ConstraintsFolding => expr_eval::ConstraintsFoldingTraceGenerator
-                    .generate_proving_ctx(&(child_vk, preflights, &blob.cf_blob), required_height),
+                    .generate_proving_ctx(
+                        &(child_vk, preflights, &blob.cf_blob, ctx.0.ctx),
+                        required_height,
+                    ),
                 _ => unreachable!(),
             }
         }
@@ -981,17 +986,19 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            ctx: &DeviceContext,
         ) -> Self {
             let cpu_proofs = proofs.iter().map(|p| &p.cpu).collect_vec();
             let cpu_preflights = preflights.iter().map(|p| &p.cpu).collect_vec();
             let common_blob = BatchConstraintBlob::new(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
             let cf_blob =
-                ConstraintsFoldingBlobGpu::new(child_vk, &common_blob.expr_evals, preflights);
+                ConstraintsFoldingBlobGpu::new(child_vk, &common_blob.expr_evals, preflights, ctx);
             let if_blob = InteractionsFoldingBlobGpu::new(
                 child_vk,
                 &common_blob.expr_evals,
                 &common_blob.eq_3b_blob,
                 preflights,
+                ctx,
             );
             let expr_claim_blob =
                 generate_expression_claim_blob(&cf_blob.folded_claims, &if_blob.folded_claims);
@@ -1008,6 +1015,7 @@ pub mod cuda_tracegen {
         type ModuleSpecificCtx<'a> = (
             Option<&'a CachedTraceRecord>,
             Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+            &'a openvm_cuda_common::stream::DeviceContext,
         );
 
         #[tracing::instrument(skip_all)]
@@ -1021,12 +1029,14 @@ pub mod cuda_tracegen {
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let cached_trace_record = module_ctx.0;
             let pow_checker = module_ctx.1.clone();
-            let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights);
+            let device_ctx = module_ctx.2;
+            let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights, device_ctx);
             let ctx = (
                 StandardTracegenGpuCtx {
                     vk: child_vk,
                     proofs,
                     preflights,
+                    ctx: device_ctx,
                 },
                 &blob,
                 cached_trace_record,
@@ -1106,7 +1116,6 @@ pub mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
-            let transport_ctx = ptds_ctx();
             let indexed_cpu_gpu_traces = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
@@ -1114,7 +1123,7 @@ pub mod cuda_tracegen {
                         idx,
                         trace.map(|m| {
                             AirProvingContext::simple_no_pis(
-                                transport_matrix_h2d_row(&m, &transport_ctx).unwrap(),
+                                transport_matrix_h2d_row(&m, device_ctx).unwrap(),
                             )
                         }),
                     )
@@ -1148,7 +1157,7 @@ pub mod cuda_tracegen {
         {
             let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let transport_ctx = ptds_ctx();
+            let transport_ctx = temp_device_ctx();
             let d_cached_trace = transport_matrix_h2d_row(&cached_trace, &transport_ctx).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {

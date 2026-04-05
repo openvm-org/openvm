@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::Digest, GpuBackend};
-use openvm_cuda_common::{
-    copy::MemCopyH2D, memory_manager::MemTracker, stream::cudaStreamPerThread,
-};
+use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker, stream::DeviceContext};
 use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -54,7 +52,7 @@ pub(in crate::proof_shape) struct ProofShapeChipGpu<const NUM_LIMBS: usize, cons
 const NUM_LIMBS: usize = 4;
 const LIMB_BITS: usize = 8;
 impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
-    type Ctx<'a> = (&'a VerifyingKeyGpu, &'a [PreflightGpu]);
+    type Ctx<'a> = (&'a VerifyingKeyGpu, &'a [PreflightGpu], &'a DeviceContext);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_proving_ctx(
@@ -62,7 +60,7 @@ impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
         ctx: &Self::Ctx<'_>,
         height: Option<usize>,
     ) -> Option<AirProvingContext<GpuBackend>> {
-        let (vk_gpu, preflights_gpu) = ctx;
+        let (vk_gpu, preflights_gpu, device_ctx) = ctx;
         let mem = MemTracker::start("tracegen.proof_shape");
         let num_valid_rows = preflights_gpu.len() * (vk_gpu.per_air.len() + 1);
         let height = if let Some(height) = height {
@@ -81,7 +79,7 @@ impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
         let num_airs = vk_gpu.per_air.len();
         let width =
             ProofShapeCols::<u8, NUM_LIMBS>::width() + encoder_width + max_cached * DIGEST_SIZE;
-        let trace = DeviceMatrix::with_capacity(height, width);
+        let trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         let per_row_tidx = preflights_gpu
             .iter()
@@ -110,7 +108,7 @@ impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
                 main_commit: preflight.proof_shape.main_commit,
             })
             .collect_vec()
-            .to_device()
+            .to_device_on(device_ctx)
             .unwrap();
         let inputs = ProofShapeTracegenInputs {
             num_airs,
@@ -136,7 +134,7 @@ impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
                 &per_proof,
                 preflights_gpu.len(),
                 &inputs,
-                cudaStreamPerThread,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

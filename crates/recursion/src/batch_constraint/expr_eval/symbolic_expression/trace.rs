@@ -699,15 +699,13 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
 pub(in crate::batch_constraint) mod cuda {
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
     use crate::{
         batch_constraint::{cuda_abi::sym_expr_common_tracegen, cuda_utils::*},
-        cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr_on},
         tracegen::ModuleChip,
     };
 
@@ -717,6 +715,7 @@ pub(in crate::batch_constraint) mod cuda {
         pub preflights: &'a [PreflightGpu],
         pub expr_evals: &'a MultiVecWithBounds<openvm_cuda_backend::prelude::EF, 2>,
         pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
+        pub ctx: &'a DeviceContext,
     }
 
     impl ModuleChip<GpuBackend> for SymbolicExpressionTraceGenerator {
@@ -734,6 +733,7 @@ pub(in crate::batch_constraint) mod cuda {
             let max_num_proofs = self.max_num_proofs;
             let has_cached = self.has_cached;
             let expr_evals = ctx.expr_evals;
+            let device_ctx = ctx.ctx;
 
             debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -808,7 +808,7 @@ pub(in crate::batch_constraint) mod cuda {
             let commit_width = DagCommitCols::<F>::width();
             let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
                 + if has_cached { 0 } else { commit_width };
-            let trace = DeviceMatrix::with_capacity(height, width);
+            let trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
             let d_log_heights = proofs
                 .iter()
@@ -820,7 +820,7 @@ pub(in crate::batch_constraint) mod cuda {
                         .map(|v| v.as_ref().map_or(0, |td| td.log_height))
                 })
                 .collect::<Vec<_>>()
-                .to_device()
+                .to_device_on(device_ctx)
                 .unwrap();
 
             let mut sort_idx_by_air_idx = vec![0usize; num_airs * proofs.len()];
@@ -838,21 +838,25 @@ pub(in crate::batch_constraint) mod cuda {
                     chunk[*air_idx] = sort_idx;
                 }
             }
-            let d_sort_idx_by_air_idx = sort_idx_by_air_idx.to_device().unwrap();
+            let d_sort_idx_by_air_idx = sort_idx_by_air_idx.to_device_on(device_ctx).unwrap();
 
-            let d_expr_evals = expr_evals.data.to_device().unwrap();
-            let d_ee_bounds_0 = expr_evals.bounds[0].to_device().unwrap();
-            let d_ee_bounds_1 = expr_evals.bounds[1].to_device().unwrap();
+            let d_expr_evals = expr_evals.data.to_device_on(device_ctx).unwrap();
+            let d_ee_bounds_0 = expr_evals.bounds[0].to_device_on(device_ctx).unwrap();
+            let d_ee_bounds_1 = expr_evals.bounds[1].to_device_on(device_ctx).unwrap();
 
-            let d_constraint_nodes = constraint_nodes.data.to_device().unwrap();
-            let d_constraint_nodes_bounds = constraint_nodes.bounds[0].to_device().unwrap();
-            let d_interactions = to_device_or_nullptr(&interactions.data).unwrap();
-            let d_interactions_bounds = interactions.bounds[0].to_device().unwrap();
-            let d_interaction_messages = to_device_or_nullptr(&interaction_messages).unwrap();
-            let d_unused_variables = to_device_or_nullptr(&unused_variables.data).unwrap();
-            let d_unused_variables_bounds = unused_variables.bounds[0].to_device().unwrap();
-            let d_record_bounds = record_bounds.to_device().unwrap();
-            let d_air_ids_per_record = air_ids_per_record.to_device().unwrap();
+            let d_constraint_nodes = constraint_nodes.data.to_device_on(device_ctx).unwrap();
+            let d_constraint_nodes_bounds =
+                constraint_nodes.bounds[0].to_device_on(device_ctx).unwrap();
+            let d_interactions = to_device_or_nullptr_on(&interactions.data, device_ctx).unwrap();
+            let d_interactions_bounds = interactions.bounds[0].to_device_on(device_ctx).unwrap();
+            let d_interaction_messages =
+                to_device_or_nullptr_on(&interaction_messages, device_ctx).unwrap();
+            let d_unused_variables =
+                to_device_or_nullptr_on(&unused_variables.data, device_ctx).unwrap();
+            let d_unused_variables_bounds =
+                unused_variables.bounds[0].to_device_on(device_ctx).unwrap();
+            let d_record_bounds = record_bounds.to_device_on(device_ctx).unwrap();
+            let d_air_ids_per_record = air_ids_per_record.to_device_on(device_ctx).unwrap();
 
             let mut sumcheck_data = Vec::new();
             let mut sumcheck_bounds = Vec::with_capacity(preflights.len() + 1);
@@ -864,12 +868,15 @@ pub(in crate::batch_constraint) mod cuda {
             let d_sumcheck_rnds = if sumcheck_data.is_empty() {
                 DeviceBuffer::new()
             } else {
-                sumcheck_data.to_device().unwrap()
+                sumcheck_data.to_device_on(device_ctx).unwrap()
             };
-            let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
-            let d_cached_records = ctx
-                .cached_trace_record
-                .map(|data| build_cached_gpu_records(data).unwrap().to_device().unwrap());
+            let d_sumcheck_bounds = sumcheck_bounds.to_device_on(device_ctx).unwrap();
+            let d_cached_records = ctx.cached_trace_record.map(|data| {
+                build_cached_gpu_records(data)
+                    .unwrap()
+                    .to_device_on(device_ctx)
+                    .unwrap()
+            });
 
             unsafe {
                 sym_expr_common_tracegen(
@@ -897,7 +904,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_sumcheck_rnds,
                     &d_sumcheck_bounds,
                     d_cached_records.as_ref(),
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

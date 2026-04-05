@@ -28,7 +28,10 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
     }
 
     pub fn hybrid(cpu_chip: Arc<RangeTupleCheckerChip<N>>, ctx: DeviceContext) -> Self {
-        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(cpu_chip.count.len(), &ctx));
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
+            cpu_chip.count.len(),
+            &ctx,
+        ));
         count.fill_zero_on(&ctx).unwrap();
         let sizes = *cpu_chip.sizes();
         Self {

@@ -189,9 +189,7 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
 pub(crate) mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -219,6 +217,7 @@ pub(crate) mod cuda {
             let child_vk = ctx.0.vk;
             let proofs_gpu = ctx.0.proofs;
             let preflights_gpu = ctx.0.preflights;
+            let device_ctx = ctx.0.ctx;
             let blob = ctx.1;
 
             let mut num_valid_rows = 0;
@@ -262,7 +261,7 @@ pub(crate) mod cuda {
                         })
                         .unwrap_or(claims.len() - 1);
                     last_main_idx_per_proof.push(last_main_idx);
-                    claims.to_device().unwrap()
+                    claims.to_device_on(device_ctx).unwrap()
                 })
                 .collect_vec();
             let lambda_pows = preflights_gpu
@@ -277,7 +276,7 @@ pub(crate) mod cuda {
                         .powers()
                         .take(claims[proof_idx].len())
                         .collect_vec()
-                        .to_device()
+                        .to_device_on(device_ctx)
                         .unwrap()
                 })
                 .collect_vec();
@@ -291,8 +290,8 @@ pub(crate) mod cuda {
                 num_valid_rows.next_power_of_two()
             };
             let width = OpeningClaimsCols::<usize>::width();
-            let d_trace = DeviceMatrix::with_capacity(height, width);
-            let d_keys_buffer = DeviceBuffer::<F>::with_capacity(height);
+            let d_trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
+            let d_keys_buffer = DeviceBuffer::<F>::with_capacity_on(height, device_ctx);
 
             let d_claims = claims.iter().map(|buf| buf.as_ptr()).collect_vec();
             let d_slice_data = blob.slice_data.iter().map(|buf| buf.as_ptr()).collect_vec();
@@ -311,7 +310,7 @@ pub(crate) mod cuda {
                     lambda: preflight.cpu.stacking.lambda,
                 })
                 .collect_vec()
-                .to_device()
+                .to_device_on(device_ctx)
                 .unwrap();
 
             unsafe {
@@ -319,10 +318,10 @@ pub(crate) mod cuda {
                     d_trace.buffer(),
                     height,
                     &d_keys_buffer,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
-                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity_on(temp_bytes, device_ctx);
                 opening_claims_tracegen(
                     d_trace.buffer(),
                     height,
@@ -338,7 +337,7 @@ pub(crate) mod cuda {
                     &d_keys_buffer,
                     &d_temp_buffer,
                     temp_bytes,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }
