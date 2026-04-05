@@ -5,6 +5,7 @@ use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major,
     hash_scheme::GpuHashScheme, prelude::SC, GenericGpuBackend, GpuBackend,
 };
+use openvm_cuda_common::stream::cudaStreamPerThread;
 use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix};
 
 use crate::Chip;
@@ -47,7 +48,7 @@ pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
         "CPU to GPU transfer of cached traces not supported"
     );
     let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
-    let trace = transport_matrix_h2d_col_major(&cm).unwrap();
+    let trace = transport_matrix_h2d_col_major(&cm, cudaStreamPerThread).unwrap();
     AirProvingContext {
         cached_mains: vec![],
         common_main: trace,

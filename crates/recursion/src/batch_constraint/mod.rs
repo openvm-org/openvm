@@ -897,6 +897,7 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
+    use openvm_cuda_common::stream::cudaStreamPerThread;
 
     use super::*;
     use crate::{
@@ -1101,7 +1102,9 @@ pub mod cuda_tracegen {
                     (
                         idx,
                         trace.map(|m| {
-                            AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                            AirProvingContext::simple_no_pis(
+                                transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                            )
                         }),
                     )
                 })
@@ -1134,7 +1137,8 @@ pub mod cuda_tracegen {
         {
             let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let d_cached_trace = transport_matrix_h2d_row(&cached_trace).unwrap();
+            let d_cached_trace =
+                transport_matrix_h2d_row(&cached_trace, cudaStreamPerThread).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {
                 commitment,

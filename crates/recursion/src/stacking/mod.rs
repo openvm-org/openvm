@@ -386,7 +386,9 @@ mod cuda_tracegen {
                     };
                     let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
                     trace.map(|m| {
-                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                        AirProvingContext::simple_no_pis(
+                            transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                        )
                     })
                 }
             }
@@ -651,7 +653,9 @@ mod cuda_tracegen {
                     (
                         idx,
                         trace.map(|m| {
-                            AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                            AirProvingContext::simple_no_pis(
+                                transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                            )
                         }),
                     )
                 })

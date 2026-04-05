@@ -651,6 +651,7 @@ impl RowMajorChip<F> for GkrModuleChip {
 mod cuda_tracegen {
     use itertools::Itertools;
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
+    use openvm_cuda_common::stream::cudaStreamPerThread;
     use openvm_stark_backend::{p3_maybe_rayon::prelude::*, prover::AirProvingContext};
 
     use super::*;
@@ -706,7 +707,9 @@ mod cuda_tracegen {
                 .into_iter()
                 .map(|trace| {
                     trace.map(|m| {
-                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                        AirProvingContext::simple_no_pis(
+                            transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                        )
                     })
                 })
                 .collect()
