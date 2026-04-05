@@ -343,7 +343,10 @@ mod cuda_tracegen {
         data_transporter::transport_matrix_h2d_row, prelude::EF, GpuBackend,
     };
     use openvm_cuda_common::{
-        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+        common::get_device,
+        copy::MemCopyH2D,
+        d_buffer::DeviceBuffer,
+        stream::{CudaStream, DeviceContext, StreamGuard, cudaStreamPerThread},
     };
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
@@ -361,6 +364,13 @@ mod cuda_tracegen {
         tracegen::{cuda::StandardTracegenGpuCtx, RowMajorChip, StandardTracegenCtx},
     };
 
+    fn ptds_ctx() -> DeviceContext {
+        DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::ptds()),
+        }
+    }
+
     impl ModuleChip<GpuBackend> for StackingModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
 
@@ -377,6 +387,7 @@ mod cuda_tracegen {
                     StackingClaimsTraceGeneratorGpu.generate_proving_ctx(ctx, required_height)
                 }
                 _ => {
+                    let transport_ctx = ptds_ctx();
                     let proofs_cpu = ctx.0.proofs.iter().map(|p| &p.cpu).collect_vec();
                     let preflights_cpu = ctx.0.preflights.iter().map(|p| &p.cpu).collect_vec();
                     let cpu_ctx = StandardTracegenCtx {
@@ -387,7 +398,7 @@ mod cuda_tracegen {
                     let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
                     trace.map(|m| {
                         AirProvingContext::simple_no_pis(
-                            transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                            transport_matrix_h2d_row(&m, &transport_ctx).unwrap(),
                         )
                     })
                 }
@@ -647,6 +658,7 @@ mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
+            let transport_ctx = ptds_ctx();
             let indexed_cpu_gpu_ctxs = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
@@ -654,7 +666,7 @@ mod cuda_tracegen {
                         idx,
                         trace.map(|m| {
                             AirProvingContext::simple_no_pis(
-                                transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                                transport_matrix_h2d_row(&m, &transport_ctx).unwrap(),
                             )
                         }),
                     )

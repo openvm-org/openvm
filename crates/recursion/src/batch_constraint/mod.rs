@@ -897,7 +897,10 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
-    use openvm_cuda_common::stream::cudaStreamPerThread;
+    use openvm_cuda_common::{
+        common::get_device,
+        stream::{CudaStream, DeviceContext, StreamGuard},
+    };
 
     use super::*;
     use crate::{
@@ -908,6 +911,13 @@ pub mod cuda_tracegen {
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         tracegen::cuda::StandardTracegenGpuCtx,
     };
+
+    fn ptds_ctx() -> DeviceContext {
+        DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::ptds()),
+        }
+    }
 
     impl ModuleChip<GpuBackend> for BatchConstraintModuleChip {
         type Ctx<'a> = (
@@ -1096,6 +1106,7 @@ pub mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
+            let transport_ctx = ptds_ctx();
             let indexed_cpu_gpu_traces = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
@@ -1103,7 +1114,7 @@ pub mod cuda_tracegen {
                         idx,
                         trace.map(|m| {
                             AirProvingContext::simple_no_pis(
-                                transport_matrix_h2d_row(&m, cudaStreamPerThread).unwrap(),
+                                transport_matrix_h2d_row(&m, &transport_ctx).unwrap(),
                             )
                         }),
                     )
@@ -1137,8 +1148,8 @@ pub mod cuda_tracegen {
         {
             let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let d_cached_trace =
-                transport_matrix_h2d_row(&cached_trace, cudaStreamPerThread).unwrap();
+            let transport_ctx = ptds_ctx();
+            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, &transport_ctx).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {
                 commitment,

@@ -5,10 +5,20 @@ use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major,
     hash_scheme::GpuHashScheme, prelude::SC, GenericGpuBackend, GpuBackend,
 };
-use openvm_cuda_common::stream::cudaStreamPerThread;
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{CudaStream, DeviceContext, StreamGuard},
+};
 use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix};
 
 use crate::Chip;
+
+fn ptds_ctx() -> DeviceContext {
+    DeviceContext {
+        device_id: get_device().unwrap() as u32,
+        stream: StreamGuard::new(CudaStream::ptds()),
+    }
+}
 
 pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<GenericGpuBackend<HS>> {
     AirProvingContext {
@@ -48,7 +58,8 @@ pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
         "CPU to GPU transfer of cached traces not supported"
     );
     let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
-    let trace = transport_matrix_h2d_col_major(&cm, cudaStreamPerThread).unwrap();
+    let ctx = ptds_ctx();
+    let trace = transport_matrix_h2d_col_major(&cm, &ctx).unwrap();
     AirProvingContext {
         cached_mains: vec![],
         common_main: trace,
