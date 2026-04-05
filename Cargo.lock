@@ -540,7 +540,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -674,7 +674,7 @@ checksum = "ae9abaedb9123ebe4b1527bc88a0409d65b2727c3de89a289284ba91ad70ae99"
 dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "reqwest 0.13.2",
  "serde_json",
  "tower",
@@ -3507,7 +3507,7 @@ dependencies = [
  "dyn-clone",
  "foundry-compilers-artifacts",
  "foundry-compilers-core",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "path-slash",
  "rayon",
  "semver 1.0.27",
@@ -5967,7 +5967,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6014,7 +6014,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "cfg-if",
  "derive-new 0.7.0",
@@ -6039,7 +6039,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6066,7 +6066,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "cc",
  "glob",
@@ -6075,7 +6075,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6866,7 +6866,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "cfg-if",
  "derivative",
@@ -6901,7 +6901,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#41d12cc0b3c4733c89a476ee33b15e7e66fd5ce8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fstream-migration#6a1dfd129b37d98d457a950fcd76a8c322a2ad9f"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -9610,7 +9610,7 @@ dependencies = [
  "derive_more 2.1.1",
  "dunce",
  "inturn",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "itoa",
  "normalize-path",
  "once_map",
@@ -9646,7 +9646,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags",
  "bumpalo",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "memchr",
  "num-bigint 0.4.6",
  "num-rational",
