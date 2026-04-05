@@ -18,7 +18,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
+    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread},
 };
 
 use super::IsLessThanIo;
@@ -219,6 +219,7 @@ fn test_cuda_less_than_tracegen() {
             max_bits,
             AUX_LEN,
             &rc_histogram,
+            cudaStreamPerThread,
         )
         .unwrap();
     }

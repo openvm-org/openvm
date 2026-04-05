@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -50,6 +50,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

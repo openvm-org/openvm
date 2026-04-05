@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::d_buffer::DeviceBuffer;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{count::DeferralCircuitCountCols, cuda_abi::count};
@@ -35,6 +35,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
                 trace_height,
                 &self.count,
                 self.num_deferral_circuits,
+                cudaStreamPerThread,
             )
             .expect("Failed to generate deferral count trace");
         }

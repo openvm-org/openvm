@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord, Rv32VecHeapBranchAdapterCols,
     Rv32VecHeapBranchAdapterRecord,
@@ -80,6 +80,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -130,6 +131,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -191,6 +193,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -241,6 +244,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -302,6 +306,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -372,6 +377,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
                 d_sizes,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

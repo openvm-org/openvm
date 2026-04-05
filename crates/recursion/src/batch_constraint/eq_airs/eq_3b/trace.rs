@@ -238,6 +238,8 @@ pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_common::copy::MemCopyH2D;
     use openvm_stark_backend::prover::AirProvingContext;
 
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use super::*;
     use crate::{
         batch_constraint::cuda_abi::eq_3b_tracegen,
@@ -338,6 +340,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_n_logups,
                     &d_xis,
                     &d_xi_bounds,
+                    cudaStreamPerThread,
                 )
                 .unwrap();
             }

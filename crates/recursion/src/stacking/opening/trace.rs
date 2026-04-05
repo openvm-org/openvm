@@ -192,6 +192,8 @@ pub(crate) mod cuda {
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use super::*;
     use crate::{
         stacking::{
@@ -314,7 +316,7 @@ pub(crate) mod cuda {
 
             unsafe {
                 let temp_bytes =
-                    opening_claims_tracegen_temp_bytes(d_trace.buffer(), height, &d_keys_buffer)
+                    opening_claims_tracegen_temp_bytes(d_trace.buffer(), height, &d_keys_buffer, cudaStreamPerThread)
                         .unwrap();
                 let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
                 opening_claims_tracegen(
@@ -332,6 +334,7 @@ pub(crate) mod cuda {
                     &d_keys_buffer,
                     &d_temp_buffer,
                     temp_bytes,
+                    cudaStreamPerThread,
                 )
                 .unwrap();
             }

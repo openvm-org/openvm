@@ -336,6 +336,8 @@ pub mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use super::*;
     use crate::{
         cuda::{
@@ -494,6 +496,7 @@ pub mod cuda {
                 &d_proof_row_starts,
                 merkle_blob.num_proofs,
                 &d_leaf_scratch,
+                cudaStreamPerThread,
             )
             .expect("failed to launch merkle verify tracegen");
         }

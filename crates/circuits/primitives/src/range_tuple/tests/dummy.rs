@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{cuda_abi::range_tuple::dummy_tracegen, range_tuple::RangeTupleCheckerChipGPU, Chip};
@@ -34,6 +34,7 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<N> {
                 trace.buffer(),
                 &self.range_tuple_checker.count,
                 &d_sizes,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

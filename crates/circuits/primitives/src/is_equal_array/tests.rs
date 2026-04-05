@@ -25,7 +25,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_cuda_common::{copy::MemCopyH2D as _, stream::cudaStreamPerThread},
     openvm_stark_backend::p3_field::PrimeField32,
     std::sync::Arc,
 };
@@ -230,7 +230,7 @@ fn test_cuda_simple_is_equal_array_tracegen() {
     let inputs_y = vec_y.as_slice().to_device().unwrap();
 
     unsafe {
-        is_equal::dummy_tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN).unwrap()
+        is_equal::dummy_tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN, cudaStreamPerThread).unwrap()
     };
 
     let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -274,7 +274,7 @@ fn test_cuda_random_is_equal_array_tracegen() {
 
         let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
         unsafe {
-            is_equal::dummy_tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN)
+            is_equal::dummy_tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN, cudaStreamPerThread)
                 .unwrap();
         }
 

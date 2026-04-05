@@ -4,6 +4,8 @@ pub mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
     use openvm_cuda_common::copy::MemCopyH2D;
 
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use crate::{
         cuda::preflight::PreflightGpu,
         transcript::{
@@ -165,6 +167,7 @@ pub mod cuda {
                 &blob.poseidon2_buffer,
                 &blob.transcript_air_blob.poseidon2_offsets,
                 preflights_gpu.len(),
+                cudaStreamPerThread,
             )
             .unwrap();
         }

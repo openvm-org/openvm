@@ -6,6 +6,7 @@ use openvm_cuda_backend::{
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{cuda_abi::encoder, encoder::Encoder};
+use openvm_cuda_common::stream::cudaStreamPerThread;
 
 #[test]
 fn test_cuda_encoder_with_invalid_row() {
@@ -36,6 +37,7 @@ fn test_cuda_encoder_with_invalid_row() {
             max_degree,
             reserve_invalid,
             expected_k as u32,
+            cudaStreamPerThread,
         )
         .unwrap();
     };
@@ -71,6 +73,7 @@ fn test_cuda_encoder_without_invalid_row() {
             max_degree,
             reserve_invalid,
             expected_k as u32,
+            cudaStreamPerThread,
         )
         .unwrap();
     };

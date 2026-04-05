@@ -3,6 +3,8 @@ use openvm_cuda_common::memory_manager::MemTracker;
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 
 use super::{compute_round_offsets, FinalPolyQueryEvalCols, FinalPolyQueryEvalRecord};
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use crate::{
     cuda::{preflight::PreflightGpu, to_device_or_nullptr},
     tracegen::ModuleChip,
@@ -75,6 +77,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
                 &round_offsets_d,
                 params.log_final_poly_len(),
                 &num_queries_per_round_d,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

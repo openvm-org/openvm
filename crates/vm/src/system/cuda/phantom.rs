@@ -8,7 +8,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use crate::cuda_abi::phantom;
@@ -43,6 +43,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PhantomChipGPU {
                 trace.height(),
                 trace.width(),
                 &arena.allocated().to_device().unwrap(),
+                cudaStreamPerThread,
             )
             .expect("Failed to generate trace");
         }

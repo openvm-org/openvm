@@ -16,7 +16,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_cuda_common::{copy::MemCopyH2D as _, stream::cudaStreamPerThread},
     openvm_stark_backend::p3_field::PrimeField32,
 };
 
@@ -169,7 +169,7 @@ fn test_cuda_tracegen_poseidon2() {
     let gpu_mat = DeviceMatrix::<F>::with_capacity(N, num_cols);
 
     unsafe {
-        poseidon2::dummy_tracegen(gpu_mat.buffer(), &inputs_dev, SBOX_REGS as u32, N as u32)
+        poseidon2::dummy_tracegen(gpu_mat.buffer(), &inputs_dev, SBOX_REGS as u32, N as u32, cudaStreamPerThread)
             .expect("GPU tracegen failed");
     }
 

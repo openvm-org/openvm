@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
@@ -57,6 +57,7 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -121,6 +122,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
+                cudaStreamPerThread,
             )
             .unwrap();
         }
@@ -176,6 +178,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
                 &d_records,
                 num_records,
                 &d_round_states,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

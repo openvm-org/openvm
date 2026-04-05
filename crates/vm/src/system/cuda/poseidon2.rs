@@ -10,6 +10,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
+    stream::cudaStreamPerThread,
 };
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
@@ -71,6 +72,7 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 num_records,
                 &d_num_records,
                 &mut temp_bytes,
+                cudaStreamPerThread,
             )
             .expect("Failed to get temp bytes");
             let d_temp_storage = DeviceBuffer::<u8>::with_capacity(temp_bytes);
@@ -81,6 +83,7 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 &d_num_records,
                 &d_temp_storage,
                 temp_bytes,
+                cudaStreamPerThread,
             )
             .expect("Failed to deduplicate records");
             num_records = *d_num_records.to_host().unwrap().first().unwrap();
@@ -99,6 +102,7 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 &counts,
                 num_records,
                 SBOX_REGISTERS,
+                cudaStreamPerThread,
             )
             .expect("Failed to generate trace");
         }

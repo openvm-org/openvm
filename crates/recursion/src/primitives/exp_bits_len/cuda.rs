@@ -4,6 +4,8 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::memory_manager::MemTracker;
 use p3_matrix::dense::RowMajorMatrix;
 
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
 use crate::{cuda::to_device_or_nullptr, primitives::cuda_abi::exp_bits_len_tracegen};
 
@@ -52,6 +54,7 @@ impl ExpBitsLenGpuTraceGenerator {
                 trace.buffer(),
                 height,
                 num_valid_rows,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

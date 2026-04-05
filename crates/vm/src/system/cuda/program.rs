@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
@@ -61,6 +61,7 @@ impl ProgramChipGPU {
                 program.pc_base,
                 DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
+                cudaStreamPerThread,
             )
             .expect("Failed to generate cached trace");
         }

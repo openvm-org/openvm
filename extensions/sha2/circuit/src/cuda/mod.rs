@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha512Config};
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -95,6 +95,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }
@@ -110,6 +111,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }
@@ -179,6 +181,7 @@ where
                         &d_record_offsets,
                         &d_prev_hashes,
                         num_blocks,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
 
@@ -195,6 +198,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
 
@@ -203,12 +207,14 @@ where
                         trace_height,
                         rows_used,
                         &d_prev_hashes,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                     cuda_abi::sha256::sha256_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
                         rows_used,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }
@@ -221,6 +227,7 @@ where
                         &d_record_offsets,
                         &d_prev_hashes,
                         num_blocks,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
 
@@ -237,6 +244,7 @@ where
                         &self.bitwise_lookup.count,
                         8,
                         self.timestamp_max_bits,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
 
@@ -245,12 +253,14 @@ where
                         trace_height,
                         rows_used,
                         &d_prev_hashes,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                     cuda_abi::sha512::sha512_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
                         rows_used,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }

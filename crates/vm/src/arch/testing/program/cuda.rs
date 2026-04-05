@@ -9,7 +9,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::program_testing;
@@ -47,7 +47,7 @@ impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
             let bytes_size = num_records * size_of::<ProgramExecutionCols<F>>();
             let records_bytes = from_raw_parts(records.as_ptr() as *const u8, bytes_size);
             let records = records_bytes.to_device().unwrap();
-            program_testing::tracegen(trace.buffer(), height, width, &records, num_records)
+            program_testing::tracegen(trace.buffer(), height, width, &records, num_records, cudaStreamPerThread)
                 .unwrap();
         }
         AirProvingContext::simple_no_pis(trace)

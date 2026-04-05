@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
 use openvm_instructions::DEFERRAL_AS;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -142,6 +142,7 @@ impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
                 &records.to_device().unwrap(),
                 num_records,
                 DEFAULT_BLOCK_SIZE,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

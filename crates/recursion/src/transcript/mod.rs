@@ -428,6 +428,8 @@ mod cuda_tracegen {
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use crate::{
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         transcript::{
@@ -564,6 +566,7 @@ mod cuda_tracegen {
                                     num_records,
                                     &d_num_records,
                                     &mut temp_bytes,
+                                    cudaStreamPerThread,
                                 )
                                 .unwrap();
                                 let d_temp_storage = if temp_bytes == 0 {
@@ -581,6 +584,7 @@ mod cuda_tracegen {
                                     blob.num_suffix_perms,
                                     &d_temp_storage,
                                     temp_bytes,
+                                    cudaStreamPerThread,
                                 )
                                 .unwrap();
                                 num_records = *d_num_records.to_host().unwrap().first().unwrap();
@@ -607,6 +611,7 @@ mod cuda_tracegen {
                                 &d_counts,
                                 num_records,
                                 SBOX_REGISTERS,
+                                cudaStreamPerThread,
                             )
                             .unwrap();
                         }

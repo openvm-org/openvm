@@ -345,6 +345,8 @@ mod cuda_tracegen {
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use super::*;
     use crate::{
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
@@ -494,6 +496,7 @@ mod cuda_tracegen {
                         num_slices,
                         n_stack,
                         l_skip,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }
@@ -531,6 +534,7 @@ mod cuda_tracegen {
                         &d_coeff_keys,
                         num_slices,
                         &d_num_coeffs,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                     let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
@@ -551,6 +555,7 @@ mod cuda_tracegen {
                         &d_temp_buffer,
                         temp_bytes,
                         &d_num_coeffs,
+                        cudaStreamPerThread,
                     )
                     .unwrap();
                 }

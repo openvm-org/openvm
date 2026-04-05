@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -65,6 +65,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
                 // Length in F elements; the CUDA side converts to record count.
                 self.poseidon2.records.len(),
                 self.address_bits,
+                cudaStreamPerThread,
             )
             .expect("Failed to generate deferral call trace");
         }

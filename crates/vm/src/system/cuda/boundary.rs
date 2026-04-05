@@ -4,7 +4,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use super::{poseidon2::SharedBuffer, DIGEST_WIDTH};
@@ -94,6 +94,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
                 num_records,
                 &self.poseidon2_buffer.buffer,
                 &self.poseidon2_buffer.idx,
+                cudaStreamPerThread,
             )
             .expect("Failed to generate boundary trace");
         }

@@ -703,6 +703,8 @@ pub(in crate::batch_constraint) mod cuda {
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use crate::{
         batch_constraint::{cuda_abi::sym_expr_common_tracegen, cuda_utils::*},
         cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
@@ -895,6 +897,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_sumcheck_rnds,
                     &d_sumcheck_bounds,
                     d_cached_records.as_ref(),
+                    cudaStreamPerThread,
                 )
                 .unwrap();
             }

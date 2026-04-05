@@ -777,6 +777,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             d_buffer::DeviceBuffer,
         };
 
+        use openvm_cuda_common::stream::cudaStreamPerThread;
+
         use crate::cuda::abi::{merkle_precomputation_hash_vectors, VectorDescriptor};
 
         let num_chunks = |len: usize| len.div_ceil(CHUNK);
@@ -861,6 +863,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                 num_vectors,
                 &d_pre_states,
                 &d_post_states,
+                cudaStreamPerThread,
             )
             .expect("hash_vectors kernel failed");
         }

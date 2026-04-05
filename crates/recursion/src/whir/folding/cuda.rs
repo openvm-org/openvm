@@ -4,6 +4,8 @@ use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
 use super::WhirFoldingCols;
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use crate::{
     tracegen::ModuleChip,
     whir::{
@@ -65,6 +67,7 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
                     u32::try_from(num_rounds).expect("num_rounds must fit in u32"),
                     u32::try_from(total_queries).expect("total_queries must fit in u32"),
                     u32::try_from(k_whir).expect("k_whir must fit in u32"),
+                    cudaStreamPerThread,
                 )
                 .unwrap();
             }

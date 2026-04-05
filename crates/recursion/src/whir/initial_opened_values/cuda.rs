@@ -3,6 +3,8 @@ use openvm_cuda_common::memory_manager::MemTracker;
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use p3_field::TwoAdicField;
 
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use crate::{
     tracegen::ModuleChip,
     whir::{
@@ -72,6 +74,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
                 &blob.stacking_widths_offsets,
                 &blob.mu_pows,
                 num_proofs,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

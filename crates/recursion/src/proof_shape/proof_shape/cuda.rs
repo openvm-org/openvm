@@ -6,6 +6,8 @@ use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker};
 use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use crate::{
     cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
     primitives::{
@@ -134,6 +136,7 @@ impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
                 &per_proof,
                 preflights_gpu.len(),
                 &inputs,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

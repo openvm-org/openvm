@@ -1,6 +1,8 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{copy::cuda_memcpy, memory_manager::MemTracker};
 
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};
 
 #[derive(Debug)]
@@ -50,7 +52,7 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
     pub fn generate_trace(self) -> DeviceMatrix<F> {
         let mem = MemTracker::start("tracegen.range_checker");
         unsafe {
-            range_checker_tracegen(self.count_ptr(), self.trace.buffer(), NUM_BITS).unwrap();
+            range_checker_tracegen(self.count_ptr(), self.trace.buffer(), NUM_BITS, cudaStreamPerThread).unwrap();
         }
         mem.emit_metrics();
         self.trace

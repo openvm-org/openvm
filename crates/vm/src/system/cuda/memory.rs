@@ -10,6 +10,7 @@ use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
+    stream::cudaStreamPerThread,
 };
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
@@ -183,8 +184,13 @@ impl MemoryInventoryGPU {
             let d_initial_mem = self.boundary.initial_leaves.to_device().unwrap();
             let mut temp_bytes = 0usize;
             unsafe {
-                inventory::merge_records_get_temp_bytes(&d_flags, in_num_records, &mut temp_bytes)
-                    .expect("merge_records_get_temp_bytes failed");
+                inventory::merge_records_get_temp_bytes(
+                    &d_flags,
+                    in_num_records,
+                    &mut temp_bytes,
+                    cudaStreamPerThread,
+                )
+                .expect("merge_records_get_temp_bytes failed");
             }
             let d_temp_storage = if temp_bytes == 0 {
                 DeviceBuffer::<u8>::new()
@@ -203,6 +209,7 @@ impl MemoryInventoryGPU {
                     &d_temp_storage,
                     temp_bytes,
                     &d_out_num_records,
+                    cudaStreamPerThread,
                 )
                 .expect("merge_records failed");
             }

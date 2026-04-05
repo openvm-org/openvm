@@ -190,6 +190,8 @@ pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
+    use openvm_cuda_common::stream::cudaStreamPerThread;
+
     use super::*;
     use crate::{
         batch_constraint::cuda_abi::{
@@ -361,6 +363,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_proof_and_sort_idxs,
                     &d_cur_sum_evals,
                     num_valid_rows,
+                    cudaStreamPerThread,
                 )
                 .unwrap();
                 let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
@@ -382,6 +385,7 @@ pub(in crate::batch_constraint) mod cuda {
                     child_vk.system_params.l_skip as u32,
                     &d_temp_buffer,
                     temp_bytes,
+                    cudaStreamPerThread,
                 )
                 .unwrap();
             }

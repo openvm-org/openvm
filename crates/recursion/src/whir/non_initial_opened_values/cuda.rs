@@ -3,6 +3,8 @@ use openvm_cuda_common::memory_manager::MemTracker;
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use p3_field::TwoAdicField;
 
+use openvm_cuda_common::stream::cudaStreamPerThread;
+
 use crate::{
     cuda::to_device_or_nullptr,
     tracegen::ModuleChip,
@@ -83,6 +85,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
                 rows_per_proof,
                 &round_query_offsets_d,
                 total_queries,
+                cudaStreamPerThread,
             )
             .unwrap();
         }

@@ -1,7 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -54,7 +54,7 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
         // `count` will be reused.
         let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), NUM_VARIABLE_RANGE_COLS);
         unsafe {
-            tracegen(&self.count, &cpu_count, trace.buffer()).unwrap();
+            tracegen(&self.count, &cpu_count, trace.buffer(), cudaStreamPerThread).unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
         self.count.fill_zero().unwrap();

@@ -6,6 +6,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
+    stream::cudaStreamPerThread,
 };
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -79,6 +80,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 num_records,
                 &d_num_records,
                 &mut temp_bytes,
+                cudaStreamPerThread,
             )
             .expect("Failed to get deferral poseidon2 temp bytes");
 
@@ -95,6 +97,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 &d_num_records,
                 &d_temp_storage,
                 temp_bytes,
+                cudaStreamPerThread,
             )
             .expect("Failed to deduplicate deferral poseidon2 records");
 
@@ -113,6 +116,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 &self.counts,
                 num_records,
                 self.sbox_registers,
+                cudaStreamPerThread,
             )
             .expect("Failed to generate deferral poseidon2 trace");
         }

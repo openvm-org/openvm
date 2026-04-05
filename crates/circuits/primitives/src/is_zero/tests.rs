@@ -20,7 +20,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_cuda_common::{copy::MemCopyH2D as _, stream::cudaStreamPerThread},
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_sdk::utils::create_seeded_rng,
     rand::Rng,
@@ -197,7 +197,7 @@ fn test_cuda_is_zero_against_cpu_full() {
         let input_buffer = vec_x.as_slice().to_device().unwrap();
         let output = DeviceMatrix::<F>::with_capacity(n, 2);
         unsafe {
-            is_zero::dummy_tracegen(output.buffer(), &input_buffer).unwrap();
+            is_zero::dummy_tracegen(output.buffer(), &input_buffer, cudaStreamPerThread).unwrap();
         };
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
