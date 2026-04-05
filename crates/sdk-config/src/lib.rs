@@ -346,13 +346,18 @@ where
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
+        device: &E::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let config = config.to_inner();
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemCpuBuilder,
+            &config.system,
+            circuit,
+            device,
+        )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32i, inventory)?;
@@ -409,6 +414,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
+        device: &openvm_cuda_backend::GpuDevice,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -416,8 +422,12 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         type E = BabyBearPoseidon2GpuEngine;
 
         let config = config.to_inner();
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+            device,
+        )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32i, inventory)?;

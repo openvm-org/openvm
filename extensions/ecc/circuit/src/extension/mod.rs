@@ -82,12 +82,17 @@ where
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<SC>,
+        device: &E::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &Rv32ModularCpuBuilder,
+            &config.modular,
+            circuit,
+            device,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,

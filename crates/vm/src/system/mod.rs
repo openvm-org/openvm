@@ -392,6 +392,7 @@ where
         &self,
         config: &SystemConfig,
         airs: AirInventory<SC>,
+        _device: &E::PD,
     ) -> Result<
         VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
         ChipInventoryError,

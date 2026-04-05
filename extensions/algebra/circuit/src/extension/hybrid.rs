@@ -412,12 +412,17 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
         &self,
         config: &Rv32ModularConfig,
         circuit: AirInventory<SC>,
+        device: &E::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+            device,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.base, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.mul, inventory)?;
@@ -445,6 +450,7 @@ impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
         &self,
         config: &Rv32ModularWithFp2Config,
         circuit: AirInventory<SC>,
+        device: &E::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -453,6 +459,7 @@ impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
             &Rv32ModularHybridBuilder,
             &config.modular,
             circuit,
+            device,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(

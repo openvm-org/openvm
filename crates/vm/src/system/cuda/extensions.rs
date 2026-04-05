@@ -74,6 +74,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         &self,
         config: &SystemConfig,
         airs: AirInventory<BabyBearPoseidon2Config>,
+        _device: &openvm_cuda_backend::GpuDevice,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,

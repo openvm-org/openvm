@@ -184,6 +184,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
         &self,
         config: &Rv32WeierstrassConfig,
         circuit: AirInventory<SC>,
+        device: &E::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -192,6 +193,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
             &Rv32ModularHybridBuilder,
             &config.modular,
             circuit,
+            device,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
