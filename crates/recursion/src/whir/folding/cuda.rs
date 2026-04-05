@@ -1,11 +1,9 @@
 use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
 use super::WhirFoldingCols;
-use openvm_cuda_common::stream::cudaStreamPerThread;
-
 use crate::{
     tracegen::ModuleChip,
     whir::{

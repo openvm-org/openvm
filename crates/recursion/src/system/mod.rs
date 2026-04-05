@@ -775,9 +775,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         use openvm_cuda_common::{
             copy::{MemCopyD2H, MemCopyH2D},
             d_buffer::DeviceBuffer,
+            stream::cudaStreamPerThread,
         };
-
-        use openvm_cuda_common::stream::cudaStreamPerThread;
 
         use crate::cuda::abi::{merkle_precomputation_hash_vectors, VectorDescriptor};
 

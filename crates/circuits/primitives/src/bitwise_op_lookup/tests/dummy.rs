@@ -45,7 +45,9 @@ pub mod cuda {
     use std::sync::Arc;
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+    use openvm_cuda_common::{
+        copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
     use openvm_stark_backend::prover::AirProvingContext;
 
     use crate::{

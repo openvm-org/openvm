@@ -334,9 +334,9 @@ pub fn compute_combination_indices(k: usize, i: usize) -> Option<CombinationIndi
 pub mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-
-    use openvm_cuda_common::stream::cudaStreamPerThread;
+    use openvm_cuda_common::{
+        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
 
     use super::*;
     use crate::{

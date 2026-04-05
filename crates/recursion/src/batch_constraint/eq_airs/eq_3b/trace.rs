@@ -235,10 +235,8 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::copy::MemCopyH2D;
+    use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
     use openvm_stark_backend::prover::AirProvingContext;
-
-    use openvm_cuda_common::stream::cudaStreamPerThread;
 
     use super::*;
     use crate::{

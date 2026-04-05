@@ -342,10 +342,10 @@ mod cuda_tracegen {
     use openvm_cuda_backend::{
         data_transporter::transport_matrix_h2d_row, prelude::EF, GpuBackend,
     };
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use openvm_cuda_common::{
+        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-
-    use openvm_cuda_common::stream::cudaStreamPerThread;
 
     use super::*;
     use crate::{

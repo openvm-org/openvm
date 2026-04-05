@@ -4,7 +4,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{
     copy::cuda_memcpy,
     d_buffer::DeviceBuffer,
-    error::{CudaError, MemCopyError, stream::cudaStream_t},
+    error::{stream::cudaStream_t, CudaError, MemCopyError},
 };
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::MatrixDimensions;

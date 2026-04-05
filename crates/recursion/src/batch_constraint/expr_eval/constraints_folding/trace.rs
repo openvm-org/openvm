@@ -187,10 +187,10 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
 pub(in crate::batch_constraint) mod cuda {
     use openvm_circuit_primitives::cuda_abi::UInt2;
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use openvm_cuda_common::{
+        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
     use openvm_stark_backend::prover::AirProvingContext;
-
-    use openvm_cuda_common::stream::cudaStreamPerThread;
 
     use super::*;
     use crate::{

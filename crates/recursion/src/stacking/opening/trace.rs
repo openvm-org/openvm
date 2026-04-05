@@ -189,10 +189,10 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
 pub(crate) mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use openvm_cuda_common::{
+        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
     use openvm_stark_backend::prover::AirProvingContext;
-
-    use openvm_cuda_common::stream::cudaStreamPerThread;
 
     use super::*;
     use crate::{
@@ -315,9 +315,13 @@ pub(crate) mod cuda {
                 .unwrap();
 
             unsafe {
-                let temp_bytes =
-                    opening_claims_tracegen_temp_bytes(d_trace.buffer(), height, &d_keys_buffer, cudaStreamPerThread)
-                        .unwrap();
+                let temp_bytes = opening_claims_tracegen_temp_bytes(
+                    d_trace.buffer(),
+                    height,
+                    &d_keys_buffer,
+                    cudaStreamPerThread,
+                )
+                .unwrap();
                 let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
                 opening_claims_tracegen(
                     d_trace.buffer(),

@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, memory_manager::MemTracker};
-
-use openvm_cuda_common::stream::cudaStreamPerThread;
+use openvm_cuda_common::{
+    copy::MemCopyH2D, d_buffer::DeviceBuffer, memory_manager::MemTracker,
+    stream::cudaStreamPerThread,
+};
 
 use crate::primitives::{
     cuda_abi::pow_checker_tracegen,

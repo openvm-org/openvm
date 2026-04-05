@@ -1,8 +1,6 @@
 use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
 use openvm_stark_backend::prover::AirProvingContext;
-
-use openvm_cuda_common::stream::cudaStreamPerThread;
 
 use crate::{
     cuda::{preflight::PreflightGpu, proof::ProofGpu},

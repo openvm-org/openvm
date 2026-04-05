@@ -1,10 +1,8 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_cuda_common::{memory_manager::MemTracker, stream::cudaStreamPerThread};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 
 use super::{compute_round_offsets, FinalPolyQueryEvalCols, FinalPolyQueryEvalRecord};
-use openvm_cuda_common::stream::cudaStreamPerThread;
-
 use crate::{
     cuda::{preflight::PreflightGpu, to_device_or_nullptr},
     tracegen::ModuleChip,

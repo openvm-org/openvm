@@ -169,7 +169,13 @@ fn test_cuda_is_equal_against_cpu_full() {
 
         let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, 2);
         unsafe {
-            is_equal::dummy_tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y, cudaStreamPerThread).unwrap();
+            is_equal::dummy_tracegen(
+                gpu_matrix.buffer(),
+                &inputs_x,
+                &inputs_y,
+                cudaStreamPerThread,
+            )
+            .unwrap();
         }
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(

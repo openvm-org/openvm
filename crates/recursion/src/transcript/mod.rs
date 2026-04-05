@@ -424,12 +424,11 @@ mod cuda_tracegen {
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
+        stream::cudaStreamPerThread,
     };
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
-    use openvm_cuda_common::stream::cudaStreamPerThread;
-
     use crate::{
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         transcript::{

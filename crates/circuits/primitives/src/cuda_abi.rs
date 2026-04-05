@@ -295,12 +295,7 @@ pub mod is_zero {
     use super::*;
 
     extern "C" {
-        fn _iszero_tracegen(
-            output: *mut F,
-            inputs: *mut F,
-            n: u32,
-            stream: cudaStream_t,
-        ) -> i32;
+        fn _iszero_tracegen(output: *mut F, inputs: *mut F, n: u32, stream: cudaStream_t) -> i32;
     }
 
     pub unsafe fn dummy_tracegen(

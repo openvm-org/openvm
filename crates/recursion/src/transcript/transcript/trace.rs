@@ -2,9 +2,7 @@
 pub mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::copy::MemCopyH2D;
-
-    use openvm_cuda_common::stream::cudaStreamPerThread;
+    use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
 
     use crate::{
         cuda::preflight::PreflightGpu,

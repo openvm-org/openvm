@@ -699,12 +699,12 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
 pub(in crate::batch_constraint) mod cuda {
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use openvm_cuda_common::{
+        copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
-    use openvm_cuda_common::stream::cudaStreamPerThread;
-
     use crate::{
         batch_constraint::{cuda_abi::sym_expr_common_tracegen, cuda_utils::*},
         cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},

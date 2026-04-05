@@ -20,8 +20,8 @@ impl UInt2 {
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,
+    stream::cudaStream_t,
 };
-use openvm_cuda_common::stream::cudaStream_t;
 
 pub mod auipc_cuda {
     use super::*;

@@ -230,7 +230,14 @@ fn test_cuda_simple_is_equal_array_tracegen() {
     let inputs_y = vec_y.as_slice().to_device().unwrap();
 
     unsafe {
-        is_equal::dummy_tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN, cudaStreamPerThread).unwrap()
+        is_equal::dummy_tracegen_array(
+            trace.buffer(),
+            &inputs_x,
+            &inputs_y,
+            ARRAY_LEN,
+            cudaStreamPerThread,
+        )
+        .unwrap()
     };
 
     let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -274,8 +281,14 @@ fn test_cuda_random_is_equal_array_tracegen() {
 
         let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
         unsafe {
-            is_equal::dummy_tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN, cudaStreamPerThread)
-                .unwrap();
+            is_equal::dummy_tracegen_array(
+                gpu_matrix.buffer(),
+                &inputs_x,
+                &inputs_y,
+                ARRAY_LEN,
+                cudaStreamPerThread,
+            )
+            .unwrap();
         }
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(

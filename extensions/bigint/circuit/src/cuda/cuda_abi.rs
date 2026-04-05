@@ -2,7 +2,7 @@
 
 use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
-    d_buffer::{DeviceBuffer, DeviceBufferView, stream::cudaStream_t},
+    d_buffer::{stream::cudaStream_t, DeviceBuffer, DeviceBufferView},
     error::CudaError,
 };
 

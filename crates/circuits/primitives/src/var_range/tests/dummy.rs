@@ -80,7 +80,9 @@ pub mod cuda {
     use std::sync::Arc;
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+    use openvm_cuda_common::{
+        copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+    };
     use openvm_stark_backend::prover::AirProvingContext;
 
     use crate::{
@@ -112,7 +114,13 @@ pub mod cuda {
             let height = self.data.len();
             let trace = DeviceMatrix::<F>::with_capacity(height, DUMMY_TRACE_WIDTH);
             unsafe {
-                dummy_tracegen(&self.data, trace.buffer(), &self.range_checker.count, cudaStreamPerThread).unwrap();
+                dummy_tracegen(
+                    &self.data,
+                    trace.buffer(),
+                    &self.range_checker.count,
+                    cudaStreamPerThread,
+                )
+                .unwrap();
             }
             AirProvingContext::simple_no_pis(trace)
         }

@@ -169,8 +169,14 @@ fn test_cuda_tracegen_poseidon2() {
     let gpu_mat = DeviceMatrix::<F>::with_capacity(N, num_cols);
 
     unsafe {
-        poseidon2::dummy_tracegen(gpu_mat.buffer(), &inputs_dev, SBOX_REGS as u32, N as u32, cudaStreamPerThread)
-            .expect("GPU tracegen failed");
+        poseidon2::dummy_tracegen(
+            gpu_mat.buffer(),
+            &inputs_dev,
+            SBOX_REGS as u32,
+            N as u32,
+            cudaStreamPerThread,
+        )
+        .expect("GPU tracegen failed");
     }
 
     // Run CPU tracegen and compare results

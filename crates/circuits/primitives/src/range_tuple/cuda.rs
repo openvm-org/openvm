@@ -1,7 +1,9 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread};
+use openvm_cuda_common::{
+    copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
+};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{cuda_abi::range_tuple::tracegen, range_tuple::RangeTupleCheckerChip, Chip};
@@ -53,7 +55,14 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
         let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), N + 1);
         let d_sizes = self.sizes.to_device().unwrap();
         unsafe {
-            tracegen(&self.count, &cpu_count, trace.buffer(), &d_sizes, cudaStreamPerThread).unwrap();
+            tracegen(
+                &self.count,
+                &cpu_count,
+                trace.buffer(),
+                &d_sizes,
+                cudaStreamPerThread,
+            )
+            .unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
         self.count.fill_zero().unwrap();

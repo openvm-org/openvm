@@ -3,10 +3,10 @@ use std::sync::Arc;
 use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
 };
+use openvm_cuda_common::stream::cudaStreamPerThread;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{cuda_abi::encoder, encoder::Encoder};
-use openvm_cuda_common::stream::cudaStreamPerThread;
 
 #[test]
 fn test_cuda_encoder_with_invalid_row() {
