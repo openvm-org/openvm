@@ -31,7 +31,11 @@ pub mod merkle_tree {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _calculate_zero_hash(d_zero_hash: *mut std::ffi::c_void, size: usize) -> i32;
+        fn _calculate_zero_hash(
+            d_zero_hash: *mut std::ffi::c_void,
+            size: usize,
+            stream: cudaStream_t,
+        ) -> i32;
 
         fn _finalize_merkle_tree(
             d_roots: *mut usize,
@@ -40,7 +44,12 @@ pub mod merkle_tree {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _get_prefix_scan_temp_bytes(d_arr: *mut u32, n: usize, temp_n: *mut usize) -> i32;
+        fn _get_prefix_scan_temp_bytes(
+            d_arr: *mut u32,
+            n: usize,
+            temp_n: *mut usize,
+            stream: cudaStream_t,
+        ) -> i32;
 
         fn _update_merkle_tree(
             num_leaves: usize,
@@ -60,6 +69,7 @@ pub mod merkle_tree {
             d_poseidon2_raw_buffer: *mut std::ffi::c_void,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -100,8 +110,13 @@ pub mod merkle_tree {
     pub unsafe fn calculate_zero_hash<T>(
         d_zero_hash: &DeviceBuffer<T>,
         size: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_calculate_zero_hash(d_zero_hash.as_mut_raw_ptr(), size))
+        CudaError::from_result(_calculate_zero_hash(
+            d_zero_hash.as_mut_raw_ptr(),
+            size,
+            stream,
+        ))
     }
 
     pub unsafe fn finalize_merkle_tree<T>(
@@ -126,11 +141,13 @@ pub mod merkle_tree {
         d_arr: &DeviceBuffer<u32>,
         n: usize,
         temp_n: &mut usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_get_prefix_scan_temp_bytes(
             d_arr.as_mut_ptr(),
             n,
             temp_n as *mut usize,
+            stream,
         ))
     }
 
@@ -151,7 +168,12 @@ pub mod merkle_tree {
         let num_subtrees = subtree_ptrs.len();
         let tmp_buffer = DeviceBuffer::<u32>::with_capacity_on(5 * num_leaves, ctx);
         let mut need_tmp_storage_bytes = 0;
-        get_prefix_scan_temp_bytes(&tmp_buffer, num_leaves, &mut need_tmp_storage_bytes)?;
+        get_prefix_scan_temp_bytes(
+            &tmp_buffer,
+            num_leaves,
+            &mut need_tmp_storage_bytes,
+            ctx.stream.as_raw(),
+        )?;
         let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, ctx);
         let actual_heights = actual_heights.to_device_on(ctx).unwrap();
         CudaError::from_result(_update_merkle_tree(
@@ -173,6 +195,7 @@ pub mod merkle_tree {
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.
             hasher_buffer.buffer.len(),
+            ctx.stream.as_raw(),
         ))
     }
 }

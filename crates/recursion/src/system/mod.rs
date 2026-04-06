@@ -182,6 +182,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
         initial_transcript: TS,
     ) -> Vec<AirProvingContext<PB>> {
         let poseidon2_compress_inputs = vec![];
@@ -201,7 +202,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
             proofs,
             &mut external_data,
             #[cfg(feature = "cuda")]
-            None,
+            device_ctx,
             initial_transcript,
         )
         .unwrap()

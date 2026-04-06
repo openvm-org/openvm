@@ -236,7 +236,7 @@ impl MemoryMerkleTree {
         let zero_hash = DeviceBuffer::<H>::with_capacity_on(label_max_bits + 1, &ctx);
         let top_roots = DeviceBuffer::<H>::with_capacity_on(2 * num_addr_spaces - 1, &ctx);
         unsafe {
-            calculate_zero_hash(&zero_hash, label_max_bits).unwrap();
+            calculate_zero_hash(&zero_hash, label_max_bits, ctx.stream.as_raw()).unwrap();
         }
 
         Self {

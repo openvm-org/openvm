@@ -83,6 +83,8 @@ fn run_test<const MAX_NUM_PROOFS: usize, Fx: TestFixture<BabyBearPoseidon2Config
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         &proofs,
+        #[cfg(feature = "cuda")]
+        None,
         default_duplex_sponge_recorder(),
     );
     debug(parent_engine, &circuit.airs(), ctxs);
@@ -157,6 +159,8 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         &[proof],
+        #[cfg(feature = "cuda")]
+        None,
         default_duplex_sponge_recorder(),
     );
     debug(&parent_engine, &circuit.airs(), ctxs);
@@ -499,6 +503,8 @@ fn test_recursion_circuit_dag_commit_subair() {
         &vk,
         CachedTraceCtx::Records(cached_trace_record),
         &[proof],
+        #[cfg(feature = "cuda")]
+        None,
         default_duplex_sponge_recorder(),
     );
     assert!(ctxs[0].cached_mains.is_empty());
@@ -652,6 +658,8 @@ fn test_recursion_circuit_w_stack_too_small() {
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         std::slice::from_ref(&proof),
+        #[cfg(feature = "cuda")]
+        None,
         default_duplex_sponge_recorder(),
     );
 
@@ -721,12 +729,14 @@ mod cuda {
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_cpu),
             &proofs,
+            None,
             default_duplex_sponge_recorder(),
         );
         let gpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_gpu),
             &proofs,
+            Some(&gpu_device_ctx),
             default_duplex_sponge_recorder(),
         );
 
