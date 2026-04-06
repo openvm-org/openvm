@@ -981,7 +981,8 @@ int launch_sha2_hash_computation(
     size_t num_records,
     size_t *d_record_offsets,
     typename V::Word *d_prev_hashes,
-    uint32_t total_num_blocks
+    uint32_t total_num_blocks,
+    cudaStream_t stream
 ) {
     auto [grid_size, block_size] = kernel_launch_params(num_records, 256);
 
@@ -1006,7 +1007,8 @@ int launch_sha2_first_pass_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     auto [grid_size, block_size] = kernel_launch_params(total_num_blocks, 256);
 
@@ -1030,7 +1032,7 @@ int launch_sha2_first_pass_tracegen(
 }
 
 template <typename V>
-int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used) {
+int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used, cudaStream_t stream) {
     size_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
     auto [grid_size, block_size] = kernel_launch_params(total_blocks, 256);
     sha2_second_pass_dependencies<V>
@@ -1048,7 +1050,8 @@ int launch_sha2_fill_invalid_rows(
     Fp *d_trace,
     size_t trace_height,
     size_t rows_used,
-    typename V::Word *d_prev_hashes
+    typename V::Word *d_prev_hashes,
+    cudaStream_t stream
 ) {
     sha2_fill_first_dummy_row<V><<<1, 1, 0, stream>>>(d_trace, trace_height, rows_used);
     if (CHECK_KERNEL() != 0) {
@@ -1068,14 +1071,16 @@ int launch_sha256_hash_computation(
     size_t num_records,
     size_t *d_record_offsets,
     uint32_t *d_prev_hashes,
-    uint32_t total_num_blocks
+    uint32_t total_num_blocks,
+    cudaStream_t stream
 ) {
     return launch_sha2_hash_computation<Sha256Variant>(
         d_records,
         num_records,
         d_record_offsets,
         reinterpret_cast<uint32_t *>(d_prev_hashes),
-        total_num_blocks
+        total_num_blocks,
+        stream
     );
 }
 
@@ -1084,10 +1089,11 @@ int launch_sha512_hash_computation(
     size_t num_records,
     size_t *d_record_offsets,
     uint64_t *d_prev_hashes,
-    uint32_t total_num_blocks
+    uint32_t total_num_blocks,
+    cudaStream_t stream
 ) {
     return launch_sha2_hash_computation<Sha512Variant>(
-        d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks
+        d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks, stream
     );
 }
 
@@ -1104,7 +1110,8 @@ int launch_sha256_first_pass_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     return launch_sha2_first_pass_tracegen<Sha256Variant>(
         d_trace,
@@ -1119,7 +1126,8 @@ int launch_sha256_first_pass_tracegen(
         range_checker_num_bins,
         d_bitwise_lookup,
         bitwise_num_bits,
-        timestamp_max_bits
+        timestamp_max_bits,
+        stream
     );
 }
 
@@ -1136,7 +1144,8 @@ int launch_sha512_first_pass_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     return launch_sha2_first_pass_tracegen<Sha512Variant>(
         d_trace,
@@ -1151,34 +1160,37 @@ int launch_sha512_first_pass_tracegen(
         range_checker_num_bins,
         d_bitwise_lookup,
         bitwise_num_bits,
-        timestamp_max_bits
+        timestamp_max_bits,
+        stream
     );
 }
 
-int launch_sha256_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    return launch_sha2_second_pass_dependencies<Sha256Variant>(d_trace, trace_height, rows_used);
+int launch_sha256_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used, cudaStream_t stream) {
+    return launch_sha2_second_pass_dependencies<Sha256Variant>(d_trace, trace_height, rows_used, stream);
 }
-int launch_sha512_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    return launch_sha2_second_pass_dependencies<Sha512Variant>(d_trace, trace_height, rows_used);
+int launch_sha512_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used, cudaStream_t stream) {
+    return launch_sha2_second_pass_dependencies<Sha512Variant>(d_trace, trace_height, rows_used, stream);
 }
 int launch_sha256_fill_invalid_rows(
     Fp *d_trace,
     size_t trace_height,
     size_t rows_used,
-    uint32_t *d_prev_hashes
+    uint32_t *d_prev_hashes,
+    cudaStream_t stream
 ) {
     return launch_sha2_fill_invalid_rows<Sha256Variant>(
-        d_trace, trace_height, rows_used, d_prev_hashes
+        d_trace, trace_height, rows_used, d_prev_hashes, stream
     );
 }
 int launch_sha512_fill_invalid_rows(
     Fp *d_trace,
     size_t trace_height,
     size_t rows_used,
-    uint64_t *d_prev_hashes
+    uint64_t *d_prev_hashes,
+    cudaStream_t stream
 ) {
     return launch_sha2_fill_invalid_rows<Sha512Variant>(
-        d_trace, trace_height, rows_used, d_prev_hashes
+        d_trace, trace_height, rows_used, d_prev_hashes, stream
     );
 }
 }

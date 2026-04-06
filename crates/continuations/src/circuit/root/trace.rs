@@ -10,6 +10,11 @@ use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{BabyBearBn254Poseidon2HashScheme, GenericGpuBackend};
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{CudaStream, DeviceContext, StreamGuard},
+};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
@@ -128,11 +133,15 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
     ) -> SubCircuitTraceData<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
         let data =
             self.generate_pre_verifier_subcircuit_ctx(proof, user_pvs_proof, memory_dimensions);
+        let ctx = DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
         SubCircuitTraceData {
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>)
+                .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, &ctx))
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
@@ -150,9 +159,13 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
     ) {
         let (cpu_ctxs, inputs) =
             self.generate_other_proving_ctxs(proof, memory_dimensions, deferral_merkle_proofs);
+        let ctx = DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>)
+            .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, &ctx))
             .collect_vec();
         (gpu_ctxs, inputs)
     }
