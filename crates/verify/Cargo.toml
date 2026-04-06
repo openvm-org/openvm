@@ -11,7 +11,9 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit.workspace = true
 openvm-recursion-circuit-derive.workspace = true
 
+bincode = "1.3.3"
 bitcode.workspace = true
+clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
 p3-field.workspace = true
 serde.workspace = true

@@ -7328,7 +7328,9 @@ dependencies = [
 name = "openvm-verify-stark-host"
 version = "2.0.0-beta.1"
 dependencies = [
+ "bincode",
  "bitcode",
+ "clap",
  "eyre",
  "openvm-circuit",
  "openvm-recursion-circuit-derive",
