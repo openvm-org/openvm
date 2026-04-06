@@ -922,14 +922,14 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         debug_assert_eq!(output_offset_chunks, total_chunks);
 
         // Upload to GPU and run kernel on the caller-owned stream.
-        let d_data = flat_data.to_device_on(&ctx).expect("failed to upload data");
+        let d_data = flat_data.to_device_on(ctx).expect("failed to upload data");
         let d_descriptors = descriptors
-            .to_device_on(&ctx)
+            .to_device_on(ctx)
             .expect("failed to upload descriptors");
         let d_pre_states =
-            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, &ctx);
+            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
         let d_post_states =
-            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, &ctx);
+            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
 
         unsafe {
             merkle_precomputation_hash_vectors(
@@ -945,10 +945,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
         // Download results
         let pre_states_flat = d_pre_states
-            .to_host_on(&ctx)
+            .to_host_on(ctx)
             .expect("failed to download pre_states");
         let post_states_flat = d_post_states
-            .to_host_on(&ctx)
+            .to_host_on(ctx)
             .expect("failed to download post_states");
         debug_assert_eq!(pre_states_flat.len(), total_chunks * POSEIDON2_WIDTH);
         debug_assert_eq!(post_states_flat.len(), total_chunks * POSEIDON2_WIDTH);
@@ -1429,10 +1429,10 @@ pub mod cuda_tracegen {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let ctx =
                 device_ctx.expect("GPU verifier tracegen requires an engine-owned DeviceContext");
-            let child_vk_gpu = VerifyingKeyGpu::new(child_vk, &ctx);
+            let child_vk_gpu = VerifyingKeyGpu::new(child_vk, ctx);
             let proofs_gpu = proofs
                 .iter()
-                .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu, &ctx))
+                .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu, ctx))
                 .collect::<Vec<_>>();
             // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this
             // avoids Rayon's thread pool overhead while still getting parallelism.
@@ -1483,7 +1483,7 @@ pub mod cuda_tracegen {
             // issues
             let preflights_gpu = zip(proofs, preflights_cpu)
                 .map(|(proof, preflight_cpu)| {
-                    PreflightGpu::new(child_vk, proof, &preflight_cpu, &ctx)
+                    PreflightGpu::new(child_vk, proof, &preflight_cpu, ctx)
                 })
                 .collect::<Vec<_>>();
             let modules = vec![
@@ -1509,7 +1509,7 @@ pub mod cuda_tracegen {
                     &child_vk_gpu,
                     &proofs_gpu,
                     &preflights_gpu,
-                    &ctx,
+                    ctx,
                     cached_trace_record,
                     &power_checker_gen,
                     &exp_bits_len_gen,

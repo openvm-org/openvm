@@ -30,7 +30,7 @@ use openvm_rv32_adapters::{
     Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
 };
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, StarkEngine};
 use strum::EnumCount;
 
 use crate::{
@@ -438,7 +438,7 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
         &self,
         config: &Rv32ModularConfig,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device: &<E as StarkEngine>::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -476,7 +476,7 @@ impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
         &self,
         config: &Rv32ModularWithFp2Config,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device: &<E as StarkEngine>::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,

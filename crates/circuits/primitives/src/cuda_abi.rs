@@ -394,6 +394,7 @@ pub mod less_than {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn less_than_array_dummy_tracegen(
         trace: &DeviceBuffer<F>,
         trace_height: usize,

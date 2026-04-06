@@ -293,6 +293,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
     let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
         internal_recursive_proof,
         &user_pvs_proof,
+        None,
     );
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
@@ -329,6 +330,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
             internal_recursive_proof.clone(),
             &user_pvs_proof,
+            None,
         )
         .unwrap();
     let mut trace_heights = ctx
@@ -353,6 +355,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
             internal_recursive_proof,
             &user_pvs_proof,
+            None,
         )
         .unwrap();
 

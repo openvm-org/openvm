@@ -404,12 +404,39 @@ where
     }
 }
 
+#[cfg(not(feature = "cuda"))]
 impl<PB, S, T, E> DeferralCircuitProver<SC> for DeferredVerifyCircuitProver<E, S, T>
 where
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
     T: DeferredVerifyTraceGen<PB>,
     E: StarkEngine<PB = PB, SC = SC>,
+    PB::Matrix: Clone,
+{
+    fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
+        self.prover.get_vk()
+    }
+
+    fn prove(&self, input_bytes: &[u8]) -> Proof<SC> {
+        let vm_proof = VmStarkProof::decode_from_bytes(input_bytes).unwrap();
+        self.prover
+            .prove_no_def::<E>(vm_proof.inner, &vm_proof.user_pvs_proof)
+            .expect("DeferredVerifyProver::prove_no_def failed")
+    }
+
+    fn get_def_idx(&self) -> usize {
+        self.prover.circuit.def_idx
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl<PB, S, T, E> DeferralCircuitProver<SC> for DeferredVerifyCircuitProver<E, S, T>
+where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
+    T: DeferredVerifyTraceGen<PB>,
+    E: StarkEngine<PB = PB, SC = SC>,
+    E::PD: MaybeDeviceContext,
     PB::Matrix: Clone,
 {
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {

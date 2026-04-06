@@ -732,7 +732,7 @@ mod cuda_tracegen {
                 .map(|trace| {
                     trace.map(|m| {
                         AirProvingContext::simple_no_pis(
-                            transport_matrix_h2d_row(&m, &ctx).unwrap(),
+                            transport_matrix_h2d_row(&m, ctx).unwrap(),
                         )
                     })
                 })

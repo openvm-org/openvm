@@ -21,7 +21,7 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::stream::DeviceContext;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, StarkEngine};
 
 use crate::{
     get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv32WeierstrassConfig, WeierstrassAir,
@@ -198,7 +198,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
         &self,
         config: &Rv32WeierstrassConfig,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device: &<E as StarkEngine>::PD,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,

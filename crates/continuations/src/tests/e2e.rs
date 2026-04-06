@@ -745,6 +745,7 @@ fn test_deferral_e2e() -> Result<()> {
         combined_proof,
         &user_pvs_proof,
         Some(&merkle_proofs),
+        None,
     );
     warn!("proving root (GPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;

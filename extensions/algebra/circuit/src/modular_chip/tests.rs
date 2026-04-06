@@ -158,13 +158,16 @@ mod addsub_tests {
         );
 
         // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(get_modular_addsub_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
+        let hybrid_chip = HybridModularChip::new(
+            get_modular_addsub_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker().ctx.clone(),
+        );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -530,13 +533,16 @@ mod muldiv_tests {
         );
 
         // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(get_modular_muldiv_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
+        let hybrid_chip = HybridModularChip::new(
+            get_modular_muldiv_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker().ctx.clone(),
+        );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -1065,6 +1071,7 @@ mod is_equal_tests {
                     ),
                     tester.cpu_memory_helper(),
                 ),
+                tester.range_checker().ctx.clone(),
             );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)

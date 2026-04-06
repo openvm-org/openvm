@@ -198,6 +198,7 @@ pub unsafe fn non_initial_opened_values_tracegen(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn whir_folding_tracegen(
     trace_d: &DeviceBuffer<F>,
     num_valid_rows: u32,

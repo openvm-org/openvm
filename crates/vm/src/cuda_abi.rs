@@ -120,6 +120,7 @@ pub mod poseidon2 {
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -160,6 +161,7 @@ pub mod poseidon2 {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn deduplicate_records(
         d_records: &DeviceBuffer<F>,
         d_counts: &DeviceBuffer<u32>,

@@ -79,6 +79,7 @@ extern "C" {
     ) -> i32;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn poseidon2_tracegen(
     d_trace: &DeviceBuffer<F>,
     height: usize,

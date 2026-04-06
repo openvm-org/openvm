@@ -191,6 +191,8 @@ pub fn compute_root_proof_heights(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
             agg_proof.deferral_merkle_proofs.as_ref(),
+            #[cfg(feature = "cuda")]
+            None,
         )
         .unwrap();
 
