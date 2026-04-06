@@ -64,7 +64,7 @@ For example, to initialize the SDK with the `verify-stark` deferral circuit:
 let def_idx = 0;
 let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
     ir_vk,
-    ir_pcs_data,
+    ir_pcs_data.commitment.into(),
     def_circuit_params,
     memory_dimensions,
     num_user_pvs,
