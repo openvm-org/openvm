@@ -21,8 +21,8 @@ The following example can be run as guest code or host code (i.e. run in the zkv
 To run with guest code, use `cargo openvm run`, and for host code use `cargo run`.
 The implementations for `Sha256`, `Sha512`, and `Sha384` fall back to using `sha2` when running as host code.
 ```rust
-[!include ~/snippets/examples/sha2/src/main.rs:imports]
-[!include ~/snippets/examples/sha2/src/main.rs:main]
+// [!include ~/snippets/examples/sha2/src/main.rs:imports]
+// [!include ~/snippets/examples/sha2/src/main.rs:main]
 ```
 
 To be able to import the `shaXXX` functions and run the example, add the following to your `Cargo.toml` file:
@@ -38,3 +38,4 @@ For the guest program to build successfully add the following to your `.toml` fi
 
 ```toml
 [app_vm_config.sha2]
+```
