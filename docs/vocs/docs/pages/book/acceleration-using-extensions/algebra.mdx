@@ -115,9 +115,10 @@ To have the correct imports for the above example, add the following to the `Car
 
 ```toml
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0", features = ["std"] }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
-serde = { version = "1.0.216", default-features = false }
+serde = { version = "1.0.216" }
+num-bigint = { version = "0.4.6", features = ["serde"] }
 ```
 
 Here is the full `openvm.toml` to accompany the above example:
