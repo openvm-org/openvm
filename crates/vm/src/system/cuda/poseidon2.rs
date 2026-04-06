@@ -12,6 +12,7 @@ use openvm_cuda_common::{
     d_buffer::DeviceBuffer,
     stream::DeviceContext,
 };
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use crate::cuda_abi::poseidon2;
@@ -65,6 +66,9 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.ctx);
+        let dedup_records =
+            DeviceBuffer::<F>::with_capacity_on(num_records * POSEIDON2_WIDTH, &self.ctx);
+        let dedup_counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.ctx);
         unsafe {
             let d_num_records = [num_records].to_device_on(&self.ctx).unwrap();
             let mut temp_bytes = 0;
@@ -85,6 +89,8 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
             poseidon2::deduplicate_records(
                 &self.records,
                 &counts,
+                &dedup_records,
+                &dedup_counts,
                 num_records,
                 &d_num_records,
                 &d_temp_storage,
@@ -109,8 +115,8 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
-                &self.records,
-                &counts,
+                &dedup_records,
+                &dedup_counts,
                 num_records,
                 SBOX_REGISTERS,
                 self.ctx.stream.as_raw(),

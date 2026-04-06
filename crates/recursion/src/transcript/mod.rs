@@ -572,6 +572,22 @@ mod cuda_tracegen {
                                 device_ctx,
                             )
                         };
+                        let d_records_dedup = if total_poseidon2_inputs == 0 {
+                            DeviceBuffer::<F>::new()
+                        } else {
+                            DeviceBuffer::<F>::with_capacity_on(
+                                total_poseidon2_inputs * POSEIDON2_WIDTH,
+                                device_ctx,
+                            )
+                        };
+                        let d_counts_dedup = if total_poseidon2_inputs == 0 {
+                            DeviceBuffer::<Poseidon2Count>::new()
+                        } else {
+                            DeviceBuffer::<Poseidon2Count>::with_capacity_on(
+                                total_poseidon2_inputs,
+                                device_ctx,
+                            )
+                        };
 
                         let mut num_records = total_poseidon2_inputs;
                         if num_records > 0 {
@@ -595,6 +611,8 @@ mod cuda_tracegen {
                                 cuda_abi::poseidon2_deduplicate_records(
                                     &blob.poseidon2_buffer,
                                     &d_counts,
+                                    &d_records_dedup,
+                                    &d_counts_dedup,
                                     num_records,
                                     &d_num_records,
                                     blob.num_prefix_perms,
@@ -632,8 +650,8 @@ mod cuda_tracegen {
                                 poseidon_trace_gpu.buffer(),
                                 poseidon_trace_gpu.height(),
                                 poseidon_trace_gpu.width(),
-                                &blob.poseidon2_buffer,
-                                &d_counts,
+                                &d_records_dedup,
+                                &d_counts_dedup,
                                 num_records,
                                 SBOX_REGISTERS,
                                 device_ctx.stream.as_raw(),

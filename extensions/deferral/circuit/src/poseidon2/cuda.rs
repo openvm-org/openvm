@@ -77,6 +77,10 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
 
+        let dedup_records =
+            DeviceBuffer::<F>::with_capacity_on(num_records * DIGEST_SIZE * 2, &self.ctx);
+        let dedup_counts =
+            DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(num_records, &self.ctx);
         unsafe {
             let d_num_records = [num_records].to_device_on(&self.ctx).unwrap();
             let mut temp_bytes = 0;
@@ -99,6 +103,8 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
             poseidon2::deduplicate_records(
                 &self.records,
                 &self.counts,
+                &dedup_records,
+                &dedup_counts,
                 num_records,
                 &d_num_records,
                 &d_temp_storage,
@@ -123,8 +129,8 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
-                &self.records,
-                &self.counts,
+                &dedup_records,
+                &dedup_counts,
                 num_records,
                 self.sbox_registers,
                 self.ctx.stream.as_raw(),
