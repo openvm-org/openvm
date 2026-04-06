@@ -5,6 +5,8 @@ use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
@@ -34,6 +36,7 @@ pub trait DeferralHookTraceGen<PB: ProverBackend> {
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<PB::Val>>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> DeferralHookPreCtx<PB>;
 }
 
@@ -61,6 +64,7 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookT
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> DeferralHookPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (leaf_children, num_real_leaves) = normalize_leaf_children(leaf_children);
         let super::decommit::MerkleDecommitTraceCtx {
@@ -122,6 +126,7 @@ impl DeferralHookTraceGen<GpuBackend> for DeferralHookTraceGenImpl {
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
+        device_ctx: Option<&DeviceContext>,
     ) -> DeferralHookPreCtx<GpuBackend> {
         let DeferralHookPreCtx {
             verifier_pvs_ctx,
@@ -129,12 +134,14 @@ impl DeferralHookTraceGen<GpuBackend> for DeferralHookTraceGenImpl {
             onion_ctx,
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
-        } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children);
+        } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children, device_ctx);
+        let ctx =
+            device_ctx.expect("GPU deferral hook tracegen requires an engine-owned DeviceContext");
 
         DeferralHookPreCtx {
-            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx),
-            decommit_ctx: cpu_proving_ctx_to_gpu(decommit_ctx),
-            onion_ctx: cpu_proving_ctx_to_gpu(onion_ctx),
+            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx, ctx),
+            decommit_ctx: cpu_proving_ctx_to_gpu(decommit_ctx, ctx),
+            onion_ctx: cpu_proving_ctx_to_gpu(onion_ctx, ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
         }

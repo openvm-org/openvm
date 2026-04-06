@@ -169,7 +169,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// Fill each address space memory with zeros. Does not change the config.
     pub fn fill_zero(&mut self) {
         for mem in &mut self.mem {
-            mem.fill_zero();
+            LinearMemory::fill_zero(mem);
         }
     }
 

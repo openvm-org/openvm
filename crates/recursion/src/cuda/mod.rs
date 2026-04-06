@@ -1,9 +1,5 @@
 use openvm_cuda_common::{
-    common::get_device,
-    copy::MemCopyH2D,
-    d_buffer::DeviceBuffer,
-    error::MemCopyError,
-    stream::{CudaStream, DeviceContext, StreamGuard},
+    copy::MemCopyH2D, d_buffer::DeviceBuffer, error::MemCopyError, stream::DeviceContext,
 };
 
 use crate::{
@@ -23,13 +19,6 @@ impl GlobalTraceGenCtx for GlobalCtxGpu {
     type ChildVerifyingKey = VerifyingKeyGpu;
     type MultiProof = [ProofGpu];
     type PreflightRecords = [PreflightGpu];
-}
-
-pub fn temp_device_ctx() -> DeviceContext {
-    DeviceContext {
-        device_id: get_device().unwrap() as u32,
-        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-    }
 }
 
 pub fn to_device_or_nullptr_on<T>(

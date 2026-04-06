@@ -4,6 +4,8 @@ use eyre::Result;
 use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
 };
+#[cfg(feature = "cuda")]
+use openvm_continuations::prover::{device_ctx_for_engine, MaybeDeviceContext};
 use openvm_continuations::{
     circuit::{deferral::DeferralMerkleProofs, Circuit},
     prover::{debug_constraints, DeferralCircuitProver},
@@ -75,14 +77,15 @@ where
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
+    #[cfg(not(feature = "cuda"))]
     pub fn prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
     ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proof, user_pvs_proof, deferral_merkle_proofs);
         let engine = E::new(self.pk.params.clone());
+        let ctx = self.generate_proving_ctx(proof, user_pvs_proof, deferral_merkle_proofs);
         #[cfg(debug_assertions)]
         debug_constraints(&self.circuit, &ctx, &engine);
         let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
@@ -93,11 +96,55 @@ where
     }
 
     #[instrument(name = "total_proof", skip_all)]
+    #[cfg(feature = "cuda")]
+    pub fn prove<E>(
+        &self,
+        proof: Proof<SC>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
+    ) -> Result<Proof<SC>>
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext,
+    {
+        let engine = E::new(self.pk.params.clone());
+        let ctx = self.generate_proving_ctx(
+            proof,
+            user_pvs_proof,
+            deferral_merkle_proofs,
+            #[cfg(feature = "cuda")]
+            device_ctx_for_engine(&engine),
+        );
+        #[cfg(debug_assertions)]
+        debug_constraints(&self.circuit, &ctx, &engine);
+        let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
+        let proof = engine.prove(&d_pk, ctx)?;
+        #[cfg(debug_assertions)]
+        engine.verify(&self.vk, &proof)?;
+        Ok(proof)
+    }
+
+    #[instrument(name = "total_proof", skip_all)]
+    #[cfg(not(feature = "cuda"))]
     pub fn prove_no_def<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
     ) -> Result<Proof<SC>> {
+        self.prove::<E>(proof, user_pvs_proof, None)
+    }
+
+    #[instrument(name = "total_proof", skip_all)]
+    #[cfg(feature = "cuda")]
+    pub fn prove_no_def<E>(
+        &self,
+        proof: Proof<SC>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+    ) -> Result<Proof<SC>>
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext,
+    {
         self.prove::<E>(proof, user_pvs_proof, None)
     }
 }

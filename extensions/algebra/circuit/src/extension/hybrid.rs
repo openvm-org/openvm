@@ -22,6 +22,7 @@ use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{
@@ -42,6 +43,7 @@ use crate::{
 #[derive(derive_new::new)]
 pub struct HybridModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
     cpu: ModularChip<F, BLOCKS, BLOCK_SIZE>,
+    ctx: DeviceContext,
 }
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
@@ -85,7 +87,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
         let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx)
+        cpu_proving_ctx_to_gpu(cpu_ctx, &self.ctx)
     }
 }
 
@@ -97,6 +99,7 @@ pub struct HybridModularIsEqualChip<
     const TOTAL_LIMBS: usize,
 > {
     cpu: ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    ctx: DeviceContext,
 }
 
 impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
@@ -128,7 +131,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
         let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx)
+        cpu_proving_ctx_to_gpu(cpu_ctx, &self.ctx)
     }
 }
 
@@ -174,7 +177,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(addsub));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    addsub,
+                    range_checker_gpu.ctx.clone(),
+                ));
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
@@ -184,7 +190,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(muldiv));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    muldiv,
+                    range_checker_gpu.ctx.clone(),
+                ));
 
                 let modulus_limbs = std::array::from_fn(|i| {
                     if i < modulus_limbs.len() {
@@ -208,7 +217,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     ),
                     mem_helper.clone(),
                 );
-                inventory.add_executor_chip(HybridModularIsEqualChip::new(is_eq));
+                inventory.add_executor_chip(HybridModularIsEqualChip::new(
+                    is_eq,
+                    range_checker_gpu.ctx.clone(),
+                ));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -224,7 +236,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(addsub));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    addsub,
+                    range_checker_gpu.ctx.clone(),
+                ));
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
@@ -234,7 +249,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(muldiv));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    muldiv,
+                    range_checker_gpu.ctx.clone(),
+                ));
 
                 let modulus_limbs = std::array::from_fn(|i| {
                     if i < modulus_limbs.len() {
@@ -258,7 +276,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     ),
                     mem_helper.clone(),
                 );
-                inventory.add_executor_chip(HybridModularIsEqualChip::new(is_eq));
+                inventory.add_executor_chip(HybridModularIsEqualChip::new(
+                    is_eq,
+                    range_checker_gpu.ctx.clone(),
+                ));
             } else {
                 panic!("Modulus too large");
             }
@@ -271,6 +292,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
 #[derive(derive_new::new)]
 pub struct HybridFp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
     cpu: Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+    ctx: DeviceContext,
 }
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
@@ -311,7 +333,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
         let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx)
+        cpu_proving_ctx_to_gpu(cpu_ctx, &self.ctx)
     }
 }
 
@@ -350,7 +372,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(addsub));
+                inventory
+                    .add_executor_chip(HybridFp2Chip::new(addsub, range_checker_gpu.ctx.clone()));
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
@@ -360,7 +383,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(muldiv));
+                inventory
+                    .add_executor_chip(HybridFp2Chip::new(muldiv, range_checker_gpu.ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -376,7 +400,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(addsub));
+                inventory
+                    .add_executor_chip(HybridFp2Chip::new(addsub, range_checker_gpu.ctx.clone()));
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
@@ -386,7 +411,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(muldiv));
+                inventory
+                    .add_executor_chip(HybridFp2Chip::new(muldiv, range_checker_gpu.ctx.clone()));
             } else {
                 panic!("Modulus too large");
             }

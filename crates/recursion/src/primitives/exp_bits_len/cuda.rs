@@ -70,9 +70,3 @@ impl ExpBitsLenGpuTraceGenerator {
         Some(trace)
     }
 }
-
-impl Default for ExpBitsLenGpuTraceGenerator {
-    fn default() -> Self {
-        Self::new(crate::cuda::temp_device_ctx())
-    }
-}

@@ -1,4 +1,6 @@
 use itertools::Itertools;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
@@ -33,6 +35,7 @@ where
         child_vk_kind: ChildVkKind,
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> ProvingContext<PB> {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
 
@@ -73,6 +76,8 @@ where
                 CachedTraceCtx::PcsData(child_vk_pcs_data),
                 proofs,
                 &mut external_data,
+                #[cfg(feature = "cuda")]
+                device_ctx,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();

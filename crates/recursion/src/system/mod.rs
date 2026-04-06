@@ -5,7 +5,17 @@
 use std::{iter, sync::Arc};
 
 use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cpu_backend::CpuDevice;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::GpuDevice;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::prover::ReferenceDevice;
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::prover::TraceCommitter;
 use openvm_stark_backend::{
     interaction::BusIndex,
     keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
@@ -18,6 +28,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHU
 use p3_field::BasedVectorSpace;
 use p3_maybe_rayon::prelude::*;
 
+#[cfg(feature = "cuda")]
+use crate::primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator;
 use crate::{
     batch_constraint::{
         expr_eval::CachedTraceRecord, BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX,
@@ -44,6 +56,32 @@ use crate::{
     utils::poseidon2_hash_slice_with_states,
     whir::WhirModule,
 };
+
+#[cfg(feature = "cuda")]
+pub trait MaybeDeviceContext {
+    fn maybe_device_ctx(&self) -> Option<&DeviceContext>;
+}
+
+#[cfg(feature = "cuda")]
+impl MaybeDeviceContext for GpuDevice {
+    fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
+        Some(&self.ctx)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl<SC> MaybeDeviceContext for CpuDevice<SC> {
+    fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
+        None
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl<SC> MaybeDeviceContext for ReferenceDevice<SC> {
+    fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
+        None
+    }
+}
 
 mod dummy;
 pub(crate) mod frame;
@@ -89,11 +127,22 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
         config: VerifierConfig,
     ) -> Self;
 
+    #[cfg(not(feature = "cuda"))]
     fn commit_child_vk<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> CommittedTraceData<PB>;
+
+    #[cfg(feature = "cuda")]
+    fn commit_child_vk<E>(
+        &self,
+        engine: &E,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CommittedTraceData<PB>
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext + TraceCommitter<PB>;
 
     fn cached_trace_record(
         &self,
@@ -112,6 +161,7 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         external_data: &mut VerifierExternalData,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 
@@ -141,6 +191,8 @@ pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
             cached_trace_ctx,
             proofs,
             &mut external_data,
+            #[cfg(feature = "cuda")]
+            None,
             initial_transcript,
         )
         .unwrap()
@@ -476,7 +528,8 @@ impl<'a> TraceModuleRef<'a> {
         preflights: &[Preflight],
         cached_trace_record: Option<&CachedTraceRecord>,
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        #[cfg(feature = "cuda")] exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
+        #[cfg(not(feature = "cuda"))] exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         external_data: &VerifierExternalData,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
@@ -667,17 +720,28 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     }
 
     /// Computes merkle precomputation (hashing opened rows) and writes results
-    /// into the preflight. When `cuda` is enabled, this launches GPU kernels on
-    /// the default stream and must not be called from parallel threads.
+    /// into the preflight on CPU.
     #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
     pub fn apply_merkle_precomputation(
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
     ) {
-        #[cfg(feature = "cuda")]
-        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof);
-        #[cfg(not(feature = "cuda"))]
         let merkle_precomputation = Self::compute_merkle_precomputation(proof);
+
+        preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
+        preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
+        preflight.initial_row_states = merkle_precomputation.initial_row_states;
+        preflight.codeword_states = merkle_precomputation.codeword_states;
+    }
+
+    #[cfg(feature = "cuda")]
+    #[tracing::instrument(name = "apply_merkle_precomputation_cuda", skip_all)]
+    pub fn apply_merkle_precomputation_cuda(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &mut Preflight,
+        ctx: &DeviceContext,
+    ) {
+        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof, ctx);
 
         preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
         preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
@@ -771,16 +835,14 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     #[tracing::instrument(name = "compute_merkle_precomputation_cuda", level = "info", skip_all)]
     fn compute_merkle_precomputation_cuda(
         proof: &Proof<BabyBearPoseidon2Config>,
+        ctx: &DeviceContext,
     ) -> MerklePrecomputation {
         use openvm_cuda_common::{
             copy::{MemCopyD2H, MemCopyH2D},
             d_buffer::DeviceBuffer,
         };
 
-        use crate::cuda::{
-            abi::{merkle_precomputation_hash_vectors, VectorDescriptor},
-            temp_device_ctx,
-        };
+        use crate::cuda::abi::{merkle_precomputation_hash_vectors, VectorDescriptor};
 
         let num_chunks = |len: usize| len.div_ceil(CHUNK);
 
@@ -849,8 +911,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         debug_assert_eq!(flat_data.len(), total_data_len);
         debug_assert_eq!(output_offset_chunks, total_chunks);
 
-        // Upload to GPU and run kernel
-        let ctx = temp_device_ctx();
+        // Upload to GPU and run kernel on the caller-owned stream.
         let d_data = flat_data.to_device_on(&ctx).expect("failed to upload data");
         let d_descriptors = descriptors
             .to_device_on(&ctx)
@@ -1039,11 +1100,25 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         Self::new_with_options(child_mvk, config)
     }
 
+    #[cfg(not(feature = "cuda"))]
     fn commit_child_vk<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> CommittedTraceData<CpuBackend<SC>> {
+        self.batch_constraint.commit_child_vk(engine, child_vk)
+    }
+
+    #[cfg(feature = "cuda")]
+    fn commit_child_vk<E>(
+        &self,
+        engine: &E,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CommittedTraceData<CpuBackend<SC>>
+    where
+        E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
+        E::PD: MaybeDeviceContext + TraceCommitter<CpuBackend<SC>>,
+    {
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
@@ -1064,6 +1139,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         cached_trace_ctx: CachedTraceCtx<CpuBackend<SC>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         external_data: &mut VerifierExternalData,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1113,6 +1189,9 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 
         let power_checker_gen =
             Arc::new(PowerCheckerCpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::default());
+        #[cfg(feature = "cuda")]
+        let exp_bits_len_gen = ExpBitsLenCpuTraceGenerator::default();
+        #[cfg(not(feature = "cuda"))]
         let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
 
         let (module_required, power_checker_required, exp_bits_len_required) =
@@ -1197,7 +1276,7 @@ pub mod cuda_tracegen {
 
     use super::*;
     use crate::{
-        cuda::{preflight::PreflightGpu, proof::ProofGpu, temp_device_ctx, vk::VerifyingKeyGpu},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
         primitives::pow::cuda::PowerCheckerGpuTraceGenerator,
     };
 
@@ -1305,11 +1384,15 @@ pub mod cuda_tracegen {
             Self::new_with_options(child_mvk, config)
         }
 
-        fn commit_child_vk<E: StarkEngine<SC = HS::SC, PB = GenericGpuBackend<HS>>>(
+        fn commit_child_vk<E>(
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        ) -> CommittedTraceData<GenericGpuBackend<HS>> {
+        ) -> CommittedTraceData<GenericGpuBackend<HS>>
+        where
+            E: StarkEngine<SC = HS::SC, PB = GenericGpuBackend<HS>>,
+            E::PD: MaybeDeviceContext + TraceCommitter<GenericGpuBackend<HS>>,
+        {
             self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
@@ -1330,10 +1413,12 @@ pub mod cuda_tracegen {
             cached_trace_ctx: CachedTraceCtx<GenericGpuBackend<HS>>,
             proofs: &[Proof<BabyBearPoseidon2Config>],
             external_data: &mut VerifierExternalData,
+            device_ctx: Option<&DeviceContext>,
             initial_transcript: TS,
         ) -> Option<Vec<AirProvingContext<GenericGpuBackend<HS>>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
-            let ctx = temp_device_ctx();
+            let ctx =
+                device_ctx.expect("GPU verifier tracegen requires an engine-owned DeviceContext");
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk, &ctx);
             let proofs_gpu = proofs
                 .iter()
@@ -1362,7 +1447,7 @@ pub mod cuda_tracegen {
 
             // Merkle precomputation launches CUDA kernels, so run serially on main thread.
             for (proof, preflight) in proofs.iter().zip(preflights_cpu.iter_mut()) {
-                Self::apply_merkle_precomputation(proof, preflight);
+                Self::apply_merkle_precomputation_cuda(proof, preflight, ctx);
             }
 
             if let Some(final_transcript_state) = &mut external_data.final_transcript_state {

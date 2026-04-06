@@ -520,7 +520,7 @@ mod tests {
             .map(|mem| {
                 let mem_slice = mem.as_slice();
                 if !mem_slice.is_empty() {
-                    mem_slice.to_device().unwrap()
+                    mem_slice.to_device_on(&gpu_merkle_tree.ctx).unwrap()
                 } else {
                     DeviceBuffer::new()
                 }
@@ -540,10 +540,19 @@ mod tests {
 
         assert_eq!(
             cpu_merkle_tree.root(),
-            gpu_merkle_tree.top_roots.to_host().unwrap()[0]
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.ctx)
+                .unwrap()[0]
         );
         eprintln!("{:?}", cpu_merkle_tree.root());
-        eprintln!("{:?}", gpu_merkle_tree.top_roots.to_host().unwrap()[0]);
+        eprintln!(
+            "{:?}",
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.ctx)
+                .unwrap()[0]
+        );
 
         // Now we add some touched memory
         // We don't care about the memory layout and whatnot, because neither implementation uses
@@ -600,7 +609,7 @@ mod tests {
                 merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });
             }
         }
-        let d_touched_blocks = merkle_records.to_device().unwrap();
+        let d_touched_blocks = merkle_records.to_device_on(&gpu_merkle_tree.ctx).unwrap();
 
         gpu_merkle_tree.update_with_touched_blocks(
             gpu_merkle_tree.calculate_unpadded_height(&touched_blocks),
@@ -610,9 +619,18 @@ mod tests {
 
         assert_eq!(
             cpu_merkle_tree.root(),
-            gpu_merkle_tree.top_roots.to_host().unwrap()[0]
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.ctx)
+                .unwrap()[0]
         );
         eprintln!("{:?}", cpu_merkle_tree.root());
-        eprintln!("{:?}", gpu_merkle_tree.top_roots.to_host().unwrap()[0]);
+        eprintln!(
+            "{:?}",
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.ctx)
+                .unwrap()[0]
+        );
     }
 }

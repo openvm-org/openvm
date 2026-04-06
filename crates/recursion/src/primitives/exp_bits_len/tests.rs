@@ -2,6 +2,11 @@ use core::borrow::Borrow;
 use std::borrow::BorrowMut;
 
 use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{CudaStream, DeviceContext, StreamGuard},
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     any_air_arc_vec,
@@ -340,7 +345,11 @@ mod cuda_tests {
         };
 
         let gpu_trace = {
-            let gpu_gen = ExpBitsLenGpuTraceGenerator::default();
+            let ctx = DeviceContext {
+                device_id: get_device().unwrap() as u32,
+                stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+            };
+            let gpu_gen = ExpBitsLenGpuTraceGenerator::new(ctx);
             gpu_gen.add_requests(requests.iter().map(|req| {
                 (
                     F::from_u32(req.base),

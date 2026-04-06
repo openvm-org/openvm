@@ -1,5 +1,7 @@
 use itertools::Itertools;
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
@@ -24,6 +26,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> Option<ProvingContext<PB>>
     where
         PB: ProverBackend<Val = F, Challenge = EF>,
@@ -73,6 +76,8 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             CachedTraceCtx::Records(self.cached_trace_record.clone()),
             &[proof],
             &mut external_data,
+            #[cfg(feature = "cuda")]
+            device_ctx,
             default_duplex_sponge_recorder(),
         );
 
@@ -92,6 +97,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> Option<ProvingContext<PB>>
     where
         PB: ProverBackend<Val = F, Challenge = EF>,
@@ -103,6 +109,12 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             self.circuit.def_hook_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
         );
-        self.generate_proving_ctx(proof, user_pvs_proof, None)
+        self.generate_proving_ctx(
+            proof,
+            user_pvs_proof,
+            None,
+            #[cfg(feature = "cuda")]
+            device_ctx,
+        )
     }
 }

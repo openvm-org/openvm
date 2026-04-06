@@ -14,6 +14,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use openvm_verify_stark_host::pvs::VkCommit;
 use tracing::instrument;
 
+#[cfg(feature = "cuda")]
+use crate::prover::{device_ctx_for_engine, MaybeDeviceContext};
 use crate::{
     circuit::{
         deferral::inner::{DeferralInnerCircuit, DeferralInnerTraceGen},
@@ -62,17 +64,53 @@ where
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
+    #[cfg(not(feature = "cuda"))]
     pub fn agg_prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proofs: &[Proof<SC>],
         child_vk_kind: DeferralChildVkKind,
         child_merkle_depth: Option<usize>,
     ) -> Result<Proof<SC>> {
+        let engine = E::new(self.pk.params.clone());
         let ctx = self.generate_proving_ctx(proofs, child_vk_kind, child_merkle_depth);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
+        #[cfg(debug_assertions)]
+        if crate::prover::debug_checks_enabled() {
+            crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
+        }
+        let proof = engine.prove(&self.d_pk, ctx)?;
+        #[cfg(debug_assertions)]
+        if crate::prover::debug_checks_enabled() {
+            engine.verify(&self.vk, &proof)?;
+        }
+        Ok(proof)
+    }
+
+    #[instrument(name = "total_proof", skip_all)]
+    #[cfg(feature = "cuda")]
+    pub fn agg_prove<E>(
+        &self,
+        proofs: &[Proof<SC>],
+        child_vk_kind: DeferralChildVkKind,
+        child_merkle_depth: Option<usize>,
+    ) -> Result<Proof<SC>>
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext,
+    {
         let engine = E::new(self.pk.params.clone());
+        let ctx = self.generate_proving_ctx(
+            proofs,
+            child_vk_kind,
+            child_merkle_depth,
+            #[cfg(feature = "cuda")]
+            device_ctx_for_engine(&engine),
+        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
+        }
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
             crate::prover::debug_constraints(&self.circuit, &ctx, &engine);

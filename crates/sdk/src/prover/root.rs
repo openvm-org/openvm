@@ -40,7 +40,9 @@ type CpuRootE =
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_continuations::prover::RootGpuProver as RootInnerProver;
+        use openvm_continuations::prover::{
+            device_ctx_for_engine, RootGpuProver as RootInnerProver,
+        };
         type E = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
         type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
@@ -99,11 +101,15 @@ impl RootProver {
         &self,
         input: VmStarkProof,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
+        #[cfg(feature = "cuda")]
+        let engine = E::new(self.0.get_pk().params.clone());
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0.generate_proving_ctx(
                 input.inner,
                 &input.user_pvs_proof,
                 input.deferral_merkle_proofs.as_ref(),
+                #[cfg(feature = "cuda")]
+                device_ctx_for_engine(&engine),
             )
         });
         ctx

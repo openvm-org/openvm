@@ -905,10 +905,8 @@ pub mod cuda_tracegen {
             build_cached_trace_record, constraints_folding::cuda::ConstraintsFoldingBlobGpu,
             interactions_folding::cuda::InteractionsFoldingBlobGpu,
         },
-        cuda::{
-            preflight::PreflightGpu, proof::ProofGpu, temp_device_ctx, vk::VerifyingKeyGpu,
-            GlobalCtxGpu,
-        },
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
+        system::MaybeDeviceContext,
         tracegen::cuda::StandardTracegenGpuCtx,
     };
 
@@ -1154,11 +1152,15 @@ pub mod cuda_tracegen {
                 Val = F,
                 Matrix = openvm_cuda_backend::base::DeviceMatrix<F>,
             >,
+            E::PD: crate::system::MaybeDeviceContext + TraceCommitter<E::PB>,
         {
             let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let transport_ctx = temp_device_ctx();
-            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, &transport_ctx).unwrap();
+            let ctx = engine
+                .device()
+                .maybe_device_ctx()
+                .expect("GPU cached-trace commit requires an engine-owned DeviceContext");
+            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, ctx).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {
                 commitment,

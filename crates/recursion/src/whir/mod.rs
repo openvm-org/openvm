@@ -17,8 +17,10 @@ use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use strum::{EnumCount, EnumDiscriminants};
 
+#[cfg(feature = "cuda")]
+use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator;
 use crate::{
-    primitives::exp_bits_len::ExpBitsLenTraceGenerator,
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
         WhirPreflight,
@@ -41,6 +43,49 @@ use crate::{
         whir_round::WhirRoundAir,
     },
 };
+
+trait WhirExpBitsLenSink {
+    fn add_requests<I>(&self, requests: I)
+    where
+        I: IntoIterator<Item = (F, F, usize)>;
+
+    fn add_requests_with_shift<I>(&self, requests: I)
+    where
+        I: IntoIterator<Item = (F, F, usize, usize, u32)>;
+}
+
+impl WhirExpBitsLenSink for ExpBitsLenCpuTraceGenerator {
+    fn add_requests<I>(&self, requests: I)
+    where
+        I: IntoIterator<Item = (F, F, usize)>,
+    {
+        ExpBitsLenCpuTraceGenerator::add_requests(self, requests);
+    }
+
+    fn add_requests_with_shift<I>(&self, requests: I)
+    where
+        I: IntoIterator<Item = (F, F, usize, usize, u32)>,
+    {
+        ExpBitsLenCpuTraceGenerator::add_requests_with_shift(self, requests);
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl WhirExpBitsLenSink for ExpBitsLenTraceGenerator {
+    fn add_requests<I>(&self, requests: I)
+    where
+        I: IntoIterator<Item = (F, F, usize)>,
+    {
+        self.cpu.add_requests(requests);
+    }
+
+    fn add_requests_with_shift<I>(&self, requests: I)
+    where
+        I: IntoIterator<Item = (F, F, usize, usize, u32)>,
+    {
+        self.cpu.add_requests_with_shift(requests);
+    }
+}
 
 mod bus;
 mod final_poly_mle_eval;
@@ -982,12 +1027,14 @@ impl WhirModule {
             .push(eval_final_poly_at_u(&proof.whir_proof.final_poly, &u[t..]));
     }
 
-    fn enqueue_pow_requests_for_proof(
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+    fn enqueue_pow_requests_for_proof<T>(
+        exp_bits_len_gen: &T,
         preflight: &Preflight,
         params: &SystemParams,
         query_layout: &WhirQueryLayout,
-    ) {
+    ) where
+        T: WhirExpBitsLenSink + Sync,
+    {
         let mu_pow_bits = params.whir.mu_pow_bits;
         let folding_pow_bits = params.whir.folding_pow_bits;
         let query_phase_pow_bits = params.whir.query_phase_pow_bits;
@@ -1099,13 +1146,16 @@ impl WhirModule {
     }
 
     #[tracing::instrument(skip_all)]
-    fn generate_blob(
+    fn generate_blob<T>(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-    ) -> WhirBlobCpu {
+        exp_bits_len_gen: &T,
+    ) -> WhirBlobCpu
+    where
+        T: WhirExpBitsLenSink + Sync,
+    {
         let params = &child_vk.inner.params;
         let k_whir = params.k_whir();
         let num_queries_per_round = num_queries_per_round(params);
@@ -1203,7 +1253,7 @@ impl WhirModule {
 }
 
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for WhirModule {
-    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenCpuTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -1211,7 +1261,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proofs = proofs.iter().collect_vec();

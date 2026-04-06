@@ -89,7 +89,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         streams: impl Into<Streams<F>>,
     ) {
         self.pc = pc_start;
-        self.memory.memory.fill_zero();
+        crate::system::memory::online::AddressMap::fill_zero(&mut self.memory.memory);
         self.memory.memory.set_from_sparse(init_memory);
         self.streams = streams.into();
         self.rng = StdRng::seed_from_u64(DEFAULT_RNG_SEED);

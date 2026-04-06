@@ -14,6 +14,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use p3_field::{Field, PrimeField32};
 use tracing::instrument;
 
+#[cfg(feature = "cuda")]
+use crate::prover::{device_ctx_for_engine, MaybeDeviceContext};
 use crate::{
     circuit::{
         deferral::hook::{DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit},
@@ -50,16 +52,50 @@ where
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
+    #[cfg(not(feature = "cuda"))]
     pub fn prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
     ) -> Result<Proof<SC>> {
+        let engine = E::new(self.pk.params.clone());
         let ctx = self.generate_proving_ctx(proof, leaf_children);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
+        #[cfg(debug_assertions)]
+        if crate::prover::debug_checks_enabled() {
+            crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
+        }
+        let proof = engine.prove(&self.d_pk, ctx)?;
+        #[cfg(debug_assertions)]
+        if crate::prover::debug_checks_enabled() {
+            engine.verify(&self.vk, &proof)?;
+        }
+        Ok(proof)
+    }
+
+    #[instrument(name = "total_proof", skip_all)]
+    #[cfg(feature = "cuda")]
+    pub fn prove<E>(
+        &self,
+        proof: Proof<SC>,
+        leaf_children: Vec<DeferralIoCommit<F>>,
+    ) -> Result<Proof<SC>>
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext,
+    {
         let engine = E::new(self.pk.params.clone());
+        let ctx = self.generate_proving_ctx(
+            proof,
+            leaf_children,
+            #[cfg(feature = "cuda")]
+            device_ctx_for_engine(&engine),
+        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
+        }
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
             crate::prover::debug_constraints(&self.circuit, &ctx, &engine);

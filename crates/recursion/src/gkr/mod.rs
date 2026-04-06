@@ -76,6 +76,8 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use strum::EnumCount;
 
+#[cfg(feature = "cuda")]
+use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator;
 use crate::{
     gkr::{
         bus::{GkrLayerInputBus, GkrLayerOutputBus, GkrXiSamplerBus},
@@ -84,7 +86,7 @@ use crate::{
         sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord, GkrSumcheckTraceGenerator},
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord, GkrXiSamplerTraceGenerator},
     },
-    primitives::exp_bits_len::ExpBitsLenTraceGenerator,
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
         TraceGenModule,
@@ -310,15 +312,35 @@ impl AirModule for GkrModule {
     }
 }
 
+trait GkrExpBitsLenSink {
+    fn add_request(&self, base: F, bit_src: F, num_bits: usize);
+}
+
+impl GkrExpBitsLenSink for ExpBitsLenCpuTraceGenerator {
+    fn add_request(&self, base: F, bit_src: F, num_bits: usize) {
+        ExpBitsLenCpuTraceGenerator::add_request(self, base, bit_src, num_bits);
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl GkrExpBitsLenSink for ExpBitsLenTraceGenerator {
+    fn add_request(&self, base: F, bit_src: F, num_bits: usize) {
+        self.cpu.add_request(base, bit_src, num_bits);
+    }
+}
+
 impl GkrModule {
     #[tracing::instrument(skip_all)]
-    fn generate_blob(
+    fn generate_blob<T>(
         &self,
         _child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-    ) -> GkrBlobCpu {
+        exp_bits_len_gen: &T,
+    ) -> GkrBlobCpu
+    where
+        T: GkrExpBitsLenSink + Sync,
+    {
         debug_assert_eq!(proofs.len(), preflights.len());
 
         // NOTE: we only collect the zipped vec because rayon vs itertools has different treatment
@@ -559,7 +581,7 @@ impl GkrModule {
 }
 
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for GkrModule {
-    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenCpuTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -567,7 +589,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proof_refs = proofs.iter().collect_vec();

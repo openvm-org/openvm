@@ -19,7 +19,8 @@ use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::PrimeField32;
 #[cfg(feature = "cuda")]
 use {
-    openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu, openvm_cuda_backend::GpuBackend,
+    openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu,
+    openvm_cuda_backend::GpuBackend, openvm_cuda_common::stream::DeviceContext,
 };
 
 use crate::{
@@ -50,6 +51,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> PreVerifierData<PB>;
 
     fn generate_verifier_pvs_ctx(
@@ -58,6 +60,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
         record: DeferredVerifyPvsRecord<PB::Val>,
         final_transcript_state: [PB::Val; POSEIDON2_WIDTH],
         output_commit: [PB::Val; DIGEST_SIZE],
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> AirProvingContext<PB>;
 }
 
@@ -77,6 +80,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> PreVerifierData<CpuBackend<SC>> {
         let (verifier_pvs_record, verifier_p2_compress_inputs, verifier_p2_permute_inputs) =
             generate_record(proof);
@@ -147,6 +151,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         record: DeferredVerifyPvsRecord<F>,
         final_transcript_state: [F; POSEIDON2_WIDTH],
         output_commit: [F; DIGEST_SIZE],
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> AirProvingContext<CpuBackend<SC>> {
         super::verifier::generate_proving_ctx(
             proof,
@@ -171,6 +176,7 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        device_ctx: Option<&DeviceContext>,
     ) -> PreVerifierData<GpuBackend> {
         let PreVerifierData {
             pre_verifier_ctxs,
@@ -187,13 +193,17 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
             memory_dimensions,
             def_idx,
             deferral_merkle_proofs,
+            device_ctx,
         );
+        let ctx = device_ctx
+            .expect("GPU deferred verify tracegen requires an engine-owned DeviceContext");
 
         PreVerifierData {
-            pre_verifier_ctxs: pre_verifier_ctxs.map(cpu_proving_ctx_to_gpu),
+            pre_verifier_ctxs: pre_verifier_ctxs
+                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, ctx)),
             post_verifier_ctxs: post_verifier_ctx
                 .into_iter()
-                .map(cpu_proving_ctx_to_gpu)
+                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, ctx))
                 .collect_vec(),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
@@ -209,13 +219,20 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
         record: DeferredVerifyPvsRecord<F>,
         final_transcript_state: [F; POSEIDON2_WIDTH],
         output_commit: [F; DIGEST_SIZE],
+        device_ctx: Option<&DeviceContext>,
     ) -> AirProvingContext<GpuBackend> {
-        cpu_proving_ctx_to_gpu(super::verifier::generate_proving_ctx(
-            proof,
-            record,
-            final_transcript_state,
-            output_commit,
-            self.deferral_enabled,
-        ))
+        let ctx = device_ctx.expect(
+            "GPU deferred verify verifier-PVS tracegen requires an engine-owned DeviceContext",
+        );
+        cpu_proving_ctx_to_gpu(
+            super::verifier::generate_proving_ctx(
+                proof,
+                record,
+                final_transcript_state,
+                output_commit,
+                self.deferral_enabled,
+            ),
+            ctx,
+        )
     }
 }

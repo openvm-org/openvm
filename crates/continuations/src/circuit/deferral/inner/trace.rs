@@ -7,6 +7,8 @@ use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
 use openvm_stark_backend::{
     proof::Proof,
@@ -118,6 +120,7 @@ pub trait DeferralInnerTraceGen<PB: ProverBackend> {
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> DeferralInnerPreCtx<PB>;
 }
 
@@ -134,6 +137,7 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInne
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (poseidon2_compress_inputs, poseidon2_permute_inputs) =
             generate_poseidon2_inputs(proofs, child_is_agg, child_merkle_depth);
@@ -167,6 +171,7 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
+        device_ctx: Option<&DeviceContext>,
     ) -> DeferralInnerPreCtx<GpuBackend> {
         let DeferralInnerPreCtx {
             verifier_pvs_ctx,
@@ -180,11 +185,14 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
             child_is_agg,
             child_vk_commit,
             child_merkle_depth,
+            device_ctx,
         );
+        let ctx =
+            device_ctx.expect("GPU deferral inner tracegen requires an engine-owned DeviceContext");
         DeferralInnerPreCtx {
-            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx),
-            def_pvs_ctx: cpu_proving_ctx_to_gpu(def_pvs_ctx),
-            input_ctx: cpu_proving_ctx_to_gpu(input_ctx),
+            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx, ctx),
+            def_pvs_ctx: cpu_proving_ctx_to_gpu(def_pvs_ctx, ctx),
+            input_ctx: cpu_proving_ctx_to_gpu(input_ctx, ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
         }

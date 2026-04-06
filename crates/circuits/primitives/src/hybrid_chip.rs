@@ -5,20 +5,10 @@ use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major,
     hash_scheme::GpuHashScheme, prelude::SC, GenericGpuBackend, GpuBackend,
 };
-use openvm_cuda_common::{
-    common::get_device,
-    stream::{CudaStream, DeviceContext, StreamGuard},
-};
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix};
 
 use crate::Chip;
-
-fn temp_device_ctx() -> DeviceContext {
-    DeviceContext {
-        device_id: get_device().unwrap() as u32,
-        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-    }
-}
 
 pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<GenericGpuBackend<HS>> {
     AirProvingContext {
@@ -31,13 +21,15 @@ pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<Gener
 // Wraps a CPU chip for use with GpuBackend
 pub struct HybridChip<RA, C: Chip<RA, CpuBackend<SC>>> {
     pub cpu_chip: C,
+    pub ctx: DeviceContext,
     _marker: PhantomData<RA>,
 }
 
 impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
-    pub fn new(cpu_chip: C) -> Self {
+    pub fn new(cpu_chip: C, ctx: DeviceContext) -> Self {
         Self {
             cpu_chip,
+            ctx,
             _marker: PhantomData,
         }
     }
@@ -46,20 +38,20 @@ impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
 impl<RA, C: Chip<RA, CpuBackend<SC>>> Chip<RA, GpuBackend> for HybridChip<RA, C> {
     fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<GpuBackend> {
         let ctx = self.cpu_chip.generate_proving_ctx(arena);
-        cpu_proving_ctx_to_gpu(ctx)
+        cpu_proving_ctx_to_gpu(ctx, &self.ctx)
     }
 }
 
 pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
     cpu_ctx: AirProvingContext<CpuBackend<SC>>,
+    ctx: &DeviceContext,
 ) -> AirProvingContext<GenericGpuBackend<HS>> {
     assert!(
         cpu_ctx.cached_mains.is_empty(),
         "CPU to GPU transfer of cached traces not supported"
     );
     let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
-    let ctx = temp_device_ctx();
-    let trace = transport_matrix_h2d_col_major(&cm, &ctx).unwrap();
+    let trace = transport_matrix_h2d_col_major(&cm, ctx).unwrap();
     AirProvingContext {
         cached_mains: vec![],
         common_main: trace,
