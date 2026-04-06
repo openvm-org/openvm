@@ -136,6 +136,7 @@ impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
         let num_records = height;
 
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, &self.1);
+        trace.buffer().fill_zero_on(&self.1).unwrap();
         unsafe {
             memory_testing::tracegen(
                 trace.buffer(),

@@ -43,6 +43,7 @@ impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, &self.1);
+        trace.buffer().fill_zero_on(&self.1).unwrap();
 
         let records = &self.0.records;
         let num_records = records.len();

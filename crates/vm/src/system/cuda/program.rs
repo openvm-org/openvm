@@ -54,6 +54,7 @@ impl ProgramChipGPU {
 
         let trace =
             DeviceMatrix::<F>::with_capacity_on(height, size_of::<ProgramExecutionCols<u8>>(), ctx);
+        trace.buffer().fill_zero_on(ctx).unwrap();
         unsafe {
             program::cached_tracegen(
                 trace.buffer(),

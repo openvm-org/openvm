@@ -63,6 +63,7 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
             NUM_VARIABLE_RANGE_COLS,
             &self.ctx,
         );
+        trace.buffer().fill_zero_on(&self.ctx).unwrap();
         unsafe {
             tracegen(
                 &self.count,

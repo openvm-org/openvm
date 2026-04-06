@@ -1057,22 +1057,21 @@ mod is_equal_tests {
         );
 
         // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip =
-            HybridModularIsEqualChip::new(
-                ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                    ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(
-                            tester.address_bits(),
-                            tester.cpu_bitwise_op_lookup(),
-                        ),
-                        offset,
-                        modulus_limbs,
+        let hybrid_chip = HybridModularIsEqualChip::new(
+            ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
+                ModularIsEqualFiller::new(
+                    Rv32IsEqualModAdapterFiller::new(
+                        tester.address_bits(),
                         tester.cpu_bitwise_op_lookup(),
                     ),
-                    tester.cpu_memory_helper(),
+                    offset,
+                    modulus_limbs,
+                    tester.cpu_bitwise_op_lookup(),
                 ),
-                tester.range_checker().ctx.clone(),
-            );
+                tester.cpu_memory_helper(),
+            ),
+            tester.range_checker().ctx.clone(),
+        );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }

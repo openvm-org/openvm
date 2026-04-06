@@ -22,6 +22,7 @@ use openvm_deferral_circuit::{
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
     prelude::DIGEST_SIZE,
+    system::device_ctx_for_engine,
     utils::{poseidon2_hash_slice, poseidon2_hash_slice_with_states},
 };
 use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
@@ -741,11 +742,12 @@ fn test_deferral_e2e() -> Result<()> {
         Some(def_hook_commit.into()),
         None,
     );
+    let engine = RootEngine::new(root_prover.get_vk().inner.params.clone());
     let ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB>(
         combined_proof,
         &user_pvs_proof,
         Some(&merkle_proofs),
-        None,
+        device_ctx_for_engine(&engine),
     );
     warn!("proving root (GPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;

@@ -92,13 +92,15 @@ where
         None,
     );
 
+    #[cfg(feature = "cuda")]
+    let engine = RootE::new(root_prover.get_pk().params.clone());
     let root_proving_ctx: ProvingContext<<RootE as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
             agg_proof.deferral_merkle_proofs.as_ref(),
             #[cfg(feature = "cuda")]
-            None,
+            openvm_recursion_circuit::system::device_ctx_for_engine(&engine),
         )
         .unwrap();
 

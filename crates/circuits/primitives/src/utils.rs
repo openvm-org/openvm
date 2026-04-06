@@ -133,9 +133,11 @@ mod touchemall {
     }
 
     pub fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>, name: &str) {
-        use openvm_cuda_common::copy::MemCopyD2H;
+        use openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize};
         use openvm_stark_backend::prover::MatrixDimensions;
 
+        // Synchronize all GPU work before reading the trace on a different stream.
+        device_synchronize().unwrap();
         let trace = &proving_ctx.common_main;
         let height = trace.height();
         let width = trace.width();

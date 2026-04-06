@@ -110,6 +110,7 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
+        trace.buffer().fill_zero_on(&self.ctx).unwrap();
         unsafe {
             poseidon2::tracegen(
                 trace.buffer(),

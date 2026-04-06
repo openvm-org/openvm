@@ -86,6 +86,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
         let trace_height = next_power_of_two_or_zero(unpadded_height);
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, self.trace_width(), &self.ctx);
+        trace.buffer().fill_zero_on(&self.ctx).unwrap();
         let mem_ptrs = self.initial_leaves.to_device_on(&self.ctx).unwrap();
         unsafe {
             persistent_boundary_tracegen(

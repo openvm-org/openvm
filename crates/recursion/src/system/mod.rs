@@ -926,8 +926,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let d_descriptors = descriptors
             .to_device_on(ctx)
             .expect("failed to upload descriptors");
-        let d_pre_states =
-            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
+        let d_pre_states = DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
         let d_post_states =
             DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
 
