@@ -155,7 +155,7 @@ mod tests {
         let (cpu_commit, _) = cpu_device.commit(&[&cpu_trace]).unwrap();
 
         // NOTE: This compares the stacked matrices, not the original cached trace
-        assert_eq_host_and_device_matrix(cpu_trace, &gpu_cached.trace);
+        assert_eq_host_and_device_matrix(cpu_trace, &gpu_cached.trace, &gpu_device.ctx);
         assert_eq!(gpu_cached.commitment, cpu_commit);
     }
 

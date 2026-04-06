@@ -3,13 +3,13 @@ use std::sync::Arc;
 use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
 };
-use openvm_cuda_common::stream::cudaStreamPerThread;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
 
-use crate::{cuda_abi::encoder, encoder::Encoder};
+use crate::{cuda_abi::encoder, encoder::Encoder, utils::test_gpu_ctx};
 
 #[test]
 fn test_cuda_encoder_with_invalid_row() {
+    let ctx = test_gpu_ctx();
     // Max number of flags for k = 6
     let num_flags = 461;
     let max_degree = 5;
@@ -29,7 +29,7 @@ fn test_cuda_encoder_with_invalid_row() {
         expected_k,
     ));
 
-    let gpu_matrix = DeviceMatrix::<F>::with_capacity(num_flags, expected_k);
+    let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(num_flags, expected_k, &ctx);
     unsafe {
         encoder::dummy_tracegen(
             gpu_matrix.buffer(),
@@ -37,16 +37,17 @@ fn test_cuda_encoder_with_invalid_row() {
             max_degree,
             reserve_invalid,
             expected_k as u32,
-            cudaStreamPerThread,
+            ctx.stream.as_raw(),
         )
         .unwrap();
     };
 
-    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
+    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &ctx);
 }
 
 #[test]
 fn test_cuda_encoder_without_invalid_row() {
+    let ctx = test_gpu_ctx();
     let num_flags = 18;
     let max_degree = 2;
     let reserve_invalid = false;
@@ -65,7 +66,7 @@ fn test_cuda_encoder_without_invalid_row() {
         expected_k,
     ));
 
-    let gpu_matrix = DeviceMatrix::<F>::with_capacity(num_flags, expected_k);
+    let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(num_flags, expected_k, &ctx);
     unsafe {
         encoder::dummy_tracegen(
             gpu_matrix.buffer(),
@@ -73,10 +74,10 @@ fn test_cuda_encoder_without_invalid_row() {
             max_degree,
             reserve_invalid,
             expected_k as u32,
-            cudaStreamPerThread,
+            ctx.stream.as_raw(),
         )
         .unwrap();
     };
 
-    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
+    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &ctx);
 }

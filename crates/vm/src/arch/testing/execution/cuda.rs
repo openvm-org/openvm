@@ -9,16 +9,16 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::cudaStreamPerThread};
+use openvm_cuda_common::{copy::MemCopyH2D, stream::DeviceContext};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::execution_testing;
 
-pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>);
+pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>, DeviceContext);
 
 impl DeviceExecutionTester {
-    pub fn new(bus: ExecutionBus) -> Self {
-        Self(ExecutionTester::new(bus))
+    pub fn new(bus: ExecutionBus, ctx: DeviceContext) -> Self {
+        Self(ExecutionTester::new(bus), ctx)
     }
 
     pub fn bus(&self) -> ExecutionBus {
@@ -42,7 +42,7 @@ impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
         if height == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
-        let trace = DeviceMatrix::<F>::with_capacity(height, width);
+        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, &self.1);
 
         let records = &self.0.records;
         let num_records = records.len();
@@ -50,13 +50,13 @@ impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
         unsafe {
             let bytes_size = num_records * size_of::<DummyExecutionInteractionCols<F>>();
             let records_bytes = from_raw_parts(records.as_ptr() as *const u8, bytes_size);
-            let records = records_bytes.to_device().unwrap();
+            let records = records_bytes.to_device_on(&self.1).unwrap();
             execution_testing::tracegen(
                 trace.buffer(),
                 height,
                 width,
                 &records,
-                cudaStreamPerThread,
+                self.1.stream.as_raw(),
             )
             .unwrap();
         }

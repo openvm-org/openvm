@@ -702,6 +702,7 @@ mod cuda {
         let ref_engine = BabyBearPoseidon2RefEngine::<DuplexSponge>::new(params.clone());
         let cpu_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
         let gpu_engine = BabyBearPoseidon2GpuEngine::new(params);
+        let gpu_device_ctx = gpu_engine.device().ctx.clone();
         let (pk, vk) = fx.keygen(&ref_engine);
         assert!(num_proofs <= 5);
         let proofs = (0..num_proofs)
@@ -737,7 +738,7 @@ mod cuda {
             let width = gpu.width();
             let height = gpu.height();
 
-            let gpu = gpu.to_host().unwrap();
+            let gpu = gpu.to_host_on(&gpu_device_ctx).unwrap();
 
             for r in 0..height {
                 for c in 0..width {
@@ -772,7 +773,7 @@ mod cuda {
             if non_deterministic_air_idxs.contains(&i) {
                 continue;
             }
-            let gpu = gpu.to_host().unwrap();
+            let gpu = gpu.to_host_on(&gpu_device_ctx).unwrap();
             let cpu_height = cpu.height();
             let cpu_width = cpu.width();
 

@@ -2,9 +2,9 @@
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{
-    copy::cuda_memcpy,
+    copy::cudaMemcpyKind,
     d_buffer::DeviceBuffer,
-    error::{CudaError, MemCopyError},
+    error::{check, CudaError, MemCopyError},
     stream::cudaStream_t,
 };
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
@@ -82,6 +82,71 @@ extern "C" {
         num_proofs: u32,
         stream: cudaStream_t,
     ) -> i32;
+
+    fn cudaMemcpyAsync(
+        dst: *mut std::ffi::c_void,
+        src: *const std::ffi::c_void,
+        count: usize,
+        kind: cudaMemcpyKind,
+        stream: cudaStream_t,
+    ) -> i32;
+
+    fn cudaMalloc(dev_ptr: *mut *mut std::ffi::c_void, size: usize) -> i32;
+    fn cudaFree(dev_ptr: *mut std::ffi::c_void) -> i32;
+    fn cudaStreamSynchronize(stream: cudaStream_t) -> i32;
+}
+
+struct TempDeviceBuffer<T> {
+    ptr: *mut T,
+}
+
+impl<T> TempDeviceBuffer<T> {
+    unsafe fn new(len: usize) -> Result<Self, CudaError> {
+        if len == 0 {
+            return Ok(Self {
+                ptr: std::ptr::null_mut(),
+            });
+        }
+        let mut ptr = std::ptr::null_mut();
+        check(unsafe { cudaMalloc(&mut ptr, len * std::mem::size_of::<T>()) })?;
+        Ok(Self { ptr: ptr as *mut T })
+    }
+
+    fn as_mut_ptr(&self) -> *mut T {
+        self.ptr
+    }
+
+    fn as_ptr(&self) -> *const T {
+        self.ptr
+    }
+}
+
+impl<T> Drop for TempDeviceBuffer<T> {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            unsafe {
+                cudaFree(self.ptr as *mut std::ffi::c_void);
+            }
+        }
+    }
+}
+
+unsafe fn cuda_memcpy_device_to_device(
+    dst: *mut std::ffi::c_void,
+    src: *const std::ffi::c_void,
+    size_bytes: usize,
+    stream: cudaStream_t,
+) -> Result<(), MemCopyError> {
+    check(unsafe {
+        cudaMemcpyAsync(
+            dst,
+            src,
+            size_bytes,
+            cudaMemcpyKind::cudaMemcpyDeviceToDevice,
+            stream,
+        )
+    })
+    .map_err(MemCopyError::from)
 }
 
 pub unsafe fn poseidon2_tracegen(
@@ -139,8 +204,8 @@ pub unsafe fn poseidon2_deduplicate_records(
 ) -> Result<(), CudaError> {
     // CUB ReduceByKey requires non-overlapping input and output ranges.
     // Allocate separate output buffers, then copy results back.
-    let d_records_out = DeviceBuffer::<F>::with_capacity(num_records * POSEIDON2_WIDTH);
-    let d_counts_out = DeviceBuffer::<Poseidon2Count>::with_capacity(num_records);
+    let d_records_out = TempDeviceBuffer::<F>::new(num_records * POSEIDON2_WIDTH)?;
+    let d_counts_out = TempDeviceBuffer::<Poseidon2Count>::new(num_records)?;
     CudaError::from_result(_poseidon2_deduplicate_records(
         d_records.as_mut_ptr(),
         d_counts.as_mut_ptr(),
@@ -161,18 +226,21 @@ pub unsafe fn poseidon2_deduplicate_records(
         MemCopyError::Cuda(e) => e,
         other => panic!("{other}"),
     };
-    cuda_memcpy::<true, true>(
+    cuda_memcpy_device_to_device(
         d_records.as_mut_raw_ptr(),
-        d_records_out.as_raw_ptr(),
+        d_records_out.as_ptr() as *const std::ffi::c_void,
         records_bytes,
+        stream,
     )
     .map_err(map_err)?;
-    cuda_memcpy::<true, true>(
+    cuda_memcpy_device_to_device(
         d_counts.as_mut_raw_ptr(),
-        d_counts_out.as_raw_ptr(),
+        d_counts_out.as_ptr() as *const std::ffi::c_void,
         counts_bytes,
+        stream,
     )
     .map_err(map_err)?;
+    check(unsafe { cudaStreamSynchronize(stream) })?;
     Ok(())
 }
 

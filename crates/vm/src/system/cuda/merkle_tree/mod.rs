@@ -429,8 +429,10 @@ mod tests {
     };
     use openvm_cuda_backend::prelude::F;
     use openvm_cuda_common::{
+        common::get_device,
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
+        stream::{CudaStream, DeviceContext, StreamGuard},
     };
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
@@ -500,6 +502,10 @@ mod tests {
             }
         }
 
+        let ctx = DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
         let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
             (mem_config
                 .addr_spaces
@@ -511,8 +517,10 @@ mod tests {
                 * 2
                 * DIGEST_WIDTH, // max_buffer_size
             1, // sbox_regs
+            ctx.clone(),
         ));
-        let mut gpu_merkle_tree = MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip);
+        let mut gpu_merkle_tree =
+            MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip, ctx.clone());
         let mem_slices = initial_memory
             .memory
             .get_memory()

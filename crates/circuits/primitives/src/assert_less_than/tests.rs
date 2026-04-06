@@ -23,12 +23,11 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
+    crate::utils::test_gpu_ctx,
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::{
-        copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    },
+    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
 };
 
 use super::*;
@@ -264,17 +263,18 @@ fn test_cuda_assert_less_than_tracegen() {
     let decomp: usize = 8;
     const AUX_LEN: usize = 4;
 
+    let ctx = test_gpu_ctx();
     let num_pairs = 4;
-    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 + AUX_LEN);
+    let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 + AUX_LEN, &ctx);
     let pairs = vec![[14321, 26883], [0, 1], [28, 120], [337, 456]]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
-        .to_device()
+        .to_device_on(&ctx)
         .unwrap();
 
     let rc_num_bins = (1 << (decomp + 1)) as usize;
-    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity_on(rc_num_bins, &ctx);
 
     unsafe {
         assert_less_than_dummy_tracegen(
@@ -284,7 +284,7 @@ fn test_cuda_assert_less_than_tracegen() {
             max_bits,
             AUX_LEN,
             &rc_histogram,
-            cudaStreamPerThread,
+            ctx.stream.as_raw(),
         )
         .unwrap();
     }
@@ -304,5 +304,5 @@ fn test_cuda_assert_less_than_tracegen() {
             .collect(),
         3 + AUX_LEN,
     ));
-    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace, &ctx);
 }

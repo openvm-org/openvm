@@ -25,7 +25,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::{copy::MemCopyH2D as _, stream::cudaStreamPerThread},
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
     std::sync::Arc,
 };
@@ -211,8 +211,9 @@ fn test_is_eq_array_fail_rand() {
 #[test]
 fn test_cuda_simple_is_equal_array_tracegen() {
     const ARRAY_LEN: usize = 4;
+    let ctx = crate::utils::test_gpu_ctx();
     let n = 4;
-    let trace = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+    let trace = DeviceMatrix::<F>::with_capacity_on(n, ARRAY_LEN + 1, &ctx);
 
     let vec_x: Vec<F> = vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9u32, 10, 11, 12, 13, 14, 15, 16]
         .into_iter()
@@ -226,8 +227,8 @@ fn test_cuda_simple_is_equal_array_tracegen() {
     .map(F::from_u32)
     .collect();
 
-    let inputs_x = vec_x.as_slice().to_device().unwrap();
-    let inputs_y = vec_y.as_slice().to_device().unwrap();
+    let inputs_x = vec_x.as_slice().to_device_on(&ctx).unwrap();
+    let inputs_y = vec_y.as_slice().to_device_on(&ctx).unwrap();
 
     unsafe {
         is_equal::dummy_tracegen_array(
@@ -235,7 +236,7 @@ fn test_cuda_simple_is_equal_array_tracegen() {
             &inputs_x,
             &inputs_y,
             ARRAY_LEN,
-            cudaStreamPerThread,
+            ctx.stream.as_raw(),
         )
         .unwrap()
     };
@@ -256,12 +257,13 @@ fn test_cuda_simple_is_equal_array_tracegen() {
         ARRAY_LEN + 1,
     ));
 
-    assert_eq_host_and_device_matrix(cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(cpu_matrix, &trace, &ctx);
 }
 
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_random_is_equal_array_tracegen() {
+    let ctx = crate::utils::test_gpu_ctx();
     let mut rng = create_seeded_rng();
     const ARRAY_LEN: usize = 64;
 
@@ -276,17 +278,17 @@ fn test_cuda_random_is_equal_array_tracegen() {
             .map(|_| F::from_u32(rng.random_range(0..F::ORDER_U32)))
             .collect();
 
-        let inputs_x = vec_x.as_slice().to_device().unwrap();
-        let inputs_y = vec_y.as_slice().to_device().unwrap();
+        let inputs_x = vec_x.as_slice().to_device_on(&ctx).unwrap();
+        let inputs_y = vec_y.as_slice().to_device_on(&ctx).unwrap();
 
-        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(n, ARRAY_LEN + 1, &ctx);
         unsafe {
             is_equal::dummy_tracegen_array(
                 gpu_matrix.buffer(),
                 &inputs_x,
                 &inputs_y,
                 ARRAY_LEN,
-                cudaStreamPerThread,
+                ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -307,6 +309,6 @@ fn test_cuda_random_is_equal_array_tracegen() {
             ARRAY_LEN + 1,
         ));
 
-        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &ctx);
     }
 }

@@ -20,9 +20,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::{
-        copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    },
+    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
 };
 
 use super::*;
@@ -230,8 +228,9 @@ fn test_cuda_less_than_array_tracegen() {
     const ARRAY_LEN: usize = 2;
     const AUX_LEN: usize = 2;
 
+    let ctx = crate::utils::test_gpu_ctx();
     let num_pairs = 4;
-    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 * ARRAY_LEN + AUX_LEN + 2);
+    let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 * ARRAY_LEN + AUX_LEN + 2, &ctx);
     let pairs = vec![
         [14321, 123, 26678, 233],
         [26678, 244, 14321, 233],
@@ -241,11 +240,11 @@ fn test_cuda_less_than_array_tracegen() {
     .into_iter()
     .flatten()
     .collect::<Vec<_>>()
-    .to_device()
+    .to_device_on(&ctx)
     .unwrap();
 
     let rc_num_bins = (1 << (decomp + 1)) as usize;
-    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity_on(rc_num_bins, &ctx);
 
     unsafe {
         less_than_array_dummy_tracegen(
@@ -256,7 +255,7 @@ fn test_cuda_less_than_array_tracegen() {
             ARRAY_LEN,
             AUX_LEN,
             &rc_histogram,
-            cudaStreamPerThread,
+            ctx.stream.as_raw(),
         )
         .unwrap();
     }
@@ -277,5 +276,5 @@ fn test_cuda_less_than_array_tracegen() {
         3 * ARRAY_LEN + AUX_LEN + 2,
     ));
 
-    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace, &ctx);
 }

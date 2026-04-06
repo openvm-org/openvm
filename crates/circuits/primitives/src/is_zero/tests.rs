@@ -20,7 +20,7 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::{copy::MemCopyH2D as _, stream::cudaStreamPerThread},
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_sdk::utils::create_seeded_rng,
     rand::Rng,
@@ -180,6 +180,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_is_zero_against_cpu_full() {
+    let ctx = crate::utils::test_gpu_ctx();
     let mut rng = create_seeded_rng();
     for log_height in 1..=16 {
         let n = 1 << log_height;
@@ -194,10 +195,10 @@ fn test_cuda_is_zero_against_cpu_full() {
             .map(F::from_u32)
             .collect();
 
-        let input_buffer = vec_x.as_slice().to_device().unwrap();
-        let output = DeviceMatrix::<F>::with_capacity(n, 2);
+        let input_buffer = vec_x.as_slice().to_device_on(&ctx).unwrap();
+        let output = DeviceMatrix::<F>::with_capacity_on(n, 2, &ctx);
         unsafe {
-            is_zero::dummy_tracegen(output.buffer(), &input_buffer, cudaStreamPerThread).unwrap();
+            is_zero::dummy_tracegen(output.buffer(), &input_buffer, ctx.stream.as_raw()).unwrap();
         };
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -214,6 +215,6 @@ fn test_cuda_is_zero_against_cpu_full() {
             2,
         ));
 
-        assert_eq_host_and_device_matrix(cpu_matrix, &output);
+        assert_eq_host_and_device_matrix(cpu_matrix, &output, &ctx);
     }
 }

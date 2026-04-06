@@ -274,9 +274,10 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         tester.dummy_memory_helper(),
     );
 
-    let count = Arc::new(DeviceBuffer::<u32>::with_capacity(num_deferrals));
-    count.fill_zero().unwrap();
-    let poseidon2_chip_gpu = DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1);
+    let ctx = tester.range_checker().ctx.clone();
+    let count = Arc::new(DeviceBuffer::<u32>::with_capacity_on(num_deferrals, &ctx));
+    count.fill_zero_on(&ctx).unwrap();
+    let poseidon2_chip_gpu = DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1, ctx.clone());
     let gpu_chip = DeferralOutputChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
@@ -292,7 +293,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         harness,
         count: (
             DeferralCircuitCountAir::new(count_bus, num_deferrals),
-            DeferralCircuitCountChipGpu::new(count, num_deferrals),
+            DeferralCircuitCountChipGpu::new(count, num_deferrals, ctx),
             DenseRecordArena::with_byte_capacity(0),
         ),
         poseidon2: (

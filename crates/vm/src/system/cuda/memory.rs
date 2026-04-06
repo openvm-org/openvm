@@ -304,6 +304,10 @@ mod tests {
         },
     };
     use openvm_cuda_backend::prelude::F;
+    use openvm_cuda_common::{
+        common::get_device,
+        stream::{CudaStream, DeviceContext, StreamGuard},
+    };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
     use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -339,8 +343,16 @@ mod tests {
         .next_power_of_two()
             * 2
             * DIGEST_WIDTH;
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip);
+        let ctx = DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            max_buffer_size,
+            1,
+            ctx.clone(),
+        ));
+        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, ctx.clone());
         inventory.set_initial_memory(&memory.memory);
 
         let ctxs = inventory.generate_proving_ctxs(Vec::new());
@@ -413,8 +425,16 @@ mod tests {
         .next_power_of_two()
             * 2
             * DIGEST_WIDTH;
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip);
+        let ctx = DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            max_buffer_size,
+            1,
+            ctx.clone(),
+        ));
+        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, ctx.clone());
         inventory.set_initial_memory(&memory.memory);
 
         let touched_memory = vec![

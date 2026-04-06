@@ -80,9 +80,7 @@ pub mod cuda {
     use std::sync::Arc;
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use crate::{
@@ -102,9 +100,10 @@ pub mod cuda {
     impl DummyInteractionChipGPU {
         pub fn new(range_checker: Arc<VariableRangeCheckerChipGPU>, data: Vec<u32>) -> Self {
             assert!(!data.is_empty());
+            let data = data.to_device_on(&range_checker.ctx).unwrap();
             Self {
                 range_checker,
-                data: data.to_device().unwrap(),
+                data,
             }
         }
     }
@@ -112,13 +111,14 @@ pub mod cuda {
     impl<RA> Chip<RA, GpuBackend> for DummyInteractionChipGPU {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len();
-            let trace = DeviceMatrix::<F>::with_capacity(height, DUMMY_TRACE_WIDTH);
+            let ctx = &self.range_checker.ctx;
+            let trace = DeviceMatrix::<F>::with_capacity_on(height, DUMMY_TRACE_WIDTH, ctx);
             unsafe {
                 dummy_tracegen(
                     &self.data,
                     trace.buffer(),
                     &self.range_checker.count,
-                    cudaStreamPerThread,
+                    ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

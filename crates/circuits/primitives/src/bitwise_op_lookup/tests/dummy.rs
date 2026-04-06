@@ -45,9 +45,7 @@ pub mod cuda {
     use std::sync::Arc;
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{
-        copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::cudaStreamPerThread,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use crate::{
@@ -67,24 +65,23 @@ pub mod cuda {
     impl<const NUM_BITS: usize> DummyInteractionChipGPU<NUM_BITS> {
         pub fn new(bitwise: Arc<BitwiseOperationLookupChipGPU<NUM_BITS>>, data: Vec<u32>) -> Self {
             assert!(!data.is_empty());
-            Self {
-                bitwise,
-                data: data.to_device().unwrap(),
-            }
+            let data = data.to_device_on(&bitwise.ctx).unwrap();
+            Self { bitwise, data }
         }
     }
 
     impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<NUM_BITS> {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len() / RECORD_WIDTH;
-            let trace = DeviceMatrix::<F>::with_capacity(height, NUM_COLS);
+            let ctx = &self.bitwise.ctx;
+            let trace = DeviceMatrix::<F>::with_capacity_on(height, NUM_COLS, ctx);
             unsafe {
                 dummy_tracegen(
                     trace.buffer(),
                     &self.data,
                     &self.bitwise.count,
                     NUM_BITS as u32,
-                    cudaStreamPerThread,
+                    ctx.stream.as_raw(),
                 )
                 .unwrap();
             }
