@@ -119,7 +119,18 @@ pub use touchemall::*;
 #[cfg(all(feature = "touchemall", feature = "cuda"))]
 mod touchemall {
     use openvm_cuda_backend::{prelude::F, GpuBackend};
+    use openvm_cuda_common::{
+        common::get_device,
+        stream::{CudaStream, DeviceContext, StreamGuard},
+    };
     use openvm_stark_backend::prover::AirProvingContext;
+
+    fn touchemall_gpu_ctx() -> DeviceContext {
+        DeviceContext {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        }
+    }
 
     pub fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>, name: &str) {
         use openvm_cuda_common::copy::MemCopyD2H;
@@ -128,9 +139,7 @@ mod touchemall {
         let trace = &proving_ctx.common_main;
         let height = trace.height();
         let width = trace.width();
-        let trace = trace
-            .to_host_on(&super::test_utils::test_gpu_ctx())
-            .unwrap();
+        let trace = trace.to_host_on(&touchemall_gpu_ctx()).unwrap();
         for r in 0..height {
             for c in 0..width {
                 let value = trace[c * height + r];
