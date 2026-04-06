@@ -103,7 +103,6 @@ pub enum GenerationError {
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
-    pub hint_space: Vec<Vec<F>>,
     /// Stores cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
@@ -114,7 +113,6 @@ impl<F> Streams<F> {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
-            hint_space: Vec::default(),
             deferrals: Vec::default(),
         }
     }
