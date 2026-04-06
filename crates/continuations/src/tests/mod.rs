@@ -354,11 +354,12 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
         Some(trace_heights.clone()),
     );
+    let engine2 = RootEngine::new(root_prover.get_pk().params.clone());
     let ctx = root_prover
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
             internal_recursive_proof,
             &user_pvs_proof,
-            None,
+            device_ctx_for_engine(&engine2),
         )
         .unwrap();
 

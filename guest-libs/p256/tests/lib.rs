@@ -197,7 +197,7 @@ mod guest_tests {
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<BabyBearPoseidon2Config>,
-                device: &openvm_cuda_backend::GpuDevice,
+                device: &openvm_circuit::openvm_cuda_backend::GpuDevice,
             ) -> Result<
                 VmChipComplex<
                     BabyBearPoseidon2Config,
