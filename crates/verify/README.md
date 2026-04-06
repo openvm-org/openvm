@@ -5,7 +5,6 @@
 To verify an RTP final proof using a pre-generated VM VK bundle:
 
 ```bash
-cd /home/lunkai/openvm
 cargo run --release -p openvm-verify-stark-host \
   --bin verify_with_vk -- \
   --proof /path/to/<proof_uuid>.proof.bin \
@@ -14,7 +13,7 @@ cargo run --release -p openvm-verify-stark-host \
 
 Inputs:
 
-- `--proof`: RTP final proof persisted by `rtp-manager`
+- `--proof`: RTP final proof
 - `--vm-vk`: VM VK bundle generated from the matching ELF
 
 ## Aggregation Chain
