@@ -40,9 +40,8 @@ type CpuRootE =
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_continuations::prover::{
-            device_ctx_for_engine, RootGpuProver as RootInnerProver,
-        };
+        use openvm_continuations::prover::RootGpuProver as RootInnerProver;
+        use openvm_recursion_circuit::system::device_ctx_for_engine;
         type E = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
         type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {

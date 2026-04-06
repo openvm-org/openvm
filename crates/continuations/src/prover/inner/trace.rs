@@ -57,6 +57,8 @@ where
                 absent_trace_pvs,
                 child_is_app,
                 child_vk_commit,
+                #[cfg(feature = "cuda")]
+                device_ctx,
             );
 
         let range_check_inputs = vec![];
@@ -83,7 +85,13 @@ where
             .unwrap();
         let post_ctxs = self
             .agg_node_tracegen
-            .generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app);
+            .generate_post_verifier_subcircuit_ctxs(
+                proofs,
+                proofs_type,
+                child_is_app,
+                #[cfg(feature = "cuda")]
+                device_ctx,
+            );
 
         ProvingContext {
             per_trace: pre_data

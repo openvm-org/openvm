@@ -1,12 +1,4 @@
-#[cfg(feature = "cuda")]
-use openvm_cpu_backend::CpuDevice;
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::device::GpuDevice;
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::prelude::F;
-#[cfg(feature = "cuda")]
-use openvm_stark_backend::prover::ReferenceDevice;
 use openvm_stark_backend::{
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
     AirRef, StarkEngine, StarkProtocolConfig,
@@ -16,41 +8,6 @@ use crate::circuit::Circuit;
 
 pub(crate) fn debug_checks_enabled() -> bool {
     std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
-}
-
-#[cfg(feature = "cuda")]
-pub trait MaybeDeviceContext {
-    fn maybe_device_ctx(&self) -> Option<&DeviceContext>;
-}
-
-#[cfg(feature = "cuda")]
-impl MaybeDeviceContext for GpuDevice {
-    fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
-        Some(&self.ctx)
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl<SC> MaybeDeviceContext for CpuDevice<SC> {
-    fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
-        None
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl<SC> MaybeDeviceContext for ReferenceDevice<SC> {
-    fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
-        None
-    }
-}
-
-#[cfg(feature = "cuda")]
-pub fn device_ctx_for_engine<E>(engine: &E) -> Option<&DeviceContext>
-where
-    E: StarkEngine,
-    E::PD: MaybeDeviceContext,
-{
-    engine.device().maybe_device_ctx()
 }
 
 pub fn debug_constraints<SC, C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)

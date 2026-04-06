@@ -4,8 +4,6 @@ use eyre::Result;
 use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
 };
-#[cfg(feature = "cuda")]
-use openvm_continuations::prover::{device_ctx_for_engine, MaybeDeviceContext};
 use openvm_continuations::{
     circuit::{deferral::DeferralMerkleProofs, Circuit},
     prover::{debug_constraints, DeferralCircuitProver},
@@ -14,6 +12,8 @@ use openvm_continuations::{
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
+#[cfg(feature = "cuda")]
+use openvm_recursion_circuit::system::{device_ctx_for_engine, MaybeDeviceContext};
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, VerifierConfig, VerifierSubCircuit, VerifierTraceGen,
 };
@@ -155,6 +155,7 @@ impl<
         T: DeferredVerifyTraceGen<PB>,
     > DeferredVerifyProver<PB, S, T>
 {
+    #[cfg(not(feature = "cuda"))]
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
@@ -204,7 +205,59 @@ impl<
         }
     }
 
+    #[cfg(feature = "cuda")]
+    pub fn new<E>(
+        child_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_cached_commit: CommitBytes,
+        system_params: SystemParams,
+        memory_dimensions: MemoryDimensions,
+        num_user_pvs: usize,
+        def_hook_commit: Option<PB::Commitment>,
+        def_idx: usize,
+    ) -> Self
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext + DeviceDataTransporter<SC, PB> + Clone,
+        PB::Val: Field + PrimeField32,
+        PB::Matrix: Clone,
+        PB::Commitment: Into<CommitBytes>,
+    {
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                final_state_bus_enabled: true,
+                has_cached: true,
+            },
+        );
+        let engine = E::new(system_params);
+        let internal_recursive_vk_commit = VkCommitBytes {
+            cached_commit: internal_recursive_cached_commit,
+            vk_pre_hash: child_vk.pre_hash.into(),
+        };
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let def_hook_commit = def_hook_commit.map(Into::into);
+        let circuit = Arc::new(DeferredVerifyCircuit::new(
+            Arc::new(verifier_circuit),
+            internal_recursive_vk_commit,
+            def_hook_commit,
+            memory_dimensions,
+            num_user_pvs,
+            def_idx,
+        ));
+        let (pk, vk) = engine.keygen(&circuit.airs());
+        Self {
+            pk: Arc::new(pk),
+            vk: Arc::new(vk),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
+            child_vk,
+            child_vk_pcs_data,
+            circuit,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
+    #[cfg(not(feature = "cuda"))]
     pub fn from_pk<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
@@ -216,6 +269,60 @@ impl<
     ) -> Self
     where
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
+        PB::Val: Field + PrimeField32,
+        PB::Matrix: Clone,
+        PB::Commitment: Into<CommitBytes>,
+    {
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                final_state_bus_enabled: true,
+                has_cached: true,
+            },
+        );
+        let def_hook_commit = def_hook_commit.map(Into::into);
+        let internal_recursive_vk_commit = VkCommitBytes {
+            cached_commit: internal_recursive_cached_commit,
+            vk_pre_hash: child_vk.pre_hash.into(),
+        };
+        let engine = E::new(pk.params.clone());
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        // WARNING: def_idx must match the original def_idx used when generating the pk,
+        // or else the generated proof will be incorrect.
+        let circuit = Arc::new(DeferredVerifyCircuit::new(
+            Arc::new(verifier_circuit),
+            internal_recursive_vk_commit,
+            def_hook_commit,
+            memory_dimensions,
+            num_user_pvs,
+            def_idx,
+        ));
+        let vk = Arc::new(pk.get_vk());
+        Self {
+            pk,
+            vk,
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
+            child_vk,
+            child_vk_pcs_data,
+            circuit,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "cuda")]
+    pub fn from_pk<E>(
+        child_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_cached_commit: CommitBytes,
+        pk: Arc<MultiStarkProvingKey<SC>>,
+        memory_dimensions: MemoryDimensions,
+        num_user_pvs: usize,
+        def_hook_commit: Option<PB::Commitment>,
+        def_idx: usize,
+    ) -> Self
+    where
+        E: StarkEngine<SC = SC, PB = PB>,
+        E::PD: MaybeDeviceContext + DeviceDataTransporter<SC, PB> + Clone,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,

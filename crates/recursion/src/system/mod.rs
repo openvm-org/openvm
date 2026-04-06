@@ -83,6 +83,15 @@ impl<SC> MaybeDeviceContext for ReferenceDevice<SC> {
     }
 }
 
+#[cfg(feature = "cuda")]
+pub fn device_ctx_for_engine<E>(engine: &E) -> Option<&DeviceContext>
+where
+    E: StarkEngine,
+    E::PD: MaybeDeviceContext,
+{
+    engine.device().maybe_device_ctx()
+}
+
 mod dummy;
 pub(crate) mod frame;
 

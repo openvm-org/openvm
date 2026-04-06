@@ -4,6 +4,8 @@ use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
@@ -31,12 +33,14 @@ pub trait InnerTraceGen<PB: ProverBackend> {
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
         child_vk_commit: VkCommit<F>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<PB>;
     fn generate_post_verifier_subcircuit_ctxs(
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         proofs_type: ProofsType,
         child_is_app: bool,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> Vec<AirProvingContext<PB>>;
 }
 
@@ -56,6 +60,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
         child_vk_commit: VkCommit<F>,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> {
         let SingleAirTraceData {
             air_proving_ctx: verifier_pvs_ctx,
@@ -100,6 +105,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         proofs: &[Proof<BabyBearPoseidon2Config>],
         proofs_type: ProofsType,
         child_is_app: bool,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>> {
         if !self.deferral_enabled {
             return vec![];
@@ -137,19 +143,24 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
         child_vk_commit: VkCommit<F>,
+        device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<GpuBackend> {
-        let data = self.generate_pre_verifier_subcircuit_ctxs(
-            proofs,
-            proofs_type,
-            absent_trace_pvs,
-            child_is_app,
-            child_vk_commit,
-        );
+        let data =
+            <Self as InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_pre_verifier_subcircuit_ctxs(
+                self,
+                proofs,
+                proofs_type,
+                absent_trace_pvs,
+                child_is_app,
+                child_vk_commit,
+                device_ctx,
+            );
+        let ctx = device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
         SubCircuitTraceData {
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(cpu_proving_ctx_to_gpu)
+                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, ctx))
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
@@ -161,12 +172,20 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         proofs: &[Proof<BabyBearPoseidon2Config>],
         proofs_type: ProofsType,
         child_is_app: bool,
+        device_ctx: Option<&DeviceContext>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let cpu_ctxs =
-            self.generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app);
+            <Self as InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_post_verifier_subcircuit_ctxs(
+                self,
+                proofs,
+                proofs_type,
+                child_is_app,
+                device_ctx,
+            );
+        let ctx = device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
         cpu_ctxs
             .into_iter()
-            .map(cpu_proving_ctx_to_gpu)
+            .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, ctx))
             .collect_vec()
     }
 }
