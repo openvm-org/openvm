@@ -30,7 +30,12 @@ To be able to import the `keccak256` function, add the following to your `Cargo.
 
 ```toml
 openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
-hex = { version = "0.4.3" }
+```
+
+Alternatively, you can use [`tiny-keccak`](https://github.com/openvm-org/tiny-keccak) directly, as shown in the [example](https://github.com/openvm-org/openvm/blob/main/examples/keccak/src/main.rs). When compiled for the zkVM target, `tiny-keccak` automatically routes through the accelerated OpenVM Keccak256 extension; when running natively, it falls back to a pure software implementation. To use `tiny-keccak`, add the following to your `Cargo.toml`:
+
+```toml
+tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak", features = ["keccak"] }
 ```
 
 ### Config parameters

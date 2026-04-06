@@ -1,6 +1,6 @@
 # Acceleration Using Pre-Built Extensions
 
-OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. Below, we highlight six of these extensions designed to accelerate common arithmetic and cryptographic operations that are notoriously expensive to execute. Some of these extensions have corresponding guest libraries which provide convenient, high-level interfaces for your guest program to interact with the extension.
+OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. Below, we highlight seven of these extensions designed to accelerate common arithmetic and cryptographic operations that are notoriously expensive to execute. Some of these extensions have corresponding guest libraries which provide convenient, high-level interfaces for your guest program to interact with the extension.
 
 - [`openvm-keccak-guest`](/book/acceleration-using-extensions/keccak) - Keccak256 hash function. See the [Keccak256 guest library](/book/guest-libraries/keccak256) for usage details.
 - [`openvm-sha2-guest`](/book/acceleration-using-extensions/sha-2) - SHA-2 family of hash functions. See the [SHA-2 guest library](/book/guest-libraries/sha2) for usage details.
@@ -46,7 +46,6 @@ range_tuple_checker_sizes = [256, 8192]
 [app_vm_config.keccak]
 
 [app_vm_config.sha2]
-[app_vm_config.native]
 
 [app_vm_config.bigint]
 range_tuple_checker_sizes = [256, 8192]

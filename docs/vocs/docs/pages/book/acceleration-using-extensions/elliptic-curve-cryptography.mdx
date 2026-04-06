@@ -21,7 +21,9 @@ Developers can enable arbitrary Weierstrass curves by configuring this extension
   - `x()`, `y()` are used to get the affine coordinates
   - `from_xy` is a constructor for the point, which checks if the point is either identity or on the affine curve.
   - The point supports elliptic curve operations through intrinsic functions `add_ne_nonidentity` and `double_nonidentity`.
-  - `decompress`: Sometimes an elliptic curve point is compressed and represented by its `x` coordinate and the odd/even parity of the `y` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
+
+- `FromCompressed` trait:
+  `decompress`: Sometimes an elliptic curve point is compressed and represented by its `x` coordinate and the odd/even parity of the `y` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
 
 - `msm`: for multi-scalar multiplication.
 
