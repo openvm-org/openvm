@@ -163,6 +163,10 @@ The `app` subcommand generates an application-level proof, the `stark` command g
 `cargo openvm prove` may execute your program several times during generation, so `print` statements may be outputted several times as well. For more information on why this is the case, see the spec on our [Distributed Proving Architecture](/specs/architecture/distributed-proving).
 :::
 
+:::info
+The `cargo openvm prove evm` subcommand requires the `evm-prove` cargo feature on `cargo-openvm`. This feature is enabled by default.
+:::
+
 :::warning
 The `stark` subcommand requires STARK aggregation key generation to have been run via
 `cargo openvm setup`, and the `evm` subcommand requires EVM key generation to have been run via
