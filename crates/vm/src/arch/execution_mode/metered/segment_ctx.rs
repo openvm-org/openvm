@@ -15,6 +15,28 @@ pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
+/// `main_cnt` in the metering = Σ(padded_height × width) in `F` cells (base field elements).
+///
+/// The secondary budget in bytes: `secondary_bytes = main_cnt × base_field_size × 0.5 = main_cnt ×
+/// 4 × 0.5 = 2 × main_cnt` bytes. The mat_eval (with need_rot = true) in bytes:
+/// ```
+/// mat_eval_bytes = (padded_height / 2^l_skip) × (2 × width) × sizeof(EF)
+///               = (padded_height / 16) × (2 × width) × 16     (with l_skip = 4)
+///               = 2 × padded_height × width
+///               = 2 × main_cnt bytes     (per trace, summed)
+/// ```
+///
+/// This accounts for the extra memory after `fold_ple` in stark-backend
+/// crates/cuda-backend/src/logup_zerocheck/mod.rs.
+///
+/// While the `mat_eval` is not dropped, inside `sumcheck_polys_batch_eval` we need to interpolate
+/// each MLE matrix further which takes `(constraint_degree * padded_height / 2^l_skip / 2) * (width
+/// * (1 + needs_rot))` extension field elements. Re-writing, this interpolated buffer has size
+/// `(constraint_degree / 2) * mat_eval_bytes`. We use max constraint degree of 4, so this is `2 *
+/// mat_eval_bytes`.
+///
+/// In total we have `3 * mat_eval_bytes = 6 * main_cnt` bytes. This makes the main cell secondary
+/// weight in base field elements (4 bytes) `6 / 4 = 1.5`.
 const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 1.5;
 /// Each interaction contributes 2 * D_EF base field elements to the GKR fractional
 /// sumcheck leaves (Frac<EF> = (p, q) pairs). Workspace overhead (work_buffer at
