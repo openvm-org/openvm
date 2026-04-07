@@ -24,8 +24,8 @@ openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-circuit = { workspace = true }
 
-aws-sdk-s3 = "1.119.0"
-aws-config = "1.8.12"
+aws-sdk-s3 = { version = "=1.119.0", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
+aws-config = { version = "=1.8.12", default-features = false, features = ["default-https-client", "rt-tokio"] }
 tokio = { version = "1.46.1", features = ["rt", "rt-multi-thread", "macros"] }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
