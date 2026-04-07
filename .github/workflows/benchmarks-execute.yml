@@ -32,6 +32,7 @@ env:
 jobs:
   codspeed-walltime-benchmarks:
     name: Run codspeed walltime benchmarks
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-benchmark-execute')
     runs-on:
       - runs-on=${{ github.run_id }}
       - family=m5a.16xlarge # 2.5Ghz clock speed
