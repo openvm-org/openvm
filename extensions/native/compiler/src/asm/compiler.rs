@@ -1058,7 +1058,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         let rhs = rhs.as_basis_coefficients_slice();
 
         self.push(
-            AsmInstruction::CopyF(dst.fp(), lhs.fp()),
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs[0]),
             debug_info.clone(),
         );
 
