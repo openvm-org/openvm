@@ -2,7 +2,7 @@ import subprocess
 import os
 
 BENCH_METRICS_DIR = ".bench_metrics/"
-FLAMEGRAPHS_DIR = ".bench_metrics/flamegraphs/"
+FLAMEGRAPHS_DIR = os.path.join(BENCH_METRICS_DIR, "flamegraphs/")
 
 def get_git_root():
     # Run the git command to get the root directory
