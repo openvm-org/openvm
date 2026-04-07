@@ -121,6 +121,8 @@ impl<C: Config> Builder<C> {
         state
     }
 
+    /// Applies Poseidon2 hashing.
+    /// The caller must ensure that `array` contains exactly 1 element, whose length is 2.
     pub fn poseidon2_hash_ext(
         &mut self,
         array: &Array<C, Array<C, Ext<C::F, C::EF>>>,
