@@ -25,16 +25,16 @@ the opcodes below [here](/specs/reference/instruction-reference).
 
 OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
 
-| Name                | Description                                                        | Constraints                                                                                         |
-| ------------------- | ------------------------------------------------------------------ |-----------------------------------------------------------------------------------------------------|
-| `F`                 | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field.                               |
-| `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                                                        |
-| `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
-| `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
-| `ADDR_SPACE_OFFSET` | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
-| `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                     |
-| `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
-| `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
+| Name                         | Description                                                        | Constraints                                                          |
+| ---------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `F`                          | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
+| `PC_BITS`                    | The number of bits in the program counter.                         | Fixed to 30.                                                         |
+| `DEFAULT_PC_STEP`            | The default program counter step size.                             | Fixed to 4.                                                          |
+| `LIMB_BITS`                  | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                          |
+| `ADDR_SPACE_OFFSET`          | The index of the first writable address space.                     | Fixed to 1.                                                          |
+| `addr_space_height`          | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`      |
+| `pointer_max_bits`           | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`       |
+| `num_public_values`          | The number of user public values.                                  | Configurable, must equal `8` times a nonzero power of two.           |
 | `MAX_HINT_BUFFER_WORDS_BITS` | The maximum number of bits for hint buffer word count. This determines `MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_WORDS_BITS - 1` = 1,023 words (≈4KB), the maximum words per `HINT_BUFFER_RV32` instruction. | Fixed to 10. |
 
 We explain these parameters in subsequent sections.
@@ -61,7 +61,7 @@ The state of the virtual machine consists of the following components:
 
 - [Input Stream](#inputs-and-hints)
 - [Hint Stream](#inputs-and-hints)
-- [Hint Spaces](#inputs-and-hints)
+- [Deferral States](#inputs-and-hints)
 
 The **initial state** of the virtual machine consists of:
 
@@ -71,7 +71,7 @@ The **initial state** of the virtual machine consists of:
 - No user public outputs
 - Input stream
 - Empty hint stream
-- Empty hint spaces
+- Deferral states
 
 We describe these components in more detail below.
 
@@ -97,10 +97,10 @@ opcode, a, b, c, d, e, f, g
 ```
 
 An instruction does not need to use all operands, and trailing unused operands are suggested to be
-set to zero, but this won't be checked.
+set to zero. This may not be constrained, however.
 
 In the following sections, you will see operands like `a, b, c, 1, e`. `1` here means a fixed address space. In this
-case, `d` is suggested be set to `1`, but this won't be checked.
+case, `d` is suggested to be set to `1`. This also may not be constrained, though.
 
 ### Program Counter
 
@@ -164,16 +164,16 @@ the invariants of those address spaces. In particular, all instructions must res
 
 ### Inputs and Hints
 
-To enable user input and non-determinism in OpenVM programs, the host state maintains the following three data
+To enable user input and non-determinism in OpenVM programs, the host state maintains the following data
 structures during runtime execution:
 
 - `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of runtime
   execution
 - `hint_stream`: a queue of values populated during runtime execution
   via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv32HintInput`.
-- `hint_space`: a vector of vectors of field elements used to store hints during runtime execution
-  via [phantom sub-instructions](#phantom-sub-instructions). The outer `hint_space` vector is append-only, but
-  each internal `hint_space[hint_id]` vector may be mutated, including deletions, by the host.
+- `deferrals`: a list of `DeferralState` objects, one per [deferral function](/specs/architecture/deferral). Each
+  `DeferralState` maps input commitments to raw inputs (or output commitments) and output commitments to raw outputs,
+  enabling the VM to cache results of computations deferred to standalone circuits.
 
 These data structures are **not** part of the guest state, and their state depends on host behavior that cannot be determined by the guest.
 
@@ -194,7 +194,7 @@ a transition function on the mutable parts of the VM state:
 - User Public Outputs
 - Input Stream
 - Hint Stream
-- Hint Spaces
+- Deferral States
 
 which must satisfy the following conditions:
 
@@ -202,11 +202,11 @@ which must satisfy the following conditions:
   valid instruction in the program ROM.
 - The execution must match the instruction from the program ROM.
 - The execution has full read/write access to the data memory, except address space `0` must be read-only.
-- User public outputs can be set at any index in `[0, num_public_values)`. If continuations are disabled, a public
-  value cannot be overwritten with a different value once it is set.
+- User public outputs can be set at any index in `[0, num_public_values)`.
 - Input stream can only be popped from the front as a queue.
 - Full read/write access to the hint stream.
-- Hint spaces can be read from at any index. Hint spaces may be mutated only by append.
+- Deferral states are pre-computed at initialization with input-to-raw-input mappings. During execution, deferral
+  functions may update a `DeferralState` by storing raw outputs and their commitments, which are as specified [here](/specs/architecture/deferral).
 - The program counter is set to a new `to_pc` at the end of the instruction execution.
   Instructions are only considered valid if `to_pc` is the address of a valid instruction in the program ROM.
 
@@ -222,7 +222,7 @@ We define **guest instruction execution** to be the subset of instruction execut
 - User Public Outputs
 
 Guest instruction execution may still depend on read access to the host state.
-For example, instructions like `HINT_STORE_RV32` (from the RV32IM extension) can
+For example, instructions like `HINT_STOREW_RV32` (from the RV32IM extension) can
 read from the `hint_stream` and write them to OpenVM memory to provide non-deterministic hints.
 
 ⚠️ Safeguards:
@@ -323,14 +323,20 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
-The address space `e` is `2` for load instructions, and can be `2`, `3`, or `4` for store instructions.
+The address space `e` is `2` for load instructions, and can be `2`, `3`, or `4` for store instructions. While `e = 4`
+(the [deferral address space](#address-spaces)) is technically allowed by the circuit constraints, verifiers should be
+extremely wary of any program that stores to address space `4` via these instructions and typically should not consider
+such programs as valid.
+
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering
 the 32 bits as the 2's complement of an `i32`.
+
 We will use shorthand `r32{c,g}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2], g)` as `i32`. This means performing
 signed 32-bit addition with the value of the register `[b:4]_1`. For consistency with other notation,
 we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to the most significant bit of `c`.
-Memory access to `ptr: i32` in address space `e` is only valid if `0 <= ptr < 2^addr_max_bits` and
+
+Memory access to `ptr: i32` in address space `e` is only valid if `0 <= ptr < 2^pointer_max_bits` and
 `ptr` is naturally aligned (i.e., `ptr` must be divisible by the data size in bytes), in
 which case it is an access to `F::from_u32(ptr as u32)`.
 The data size is `1` for LOADB_RV32, LOADBU_RV32, STOREB_RV32, `2` for LOADH_RV32, LOADHU_RV32, STOREH_RV32, and `4` for LOADW_RV32, STOREW_RV32.
@@ -419,7 +425,7 @@ with user input-output.
 | ---------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HINT_STOREW_RV32 | `_,b,_,1,2`     | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
 | HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. `l` must be non-zero and `<=` `MAX_HINT_BUFFER_WORDS` (1,023 words ≈ 4KB). The pointer address `r32{0}(b)` does not need to be a multiple of `4`. |
-| REVEAL_RV32      | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                                           |
+| REVEAL_RV32      | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3,_,g` writing to the user IO address space `3`.                                                                                      |
 
 > **Note:** The `MAX_HINT_BUFFER_WORDS` bound on `HINT_BUFFER_RV32` is enforced by both the executor and AIR constraints. The SDK's `hint_buffer_chunked` function automatically splits larger reads into multiple `HINT_BUFFER_RV32` instructions.
 
@@ -432,7 +438,6 @@ The RV32IM extension defines the following phantom sub-instructions.
 | Rv32HintInput     | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                             |
 | Rv32PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
 | Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                                 |
-| Rv32HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[r32{0}{a}:r32{0}{b}]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
 
 ### Deferral Extension
 
@@ -444,14 +449,15 @@ The extension operates on address spaces `1` (registers) and `2` (user memory) a
 
 | Name   | Operands          | Description |
 |--------|-------------------|-------------|
-| CALL   | `a,b,def_idx,1,2` | Executes a deferred call for deferral index `def_idx`. Reads a 32-byte input commitment from `[r32{0}(b):32]_2`. Writes an `OutputKey` (32-byte output commitment followed by an 8-byte output length) to `[r32{0}(a):40]_2`. Also updates the input and output accumulators in address space `4`. |
-| OUTPUT | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes the output bytes to `[r32{0}(a):output_len]_2`. |
+| CALL   | `a,b,def_idx,1,2` | Executes a deferred call for deferral index `def_idx`. Reads a 32-byte input commitment from `[r32{0}(b):32]_2`. Writes an `OutputKey` to `[r32{0}(a):40]_2`, with layout `[output_commit:32 bytes \|\| output_len_le:8 bytes]`. The `output_len` field is encoded as 8-byte little-endian but is currently constrained to a zero-extended 32-bit value. Deferred outputs must have byte length divisible by `DIGEST_SIZE`. Also updates the input and output accumulators in address space `4`. |
+| OUTPUT | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes `output_len` bytes to `[r32{0}(a):output_len]_2`. The instruction is only valid for deferred outputs whose byte length is divisible by `DIGEST_SIZE`. |
 
 ### Keccak Extension
 
 The Keccak extension supports the Keccak-256 hash function via two low-level opcodes that decompose the Keccak sponge
 construction into its constituent operations: absorbing input (XOR-in) and permuting state (keccak-f[1600]). Together,
-these opcodes can be used to implement the full Keccak-256 hash function, including incremental/streaming hashing.
+these opcodes can be used to implement the full Keccak-256 hash function, including incremental/streaming hashing. The
+opcodes themselves do not perform padding or squeezing.
 
 The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
 
@@ -462,25 +468,27 @@ In the instructions below, let `buf = r32{0}(a)`, `inp = r32{0}(b)`, and `len = 
 
 | Name    | Operands      | Description                                                                                                                                                                                                                                  |
 | ------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| XORIN   | `a,b,c,1,2`  | XORs input bytes into a state buffer in-place. For `i` in `0..len`, sets `[buf+i]_2 ^= [inp+i]_2`. Reads `len/4` four-byte words from both the buffer at `buf` and the input at `inp`, and writes `len/4` four-byte words back to `buf`. The instruction is only valid when `len` is a positive multiple of `4` and at most `136`. |
+| XORIN   | `a,b,c,1,2`  | XORs input bytes into a state buffer in-place. For `i` in `0..len`, sets `[buf+i]_2 ^= [inp+i]_2`. Reads `len/4` four-byte words from both the buffer at `buf` and the input at `inp`, and writes `len/4` four-byte words back to `buf`. The instruction is only valid when `len` is a multiple of `4` and at most `136`; `len = 0` is a no-op. |
 | KECCAKF | `a,_,_,1,2`  | Applies the keccak-f[1600] permutation in-place on a 200-byte state buffer: `[buf:200]_2 = keccakf([buf:200]_2)`. Reads 50 four-byte words from `buf`, applies the permutation, and writes 50 four-byte words back. |
 
 ### SHA-2 Extension
 
-The SHA-2 extension supports the SHA-256 and SHA-512 hash functions. The extension operates on address spaces `1` and `2`,
-meaning all memory cells are constrained to be bytes.
+The SHA-2 extension exposes single-block compression instructions for SHA-256 and SHA-512. These are sufficient to
+implement the SHA-256, SHA-384, and SHA-512 hash functions: SHA-384 uses `SHA512_UPDATE_RV32` with the SHA-384 initial
+state and final 48-byte truncation. The extension operates on address spaces `1` and `2`, meaning all memory cells are
+constrained to be bytes. State buffers store 8 words in little-endian order, the destination pointer (`a`) may alias
+the state pointer (`b`), and these instructions do not perform padding.
 
 | Name        | Operands    | Description                                                                                                                                                              |
 | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SHA256_UPDATE_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = compress256([r32{0}(b):32]_2, [r32{0}(c):64]_2)`. where `compress256(state, input)` is the SHA-256 block compression function which returns the updated state. This instruction performs memory reads and writes with block size `4`. |
-| SHA512_UPDATE_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = compress512([r32{0}(b):64]_2, [r32{0}(c):128]_2)`. where `compress512(state, input)` is the SHA-512 block compression function which returns the updated state. This instruction performs memory reads and writes with block size `4`. |
+| SHA256_UPDATE_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = compress256([r32{0}(b):32]_2, [r32{0}(c):64]_2)`, where `compress256(state, input)` is the SHA-256 block compression function which returns the updated state. |
+| SHA512_UPDATE_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = compress512([r32{0}(b):64]_2, [r32{0}(c):128]_2)`, where `compress512(state, input)` is the SHA-512 block compression function which returns the updated state. |
 
 ### BigInt Extension
 
 The BigInt extension supports operations on 256-bit signed and unsigned integers. The extension operates on address
 spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the representation of the elements
-are read from address space `1` and the elements themselves are read/written from address space `2`. Each instruction
-performs block accesses with block size `4` in address space `1` and block size `32` in address space `2`.
+are read from address space `1` and the elements themselves are read/written from address space `2`.
 
 **Note:** These instructions are not the same as instructions on 256-bit registers.
 
@@ -523,14 +531,14 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 The algebra extension supports modular arithmetic over arbitrary fields and their complex field extensions. It is
 configured to specify a list of supported moduli. The configuration of each supported positive integer modulus `N`
-includes associated configuration parameters `N::NUM_LIMBS` and `N::BLOCK_SIZE` (defined below).
+includes the associated configuration parameter `N::NUM_LIMBS` (defined below).
 
 The instructions perform operations on unsigned big integers representing elements in the modulus. The extension
 operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes. Pointers to the
 representation of the elements are read from address space `1` and the elements themselves are read/written from address
 space `2`.
 
-An element in the ring of integers modulo `N`is represented as an unsigned big integer with `N::NUM_LIMBS` limbs with
+An element in the ring of integers modulo `N` is represented as an unsigned big integer with `N::NUM_LIMBS` limbs with
 each limb having `LIMB_BITS = 8` bits. For each instruction, the input elements
 `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c):N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian
 format with each limb having `LIMB_BITS` bits. However, the big integers are **not** required to be less than `N`. Under
@@ -538,8 +546,6 @@ these conditions, the output element `[r32{0}(a): N::NUM_LIMBS]_2` written to me
 the same format that is congruent modulo `N` to the respective operation applied to the two inputs.
 
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
-Each instruction performs block accesses with block size `4` in address space `1` and block size `N::BLOCK_SIZE` in
-address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of 2.
 
 | Name                      | Operands    | Description                                                                                                                                                                                                |
 | ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -563,23 +569,19 @@ format with each limb having `LIMB_BITS` bits.
 
 #### Phantom Sub-Instructions
 
-
 | Name           | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | HintNonQr\<N\>  | 0x50         | `_,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Reset the hint stream to equal a quadratic nonresidue modulo `N`. |
 | HintSqrt\<N\>   | 0x51         | `a,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Read from memory `x = [r32{0}(a): N::NUM_LIMBS]_2`.  If `x` is a quadratic residue modulo `N`, reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` followed by a square root of `x`.  If `x` is not a quadratic residue, reset the hint stream to `[0u8; 4]` followed by a square root of `x * non_qr`, where `non_qr` is the quadratic nonresidue returned by `HintNonQr<N>`. |
-
-#
 
 #### Complex Extension Field
 
 A complex extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`.
 An element in `Fp2` is a pair `c0: Fp, c1: Fp` such that `c0 + c1 u` represents a point in `Fp2` where `u^2 = -1`.
 
-The complex extension field `Fp2` is supported only if the modular arithmetic instructions for `Fp::MODULUS` is also
+The complex extension field `Fp2` is supported only if the modular arithmetic instructions for `Fp::MODULUS` are also
 supported.
-The memory layout of `Fp2` is then that of two concatenated `Fp` elements,
-and the block size for memory accesses is the block size of `Fp`.
+The memory layout of `Fp2` is then that of two concatenated `Fp` elements.
 
 We use the following notation below:
 
@@ -591,14 +593,14 @@ r32_fp2(a) -> Fp2 {
 }
 ```
 
-| Name                | Operands    | Description                                                                                                                                                                  |
-| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADD\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                   |
-| SUB\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                   |
-| SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
-| MUL\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)`                                                                                                                                   |
-| DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                   |
-| SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
+| Name                | Operands    | Description                                                                                                                                                                 |
+| ------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADD\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                  |
+| SUB\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                  |
+| SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert(r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
+| MUL\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)`                                                                                                                                  |
+| DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                  |
+| SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert(r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
 ### Elliptic Curve Extension
 
@@ -606,21 +608,20 @@ The elliptic curve extension supports arithmetic over elliptic curves `C` in Wei
 equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that
 the definitions of the
 curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
-each Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
-defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
-bytes.
+each Weierstrass curve `C`, the coordinate size is determined by `C::Fp::NUM_LIMBS` from the coordinate field. The
+extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be bytes.
 
-An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
+An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::Fp::NUM_LIMBS` elements each
 with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `x,y` is guaranteed to be
 the same as the format used in the [modular arithmetic instructions](#modular-arithmetic). A curve point will be
-represented as `2 * C::COORD_SIZE` contiguous cells in memory.
+represented as `2 * C::Fp::NUM_LIMBS` contiguous cells in memory.
 
 We use the following notation below:
 
 ```
 r32_ec_point(a) -> EcPoint {
-    let x = [r32{0}(a): C::COORD_SIZE]_2;
-    let y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
+    let x = [r32{0}(a): C::Fp::NUM_LIMBS]_2;
+    let y = [r32{0}(a) + C::Fp::NUM_LIMBS: C::Fp::NUM_LIMBS]_2;
     return EcPoint(x, y);
 }
 ```
@@ -628,17 +629,16 @@ r32_ec_point(a) -> EcPoint {
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
 | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::Fp::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::Fp::NUM_LIMBS]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
 | EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::Fp::MODULUS && r32_ec_point(b).y == C::CURVE_A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::Fp::NUM_LIMBS]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::Fp::MODULUS)` |
 
 ### Pairing Extension
 
 The pairing extension supports opcodes tailored to accelerate pairing checks using the optimal Ate pairing over certain
 classes of pairing friendly elliptic curves. For a curve `C` to be supported, the VM must have enabled instructions for
-`C::Fp` and `C::Fp2`. The memory block size is `C::Fp::BLOCK_SIZE` for both reads and writes. The currently supported
-curves are BN254 and BLS12-381. The extension operates on address spaces `1` and `2`, meaning all memory cells are
-constrained to be bytes.
+`C::Fp` and `C::Fp2`. The currently supported curves are BN254 and BLS12-381. The extension operates on address spaces
+`1` and `2`, meaning all memory cells are constrained to be bytes.
 
 #### Phantom Sub-Instructions
 
@@ -646,7 +646,7 @@ The pairing extension defines the following phantom sub-instructions.
 
 | Name         | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------ | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| HintFinalExp | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [r32{0}(a)..r32{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. |
+| HintFinalExp | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [r32{0}(a)..r32{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. Requires `p_len = q_len`. |
 
 ## Acknowledgements
 
