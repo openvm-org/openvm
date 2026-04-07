@@ -15,7 +15,7 @@ pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
-const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.5;
+const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 1.5;
 /// Each interaction contributes 2 * D_EF base field elements to the GKR fractional
 /// sumcheck leaves (Frac<EF> = (p, q) pairs). Workspace overhead (work_buffer at
 /// ~1/32 of leaves, tmp_block_sums at ~1/256) totals ~4% of the leaf memory.
