@@ -154,7 +154,18 @@ fn exp_naf_blstrs(base: &Fq12, is_positive: bool, digits_naf: &[i8]) -> Fq12 {
         return <Fq12 as halo2curves_axiom::ff::Field>::ONE;
     }
 
-    // Transmute to blstrs for computation
+    // Transmute to blstrs for computation.
+    // Safety: requires identical memory layout between halo2curves Fq12 and blstrs Fp12.
+    debug_assert_eq!(
+        core::mem::size_of::<Fq12>(),
+        core::mem::size_of::<blstrs::Fp12>(),
+        "Fq12 and blstrs::Fp12 must have the same size"
+    );
+    debug_assert_eq!(
+        core::mem::align_of::<Fq12>(),
+        core::mem::align_of::<blstrs::Fp12>(),
+        "Fq12 and blstrs::Fp12 must have the same alignment"
+    );
     let base_blstrs = unsafe { core::mem::transmute::<Fq12, blstrs::Fp12>(*base) };
 
     let base_blstrs = if !is_positive {
@@ -181,6 +192,10 @@ fn exp_naf_blstrs(base: &Fq12, is_positive: bool, digits_naf: &[i8]) -> Fq12 {
         }
     }
 
-    // Transmute back to Fq12
+    // Transmute back to Fq12 (same size/alignment invariant as above)
+    debug_assert_eq!(
+        core::mem::size_of::<blstrs::Fp12>(),
+        core::mem::size_of::<Fq12>(),
+    );
     unsafe { core::mem::transmute::<blstrs::Fp12, Fq12>(res_blstrs) }
 }

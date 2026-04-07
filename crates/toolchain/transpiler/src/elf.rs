@@ -162,9 +162,16 @@ impl Elf {
 
         let mut instructions: Vec<u32> = Vec::new();
         let mut base_address = u32::MAX;
+        // Track the end of the last executable segment to detect non-contiguous executable
+        // segments.
+        let mut last_exec_end: Option<u32> = None;
 
-        // Only read segments that are executable instructions that are also PT_LOAD.
-        for segment in segments.iter().filter(|x| x.p_type == PT_LOAD) {
+        // Collect and sort PT_LOAD segments by virtual address to ensure executable
+        // segment contiguity checks are correct regardless of ELF header ordering.
+        let mut load_segments: Vec<_> = segments.iter().filter(|x| x.p_type == PT_LOAD).collect();
+        load_segments.sort_by_key(|s| s.p_vaddr);
+
+        for segment in load_segments {
             // Get the file size of the segment as an u32.
             let file_size: u32 = segment.p_filesz.try_into()?;
             if file_size >= max_mem {
@@ -183,10 +190,25 @@ impl Elf {
                 bail!("vaddr {vaddr:08x} is unaligned");
             }
 
-            // If the virtual address is less than the first memory address, then update the first
-            // memory address.
-            if (segment.p_flags & PF_X) != 0 && base_address > vaddr {
-                base_address = vaddr;
+            // Track executable segments and reject non-contiguous ones.
+            if (segment.p_flags & PF_X) != 0 {
+                if let Some(prev_end) = last_exec_end {
+                    if vaddr != prev_end {
+                        bail!(
+                            "Non-contiguous executable segments are not supported: \
+                             previous segment ended at 0x{prev_end:08x}, \
+                             next segment starts at 0x{vaddr:08x}"
+                        );
+                    }
+                }
+                if base_address > vaddr {
+                    base_address = vaddr;
+                }
+                last_exec_end = Some(
+                    vaddr
+                        .checked_add(mem_size)
+                        .ok_or_else(|| eyre::eyre!("executable segment end address overflow"))?,
+                );
             }
 
             // Get the offset to the segment.

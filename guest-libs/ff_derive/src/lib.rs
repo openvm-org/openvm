@@ -1092,6 +1092,12 @@ fn prime_field_impl(
         }
 
         impl ::ff::derive::subtle::ConstantTimeEq for #name {
+            /// Compares raw byte representations via `to_repr()`.
+            ///
+            /// **Note:** both operands must be in canonical (reduced) form.
+            /// Values created via `from_le_bytes_unchecked` or other unchecked
+            /// constructors must be reduced before calling `ct_eq`; non-canonical
+            /// values may compare as unequal even when congruent mod p.
             fn ct_eq(&self, other: &#name) -> ::ff::derive::subtle::Choice {
                 use ::ff::PrimeField;
                 self.to_repr().ct_eq(&other.to_repr())
@@ -1425,6 +1431,11 @@ fn prime_field_impl(
 
             #[inline(always)]
             fn is_odd(&self) -> ::ff::derive::subtle::Choice {
+                // On zkvm, is_odd checks the LSB of the raw byte representation and
+                // assumes the value is in canonical (reduced) form. Values created via
+                // `from_le_bytes_unchecked` must be reduced before calling `is_odd`,
+                // otherwise a non-canonical representation (e.g., storing p which is
+                // odd) would return incorrect results.
                 #[cfg(target_os = "zkvm")]
                 {
                     ::ff::derive::subtle::Choice::from((<Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(self)[0] & 1) as u8)
