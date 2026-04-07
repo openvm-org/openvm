@@ -5,7 +5,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  S3_FIXTURES_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/fixtures
+  S3_FIXTURES_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/fixtures
 
 jobs:
   generate-fixtures:

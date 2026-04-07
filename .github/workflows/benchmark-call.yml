@@ -115,8 +115,8 @@ on:
         default: false
 
 env:
-  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  S3_METRICS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/metrics
+  S3_FLAMEGRAPHS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/flamegraphs
   FEATURE_FLAGS: "metrics,parallel,tco"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
