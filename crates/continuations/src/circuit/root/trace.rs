@@ -137,7 +137,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
-        SubCircuitTraceData {
+        let result = SubCircuitTraceData {
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
@@ -145,7 +145,9 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
-        }
+        };
+        ctx.stream.synchronize().unwrap();
+        result
     }
 
     fn generate_other_proving_ctxs(
@@ -167,6 +169,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
             .into_iter()
             .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, &ctx))
             .collect_vec();
+        ctx.stream.synchronize().unwrap();
         (gpu_ctxs, inputs)
     }
 }

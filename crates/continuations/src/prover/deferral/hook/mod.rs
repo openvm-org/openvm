@@ -87,12 +87,7 @@ where
         E::PD: MaybeDeviceContext,
     {
         let engine = E::new(self.pk.params.clone());
-        let ctx = self.generate_proving_ctx(
-            proof,
-            leaf_children,
-            #[cfg(feature = "cuda")]
-            device_ctx_for_engine(&engine),
-        );
+        let ctx = self.generate_proving_ctx(proof, leaf_children, device_ctx_for_engine(&engine));
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
@@ -115,7 +110,6 @@ impl<
         T: DeferralHookTraceGen<PB>,
     > DeferralHookProver<PB, S, T>
 {
-    #[cfg(not(feature = "cuda"))]
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
@@ -157,100 +151,12 @@ impl<
         }
     }
 
-    #[cfg(feature = "cuda")]
-    pub fn new<E>(
-        child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_cached_commit: CommitBytes,
-        system_params: SystemParams,
-    ) -> Self
-    where
-        E: StarkEngine<SC = SC, PB = PB>,
-        E::PD: MaybeDeviceContext,
-        PB::Val: Field + PrimeField32,
-        PB::Matrix: Clone,
-        PB::Commitment: Into<CommitBytes>,
-    {
-        let verifier_circuit = S::new(
-            child_vk.clone(),
-            VerifierConfig {
-                continuations_enabled: true,
-                ..Default::default()
-            },
-        );
-        let engine = E::new(system_params);
-        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let internal_recursive_vk_commit = VkCommitBytes {
-            cached_commit: internal_recursive_cached_commit,
-            vk_pre_hash: child_vk.pre_hash.into(),
-        };
-        let circuit = Arc::new(DeferralHookCircuit::new(
-            Arc::new(verifier_circuit),
-            internal_recursive_vk_commit,
-        ));
-        let (pk, vk) = engine.keygen(&circuit.airs());
-        let d_pk = engine.device().transport_pk_to_device(&pk);
-
-        Self {
-            pk: Arc::new(pk),
-            d_pk,
-            vk: Arc::new(vk),
-            agg_node_tracegen: T::new(),
-            child_vk,
-            child_vk_pcs_data,
-            circuit,
-        }
-    }
-
-    #[cfg(not(feature = "cuda"))]
     pub fn from_pk<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
         pk: Arc<MultiStarkProvingKey<SC>>,
     ) -> Self
     where
-        PB::Val: Field + PrimeField32,
-        PB::Matrix: Clone,
-        PB::Commitment: Into<CommitBytes>,
-    {
-        let verifier_circuit = S::new(
-            child_vk.clone(),
-            VerifierConfig {
-                continuations_enabled: true,
-                ..Default::default()
-            },
-        );
-        let engine = E::new(pk.params.clone());
-        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let internal_recursive_vk_commit = VkCommitBytes {
-            cached_commit: internal_recursive_cached_commit,
-            vk_pre_hash: child_vk.pre_hash.into(),
-        };
-        let circuit = Arc::new(DeferralHookCircuit::new(
-            Arc::new(verifier_circuit),
-            internal_recursive_vk_commit,
-        ));
-        let vk = Arc::new(pk.get_vk());
-        let d_pk = engine.device().transport_pk_to_device(pk.as_ref());
-        Self {
-            pk,
-            d_pk,
-            vk,
-            agg_node_tracegen: T::new(),
-            child_vk,
-            child_vk_pcs_data,
-            circuit,
-        }
-    }
-
-    #[cfg(feature = "cuda")]
-    pub fn from_pk<E>(
-        child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        internal_recursive_cached_commit: CommitBytes,
-        pk: Arc<MultiStarkProvingKey<SC>>,
-    ) -> Self
-    where
-        E: StarkEngine<SC = SC, PB = PB>,
-        E::PD: MaybeDeviceContext,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,

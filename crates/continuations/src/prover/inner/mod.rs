@@ -109,7 +109,6 @@ where
             child_vk_kind,
             proofs_type,
             absent_trace_pvs,
-            #[cfg(feature = "cuda")]
             device_ctx_for_engine(&engine),
         );
         if tracing::enabled!(tracing::Level::DEBUG) {
@@ -156,7 +155,6 @@ impl<
         T: InnerTraceGen<PB>,
     > InnerAggregationProver<PB, S, T>
 {
-    #[cfg(not(feature = "cuda"))]
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         system_params: SystemParams,
@@ -196,101 +194,12 @@ impl<
         }
     }
 
-    #[cfg(feature = "cuda")]
-    pub fn new<E>(
-        child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        system_params: SystemParams,
-        is_self_recursive: bool,
-        def_hook_cached_commit: Option<Digest>,
-    ) -> Self
-    where
-        E: StarkEngine<SC = SC, PB = PB>,
-        E::PD: MaybeDeviceContext,
-    {
-        let verifier_circuit = S::new(
-            child_vk.clone(),
-            VerifierConfig {
-                continuations_enabled: true,
-                ..Default::default()
-            },
-        );
-        let engine = E::new(system_params);
-        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(InnerCircuit::new(
-            Arc::new(verifier_circuit),
-            def_hook_cached_commit.map(|d| d.into()),
-        ));
-        let (pk, vk) = engine.keygen(&circuit.airs());
-        let d_pk = engine.device().transport_pk_to_device(&pk);
-        let self_vk_pcs_data = if is_self_recursive {
-            Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
-        } else {
-            None
-        };
-        let agg_node_tracegen = InnerTraceGen::new(def_hook_cached_commit.is_some());
-        Self {
-            pk: Arc::new(pk),
-            d_pk,
-            vk: Arc::new(vk),
-            agg_node_tracegen,
-            child_vk,
-            child_vk_pcs_data,
-            circuit,
-            self_vk_pcs_data,
-        }
-    }
-
-    #[cfg(not(feature = "cuda"))]
     pub fn from_pk<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
         def_hook_cached_commit: Option<Digest>,
     ) -> Self {
-        let verifier_circuit = S::new(
-            child_vk.clone(),
-            VerifierConfig {
-                continuations_enabled: true,
-                ..Default::default()
-            },
-        );
-        let engine = E::new(pk.params.clone());
-        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(InnerCircuit::new(
-            Arc::new(verifier_circuit),
-            def_hook_cached_commit.map(|d| d.into()),
-        ));
-        let vk = Arc::new(pk.get_vk());
-        let d_pk = engine.device().transport_pk_to_device(&pk);
-        let self_vk_pcs_data = if is_self_recursive {
-            Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
-        } else {
-            None
-        };
-        let agg_node_tracegen = InnerTraceGen::new(def_hook_cached_commit.is_some());
-        Self {
-            pk,
-            d_pk,
-            vk,
-            agg_node_tracegen,
-            child_vk,
-            child_vk_pcs_data,
-            circuit,
-            self_vk_pcs_data,
-        }
-    }
-
-    #[cfg(feature = "cuda")]
-    pub fn from_pk<E>(
-        child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        pk: Arc<MultiStarkProvingKey<SC>>,
-        is_self_recursive: bool,
-        def_hook_cached_commit: Option<Digest>,
-    ) -> Self
-    where
-        E: StarkEngine<SC = SC, PB = PB>,
-        E::PD: MaybeDeviceContext,
-    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
