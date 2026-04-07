@@ -30,12 +30,12 @@ const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 /// crates/cuda-backend/src/logup_zerocheck/mod.rs.
 ///
 /// While the `mat_eval` is not dropped, inside `sumcheck_polys_batch_eval` we need to interpolate
-/// each MLE matrix further which takes `(constraint_degree * padded_height / 2^l_skip / 2) * (width
-/// * (1 + needs_rot))` extension field elements. Re-writing, this interpolated buffer has size
-/// `(constraint_degree / 2) * mat_eval_bytes`. We use max constraint degree of 4, so this is `2 *
-/// mat_eval_bytes`.
+/// each MLE matrix further which takes `(constraint_degree \* padded_height / 2^l_skip / 2) \*
+/// (width \* (1 + needs_rot))` extension field elements. Re-writing, this interpolated buffer has
+/// size `(constraint_degree / 2) \* mat_eval_bytes`. We use max constraint degree of 4, so this is
+/// `2 \* mat_eval_bytes`.
 ///
-/// In total we have `3 * mat_eval_bytes = 6 * main_cnt` bytes. This makes the main cell secondary
+/// In total we have `3 \* mat_eval_bytes = 6 \* main_cnt` bytes. This makes the main cell secondary
 /// weight in base field elements (4 bytes) `6 / 4 = 1.5`.
 const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 1.5;
 /// Each interaction contributes 2 * D_EF base field elements to the GKR fractional
