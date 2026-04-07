@@ -168,8 +168,18 @@ where
         // (T01b): `num_challenges_to_sample.len() < 2`.
 
         let num_phases = RVar::from(num_challenges_to_sample.len());
-        // Here the shape of `exposed_values_after_challenge` is not verified. But it's verified
-        // later (T01c).
+        // Outer shape: number of challenge phases with exposed values must match VK. (T01c) then
+        // checks per-phase lengths and observes values for interacting AIRs only.
+        builder.range(0, num_airs).for_each(|i_vec, builder| {
+            let i = i_vec[0];
+            let air_proof_data = builder.get(air_proofs, i);
+            let air_advice = builder.get(&m_advice_var.per_air, i);
+            builder.assert_usize_eq(
+                air_proof_data.exposed_values_after_challenge.len(),
+                air_advice.num_exposed_values_after_challenge.len(),
+            );
+        });
+
         assert_cumulative_sums(builder, air_proofs, &num_challenges_to_sample);
 
         let air_perm_by_height = if builder.flags.static_only {
