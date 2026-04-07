@@ -11,7 +11,7 @@ on:
         type: string
 
 env:
-  S3_BUCKET: openvm-public-artifacts-us-east-1
+  S3_BUCKET: ${{ vars.OPENVM_S3_ARTIFACTS_BUCKET }}
 
 jobs:
   upload-setup:
