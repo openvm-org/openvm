@@ -245,10 +245,15 @@ impl BabyBearChip {
         mut b: BabyBearWire,
     ) -> BabyBearWire {
         let b_val = b.to_baby_bear();
-        let b_inv = b_val.try_inverse().unwrap();
+        let b_inv_val = b_val.try_inverse().unwrap();
+        // Constrain b is non-zero by checking b * b_inv == 1
+        let b_inv = self.load_witness(ctx, b_inv_val);
+        let one = self.load_constant(ctx, BabyBear::ONE);
+        let inv_prod = self.mul(ctx, b, b_inv);
+        self.assert_equal(ctx, inv_prod, one);
 
-        let mut c = self.load_witness(ctx, a.to_baby_bear() * b_inv);
-        // constraint a = b * c (mod p)
+        // Constrain a = b * c (mod p)
+        let mut c = self.load_witness(ctx, a.to_baby_bear() * b_inv_val);
         if a.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
         }
