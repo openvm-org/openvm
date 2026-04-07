@@ -221,10 +221,15 @@ impl BabyBearExt4Chip {
         b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {
         let b_val = b.to_extension_field();
-        let b_inv = b_val.try_inverse().unwrap();
+        let b_inv_val = b_val.try_inverse().unwrap();
+        // Constrain b is non-zero by checking b * b_inv == 1
+        let b_inv = self.load_witness(ctx, b_inv_val);
+        let one = self.load_constant(ctx, BinomialExtensionField::<BabyBear, 4>::ONE);
+        let inv_prod = self.mul(ctx, b, b_inv);
+        self.assert_equal(ctx, inv_prod, one);
 
-        let c = self.load_witness(ctx, a.to_extension_field() * b_inv);
-        // constraint a = b * c
+        // Constrain a = b * c (mod p)
+        let c = self.load_witness(ctx, a.to_extension_field() * b_inv_val);
         let prod = self.mul(ctx, b, c);
         self.assert_equal(ctx, a, prod);
 
