@@ -1,9 +1,9 @@
 # RV32 Hint Store Chip
 
-The chip is an instruction executor for the HINT_STORE_RV32 and HINT_BUFFER_RV32 instructions.
+The chip is an instruction executor for the HINT_STOREW_RV32 and HINT_BUFFER_RV32 instructions.
 
 Trace rows are exactly one of 3 types:
-- `is_single = 1, is_buffer = 0`: to handle HINT_STORE_RV32
+- `is_single = 1, is_buffer = 0`: to handle HINT_STOREW_RV32
 - `is_single = 0, is_buffer = 1`: rows for HINT_BUFFER_RV32
 - `is_single = 0, is_buffer = 0`: dummy padding rows
 
