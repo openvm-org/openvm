@@ -41,8 +41,13 @@ impl Default for Secp256k1Scalar {
     }
 }
 
-// Requires canonical form
 impl ConstantTimeEq for Secp256k1Scalar {
+    /// Compares raw little-endian byte representations for equality.
+    ///
+    /// **Note:** both operands must be in canonical (reduced) form.
+    /// Values created via `from_le_bytes_unchecked` or `from_be_bytes_unchecked`
+    /// must be reduced before calling `ct_eq`; otherwise two representations of
+    /// the same field element may compare as unequal.
     fn ct_eq(&self, other: &Self) -> Choice {
         self.as_le_bytes().ct_eq(other.as_le_bytes())
     }

@@ -262,6 +262,9 @@ pub trait IntMod:
 // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
 pub trait Reduce: Sized {
     /// Interpret the given bytes as an integer and perform a modular reduction.
+    ///
+    /// **Note:** `bytes.len()` must be a multiple of the modulus byte size.
+    /// Non-aligned lengths will panic.
     fn reduce_le_bytes(bytes: &[u8]) -> Self;
     fn reduce_be_bytes(bytes: &[u8]) -> Self {
         Self::reduce_le_bytes(&bytes.iter().rev().copied().collect::<Vec<_>>())

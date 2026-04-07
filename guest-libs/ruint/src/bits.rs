@@ -361,7 +361,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
                 zkvm_u256_wrapping_shl_impl(
                     self.limbs.as_mut_ptr() as *mut u8,
                     self.limbs.as_ptr() as *const u8,
-                    [rhs].as_ptr() as *const u8,
+                    [rhs, 0, 0, 0].as_ptr() as *const u8,
                 );
             }
             self
@@ -460,7 +460,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
                 zkvm_u256_wrapping_shr_impl(
                     self.limbs.as_mut_ptr() as *mut u8,
                     self.limbs.as_ptr() as *const u8,
-                    [rhs].as_ptr() as *const u8,
+                    [rhs, 0, 0, 0].as_ptr() as *const u8,
                 );
             }
             self
@@ -498,7 +498,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
                 zkvm_u256_arithmetic_shr_impl(
                     self.limbs.as_mut_ptr() as *mut u8,
                     self.limbs.as_ptr() as *const u8,
-                    [rhs].as_ptr() as *const u8,
+                    [rhs, 0, 0, 0].as_ptr() as *const u8,
                 );
             }
             self

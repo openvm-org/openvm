@@ -777,6 +777,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
             impl openvm_algebra_guest::Reduce for #struct_name {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
+                    debug_assert!(
+                        bytes.len() % #limbs == 0,
+                        "reduce_le_bytes: input length {} is not a multiple of modulus byte size {}",
+                        bytes.len(),
+                        #limbs,
+                    );
                     let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
                     let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(&[255u8; #limbs]);

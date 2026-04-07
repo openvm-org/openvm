@@ -57,9 +57,13 @@ where
     }
 
     /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the
-    /// residue witness in the final exponentiation step
+    /// residue witness in the final exponentiation step.
     ///
     /// `c` is assumed nonzero.
+    ///
+    /// **Note:** All points in `P` must have non-zero `y` coordinate. Points with `y=0`
+    /// are not on BN254/BLS12-381, but `AffinePoint` does not enforce on-curve membership.
+    /// Passing such points would cause `div_unsafe` on zero, producing unconstrained values.
     fn multi_miller_loop_embedded_exp(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
