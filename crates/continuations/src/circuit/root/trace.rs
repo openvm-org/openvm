@@ -11,10 +11,7 @@ use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{BabyBearBn254Poseidon2HashScheme, GenericGpuBackend};
 #[cfg(feature = "cuda")]
-use openvm_cuda_common::{
-    common::get_device,
-    stream::{CudaStream, DeviceContext, StreamGuard},
-};
+use openvm_cuda_common::stream::DeviceContext;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
@@ -39,12 +36,14 @@ pub trait RootTraceGen<PB: ProverBackend> {
         proof: &Proof<BabyBearPoseidon2Config>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         memory_dimensions: MemoryDimensions,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<PB>;
     fn generate_other_proving_ctxs(
         &self,
         proof: &Proof<BabyBearPoseidon2Config>,
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> (Vec<AirProvingContext<PB>>, Vec<[PB::Val; POSEIDON2_WIDTH]>);
 }
 
@@ -62,6 +61,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceG
         proof: &Proof<BabyBearPoseidon2Config>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<CpuBackend<SC>> {
         let SingleAirTraceData {
             air_proving_ctx: verifier_ctx,
@@ -92,6 +92,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceG
         proof: &Proof<BabyBearPoseidon2Config>,
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
     ) -> (
         Vec<AirProvingContext<CpuBackend<SC>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
@@ -130,24 +131,27 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
         proof: &Proof<BabyBearPoseidon2Config>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
-        let data =
-            self.generate_pre_verifier_subcircuit_ctx(proof, user_pvs_proof, memory_dimensions);
-        let ctx = DeviceContext {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-        };
-        let result = SubCircuitTraceData {
+        let ctx = device_ctx.expect("GPU RootTraceGen requires engine-owned DeviceContext");
+        let data: SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> =
+            <Self as RootTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_pre_verifier_subcircuit_ctx(
+                self,
+                proof,
+                user_pvs_proof,
+                memory_dimensions,
+                #[cfg(feature = "cuda")]
+                None,
+            );
+        SubCircuitTraceData {
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, &ctx))
+                .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, ctx))
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
-        };
-        ctx.stream.synchronize().unwrap();
-        result
+        }
     }
 
     fn generate_other_proving_ctxs(
@@ -155,21 +159,25 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
         proof: &Proof<BabyBearPoseidon2Config>,
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> (
         Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
+        let ctx = device_ctx.expect("GPU RootTraceGen requires engine-owned DeviceContext");
         let (cpu_ctxs, inputs) =
-            self.generate_other_proving_ctxs(proof, memory_dimensions, deferral_merkle_proofs);
-        let ctx = DeviceContext {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-        };
+            <Self as RootTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_other_proving_ctxs(
+                self,
+                proof,
+                memory_dimensions,
+                deferral_merkle_proofs,
+                #[cfg(feature = "cuda")]
+                None,
+            );
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, &ctx))
+            .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, ctx))
             .collect_vec();
-        ctx.stream.synchronize().unwrap();
         (gpu_ctxs, inputs)
     }
 }

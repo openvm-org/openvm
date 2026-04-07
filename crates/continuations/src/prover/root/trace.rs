@@ -44,12 +44,16 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             &proof,
             user_pvs_proof,
             self.circuit.memory_dimensions,
+            #[cfg(feature = "cuda")]
+            device_ctx,
         );
         let (post_verifier_subcircuit_ctxs, other_compress_inputs) =
             self.agg_node_tracegen.generate_other_proving_ctxs(
                 &proof,
                 self.circuit.memory_dimensions,
                 deferral_merkle_proofs,
+                #[cfg(feature = "cuda")]
+                device_ctx,
             );
         pre_data
             .poseidon2_compress_inputs
