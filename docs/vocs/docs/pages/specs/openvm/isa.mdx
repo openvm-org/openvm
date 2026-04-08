@@ -445,7 +445,7 @@ The extension operates on address spaces `1` (registers) and `2` (user memory) a
 | Name   | Operands          | Description |
 |--------|-------------------|-------------|
 | CALL   | `a,b,def_idx,1,2` | Executes a deferred call for deferral index `def_idx`. Reads a 32-byte input commitment from `[r32{0}(b):32]_2`. Writes an `OutputKey` (32-byte output commitment followed by an 8-byte output length) to `[r32{0}(a):40]_2`. Also updates the input and output accumulators in address space `4`. |
-| OUTPUT | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes the output bytes to `[r32{0}(a):output_len]_2`. |
+| OUTPUT | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes the output bytes to `[r32{0}(a):output_len]_2`, where `output_len` is the length from the `OutputKey`. |
 
 ### Keccak Extension
 
