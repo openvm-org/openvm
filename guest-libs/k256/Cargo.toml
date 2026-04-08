@@ -72,7 +72,7 @@ pkcs8 = ["ecdsa-core/pkcs8", "elliptic-curve/pkcs8"]
 precomputed-tables = ["arithmetic", "once_cell"]
 schnorr = ["arithmetic", "signature"]
 serde = ["ecdsa-core/serde", "elliptic-curve/serde"]
-sha2 = []
+sha256 = []
 test-vectors = []
 
 # Internal feature for testing only.
