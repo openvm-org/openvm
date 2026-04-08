@@ -5,18 +5,12 @@ The default VM extensions that support transpilation are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Keccak-256](#keccak-extension): An extension implementing low-level Keccak sponge operations (XOR-in and keccak-f[1600] permutation) compatibly with RISC-V memory, used to implement the Keccak-256 hash function.
-- [SHA2](#sha-2-extension): An extension implementing the SHA-256 and SHA-512 hash functions compatibly with RISC-V memory.
+- [SHA2](#sha-2-extension): An extension implementing the SHA-256 and SHA-512 compression functions compatibly with RISC-V memory. These are sufficient to implement SHA-256, SHA-384, and SHA-512.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex field extensions. This extension respects the RISC-V memory format.
 - [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
 - [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254 and BLS12-381 curves. This extension respects the RISC-V memory format.
-
-## Classification of Custom RISC-V Machine Code
-
-We divide the types of custom RISC-V machine code associated with VM extensions into two categories:
-
-- **Intrinsic Instruction:** the custom machine code is a single custom RISC-V instruction, compliant with the RISC-V specification.
-- **Kernel Code:** the custom machine code is a 32-bit aligned binary sequence with bit length a multiple of 32. The machine code does not need to conform to any RISC-V ISA specification. Kernel code is used as a means to statically link foreign OpenVM assembly code into the ELF without a custom linker. Kernel code cannot be executed directly by a RISC-V machine without additional toolchain support from the [transpiler](/specs/reference/transpiler#openvm-kernel-code-transpilation).
+- [Deferral](#deferral-extension): An extension for deferred computation, where results are committed during app execution and verified during proof aggregation.
 
 ## Conventions for RISC-V Intrinsic Instructions
 
@@ -66,9 +60,9 @@ the guest must take care to validate all data and account for behavior in cases 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                                                               |
 | ----------- | --- | ----------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | hintstorew  | I   | 0001011     | 001    | 0x0       | Stores next 4-byte word from hint stream in user memory at `[rd]_2`. The address `rd` does not have any alignment requirements. |
-| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd..rd + 4 * rs1]_2`. Only valid if next `4 * rs1` values in hint stream are bytes and `rs1` is non-zero. The address `rd` does not have any alignment requirements. |
+| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd..rd + 4 * rs1]_2`. Only valid if next `4 * rs1` values in hint stream are bytes and `rs1` is non-zero and at most `1023`. The address `rd` does not have any alignment requirements. |
 | reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space. The address `rd + imm` must be aligned to a 4-byte boundary. |
-| hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                                                                     |
+| hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to `[(len as u32).to_le_bytes(), vector, zero padding to 4-byte alignment]`, where `len` is the vector length in bytes. |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
 | hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from a fixed-seed RNG (`rand::rngs::StdRng`) on the host.                                                                                      |
 
@@ -78,15 +72,15 @@ Deferral instructions use the _custom-1_ opcode prefix (`0101011`) and `funct3 =
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[1:0] | RISC-V description and notes |
 | ----------- | --- | ----------- | ------ | -------- | ---------------------------------------------------------------- |
-| def_call    | I   | 0101011     | 111    | 0x0      | Deferred call: reads 32-byte input commitment from `[rs1]`, writes 40-byte `OutputKey` to `[rd]`. `imm[11:2]` = deferral index. |
-| def_output  | I   | 0101011     | 111    | 0x1      | Retrieve deferred output: reads 40-byte `OutputKey` from `[rs1]`, writes output bytes to `[rd]`. `imm[11:2]` = deferral index. |
+| def_call    | I   | 0101011     | 111    | 0x0      | Deferred call: reads 32-byte input commitment from `[rs1]`, writes 40-byte `OutputKey = [output_commit:32 bytes || output_len_le:8 bytes]` to `[rd]`. The `output_len` field is encoded as 8-byte little-endian but is currently constrained to a zero-extended 32-bit value, and deferred outputs must have byte length divisible by `DIGEST_SIZE`. `imm[11:2]` = deferral index. |
+| def_output  | I   | 0101011     | 111    | 0x1      | Retrieve deferred output: reads 40-byte `OutputKey` from `[rs1]`, writes `output_len` bytes to `[rd]`. The instruction is only valid for deferred outputs whose byte length is divisible by `DIGEST_SIZE`. `imm[11:2]` = deferral index. |
 
 ## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
 | ----------- | --- | ----------- | ------ | ------ | ------------------------------------------- |
 | keccakf     | R   | 0001011     | 100    | 0x0    | Applies keccak-f[1600] permutation in-place on 200-byte state buffer at `rd`: `[rd:200]_2 = keccakf([rd:200]_2)`. `rs1` and `rs2` must be `x0`. |
-| xorin       | R   | 0001011     | 100    | 0x1    | XORs `rs2` input bytes into state buffer: for `i` in `0..rs2`, `[rd+i]_2 ^= [rs1+i]_2`. `rs2` must be a positive multiple of 4 and at most 136. |
+| xorin       | R   | 0001011     | 100    | 0x1    | XORs `rs2` input bytes into state buffer: for `i` in `0..rs2`, `[rd+i]_2 ^= [rs1+i]_2`. `rs2` must be a multiple of 4 and at most 136; `rs2 = 0` is a no-op. |
 
 ## SHA-2 Extension
 
@@ -109,7 +103,7 @@ Deferral instructions use the _custom-1_ opcode prefix (`0101011`) and `funct3 =
 | sra256      | R   | 0001011     | 101    | 0x07   | `[rd:32]_2 = [rs1:32]_2 >> [rs2:32]_2` MSB extends        |
 | slt256      | R   | 0001011     | 101    | 0x08   | `[rd:32]_2 = i256([rs1:32]_2) < i256([rs2:32]_2) ? 1 : 0` |
 | sltu256     | R   | 0001011     | 101    | 0x09   | `[rd:32]_2 = u256([rs1:32]_2) < u256([rs2:32]_2) ? 1 : 0` |
-| mul256      | R   | 0001011     | 101    | 0x10   | `[rd:32]_2 = ([rs1:32]_2 * [rs2:32]_2)[0:255]`            |
+| mul256      | R   | 0001011     | 101    | 0x0A   | `[rd:32]_2 = ([rs1:32]_2 * [rs2:32]_2)[0:255]`            |
 
 We support a single branch instruction, `beq256`, which is B-type.
 
@@ -149,7 +143,7 @@ We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list 
 | iseqmod\<N\> | R   | 0101011     | 000    | `idx*8+4` | `rd = [rs1: N::NUM_LIMBS]_2 == [rs2: N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. If `rd != x0`, enforces that `[rs1: N::NUM_LIMBS]_2` and `[rs2: N::NUM_LIMBS]_2` are both less than `N` and then sets `rd` equal to boolean comparison value. If `rd = x0`, this is a no-op.                                                                                                                                                         |
 | setup\<N\>   | R   | 0101011     | 000    | `idx*8+5` | `assert([rs1: N::NUM_LIMBS]_2 == N)` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: N::NUM_LIMBS]_2` if `ind(rs2) = 0,1` (for add_sub, mul_div) or it overwrites the register value of `rd` with an unconstrained value if `ind(rs2) = 2` (for iseq). If `ind(rs2) = 2`, then the instruction is **invalid** if `rd = x0`. |
 | hint_non_qr\<N\> | R   | 0101011     | 000    | `idx*8+6` | Reset the hint stream to equal `non_qr` where `non_qr` is a quadratic nonresidue modulo `N`. The same `non_qr` is returned in each execution of this instruction. `rd`, `rs1`, and `rs2` should be `x0`. |
-| hint_sqrt\<N\> | R   | 0101011     | 000    | `idx*8+7` | Read `x = [rs1: N::NUM_LIMBS]_2`. If `x` is a quadratic residue modulo `N` then reset the hint stream to `[1u0, 0u8, 0u8, 0u8]` concatenated with a square root of `x`. If `x` is not a quadratic residue, then reset the hint stream to `[0u8; 4]` concatenated with a square root of `x * non_qr` where `non_qr` is the quadratic nonresidue returned by `hint_non_qr<N>`. `rd` and `rs2` should be `x0`. |
+| hint_sqrt\<N\> | R   | 0101011     | 000    | `idx*8+7` | Read `x = [rs1: N::NUM_LIMBS]_2`. If `x` is a quadratic residue modulo `N` then reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` concatenated with a square root of `x`. If `x` is not a quadratic residue, then reset the hint stream to `[0u8; 4]` concatenated with a square root of `x * non_qr` where `non_qr` is the quadratic nonresidue returned by `hint_non_qr<N>`. `rd` and `rs2` should be `x0`. |
 
 Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -171,9 +165,9 @@ The elliptic curve extension supports arithmetic over short Weierstrass curves, 
 
 | RISC-V Inst     | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | --------------- | --- | ----------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| sw_add_ne\<C\>  | R   | 0101011     | 001    | `idx*8`   | `EcPoint([rd:2*C::COORD_SIZE]_2) = EcPoint([rs1:2*C::COORD_SIZE]_2) + EcPoint([rs2:2*C::COORD_SIZE]_2)`. Assumes that input affine points are not identity and do not have same x-coordinate.                                                                                                                                                                                                                                                                                                                                                                  |
-| sw_double\<C\>  | R   | 0101011     | 001    | `idx*8+1` | `EcPoint([rd:2*C::COORD_SIZE]_2) = 2 * EcPoint([rs1:2*C::COORD_SIZE]_2)`. Assumes that input affine point is not identity. `rs2` is unused and must be set to `x0`.                                                                                                                                                                                                                                                                                                                                                                                            |
-| setup\<C\>      | R   | 0101011     | 001    | `idx*8+2` | If `ind(rs2) != 0`, then this instruction is setup for `sw_add_ne`. Otherwise it is setup for `sw_double`. If setup for `sw_add_ne`, it checks `assert([rs1: C::COORD_SIZE]_2 == C::MODULUS)`, and if setup for `sw_double`, checks `assert([rs1: 2*C::COORD_SIZE]_2 == [C::MODULUS, CURVE_A])`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: 2*C::COORD_SIZE]_2`. When `ind(rs2) != 0` (add_ne), it is required for proper functionality that `[rs2: C::COORD_SIZE]_2 != [rs1: C::COORD_SIZE]_2`; otherwise (double), it is required that `[rs1 + C::COORD_SIZE: C::COORD_SIZE]_2 != C::Fp::ZERO` |
+| sw_add_ne\<C\>  | R   | 0101011     | 001    | `idx*8`   | `EcPoint([rd:2*C::Fp::NUM_LIMBS]_2) = EcPoint([rs1:2*C::Fp::NUM_LIMBS]_2) + EcPoint([rs2:2*C::Fp::NUM_LIMBS]_2)`. Assumes that input affine points are not identity and do not have same x-coordinate.                                                                                                                                                                                                                                                                                                                                                                  |
+| sw_double\<C\>  | R   | 0101011     | 001    | `idx*8+1` | `EcPoint([rd:2*C::Fp::NUM_LIMBS]_2) = 2 * EcPoint([rs1:2*C::Fp::NUM_LIMBS]_2)`. Assumes that input affine point is not identity. `rs2` is unused and must be set to `x0`.                                                                                                                                                                                                                                                                                                                                                                                            |
+| setup\<C\>      | R   | 0101011     | 001    | `idx*8+2` | If `ind(rs2) != 0`, then this instruction is setup for `sw_add_ne`. Otherwise it is setup for `sw_double`. If setup for `sw_add_ne`, it checks `assert([rs1: C::Fp::NUM_LIMBS]_2 == C::Fp::MODULUS)`, and if setup for `sw_double`, checks `assert([rs1: 2*C::Fp::NUM_LIMBS]_2 == [C::Fp::MODULUS, C::CURVE_A])`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: 2*C::Fp::NUM_LIMBS]_2`. When `ind(rs2) != 0` (add_ne), it is required for proper functionality that `[rs2: C::Fp::NUM_LIMBS]_2 != [rs1: C::Fp::NUM_LIMBS]_2`; otherwise (double), it is required that `[rs1 + C::Fp::NUM_LIMBS: C::Fp::NUM_LIMBS]_2 != C::Fp::ZERO` |
 
 Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -183,4 +177,4 @@ Instructions for accelerating optimal Ate pairing depend on a pairing friendly e
 
 | RISC-V Inst                | FMT | opcode[6:0] | funct3 | funct7       | RISC-V description and notes                                                                                                                                                                                                                                   |
 | -------------------------- | --- | ----------- | ------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hint_final_exp             | R   | 0101011     | 011    | `idx*16`     | Read `p: Fp` from `[rs1..]_2` and `q: Fp2` from `[rs2..]_2`, then compute `f: Fp12 = multi_miller_loop(p, q)`. Reset the hint stream to equal `hint_final_exp(f) = (residue_witness, scaling_factor): (Fp12, Fp12)` flattened into bytes. `rd` should be `x0`. |
+| hint_final_exp             | R   | 0101011     | 011    | `idx*16`     | `rs1` points to `(p_ptr, p_len): (u32, u32)` and `rs2` points to `(q_ptr, q_len): (u32, u32)` in memory. Reads `P` as `p_len` `G1Affine` elements from `[p_ptr..]_2` and `Q` as `q_len` `G2Affine` elements from `[q_ptr..]_2`. Computes `f: Fp12 = multi_miller_loop(P, Q)` and resets the hint stream to `(residue_witness, scaling_factor): (Fp12, Fp12)` flattened into bytes. `rd` should be `x0`. Requires `p_len = q_len`. |
