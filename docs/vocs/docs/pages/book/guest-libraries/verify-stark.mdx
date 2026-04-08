@@ -53,7 +53,7 @@ These vectors are aligned by index.
 
 It is **highly** recommended that guest programs that use deferrals are proved using the SDK. The flow is:
 
-1. Build a `DeferralProver` whose single-circuit prover is `VerifyCircuitProver`.
+1. Build a `DeferralProver` whose single-circuit prover is a `DeferredVerifyCircuitProver`.
 2. Create the extension with `make_extension`, passing the deferral function(s).
 3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
 4. Build your SDK with `Sdk::builder().deferral_prover(deferral_prover)`.
@@ -64,7 +64,7 @@ For example, to initialize the SDK with the `verify-stark` deferral circuit:
 let def_idx = 0;
 let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
     ir_vk,
-    ir_pcs_data,
+    ir_pcs_data.commitment.into(),
     def_circuit_params,
     memory_dimensions,
     num_user_pvs,
