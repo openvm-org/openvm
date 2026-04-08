@@ -715,7 +715,7 @@ pub(in crate::batch_constraint) mod cuda {
         pub preflights: &'a [PreflightGpu],
         pub expr_evals: &'a MultiVecWithBounds<openvm_cuda_backend::prelude::EF, 2>,
         pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
-        pub ctx: &'a DeviceContext,
+        pub device_ctx: &'a DeviceContext,
     }
 
     impl ModuleChip<GpuBackend> for SymbolicExpressionTraceGenerator {
@@ -733,7 +733,7 @@ pub(in crate::batch_constraint) mod cuda {
             let max_num_proofs = self.max_num_proofs;
             let has_cached = self.has_cached;
             let expr_evals = ctx.expr_evals;
-            let device_ctx = ctx.ctx;
+            let device_ctx = ctx.device_ctx;
 
             debug_assert_eq!(proofs.len(), preflights.len());
 

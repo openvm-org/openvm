@@ -274,7 +274,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         tester.dummy_memory_helper(),
     );
 
-    let ctx = tester.range_checker().ctx.clone();
+    let ctx = tester.range_checker().device_ctx.clone();
     let count = Arc::new(DeviceBuffer::<u32>::with_capacity_on(num_deferrals, &ctx));
     count.fill_zero_on(&ctx).unwrap();
     let poseidon2_chip_gpu = DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1, ctx.clone());

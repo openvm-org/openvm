@@ -15,7 +15,7 @@ pub struct DummyInteractionChipGPU<const N: usize> {
 impl<const N: usize> DummyInteractionChipGPU<N> {
     pub fn new(range_tuple_checker: Arc<RangeTupleCheckerChipGPU<N>>, data: Vec<u32>) -> Self {
         assert!(!data.is_empty());
-        let data = data.to_device_on(&range_tuple_checker.ctx).unwrap();
+        let data = data.to_device_on(&range_tuple_checker.device_ctx).unwrap();
         Self {
             range_tuple_checker,
             data,
@@ -27,7 +27,7 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<N> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let height = self.data.len() / N;
         let width = N + 1;
-        let ctx = &self.range_tuple_checker.ctx;
+        let ctx = &self.range_tuple_checker.device_ctx;
         let trace = DeviceMatrix::<F>::with_capacity_on(height, width, ctx);
         let d_sizes = self.range_tuple_checker.sizes.to_device_on(ctx).unwrap();
         unsafe {

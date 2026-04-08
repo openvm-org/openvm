@@ -39,23 +39,26 @@ impl SystemChipInventoryGPU {
         config: &SystemConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
-        ctx: DeviceContext,
+        device_ctx: DeviceContext,
     ) -> Self {
         let cpu_range_checker = range_checker.cpu_chip.clone().unwrap();
 
         // We create an empty program chip: the program should be loaded later (and can be swapped
         // out). The execution frequencies are supplied only after execution.
-        let program_chip = ProgramChipGPU::new(ctx.clone());
+        let program_chip = ProgramChipGPU::new(device_ctx.clone());
         let connector_chip = VmConnectorChipGPU::new(
             VmConnectorChip::new(
                 cpu_range_checker.clone(),
                 config.memory_config.timestamp_max_bits,
             ),
-            ctx.clone(),
+            device_ctx.clone(),
         );
 
-        let memory_inventory =
-            MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip, ctx.clone());
+        let memory_inventory = MemoryInventoryGPU::new(
+            config.memory_config.clone(),
+            hasher_chip,
+            device_ctx.clone(),
+        );
 
         Self {
             program: program_chip,

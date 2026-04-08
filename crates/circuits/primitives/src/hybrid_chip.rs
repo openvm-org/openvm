@@ -21,15 +21,15 @@ pub fn get_empty_air_proving_ctx<HS: GpuHashScheme>() -> AirProvingContext<Gener
 // Wraps a CPU chip for use with GpuBackend
 pub struct HybridChip<RA, C: Chip<RA, CpuBackend<SC>>> {
     pub cpu_chip: C,
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
     _marker: PhantomData<RA>,
 }
 
 impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
-    pub fn new(cpu_chip: C, ctx: DeviceContext) -> Self {
+    pub fn new(cpu_chip: C, device_ctx: DeviceContext) -> Self {
         Self {
             cpu_chip,
-            ctx,
+            device_ctx,
             _marker: PhantomData,
         }
     }
@@ -38,20 +38,20 @@ impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
 impl<RA, C: Chip<RA, CpuBackend<SC>>> Chip<RA, GpuBackend> for HybridChip<RA, C> {
     fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<GpuBackend> {
         let ctx = self.cpu_chip.generate_proving_ctx(arena);
-        cpu_proving_ctx_to_gpu(ctx, &self.ctx)
+        cpu_proving_ctx_to_gpu(ctx, &self.device_ctx)
     }
 }
 
 pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
     cpu_ctx: AirProvingContext<CpuBackend<SC>>,
-    ctx: &DeviceContext,
+    device_ctx: &DeviceContext,
 ) -> AirProvingContext<GenericGpuBackend<HS>> {
     assert!(
         cpu_ctx.cached_mains.is_empty(),
         "CPU to GPU transfer of cached traces not supported"
     );
     let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
-    let trace = transport_matrix_h2d_col_major(&cm, ctx).unwrap();
+    let trace = transport_matrix_h2d_col_major(&cm, device_ctx).unwrap();
     AirProvingContext {
         cached_mains: vec![],
         common_main: trace,

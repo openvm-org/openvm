@@ -43,7 +43,7 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
 
         let trace_width = NUM_XORIN_VM_COLS;
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
@@ -108,7 +108,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
         let num_records = records.len() / RECORD_SIZE;
         let trace_width = NUM_KECCAKF_OP_COLS;
         let trace_height = next_power_of_two_or_zero(num_records * NUM_OP_ROWS_PER_INS);
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
 
         // Transfer records to GPU
         let d_records = records.to_device_on(ctx).unwrap();

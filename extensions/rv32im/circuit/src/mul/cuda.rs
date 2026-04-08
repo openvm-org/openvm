@@ -44,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
 
         let tuple_checker_sizes = self.range_tuple_checker.sizes;
         let tuple_checker_sizes = UInt2::new(tuple_checker_sizes[0], tuple_checker_sizes[1]);
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);

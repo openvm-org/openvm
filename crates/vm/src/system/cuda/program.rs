@@ -16,15 +16,21 @@ use crate::cuda_abi::program;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
 }
 
 impl ProgramChipGPU {
-    pub fn new(ctx: DeviceContext) -> Self {
-        Self { cached: None, ctx }
+    pub fn new(device_ctx: DeviceContext) -> Self {
+        Self {
+            cached: None,
+            device_ctx,
+        }
     }
 
-    pub fn generate_cached_trace(program: Program<F>, ctx: &DeviceContext) -> DeviceMatrix<F> {
+    pub fn generate_cached_trace(
+        program: Program<F>,
+        device_ctx: &DeviceContext,
+    ) -> DeviceMatrix<F> {
         let instructions = program
             .enumerate_by_pc()
             .into_iter()
@@ -49,12 +55,15 @@ impl ProgramChipGPU {
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
-            .to_device_on(ctx)
+            .to_device_on(device_ctx)
             .unwrap();
 
-        let trace =
-            DeviceMatrix::<F>::with_capacity_on(height, size_of::<ProgramExecutionCols<u8>>(), ctx);
-        trace.buffer().fill_zero_on(ctx).unwrap();
+        let trace = DeviceMatrix::<F>::with_capacity_on(
+            height,
+            size_of::<ProgramExecutionCols<u8>>(),
+            device_ctx,
+        );
+        trace.buffer().fill_zero_on(device_ctx).unwrap();
         unsafe {
             program::cached_tracegen(
                 trace.buffer(),
@@ -64,7 +73,7 @@ impl ProgramChipGPU {
                 program.pc_base,
                 DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate cached trace");
         }
@@ -99,17 +108,19 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
             filtered_len <= height,
             "filtered_exec_freqs len={filtered_len} > cached trace height={height}"
         );
-        let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity_on(height, &self.ctx);
+        let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity_on(height, &self.device_ctx);
 
         filtered_exec_freqs
             .into_iter()
             .map(F::from_u32)
             .collect::<Vec<_>>()
-            .copy_to_on(&mut buffer, &self.ctx)
+            .copy_to_on(&mut buffer, &self.device_ctx)
             .unwrap();
         // Making sure to zero-out the untouched part of the buffer.
         if filtered_len < height {
-            buffer.fill_zero_suffix_on(filtered_len, &self.ctx).unwrap();
+            buffer
+                .fill_zero_suffix_on(filtered_len, &self.device_ctx)
+                .unwrap();
         }
 
         let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);
@@ -147,7 +158,8 @@ mod tests {
     fn test_cached_committed_trace_data(program: Program<F>) {
         let gpu_engine = test_gpu_engine();
         let gpu_device = gpu_engine.device();
-        let gpu_trace = ProgramChipGPU::generate_cached_trace(program.clone(), &gpu_device.ctx);
+        let gpu_trace =
+            ProgramChipGPU::generate_cached_trace(program.clone(), &gpu_device.device_ctx);
         let gpu_cached = ProgramChipGPU::get_committed_trace(gpu_trace, gpu_device);
 
         let cpu_engine = test_cpu_engine();
@@ -156,7 +168,7 @@ mod tests {
         let (cpu_commit, _) = cpu_device.commit(&[&cpu_trace]).unwrap();
 
         // NOTE: This compares the stacked matrices, not the original cached trace
-        assert_eq_host_and_device_matrix(cpu_trace, &gpu_cached.trace, &gpu_device.ctx);
+        assert_eq_host_and_device_matrix(cpu_trace, &gpu_cached.trace, &gpu_device.device_ctx);
         assert_eq!(gpu_cached.commitment, cpu_commit);
     }
 

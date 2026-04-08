@@ -254,13 +254,13 @@ impl GpuChipTestBuilder {
     pub fn new(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let ctx = DeviceContext {
+        let device_ctx = DeviceContext {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
             Arc::new(VariableRangeCheckerChip::new(bus)),
-            ctx.clone(),
+            device_ctx.clone(),
         ));
         Self {
             memory: DeviceMemoryTester::new(
@@ -268,10 +268,13 @@ impl GpuChipTestBuilder {
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
-                ctx.clone(),
+                device_ctx.clone(),
             ),
-            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS), ctx.clone()),
-            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS), ctx),
+            execution: DeviceExecutionTester::new(
+                ExecutionBus::new(EXECUTION_BUS),
+                device_ctx.clone(),
+            ),
+            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS), device_ctx),
             streams: Default::default(),
             var_range_checker: range_checker,
             bitwise_op_lookup: None,
@@ -285,19 +288,19 @@ impl GpuChipTestBuilder {
     }
 
     pub fn with_bitwise_op_lookup(mut self, bus: BitwiseOperationLookupBus) -> Self {
-        let ctx = self.var_range_checker.ctx.clone();
+        let device_ctx = self.var_range_checker.device_ctx.clone();
         self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::hybrid(
             Arc::new(BitwiseOperationLookupChip::new(bus)),
-            ctx,
+            device_ctx,
         )));
         self
     }
 
     pub fn with_range_tuple_checker(mut self, bus: RangeTupleCheckerBus<2>) -> Self {
-        let ctx = self.var_range_checker.ctx.clone();
+        let device_ctx = self.var_range_checker.device_ctx.clone();
         self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::hybrid(
             Arc::new(RangeTupleCheckerChip::new(bus)),
-            ctx,
+            device_ctx,
         )));
         self
     }
@@ -547,14 +550,14 @@ impl GpuChipTester {
         }
         let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_trace);
         device_synchronize().unwrap();
-        let ctx = DeviceContext {
+        let device_ctx = DeviceContext {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         assert_eq_host_and_device_matrix_col_maj(
             &expected_trace_cm,
             &proving_ctx.common_main,
-            &ctx,
+            &device_ctx,
         );
         self.airs.push(Arc::new(air) as AirRef<SC>);
         self.ctxs.push(proving_ctx);

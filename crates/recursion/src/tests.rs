@@ -710,7 +710,7 @@ mod cuda {
         let ref_engine = BabyBearPoseidon2RefEngine::<DuplexSponge>::new(params.clone());
         let cpu_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
         let gpu_engine = BabyBearPoseidon2GpuEngine::new(params);
-        let gpu_device_ctx = gpu_engine.device().ctx.clone();
+        let gpu_device_ctx = gpu_engine.device().device_ctx.clone();
         let (pk, vk) = fx.keygen(&ref_engine);
         assert!(num_proofs <= 5);
         let proofs = (0..num_proofs)

@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub struct VariableRangeCheckerChipGPU {
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<VariableRangeCheckerChip>>,
 }
@@ -19,25 +19,25 @@ pub struct VariableRangeCheckerChipGPU {
 /// [value, bits] are in preprocessed trace
 /// generate_trace returns [count]
 impl VariableRangeCheckerChipGPU {
-    pub fn new(bus: VariableRangeCheckerBus, ctx: DeviceContext) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, device_ctx: DeviceContext) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
-        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(num_rows, &ctx));
-        count.fill_zero_on(&ctx).unwrap();
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(num_rows, &device_ctx));
+        count.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx,
+            device_ctx,
             count,
             cpu_chip: None,
         }
     }
 
-    pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>, ctx: DeviceContext) -> Self {
+    pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>, device_ctx: DeviceContext) -> Self {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
             cpu_chip.count.len(),
-            &ctx,
+            &device_ctx,
         ));
-        count.fill_zero_on(&ctx).unwrap();
+        count.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx,
+            device_ctx,
             count,
             cpu_chip: Some(cpu_chip),
         }
@@ -53,7 +53,7 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
                 .iter()
                 .map(|c| c.swap(0, Ordering::Relaxed))
                 .collect::<Vec<_>>()
-                .to_device_on(&self.ctx)
+                .to_device_on(&self.device_ctx)
                 .unwrap()
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
@@ -61,20 +61,20 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
         let trace = DeviceMatrix::<F>::with_capacity_on(
             self.count.len(),
             NUM_VARIABLE_RANGE_COLS,
-            &self.ctx,
+            &self.device_ctx,
         );
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         unsafe {
             tracegen(
                 &self.count,
                 &cpu_count,
                 trace.buffer(),
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
-        self.count.fill_zero_on(&self.ctx).unwrap();
+        self.count.fill_zero_on(&self.device_ctx).unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 

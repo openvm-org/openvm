@@ -16,7 +16,7 @@ pub(in crate::whir) struct FoldingGpuCtx<'a> {
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
     pub num_proofs: usize,
-    pub ctx: &'a DeviceContext,
+    pub device_ctx: &'a DeviceContext,
 }
 
 pub(in crate::whir) struct FoldingGpuTraceGenerator;
@@ -33,7 +33,7 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
         let blob = ctx.blob;
         let params = ctx.params;
         let num_proofs = ctx.num_proofs;
-        let device_ctx = ctx.ctx;
+        let device_ctx = ctx.device_ctx;
 
         let mem = MemTracker::start("tracegen.whir_folding");
         let num_rounds = params.num_whir_rounds();

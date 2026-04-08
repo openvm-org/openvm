@@ -33,7 +33,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32AuipcChipGpu {
 
         let trace_width = Rv32AuipcCoreCols::<F>::width() + Rv32RdWriteAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);

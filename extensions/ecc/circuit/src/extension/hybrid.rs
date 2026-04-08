@@ -124,7 +124,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     addne,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
@@ -138,7 +138,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     double,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
@@ -157,7 +157,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     addne,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
@@ -171,7 +171,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     double,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
             } else {
                 panic!("Modulus too large");

@@ -52,11 +52,11 @@ impl ProofGpu {
     pub fn new(
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) -> Self {
         ProofGpu {
             cpu: proof.clone(),
-            proof_shape: Self::proof_shape(vk, proof, ctx),
+            proof_shape: Self::proof_shape(vk, proof, device_ctx),
             gkr: Self::gkr(proof),
             batch_constraint: Self::batch_constraint(proof),
             stacking: Self::stacking(proof),
@@ -67,7 +67,7 @@ impl ProofGpu {
     fn proof_shape(
         _vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) -> ProofShapeProofGpu {
         let num_airs = proof.public_values.len();
         let public_values = proof
@@ -89,7 +89,7 @@ impl ProofGpu {
             })
             .collect_vec();
         ProofShapeProofGpu {
-            public_values: to_device_or_nullptr_on(&public_values, ctx).unwrap(),
+            public_values: to_device_or_nullptr_on(&public_values, device_ctx).unwrap(),
         }
     }
 

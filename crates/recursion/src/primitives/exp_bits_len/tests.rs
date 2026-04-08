@@ -344,12 +344,12 @@ mod cuda_tests {
                 .expect("trace height should be unconstrained")
         };
 
-        let ctx = DeviceContext {
+        let device_ctx = DeviceContext {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let gpu_trace = {
-            let gpu_gen = ExpBitsLenGpuTraceGenerator::new(ctx.clone());
+            let gpu_gen = ExpBitsLenGpuTraceGenerator::new(device_ctx.clone());
             gpu_gen.add_requests(requests.iter().map(|req| {
                 (
                     F::from_u32(req.base),
@@ -362,6 +362,6 @@ mod cuda_tests {
                 .expect("trace height should be unconstrained")
         };
 
-        assert_eq_host_and_device_matrix(Arc::new(cpu_trace), &gpu_trace, &ctx);
+        assert_eq_host_and_device_matrix(Arc::new(cpu_trace), &gpu_trace, &device_ctx);
     }
 }

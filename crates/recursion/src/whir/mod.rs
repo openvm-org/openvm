@@ -1524,46 +1524,48 @@ mod cuda_tracegen {
             proofs: &[&Proof<BabyBearPoseidon2Config>],
             preflights: &[&Preflight],
             blob: &WhirBlobCpu,
-            ctx: &DeviceContext,
+            device_ctx: &DeviceContext,
         ) -> Self {
             let mus = to_device_or_nullptr_on(
                 &preflights
                     .iter()
                     .map(|preflight| preflight.stacking.stacking_batching_challenge)
                     .collect_vec(),
-                ctx,
+                device_ctx,
             )
             .unwrap();
-            let zis = to_device_or_nullptr_on(blob.zis.as_slice(), ctx).unwrap();
-            let zi_roots = to_device_or_nullptr_on(blob.zi_roots.as_slice(), ctx).unwrap();
-            let yis = to_device_or_nullptr_on(blob.yis.as_slice(), ctx).unwrap();
+            let zis = to_device_or_nullptr_on(blob.zis.as_slice(), device_ctx).unwrap();
+            let zi_roots = to_device_or_nullptr_on(blob.zi_roots.as_slice(), device_ctx).unwrap();
+            let yis = to_device_or_nullptr_on(blob.yis.as_slice(), device_ctx).unwrap();
             let raw_queries = to_device_or_nullptr_on(
                 &preflights
                     .iter()
                     .flat_map(|preflight| preflight.whir.queries.iter().copied())
                     .collect_vec(),
-                ctx,
+                device_ctx,
             )
             .unwrap();
             let accs_layout = blob.codeword_value_accs.layout();
             let rows_per_proof_offsets =
-                to_device_or_nullptr_on(accs_layout.rows_per_proof_offsets(), ctx).unwrap();
+                to_device_or_nullptr_on(accs_layout.rows_per_proof_offsets(), device_ctx).unwrap();
             let commits_per_proof_offsets =
-                to_device_or_nullptr_on(accs_layout.commits_per_proof_offsets(), ctx).unwrap();
+                to_device_or_nullptr_on(accs_layout.commits_per_proof_offsets(), device_ctx)
+                    .unwrap();
             let stacking_chunks_offsets =
-                to_device_or_nullptr_on(accs_layout.stacking_chunks_offsets(), ctx).unwrap();
+                to_device_or_nullptr_on(accs_layout.stacking_chunks_offsets(), device_ctx).unwrap();
             let stacking_widths_offsets =
-                to_device_or_nullptr_on(accs_layout.stacking_widths_offsets(), ctx).unwrap();
-            let mu_pows = to_device_or_nullptr_on(blob.mu_pows.as_slice(), ctx).unwrap();
+                to_device_or_nullptr_on(accs_layout.stacking_widths_offsets(), device_ctx).unwrap();
+            let mu_pows = to_device_or_nullptr_on(blob.mu_pows.as_slice(), device_ctx).unwrap();
             let codeword_value_accs =
-                to_device_or_nullptr_on(blob.codeword_value_accs.as_slice(), ctx).unwrap();
+                to_device_or_nullptr_on(blob.codeword_value_accs.as_slice(), device_ctx).unwrap();
 
             // Build poseidon state pairs in kernel order: [query][coset][commit][chunk]
             let poseidon_states_host = build_initial_poseidon_state_pairs(proofs, preflights);
-            let poseidon_states = to_device_or_nullptr_on(&poseidon_states_host, ctx).unwrap();
+            let poseidon_states =
+                to_device_or_nullptr_on(&poseidon_states_host, device_ctx).unwrap();
 
             let folding_records =
-                to_device_or_nullptr_on(blob.fold_records.as_slice(), ctx).unwrap();
+                to_device_or_nullptr_on(blob.fold_records.as_slice(), device_ctx).unwrap();
 
             let codeword_opened_values_cap: usize = proofs
                 .iter()
@@ -1584,7 +1586,7 @@ mod cuda_tracegen {
                 }
             }
             let codeword_opened_values =
-                to_device_or_nullptr_on(&codeword_opened_values_host, ctx).unwrap();
+                to_device_or_nullptr_on(&codeword_opened_values_host, device_ctx).unwrap();
 
             // Must be in same order as codeword_opened_values
             let mut codeword_states_host =
@@ -1598,7 +1600,8 @@ mod cuda_tracegen {
                     }
                 }
             }
-            let codeword_states = to_device_or_nullptr_on(&codeword_states_host, ctx).unwrap();
+            let codeword_states =
+                to_device_or_nullptr_on(&codeword_states_host, device_ctx).unwrap();
 
             WhirBlobGpu {
                 zis,
@@ -1636,7 +1639,7 @@ mod cuda_tracegen {
                                 num_proofs: ctx.0.proofs.len(),
                                 blob: ctx.1,
                                 params: &ctx.0.vk.system_params,
-                                ctx: ctx.0.ctx,
+                                device_ctx: ctx.0.device_ctx,
                             },
                             required_height,
                         )
@@ -1647,7 +1650,7 @@ mod cuda_tracegen {
                             &non_initial_opened_values::cuda::NonInitialOpenedValuesGpuCtx {
                                 blob: ctx.1,
                                 params: &ctx.0.vk.system_params,
-                                ctx: ctx.0.ctx,
+                                device_ctx: ctx.0.device_ctx,
                             },
                             required_height,
                         )
@@ -1672,7 +1675,7 @@ mod cuda_tracegen {
                                 records: records.as_slice(),
                                 params: &ctx.0.vk.system_params,
                                 preflights: ctx.0.preflights,
-                                ctx: ctx.0.ctx,
+                                device_ctx: ctx.0.device_ctx,
                             },
                             required_height,
                         )
@@ -1683,7 +1686,7 @@ mod cuda_tracegen {
                             blob: ctx.1,
                             params: &ctx.0.vk.system_params,
                             num_proofs: ctx.0.proofs.len(),
-                            ctx: ctx.0.ctx,
+                            device_ctx: ctx.0.device_ctx,
                         },
                         required_height,
                     ),
@@ -1701,7 +1704,7 @@ mod cuda_tracegen {
                     let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
                     trace.map(|m| {
                         AirProvingContext::simple_no_pis(
-                            transport_matrix_h2d_row(&m, ctx.0.ctx).unwrap(),
+                            transport_matrix_h2d_row(&m, ctx.0.device_ctx).unwrap(),
                         )
                     })
                 }
@@ -1744,7 +1747,7 @@ mod cuda_tracegen {
                     vk: child_vk,
                     proofs,
                     preflights,
-                    ctx: device_ctx,
+                    device_ctx,
                 },
                 &blob_gpu,
                 &blob,

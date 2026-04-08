@@ -155,12 +155,13 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
                 child_vk_commit,
                 device_ctx,
             );
-        let ctx = device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
+        let device_ctx =
+            device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
         SubCircuitTraceData {
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, ctx))
+                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, device_ctx))
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
@@ -182,10 +183,11 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
                 child_is_app,
                 device_ctx,
             );
-        let ctx = device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
+        let device_ctx =
+            device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
         cpu_ctxs
             .into_iter()
-            .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, ctx))
+            .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, device_ctx))
             .collect_vec()
     }
 }

@@ -17,8 +17,8 @@ use crate::cuda_abi::execution_testing;
 pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>, DeviceContext);
 
 impl DeviceExecutionTester {
-    pub fn new(bus: ExecutionBus, ctx: DeviceContext) -> Self {
-        Self(ExecutionTester::new(bus), ctx)
+    pub fn new(bus: ExecutionBus, device_ctx: DeviceContext) -> Self {
+        Self(ExecutionTester::new(bus), device_ctx)
     }
 
     pub fn bus(&self) -> ExecutionBus {

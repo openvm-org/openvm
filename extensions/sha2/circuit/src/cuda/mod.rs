@@ -76,7 +76,7 @@ where
 
         let num_records = record_offsets.len();
         let trace_height = next_power_of_two_or_zero(num_records);
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, C::MAIN_CHIP_WIDTH, ctx);
 
         let d_records = records.to_device_on(ctx).unwrap();
@@ -165,7 +165,7 @@ where
 
         let rows_used = num_records * C::ROWS_PER_BLOCK;
         let trace_height = next_power_of_two_or_zero(rows_used);
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, C::BLOCK_HASHER_WIDTH, ctx);
 
         // one record per block, right now

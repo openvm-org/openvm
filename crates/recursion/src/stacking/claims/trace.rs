@@ -191,7 +191,7 @@ pub(crate) mod cuda {
         ) -> Option<openvm_stark_backend::prover::AirProvingContext<GpuBackend>> {
             let proofs_gpu = ctx.0.proofs;
             let preflights_gpu = ctx.0.preflights;
-            let device_ctx = ctx.0.ctx;
+            let device_ctx = ctx.0.device_ctx;
             let blob = ctx.1;
             let w_stack = ctx.0.vk.system_params.w_stack;
 

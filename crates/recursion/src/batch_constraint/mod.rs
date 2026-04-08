@@ -934,7 +934,7 @@ pub mod cuda_tracegen {
                         &child_vk.cpu,
                         &blob.common_blob.eq_3b_blob,
                         preflights,
-                        ctx.0.ctx,
+                        ctx.0.device_ctx,
                     ),
                     required_height,
                 ),
@@ -952,18 +952,18 @@ pub mod cuda_tracegen {
                         preflights,
                         expr_evals: &blob.common_blob.expr_evals,
                         cached_trace_record: &cached_trace_record,
-                        ctx: ctx.0.ctx,
+                        device_ctx: ctx.0.device_ctx,
                     },
                     required_height,
                 ),
                 InteractionsFolding => expr_eval::InteractionsFoldingTraceGenerator
                     .generate_proving_ctx(
-                        &(child_vk, preflights, &blob.if_blob, ctx.0.ctx),
+                        &(child_vk, preflights, &blob.if_blob, ctx.0.device_ctx),
                         required_height,
                     ),
                 ConstraintsFolding => expr_eval::ConstraintsFoldingTraceGenerator
                     .generate_proving_ctx(
-                        &(child_vk, preflights, &blob.cf_blob, ctx.0.ctx),
+                        &(child_vk, preflights, &blob.cf_blob, ctx.0.device_ctx),
                         required_height,
                     ),
                 _ => unreachable!(),
@@ -984,19 +984,23 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            ctx: &DeviceContext,
+            device_ctx: &DeviceContext,
         ) -> Self {
             let cpu_proofs = proofs.iter().map(|p| &p.cpu).collect_vec();
             let cpu_preflights = preflights.iter().map(|p| &p.cpu).collect_vec();
             let common_blob = BatchConstraintBlob::new(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
-            let cf_blob =
-                ConstraintsFoldingBlobGpu::new(child_vk, &common_blob.expr_evals, preflights, ctx);
+            let cf_blob = ConstraintsFoldingBlobGpu::new(
+                child_vk,
+                &common_blob.expr_evals,
+                preflights,
+                device_ctx,
+            );
             let if_blob = InteractionsFoldingBlobGpu::new(
                 child_vk,
                 &common_blob.expr_evals,
                 &common_blob.eq_3b_blob,
                 preflights,
-                ctx,
+                device_ctx,
             );
             let expr_claim_blob =
                 generate_expression_claim_blob(&cf_blob.folded_claims, &if_blob.folded_claims);
@@ -1034,7 +1038,7 @@ pub mod cuda_tracegen {
                     vk: child_vk,
                     proofs,
                     preflights,
-                    ctx: device_ctx,
+                    device_ctx,
                 },
                 &blob,
                 cached_trace_record,
@@ -1156,11 +1160,11 @@ pub mod cuda_tracegen {
         {
             let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let ctx = engine
+            let device_ctx = engine
                 .device()
                 .maybe_device_ctx()
                 .expect("GPU cached-trace commit requires an engine-owned DeviceContext");
-            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, ctx).unwrap();
+            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, device_ctx).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {
                 commitment,

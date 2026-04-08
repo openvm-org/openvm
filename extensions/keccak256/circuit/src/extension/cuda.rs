@@ -54,7 +54,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         // Register KeccakfPermChip (periphery chip - added BEFORE OpChip to ensure OpChip tracegen
         // runs first)
         inventory.next_air::<KeccakfPermAir>()?;
-        let perm_chip = KeccakfPermChipGpu::new(shared_records.clone(), range_checker.ctx.clone());
+        let perm_chip =
+            KeccakfPermChipGpu::new(shared_records.clone(), range_checker.device_ctx.clone());
         inventory.add_periphery_chip(perm_chip);
 
         // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery

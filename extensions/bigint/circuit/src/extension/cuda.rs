@@ -45,7 +45,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
                 inventory.next_air::<RangeTupleCheckerAir<2>>()?;
                 let chip = Arc::new(RangeTupleCheckerChipGPU::new(
                     extension.range_tuple_checker_sizes,
-                    range_checker.ctx.clone(),
+                    range_checker.device_ctx.clone(),
                 ));
                 inventory.add_periphery_chip(chip.clone());
                 chip

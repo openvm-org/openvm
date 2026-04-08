@@ -42,7 +42,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace_width =
             DeferralCallAdapterCols::<F>::width() + DeferralCallCoreCols::<F>::width();
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(ctx).unwrap();
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);

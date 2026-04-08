@@ -69,6 +69,6 @@ pub(crate) mod cuda {
         pub vk: &'a VerifyingKeyGpu,
         pub proofs: &'a [ProofGpu],
         pub preflights: &'a [PreflightGpu],
-        pub ctx: &'a DeviceContext,
+        pub device_ctx: &'a DeviceContext,
     }
 }

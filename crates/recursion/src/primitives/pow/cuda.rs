@@ -11,7 +11,7 @@ use crate::primitives::{
 };
 
 pub struct PowerCheckerGpuTraceGenerator<const BASE: usize, const N: usize> {
-    ctx: DeviceContext,
+    device_ctx: DeviceContext,
     pow_count: DeviceBuffer<u32>,
     range_count: DeviceBuffer<u32>,
     cpu_checker: Option<Arc<PowerCheckerCpuTraceGenerator<BASE, N>>>,
@@ -20,23 +20,23 @@ pub struct PowerCheckerGpuTraceGenerator<const BASE: usize, const N: usize> {
 impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
     pub fn new(
         cpu_checker: Option<Arc<PowerCheckerCpuTraceGenerator<BASE, N>>>,
-        ctx: DeviceContext,
+        device_ctx: DeviceContext,
     ) -> Self {
-        let pow_count = DeviceBuffer::with_capacity_on(N, &ctx);
-        pow_count.fill_zero_on(&ctx).unwrap();
-        let range_count = DeviceBuffer::with_capacity_on(N, &ctx);
-        range_count.fill_zero_on(&ctx).unwrap();
+        let pow_count = DeviceBuffer::with_capacity_on(N, &device_ctx);
+        pow_count.fill_zero_on(&device_ctx).unwrap();
+        let range_count = DeviceBuffer::with_capacity_on(N, &device_ctx);
+        range_count.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx,
+            device_ctx,
             pow_count,
             range_count,
             cpu_checker,
         }
     }
 
-    pub fn hybrid(ctx: DeviceContext) -> Self {
+    pub fn hybrid(device_ctx: DeviceContext) -> Self {
         let cpu_checker = Some(Arc::new(PowerCheckerCpuTraceGenerator::default()));
-        Self::new(cpu_checker, ctx)
+        Self::new(cpu_checker, device_ctx)
     }
 
     pub fn pow_count_mut_ptr(&self) -> *mut u32 {
@@ -56,13 +56,14 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
         let (cpu_pow_count, cpu_range_count) = if let Some(cpu_checker) = &self.cpu_checker {
             let (pow, range) = cpu_checker.take_counts();
             (
-                Some(pow.as_slice().to_device_on(&self.ctx).unwrap()),
-                Some(range.as_slice().to_device_on(&self.ctx).unwrap()),
+                Some(pow.as_slice().to_device_on(&self.device_ctx).unwrap()),
+                Some(range.as_slice().to_device_on(&self.device_ctx).unwrap()),
             )
         } else {
             (None, None)
         };
-        let trace = DeviceMatrix::with_capacity_on(N, PowerCheckerCols::<u8>::width(), &self.ctx);
+        let trace =
+            DeviceMatrix::with_capacity_on(N, PowerCheckerCols::<u8>::width(), &self.device_ctx);
         unsafe {
             pow_checker_tracegen(
                 self.pow_count.as_ptr(),
@@ -71,7 +72,7 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
                 cpu_range_count.as_ref(),
                 trace.buffer(),
                 N,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

@@ -56,7 +56,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 offsets.push(OffsetInfo::new(prev_offset as u32, idx));
             }
         }
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(ctx).unwrap();
         let d_record_offsets = offsets.to_device_on(ctx).unwrap();

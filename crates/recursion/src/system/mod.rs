@@ -65,7 +65,7 @@ pub trait MaybeDeviceContext {
 #[cfg(feature = "cuda")]
 impl MaybeDeviceContext for GpuDevice {
     fn maybe_device_ctx(&self) -> Option<&DeviceContext> {
-        Some(&self.ctx)
+        Some(&self.device_ctx)
     }
 }
 
@@ -749,9 +749,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn apply_merkle_precomputation_cuda(
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) {
-        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof, ctx);
+        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof, device_ctx);
 
         preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
         preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
@@ -845,7 +845,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     #[tracing::instrument(name = "compute_merkle_precomputation_cuda", level = "info", skip_all)]
     fn compute_merkle_precomputation_cuda(
         proof: &Proof<BabyBearPoseidon2Config>,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) -> MerklePrecomputation {
         use openvm_cuda_common::{
             copy::{MemCopyD2H, MemCopyH2D},
@@ -922,13 +922,16 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         debug_assert_eq!(output_offset_chunks, total_chunks);
 
         // Upload to GPU and run kernel on the caller-owned stream.
-        let d_data = flat_data.to_device_on(ctx).expect("failed to upload data");
+        let d_data = flat_data
+            .to_device_on(device_ctx)
+            .expect("failed to upload data");
         let d_descriptors = descriptors
-            .to_device_on(ctx)
+            .to_device_on(device_ctx)
             .expect("failed to upload descriptors");
-        let d_pre_states = DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
+        let d_pre_states =
+            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, device_ctx);
         let d_post_states =
-            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, ctx);
+            DeviceBuffer::<F>::with_capacity_on(total_chunks * POSEIDON2_WIDTH, device_ctx);
 
         unsafe {
             merkle_precomputation_hash_vectors(
@@ -937,17 +940,17 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                 num_vectors,
                 &d_pre_states,
                 &d_post_states,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .expect("hash_vectors kernel failed");
         }
 
         // Download results
         let pre_states_flat = d_pre_states
-            .to_host_on(ctx)
+            .to_host_on(device_ctx)
             .expect("failed to download pre_states");
         let post_states_flat = d_post_states
-            .to_host_on(ctx)
+            .to_host_on(device_ctx)
             .expect("failed to download post_states");
         debug_assert_eq!(pre_states_flat.len(), total_chunks * POSEIDON2_WIDTH);
         debug_assert_eq!(post_states_flat.len(), total_chunks * POSEIDON2_WIDTH);
@@ -1302,7 +1305,7 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            ctx: &openvm_cuda_common::stream::DeviceContext,
+            device_ctx: &openvm_cuda_common::stream::DeviceContext,
             cached_trace_record: Option<&CachedTraceRecord>,
             pow_checker_gen: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
@@ -1317,7 +1320,7 @@ pub mod cuda_tracegen {
                     &(
                         external_data.poseidon2_permute_inputs,
                         external_data.poseidon2_compress_inputs,
-                        ctx,
+                        device_ctx,
                     ),
                     required_heights,
                 ),
@@ -1328,7 +1331,7 @@ pub mod cuda_tracegen {
                     &(
                         pow_checker_gen.clone(),
                         external_data.range_check_inputs.as_slice(),
-                        ctx,
+                        device_ctx,
                     ),
                     required_heights,
                 ),
@@ -1336,7 +1339,7 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    &(exp_bits_len_gen, ctx),
+                    &(exp_bits_len_gen, device_ctx),
                     required_heights,
                 ),
                 TraceModuleRef::BatchConstraint(module) => module.generate_proving_ctxs(
@@ -1346,7 +1349,7 @@ pub mod cuda_tracegen {
                     &(
                         cached_trace_record,
                         pow_checker_gen.cpu_checker().unwrap(),
-                        ctx,
+                        device_ctx,
                     ),
                     required_heights,
                 ),
@@ -1354,14 +1357,14 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    &ctx,
+                    &device_ctx,
                     required_heights,
                 ),
                 TraceModuleRef::Whir(module) => module.generate_proving_ctxs(
                     child_vk,
                     proofs,
                     preflights,
-                    &(exp_bits_len_gen, ctx),
+                    &(exp_bits_len_gen, device_ctx),
                     required_heights,
                 ),
             }
@@ -1426,12 +1429,12 @@ pub mod cuda_tracegen {
             initial_transcript: TS,
         ) -> Option<Vec<AirProvingContext<GenericGpuBackend<HS>>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
-            let ctx =
+            let device_ctx =
                 device_ctx.expect("GPU verifier tracegen requires an engine-owned DeviceContext");
-            let child_vk_gpu = VerifyingKeyGpu::new(child_vk, ctx);
+            let child_vk_gpu = VerifyingKeyGpu::new(child_vk, device_ctx);
             let proofs_gpu = proofs
                 .iter()
-                .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu, ctx))
+                .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu, device_ctx))
                 .collect::<Vec<_>>();
             // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this
             // avoids Rayon's thread pool overhead while still getting parallelism.
@@ -1456,7 +1459,7 @@ pub mod cuda_tracegen {
 
             // Merkle precomputation launches CUDA kernels, so run serially on main thread.
             for (proof, preflight) in proofs.iter().zip(preflights_cpu.iter_mut()) {
-                Self::apply_merkle_precomputation_cuda(proof, preflight, ctx);
+                Self::apply_merkle_precomputation_cuda(proof, preflight, device_ctx);
             }
 
             if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
@@ -1471,9 +1474,9 @@ pub mod cuda_tracegen {
             }
 
             let power_checker_gen = Arc::new(
-                PowerCheckerGpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::hybrid(ctx.clone()),
+                PowerCheckerGpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::hybrid(device_ctx.clone()),
             );
-            let exp_bits_len_gen = ExpBitsLenTraceGenerator::new(ctx.clone());
+            let exp_bits_len_gen = ExpBitsLenTraceGenerator::new(device_ctx.clone());
 
             let (module_required, power_checker_required, exp_bits_len_required) =
                 self.split_required_heights(external_data.required_heights);
@@ -1482,7 +1485,7 @@ pub mod cuda_tracegen {
             // issues
             let preflights_gpu = zip(proofs, preflights_cpu)
                 .map(|(proof, preflight_cpu)| {
-                    PreflightGpu::new(child_vk, proof, &preflight_cpu, ctx)
+                    PreflightGpu::new(child_vk, proof, &preflight_cpu, device_ctx)
                 })
                 .collect::<Vec<_>>();
             let modules = vec![
@@ -1508,7 +1511,7 @@ pub mod cuda_tracegen {
                     &child_vk_gpu,
                     &proofs_gpu,
                     &preflights_gpu,
-                    ctx,
+                    device_ctx,
                     cached_trace_record,
                     &power_checker_gen,
                     &exp_bits_len_gen,
@@ -1516,7 +1519,7 @@ pub mod cuda_tracegen {
                     required_heights,
                 )?);
             }
-            ctx.stream.synchronize().unwrap();
+            device_ctx.stream.synchronize().unwrap();
             let mut ctxs_by_module: Vec<Vec<AirProvingContext<GenericGpuBackend<HS>>>> =
                 ctxs_by_module_gpu
                     .into_iter()

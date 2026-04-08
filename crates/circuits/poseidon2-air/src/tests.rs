@@ -148,7 +148,7 @@ fn test_cuda_tracegen_poseidon2() {
     const SBOX_REGS: usize = 1;
     const HALF_FULL_ROUNDS: usize = 4; // Constant for BabyBear
     const PARTIAL_ROUNDS: usize = 13; // Constant for BabyBear
-    let ctx = DeviceContext {
+    let device_ctx = DeviceContext {
         device_id: get_device().unwrap() as u32,
         stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     };
@@ -164,7 +164,7 @@ fn test_cuda_tracegen_poseidon2() {
         .iter()
         .flat_map(|r| r.iter().copied())
         .collect::<Vec<_>>()
-        .to_device_on(&ctx)
+        .to_device_on(&device_ctx)
         .unwrap();
 
     // Launch GPU tracegen
@@ -174,7 +174,7 @@ fn test_cuda_tracegen_poseidon2() {
         + PARTIAL_ROUNDS * (SBOX_REGS + 1)
         + HALF_FULL_ROUNDS * (WIDTH * SBOX_REGS + WIDTH);
 
-    let gpu_mat = DeviceMatrix::<F>::with_capacity_on(N, num_cols, &ctx);
+    let gpu_mat = DeviceMatrix::<F>::with_capacity_on(N, num_cols, &device_ctx);
 
     unsafe {
         poseidon2::dummy_tracegen(
@@ -182,7 +182,7 @@ fn test_cuda_tracegen_poseidon2() {
             &inputs_dev,
             SBOX_REGS as u32,
             N as u32,
-            ctx.stream.as_raw(),
+            device_ctx.stream.as_raw(),
         )
         .expect("GPU tracegen failed");
     }
@@ -191,5 +191,5 @@ fn test_cuda_tracegen_poseidon2() {
     let config = Poseidon2Config::<BabyBear>::default();
     let chip: Poseidon2SubChip<_, SBOX_REGS> = Poseidon2SubChip::new(config.constants);
     let cpu_trace = Arc::new(chip.generate_trace(cpu_inputs));
-    assert_eq_host_and_device_matrix(cpu_trace, &gpu_mat, &ctx);
+    assert_eq_host_and_device_matrix(cpu_trace, &gpu_mat, &device_ctx);
 }

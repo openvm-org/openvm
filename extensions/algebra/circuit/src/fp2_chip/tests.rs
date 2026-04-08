@@ -419,7 +419,7 @@ mod cuda_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().ctx.clone(),
+            tester.range_checker().device_ctx.clone(),
         );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -466,7 +466,7 @@ mod cuda_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().ctx.clone(),
+            tester.range_checker().device_ctx.clone(),
         );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)

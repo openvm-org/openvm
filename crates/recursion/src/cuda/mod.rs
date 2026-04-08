@@ -23,11 +23,11 @@ impl GlobalTraceGenCtx for GlobalCtxGpu {
 
 pub fn to_device_or_nullptr_on<T>(
     h2d: &[T],
-    ctx: &DeviceContext,
+    device_ctx: &DeviceContext,
 ) -> Result<DeviceBuffer<T>, MemCopyError> {
     if h2d.is_empty() {
         Ok(DeviceBuffer::new())
     } else {
-        h2d.to_device_on(ctx)
+        h2d.to_device_on(device_ctx)
     }
 }

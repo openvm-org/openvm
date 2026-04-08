@@ -9,7 +9,7 @@ use crate::{cuda::to_device_or_nullptr_on, primitives::cuda_abi::exp_bits_len_tr
 
 pub struct ExpBitsLenGpuTraceGenerator {
     pub cpu: ExpBitsLenCpuTraceGenerator,
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
 }
 
 impl Deref for ExpBitsLenGpuTraceGenerator {
@@ -21,10 +21,10 @@ impl Deref for ExpBitsLenGpuTraceGenerator {
 }
 
 impl ExpBitsLenGpuTraceGenerator {
-    pub fn new(ctx: DeviceContext) -> Self {
+    pub fn new(device_ctx: DeviceContext) -> Self {
         Self {
             cpu: ExpBitsLenCpuTraceGenerator::default(),
-            ctx,
+            device_ctx,
         }
     }
 
@@ -50,10 +50,10 @@ impl ExpBitsLenGpuTraceGenerator {
         };
         let width = ExpBitsLenCols::<u8>::width();
 
-        let trace = DeviceMatrix::with_capacity_on(height, width, &self.ctx);
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
+        let trace = DeviceMatrix::with_capacity_on(height, width, &self.device_ctx);
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
 
-        let records = to_device_or_nullptr_on(&records, &self.ctx).unwrap();
+        let records = to_device_or_nullptr_on(&records, &self.device_ctx).unwrap();
         unsafe {
             exp_bits_len_tracegen(
                 &records,
@@ -61,7 +61,7 @@ impl ExpBitsLenGpuTraceGenerator {
                 trace.buffer(),
                 height,
                 num_valid_rows,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

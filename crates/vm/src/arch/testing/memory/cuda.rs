@@ -46,20 +46,23 @@ impl DeviceMemoryTester {
         mem_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-        ctx: DeviceContext,
+        device_ctx: DeviceContext,
     ) -> Self {
         let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         let sbox_regs = 1;
         let poseidon2_periphery = Arc::new(Poseidon2PeripheryChipGPU::new(
             1 << 20, // probably enough for our tests
             sbox_regs,
-            ctx.clone(),
+            device_ctx.clone(),
         ));
-        let mut inventory =
-            MemoryInventoryGPU::new(mem_config.clone(), poseidon2_periphery.clone(), ctx.clone());
+        let mut inventory = MemoryInventoryGPU::new(
+            mem_config.clone(),
+            poseidon2_periphery.clone(),
+            device_ctx.clone(),
+        );
         inventory.set_initial_memory(&memory.data.memory);
         Self {
-            chip: FixedSizeMemoryTester::new(mem_bus, ctx),
+            chip: FixedSizeMemoryTester::new(mem_bus, device_ctx),
             memory,
             inventory,
             hasher_chip: Some(poseidon2_periphery),
@@ -109,8 +112,8 @@ impl DeviceMemoryTester {
 pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>, DeviceContext);
 
 impl FixedSizeMemoryTester {
-    pub fn new(bus: MemoryBus, ctx: DeviceContext) -> Self {
-        Self(MemoryDummyChip::new(MemoryDummyAir::new(bus)), ctx)
+    pub fn new(bus: MemoryBus, device_ctx: DeviceContext) -> Self {
+        Self(MemoryDummyChip::new(MemoryDummyAir::new(bus)), device_ctx)
     }
 
     pub fn send(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32) {

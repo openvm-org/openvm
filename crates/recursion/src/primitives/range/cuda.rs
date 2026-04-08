@@ -5,19 +5,22 @@ use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCol
 
 pub struct RangeCheckerGpuTraceGenerator<const NUM_BITS: usize> {
     trace: DeviceMatrix<F>,
-    ctx: DeviceContext,
+    device_ctx: DeviceContext,
 }
 
 impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
-    pub fn new(ctx: DeviceContext) -> Self {
-        let trace =
-            DeviceMatrix::with_capacity_on(1 << NUM_BITS, RangeCheckerCols::<u8>::width(), &ctx);
-        trace.buffer().fill_zero_on(&ctx).unwrap();
-        Self { trace, ctx }
+    pub fn new(device_ctx: DeviceContext) -> Self {
+        let trace = DeviceMatrix::with_capacity_on(
+            1 << NUM_BITS,
+            RangeCheckerCols::<u8>::width(),
+            &device_ctx,
+        );
+        trace.buffer().fill_zero_on(&device_ctx).unwrap();
+        Self { trace, device_ctx }
     }
 
-    pub fn from_vals(vals: &[usize], ctx: DeviceContext) -> Self {
-        let res = Self::new(ctx);
+    pub fn from_vals(vals: &[usize], device_ctx: DeviceContext) -> Self {
+        let res = Self::new(device_ctx);
         if vals.is_empty() {
             return res;
         }
@@ -32,7 +35,7 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
                 res.count_mut_ptr().cast(),
                 count.as_ptr().cast(),
                 std::mem::size_of_val(count.as_slice()),
-                &res.ctx,
+                &res.device_ctx,
             )
             .unwrap();
         }
@@ -54,7 +57,7 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
                 self.count_ptr(),
                 self.trace.buffer(),
                 NUM_BITS,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

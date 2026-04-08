@@ -16,7 +16,7 @@ use crate::{
 pub(in crate::whir) struct NonInitialOpenedValuesGpuCtx<'a> {
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
-    pub ctx: &'a DeviceContext,
+    pub device_ctx: &'a DeviceContext,
 }
 
 pub(in crate::whir) struct NonInitialOpenedValuesGpuTraceGenerator;
@@ -32,7 +32,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
     ) -> Option<AirProvingContext<GpuBackend>> {
         let blob = ctx.blob;
         let params = ctx.params;
-        let device_ctx = ctx.ctx;
+        let device_ctx = ctx.device_ctx;
 
         let mem = MemTracker::start("tracegen.whir_non_initial_opened_values");
         let num_valid_rows = blob.codeword_opened_values.len();

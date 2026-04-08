@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub struct BitwiseOperationLookupChipGPU<const NUM_BITS: usize> {
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<BitwiseOperationLookupChip<NUM_BITS>>>,
 }
@@ -23,30 +23,33 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
         1 << (2 * NUM_BITS)
     }
 
-    pub fn new(ctx: DeviceContext) -> Self {
+    pub fn new(device_ctx: DeviceContext) -> Self {
         // The first 2^(2 * NUM_BITS) indices are for range checking, the rest are for XOR
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
             NUM_BITWISE_OP_LOOKUP_MULT_COLS * Self::num_rows(),
-            &ctx,
+            &device_ctx,
         ));
-        count.fill_zero_on(&ctx).unwrap();
+        count.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx,
+            device_ctx,
             count,
             cpu_chip: None,
         }
     }
 
-    pub fn hybrid(cpu_chip: Arc<BitwiseOperationLookupChip<NUM_BITS>>, ctx: DeviceContext) -> Self {
+    pub fn hybrid(
+        cpu_chip: Arc<BitwiseOperationLookupChip<NUM_BITS>>,
+        device_ctx: DeviceContext,
+    ) -> Self {
         assert_eq!(cpu_chip.count_range.len(), Self::num_rows());
         assert_eq!(cpu_chip.count_xor.len(), Self::num_rows());
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
             NUM_BITWISE_OP_LOOKUP_MULT_COLS * Self::num_rows(),
-            &ctx,
+            &device_ctx,
         ));
-        count.fill_zero_on(&ctx).unwrap();
+        count.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx,
+            device_ctx,
             count,
             cpu_chip: Some(cpu_chip),
         }
@@ -67,25 +70,26 @@ impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for BitwiseOperationLookupC
                 .chain(cpu_chip.count_xor.iter())
                 .map(|c| c.swap(0, Ordering::Relaxed))
                 .collect::<Vec<_>>()
-                .to_device_on(&self.ctx)
+                .to_device_on(&self.device_ctx)
                 .unwrap()
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
         // `count` will be reused.
-        let trace = DeviceMatrix::<F>::with_capacity_on(Self::num_rows(), num_cols, &self.ctx);
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
+        let trace =
+            DeviceMatrix::<F>::with_capacity_on(Self::num_rows(), num_cols, &self.device_ctx);
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         unsafe {
             tracegen(
                 &self.count,
                 &cpu_count,
                 trace.buffer(),
                 NUM_BITS as u32,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
-        self.count.fill_zero_on(&self.ctx).unwrap();
+        self.count.fill_zero_on(&self.device_ctx).unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 

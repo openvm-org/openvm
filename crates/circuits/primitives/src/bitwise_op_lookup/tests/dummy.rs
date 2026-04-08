@@ -65,7 +65,7 @@ pub mod cuda {
     impl<const NUM_BITS: usize> DummyInteractionChipGPU<NUM_BITS> {
         pub fn new(bitwise: Arc<BitwiseOperationLookupChipGPU<NUM_BITS>>, data: Vec<u32>) -> Self {
             assert!(!data.is_empty());
-            let data = data.to_device_on(&bitwise.ctx).unwrap();
+            let data = data.to_device_on(&bitwise.device_ctx).unwrap();
             Self { bitwise, data }
         }
     }
@@ -73,7 +73,7 @@ pub mod cuda {
     impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<NUM_BITS> {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len() / RECORD_WIDTH;
-            let ctx = &self.bitwise.ctx;
+            let ctx = &self.bitwise.device_ctx;
             let trace = DeviceMatrix::<F>::with_capacity_on(height, NUM_COLS, ctx);
             unsafe {
                 dummy_tracegen(

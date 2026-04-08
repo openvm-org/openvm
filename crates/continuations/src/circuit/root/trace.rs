@@ -133,7 +133,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
         memory_dimensions: MemoryDimensions,
         #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
     ) -> SubCircuitTraceData<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> {
-        let ctx = device_ctx.expect("GPU RootTraceGen requires engine-owned DeviceContext");
+        let device_ctx = device_ctx.expect("GPU RootTraceGen requires engine-owned DeviceContext");
         let data: SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> =
             <Self as RootTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_pre_verifier_subcircuit_ctx(
                 self,
@@ -147,7 +147,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
             air_proving_ctxs: data
                 .air_proving_ctxs
                 .into_iter()
-                .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, ctx))
+                .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, device_ctx))
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
@@ -164,7 +164,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
         Vec<AirProvingContext<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
-        let ctx = device_ctx.expect("GPU RootTraceGen requires engine-owned DeviceContext");
+        let device_ctx = device_ctx.expect("GPU RootTraceGen requires engine-owned DeviceContext");
         let (cpu_ctxs, inputs) =
             <Self as RootTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_other_proving_ctxs(
                 self,
@@ -176,7 +176,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>> for RootT
             );
         let gpu_ctxs = cpu_ctxs
             .into_iter()
-            .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, ctx))
+            .map(|c| cpu_proving_ctx_to_gpu::<BabyBearBn254Poseidon2HashScheme>(c, device_ctx))
             .collect_vec();
         (gpu_ctxs, inputs)
     }

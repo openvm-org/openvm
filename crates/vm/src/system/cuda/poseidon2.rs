@@ -24,7 +24,7 @@ pub struct SharedBuffer<T> {
 }
 
 pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
     pub records: Arc<DeviceBuffer<F>>,
     pub idx: Arc<DeviceBuffer<u32>>,
     #[cfg(feature = "metrics")]
@@ -35,12 +35,15 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
     /// Creates a new Poseidon2 chip with a device buffer of `max_buffer_size` field elements.
     /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the buffer
     /// can hold `max_buffer_size / POSEIDON2_WIDTH` records.
-    pub fn new(max_buffer_size: usize, ctx: DeviceContext) -> Self {
-        let idx = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, &ctx));
-        idx.fill_zero_on(&ctx).unwrap();
+    pub fn new(max_buffer_size: usize, device_ctx: DeviceContext) -> Self {
+        let idx = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, &device_ctx));
+        idx.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx: ctx.clone(),
-            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(max_buffer_size, &ctx)),
+            device_ctx: device_ctx.clone(),
+            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(
+                max_buffer_size,
+                &device_ctx,
+            )),
             idx,
             #[cfg(feature = "metrics")]
             current_trace_height: Arc::new(AtomicUsize::new(0)),
@@ -61,16 +64,16 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
 
 impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let mut num_records = self.idx.to_host_on(&self.ctx).unwrap()[0] as usize;
+        let mut num_records = self.idx.to_host_on(&self.device_ctx).unwrap()[0] as usize;
         if num_records == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
-        let counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.ctx);
+        let counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.device_ctx);
         let dedup_records =
-            DeviceBuffer::<F>::with_capacity_on(num_records * POSEIDON2_WIDTH, &self.ctx);
-        let dedup_counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.ctx);
+            DeviceBuffer::<F>::with_capacity_on(num_records * POSEIDON2_WIDTH, &self.device_ctx);
+        let dedup_counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.device_ctx);
         unsafe {
-            let d_num_records = [num_records].to_device_on(&self.ctx).unwrap();
+            let d_num_records = [num_records].to_device_on(&self.device_ctx).unwrap();
             let mut temp_bytes = 0;
             poseidon2::deduplicate_records_get_temp_bytes(
                 &self.records,
@@ -78,13 +81,13 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 num_records,
                 &d_num_records,
                 &mut temp_bytes,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to get temp bytes");
             let d_temp_storage = if temp_bytes == 0 {
                 DeviceBuffer::<u8>::new()
             } else {
-                DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.ctx)
+                DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.device_ctx)
             };
             poseidon2::deduplicate_records(
                 &self.records,
@@ -95,11 +98,11 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 &d_num_records,
                 &d_temp_storage,
                 temp_bytes,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to deduplicate records");
             num_records = *d_num_records
-                .to_host_on(&self.ctx)
+                .to_host_on(&self.device_ctx)
                 .unwrap()
                 .first()
                 .unwrap();
@@ -108,9 +111,12 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
         self.current_trace_height
             .store(num_records, std::sync::atomic::Ordering::Relaxed);
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace =
-            DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
+        let trace = DeviceMatrix::<F>::with_capacity_on(
+            trace_height,
+            Self::trace_width(),
+            &self.device_ctx,
+        );
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         unsafe {
             poseidon2::tracegen(
                 trace.buffer(),
@@ -120,12 +126,12 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 &dedup_counts,
                 num_records,
                 SBOX_REGISTERS,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate trace");
         }
         // Reset state of this chip.
-        self.idx.fill_zero_on(&self.ctx).unwrap();
+        self.idx.fill_zero_on(&self.device_ctx).unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 }
@@ -136,10 +142,10 @@ pub enum Poseidon2PeripheryChipGPU {
 }
 
 impl Poseidon2PeripheryChipGPU {
-    pub fn new(max_buffer_size: usize, sbox_registers: usize, ctx: DeviceContext) -> Self {
+    pub fn new(max_buffer_size: usize, sbox_registers: usize, device_ctx: DeviceContext) -> Self {
         match sbox_registers {
-            0 => Self::Register0(Poseidon2ChipGPU::new(max_buffer_size, ctx)),
-            1 => Self::Register1(Poseidon2ChipGPU::new(max_buffer_size, ctx)),
+            0 => Self::Register0(Poseidon2ChipGPU::new(max_buffer_size, device_ctx)),
+            1 => Self::Register1(Poseidon2ChipGPU::new(max_buffer_size, device_ctx)),
             _ => panic!("Invalid number of sbox registers: {sbox_registers}"),
         }
     }
@@ -151,10 +157,10 @@ impl Poseidon2PeripheryChipGPU {
         }
     }
 
-    pub fn ctx(&self) -> &DeviceContext {
+    pub fn device_ctx(&self) -> &DeviceContext {
         match self {
-            Self::Register0(chip) => &chip.ctx,
-            Self::Register1(chip) => &chip.ctx,
+            Self::Register0(chip) => &chip.device_ctx,
+            Self::Register1(chip) => &chip.device_ctx,
         }
     }
 }

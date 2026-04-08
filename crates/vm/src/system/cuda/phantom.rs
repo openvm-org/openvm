@@ -15,7 +15,7 @@ use crate::cuda_abi::phantom;
 
 #[derive(new)]
 pub struct PhantomChipGPU {
-    ctx: DeviceContext,
+    device_ctx: DeviceContext,
 }
 
 impl PhantomChipGPU {
@@ -38,16 +38,19 @@ impl Chip<DenseRecordArena, GpuBackend> for PhantomChipGPU {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace =
-            DeviceMatrix::<F>::with_capacity_on(trace_height, Self::trace_width(), &self.ctx);
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
+        let trace = DeviceMatrix::<F>::with_capacity_on(
+            trace_height,
+            Self::trace_width(),
+            &self.device_ctx,
+        );
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         unsafe {
             phantom::tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
-                &arena.allocated().to_device_on(&self.ctx).unwrap(),
-                self.ctx.stream.as_raw(),
+                &arena.allocated().to_device_on(&self.device_ctx).unwrap(),
+                self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate trace");
         }

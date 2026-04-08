@@ -100,7 +100,7 @@ pub mod cuda {
     impl DummyInteractionChipGPU {
         pub fn new(range_checker: Arc<VariableRangeCheckerChipGPU>, data: Vec<u32>) -> Self {
             assert!(!data.is_empty());
-            let data = data.to_device_on(&range_checker.ctx).unwrap();
+            let data = data.to_device_on(&range_checker.device_ctx).unwrap();
             Self {
                 range_checker,
                 data,
@@ -111,7 +111,7 @@ pub mod cuda {
     impl<RA> Chip<RA, GpuBackend> for DummyInteractionChipGPU {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len();
-            let ctx = &self.range_checker.ctx;
+            let ctx = &self.range_checker.device_ctx;
             let trace = DeviceMatrix::<F>::with_capacity_on(height, DUMMY_TRACE_WIDTH, ctx);
             unsafe {
                 dummy_tracegen(

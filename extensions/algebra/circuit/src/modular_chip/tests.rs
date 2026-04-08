@@ -166,7 +166,7 @@ mod addsub_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().ctx.clone(),
+            tester.range_checker().device_ctx.clone(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -541,7 +541,7 @@ mod muldiv_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().ctx.clone(),
+            tester.range_checker().device_ctx.clone(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -1070,7 +1070,7 @@ mod is_equal_tests {
                 ),
                 tester.cpu_memory_helper(),
             ),
-            tester.range_checker().ctx.clone(),
+            tester.range_checker().device_ctx.clone(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)

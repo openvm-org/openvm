@@ -7,35 +7,35 @@ use openvm_stark_backend::prover::AirProvingContext;
 use crate::{cuda_abi::range_tuple::tracegen, range_tuple::RangeTupleCheckerChip, Chip};
 
 pub struct RangeTupleCheckerChipGPU<const N: usize> {
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<RangeTupleCheckerChip<N>>>,
     pub sizes: [u32; N],
 }
 
 impl<const N: usize> RangeTupleCheckerChipGPU<N> {
-    pub fn new(sizes: [u32; N], ctx: DeviceContext) -> Self {
+    pub fn new(sizes: [u32; N], device_ctx: DeviceContext) -> Self {
         assert!(N > 1, "RangeTupleChecker requires at least 2 dimensions");
         let range_max = sizes.iter().product::<u32>() as usize;
-        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(range_max, &ctx));
-        count.fill_zero_on(&ctx).unwrap();
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(range_max, &device_ctx));
+        count.fill_zero_on(&device_ctx).unwrap();
         Self {
-            ctx,
+            device_ctx,
             count,
             cpu_chip: None,
             sizes,
         }
     }
 
-    pub fn hybrid(cpu_chip: Arc<RangeTupleCheckerChip<N>>, ctx: DeviceContext) -> Self {
+    pub fn hybrid(cpu_chip: Arc<RangeTupleCheckerChip<N>>, device_ctx: DeviceContext) -> Self {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
             cpu_chip.count.len(),
-            &ctx,
+            &device_ctx,
         ));
-        count.fill_zero_on(&ctx).unwrap();
+        count.fill_zero_on(&device_ctx).unwrap();
         let sizes = *cpu_chip.sizes();
         Self {
-            ctx,
+            device_ctx,
             count,
             cpu_chip: Some(cpu_chip),
             sizes,
@@ -51,26 +51,26 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
                 .iter()
                 .map(|c| c.swap(0, Ordering::Relaxed))
                 .collect::<Vec<_>>()
-                .to_device_on(&self.ctx)
+                .to_device_on(&self.device_ctx)
                 .unwrap()
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
         // `count` will be reused.
-        let trace = DeviceMatrix::<F>::with_capacity_on(self.count.len(), N + 1, &self.ctx);
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
-        let d_sizes = self.sizes.to_device_on(&self.ctx).unwrap();
+        let trace = DeviceMatrix::<F>::with_capacity_on(self.count.len(), N + 1, &self.device_ctx);
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
+        let d_sizes = self.sizes.to_device_on(&self.device_ctx).unwrap();
         unsafe {
             tracegen(
                 &self.count,
                 &cpu_count,
                 trace.buffer(),
                 &d_sizes,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
-        self.count.fill_zero_on(&self.ctx).unwrap();
+        self.count.fill_zero_on(&self.device_ctx).unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 

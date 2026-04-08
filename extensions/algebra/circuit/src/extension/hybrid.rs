@@ -179,7 +179,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     addsub,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
@@ -192,7 +192,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     muldiv,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
 
                 let modulus_limbs = std::array::from_fn(|i| {
@@ -219,7 +219,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularIsEqualChip::new(
                     is_eq,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
@@ -238,7 +238,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     addsub,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
@@ -251,7 +251,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     muldiv,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
 
                 let modulus_limbs = std::array::from_fn(|i| {
@@ -278,7 +278,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularIsEqualChip::new(
                     is_eq,
-                    range_checker_gpu.ctx.clone(),
+                    range_checker_gpu.device_ctx.clone(),
                 ));
             } else {
                 panic!("Modulus too large");
@@ -372,8 +372,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory
-                    .add_executor_chip(HybridFp2Chip::new(addsub, range_checker_gpu.ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    addsub,
+                    range_checker_gpu.device_ctx.clone(),
+                ));
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
@@ -383,8 +385,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory
-                    .add_executor_chip(HybridFp2Chip::new(muldiv, range_checker_gpu.ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    muldiv,
+                    range_checker_gpu.device_ctx.clone(),
+                ));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -400,8 +404,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory
-                    .add_executor_chip(HybridFp2Chip::new(addsub, range_checker_gpu.ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    addsub,
+                    range_checker_gpu.device_ctx.clone(),
+                ));
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
@@ -411,8 +417,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory
-                    .add_executor_chip(HybridFp2Chip::new(muldiv, range_checker_gpu.ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    muldiv,
+                    range_checker_gpu.device_ctx.clone(),
+                ));
             } else {
                 panic!("Modulus too large");
             }

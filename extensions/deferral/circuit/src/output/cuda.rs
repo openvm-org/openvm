@@ -112,7 +112,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
         let rows_used = per_row.len();
         let trace_height = next_power_of_two_or_zero(rows_used);
         let trace_width = DeferralOutputCols::<F>::width();
-        let ctx = &self.range_checker.ctx;
+        let ctx = &self.range_checker.device_ctx;
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
 
         let d_raw_records = records.to_device_on(ctx).unwrap();

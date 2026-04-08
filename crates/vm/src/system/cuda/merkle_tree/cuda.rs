@@ -162,20 +162,20 @@ pub mod merkle_tree {
         actual_heights: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) -> Result<(), CudaError> {
         let num_leaves = touched_blocks.len() / MERKLE_TOUCHED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
-        let tmp_buffer = DeviceBuffer::<u32>::with_capacity_on(5 * num_leaves, ctx);
+        let tmp_buffer = DeviceBuffer::<u32>::with_capacity_on(5 * num_leaves, device_ctx);
         let mut need_tmp_storage_bytes = 0;
         get_prefix_scan_temp_bytes(
             &tmp_buffer,
             num_leaves,
             &mut need_tmp_storage_bytes,
-            ctx.stream.as_raw(),
+            device_ctx.stream.as_raw(),
         )?;
-        let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, ctx);
-        let actual_heights = actual_heights.to_device_on(ctx).unwrap();
+        let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, device_ctx);
+        let actual_heights = actual_heights.to_device_on(device_ctx).unwrap();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
             touched_blocks.as_mut_ptr(),
@@ -195,7 +195,7 @@ pub mod merkle_tree {
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.
             hasher_buffer.buffer.len(),
-            ctx.stream.as_raw(),
+            device_ctx.stream.as_raw(),
         ))
     }
 }

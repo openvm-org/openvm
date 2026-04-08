@@ -81,15 +81,15 @@ impl PreflightGpu {
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) -> Self {
         PreflightGpu {
             cpu: preflight.clone(),
             transcript: Self::transcript(preflight),
-            proof_shape: Self::proof_shape(vk, proof, preflight, ctx),
+            proof_shape: Self::proof_shape(vk, proof, preflight, device_ctx),
             gkr: Self::gkr(preflight),
-            batch_constraint: Self::batch_constraint(preflight, ctx),
-            stacking: Self::stacking(preflight, ctx),
+            batch_constraint: Self::batch_constraint(preflight, device_ctx),
+            stacking: Self::stacking(preflight, device_ctx),
             whir: Self::whir(preflight),
         }
     }
@@ -102,7 +102,7 @@ impl PreflightGpu {
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
-        ctx: &DeviceContext,
+        device_ctx: &DeviceContext,
     ) -> ProofShapePreflightGpu {
         let mut sorted_cached_commits: Vec<Digest> = vec![];
         let mut cidx = 1;
@@ -177,11 +177,14 @@ impl PreflightGpu {
         }
 
         ProofShapePreflightGpu {
-            sorted_trace_heights: to_device_or_nullptr_on(&sorted_trace_heights, ctx).unwrap(),
-            sorted_trace_metadata: to_device_or_nullptr_on(&sorted_trace_metadata, ctx).unwrap(),
-            sorted_cached_commits: to_device_or_nullptr_on(&sorted_cached_commits, ctx).unwrap(),
-            per_row_tidx: to_device_or_nullptr_on(&per_row_tidx, ctx).unwrap(),
-            pvs_tidx: to_device_or_nullptr_on(&pvs_tidx_by_air_id, ctx).unwrap(),
+            sorted_trace_heights: to_device_or_nullptr_on(&sorted_trace_heights, device_ctx)
+                .unwrap(),
+            sorted_trace_metadata: to_device_or_nullptr_on(&sorted_trace_metadata, device_ctx)
+                .unwrap(),
+            sorted_cached_commits: to_device_or_nullptr_on(&sorted_cached_commits, device_ctx)
+                .unwrap(),
+            per_row_tidx: to_device_or_nullptr_on(&per_row_tidx, device_ctx).unwrap(),
+            pvs_tidx: to_device_or_nullptr_on(&pvs_tidx_by_air_id, device_ctx).unwrap(),
             post_tidx: preflight.proof_shape.post_tidx,
             num_present: preflight.proof_shape.sorted_trace_vdata.len(),
             n_max: preflight.proof_shape.n_max,
@@ -196,16 +199,23 @@ impl PreflightGpu {
         GkrPreflightGpu { _dummy: 0 }
     }
 
-    fn batch_constraint(preflight: &Preflight, ctx: &DeviceContext) -> BatchConstraintPreflightGpu {
+    fn batch_constraint(
+        preflight: &Preflight,
+        device_ctx: &DeviceContext,
+    ) -> BatchConstraintPreflightGpu {
         BatchConstraintPreflightGpu {
-            sumcheck_rnd: to_device_or_nullptr_on(&preflight.batch_constraint.sumcheck_rnd, ctx)
-                .unwrap(),
+            sumcheck_rnd: to_device_or_nullptr_on(
+                &preflight.batch_constraint.sumcheck_rnd,
+                device_ctx,
+            )
+            .unwrap(),
         }
     }
 
-    fn stacking(preflight: &Preflight, ctx: &DeviceContext) -> StackingPreflightGpu {
+    fn stacking(preflight: &Preflight, device_ctx: &DeviceContext) -> StackingPreflightGpu {
         StackingPreflightGpu {
-            sumcheck_rnd: to_device_or_nullptr_on(&preflight.stacking.sumcheck_rnd, ctx).unwrap(),
+            sumcheck_rnd: to_device_or_nullptr_on(&preflight.stacking.sumcheck_rnd, device_ctx)
+                .unwrap(),
         }
     }
 

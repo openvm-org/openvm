@@ -17,8 +17,8 @@ use crate::cuda_abi::program_testing;
 pub struct DeviceProgramTester(ProgramTester<F>, DeviceContext);
 
 impl DeviceProgramTester {
-    pub fn new(bus: ProgramBus, ctx: DeviceContext) -> Self {
-        Self(ProgramTester::new(bus), ctx)
+    pub fn new(bus: ProgramBus, device_ctx: DeviceContext) -> Self {
+        Self(ProgramTester::new(bus), device_ctx)
     }
 
     pub fn bus(&self) -> ProgramBus {

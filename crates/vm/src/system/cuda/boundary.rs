@@ -11,7 +11,7 @@ use super::{poseidon2::SharedBuffer, DIGEST_WIDTH};
 use crate::cuda_abi::boundary::persistent_boundary_tracegen;
 
 pub struct BoundaryChipGPU {
-    pub ctx: DeviceContext,
+    pub device_ctx: DeviceContext,
     pub poseidon2_buffer: SharedBuffer<F>,
     /// A `Vec` of pointers to the copied guest memory on device.
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
@@ -34,9 +34,9 @@ pub struct PersistentBoundaryRecord {
 }
 
 impl BoundaryChipGPU {
-    pub fn new(poseidon2_buffer: SharedBuffer<F>, ctx: DeviceContext) -> Self {
+    pub fn new(poseidon2_buffer: SharedBuffer<F>, device_ctx: DeviceContext) -> Self {
         Self {
-            ctx,
+            device_ctx,
             poseidon2_buffer,
             initial_leaves: Vec::new(),
             records: None,
@@ -51,7 +51,10 @@ impl BoundaryChipGPU {
         self.records = Some(if records.is_empty() {
             DeviceBuffer::new()
         } else {
-            records.to_device_on(&self.ctx).unwrap().as_buffer::<u32>()
+            records
+                .to_device_on(&self.device_ctx)
+                .unwrap()
+                .as_buffer::<u32>()
         });
     }
 
@@ -85,9 +88,9 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
         let unpadded_height = 2 * num_records;
         let trace_height = next_power_of_two_or_zero(unpadded_height);
         let trace =
-            DeviceMatrix::<F>::with_capacity_on(trace_height, self.trace_width(), &self.ctx);
-        trace.buffer().fill_zero_on(&self.ctx).unwrap();
-        let mem_ptrs = self.initial_leaves.to_device_on(&self.ctx).unwrap();
+            DeviceMatrix::<F>::with_capacity_on(trace_height, self.trace_width(), &self.device_ctx);
+        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
+        let mem_ptrs = self.initial_leaves.to_device_on(&self.device_ctx).unwrap();
         unsafe {
             persistent_boundary_tracegen(
                 trace.buffer(),
@@ -98,7 +101,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
                 num_records,
                 &self.poseidon2_buffer.buffer,
                 &self.poseidon2_buffer.idx,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate boundary trace");
         }

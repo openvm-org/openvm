@@ -13,7 +13,7 @@ pub(in crate::whir) struct FinalPolyQueryEvalGpuCtx<'a> {
     pub records: &'a [FinalPolyQueryEvalRecord],
     pub params: &'a SystemParams,
     pub preflights: &'a [PreflightGpu],
-    pub ctx: &'a DeviceContext,
+    pub device_ctx: &'a DeviceContext,
 }
 
 pub(in crate::whir) struct FinalPolyQueryEvalGpuTraceGenerator;
@@ -30,7 +30,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
         let records = ctx.records;
         let params = ctx.params;
         let preflights = ctx.preflights;
-        let device_ctx = ctx.ctx;
+        let device_ctx = ctx.device_ctx;
 
         let mem = MemTracker::start("tracegen.whir_final_poly_query_eval");
         let num_valid_rows = records.len();

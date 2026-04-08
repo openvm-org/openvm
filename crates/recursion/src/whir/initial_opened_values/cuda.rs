@@ -15,7 +15,7 @@ pub(in crate::whir) struct InitialOpenedValuesGpuCtx<'a> {
     pub num_proofs: usize,
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
-    pub ctx: &'a DeviceContext,
+    pub device_ctx: &'a DeviceContext,
 }
 
 pub(in crate::whir) struct InitialOpenedValuesGpuTraceGenerator;
@@ -32,7 +32,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
         let num_proofs = ctx.num_proofs;
         let blob = ctx.blob;
         let params = ctx.params;
-        let device_ctx = ctx.ctx;
+        let device_ctx = ctx.device_ctx;
 
         let mem = MemTracker::start("tracegen.whir_initial_opened_values");
         let num_valid_rows = blob.codeword_value_accs.len();

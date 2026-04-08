@@ -385,7 +385,7 @@ mod cuda_tracegen {
                     let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
                     trace.map(|m| {
                         AirProvingContext::simple_no_pis(
-                            transport_matrix_h2d_row(&m, ctx.0.ctx).unwrap(),
+                            transport_matrix_h2d_row(&m, ctx.0.device_ctx).unwrap(),
                         )
                     })
                 }
@@ -404,7 +404,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            ctx: &DeviceContext,
+            device_ctx: &DeviceContext,
         ) -> Self {
             let l_skip = child_vk.system_params.l_skip as u32;
             let n_stack = child_vk.system_params.n_stack as u32;
@@ -481,11 +481,13 @@ mod cuda_tracegen {
                     })
                     .collect_vec();
 
-                let d_slice_offsets = slice_offsets.to_device_on(ctx).unwrap();
-                let d_stacked_trace_data = stacked_trace_data.to_device_on(ctx).unwrap();
+                let d_slice_offsets = slice_offsets.to_device_on(device_ctx).unwrap();
+                let d_stacked_trace_data = stacked_trace_data.to_device_on(device_ctx).unwrap();
 
-                let d_slice_data =
-                    DeviceBuffer::<StackedSliceData>::with_capacity_on(num_slices as usize, ctx);
+                let d_slice_data = DeviceBuffer::<StackedSliceData>::with_capacity_on(
+                    num_slices as usize,
+                    device_ctx,
+                );
 
                 unsafe {
                     stacked_slice_data(
@@ -497,7 +499,7 @@ mod cuda_tracegen {
                         num_slices,
                         n_stack,
                         l_skip,
-                        ctx.stream.as_raw(),
+                        device_ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
@@ -509,15 +511,18 @@ mod cuda_tracegen {
                     .powers()
                     .take((num_slices << 1) as usize)
                     .collect_vec()
-                    .to_device_on(ctx)
+                    .to_device_on(device_ctx)
                     .unwrap();
 
-                let d_coeff_terms = DeviceBuffer::<EF>::with_capacity_on(num_slices as usize, ctx);
+                let d_coeff_terms =
+                    DeviceBuffer::<EF>::with_capacity_on(num_slices as usize, device_ctx);
                 let d_coeff_term_keys =
-                    DeviceBuffer::<u64>::with_capacity_on(num_slices as usize, ctx);
-                let d_precomps =
-                    DeviceBuffer::<PolyPrecomputation>::with_capacity_on(num_slices as usize, ctx);
-                let d_num_coeffs = DeviceBuffer::<usize>::with_capacity_on(1, ctx);
+                    DeviceBuffer::<u64>::with_capacity_on(num_slices as usize, device_ctx);
+                let d_precomps = DeviceBuffer::<PolyPrecomputation>::with_capacity_on(
+                    num_slices as usize,
+                    device_ctx,
+                );
+                let d_num_coeffs = DeviceBuffer::<usize>::with_capacity_on(1, device_ctx);
 
                 let num_claims = proof
                     .cpu
@@ -525,8 +530,8 @@ mod cuda_tracegen {
                     .stacking_openings
                     .iter()
                     .fold(0, |acc, v| acc + v.len());
-                let d_coeffs = DeviceBuffer::<EF>::with_capacity_on(num_claims, ctx);
-                let d_coeff_keys = DeviceBuffer::<u64>::with_capacity_on(num_claims, ctx);
+                let d_coeffs = DeviceBuffer::<EF>::with_capacity_on(num_claims, device_ctx);
+                let d_coeff_keys = DeviceBuffer::<u64>::with_capacity_on(num_claims, device_ctx);
 
                 unsafe {
                     let temp_bytes = compute_coefficients_temp_bytes(
@@ -536,10 +541,11 @@ mod cuda_tracegen {
                         &d_coeff_keys,
                         num_slices,
                         &d_num_coeffs,
-                        ctx.stream.as_raw(),
+                        device_ctx.stream.as_raw(),
                     )
                     .unwrap();
-                    let d_temp_buffer = DeviceBuffer::<u8>::with_capacity_on(temp_bytes, ctx);
+                    let d_temp_buffer =
+                        DeviceBuffer::<u8>::with_capacity_on(temp_bytes, device_ctx);
                     compute_coefficients(
                         &d_coeff_terms,
                         &d_coeff_term_keys,
@@ -557,7 +563,7 @@ mod cuda_tracegen {
                         &d_temp_buffer,
                         temp_bytes,
                         &d_num_coeffs,
-                        ctx.stream.as_raw(),
+                        device_ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
@@ -593,7 +599,7 @@ mod cuda_tracegen {
                     vk: child_vk,
                     proofs,
                     preflights,
-                    ctx: device_ctx,
+                    device_ctx,
                 },
                 &blob,
             );
