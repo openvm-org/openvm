@@ -48,7 +48,7 @@ The deferral extension cannot be configured via `openvm.toml` alone — it requi
 To enable deferrals in your VM configuration:
 
 1. Build a `DeferralProver` with the appropriate single-circuit prover for your use case.
-2. Create the extension with `deferral_prover.make_extension`, passing the deferral function(s).
+2. Create the extension with `DeferralProver::make_extension`, passing the deferral function(s).
 3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
 4. Build the SDK with `Sdk::builder().deferral_prover(deferral_prover)`.
 

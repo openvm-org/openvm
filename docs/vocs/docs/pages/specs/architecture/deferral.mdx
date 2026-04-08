@@ -96,7 +96,7 @@ The proofs for each `C_i` are aggregated separately. The leaf, internal-for-leaf
 - Exposes `merkle_commit` and `num_def_circuit_proofs` as public values
 - Propagates `def_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit` through the verifier subcircuit
 
-Note that because we are building a Merkle tree, tail proofs are combined with "non-present" proofs. The `merkle_commit` of a non-present proof at a particular depth is the Merkle root of a zeroed tree of that depth.
+Note that because we are building a Merkle tree of input and output commits, tail proofs are combined with "non-present" proofs. The input and output commit of a non-present proof at a particular depth is the Merkle root of a zeroed tree of that depth.
 
 The final internal-recursive layer is passed to a **deferral hook** layer, which:
 
