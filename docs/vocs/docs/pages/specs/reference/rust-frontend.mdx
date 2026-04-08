@@ -36,7 +36,7 @@ through the `"std"` feature.  This section documents the different features of t
 ### Memory Allocator
 
 OpenVM supports 512MB of guest memory, with stack growing down from `STACK_TOP = 0x0020_0400`.
-program loading starting at `TEXT_START = 0x0020_0800`, and heap starting right afterwards.
+Program loading starting at `TEXT_START = 0x0020_0800`, and heap starting right afterwards.
 We support two allocators:
 
 - A **bump** allocator which increments a heap pointer for each successive allocation without
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn sys_getenv(
     _varname_len: usize,
 ) -> usize;
 ```
-This function always returns `0`, which is equivalent to `std::env::var` always returning `None`.
+This function always returns `0`, which is equivalent to `std::env::var_os` always returning `Some("")`.
 
 ```rust
 pub extern "C" fn sys_argc() -> usize;
