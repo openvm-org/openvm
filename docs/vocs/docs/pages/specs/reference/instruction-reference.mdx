@@ -21,10 +21,10 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
 | ------------- | ---------- | ------------- |
-| System | `SysPhantom::Nop` | NOP |
-| System | `SysPhantom::DebugPanic` | DEBUG_PANIC |
-| System | `SysPhantom::CtStart` | CT_START |
-| System | `SysPhantom::CtEnd` | CT_END |
+| System | `SysPhantom::Nop` | Nop |
+| System | `SysPhantom::DebugPanic` | DebugPanic |
+| System | `SysPhantom::CtStart` | CtStart |
+| System | `SysPhantom::CtEnd` | CtEnd |
 
 ## RV32IM Extension
 
@@ -113,23 +113,23 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| BigInt | `Rv32BaseAlu256Opcode::ADD256` | ADD256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode::SUB256` | SUB256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode::XOR256` | XOR256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode::OR256` | OR256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode::AND256` | AND256_RV32 |
-| BigInt | `Rv32Shift256Opcode::SLL256` | SLL256_RV32 |
-| BigInt | `Rv32Shift256Opcode::SRL256` | SRL256_RV32 |
-| BigInt | `Rv32Shift256Opcode::SRA256` | SRA256_RV32 |
-| BigInt | `Rv32LessThan256Opcode::SLT256` | SLT256_RV32 |
-| BigInt | `Rv32LessThan256Opcode::SLTU256` | SLTU256_RV32 |
-| BigInt | `Rv32BranchEqual256Opcode::BEQ256` | BEQ256_RV32 |
-| BigInt | `Rv32BranchEqual256Opcode::BNE256` | BNE256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode::BLT256` | BLT256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode::BGE256` | BGE256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode::BLTU256` | BLTU256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode::BGEU256` | BGEU256_RV32 |
-| BigInt | `Rv32Mul256Opcode::MUL256` | MUL256_RV32 |
+| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::ADD)` | ADD256_RV32 |
+| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::SUB)` | SUB256_RV32 |
+| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::XOR)` | XOR256_RV32 |
+| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::OR)` | OR256_RV32 |
+| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::AND)` | AND256_RV32 |
+| BigInt | `Rv32Shift256Opcode(ShiftOpcode::SLL)` | SLL256_RV32 |
+| BigInt | `Rv32Shift256Opcode(ShiftOpcode::SRL)` | SRL256_RV32 |
+| BigInt | `Rv32Shift256Opcode(ShiftOpcode::SRA)` | SRA256_RV32 |
+| BigInt | `Rv32LessThan256Opcode(LessThanOpcode::SLT)` | SLT256_RV32 |
+| BigInt | `Rv32LessThan256Opcode(LessThanOpcode::SLTU)` | SLTU256_RV32 |
+| BigInt | `Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ)` | BEQ256_RV32 |
+| BigInt | `Rv32BranchEqual256Opcode(BranchEqualOpcode::BNE)` | BNE256_RV32 |
+| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT)` | BLT256_RV32 |
+| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BGE)` | BGE256_RV32 |
+| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLTU)` | BLTU256_RV32 |
+| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BGEU)` | BGEU256_RV32 |
+| BigInt | `Rv32Mul256Opcode(MulOpcode::MUL)` | MUL256_RV32 |
 
 ## Algebra Extension
 
@@ -152,6 +152,13 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `Fp2Opcode::DIV` | DIV\<Fp2\> |
 | Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV\<Fp2\> |
 
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| Algebra | `ModularPhantom::HintNonQr` | HintNonQr\<N\> |
+| Algebra | `ModularPhantom::HintSqrt` | HintSqrt\<N\> |
+
 ## Elliptic Curve Extension
 
 #### Instructions
@@ -163,18 +170,10 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
 | Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
 
-#### Phantom Sub-Instructions
-
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| Elliptic Curve | `EccPhantom::HintDecompress` | HintDecompress |
-
 ## Pairing Extension
 
-#### Instructions
-
 #### Phantom Sub-Instructions
 
 | VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
 | ------------- | ---------- | ------------- |
-| Pairing | `PairingPhantom::HintDecompress` | HintDecompress |
+| Pairing | `PairingPhantom::HintFinalExp` | HintFinalExp |
