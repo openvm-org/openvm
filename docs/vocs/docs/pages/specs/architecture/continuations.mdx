@@ -71,14 +71,14 @@ For convenience the SDK provides several **SDK provers**, which orchestrate basi
 | `AppProver` | app | Executable and `StdIn` input | `ContinuationVmProof` (i.e. app proof) |
 | `AggProver` | leaf → internal-for-leaf → internal-recursive (repeated at least until one `Proof` remains) | `ContinuationVmProof` | `VmStarkProof` (i.e. STARK proof) |
 | `RootProver` | root | `VmStarkProof` | `Proof` (EVM input) |
-| `StaticProver` | static | `Proof` | `EvmProof` (EVM proof) |
+| `Halo2Prover` | static | `Proof` | `EvmProof` (EVM proof) |
 
 `StarkProver` and `EvmProver` use these component SDK provers to encapsulate end-to-end STARK and EVM proving.
 
 | E2E SDK Prover | Component Prover Pipeline | Input | Output |
 |-------|-----------------|-------|-------|
 | `StarkProver` | `AppProver` → `AggProver` | Executable and `StdIn` input | `VmStarkProof` |
-| `EvmProver` | `AppProver` → `AggProver` → `RootProver` → `StaticProver` | Executable and `StdIn` input | `EvmProof` |
+| `EvmProver` | `AppProver` → `AggProver` → `RootProver` → `Halo2Prover` | Executable and `StdIn` input | `EvmProof` |
 
 ## Layer Architecture
 
@@ -180,7 +180,7 @@ App public values are the public values exposed by the app layer. They are propa
 All aggregation subcircuits enforce **segment adjacency** constraints on the app public values. Given several adjacent segments, the aggregation subcircuit constrains that:
 
 1. The `final_pc` and `final_root` of each non-terminal segment equal the `initial_pc` and `initial_root` of the segment immediately following it
-2. Non-terminal segments have `is_terminate == 0` and `exit_code == ExitCode::SUSPEND`
+2. Non-terminal segments have `is_terminate == 0` and `exit_code == DEFAULT_SUSPEND_EXIT_CODE`
 3. The terminal segment has `is_terminate == 1` and `exit_code == ExitCode::Success`
 
 The aggregation subcircuit also **exposes public values** necessary for either further recursive aggregation or final proof verification.
@@ -195,7 +195,7 @@ The inner subcircuit takes up to $N$ child `Proof`s and does **not** constrain t
 
 #### Public Values
 
-Public values are processed by `VerifierPvsAir`. The inner subcircuit re-exposes the app public values (excluding `user_public_values`) and adds the following **verifier-specific public values**, which are common over all inner layers:
+Public values are processed by `VmPvsAir` and `VerifierPvsAir`. The inner subcircuit re-exposes the app public values (excluding `user_public_values`) and adds the following **verifier-specific public values**, which are common over all inner layers:
 
 - **Program Commit**
     - `program_commit: Digest` — cached trace commit of the app circuit's `ProgramAir`
@@ -256,8 +256,9 @@ The root subcircuit constrains the child proof's public values:
 
 - `is_terminate == 1` and `exit_code == ExitCode::Success` (successful app termination)
 - `internal_flag == 2` and `recursion_flag` is `1` or `2` (child is internal-recursive)
-- `SymbolicExpressionAir`'s cached commit equals `internal_recursive_vk_commit.cached_commit`
-- `internal_recursive_vk_commit` (both `cached_commit` and `vk_pre_hash`) matches a pre-generated constant
+- The verifier subcircuit's `SymbolicExpressionAir` cached commit and `internal_recursive_vk_commit` are verified depending on `recursion_flag`:
+  - `recursion_flag == 1`: cached commit is verified against `internal_for_leaf_vk_commit.cached_commit`, and `internal_recursive_vk_commit` must be unset (all zeros)
+  - `recursion_flag == 2`: cached commit is verified against `internal_recursive_vk_commit.cached_commit`, and `internal_recursive_vk_commit` (both `cached_commit` and `vk_pre_hash`) matches a pre-generated constant
 
 The root subcircuit also constrains its own public values:
 
@@ -279,7 +280,7 @@ The final internal-recursive proof for each `C_i` is then passed to a **deferral
 
 1. Verifies the child proof
 2. Converts the input and output commit Merkle roots into **onion hashes** (the hash-onion accumulators used by the VM)
-3. Exposes `initial_acc_hash` and `final_acc_hash` — the initial and final deferral accumulator values as memory subtree Merkle leaves
+3. Exposes `DeferralPvs` containing `initial_acc_hash` and `final_acc_hash` (the initial and final deferral accumulator values as memory subtree Merkle leaves) and `depth` (the Merkle subtree depth)
 4. Computes and exposes a `def_hook_commit` from the deferral circuit's VK commits
 
 ### Combined VM-Deferral Tree
@@ -306,7 +307,7 @@ When multiple deferral hook proofs are combined, the inner subcircuit Merklizes 
 
 ### Root Verifier Deferral Constraints
 
-The inner aggregation subcircuit also computes and propagates a `def_hook_commit` — a commitment to the deferral hook verifying key, derived by hashing the VK commit components of deferral-only child proofs. This is computed at the internal-for-leaf layer (when `internal_flag == 2`) and propagated unchanged through subsequent layers. The `def_hook_commit` ensures that the correct deferral circuits were used.
+The inner aggregation subcircuit also computes and propagates a `def_hook_commit` — a commitment to the deferral hook verifying key, derived by hashing the VK commit components of deferral-only child proofs. This is computed at any internal-recursive layer where `internal_flag == 2` and `deferral_flag == 1`, and propagated unchanged through subsequent layers. The `def_hook_commit` ensures that the correct deferral circuits were used.
 
 When deferral is enabled, the root subcircuit additionally constrains:
 
