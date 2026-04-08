@@ -295,7 +295,7 @@ Deferral hook proofs are incorporated into the main aggregation tree at the inte
 
 At the leaf and early internal layers, VM segment proofs (`deferral_flag=0`) and deferral hook proofs (`deferral_flag=1`) are aggregated separately. When proofs of both types are combined in the same internal-recursive layer, the output proof has `deferral_flag=2`.
 
-The `DeferralPvs` propagated through the tree contain:
+`DeferralPvsAir` processes and propagates the following `DeferralPvs` through the tree:
 
 - `initial_acc_hash: Digest` — Merkle root of all initial deferral accumulators aggregated so far
 - `final_acc_hash: Digest` — Merkle root of all final deferral accumulators aggregated so far
