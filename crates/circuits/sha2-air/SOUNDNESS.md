@@ -9,7 +9,7 @@ The main constraints are summarized below.
 
 ### Constraint 1: Digest Row Hash Computation
 
-In `eval_digest_row()` on lines 148-185, we constrain:
+In `eval_digest_row()`, we constrain:
 
 ```
 next.prev_hash + local.work_vars = next.final_hash
@@ -19,7 +19,7 @@ when `next` is a digest row.
 
 ### Constraint 2: Dummy Row Consistency
 
-In `eval_transitions()` on lines 293-304, we constrain:
+In `eval_transitions()`, we constrain:
 
 ```
 local.work_vars.a == next.work_vars.a
@@ -206,4 +206,4 @@ So, the first 4 rounds of block 1 are constrained correctly.
 
 Now, we can show that each block's `final_hash` is correct.
 
-We already argued that, on each block, `last_round_row.work_vars` is correctly computed from the `prev_hash`. Now, **constraint 1** gives that each block's `final_hash` is constructed by adding the `last_round_row.work_vars` to the `prev_state`. This is exactly correct, by the SHA-2 specification.
+We already argued that, on each block, `last_round_row.work_vars` is correctly computed from the `prev_hash`. Now, **constraint 1** gives that each block's `final_hash` is constructed by adding the `last_round_row.work_vars` to the `prev_hash`. This is exactly correct, by the SHA-2 specification.
