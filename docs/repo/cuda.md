@@ -64,16 +64,12 @@ Example:
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
-        pub use cuda::*;
-        pub use cuda::{
-            Keccak256GpuProverExt as Keccak256ProverExt,
-            Keccak256Rv32GpuBuilder as Keccak256Rv32Builder,
-        };
+        pub use self::cuda::*;
+        pub use self::cuda::Sha2GpuProverExt as Sha2ProverExt;
+        pub use self::cuda::Sha2Rv32GpuBuilder as Sha2Rv32Builder;
     } else {
-        pub use self::{
-            Keccak256CpuProverExt as Keccak256ProverExt,
-            Keccak256Rv32CpuBuilder as Keccak256Rv32Builder,
-        };
+        pub use self::Sha2CpuProverExt as Sha2ProverExt;
+        pub use self::Sha2Rv32CpuBuilder as Sha2Rv32Builder;
     }
 }
 ```
