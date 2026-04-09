@@ -41,6 +41,10 @@ jobs:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
           ignore_words_file: .codespellignore
       - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -98,18 +102,27 @@ jobs:
         run: |
           cargo binstall --no-confirm --force cargo-audit
           cargo audit
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
   lint-cuda:
     name: Lint CUDA
     needs: changes
     if: ${{ needs.changes.outputs.cuda == 'true' }}
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia/cpu=8
+      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia/cpu=8/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -127,3 +140,7 @@ jobs:
       #     sudo apt-get update
       #     sudo apt-get install -y clang-tidy-21
       #     ./scripts/run_clang_tidy.sh
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
