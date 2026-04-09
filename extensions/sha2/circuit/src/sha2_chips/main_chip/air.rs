@@ -100,6 +100,12 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         next: &Sha2ColsRef<AB::Var>,
     ) {
+        builder.assert_bool(*local.instruction.is_enabled);
+        builder
+            .when_transition()
+            .when_ne(*local.instruction.is_enabled, AB::Expr::ONE)
+            .assert_zero(*next.instruction.is_enabled);
+
         builder
             .when_first_row()
             .when(*local.instruction.is_enabled)
