@@ -97,7 +97,7 @@ impl<F: PrimeField32> AotExecutor<F> for KeccakfExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<KeccakfPreCompute>()
+        size_of::<E2PreCompute<KeccakfPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]

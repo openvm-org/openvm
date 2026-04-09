@@ -100,7 +100,7 @@ impl<F: PrimeField32> AotExecutor<F> for XorinVmExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<XorinPreCompute>()
+        size_of::<E2PreCompute<XorinPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
