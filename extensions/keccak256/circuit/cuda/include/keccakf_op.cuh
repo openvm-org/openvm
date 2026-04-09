@@ -41,63 +41,12 @@ template <typename T> struct KeccakfOpCols {
 
 inline constexpr size_t NUM_KECCAKF_OP_COLS = sizeof(KeccakfOpCols<uint8_t>);
 
-// Helper to rotate left a 64-bit value.
-// Guard: when n == 0, (x >> 64) is undefined behavior per C++ standard.
-// R[0][0] == 0 in the Keccak rho step, so this path is reachable.
-__device__ __forceinline__ uint64_t rotl64(uint64_t x, int n) {
-    n &= 63;
-    return n ? ((x << n) | (x >> (64 - n))) : x;
-}
-
 // Compute keccak-f permutation on a 200-byte state.
-//
-// Uses in-place rho/pi via the 24-element permutation cycle and in-place chi
-// with two temporaries per row, so no scratch array is needed.
+// Delegates to the shared round body in keccak256::keccakf_round_body;
+// __forceinline__ so the full permutation folds into the caller's frame.
 __device__ __forceinline__ void keccakf_permutation(uint64_t state[25]) {
-    using keccak256::RHO_PI_CYCLE_IDX;
-    using keccak256::RHO_PI_CYCLE_ROT;
-
     for (int round = 0; round < 24; round++) {
-        // Theta: C[x] = xor(A[x, 0..4])
-        uint64_t c[5];
-#pragma unroll 5
-        for (int x = 0; x < 5; x++) {
-            c[x] = state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20];
-        }
-        // A'[x, y] = A[x, y] ^ D[x] where D[x] = C[x-1] ^ ROTL(C[x+1], 1).
-        // Use a scalar `d` instead of materializing D[5].
-        for (int x = 0; x < 5; x++) {
-            uint64_t d = c[(x + 4) % 5] ^ rotl64(c[(x + 1) % 5], 1);
-#pragma unroll 5
-            for (int y = 0; y < 5; y++) {
-                state[x + 5 * y] ^= d;
-            }
-        }
-
-        // Rho/Pi in place via the 24-element permutation cycle (one temp).
-        uint64_t temp = rotl64(state[RHO_PI_CYCLE_IDX[0]], RHO_PI_CYCLE_ROT[23]);
-        // Prevent unrolling to avoid 23 simultaneous rotations in flight.
-#pragma unroll 1
-        for (int i = 0; i < 23; i++) {
-            state[RHO_PI_CYCLE_IDX[i]] =
-                rotl64(state[RHO_PI_CYCLE_IDX[i + 1]], RHO_PI_CYCLE_ROT[i]);
-        }
-        state[RHO_PI_CYCLE_IDX[23]] = temp;
-
-        // Chi in place with 2 temps per row.
-        for (int y = 0; y < 5; y++) {
-            uint64_t *row_state = &state[5 * y];
-            uint64_t t0 = row_state[0];
-            uint64_t t1 = row_state[1];
-            row_state[0] = t0 ^ ((~t1) & row_state[2]);
-            row_state[1] = t1 ^ ((~row_state[2]) & row_state[3]);
-            row_state[2] ^= (~row_state[3]) & row_state[4];
-            row_state[3] ^= (~row_state[4]) & t0;
-            row_state[4] ^= (~t0) & t1;
-        }
-
-        // Iota
-        state[0] ^= RC[round];
+        keccak256::keccakf_round_body(state, round);
     }
 }
 
