@@ -677,7 +677,7 @@ mod cuda_tracegen {
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let exp_bits_len_gen = module_ctx.0;
-            let ctx = module_ctx.1;
+            let device_ctx = module_ctx.1;
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()
@@ -714,7 +714,7 @@ mod cuda_tracegen {
                 .into_iter()
                 .map(|trace| {
                     trace.map(|m| {
-                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m, ctx).unwrap())
+                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m, device_ctx).unwrap())
                     })
                 })
                 .collect()
