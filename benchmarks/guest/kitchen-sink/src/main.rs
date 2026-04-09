@@ -3,8 +3,9 @@ extern crate alloc;
 use std::hint::black_box;
 
 use openvm_algebra_guest::IntMod;
+#[allow(unused_imports)]
+use openvm_bigint_guest::externs;
 use openvm_keccak256::keccak256;
-use openvm_ruint::aliases::U256;
 use openvm_sha2::Sha256;
 #[allow(unused_imports)]
 use {
@@ -24,6 +25,41 @@ use {
 // Note: these will all currently be represented as bytes32 even though they could be smaller
 openvm_algebra_guest::moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
+}
+
+extern "C" {
+    fn zkvm_u256_wrapping_add_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_wrapping_sub_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_wrapping_mul_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_bitand_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_bitxor_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_wrapping_shl_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_wrapping_shr_impl(r: *mut u8, a: *const u8, b: *const u8);
+    fn zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool;
+    fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> core::cmp::Ordering;
+}
+
+/// Exercise all bigint u256 opcodes on a pair of 32-byte inputs.
+fn run_bigint_ops(a: &[u8; 32], b: &[u8; 32]) {
+    let mut r = [0u8; 32];
+    unsafe {
+        zkvm_u256_wrapping_add_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+        zkvm_u256_wrapping_sub_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+        zkvm_u256_wrapping_mul_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+        black_box(zkvm_u256_eq_impl(a.as_ptr(), b.as_ptr()));
+        black_box(zkvm_u256_cmp_impl(a.as_ptr(), b.as_ptr()));
+        zkvm_u256_bitand_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+        zkvm_u256_bitxor_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+        zkvm_u256_wrapping_shl_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+        zkvm_u256_wrapping_shr_impl(r.as_mut_ptr(), a.as_ptr(), b.as_ptr());
+        black_box(r);
+    }
 }
 
 openvm::init!();
@@ -103,19 +139,6 @@ pub fn main() {
         let digest2 = Sha256::digest(&hash);
         hash.extend_from_slice(&digest2);
 
-        // SAFETY: internally U256 is represented as [u8; 32]
-        let i1 = U256::from_le_bytes(digest1);
-        let i2 = U256::from_le_bytes(digest2);
-
-        black_box(&i1 + &i2);
-        black_box(&i1 - &i2);
-        black_box(&i1 * &i2);
-        black_box(i1 == i2);
-        black_box(i1 < i2);
-        black_box(i1 <= i2);
-        black_box(&i1 & &i2);
-        black_box(&i1 ^ &i2);
-        black_box(i1 << &i2);
-        black_box(i1 >> &i2);
+        run_bigint_ops(&digest1, &digest2);
     }
 }
