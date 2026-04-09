@@ -47,7 +47,7 @@ pub trait RecordArena<'a, Layout, RecordMut> {
 }
 ```
 
-We may refer to this mutable record view as simply "record" for brewity.
+We may refer to this mutable record view as simply "record" for brevity.
 
 ### Layout and Metadata
 
@@ -161,14 +161,13 @@ impl MultiRowMetadata for EmptyMultiRowMetadata {
     }
 }
 
-pub struct FriReducedOpeningMetadata {
-    length: usize,
-    is_init: bool,
+pub struct Rv32HintStoreMetadata {
+    num_words: usize,
 }
 
-impl MultiRowMetadata for FriReducedOpeningMetadata {
+impl MultiRowMetadata for Rv32HintStoreMetadata {
     fn get_num_rows(&self) -> usize {
-        self.length + 2
+        self.num_words
     }
 }
 ```
@@ -199,15 +198,23 @@ The last code listing introduced a new `CustomBorrow` trait. It is implemented f
 The latter is important as it establishes a guarantee that **the layout must be restorable from the record**. In particular, if an arena would just generate some variable number of rows from an instruction to fill later, then, posterior to their filling, the number of rows from this instruction must be defined by the contents of the trace rows:
 
 ```rust
-impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpeningLayout>
-    for [u8]
-{
-    // ... 
-    unsafe fn extract_layout(&self) -> FriReducedOpeningLayout {
-        let header: &FriReducedOpeningHeaderRecord = self.borrow();
-        FriReducedOpeningLayout::new(FriReducedOpeningMetadata {
-            length: header.length as usize,
-            is_init: header.is_init,
+type Rv32HintStoreLayout = MultiRowLayout<Rv32HintStoreMetadata>;
+
+impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: Rv32HintStoreLayout) -> Rv32HintStoreRecordMut<'a> {
+        let (header_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecordHeader>()) };
+        let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
+        Rv32HintStoreRecordMut {
+            inner: header_buf.borrow_mut(),
+            var: &mut vars[..layout.metadata.num_words],
+        }
+    }
+
+    unsafe fn extract_layout(&self) -> Rv32HintStoreLayout {
+        let header: &Rv32HintStoreRecordHeader = self.borrow();
+        MultiRowLayout::new(Rv32HintStoreMetadata {
+            num_words: header.num_words as usize,
         })
     }
 }
