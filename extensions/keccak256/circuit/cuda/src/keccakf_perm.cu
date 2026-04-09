@@ -56,12 +56,12 @@ __global__ void keccakf_perm_phase1(
         // generate_trace_row_for_round expects current_state[y][x] = A[x][y] (keccak notation)
         // In keccak buffer: A[x][y] is stored at offset (x + 5*y)
         // So current_state[y][x] should get keccak_buffer[x + 5*y]
-        for (uint32_t x = 0; x < 5; x++) {
-            for (uint32_t y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
+            for (int y = 0; y < 5; y++) {
                 // keccak spec: A[x][y] is at byte offset (x + 5*y) * 8
-                uint32_t keccak_offset = x + 5 * y;
+                int keccak_offset = x + 5 * y;
                 uint64_t val = 0;
-                for (uint32_t j = 0; j < 8; j++) {
+                for (int j = 0; j < 8; j++) {
                     val |= static_cast<uint64_t>(rec.preimage_buffer_bytes[keccak_offset * 8 + j])
                            << (j * 8);
                 }

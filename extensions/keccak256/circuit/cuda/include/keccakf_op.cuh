@@ -45,7 +45,7 @@ inline constexpr size_t NUM_KECCAKF_OP_COLS = sizeof(KeccakfOpCols<uint8_t>);
 // Delegates to the shared round body in keccak256::keccakf_round_body;
 // __forceinline__ so the full permutation folds into the caller's frame.
 __device__ __forceinline__ void keccakf_permutation(uint64_t state[25]) {
-    for (uint32_t round = 0; round < 24; round++) {
+    for (int round = 0; round < 24; round++) {
         keccak256::keccakf_round_body(state, round);
     }
 }
