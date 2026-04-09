@@ -70,6 +70,10 @@ jobs:
           exit 0
 
       - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -109,3 +113,7 @@ jobs:
           else
             cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
           fi
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
