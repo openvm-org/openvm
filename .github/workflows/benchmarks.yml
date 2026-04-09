@@ -168,7 +168,14 @@ jobs:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
       - uses: dtolnay/rust-toolchain@stable
+      - name: Check for sccache action
+        id: check-sccache
+        run: |
+          if [[ -f ".github/actions/setup-sccache/action.yml" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: ./.github/actions/setup-sccache
+        if: steps.check-sccache.outputs.available == 'true'
         with:
           s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
           s3-region: ${{ vars.OPENVM_S3_REGION }}
