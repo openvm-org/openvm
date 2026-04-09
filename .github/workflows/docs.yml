@@ -27,7 +27,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32/extras=s3-cache
     steps:
       - uses: actions/checkout@v5
       - name: Set up Rust toolchain

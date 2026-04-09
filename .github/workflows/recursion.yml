@@ -21,7 +21,7 @@ jobs:
   tests:
     name: Recursion tests
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=16cpu-linux-arm64
+      - runs-on=${{ github.run_id }}/runner=16cpu-linux-arm64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

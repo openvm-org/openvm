@@ -112,7 +112,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.cuda == 'true' }}
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia/cpu=8
+      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia/cpu=8/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
