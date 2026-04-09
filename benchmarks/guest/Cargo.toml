@@ -11,7 +11,7 @@ openvm = { path = "../../crates/toolchain/openvm" }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest", default-features = false }
 openvm-ecc-guest = { path = "../../extensions/ecc/guest", default-features = false }
 openvm-keccak256 = { path = "../../guest-libs/keccak256/", default-features = false }
-openvm-ruint = { path = "../../guest-libs/ruint/", package = "ruint", default-features = false }
+openvm-ruint = { git = "https://github.com/axiom-crypto/uint.git", branch = "v1.14.0-openvm", package = "ruint", default-features = false }
 openvm-pairing = { path = "../../guest-libs/pairing/", default-features = false }
 openvm-sha2 = { path = "../../guest-libs/sha2/", default-features = false }
 openvm-k256 = { path = "../../guest-libs/k256/", package = "k256" }
