@@ -43,12 +43,12 @@ lint or use rust-analyzer on the crate while in the workspace, so the recommende
 
 ### Adding the Benchmark
 
-Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](../../benchmarks/prove/src/bin) by following the [fibonacci example](../../benchmarks/prove/src/bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](../../benchmarks/utils/src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `openvm` and reads the output RISC-V ELF file.
-This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any other `VmExe`) from a given `VmConfig`.
+Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](../../benchmarks/prove/src/bin) by following the [fibonacci example](../../benchmarks/prove/src/bin/fibonacci.rs). Any general benchmarking utility functions can be added to the library in [`src`](../../benchmarks/utils/src). There are utility functions `build_elf` and `build_elf_with_path` which compile the guest program crate with target set to `openvm` and read the output RISC-V ELF file.
+Each benchmark binary parses `BenchmarkCli` and calls `BenchmarkCli::run()` which handles proving with the appropriate pipeline (app-only, app+aggregation, or full EVM e2e).
 
 #### Providing Inputs
 
-Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `openvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `PrimeCharacteristicRing::from_u8`.
+Inputs are provided via `StdIn<F>` from the `openvm-sdk` crate. Use `stdin.write(&value)` to write serializable values, or `StdIn::from_bytes(&bytes)` for raw byte input.
 
 You can find an example of passing in a single `Vec<u8>` input in [base64_json](../../benchmarks/prove/src/bin/base64_json.rs).
 
@@ -62,7 +62,7 @@ cargo run --features std
 
 To run the program on host (in normal rust runtime). This requires the std library, which is enabled by the `std` feature. To ensure that your guest program is still `no_std`, you should not make `std` the default feature.
 
-The behavior of `openvm::io::read_vec` and `openvm::io::read` differs when run on OpenVM or the host machine. As mentioned above, when running on OpenVM, the inputs must be provided in the `bench_from_exe` function.
+The behavior of `openvm::io::read_vec` and `openvm::io::read` differs when run on OpenVM or the host machine. As mentioned above, when running on OpenVM, the inputs must be provided via the `StdIn` struct passed to `BenchmarkCli::run()`.
 On the host machine, when you run `cargo run --features std`, each `read_vec` call will read bytes to end from stdin. For example here is how you would run the fibonacci guest program:
 
 ```bash
@@ -92,7 +92,7 @@ OUTPUT_PATH="metrics.json" cargo run --release --bin <benchmark_name>
 where `<benchmark_name>.rs` is one of the files in [`src/bin`](../../benchmarks/prove/src/bin).
 The `OUTPUT_PATH` environment variable should be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
 
-To run a benchmark with the leaf aggregation, add `--features aggregation` to the above command.
+By default, the benchmark runs app proving followed by aggregation. To run only the app proof, add `-- --app-only`. To run full end-to-end EVM proving, add `--features evm -- --evm`.
 
 ### Markdown Output
 
@@ -157,36 +157,24 @@ The flamegraphs will be written to `*.svg` files in `.bench_metrics/flamegraphs`
 
 ## Running a Benchmark via Github Actions
 
-Benchmarks are run on every pull request. By default, only the App VM is benchmarked. In order to run the leaf aggregation benchmark, add the `run-benchmark` label to your pull request. To run end-to-end benchmarks for EVM proofs, add the `run-benchmark-e2e` label. Pull request benchmarks do not run with additional profiling for flamegraphs.
+Benchmarks are run on every pull request. By default, only the App VM is benchmarked. To run end-to-end benchmarks for EVM proofs, add the `run-benchmark-e2e` label to your pull request. Pull request benchmarks do not run with additional profiling for flamegraphs.
 
 You can also manually trigger benchmarks by using workflow dispatch from [this page](https://github.com/openvm-org/openvm/actions/workflows/benchmarks.yml). Here you will have the option to run with leaf aggregation, run end-to-end benchmarks, and run with additional profiling for flamegraphs. If flamegraphs are enabled, the workflow will generate flamegraphs and create a new markdown file in the [`benchmark-results` branch](https://github.com/openvm-org/openvm/tree/benchmark-results) displaying the flamegraphs. You can find a path to the markdown file in the workflow run details.
 
 ## Adding a Benchmark to CI
 
-To add the benchmark to CI, update the [ci/benchmark-config.json](../../ci/benchmark-config.json) file and set it's configuration parameters. To make the benchmark run on every PR, follow the existing format with `e2e_bench = false`. To make the benchmark run only when label `run_benchmark_e2e` is present, set `e2e_bench = true` and specify values for `root_log_blowup` and `internal_log_blowup`.
+To add the benchmark to CI, update the [ci/benchmark-config.json](../../ci/benchmark-config.json) file and set it's configuration parameters. To make the benchmark run on every PR, follow the existing format with `"e2e_bench": false`. To make the benchmark run only when label `run-benchmark-e2e` is present, set `"e2e_bench": true` and specify values for `root_log_blowup` and `internal_log_blowup`.
 
 The `benchmarks.yml` file reads this JSON and generates a matrix of inputs for the [.github/workflows/benchmark-call.yml](../../.github/workflows/benchmark-call.yml) file, a reusable workflow for running the benchmark, collecting metrics, and storing and displaying results.
 
 ## Execution Benchmarks
 
-The crate [`openvm-benchmarks-execute`](../../benchmarks/execute) contains benchmarks for measuring the raw VM execution performance without proving. It includes a CLI tool that allows running various pre-defined benchmark programs to evaluate execution time. Note that this tool doesn't compile the guest ELF files and requires them to be precompiled before running the benchmarks.
+The crate [`openvm-benchmarks-execute`](../../benchmarks/execute) contains benchmarks for measuring the raw VM execution performance without proving. It uses [divan](https://github.com/nvzqz/divan) (via `codspeed-divan-compat`) as the benchmarking harness. Note that the ELF files must be precompiled before running the benchmarks.
 
-### Using the CLI
-
-The CLI provides several options for running execution benchmarks:
+The single bench target `execute` can be run with:
 
 ```bash
-# Run all benchmark programs
-cargo run --package openvm-benchmarks-execute
-
-# List all available benchmark programs
-cargo run --package openvm-benchmarks-execute -- --list
-
-# Run specific benchmark programs
-cargo run --package openvm-benchmarks-execute -- --programs fibonacci_recursive fibonacci_iterative
-
-# Run all benchmark programs except specified ones
-cargo run --package openvm-benchmarks-execute -- --skip keccak256 sha256
+cargo bench -p openvm-benchmarks-execute --bench execute
 ```
 
 These benchmarks measure pure execution time without proving, making them useful for isolating performance bottlenecks in the VM runtime itself.
@@ -216,18 +204,17 @@ cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-el
 
 The following section discusses traditional profiling of the VM runtime execution, without ZK proving.
 
-### Criterion Benchmarks
+### Divan Benchmarks
 
-Most benchmarks are binaries that run once since proving benchmarks take longer. For smaller benchmarks, such as to benchmark VM runtime, we use Criterion. These are in the [`benches`](../../benchmarks/execute/benches) directory.
+Most benchmarks are binaries that run once since proving benchmarks take longer. For smaller benchmarks, such as to benchmark VM runtime, we use divan. These are in the [`benches`](../../benchmarks/execute/benches) directory.
 
 ```bash
-cargo bench --bench fibonacci_execute
-cargo bench --bench regex_execute
+cargo bench -p openvm-benchmarks-execute --bench execute
 ```
 
-will run the normal criterion benchmark.
+will run the divan benchmarks.
 
-We profile using executables without criterion in [`examples`](../../benchmarks/execute/examples). To prevent the ELF build time from being included in the benchmark, we pre-build the ELF using the CLI. Check that the included ELF file in `examples` is up to date before proceeding.
+We profile using executables without divan in [`examples`](../../benchmarks/execute/examples). To prevent the ELF build time from being included in the benchmark, we pre-build the ELF using the CLI. Check that the included ELF file in `examples` is up to date before proceeding.
 
 ### Flamegraph
 
@@ -237,7 +224,7 @@ To generate flamegraphs, install `cargo-flamegraph` and run:
 cargo flamegraph --example regex_execute --profile=profiling
 ```
 
-will generate a flamegraph at `flamegraph.svg` without running any criterion analysis.
+will generate a flamegraph at `flamegraph.svg` without running any divan analysis.
 On MacOS, you will need to run the above command with `sudo`.
 
 ### Samply
