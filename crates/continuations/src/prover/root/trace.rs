@@ -1,7 +1,5 @@
 use itertools::Itertools;
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
@@ -21,18 +19,18 @@ use crate::{
 };
 
 impl<S: AggregationSubCircuit, T> RootProver<S, T> {
-    pub fn generate_proving_ctx<PB>(
+    pub fn generate_proving_ctx<PB, DC: Clone + Send + Sync>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> Option<ProvingContext<PB>>
     where
         PB: ProverBackend<Val = F, Challenge = EF>,
         PB::Matrix: Clone,
-        S: VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
+        S: VerifierTraceGen<PB, RootSC, DC>,
+        T: RootTraceGen<PB, DC>,
     {
         assert_eq!(
             user_pvs_proof.public_values.len(),
@@ -44,7 +42,6 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             &proof,
             user_pvs_proof,
             self.circuit.memory_dimensions,
-            #[cfg(feature = "cuda")]
             device_ctx,
         );
         let (post_verifier_subcircuit_ctxs, other_compress_inputs) =
@@ -52,7 +49,6 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
                 &proof,
                 self.circuit.memory_dimensions,
                 deferral_merkle_proofs,
-                #[cfg(feature = "cuda")]
                 device_ctx,
             );
         pre_data
@@ -80,7 +76,6 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             CachedTraceCtx::Records(self.cached_trace_record.clone()),
             &[proof],
             &mut external_data,
-            #[cfg(feature = "cuda")]
             device_ctx,
             default_duplex_sponge_recorder(),
         );
@@ -97,28 +92,22 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     }
 
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_no_def<PB>(
+    pub fn generate_proving_ctx_no_def<PB, DC: Clone + Send + Sync>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> Option<ProvingContext<PB>>
     where
         PB: ProverBackend<Val = F, Challenge = EF>,
         PB::Matrix: Clone,
-        S: VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
+        S: VerifierTraceGen<PB, RootSC, DC>,
+        T: RootTraceGen<PB, DC>,
     {
         assert!(
             self.circuit.def_hook_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
         );
-        self.generate_proving_ctx(
-            proof,
-            user_pvs_proof,
-            None,
-            #[cfg(feature = "cuda")]
-            device_ctx,
-        )
+        self.generate_proving_ctx(proof, user_pvs_proof, None, device_ctx)
     }
 }

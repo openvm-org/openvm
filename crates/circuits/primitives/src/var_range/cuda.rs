@@ -1,7 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub struct VariableRangeCheckerChipGPU {
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<VariableRangeCheckerChip>>,
 }
@@ -19,7 +19,7 @@ pub struct VariableRangeCheckerChipGPU {
 /// [value, bits] are in preprocessed trace
 /// generate_trace returns [count]
 impl VariableRangeCheckerChipGPU {
-    pub fn new(bus: VariableRangeCheckerBus, device_ctx: DeviceContext) -> Self {
+    pub fn new(bus: VariableRangeCheckerBus, device_ctx: GpuDeviceCtx) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(num_rows, &device_ctx));
         count.fill_zero_on(&device_ctx).unwrap();
@@ -30,7 +30,7 @@ impl VariableRangeCheckerChipGPU {
         }
     }
 
-    pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>, device_ctx: DeviceContext) -> Self {
+    pub fn hybrid(cpu_chip: Arc<VariableRangeCheckerChip>, device_ctx: GpuDeviceCtx) -> Self {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
             cpu_chip.count.len(),
             &device_ctx,
@@ -63,6 +63,7 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
             NUM_VARIABLE_RANGE_COLS,
             &self.device_ctx,
         );
+        // Zero padding rows so stale pool data doesn't cause constraint violations.
         trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         unsafe {
             tracegen(

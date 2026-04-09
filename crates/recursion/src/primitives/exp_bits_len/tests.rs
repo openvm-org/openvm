@@ -5,7 +5,7 @@ use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
     common::get_device,
-    stream::{CudaStream, DeviceContext, StreamGuard},
+    stream::{CudaStream, GpuDeviceCtx, StreamGuard},
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -344,7 +344,7 @@ mod cuda_tests {
                 .expect("trace height should be unconstrained")
         };
 
-        let device_ctx = DeviceContext {
+        let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };

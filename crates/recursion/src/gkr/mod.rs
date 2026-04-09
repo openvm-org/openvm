@@ -86,7 +86,7 @@ use crate::{
         sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord, GkrSumcheckTraceGenerator},
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord, GkrXiSamplerTraceGenerator},
     },
-    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
+    primitives::exp_bits_len::{ExpBitsLenCpuTraceGenerator, ExpBitsLenSink},
     system::{
         AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
         TraceGenModule,
@@ -312,23 +312,6 @@ impl AirModule for GkrModule {
     }
 }
 
-trait GkrExpBitsLenSink {
-    fn add_request(&self, base: F, bit_src: F, num_bits: usize);
-}
-
-impl GkrExpBitsLenSink for ExpBitsLenCpuTraceGenerator {
-    fn add_request(&self, base: F, bit_src: F, num_bits: usize) {
-        ExpBitsLenCpuTraceGenerator::add_request(self, base, bit_src, num_bits);
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl GkrExpBitsLenSink for ExpBitsLenTraceGenerator {
-    fn add_request(&self, base: F, bit_src: F, num_bits: usize) {
-        self.cpu.add_request(base, bit_src, num_bits);
-    }
-}
-
 impl GkrModule {
     #[tracing::instrument(skip_all)]
     fn generate_blob<T>(
@@ -339,7 +322,7 @@ impl GkrModule {
         exp_bits_len_gen: &T,
     ) -> GkrBlobCpu
     where
-        T: GkrExpBitsLenSink + Sync,
+        T: ExpBitsLenSink + Sync,
     {
         debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -673,7 +656,7 @@ impl RowMajorChip<F> for GkrModuleChip {
 mod cuda_tracegen {
     use itertools::Itertools;
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
-    use openvm_cuda_common::stream::DeviceContext;
+    use openvm_cuda_common::stream::GpuDeviceCtx;
     use openvm_stark_backend::{p3_maybe_rayon::prelude::*, prover::AirProvingContext};
 
     use super::*;
@@ -682,7 +665,7 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for GkrModule {
-        type ModuleSpecificCtx<'a> = (&'a ExpBitsLenTraceGenerator, &'a DeviceContext);
+        type ModuleSpecificCtx<'a> = (&'a ExpBitsLenTraceGenerator, &'a GpuDeviceCtx);
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(

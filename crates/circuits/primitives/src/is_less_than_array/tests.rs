@@ -228,7 +228,7 @@ fn test_cuda_less_than_array_tracegen() {
     const ARRAY_LEN: usize = 2;
     const AUX_LEN: usize = 2;
 
-    let ctx = crate::utils::test_gpu_ctx();
+    let ctx = crate::utils::test_device_ctx();
     let num_pairs = 4;
     let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 * ARRAY_LEN + AUX_LEN + 2, &ctx);
     let pairs = vec![

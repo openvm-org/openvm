@@ -15,7 +15,7 @@ use test_case::test_matrix;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
-    crate::utils::test_gpu_ctx,
+    crate::utils::test_device_ctx,
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
@@ -146,7 +146,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_is_equal_against_cpu_full() {
-    let ctx = test_gpu_ctx();
+    let ctx = test_device_ctx();
     let mut rng = create_seeded_rng();
 
     for log_height in 1..=16 {

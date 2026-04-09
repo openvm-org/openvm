@@ -9,7 +9,7 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::{
     common::get_device,
     copy::MemCopyH2D,
-    stream::{CudaStream, DeviceContext, StreamGuard},
+    stream::{CudaStream, GpuDeviceCtx, StreamGuard},
 };
 use openvm_stark_backend::prover::ColMajorMatrix;
 use openvm_stark_sdk::utils::create_seeded_rng;
@@ -33,7 +33,7 @@ fn test_cuda_deferral_count_tracegen_equivalence() {
         }
     }
 
-    let ctx = DeviceContext {
+    let ctx = GpuDeviceCtx {
         device_id: get_device().unwrap() as u32,
         stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     };

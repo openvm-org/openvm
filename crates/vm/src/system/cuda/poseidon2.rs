@@ -10,7 +10,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::DeviceContext,
+    stream::GpuDeviceCtx,
 };
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
@@ -24,7 +24,7 @@ pub struct SharedBuffer<T> {
 }
 
 pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
     pub records: Arc<DeviceBuffer<F>>,
     pub idx: Arc<DeviceBuffer<u32>>,
     #[cfg(feature = "metrics")]
@@ -35,7 +35,7 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
     /// Creates a new Poseidon2 chip with a device buffer of `max_buffer_size` field elements.
     /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the buffer
     /// can hold `max_buffer_size / POSEIDON2_WIDTH` records.
-    pub fn new(max_buffer_size: usize, device_ctx: DeviceContext) -> Self {
+    pub fn new(max_buffer_size: usize, device_ctx: GpuDeviceCtx) -> Self {
         let idx = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, &device_ctx));
         idx.fill_zero_on(&device_ctx).unwrap();
         Self {
@@ -142,7 +142,7 @@ pub enum Poseidon2PeripheryChipGPU {
 }
 
 impl Poseidon2PeripheryChipGPU {
-    pub fn new(max_buffer_size: usize, sbox_registers: usize, device_ctx: DeviceContext) -> Self {
+    pub fn new(max_buffer_size: usize, sbox_registers: usize, device_ctx: GpuDeviceCtx) -> Self {
         match sbox_registers {
             0 => Self::Register0(Poseidon2ChipGPU::new(max_buffer_size, device_ctx)),
             1 => Self::Register1(Poseidon2ChipGPU::new(max_buffer_size, device_ctx)),
@@ -157,7 +157,7 @@ impl Poseidon2PeripheryChipGPU {
         }
     }
 
-    pub fn device_ctx(&self) -> &DeviceContext {
+    pub fn device_ctx(&self) -> &GpuDeviceCtx {
         match self {
             Self::Register0(chip) => &chip.device_ctx,
             Self::Register1(chip) => &chip.device_ctx,

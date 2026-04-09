@@ -5,7 +5,7 @@ use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::DeviceContext;
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
@@ -24,7 +24,7 @@ pub enum ProofsType {
 }
 
 // Trait that inner provers use to remain generic in PB
-pub trait InnerTraceGen<PB: ProverBackend> {
+pub trait InnerTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
     fn new(deferral_enabled: bool) -> Self;
     fn generate_pre_verifier_subcircuit_ctxs(
         &self,
@@ -33,14 +33,14 @@ pub trait InnerTraceGen<PB: ProverBackend> {
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
         child_vk_commit: VkCommit<F>,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> SubCircuitTraceData<PB>;
     fn generate_post_verifier_subcircuit_ctxs(
         &self,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         proofs_type: ProofsType,
         child_is_app: bool,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> Vec<AirProvingContext<PB>>;
 }
 
@@ -48,7 +48,7 @@ pub struct InnerTraceGenImpl {
     pub deferral_enabled: bool,
 }
 
-impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
+impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for InnerTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -60,7 +60,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
         child_vk_commit: VkCommit<F>,
-        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
+        _device_ctx: &(),
     ) -> SubCircuitTraceData<CpuBackend<BabyBearPoseidon2Config>> {
         let SingleAirTraceData {
             air_proving_ctx: verifier_pvs_ctx,
@@ -105,7 +105,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
         proofs: &[Proof<BabyBearPoseidon2Config>],
         proofs_type: ProofsType,
         child_is_app: bool,
-        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
+        _device_ctx: &(),
     ) -> Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>> {
         if !self.deferral_enabled {
             return vec![];
@@ -131,7 +131,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
 }
 
 #[cfg(feature = "cuda")]
-impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
+impl InnerTraceGen<GpuBackend, GpuDeviceCtx> for InnerTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -143,20 +143,18 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         child_is_app: bool,
         child_vk_commit: VkCommit<F>,
-        device_ctx: Option<&DeviceContext>,
+        device_ctx: &GpuDeviceCtx,
     ) -> SubCircuitTraceData<GpuBackend> {
         let data =
-            <Self as InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_pre_verifier_subcircuit_ctxs(
+            <Self as InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::generate_pre_verifier_subcircuit_ctxs(
                 self,
                 proofs,
                 proofs_type,
                 absent_trace_pvs,
                 child_is_app,
                 child_vk_commit,
-                device_ctx,
+                &(),
             );
-        let device_ctx =
-            device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
         SubCircuitTraceData {
             air_proving_ctxs: data
                 .air_proving_ctxs
@@ -173,18 +171,16 @@ impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
         proofs: &[Proof<BabyBearPoseidon2Config>],
         proofs_type: ProofsType,
         child_is_app: bool,
-        device_ctx: Option<&DeviceContext>,
+        device_ctx: &GpuDeviceCtx,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let cpu_ctxs =
-            <Self as InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::generate_post_verifier_subcircuit_ctxs(
+            <Self as InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::generate_post_verifier_subcircuit_ctxs(
                 self,
                 proofs,
                 proofs_type,
                 child_is_app,
-                device_ctx,
+                &(),
             );
-        let device_ctx =
-            device_ctx.expect("GPU inner tracegen requires an engine-owned DeviceContext");
         cpu_ctxs
             .into_iter()
             .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, device_ctx))

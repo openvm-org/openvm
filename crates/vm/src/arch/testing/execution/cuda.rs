@@ -9,15 +9,15 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::execution_testing;
 
-pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>, DeviceContext);
+pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>, GpuDeviceCtx);
 
 impl DeviceExecutionTester {
-    pub fn new(bus: ExecutionBus, device_ctx: DeviceContext) -> Self {
+    pub fn new(bus: ExecutionBus, device_ctx: GpuDeviceCtx) -> Self {
         Self(ExecutionTester::new(bus), device_ctx)
     }
 

@@ -9,7 +9,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::{CudaEvent, DeviceContext},
+    stream::{CudaEvent, GpuDeviceCtx},
 };
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
@@ -40,7 +40,7 @@ pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
 /// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size`
 ///   leaves and `2 * size - 1` total nodes.
 ///
-/// All GPU work is issued on the subtree's `DeviceContext` stream.
+/// All GPU work is issued on the subtree's `GpuDeviceCtx` stream.
 /// `build_completion_event` records when the build kernels finish so that downstream consumers can
 /// synchronize.
 pub struct MemoryMerkleSubTree {
@@ -60,7 +60,7 @@ impl MemoryMerkleSubTree {
     ///
     /// `addr_space_size` must be a power of two or zero.
     /// `max_size` must be a power of two.
-    pub fn new(addr_space_size: usize, max_size: usize, device_ctx: &DeviceContext) -> Self {
+    pub fn new(addr_space_size: usize, max_size: usize, device_ctx: &GpuDeviceCtx) -> Self {
         assert!(
             addr_space_size == 0 || addr_space_size.is_power_of_two(),
             "The actual address space size must be a power of two"
@@ -101,7 +101,7 @@ impl MemoryMerkleSubTree {
         }
     }
 
-    /// Builds the Merkle subtree on the provided `DeviceContext` stream.
+    /// Builds the Merkle subtree on the provided `GpuDeviceCtx` stream.
     /// Also reconstructs the vertical path if `path_len > 0`, and records a completion event.
     ///
     /// Here `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
@@ -110,7 +110,7 @@ impl MemoryMerkleSubTree {
         d_data: &DeviceBuffer<u8>,
         addr_space_idx: usize,
         zero_hash: &DeviceBuffer<H>,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) {
         let event = CudaEvent::new().unwrap();
         if self.buf.is_empty() {
@@ -186,10 +186,10 @@ impl MemoryMerkleSubTree {
 ///     - if we have > 4 address spaces, top_roots will be extended with the next hash, etc.
 ///
 /// Execution:
-/// - Subtrees are built on the tree's `DeviceContext` stream.
+/// - Subtrees are built on the tree's `GpuDeviceCtx` stream.
 /// - The final root is computed after all subtrees complete on that same stream.
 pub struct MemoryMerkleTree {
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
     pub subtrees: Vec<MemoryMerkleSubTree>,
     pub top_roots: DeviceBuffer<H>,
     zero_hash: DeviceBuffer<H>,
@@ -205,7 +205,7 @@ impl MemoryMerkleTree {
     pub fn new(
         mem_config: MemoryConfig,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
-        device_ctx: DeviceContext,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         let addr_space_sizes = mem_config
             .addr_spaces
@@ -257,7 +257,7 @@ impl MemoryMerkleTree {
     }
 
     /// Starts construction of the specified address space's Merkle subtree.
-    /// Uses internal zero hashes and launches kernels on the tree's `DeviceContext` stream.
+    /// Uses internal zero hashes and launches kernels on the tree's `GpuDeviceCtx` stream.
     ///
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
@@ -283,7 +283,7 @@ impl MemoryMerkleTree {
     }
 
     /// Finalizes the Merkle tree by collecting all subtree roots and computing the final root.
-    /// All subtree builds were issued on the same `DeviceContext` stream, so stream ordering
+    /// All subtree builds were issued on the same `GpuDeviceCtx` stream, so stream ordering
     /// guarantees they are complete before the finalize kernel runs.
     pub fn finalize(&mut self) {
         let roots: Vec<usize> = self
@@ -306,7 +306,7 @@ impl MemoryMerkleTree {
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.
     ///
-    /// Synchronizes the tree's `DeviceContext` stream before deallocating buffers and destroying
+    /// Synchronizes the tree's `GpuDeviceCtx` stream before deallocating buffers and destroying
     /// events.
     pub fn drop_subtrees(&mut self) {
         self.device_ctx.stream.synchronize().unwrap();
@@ -434,7 +434,7 @@ mod tests {
         common::get_device,
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
-        stream::{CudaStream, DeviceContext, StreamGuard},
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
@@ -504,7 +504,7 @@ mod tests {
             }
         }
 
-        let device_ctx = DeviceContext {
+        let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };

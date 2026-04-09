@@ -1,8 +1,6 @@
 use std::iter::once;
 
 use itertools::Itertools;
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
@@ -23,9 +21,10 @@ use crate::{
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: DeferralHookTraceGen<PB>,
-    > DeferralHookProver<PB, S, T>
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
+        T: DeferralHookTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    > DeferralHookProver<PB, S, T, DC>
 where
     PB::Matrix: Clone,
 {
@@ -34,7 +33,7 @@ where
         &self,
         proof: Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> ProvingContext<PB> {
         let DeferralHookPreCtx {
             verifier_pvs_ctx,
@@ -45,7 +44,6 @@ where
         } = self.agg_node_tracegen.pre_verifier_subcircuit_tracegen(
             &proof,
             leaf_children,
-            #[cfg(feature = "cuda")]
             device_ctx,
         );
 
@@ -67,7 +65,6 @@ where
                 CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone()),
                 proof_slice,
                 &mut external_data,
-                #[cfg(feature = "cuda")]
                 device_ctx,
                 default_duplex_sponge_recorder(),
             )

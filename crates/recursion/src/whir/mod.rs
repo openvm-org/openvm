@@ -20,7 +20,7 @@ use strum::{EnumCount, EnumDiscriminants};
 #[cfg(feature = "cuda")]
 use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator;
 use crate::{
-    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
+    primitives::exp_bits_len::{ExpBitsLenCpuTraceGenerator, ExpBitsLenSink},
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
         WhirPreflight,
@@ -43,49 +43,6 @@ use crate::{
         whir_round::WhirRoundAir,
     },
 };
-
-trait WhirExpBitsLenSink {
-    fn add_requests<I>(&self, requests: I)
-    where
-        I: IntoIterator<Item = (F, F, usize)>;
-
-    fn add_requests_with_shift<I>(&self, requests: I)
-    where
-        I: IntoIterator<Item = (F, F, usize, usize, u32)>;
-}
-
-impl WhirExpBitsLenSink for ExpBitsLenCpuTraceGenerator {
-    fn add_requests<I>(&self, requests: I)
-    where
-        I: IntoIterator<Item = (F, F, usize)>,
-    {
-        ExpBitsLenCpuTraceGenerator::add_requests(self, requests);
-    }
-
-    fn add_requests_with_shift<I>(&self, requests: I)
-    where
-        I: IntoIterator<Item = (F, F, usize, usize, u32)>,
-    {
-        ExpBitsLenCpuTraceGenerator::add_requests_with_shift(self, requests);
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl WhirExpBitsLenSink for ExpBitsLenTraceGenerator {
-    fn add_requests<I>(&self, requests: I)
-    where
-        I: IntoIterator<Item = (F, F, usize)>,
-    {
-        self.cpu.add_requests(requests);
-    }
-
-    fn add_requests_with_shift<I>(&self, requests: I)
-    where
-        I: IntoIterator<Item = (F, F, usize, usize, u32)>,
-    {
-        self.cpu.add_requests_with_shift(requests);
-    }
-}
 
 mod bus;
 mod final_poly_mle_eval;
@@ -1033,7 +990,7 @@ impl WhirModule {
         params: &SystemParams,
         query_layout: &WhirQueryLayout,
     ) where
-        T: WhirExpBitsLenSink + Sync,
+        T: ExpBitsLenSink + Sync,
     {
         let mu_pow_bits = params.whir.mu_pow_bits;
         let folding_pow_bits = params.whir.folding_pow_bits;
@@ -1154,7 +1111,7 @@ impl WhirModule {
         exp_bits_len_gen: &T,
     ) -> WhirBlobCpu
     where
-        T: WhirExpBitsLenSink + Sync,
+        T: ExpBitsLenSink + Sync,
     {
         let params = &child_vk.inner.params;
         let k_whir = params.k_whir();
@@ -1433,7 +1390,7 @@ mod cuda_tracegen {
     use std::cmp;
 
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
-    use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::DeviceContext};
+    use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
     use openvm_poseidon2_air::POSEIDON2_WIDTH;
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
     use openvm_stark_sdk::config::baby_bear_poseidon2::CHUNK;
@@ -1524,7 +1481,7 @@ mod cuda_tracegen {
             proofs: &[&Proof<BabyBearPoseidon2Config>],
             preflights: &[&Preflight],
             blob: &WhirBlobCpu,
-            device_ctx: &DeviceContext,
+            device_ctx: &GpuDeviceCtx,
         ) -> Self {
             let mus = to_device_or_nullptr_on(
                 &preflights
@@ -1715,7 +1672,7 @@ mod cuda_tracegen {
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for WhirModule {
         type ModuleSpecificCtx<'a> = (
             &'a ExpBitsLenTraceGenerator,
-            &'a openvm_cuda_common::stream::DeviceContext,
+            &'a openvm_cuda_common::stream::GpuDeviceCtx,
         );
 
         #[tracing::instrument(skip_all)]
@@ -1767,7 +1724,7 @@ mod cuda_tracegen {
             ];
 
             // Launch all CUDA tracegen kernels serially first (default stream).
-            let indexed_gpu_ctxs = gpu_chips
+            let indexed_gpu_proving_ctxs = gpu_chips
                 .iter()
                 .map(|chip| {
                     (
@@ -1808,7 +1765,7 @@ mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
-            let indexed_cpu_gpu_ctxs = indexed_cpu_rm_traces
+            let indexed_cpu_gpu_proving_ctxs = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
                     (
@@ -1822,9 +1779,9 @@ mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
-            indexed_gpu_ctxs
+            indexed_gpu_proving_ctxs
                 .into_iter()
-                .chain(indexed_cpu_gpu_ctxs)
+                .chain(indexed_cpu_gpu_proving_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_idx, ctx)| ctx)
                 .collect()

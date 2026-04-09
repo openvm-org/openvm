@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
@@ -16,11 +16,11 @@ use crate::cuda_abi::program;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
 }
 
 impl ProgramChipGPU {
-    pub fn new(device_ctx: DeviceContext) -> Self {
+    pub fn new(device_ctx: GpuDeviceCtx) -> Self {
         Self {
             cached: None,
             device_ctx,
@@ -29,7 +29,7 @@ impl ProgramChipGPU {
 
     pub fn generate_cached_trace(
         program: Program<F>,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> DeviceMatrix<F> {
         let instructions = program
             .enumerate_by_pc()
@@ -95,7 +95,7 @@ impl ProgramChipGPU {
 
 impl Default for ProgramChipGPU {
     fn default() -> Self {
-        panic!("ProgramChipGPU requires an explicit DeviceContext")
+        panic!("ProgramChipGPU requires an explicit GpuDeviceCtx")
     }
 }
 

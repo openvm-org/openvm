@@ -5,7 +5,7 @@ use openvm_cuda_common::{
     copy::MemCopyH2D,
     d_buffer::DeviceBuffer,
     error::CudaError,
-    stream::{cudaStream_t, DeviceContext},
+    stream::{cudaStream_t, GpuDeviceCtx},
 };
 
 use super::{SharedBuffer, DIGEST_WIDTH, MERKLE_TOUCHED_BLOCK_WIDTH};
@@ -162,7 +162,7 @@ pub mod merkle_tree {
         actual_heights: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> Result<(), CudaError> {
         let num_leaves = touched_blocks.len() / MERKLE_TOUCHED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();

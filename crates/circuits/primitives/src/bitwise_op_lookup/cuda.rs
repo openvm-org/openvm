@@ -1,7 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub struct BitwiseOperationLookupChipGPU<const NUM_BITS: usize> {
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<BitwiseOperationLookupChip<NUM_BITS>>>,
 }
@@ -23,7 +23,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
         1 << (2 * NUM_BITS)
     }
 
-    pub fn new(device_ctx: DeviceContext) -> Self {
+    pub fn new(device_ctx: GpuDeviceCtx) -> Self {
         // The first 2^(2 * NUM_BITS) indices are for range checking, the rest are for XOR
         let count = Arc::new(DeviceBuffer::<F>::with_capacity_on(
             NUM_BITWISE_OP_LOOKUP_MULT_COLS * Self::num_rows(),
@@ -39,7 +39,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
 
     pub fn hybrid(
         cpu_chip: Arc<BitwiseOperationLookupChip<NUM_BITS>>,
-        device_ctx: DeviceContext,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         assert_eq!(cpu_chip.count_range.len(), Self::num_rows());
         assert_eq!(cpu_chip.count_xor.len(), Self::num_rows());
@@ -77,6 +77,7 @@ impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for BitwiseOperationLookupC
         // `count` will be reused.
         let trace =
             DeviceMatrix::<F>::with_capacity_on(Self::num_rows(), num_cols, &self.device_ctx);
+        // Zero padding rows so stale pool data doesn't cause constraint violations.
         trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         unsafe {
             tracegen(

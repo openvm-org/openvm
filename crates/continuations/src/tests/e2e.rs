@@ -22,14 +22,13 @@ use openvm_deferral_circuit::{
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
     prelude::DIGEST_SIZE,
-    system::device_ctx_for_engine,
     utils::{poseidon2_hash_slice, poseidon2_hash_slice_with_states},
 };
 use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
+use openvm_stark_backend::{proof::Proof, prover::ProverDevice, AirRef, StarkEngine};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{
         poseidon2_compress_with_capacity, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
@@ -747,7 +746,7 @@ fn test_deferral_e2e() -> Result<()> {
         combined_proof,
         &user_pvs_proof,
         Some(&merkle_proofs),
-        device_ctx_for_engine(&engine),
+        engine.device().device_ctx(),
     );
     warn!("proving root (GPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;

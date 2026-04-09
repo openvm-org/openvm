@@ -8,14 +8,14 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use crate::cuda_abi::phantom;
 
 #[derive(new)]
 pub struct PhantomChipGPU {
-    device_ctx: DeviceContext,
+    device_ctx: GpuDeviceCtx,
 }
 
 impl PhantomChipGPU {

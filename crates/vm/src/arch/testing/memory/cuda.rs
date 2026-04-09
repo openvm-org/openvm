@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 use openvm_instructions::DEFERRAL_AS;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -46,7 +46,7 @@ impl DeviceMemoryTester {
         mem_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-        device_ctx: DeviceContext,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         let sbox_regs = 1;
@@ -109,10 +109,10 @@ impl DeviceMemoryTester {
     }
 }
 
-pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>, DeviceContext);
+pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>, GpuDeviceCtx);
 
 impl FixedSizeMemoryTester {
-    pub fn new(bus: MemoryBus, device_ctx: DeviceContext) -> Self {
+    pub fn new(bus: MemoryBus, device_ctx: GpuDeviceCtx) -> Self {
         Self(MemoryDummyChip::new(MemoryDummyAir::new(bus)), device_ctx)
     }
 

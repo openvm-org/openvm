@@ -1,6 +1,4 @@
 use itertools::Itertools;
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::DeviceContext;
 use openvm_recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
@@ -22,9 +20,10 @@ use crate::{
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: InnerTraceGen<PB>,
-    > InnerAggregationProver<PB, S, T>
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
+        T: InnerTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    > InnerAggregationProver<PB, S, T, DC>
 where
     PB::Matrix: Clone,
 {
@@ -35,7 +34,7 @@ where
         child_vk_kind: ChildVkKind,
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> ProvingContext<PB> {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
 
@@ -57,7 +56,6 @@ where
                 absent_trace_pvs,
                 child_is_app,
                 child_vk_commit,
-                #[cfg(feature = "cuda")]
                 device_ctx,
             );
 
@@ -78,20 +76,13 @@ where
                 CachedTraceCtx::PcsData(child_vk_pcs_data),
                 proofs,
                 &mut external_data,
-                #[cfg(feature = "cuda")]
                 device_ctx,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();
         let post_ctxs = self
             .agg_node_tracegen
-            .generate_post_verifier_subcircuit_ctxs(
-                proofs,
-                proofs_type,
-                child_is_app,
-                #[cfg(feature = "cuda")]
-                device_ctx,
-            );
+            .generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app, device_ctx);
 
         ProvingContext {
             per_trace: pre_data

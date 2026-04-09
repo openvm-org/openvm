@@ -235,7 +235,7 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D, stream::DeviceContext};
+    use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -251,7 +251,7 @@ pub(in crate::batch_constraint) mod cuda {
             &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
             &'a Eq3bBlob,
             &'a [PreflightGpu],
-            &'a DeviceContext,
+            &'a GpuDeviceCtx,
         );
 
         #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]

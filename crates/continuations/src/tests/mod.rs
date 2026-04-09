@@ -57,11 +57,9 @@ cfg_if::cfg_if! {
             openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs},
         };
 
-        use openvm_recursion_circuit::{
-            system::device_ctx_for_engine, utils::poseidon2_hash_slice_with_states,
-        };
+        use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-        use openvm_stark_backend::prover::CommittedTraceData;
+        use openvm_stark_backend::prover::{CommittedTraceData, ProverDevice};
         use openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity;
         use openvm_verify_stark_host::pvs::VERIFIER_PVS_AIR_ID;
         use p3_field::PrimeField32;
@@ -296,7 +294,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
     let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
         internal_recursive_proof,
         &user_pvs_proof,
-        device_ctx_for_engine(&engine),
+        engine.device().device_ctx(),
     );
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
@@ -333,7 +331,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
             internal_recursive_proof.clone(),
             &user_pvs_proof,
-            device_ctx_for_engine(&engine),
+            engine.device().device_ctx(),
         )
         .unwrap();
     let mut trace_heights = ctx
@@ -359,7 +357,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
             internal_recursive_proof,
             &user_pvs_proof,
-            device_ctx_for_engine(&engine2),
+            engine2.device().device_ctx(),
         )
         .unwrap();
 

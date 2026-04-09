@@ -92,15 +92,20 @@ where
         None,
     );
 
-    #[cfg(feature = "cuda")]
-    let engine = RootE::new(root_prover.get_pk().params.clone());
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "cuda")] {
+            let engine = RootE::new(root_prover.get_pk().params.clone());
+            let root_device_ctx = &engine.device().device_ctx;
+        } else {
+            let root_device_ctx = &();
+        }
+    }
     let root_proving_ctx: ProvingContext<<RootE as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
             agg_proof.deferral_merkle_proofs.as_ref(),
-            #[cfg(feature = "cuda")]
-            openvm_recursion_circuit::system::device_ctx_for_engine(&engine),
+            root_device_ctx,
         )
         .unwrap();
 

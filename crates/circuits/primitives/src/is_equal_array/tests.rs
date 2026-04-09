@@ -211,7 +211,7 @@ fn test_is_eq_array_fail_rand() {
 #[test]
 fn test_cuda_simple_is_equal_array_tracegen() {
     const ARRAY_LEN: usize = 4;
-    let ctx = crate::utils::test_gpu_ctx();
+    let ctx = crate::utils::test_device_ctx();
     let n = 4;
     let trace = DeviceMatrix::<F>::with_capacity_on(n, ARRAY_LEN + 1, &ctx);
 
@@ -263,7 +263,7 @@ fn test_cuda_simple_is_equal_array_tracegen() {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_random_is_equal_array_tracegen() {
-    let ctx = crate::utils::test_gpu_ctx();
+    let ctx = crate::utils::test_device_ctx();
     let mut rng = create_seeded_rng();
     const ARRAY_LEN: usize = 64;
 

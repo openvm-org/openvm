@@ -1,15 +1,15 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{copy::cuda_memcpy_on, memory_manager::MemTracker, stream::DeviceContext};
+use openvm_cuda_common::{copy::cuda_memcpy_on, memory_manager::MemTracker, stream::GpuDeviceCtx};
 
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};
 
 pub struct RangeCheckerGpuTraceGenerator<const NUM_BITS: usize> {
     trace: DeviceMatrix<F>,
-    device_ctx: DeviceContext,
+    device_ctx: GpuDeviceCtx,
 }
 
 impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
-    pub fn new(device_ctx: DeviceContext) -> Self {
+    pub fn new(device_ctx: GpuDeviceCtx) -> Self {
         let trace = DeviceMatrix::with_capacity_on(
             1 << NUM_BITS,
             RangeCheckerCols::<u8>::width(),
@@ -19,7 +19,7 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
         Self { trace, device_ctx }
     }
 
-    pub fn from_vals(vals: &[usize], device_ctx: DeviceContext) -> Self {
+    pub fn from_vals(vals: &[usize], device_ctx: GpuDeviceCtx) -> Self {
         let res = Self::new(device_ctx);
         if vals.is_empty() {
             return res;

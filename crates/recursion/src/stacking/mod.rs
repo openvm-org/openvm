@@ -342,7 +342,7 @@ mod cuda_tracegen {
     use openvm_cuda_backend::{
         data_transporter::transport_matrix_h2d_row, prelude::EF, GpuBackend,
     };
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
@@ -404,7 +404,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            device_ctx: &DeviceContext,
+            device_ctx: &GpuDeviceCtx,
         ) -> Self {
             let l_skip = child_vk.system_params.l_skip as u32;
             let n_stack = child_vk.system_params.n_stack as u32;
@@ -582,7 +582,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for StackingModule {
-        type ModuleSpecificCtx<'a> = &'a openvm_cuda_common::stream::DeviceContext;
+        type ModuleSpecificCtx<'a> = &'a openvm_cuda_common::stream::GpuDeviceCtx;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -590,7 +590,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            device_ctx: &&openvm_cuda_common::stream::DeviceContext,
+            device_ctx: &&openvm_cuda_common::stream::GpuDeviceCtx,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let blob = StackingBlob::new(child_vk, proofs, preflights, device_ctx);
@@ -616,7 +616,7 @@ mod cuda_tracegen {
             ];
 
             // Launch all GPU tracegen kernels serially first (default stream).
-            let indexed_gpu_ctxs = gpu_chips
+            let indexed_gpu_proving_ctxs = gpu_chips
                 .iter()
                 .map(|chip| {
                     (
@@ -654,7 +654,7 @@ mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
-            let indexed_cpu_gpu_ctxs = indexed_cpu_rm_traces
+            let indexed_cpu_gpu_proving_ctxs = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
                     (
@@ -668,9 +668,9 @@ mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
-            indexed_gpu_ctxs
+            indexed_gpu_proving_ctxs
                 .into_iter()
-                .chain(indexed_cpu_gpu_ctxs)
+                .chain(indexed_cpu_gpu_proving_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_idx, ctx)| ctx)
                 .collect()

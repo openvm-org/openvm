@@ -4,14 +4,14 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use super::{poseidon2::SharedBuffer, DIGEST_WIDTH};
 use crate::cuda_abi::boundary::persistent_boundary_tracegen;
 
 pub struct BoundaryChipGPU {
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
     pub poseidon2_buffer: SharedBuffer<F>,
     /// A `Vec` of pointers to the copied guest memory on device.
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
@@ -34,7 +34,7 @@ pub struct PersistentBoundaryRecord {
 }
 
 impl BoundaryChipGPU {
-    pub fn new(poseidon2_buffer: SharedBuffer<F>, device_ctx: DeviceContext) -> Self {
+    pub fn new(poseidon2_buffer: SharedBuffer<F>, device_ctx: GpuDeviceCtx) -> Self {
         Self {
             device_ctx,
             poseidon2_buffer,

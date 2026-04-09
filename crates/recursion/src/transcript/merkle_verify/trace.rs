@@ -334,7 +334,7 @@ pub fn compute_combination_indices(k: usize, i: usize) -> Option<CombinationIndi
 pub mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 
     use super::*;
     use crate::{
@@ -452,7 +452,7 @@ pub mod cuda {
     #[tracing::instrument(level = "trace", skip_all)]
     pub(crate) fn generate_trace(
         blob: &TranscriptBlob,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
         required_height: Option<usize>,
     ) -> Option<DeviceMatrix<F>> {
         let merkle_blob = &blob.merkle_verify_blob;

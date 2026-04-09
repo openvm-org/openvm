@@ -187,7 +187,7 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
 pub(in crate::batch_constraint) mod cuda {
     use openvm_circuit_primitives::cuda_abi::UInt2;
     use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -214,7 +214,7 @@ pub(in crate::batch_constraint) mod cuda {
             vk: &VerifyingKeyGpu,
             expr_evals: &MultiVecWithBounds<EF, 2>,
             preflights: &[PreflightGpu],
-            _ctx: &DeviceContext,
+            _ctx: &GpuDeviceCtx,
         ) -> Self {
             let constraints = vk
                 .cpu
@@ -281,7 +281,7 @@ pub(in crate::batch_constraint) mod cuda {
             &'a VerifyingKeyGpu,
             &'a [PreflightGpu],
             &'a ConstraintsFoldingBlobGpu,
-            &'a DeviceContext,
+            &'a GpuDeviceCtx,
         );
 
         #[tracing::instrument(level = "trace", skip_all)]

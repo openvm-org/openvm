@@ -699,7 +699,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
 pub(in crate::batch_constraint) mod cuda {
 
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
@@ -715,7 +715,7 @@ pub(in crate::batch_constraint) mod cuda {
         pub preflights: &'a [PreflightGpu],
         pub expr_evals: &'a MultiVecWithBounds<openvm_cuda_backend::prelude::EF, 2>,
         pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
-        pub device_ctx: &'a DeviceContext,
+        pub device_ctx: &'a GpuDeviceCtx,
     }
 
     impl ModuleChip<GpuBackend> for SymbolicExpressionTraceGenerator {

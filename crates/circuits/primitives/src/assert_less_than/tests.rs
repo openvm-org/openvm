@@ -23,7 +23,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
-    crate::utils::test_gpu_ctx,
+    crate::utils::test_device_ctx,
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
@@ -263,7 +263,7 @@ fn test_cuda_assert_less_than_tracegen() {
     let decomp: usize = 8;
     const AUX_LEN: usize = 4;
 
-    let ctx = test_gpu_ctx();
+    let ctx = test_device_ctx();
     let num_pairs = 4;
     let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 + AUX_LEN, &ctx);
     let pairs = vec![[14321, 26883], [0, 1], [28, 120], [337, 456]]

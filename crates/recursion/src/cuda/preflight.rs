@@ -2,7 +2,7 @@ use std::iter::once;
 
 use itertools::Itertools;
 use openvm_cuda_backend::prelude::EF;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 
@@ -81,7 +81,7 @@ impl PreflightGpu {
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> Self {
         PreflightGpu {
             cpu: preflight.clone(),
@@ -102,7 +102,7 @@ impl PreflightGpu {
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> ProofShapePreflightGpu {
         let mut sorted_cached_commits: Vec<Digest> = vec![];
         let mut cidx = 1;
@@ -201,7 +201,7 @@ impl PreflightGpu {
 
     fn batch_constraint(
         preflight: &Preflight,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> BatchConstraintPreflightGpu {
         BatchConstraintPreflightGpu {
             sumcheck_rnd: to_device_or_nullptr_on(
@@ -212,7 +212,7 @@ impl PreflightGpu {
         }
     }
 
-    fn stacking(preflight: &Preflight, device_ctx: &DeviceContext) -> StackingPreflightGpu {
+    fn stacking(preflight: &Preflight, device_ctx: &GpuDeviceCtx) -> StackingPreflightGpu {
         StackingPreflightGpu {
             sumcheck_rnd: to_device_or_nullptr_on(&preflight.stacking.sumcheck_rnd, device_ctx)
                 .unwrap(),

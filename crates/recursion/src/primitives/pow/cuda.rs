@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{
-    copy::MemCopyH2D, d_buffer::DeviceBuffer, memory_manager::MemTracker, stream::DeviceContext,
+    copy::MemCopyH2D, d_buffer::DeviceBuffer, memory_manager::MemTracker, stream::GpuDeviceCtx,
 };
 
 use crate::primitives::{
@@ -11,7 +11,7 @@ use crate::primitives::{
 };
 
 pub struct PowerCheckerGpuTraceGenerator<const BASE: usize, const N: usize> {
-    device_ctx: DeviceContext,
+    device_ctx: GpuDeviceCtx,
     pow_count: DeviceBuffer<u32>,
     range_count: DeviceBuffer<u32>,
     cpu_checker: Option<Arc<PowerCheckerCpuTraceGenerator<BASE, N>>>,
@@ -20,7 +20,7 @@ pub struct PowerCheckerGpuTraceGenerator<const BASE: usize, const N: usize> {
 impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
     pub fn new(
         cpu_checker: Option<Arc<PowerCheckerCpuTraceGenerator<BASE, N>>>,
-        device_ctx: DeviceContext,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         let pow_count = DeviceBuffer::with_capacity_on(N, &device_ctx);
         pow_count.fill_zero_on(&device_ctx).unwrap();
@@ -34,7 +34,7 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
         }
     }
 
-    pub fn hybrid(device_ctx: DeviceContext) -> Self {
+    pub fn hybrid(device_ctx: GpuDeviceCtx) -> Self {
         let cpu_checker = Some(Arc::new(PowerCheckerCpuTraceGenerator::default()));
         Self::new(cpu_checker, device_ctx)
     }

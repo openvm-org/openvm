@@ -19,7 +19,7 @@ use {
     openvm_cuda_common::{
         common::get_device,
         copy::MemCopyH2D as _,
-        stream::{CudaStream, DeviceContext, StreamGuard},
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     },
     openvm_stark_backend::p3_field::PrimeField32,
 };
@@ -148,7 +148,7 @@ fn test_cuda_tracegen_poseidon2() {
     const SBOX_REGS: usize = 1;
     const HALF_FULL_ROUNDS: usize = 4; // Constant for BabyBear
     const PARTIAL_ROUNDS: usize = 13; // Constant for BabyBear
-    let device_ctx = DeviceContext {
+    let device_ctx = GpuDeviceCtx {
         device_id: get_device().unwrap() as u32,
         stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     };

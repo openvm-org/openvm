@@ -23,7 +23,7 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::{
     common::get_device,
-    stream::{device_synchronize, CudaStream, DeviceContext, StreamGuard},
+    stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
 };
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
@@ -254,7 +254,7 @@ impl GpuChipTestBuilder {
     pub fn new(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let device_ctx = DeviceContext {
+        let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
@@ -550,7 +550,7 @@ impl GpuChipTester {
         }
         let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_trace);
         device_synchronize().unwrap();
-        let device_ctx = DeviceContext {
+        let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };

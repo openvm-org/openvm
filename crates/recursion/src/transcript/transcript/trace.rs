@@ -2,7 +2,7 @@
 pub mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::{copy::MemCopyH2D, stream::DeviceContext};
+    use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 
     use crate::{
         cuda::preflight::PreflightGpu,
@@ -103,7 +103,7 @@ pub mod cuda {
     pub(crate) fn generate_trace(
         preflights_gpu: &[PreflightGpu],
         blob: &TranscriptBlob,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
         required_height: Option<usize>,
     ) -> Option<DeviceMatrix<F>> {
         let mut num_valid_rows = 0usize;

@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
@@ -52,7 +52,7 @@ impl ProofGpu {
     pub fn new(
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> Self {
         ProofGpu {
             cpu: proof.clone(),
@@ -67,7 +67,7 @@ impl ProofGpu {
     fn proof_shape(
         _vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
-        device_ctx: &DeviceContext,
+        device_ctx: &GpuDeviceCtx,
     ) -> ProofShapeProofGpu {
         let num_airs = proof.public_values.len();
         let public_values = proof

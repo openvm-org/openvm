@@ -22,7 +22,7 @@ use rand::Rng;
 use {
     crate::{
         bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
-        utils::{test_gpu_ctx, test_gpu_engine_small},
+        utils::{test_device_ctx, test_gpu_engine_small},
         Chip,
     },
     dummy::cuda::DummyInteractionChipGPU,
@@ -263,7 +263,7 @@ fn test_cuda_bitwise_op_lookup() {
 
     let mut rng = create_seeded_rng();
     let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::new(
-        test_gpu_ctx(),
+        test_device_ctx(),
     ));
 
     let random_values = (0..NUM_INPUTS)
@@ -300,7 +300,7 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
 
     let mut rng = create_seeded_rng();
     let bus = BitwiseOperationLookupBus::new(0);
-    let ctx = test_gpu_ctx();
+    let ctx = test_device_ctx();
     let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::hybrid(
         Arc::new(BitwiseOperationLookupChip::new(bus)),
         ctx.clone(),

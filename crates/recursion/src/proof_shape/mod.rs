@@ -391,7 +391,7 @@ mod cuda_tracegen {
         type ModuleSpecificCtx<'a> = (
             Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             &'a [usize],
-            &'a openvm_cuda_common::stream::DeviceContext,
+            &'a openvm_cuda_common::stream::GpuDeviceCtx,
         );
 
         #[tracing::instrument(skip_all)]

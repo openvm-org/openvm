@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::Digest, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -52,7 +52,7 @@ pub(in crate::proof_shape) struct ProofShapeChipGpu<const NUM_LIMBS: usize, cons
 const NUM_LIMBS: usize = 4;
 const LIMB_BITS: usize = 8;
 impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
-    type Ctx<'a> = (&'a VerifyingKeyGpu, &'a [PreflightGpu], &'a DeviceContext);
+    type Ctx<'a> = (&'a VerifyingKeyGpu, &'a [PreflightGpu], &'a GpuDeviceCtx);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_proving_ctx(

@@ -22,7 +22,7 @@ use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_cuda_common::stream::DeviceContext;
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{
@@ -43,7 +43,7 @@ use crate::{
 #[derive(derive_new::new)]
 pub struct HybridModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
     cpu: ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    ctx: DeviceContext,
+    ctx: GpuDeviceCtx,
 }
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
@@ -99,7 +99,7 @@ pub struct HybridModularIsEqualChip<
     const TOTAL_LIMBS: usize,
 > {
     cpu: ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    ctx: DeviceContext,
+    ctx: GpuDeviceCtx,
 }
 
 impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
@@ -292,7 +292,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
 #[derive(derive_new::new)]
 pub struct HybridFp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
     cpu: Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
-    ctx: DeviceContext,
+    ctx: GpuDeviceCtx,
 }
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>

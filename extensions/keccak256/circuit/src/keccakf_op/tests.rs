@@ -191,7 +191,7 @@ use openvm_circuit::arch::{
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
     common::get_device,
-    stream::{CudaStream, DeviceContext, StreamGuard},
+    stream::{CudaStream, GpuDeviceCtx, StreamGuard},
 };
 
 #[cfg(feature = "cuda")]
@@ -243,7 +243,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
 
     // Create GPU Perm chip with shared records
     let perm_air = KeccakfPermAir::new(air.keccakf_state_bus);
-    let ctx = DeviceContext {
+    let ctx = GpuDeviceCtx {
         device_id: get_device().unwrap() as u32,
         stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     };

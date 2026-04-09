@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::DeviceContext};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
@@ -145,7 +145,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
 #[derive(new)]
 pub struct KeccakfPermChipGpu {
     pub shared_records: SharedKeccakfRecordsGpu,
-    pub ctx: DeviceContext,
+    pub ctx: GpuDeviceCtx,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {

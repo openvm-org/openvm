@@ -1,5 +1,5 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::GpuDeviceCtx};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use p3_field::TwoAdicField;
 
@@ -15,7 +15,7 @@ pub(in crate::whir) struct InitialOpenedValuesGpuCtx<'a> {
     pub num_proofs: usize,
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
-    pub device_ctx: &'a DeviceContext,
+    pub device_ctx: &'a GpuDeviceCtx,
 }
 
 pub(in crate::whir) struct InitialOpenedValuesGpuTraceGenerator;

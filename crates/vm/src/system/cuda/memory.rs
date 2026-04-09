@@ -10,7 +10,7 @@ use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
-    stream::DeviceContext,
+    stream::GpuDeviceCtx,
 };
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
@@ -23,7 +23,7 @@ use super::{
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
@@ -59,7 +59,7 @@ impl MemoryInventoryGPU {
     pub fn new(
         config: MemoryConfig,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
-        device_ctx: DeviceContext,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         Self {
             device_ctx: device_ctx.clone(),
@@ -311,7 +311,7 @@ mod tests {
     use openvm_cuda_backend::prelude::F;
     use openvm_cuda_common::{
         common::get_device,
-        stream::{CudaStream, DeviceContext, StreamGuard},
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
     use openvm_stark_backend::prover::MatrixDimensions;
@@ -348,7 +348,7 @@ mod tests {
         .next_power_of_two()
             * 2
             * DIGEST_WIDTH;
-        let device_ctx = DeviceContext {
+        let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
@@ -431,7 +431,7 @@ mod tests {
         .next_power_of_two()
             * 2
             * DIGEST_WIDTH;
-        let device_ctx = DeviceContext {
+        let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };

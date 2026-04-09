@@ -278,7 +278,7 @@ fn test_cuda_var_range() {
         .map(|_| rng.random::<u32>() & RANGE_BIT_MASK)
         .collect();
 
-    let ctx = crate::utils::test_gpu_ctx();
+    let ctx = crate::utils::test_device_ctx();
     let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(bus, ctx));
     let dummy_chip = DummyInteractionChipGPU::new(range_checker.clone(), random_values);
 
@@ -305,7 +305,7 @@ fn test_cuda_var_range_hybrid() {
 
     let mut rng = create_seeded_rng();
     let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
-    let ctx = crate::utils::test_gpu_ctx();
+    let ctx = crate::utils::test_device_ctx();
     let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
         Arc::new(VariableRangeCheckerChip::new(bus)),
         ctx.clone(),

@@ -1,5 +1,5 @@
 use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
 pub struct PublicValuesGpuTraceGenerator;
 
 impl ModuleChip<GpuBackend> for PublicValuesGpuTraceGenerator {
-    type Ctx<'a> = (&'a [ProofGpu], &'a [PreflightGpu], &'a DeviceContext);
+    type Ctx<'a> = (&'a [ProofGpu], &'a [PreflightGpu], &'a GpuDeviceCtx);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_proving_ctx(

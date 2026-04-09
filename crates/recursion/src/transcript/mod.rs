@@ -424,7 +424,7 @@ mod cuda_tracegen {
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
-        stream::DeviceContext,
+        stream::GpuDeviceCtx,
     };
     use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -463,7 +463,7 @@ mod cuda_tracegen {
             external_poseidon2_inputs: &(
                 &Vec<[F; POSEIDON2_WIDTH]>,
                 &Vec<[F; POSEIDON2_WIDTH]>,
-                &DeviceContext,
+                &GpuDeviceCtx,
             ),
         ) -> Self {
             let external_poseidon2_permute_inputs = external_poseidon2_inputs.0;
@@ -521,7 +521,7 @@ mod cuda_tracegen {
         type ModuleSpecificCtx<'a> = (
             &'a Vec<[F; POSEIDON2_WIDTH]>,
             &'a Vec<[F; POSEIDON2_WIDTH]>,
-            &'a openvm_cuda_common::stream::DeviceContext,
+            &'a openvm_cuda_common::stream::GpuDeviceCtx,
         );
 
         #[tracing::instrument(skip_all)]

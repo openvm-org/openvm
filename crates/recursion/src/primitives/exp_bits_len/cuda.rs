@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{memory_manager::MemTracker, stream::DeviceContext};
+use openvm_cuda_common::{memory_manager::MemTracker, stream::GpuDeviceCtx};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
@@ -9,7 +9,7 @@ use crate::{cuda::to_device_or_nullptr_on, primitives::cuda_abi::exp_bits_len_tr
 
 pub struct ExpBitsLenGpuTraceGenerator {
     pub cpu: ExpBitsLenCpuTraceGenerator,
-    pub device_ctx: DeviceContext,
+    pub device_ctx: GpuDeviceCtx,
 }
 
 impl Deref for ExpBitsLenGpuTraceGenerator {
@@ -21,7 +21,7 @@ impl Deref for ExpBitsLenGpuTraceGenerator {
 }
 
 impl ExpBitsLenGpuTraceGenerator {
-    pub fn new(device_ctx: DeviceContext) -> Self {
+    pub fn new(device_ctx: GpuDeviceCtx) -> Self {
         Self {
             cpu: ExpBitsLenCpuTraceGenerator::default(),
             device_ctx,

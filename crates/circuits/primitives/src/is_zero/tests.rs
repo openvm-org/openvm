@@ -180,7 +180,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_is_zero_against_cpu_full() {
-    let ctx = crate::utils::test_gpu_ctx();
+    let ctx = crate::utils::test_device_ctx();
     let mut rng = create_seeded_rng();
     for log_height in 1..=16 {
         let n = 1 << log_height;

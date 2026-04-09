@@ -6,7 +6,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::DeviceContext,
+    stream::GpuDeviceCtx,
 };
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -24,7 +24,7 @@ pub struct DeferralPoseidon2SharedBuffer {
 }
 
 pub struct DeferralPoseidon2ChipGpu {
-    pub ctx: DeviceContext,
+    pub ctx: GpuDeviceCtx,
     pub records: Arc<DeviceBuffer<F>>,
     pub counts: Arc<DeviceBuffer<DeferralPoseidon2Count>>,
     pub idx: Arc<DeviceBuffer<u32>>,
@@ -35,7 +35,7 @@ impl DeferralPoseidon2ChipGpu {
     /// Creates a new deferral Poseidon2 chip configured for `max_trace_height` records. Each
     /// Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, and a buffer of that
     /// size is allocated.
-    pub fn new(max_trace_height: usize, sbox_registers: usize, ctx: DeviceContext) -> Self {
+    pub fn new(max_trace_height: usize, sbox_registers: usize, ctx: GpuDeviceCtx) -> Self {
         let max_num_records = max_trace_height.next_power_of_two();
         let max_record_buf_size = max_num_records * (DIGEST_SIZE * 2);
 

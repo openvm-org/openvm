@@ -8,7 +8,7 @@ use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::DeviceContext;
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
 use openvm_stark_backend::{
     proof::Proof,
@@ -112,7 +112,7 @@ fn generate_poseidon2_inputs(
 }
 
 // Trait used to remain generic in PB
-pub trait DeferralInnerTraceGen<PB: ProverBackend> {
+pub trait DeferralInnerTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
     fn new() -> Self;
     fn pre_verifier_subcircuit_tracegen(
         &self,
@@ -120,13 +120,13 @@ pub trait DeferralInnerTraceGen<PB: ProverBackend> {
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
-        #[cfg(feature = "cuda")] device_ctx: Option<&DeviceContext>,
+        device_ctx: &DC,
     ) -> DeferralInnerPreCtx<PB>;
 }
 
 pub struct DeferralInnerTraceGenImpl;
 
-impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInnerTraceGenImpl {
+impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralInnerTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -137,7 +137,7 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInne
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
-        #[cfg(feature = "cuda")] _device_ctx: Option<&DeviceContext>,
+        _device_ctx: &(),
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (poseidon2_compress_inputs, poseidon2_permute_inputs) =
             generate_poseidon2_inputs(proofs, child_is_agg, child_merkle_depth);
@@ -160,7 +160,7 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInne
 }
 
 #[cfg(feature = "cuda")]
-impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
+impl DeferralInnerTraceGen<GpuBackend, GpuDeviceCtx> for DeferralInnerTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -171,7 +171,7 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
-        device_ctx: Option<&DeviceContext>,
+        device_ctx: &GpuDeviceCtx,
     ) -> DeferralInnerPreCtx<GpuBackend> {
         let DeferralInnerPreCtx {
             verifier_pvs_ctx,
@@ -179,20 +179,18 @@ impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
             input_ctx,
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
-        } = <Self as DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(
+        } = <Self as DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::pre_verifier_subcircuit_tracegen(
             self,
             proofs,
             child_is_agg,
             child_vk_commit,
             child_merkle_depth,
-            device_ctx,
+            &(),
         );
-        let ctx =
-            device_ctx.expect("GPU deferral inner tracegen requires an engine-owned DeviceContext");
         DeferralInnerPreCtx {
-            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx, ctx),
-            def_pvs_ctx: cpu_proving_ctx_to_gpu(def_pvs_ctx, ctx),
-            input_ctx: cpu_proving_ctx_to_gpu(input_ctx, ctx),
+            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx, device_ctx),
+            def_pvs_ctx: cpu_proving_ctx_to_gpu(def_pvs_ctx, device_ctx),
+            input_ctx: cpu_proving_ctx_to_gpu(input_ctx, device_ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
         }

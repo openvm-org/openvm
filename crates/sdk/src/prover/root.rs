@@ -41,7 +41,6 @@ type CpuRootE =
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_continuations::prover::RootGpuProver as RootInnerProver;
-        use openvm_recursion_circuit::system::device_ctx_for_engine;
         type E = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
         type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
@@ -100,15 +99,20 @@ impl RootProver {
         &self,
         input: VmStarkProof,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
-        #[cfg(feature = "cuda")]
-        let engine = E::new(self.0.get_pk().params.clone());
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cuda")] {
+                let engine = E::new(self.0.get_pk().params.clone());
+                let root_device_ctx = &engine.device().device_ctx;
+            } else {
+                let root_device_ctx = &();
+            }
+        }
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0.generate_proving_ctx(
                 input.inner,
                 &input.user_pvs_proof,
                 input.deferral_merkle_proofs.as_ref(),
-                #[cfg(feature = "cuda")]
-                device_ctx_for_engine(&engine),
+                root_device_ctx,
             )
         });
         ctx
@@ -191,8 +195,7 @@ pub fn compute_root_proof_heights(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
             agg_proof.deferral_merkle_proofs.as_ref(),
-            #[cfg(feature = "cuda")]
-            None,
+            &(),
         )
         .unwrap();
 

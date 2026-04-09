@@ -1,5 +1,5 @@
 use openvm_cuda_common::{
-    copy::MemCopyH2D, d_buffer::DeviceBuffer, error::MemCopyError, stream::DeviceContext,
+    copy::MemCopyH2D, d_buffer::DeviceBuffer, error::MemCopyError, stream::GpuDeviceCtx,
 };
 
 use crate::{
@@ -23,7 +23,7 @@ impl GlobalTraceGenCtx for GlobalCtxGpu {
 
 pub fn to_device_or_nullptr_on<T>(
     h2d: &[T],
-    device_ctx: &DeviceContext,
+    device_ctx: &GpuDeviceCtx,
 ) -> Result<DeviceBuffer<T>, MemCopyError> {
     if h2d.is_empty() {
         Ok(DeviceBuffer::new())

@@ -18,7 +18,7 @@ use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_cuda_common::stream::DeviceContext;
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, StarkEngine};
@@ -37,7 +37,7 @@ pub struct HybridWeierstrassChip<
     const BLOCK_SIZE: usize,
 > {
     cpu: WeierstrassChip<F, NUM_READS, BLOCKS, BLOCK_SIZE>,
-    ctx: DeviceContext,
+    ctx: GpuDeviceCtx,
 }
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
