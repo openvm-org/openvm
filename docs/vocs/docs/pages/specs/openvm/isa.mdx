@@ -447,10 +447,10 @@ Each deferral instruction encodes a **deferral index** (`def_idx`) identifying w
 
 The extension operates on address spaces `1` (registers) and `2` (user memory) and uses address space `4` (deferral) for accumulator state.
 
-| Name   | Operands          | Description |
-|--------|-------------------|-------------|
-| CALL   | `a,b,def_idx,1,2` | Executes a deferred call for deferral index `def_idx`. Reads a 32-byte input commitment from `[r32{0}(b):32]_2`. Writes an `OutputKey` to `[r32{0}(a):40]_2`, with layout `[output_commit:32 bytes \|\| output_len_le:8 bytes]`. The `output_len` field is encoded as 8-byte little-endian but is currently constrained to a zero-extended 32-bit value. Deferred outputs must have byte length divisible by `DIGEST_SIZE`. Also updates the input and output accumulators in address space `4`. |
-| OUTPUT | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes `output_len` bytes to `[r32{0}(a):output_len]_2`, where `output_len` is the length from the `OutputKey`. The instruction is only valid for deferred outputs whose byte length is divisible by `DIGEST_SIZE`. |
+| Name        | Operands          | Description |
+|-------------|-------------------|-------------|
+| CALL_RV32   | `a,b,def_idx,1,2` | Executes a deferred call for deferral index `def_idx`. Reads a 32-byte input commitment from `[r32{0}(b):32]_2`. Writes an `OutputKey` to `[r32{0}(a):40]_2`, with layout `[output_commit:32 bytes \|\| output_len_le:8 bytes]`. The `output_len` field is encoded as 8-byte little-endian but is currently constrained to a zero-extended 32-bit value. Deferred outputs must have byte length divisible by `DIGEST_SIZE`. Also updates the input and output accumulators in address space `4`. |
+| OUTPUT_RV32 | `a,b,def_idx,1,2` | Retrieves the output of a previous deferred call. Reads an `OutputKey` from `[r32{0}(b):40]_2`. Writes `output_len` bytes to `[r32{0}(a):output_len]_2`, where `output_len` is the length from the `OutputKey`. The instruction is only valid for deferred outputs whose byte length is divisible by `DIGEST_SIZE`. |
 
 ### Keccak Extension
 
@@ -466,10 +466,10 @@ corresponding to a capacity of 512 bits for Keccak-256.
 
 In the instructions below, let `buf = r32{0}(a)`, `inp = r32{0}(b)`, and `len = r32{0}(c)`.
 
-| Name    | Operands      | Description                                                                                                                                                                                                                                  |
-| ------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| XORIN   | `a,b,c,1,2`  | XORs input bytes into a state buffer in-place. For `i` in `0..len`, sets `[buf+i]_2 ^= [inp+i]_2`. Reads `len/4` four-byte words from both the buffer at `buf` and the input at `inp`, and writes `len/4` four-byte words back to `buf`. The instruction is only valid when `len` is a multiple of `4` and at most `136`; `len = 0` is a no-op. |
-| KECCAKF | `a,_,_,1,2`  | Applies the keccak-f[1600] permutation in-place on a 200-byte state buffer: `[buf:200]_2 = keccakf([buf:200]_2)`. Reads 50 four-byte words from `buf`, applies the permutation, and writes 50 four-byte words back. |
+| Name         | Operands     | Description                                                                                                                                                                                                                                  |
+| ------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| XORIN_RV32   | `a,b,c,1,2`  | XORs input bytes into a state buffer in-place. For `i` in `0..len`, sets `[buf+i]_2 ^= [inp+i]_2`. Reads `len/4` four-byte words from both the buffer at `buf` and the input at `inp`, and writes `len/4` four-byte words back to `buf`. The instruction is only valid when `len` is a multiple of `4` and at most `136`; `len = 0` is a no-op. |
+| KECCAKF_RV32 | `a,_,_,1,2`  | Applies the keccak-f[1600] permutation in-place on a 200-byte state buffer: `[buf:200]_2 = keccakf([buf:200]_2)`. Reads 50 four-byte words from `buf`, applies the permutation, and writes 50 four-byte words back. |
 
 ### SHA-2 Extension
 
@@ -593,14 +593,14 @@ r32_fp2(a) -> Fp2 {
 }
 ```
 
-| Name                | Operands    | Description                                                                                                                                                                 |
-| ------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADD\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                  |
-| SUB\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                  |
-| SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert(r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
-| MUL\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)`                                                                                                                                  |
-| DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                  |
-| SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert(r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
+| Name                     | Operands    | Description                                                                                                                                                                 |
+| ------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADD_RV32\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                  |
+| SUB_RV32\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                  |
+| SETUP_ADDSUB_RV32\<Fp2\> | `a,b,c,1,2` | `assert(r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
+| MUL_RV32\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)`                                                                                                                                  |
+| DIV_RV32\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                  |
+| SETUP_MULDIV_RV32\<Fp2\> | `a,b,c,1,2` | `assert(r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
 ### Elliptic Curve Extension
 
@@ -626,12 +626,12 @@ r32_ec_point(a) -> EcPoint {
 }
 ```
 
-| Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
-| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::Fp::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::Fp::NUM_LIMBS]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
-| EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::Fp::MODULUS && r32_ec_point(b).y == C::CURVE_A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::Fp::NUM_LIMBS]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::Fp::MODULUS)` |
+| Name                      | Operands    | Description                                                                                                                                                                                                                                                                                    |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EC_ADD_NE_RV32\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
+| SETUP_EC_ADD_NE_RV32\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::Fp::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::Fp::NUM_LIMBS]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| EC_DOUBLE_RV32\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
+| SETUP_EC_DOUBLE_RV32\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::Fp::MODULUS && r32_ec_point(b).y == C::CURVE_A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::Fp::NUM_LIMBS]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::Fp::MODULUS)` |
 
 ### Pairing Extension
 
