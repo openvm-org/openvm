@@ -5,6 +5,7 @@
 - [Invariants](#invariants)
 - [Soundness proof](#soundness-proof)
   - [Time goes forward](#time-goes-forward)
+  - [Timestamp-growth bound for OpenVM chips](#timestamp-growth-bound-for-openvm-chips)
   - [Memory consistency](#memory-consistency)
 - [The `PersistentBoundaryChip`](#the-persistentboundarychip)
 - [Implementation details](#implementation-details)
@@ -12,15 +13,21 @@
 
 ---
 
-Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `pointer`), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{\text{timestamp\_max\_bits}}$ (in the current implementation, `timestamp_max_bits <= 29`). We assume that memory is initialized at timestamp $0$. For simplicity, we assume that all memory operations are enabled (there is a way to disable them in the implementation).
+Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `pointer`), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{\text{timestamp\_max\_bits}}$ (in the current implementation, `timestamp_max_bits <= 29`). The memory boundary chip represents the initial memory state on the memory bus at timestamp $0$.
 
-Our memory is split into **online** and **offline** memory. Online memory provides actual data and generates access records during program execution, while offline memory uses those records to verify memory consistency. Below we describe how offline memory works. First, we look at the interactions on the memory bus and why they are sound in our ecosystem. Next, we discuss how the boundary chip commits to both the initial and final memory state.
+There is no single global memory trace. Instead, chips that access memory post interactions on the
+memory bus, and the boundary chips account for the initial and final memory states. The soundness
+argument shows that from any valid set of traces, one can extract a consistent sequence of logical
+memory reads and writes. Below we describe this memory-checking argument. First, we look at the
+interactions on the memory bus and why they are sound in our setting. Next, we discuss how the
+boundary chip commits to both the initial and final memory state.
 
-We use the offline memory checking argument of [BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
+This follows the offline memory-checking argument of
+[BEGKN92](https://www.cs.ubc.ca/~will/papers/memcheck.pdf).
 
 ## Basic performed interactions
 
-We say an address is _accessed_ when it's initialized, finalized, read from, or written to. An address is initialized at timestamp $0$ and is finalized at the same timestamp it was last read from or written to (or $0$ if there were no operations involving it).
+We say an address is _accessed_ when it's initialized, finalized, read from, or written to. An address is initialized by the memory boundary chip at timestamp $0$ and is finalized at the same timestamp it was last read from or written to (or $0$ if there were no operations involving it).
 
 To verify memory consistency, we use MEMORY_BUS to post information about all memory accesses through interactions. More specifically, we use a **memory bridge** that **both** checks the timestamp inequality and performs the necessary interactions:
 
@@ -81,7 +88,7 @@ The following invariants **must** be maintained by the memory architecture:
 2. In the MEMORY_BUS, the `address_space` is always in range `[1, 1 + 2^addr_space_height)` where `addr_space_height` is a configuration constant satisfying `addr_space_height < F::bits() - 2`. (Our current implementation only supports `addr_space_height` less than the max bits supported by the VariableRangeCheckerBus).
 3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
 
-Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
+Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during a single logical instruction execution is bounded by `num_interactions * num_rows_per_execution`, where `num_interactions` is the number of interactions contributed by one trace row.
 
 Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `PersistentBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
 
@@ -97,7 +104,76 @@ Assume that the MEMORY_BUS interactions and the constraints mentioned above are 
 
 ### Time goes forward
 
-In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](/specs/architecture/circuit-architecture#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $2^{\text{timestamp\_max\_bits}}$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. For the OpenVM chips discussed here, the timestamp-growth bound justified in [Timestamp-growth bound for OpenVM chips](#timestamp-growth-bound-for-openvm-chips) guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $2^{\text{timestamp\_max\_bits}}$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+
+### Timestamp-growth bound for OpenVM chips
+
+This subsection justifies the timestamp-growth assumption from
+[Circuit Architecture](/specs/architecture/circuit-architecture#instruction-executors) for the
+OpenVM chips discussed in this spec. Custom downstream extensions must establish the same bound
+separately.
+
+Most instruction executors satisfy a stronger property: they increase the timestamp by `1` per
+memory access, and each memory access contributes `4` interactions in the AIR: `2` on the memory
+bus and `2` range-check interactions. For one-row instruction executors, this implies
+`timestamp_delta <= num_interactions / 4`.
+
+It therefore remains to examine:
+
+1. Chips that increase timestamp by `1` per memory access, but where a single logical instruction
+   execution may use multiple trace rows.
+2. Chips that set the timestamp delta in a custom way.
+
+The chips that fall into these categories are:
+
+| Name                  | timestamp_delta | # of interactions | Comment                                                    |
+| --------------------- | --------------- | ----------------- | ---------------------------------------------------------- |
+| PhantomChip           | 1               | 3                 | Case 2. No memory accesses; only program and execution interactions. |
+| XorinVmChip           | -               | -                 | Case 2. Special timestamp jump.                            |
+| KeccakfOpChip         | 51              | -                 | Case 2. 1 register read + 50 word writes.                  |
+| Rv32HintStoreChip     | –               | –                 | Case 1.                                                    |
+| Sha2VmChip            | –               | –                 | Case 1.                                                    |
+| DeferralOutputChip    | –               | –                 | Case 1.                                                    |
+
+For `PhantomChip`, `timestamp_delta = 1`, `num_interactions = 3`, and
+`num_rows_per_execution = 1`, so `timestamp_delta < num_interactions * num_rows_per_execution`.
+
+All the chips in Case 1 can use a variable number of trace rows to execute a single instruction,
+but their AIR constraints maintain that the timestamp increments by `1` per memory access and that
+these memory accesses account for all timestamp increments. Therefore
+`timestamp_delta <= num_interactions * num_rows_per_execution / 4` in these cases.
+
+#### XorinVmChip
+
+The `XorinVmAir` timestamp change is `3 + 3 * num_words` where `num_words = len / 4` is the number
+of non-padding 4-byte chunks (at most `34`, since `len` is at most `136`). The maximum timestamp
+change is therefore `3 + 3 * 34 = 105`. Each XORIN instruction uses `1` trace row.
+
+In the AIR constraints:
+
+- `eval_instruction` does an `execute_and_increment_pc` (`3`), `3` register reads (`12`), and `2`
+  range checks (`2`), giving `17` interactions.
+- `constrain_input_read` does up to `34` input reads (`136`) and `34` buffer reads (`136`).
+- `constrain_xor` does up to `136` XOR lookups on the bitwise lookup bus.
+- `constrain_output_write` does up to `34` buffer writes (`136`).
+
+In total, there are at least `17 + 136 + 136 + 136 + 136 = 561` interactions per row when
+`num_words = 34`. Since `timestamp_delta = 105 < 561 = num_interactions`, the condition is
+satisfied.
+
+#### KeccakfOpChip
+
+The `KeccakfOpAir` timestamp delta is `51` (`1` register read + `50` word writes). Each KECCAKF
+instruction uses `1` trace row in the `KeccakfOpAir` and `24` rows in the separate
+`KeccakfPermAir`.
+
+In the AIR constraints:
+
+- `1` `execute_and_increment_pc` (`3`), `1` register read (`4`), `1` pointer range check (`1`),
+  `50` word writes (`200`), `100` byte range checks (`50`), and `2` keccakf state bus sends (`2`).
+
+In total, there are at least `260` interactions per row. Since `timestamp_delta = 51 < 260`, the
+condition is satisfied.
 
 ### Memory consistency
 
