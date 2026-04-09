@@ -126,7 +126,7 @@ jobs:
               # Run integration tests
               if [ -d "extensions/$ext/tests" ]; then
                 pushd extensions/$ext/tests
-                rustup component add rust-src --toolchain nightly-2026-01-18
+                rustup component add rust-src --toolchain nightly-2025-12-05
                 ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
                 popd
               fi

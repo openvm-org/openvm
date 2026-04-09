@@ -73,7 +73,7 @@ jobs:
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          rustup component add rust-src --toolchain nightly-2025-12-05
           EXTRA_ARGS=()
           if [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
             EXTRA_ARGS+=(--features=aot)

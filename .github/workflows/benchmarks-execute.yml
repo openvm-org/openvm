@@ -27,7 +27,7 @@ env:
   CARGO_TERM_COLOR: always
   S3_FIXTURES_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/fixtures
   JEMALLOC_SYS_WITH_MALLOC_CONF: "retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:10000,muzzy_decay_ms:10000,abort_conf:true"
-  TOOLCHAIN: "+nightly-2026-01-18"
+  TOOLCHAIN: "+nightly-2025-12-05"
 
 jobs:
   codspeed-walltime-benchmarks:

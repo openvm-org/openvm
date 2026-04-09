@@ -103,7 +103,7 @@ jobs:
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          rustup component add rust-src --toolchain nightly-2025-12-05
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
           else

@@ -53,5 +53,5 @@ jobs:
       - name: Run SDK CUDA tests
         working-directory: crates/sdk
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          rustup component add rust-src --toolchain nightly-2025-12-05
           cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1
