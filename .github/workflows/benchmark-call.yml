@@ -101,6 +101,8 @@ jobs:
       - runs-on=${{ github.run_id }}-benchcall-${{ github.run_attempt }}-${{ inputs.job_index || inputs.benchmark_id || inputs.benchmark_name || github.event.inputs.benchmark_name }}/family=${{ inputs.instance_type || github.event.inputs.instance_type }}/image=${{ startsWith(inputs.instance_type || github.event.inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(inputs.instance_type || github.event.inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
@@ -112,10 +114,7 @@ jobs:
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/setup-sccache
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
