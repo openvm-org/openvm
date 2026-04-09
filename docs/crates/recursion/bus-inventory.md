@@ -553,8 +553,8 @@ Lookup table for range checks. Verifies that a value fits within the specified n
 
 **Table:** The table consists of `{(i, NUM_BITS) : 0 <= i <= 255}` where `NUM_BITS = 8`. The `max_bits` field is always 8; every key has `max_bits = NUM_BITS`.
 
-**Provider:** RangeCheckerAir (provides the 256-row table of values 0..255).
-**Consumers:** ProofShapeAir, PowerCheckerAir.
+**Providers:** RangeCheckerAir (provides the 256-row table of values 0..255), PowerCheckerAir.
+**Consumers:** ProofShapeAir.
 
 ---
 
@@ -744,10 +744,8 @@ rows over which to compute equality polynomial evaluations.
 
 Passes the global LogUp dimension `n_logup` and the maximum hypercube dimension `n_max` to EqNsAir, so it knows the range of dimensions for multivariate equality polynomial computation.
 
-**Send set:** One message per proof.
-
-**Producers:** ProofShapeAir (send).
-**Consumers:** EqNsAir (receive).
+**Provider:** ProofShapeAir (add_key_with_lookups).
+**Consumers:** EqNsAir (lookup_key).
 
 ---
 
@@ -1154,7 +1152,7 @@ Carries partial products of the "sharp univariate" equality polynomial. These ar
 **Send set:** One message per `(xi_idx, iter_idx)` pair.
 
 **Producers:** EqSharpUniAir (send).
-**Consumers:** EqNsAir (receive).
+**Consumers:** EqSharpUniReceiverAir (receive).
 
 **Invariants:**
 - The two products (`prod_1` and `prod_2`) represent partial evaluation products from the sharp univariate eq polynomial butterfly expansion.
@@ -1655,7 +1653,7 @@ These buses support the proof continuations feature, where verification state is
 |---|---|
 | **Type** | Permutation, per-proof |
 | **Source** | `bus.rs` |
-| **Message** | `{air_idx: F, cached_idx: F, cached_commit: [F; DIGEST_SIZE]}` |
+| **Message** | `{air_idx: F, cached_idx: F, global_cached_idx: F, cached_commit: [F; DIGEST_SIZE]}` |
 
 Carries cached trace commitments from the verifier subcircuit to enclosing circuits. When AIRs have cached (pre-committed) trace partitions, ProofShapeAir sends one message per cached partition, and the enclosing circuit's verifier AIR receives them to verify each cached commitment matches the expected value from the verifying key.
 
@@ -1749,4 +1747,5 @@ Carries cached trace commitments from the verifier subcircuit to enclosing circu
 | 70 | FinalPolyFoldingBus | Permutation | Per-proof | WHIR Internal |
 | 71 | FinalPolyQueryEvalBus | Permutation | Per-proof | WHIR Internal |
 | 72 | WhirFinalPolyBus | Lookup | Per-proof | WHIR Internal |
-| 72 | CachedCommitBus | Permutation | Per-proof | Continuations |
+| 73 | AirPresenceBus | Lookup | Per-proof | Data/Shape |
+| 74 | CachedCommitBus | Permutation | Per-proof | Continuations |
