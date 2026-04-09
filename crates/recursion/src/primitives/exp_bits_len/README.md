@@ -25,7 +25,7 @@ Each request always occupies exactly `32` rows:
 - rows `0..30` are the 31 decomposition steps
 - row `31` is the terminal state after the final shift
 
-The request row is row `0`. Only that row publishes the external lookup key on `ExpBitsLenBus`.
+The request row is row `0`. Only that row publishes the external lookup key on `ExpBitsLenBus`. Each row also interacts with `RightShiftBus` via `add_key_with_lookups` to provide verified right-shift results.
 
 Across a block:
 
@@ -82,7 +82,7 @@ The AIR enforces:
 2. `num_bits` and `low_bits_left` imply their boolean “nonzero” flags via `when(counter).assert_one(selector)`, and the fixed decrement-to-zero transitions force those selectors back to `0` once the counters reach `0`
 3. `result_multiplier` is either `1` or `base`, depending on whether the current bit is active
 4. `is_first => is_valid`, and adjacent rows enforce the fixed 32-row block transition through the derived `is_transition` / `local_is_last` selectors above
-5. the terminal row enforces `bit_src = 0`, `num_bits = 0`, and `result = 1`
+5. the terminal row enforces `bit_src = 0`, `num_bits = 0`, `result = 1`, and `result_multiplier = 1`
 6. the terminal row also enforces the canonical `< p` condition above
 
 These constraints ensure that:

@@ -10,7 +10,6 @@ This chip outputs a boolean value `out` that equals 1 if and only if array `x` i
 **IO Columns:**
 - `x`: Array of input values $`[x_0, x_1, \ldots, x_{n-1}]`$
 - `y`: Array of input values $`[y_0, y_1, \ldots, y_{n-1}]`$
-- `max_bits`: Maximum bit length of each input value
 - `count`: Activation flag $`s`$ (constraints only apply when `count != 0`)
 - `out`: Boolean output indicating whether `x < y` lexicographically
 
@@ -32,7 +31,7 @@ The comparison is performed by:
 ```math
 \begin{align}
 m_i \cdot (m_i - 1) &= 0 & \forall\ i < N &\hspace{2em} (1)\\
-s\cdot\left[1 - \sum^{i-1}_{k=0} m_k\right] \cdot (y_i - x_i) &= 0 & \forall\ i < N &\hspace{2em} (2)\\
+s\cdot\left[1 - \sum^{i}_{k=0} m_k\right] \cdot (y_i - x_i) &= 0 & \forall\ i < N &\hspace{2em} (2)\\
 m_i \cdot \left[(y_i - x_i) \cdot \texttt{diff\_inv} - 1\right] &= 0 & \forall\ i < N &\hspace{2em} (3)\\
 \sum^{N-1}_{i=0} m_i \cdot \left(\sum^{N-1}_{i=0} m_i - 1\right) &= 0 & &\hspace{2em} (4)\\
 s\cdot\left[1 - \sum^{N-1}_{i=0} m_i\right] \cdot \texttt{out} &= 0 & &\hspace{2em} (5)

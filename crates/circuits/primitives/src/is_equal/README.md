@@ -15,7 +15,7 @@ The chip leverages the `IsZeroSubAir` by checking if the difference `x - y` is z
 
 **Constraints:**
 
-The IsEqualSubAir applies the following constraint:
+The IsEqSubAir applies the following constraint:
 
 ```math
 \begin{align}
