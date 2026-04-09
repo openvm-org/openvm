@@ -32,6 +32,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -61,3 +65,7 @@ jobs:
       #   working-directory: benchmarks/prove
       #   run: |
       #     CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-memory 16106127360
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

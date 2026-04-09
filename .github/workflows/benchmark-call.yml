@@ -85,8 +85,8 @@ on:
         default: false
 
 env:
-  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  S3_PUBLIC_PATH_BASE: s3://openvm-public-data-sandbox-us-east-1/benchmark/github
+  S3_METRICS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/metrics
+  S3_PUBLIC_PATH_BASE: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github
   FEATURE_FLAGS: "metrics,parallel,tco"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"

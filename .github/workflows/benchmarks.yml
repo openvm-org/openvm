@@ -51,10 +51,10 @@ env:
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
-  S3_PUBLIC_PATH_BASE: s3://openvm-public-data-sandbox-us-east-1/benchmark/github
-  S3_PUBLIC_URL_BASE: https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github
+  S3_METRICS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/metrics
+  S3_MD_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/results
+  S3_PUBLIC_PATH_BASE: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github
+  S3_PUBLIC_URL_BASE: https://${{ vars.OPENVM_S3_DATA_BUCKET }}.s3.${{ vars.OPENVM_S3_REGION }}.amazonaws.com/benchmark/github
   FEATURE_FLAGS: ""
 
 permissions:

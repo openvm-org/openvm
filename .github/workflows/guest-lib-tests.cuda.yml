@@ -107,6 +107,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -158,3 +162,7 @@ jobs:
               echo "Skipping tests for $crate as no relevant files changed."
             fi
           done
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

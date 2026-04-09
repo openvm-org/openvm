@@ -39,6 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -93,3 +97,7 @@ jobs:
         run: |
           export SKIP_INSTALL=1
           cargo nextest run --cargo-profile=fast --test-threads=1
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
