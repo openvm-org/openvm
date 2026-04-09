@@ -32,12 +32,11 @@ jobs:
 
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/setup-sccache
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
