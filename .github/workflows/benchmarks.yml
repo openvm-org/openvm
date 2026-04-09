@@ -51,10 +51,10 @@ env:
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
-  S3_PUBLIC_PATH_BASE: s3://openvm-public-data-sandbox-us-east-1/benchmark/github
-  S3_PUBLIC_URL_BASE: https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github
+  S3_METRICS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/metrics
+  S3_MD_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/results
+  S3_PUBLIC_PATH_BASE: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github
+  S3_PUBLIC_URL_BASE: https://${{ vars.OPENVM_S3_DATA_BUCKET }}.s3.${{ vars.OPENVM_S3_REGION }}.amazonaws.com/benchmark/github
   FEATURE_FLAGS: ""
 
 permissions:
@@ -140,6 +140,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
+      - extras=s3-cache
     steps:
       ##########################################################################
       # Install S3 if necessary                                                #
@@ -166,10 +167,40 @@ jobs:
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
+      - uses: dtolnay/rust-toolchain@stable
+      # TODO: replace with `uses: ./.github/actions/setup-sccache` once the action exists on main
+      - name: Setup sccache
+        env:
+          SCCACHE_BUCKET: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          SCCACHE_REGION: ${{ vars.OPENVM_S3_REGION }}
+        run: |
+          if ! command -v sccache &> /dev/null || [[ -z "$SCCACHE_BUCKET" ]]; then
+            echo "::warning::sccache or S3 bucket not available, skipping"
+            exit 0
+          fi
+          CONF="${{ github.workspace }}/.github/actions/setup-sccache/sccache.toml"
+          if [[ -f "$CONF" ]]; then
+            export SCCACHE_CONF="$CONF"
+          fi
+          export SCCACHE_S3_USE_SSL=true
+          sccache --stop-server 2>/dev/null || true
+          if sccache --start-server && sccache --show-stats > /dev/null; then
+            echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+            echo "SCCACHE_BUCKET=$SCCACHE_BUCKET" >> "$GITHUB_ENV"
+            echo "SCCACHE_REGION=$SCCACHE_REGION" >> "$GITHUB_ENV"
+            echo "SCCACHE_S3_USE_SSL=true" >> "$GITHUB_ENV"
+            if [[ -f "$CONF" ]]; then
+              echo "SCCACHE_CONF=$CONF" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "::warning::sccache failed to start, compiling without cache"
+            sccache --stop-server 2>/dev/null || true
+          fi
 
-      - name: Install openvm-prof
-        working-directory: crates/prof
-        run: cargo install --force --profile=dev --path .
+      - name: Build openvm-prof
+        run: |
+          cargo build --locked -p openvm-prof
+          echo "${{ github.workspace }}/target/debug" >> $GITHUB_PATH
 
       - name: Set github pages path for dispatch
         if: github.event_name == 'workflow_dispatch'
@@ -379,3 +410,7 @@ jobs:
               repo: context.repo.repo,
               body: `<!--Benchmark Results-->\n${newBenchmark}`
             });
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

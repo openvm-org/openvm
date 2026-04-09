@@ -1,0 +1,70 @@
+name: "Setup sccache with S3"
+description: "Configures sccache with S3 backend for distributed Rust compilation caching"
+
+inputs:
+  s3-bucket:
+    description: "S3 bucket name for sccache"
+    required: false
+    default: ""
+  s3-region:
+    description: "AWS region for S3 bucket"
+    required: false
+    default: ""
+  s3-key-prefix:
+    description: "Additional S3 key prefix for cache partitioning"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - name: Configure sccache S3 backend
+      shell: bash
+      run: |
+        if [[ -z "${{ inputs.s3-bucket }}" ]]; then
+          echo "::warning::S3 bucket not configured, skipping sccache"
+          echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
+          exit 0
+        fi
+
+        # Set up env for health check
+        export SCCACHE_CONF="${{ github.action_path }}/sccache.toml"
+        export SCCACHE_BUCKET="${{ inputs.s3-bucket }}"
+        export SCCACHE_REGION="${{ inputs.s3-region }}"
+        export SCCACHE_S3_USE_SSL=true
+
+        # Auto-detect CUDA architecture for cache key partitioning
+        PREFIX="${{ inputs.s3-key-prefix }}"
+        if command -v nvidia-smi &> /dev/null; then
+          CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' || true)
+          CUDA_ARCH="${CUDA_ARCH:-unknown}"
+          PREFIX="${PREFIX:+${PREFIX}/}cuda-${CUDA_ARCH}"
+          echo "Detected CUDA architecture: $CUDA_ARCH"
+        fi
+        if [[ -n "$PREFIX" ]]; then
+          export SCCACHE_S3_KEY_PREFIX="$PREFIX"
+          echo "sccache S3 key prefix: $PREFIX"
+        fi
+
+        # Stop any server the sccache-action may have started (without S3 config)
+        sccache --stop-server 2>/dev/null || true
+
+        # Start server and verify it runs; fall back to plain rustc if it fails
+        if sccache --start-server && sccache --show-stats > /dev/null; then
+          echo "sccache server started successfully"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_CONF=${{ github.action_path }}/sccache.toml" >> "$GITHUB_ENV"
+          echo "SCCACHE_BUCKET=${{ inputs.s3-bucket }}" >> "$GITHUB_ENV"
+          echo "SCCACHE_REGION=${{ inputs.s3-region }}" >> "$GITHUB_ENV"
+          echo "SCCACHE_S3_USE_SSL=true" >> "$GITHUB_ENV"
+          if [[ -n "$PREFIX" ]]; then
+            echo "SCCACHE_S3_KEY_PREFIX=$PREFIX" >> "$GITHUB_ENV"
+          fi
+        else
+          echo "::warning::sccache server failed to start, compiling without cache"
+          sccache --stop-server 2>/dev/null || true
+          echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
+        fi

@@ -39,6 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -47,10 +51,10 @@ jobs:
         run: |
           (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Install cargo-openvm
-        working-directory: crates/cli
+      - name: Build cargo-openvm
         run: |
-          cargo install --force --locked --path .
+          cargo build --locked --profile fast -p cargo-openvm
+          echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
       - name: Build and run book examples
         working-directory: examples
@@ -93,3 +97,7 @@ jobs:
         run: |
           export SKIP_INSTALL=1
           cargo nextest run --cargo-profile=fast --test-threads=1
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
