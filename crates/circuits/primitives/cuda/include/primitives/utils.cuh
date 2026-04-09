@@ -31,9 +31,11 @@ template <typename T> __device__ __host__ __forceinline__ T next_multiple_of(T a
     return d_div_ceil(a, b) * b;
 }
 
-// UB-free 64-bit rotate left. (-(s)) & 63 equals (64 - s) % 64, so when
-// s == 0 the right shift is by 0 instead of by 64 (which would be UB).
-#define ROTL64(x, s) (((uint64_t)(x) << ((s) & 63)) | ((uint64_t)(x) >> ((-(s)) & 63)))
+// UB-free 64-bit rotate left. (-(n)) & 63 equals (64 - n) % 64, so when
+// n == 0 the right shift is by 0 instead of by 64 (which would be UB).
+__device__ __host__ __forceinline__ uint64_t rotl64(uint64_t x, uint32_t n) {
+    return (x << (n & 63)) | (x >> ((-n) & 63));
+}
 
 __device__ __host__ __forceinline__ uint32_t rotr(uint32_t value, int n) {
     return (value >> n) | (value << (32 - n));
