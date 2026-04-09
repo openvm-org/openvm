@@ -38,7 +38,9 @@ jobs:
 
       # Build and test from base branch
       - name: Build base branch CLI
-        run: cargo install --force --locked --path crates/cli
+        run: |
+          cargo build --release --locked -p cargo-openvm
+          echo "${{ github.workspace }}/target/release" >> $GITHUB_PATH
 
       - name: Run setup from base branch and snapshot ~/.openvm
         run: |
@@ -82,7 +84,7 @@ jobs:
           clean: false
 
       - name: Build tagged CLI
-        run: cargo install --force --locked --path crates/cli
+        run: cargo build --release --locked -p cargo-openvm
 
       - name: Run setup from tagged version
         run: |

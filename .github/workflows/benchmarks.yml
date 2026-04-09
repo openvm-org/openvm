@@ -190,9 +190,10 @@ jobs:
             sccache --stop-server 2>/dev/null || true
           fi
 
-      - name: Install openvm-prof
-        working-directory: crates/prof
-        run: cargo install --force --profile=dev --path .
+      - name: Build openvm-prof
+        run: |
+          cargo build --locked -p openvm-prof
+          echo "${{ github.workspace }}/target/debug" >> $GITHUB_PATH
 
       - name: Set github pages path for dispatch
         if: github.event_name == 'workflow_dispatch'

@@ -51,10 +51,10 @@ jobs:
         run: |
           (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Install cargo-openvm
-        working-directory: crates/cli
+      - name: Build cargo-openvm
         run: |
-          cargo install --force --locked --path .
+          cargo build --locked --profile fast -p cargo-openvm
+          echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
       - name: Build and run book examples
         working-directory: examples

@@ -46,7 +46,9 @@ jobs:
           ref: ${{ env.version }}
 
       - name: Build tagged CLI
-        run: cargo install --force --locked --path crates/cli cargo-openvm
+        run: |
+          cargo build --release --locked -p cargo-openvm
+          echo "${{ github.workspace }}/target/release" >> $GITHUB_PATH
 
       - name: Run setup from tagged version
         run: |
