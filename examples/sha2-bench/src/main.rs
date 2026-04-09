@@ -37,5 +37,5 @@ pub fn main() {
     }
     let output = hasher.finalize();
 
-    println(format!("SHA-256 result: {:x}", output));
+    println(format!("SHA-256 result: {:?}", output));
 }
