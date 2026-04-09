@@ -168,17 +168,27 @@ jobs:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check for sccache action
-        id: check-sccache
+      # TODO: replace with `uses: ./.github/actions/setup-sccache` once the action exists on main
+      - name: Setup sccache
+        env:
+          SCCACHE_BUCKET: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          SCCACHE_REGION: ${{ vars.OPENVM_S3_REGION }}
         run: |
-          if [[ -f ".github/actions/setup-sccache/action.yml" ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
+          if ! command -v sccache &> /dev/null || [[ -z "$SCCACHE_BUCKET" ]]; then
+            echo "::warning::sccache or S3 bucket not available, skipping"
+            exit 0
           fi
-      - uses: ./.github/actions/setup-sccache
-        if: steps.check-sccache.outputs.available == 'true'
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+          export SCCACHE_S3_USE_SSL=true
+          sccache --stop-server 2>/dev/null || true
+          if sccache --start-server && sccache --show-stats > /dev/null; then
+            echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+            echo "SCCACHE_BUCKET=$SCCACHE_BUCKET" >> "$GITHUB_ENV"
+            echo "SCCACHE_REGION=$SCCACHE_REGION" >> "$GITHUB_ENV"
+            echo "SCCACHE_S3_USE_SSL=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::sccache failed to start, compiling without cache"
+            sccache --stop-server 2>/dev/null || true
+          fi
 
       - name: Install openvm-prof
         working-directory: crates/prof
