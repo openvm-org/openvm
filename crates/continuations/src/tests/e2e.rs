@@ -28,7 +28,7 @@ use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::{proof::Proof, prover::ProverDevice, AirRef, StarkEngine};
+use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{
         poseidon2_compress_with_capacity, BabyBearPoseidon2CpuEngine, DuplexSponge, F,
@@ -742,11 +742,11 @@ fn test_deferral_e2e() -> Result<()> {
         None,
     );
     let engine = RootEngine::new(root_prover.get_vk().inner.params.clone());
-    let ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB>(
+    let ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB, _>(
         combined_proof,
         &user_pvs_proof,
         Some(&merkle_proofs),
-        engine.device().device_ctx(),
+        &engine.device().device_ctx,
     );
     warn!("proving root (GPU)");
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;

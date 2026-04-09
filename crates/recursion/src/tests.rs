@@ -726,14 +726,14 @@ mod cuda {
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_cpu),
             &proofs,
-            None,
+            &(),
             default_duplex_sponge_recorder(),
         );
         let gpu_proving_ctxs = circuit.generate_proving_ctxs_base(
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_gpu),
             &proofs,
-            Some(&gpu_device_ctx),
+            &gpu_device_ctx,
             default_duplex_sponge_recorder(),
         );
 
