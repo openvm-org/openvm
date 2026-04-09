@@ -16,7 +16,7 @@ def run_cargo_command(
 ):
     toolchain = "+1.94"
     if "tco" in feature_flags:
-        toolchain = "+nightly-2026-04-08"
+        toolchain = "+nightly-2026-01-18"
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
         "cargo",

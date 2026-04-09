@@ -54,7 +54,7 @@ jobs:
       - name: Run continuations CUDA tests
         working-directory: crates/continuations
         run: |
-          rustup component add rust-src --toolchain nightly-2026-04-08
+          rustup component add rust-src --toolchain nightly-2026-01-18
           cargo nextest run --cargo-profile=fast --features cuda,root-prover --profile=heavy -E 'not test(e2e)'
 
       - name: Run continuations CUDA e2e test
