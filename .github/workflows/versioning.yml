@@ -28,13 +28,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
       # Build and test from base branch
       - name: Build base branch CLI
-        run: cargo install --force --locked --path crates/cli
+        run: |
+          cargo build --release --locked -p cargo-openvm
+          echo "${{ github.workspace }}/target/release" >> $GITHUB_PATH
 
       - name: Run setup from base branch and snapshot ~/.openvm
         run: |
@@ -78,7 +84,7 @@ jobs:
           clean: false
 
       - name: Build tagged CLI
-        run: cargo install --force --locked --path crates/cli
+        run: cargo build --release --locked -p cargo-openvm
 
       - name: Run setup from tagged version
         run: |
@@ -205,3 +211,7 @@ jobs:
           echo "✅ All example verification keys are identical"
           echo "✅ All benchmark verification keys are identical"
           echo "✅ Versioning policy maintained - patch upgrade is backward compatible"
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
