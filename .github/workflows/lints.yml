@@ -35,16 +35,15 @@ jobs:
       - runs-on=${{ github.run_id }}-cpu/runner=64cpu-linux-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
           ignore_words_file: .codespellignore
       - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/setup-sccache
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -115,14 +114,13 @@ jobs:
       - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia/cpu=8/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: ./.github/actions/setup-sccache
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
