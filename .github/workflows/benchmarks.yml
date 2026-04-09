@@ -142,6 +142,9 @@ jobs:
       - runner=8cpu-linux-x64
       - extras=s3-cache
     steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
       ##########################################################################
       # Install S3 if necessary                                                #
       ##########################################################################
@@ -168,34 +171,7 @@ jobs:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
       - uses: dtolnay/rust-toolchain@stable
-      # TODO: replace with `uses: ./.github/actions/setup-sccache` once the action exists on main
-      - name: Setup sccache
-        env:
-          SCCACHE_BUCKET: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          SCCACHE_REGION: ${{ vars.OPENVM_S3_REGION }}
-        run: |
-          if ! command -v sccache &> /dev/null || [[ -z "$SCCACHE_BUCKET" ]]; then
-            echo "::warning::sccache or S3 bucket not available, skipping"
-            exit 0
-          fi
-          CONF="${{ github.workspace }}/.github/actions/setup-sccache/sccache.toml"
-          if [[ -f "$CONF" ]]; then
-            export SCCACHE_CONF="$CONF"
-          fi
-          export SCCACHE_S3_USE_SSL=true
-          sccache --stop-server 2>/dev/null || true
-          if sccache --start-server && sccache --show-stats > /dev/null; then
-            echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-            echo "SCCACHE_BUCKET=$SCCACHE_BUCKET" >> "$GITHUB_ENV"
-            echo "SCCACHE_REGION=$SCCACHE_REGION" >> "$GITHUB_ENV"
-            echo "SCCACHE_S3_USE_SSL=true" >> "$GITHUB_ENV"
-            if [[ -f "$CONF" ]]; then
-              echo "SCCACHE_CONF=$CONF" >> "$GITHUB_ENV"
-            fi
-          else
-            echo "::warning::sccache failed to start, compiling without cache"
-            sccache --stop-server 2>/dev/null || true
-          fi
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Build openvm-prof
         run: |
