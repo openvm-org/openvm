@@ -27,8 +27,8 @@ openvm-continuations = { workspace = true, features = ["root-prover"] }
 openvm-sdk-config = { workspace = true }
 p3-bn254 = { workspace = true }
 
-aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
-aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.129.0", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
+aws-config = { version = "1.8.15", default-features = false, features = ["default-https-client", "rt-tokio"] }
 tokio = { version = "1.46.1", features = ["rt", "rt-multi-thread", "macros"] }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
