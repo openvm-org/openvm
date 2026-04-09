@@ -45,6 +45,8 @@ jobs:
 
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
@@ -56,10 +58,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-      - uses: ./.github/actions/setup-sccache
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Set feature flags
         run: |

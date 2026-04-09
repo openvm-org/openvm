@@ -15,6 +15,9 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}/runner=64cpu-linux-x64/extras=s3-cache/disk=large
     steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - name: Checkout base branch
         uses: actions/checkout@v5
 
@@ -28,10 +31,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - uses: ./.github/actions/setup-sccache
-        with:
-          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
-          s3-region: ${{ vars.OPENVM_S3_REGION }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
