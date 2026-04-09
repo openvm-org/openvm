@@ -2,7 +2,7 @@
 
 OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. Below, we highlight some of these extensions designed to accelerate common arithmetic and cryptographic operations that are notoriously expensive to execute. Some of these extensions have corresponding guest libraries which provide convenient, high-level interfaces for your guest program to interact with the extension.
 
-- [`openvm-keccak-guest`](/book/acceleration-using-extensions/keccak) - Keccak256 hash function. See the [Keccak256 guest library](/book/guest-libraries/keccak256) for usage details.
+- [`openvm-keccak256-guest`](/book/acceleration-using-extensions/keccak) - Keccak256 hash function. See the [Keccak256 guest library](/book/guest-libraries/keccak256) for usage details.
 - [`openvm-sha2-guest`](/book/acceleration-using-extensions/sha-2) - SHA-2 family of hash functions. See the [SHA-2 guest library](/book/guest-libraries/sha2) for usage details.
 - [`openvm-bigint-guest`](/book/acceleration-using-extensions/big-integer) - Big integer arithmetic for 256-bit signed and unsigned integers. See the [Ruint guest library](/book/guest-libraries/ruint) for using accelerated 256-bit integer ops in rust.
 - [`openvm-algebra-guest`](/book/acceleration-using-extensions/algebra) - Modular arithmetic and complex field extensions.
@@ -54,7 +54,7 @@ range_tuple_checker_sizes = [256, 8192]
 supported_moduli = ["<modulus_1>", "<modulus_2>", "..."]
 
 [app_vm_config.fp2]
-supported_moduli = ["<modulus_1>", "<modulus_2>", "..."]
+supported_moduli = [["<name_1>", "<modulus_1>"], ["<name_2>", "<modulus_2>"]]
 
 [app_vm_config.pairing]
 supported_curves = ["Bls12_381", "Bn254"]
