@@ -185,7 +185,8 @@ fn negative_test_bitwise_operation_lookup_range_x_out_of_range() {
     match result {
         Err(_) => {
             // debug_assert! fired (debug mode) — expected
-            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+            #[cfg(not(debug_assertions))]
+            unreachable!("Unexpected panic in release mode");
         }
         Ok(test_result) => {
             // No panic (release mode) — verification should fail
@@ -202,7 +203,8 @@ fn negative_test_bitwise_operation_lookup_range_y_out_of_range() {
     match result {
         Err(_) => {
             // debug_assert! fired (debug mode) — expected
-            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+            #[cfg(not(debug_assertions))]
+            unreachable!("Unexpected panic in release mode");
         }
         Ok(test_result) => {
             // No panic (release mode) — verification should fail
@@ -227,7 +229,8 @@ fn negative_test_bitwise_operation_lookup_xor_x_out_of_range() {
     match result {
         Err(_) => {
             // debug_assert! fired (debug mode) — expected
-            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+            #[cfg(not(debug_assertions))]
+            unreachable!("Unexpected panic in release mode");
         }
         Ok(test_result) => {
             // No panic (release mode) — verification should fail
@@ -245,7 +248,8 @@ fn negative_test_bitwise_operation_lookup_xor_y_out_of_range() {
     match result {
         Err(_) => {
             // debug_assert! fired (debug mode) — expected
-            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+            #[cfg(not(debug_assertions))]
+            unreachable!("Unexpected panic in release mode");
         }
         Ok(test_result) => {
             // No panic (release mode) — verification should fail

@@ -1,4 +1,4 @@
-use clap::{command, Parser};
+use clap::Parser;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_sdk::{
     config::{AggregationSystemParams, AppConfig},

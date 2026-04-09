@@ -398,8 +398,9 @@ where
             if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
                 break;
             }
-            if exec_state.exit_code.is_err() {
-                return Err(exec_state.exit_code.unwrap_err());
+            #[allow(clippy::question_mark)]
+            if let Err(e) = exec_state.exit_code {
+                return Err(e);
             }
         }
         check_termination(exec_state.exit_code)?;

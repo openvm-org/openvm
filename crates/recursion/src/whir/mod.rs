@@ -932,6 +932,7 @@ impl WhirModule {
                     for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
                         let opened_rows = &opened_rows_per_query[query_idx];
                         let width = opened_rows[0].len();
+                        #[allow(clippy::needless_range_loop)]
                         for c in 0..width {
                             let mu_pow = mu_pow_iter.next().unwrap();
                             for j in 0..(1 << k_whir) {

@@ -113,11 +113,11 @@ install_s5cmd() {
     arch=$(uname -m)
     case $arch in
     arm64|aarch64)
-        rustup component add rust-src --toolchain nightly-2025-08-02-aarch64-unknown-linux-gnu
+        rustup component add rust-src --toolchain nightly-2026-04-08-aarch64-unknown-linux-gnu
         S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
         ;;
     x86_64|amd64)
-        rustup component add rust-src --toolchain nightly-2025-08-02-x86_64-unknown-linux-gnu
+        rustup component add rust-src --toolchain nightly-2026-04-08-x86_64-unknown-linux-gnu
         S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
         ;;
     *)
