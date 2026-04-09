@@ -196,7 +196,7 @@ This circuit proves that:
   - The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))`
 - If `opcode` is `lui`, then
   - `to_pc == pc + 4`
-  - `compose(rd) == imm * 2^8`
+  - `compose(rd) == imm * 2^12`
 
 #### 6. [JALR](./jalr/core.rs)
 

@@ -65,7 +65,7 @@ Thus, we have constrained that `b[i] == N[i]` for some `i` (namely `b_diff_idx`)
 To constrain `c < N`, we add the following constraints:
 - when `prefix_sum` is not `c_lt_mark` or `final_sum`, `c[i] = N[i]`.
 By our claim, this is equivalent to constraining `c[i] = N[i]` for `i > c_diff_idx`.
-- when `lt_marker[i]` is not 0 or 3 (and hence must be 2), constrain `c_lt_diff = N[i] - c[i]`.
+- when `lt_marker[i]` is not 0 or `3 - c_lt_mark` (and hence must be `c_lt_mark`), constrain `c_lt_diff = N[i] - c[i]`.
 This index `i` is the proposed `c_diff_idx`.
 - when `is_setup = 0`, range check `c_lt_diff` to be in `[1, 2^LIMB_BITS - 1)` which implies `c_lt_diff > 0`. 
 

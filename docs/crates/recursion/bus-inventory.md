@@ -252,7 +252,7 @@ Lookup table of AIR shape properties. For each AIR present in the child proof (i
 - `property_idx = 2` (NeedRot): 1 if the AIR needs rotated trace access, 0 otherwise.
 
 **Provider:** ProofShapeAir.
-**Consumers:** SymbolicExpressionAir, InteractionsFoldingAir, OpeningClaimsAir.
+**Consumers:** SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir, OpeningClaimsAir.
 
 **Invariants:**
 - `sort_idx` values are contiguous within a proof.
@@ -892,8 +892,8 @@ Coordinates xi challenge sampling between the GKR layer processing and the xi sa
 
 **Send set:** One message per xi challenge.
 
-**Producers:** GkrLayerAir (send).
-**Consumers:** GkrXiSamplerAir (receive).
+**Producers:** GkrInputAir (send), GkrXiSamplerAir (send).
+**Consumers:** GkrXiSamplerAir (receive), GkrInputAir (receive).
 
 ---
 
@@ -1192,7 +1192,7 @@ Lookup table of equality polynomial values `eq_n(xi, r)` indexed by dimension `n
 **Table:** For each dimension `n` and each variant, the evaluated eq polynomial value.
 
 **Provider:** EqNsAir.
-**Consumers:** SymbolicExpressionAir, InteractionsFoldingAir.
+**Consumers:** ExpressionClaimAir, ConstraintsFoldingAir.
 
 ---
 

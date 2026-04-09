@@ -67,7 +67,7 @@ So the range of carry should be $`[-2^{m-k}, 2^{m-k})`$. The way we range-check 
 
 Assume the limb bit (not overflowed) is `k`, and one of the expr of `OverflowInt` is evaluated to `X = -( 2^k * a + b)`.
 If `b = 0` (which is usually the case as this subair is used to constrain something evaluated to 0), then carry is exactly `-a` without worrying about taking floor or ceil.
-However, to make it complete let's assume b is not 0. Since the canonical limb is nonnegative within $`[0, 2^k - 1)`$,
+However, to make it complete let's assume b is not 0. Since the canonical limb is nonnegative within $`[0, 2^k)`$,
 the carry should be `-(a+1)` with canonical limb `2^k - b`.
 Therefore the correct way to calculate carry is `X >> k` instead of `X / (1 << K)`.
 

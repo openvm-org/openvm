@@ -20,7 +20,7 @@ Only the starting `mem_ptr` is range checked: since each row will increment `mem
 of bounds memory access will occur, causing an imbalance in the memory bus, before `mem_ptr` overflows the field.
 
 On the starting row, the `rem_words` is also read from memory in the form of `rem_words_limbs` limbs.
-We also range check the highest limb to be `pointer_max_bits - 24` bits to ensure that calculating `rem_words` by composing the limbs `rem_words_limbs` will not overflow the field. Note that the bound `rem_words < 2^pointer_max_bits` is not tight, since `rem_words` refers to 4-byte words, not bytes.
+We constrain the top `REM_WORD_NUM_ZERO_LIMBS = 2` limbs of `rem_words_limbs` to be zero, and range check the next limb against `MAX_HINT_BUFFER_WORDS_BITS`. This enforces `rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS`, which is a stricter bound than the `mem_ptr` bound because `rem_words` counts 4-byte words, not bytes.
 On each row with `is_buffer = 1`, the `rem_words` is decremented by `1`.
 
 Note: we constrain that when the current instruction ends then `rem_words` is 1. However, we don't constrain that when `rem_words` is 1 then we have to end the current instruction. The only way to exploit this if we to do some multiple of `p` number of additional illegal `is_buffer = 1` rows where `p` is the prime modulus of `F`. However, when doing `p` additional rows we will always reach an illegal `mem_ptr` at some point which prevents this exploit.
