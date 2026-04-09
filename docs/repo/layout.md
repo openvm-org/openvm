@@ -22,15 +22,21 @@ The main components of the repository are:
     - [Big Integers](#big-integers)
     - [Algebra (Modular Arithmetic)](#algebra-modular-arithmetic)
     - [Elliptic Curve Cryptography](#elliptic-curve-cryptography)
+    - [SHA-2](#sha-2)
     - [Elliptic Curve Pairing](#elliptic-curve-pairing)
+  - [Guest Libraries](#guest-libraries)
+  - [Verification & Configuration](#verification--configuration)
 
 ### Documentation
 
-Contributor documentation is in [`docs`](../../docs) and user documentation is in [`book`](../../book).
+Contributor documentation is in [`docs`](../../docs) and user documentation is in [`docs/vocs`](../../docs/vocs).
 
 ### Benchmarks
 
-Benchmark guest programs and benchmark scripts are in [`openvm-benchmarks`](../../benchmarks).
+Benchmark guest programs and benchmark scripts are in [`benchmarks`](../../benchmarks), which contains:
+- [`openvm-benchmarks-execute`](../../benchmarks/execute): Execution benchmarks (no proving) using divan.
+- [`openvm-benchmarks-prove`](../../benchmarks/prove): Proving benchmark binaries.
+- [`openvm-benchmarks-utils`](../../benchmarks/utils): Shared utilities for building guest ELFs.
 
 ### CI
 
@@ -69,7 +75,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 - [`openvm-circuit-primitives`](../../crates/circuits/primitives): Primitive chips and sub-chips for standalone use in any circuit.
 - [`openvm-circuit-primitives-derive`](../../crates/circuits/primitives/derive): Procedural macros for use in circuit to derive traits.
-- [`openvm-poseidon2-air`](../../crates/circuits/poseidon2-air): Standalone poseidon2 AIR implementation which is configurable based on the desired maximum constraint degree.
+- [`openvm-poseidon2-air`](../../crates/circuits/poseidon2-air): Wrapper around `p3_poseidon2_air` only intended for use in OpenVM with BabyBear.
 - [`openvm-mod-circuit-builder`](../../crates/circuits/mod-builder): General builder for generating a chip for any modular arithmetic expression for a modulus known at compile time.
 
 ### Recursion
@@ -98,28 +104,33 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions and IO instructions.
 - [`openvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
 - [`openvm-rv32-adapters`](../../extensions/rv32-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 32-bit architecture.
-- [`openvm-rv32im-tests`](../../extensions/rv32im/tests): Integration tests for the RV32IM extension.
+- [`openvm-rv32im-integration-tests`](../../extensions/rv32im/tests): Integration tests for the RV32IM extension.
 
 #### Deferral
 
 - [`openvm-deferral-circuit`](../../extensions/deferral/circuit): Circuit extension for deferred computation. Provides chips for deferral calls and outputs.
 - [`openvm-deferral-transpiler`](../../extensions/deferral/transpiler): Transpiler extension for deferral instructions.
 - [`openvm-deferral-guest`](../../extensions/deferral/guest): Guest library with deferral instruction definitions and types.
-- [`openvm-deferral-tests`](../../extensions/deferral/tests): Integration tests for the deferral extension.
+- [`openvm-deferral-integration-tests`](../../extensions/deferral/tests): Integration tests for the deferral extension.
 
 #### Keccak256
 
 - [`openvm-keccak256-circuit`](../../extensions/keccak256/circuit): Circuit extension for the `keccak256` hash function.
 - [`openvm-keccak256-transpiler`](../../extensions/keccak256/transpiler): Transpiler extension for the `keccak256` hash function.
 - [`openvm-keccak256-guest`](../../extensions/keccak256/guest): Guest library with intrinsic function for the `keccak256` hash function.
-- [`openvm-keccak256-tests`](../../extensions/keccak256/tests): Integration tests for the keccak256 extension.
+
+#### SHA-2
+
+- [`openvm-sha2-air`](../../crates/circuits/sha2-air): Standalone SHA-2 AIR implementation.
+- [`openvm-sha2-circuit`](../../extensions/sha2/circuit): Circuit extension for SHA-2.
+- [`openvm-sha2-transpiler`](../../extensions/sha2/transpiler): Transpiler extension for SHA-2.
+- [`openvm-sha2-guest`](../../extensions/sha2/guest): Guest library for SHA-2.
 
 #### Big Integers
 
 - [`openvm-bigint-circuit`](../../extensions/bigint/circuit): Circuit extension for `I256` and `U256` big integer operations.
 - [`openvm-bigint-transpiler`](../../extensions/bigint/transpiler): Transpiler extension for `I256` and `U256` big integer operations.
 - [`openvm-bigint-guest`](../../extensions/bigint/guest): Guest library with `I256` and `U256` big integers operations using intrinsics for underlying operations.
-- [`openvm-bigint-tests`](../../extensions/bigint/tests): Integration tests for the bigint extension.
 
 #### Algebra (Modular Arithmetic)
 
@@ -133,11 +144,30 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-ecc-circuit`](../../extensions/ecc/circuit): Circuit extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with traits for elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
-- [`openvm-ecc-tests`](../../extensions/ecc/tests): Integration tests for the elliptic curve cryptography extension.
+- [`openvm-ecc-integration-tests`](../../extensions/ecc/tests): Integration tests for the elliptic curve cryptography extension.
 
 #### Elliptic Curve Pairing
 
 - [`openvm-pairing-circuit`](../../extensions/pairing/circuit): Circuit extension for optimal Ate pairing on BN254 and BLS12-381 curves.
 - [`openvm-pairing-transpiler`](../../extensions/pairing/transpiler): Transpiler extension for optimal Ate pairing on BN254 and BLS12-381.
 - [`openvm-pairing-guest`](../../extensions/pairing/guest): Guest library with optimal Ate pairing on BN254 and BLS12-381 and associated constants. Also includes elliptic curve operations for VM runtime with the `halo2curves` feature gate.
-- [`openvm-pairing-tests`](../../extensions/pairing/tests): Integration tests for the pairing extension.
+
+### Guest Libraries
+
+Forked or custom libraries optimized for guest program execution inside the VM.
+
+- [`openvm-ff-derive`](../../guest-libs/ff_derive): OpenVM fork of `ff_derive` for finite field arithmetic.
+- [`k256`](../../guest-libs/k256): OpenVM fork of `k256`.
+- [`openvm-keccak256`](../../guest-libs/keccak256): OpenVM library for keccak256.
+- [`p256`](../../guest-libs/p256): OpenVM fork of `p256`.
+- [`openvm-pairing`](../../guest-libs/pairing): OpenVM library for elliptic curve pairing.
+- [`ruint`](../../guest-libs/ruint): OpenVM fork of `ruint`.
+- [`openvm-sha2`](../../guest-libs/sha2): OpenVM library for SHA-2.
+- [`openvm-verify-stark-circuit`](../../guest-libs/verify-stark/circuit): Circuit extension for verifying STARKs in-guest.
+- [`openvm-verify-stark-guest`](../../guest-libs/verify-stark/guest): Guest library for verifying STARKs.
+
+### Verification & Configuration
+
+- [`openvm-sdk-config`](../../crates/sdk-config): SDK configuration types, separated for lighter downstream dependencies.
+- [`openvm-static-verifier`](../../crates/static-verifier): Static verifier generation.
+- [`openvm-verify-stark-host`](../../crates/verify): Lightweight crate to verify a STARK proof for an OpenVM virtual machine.

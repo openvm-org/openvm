@@ -149,24 +149,25 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 **EqNsAir**
 - `EqZeroNBus` (R)
 - `XiRandomnessBus` (R)
-- `BatchConstraintConductorBus` (L)
+- `BatchConstraintConductorBus` (L, P)
 - `SelHypercubeBus` (P)
 - `EqNOuterBus` (P)
+- `EqNsNLogupMaxBus` (L)
 
 **Eq3bAir**
 - `Eq3bBus` (S)
-- `Eq3bShapeBus` (R)
+- `Eq3bShapeBus` (L)
 - `BatchConstraintConductorBus` (L)
 
 **EqSharpUniAir**
 - `XiRandomnessBus` (R)
-- `EqSharpUniBus` (S)
+- `EqSharpUniBus` (S, R)
 - `BatchConstraintConductorBus` (L, P)
 
 **EqSharpUniReceiverAir**
-- `BatchConstraintConductorBus` (P)
+- `BatchConstraintConductorBus` (L)
 - `EqSharpUniBus` (R)
-- `EqZeroNBus` (R, S)
+- `EqZeroNBus` (S)
 
 **EqUniAir**
 - `BatchConstraintConductorBus` (L)
@@ -237,10 +238,10 @@ Below, each AIR lists every bus it touches. Direction: S=send, R=receive, P=prov
 - `NumPublicValuesBus` (S)
 - `GkrModuleBus` (S)
 - `ExpressionClaimNMaxBus` (S)
-- `EqNsNLogupMaxBus` (S)
+- `EqNsNLogupMaxBus` (P)
 - `NLiftBus` (S)
 - `FractionFolderInputBus` (S)
-- `Eq3bShapeBus` (S)
+- `Eq3bShapeBus` (P)
 - `PreHashBus` (S, optional/continuations)
 - `StartingTidxBus` (S, R)
 
