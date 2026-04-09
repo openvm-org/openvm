@@ -166,6 +166,11 @@ jobs:
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
 
       - name: Install openvm-prof
         working-directory: crates/prof
@@ -379,3 +384,7 @@ jobs:
               repo: context.repo.repo,
               body: `<!--Benchmark Results-->\n${newBenchmark}`
             });
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
