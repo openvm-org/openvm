@@ -1,65 +1,115 @@
 # Security Model
 
-This section describes the security model, security parameters, and cryptographic
-assumptions for OpenVM. For a technical overview of the OpenVM design, see the
-[whitepaper](https://openvm.dev/whitepaper.pdf). 
+OpenVM targets 100 bits of provable security.
 
-## Cryptographic Security
+The proving pipeline produces two kinds of proofs: STARK proofs for the core VM
+execution and aggregation, and a final EVM proof for on-chain verification.
 
-OpenVM targets 100 bits of provable security, achieved via a FRI-based backend for STARK 
-proofs and a halo2-based backend for EVM proofs. 
+## STARK Proofs
 
-### Cryptographic Assumptions
+OpenVM uses [SWIRL](https://openvm.dev/swirl.pdf), a sumcheck-based proof system with
+[WHIR](https://eprint.iacr.org/2024/1586) as the polynomial commitment scheme, over
+the BabyBear field. The interaction argument uses GKR LogUp; see
+[Improving logarithmic derivative lookups using GKR](https://eprint.iacr.org/2023/1284).
 
-The STARKs for OpenVM use FRI over the BabyBear field as implemented in [Plonky3](https://github.com/Plonky3/Plonky3)
-with [LogUp](https://eprint.iacr.org/2022/1530.pdf) for lookup arguments. We 
-use the following assumptions in our soundness analysis:
+### Assumptions
 
-- We use proof-of-work grinding to increase bits of security as described in 
-[Section 3.11.3 of the ethSTARK paper](https://eprint.iacr.org/2021/582.pdf).
-- We use proof-of-work grinding to boost LogUp soundness as described in
-[Section 4 of our analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
-- We analyze STARK soundness using theorems on batched FRI and DEEP-ALI with correlated agreement in the unique decoding regime (UDR).
+- The Fiat-Shamir transformation uses a duplex sponge and is secure in the
+  [ideal permutation model](https://eprint.iacr.org/2025/536). We instantiate the
+  permutation with Poseidon2.
+- Soundness is based on provable proximity gaps theorems. It does **not** rely on the
+  [ethSTARK toy problem conjecture](https://eprint.iacr.org/2021/582) or any
+  [proximity gaps conjectures](https://eprint.iacr.org/2020/654).
+- We use proof-of-work grinding to increase the prover work required to bias
+  Fiat-Shamir challenges. In our security accounting, a `w`-bit grinding
+  condition contributes `w` bits of security to the round in which it is
+  applied, and costs about `2^w` additional Fiat-Shamir permutation
+  invocations in expectation; the concrete cost depends on the instantiated
+  permutation (here, Poseidon2).
 
-The EVM proofs for OpenVM use halo2 with a KZG backend as originally designed by [ZCash](https://zcash.github.io/halo2/)
-and forked by [PSE](https://github.com/privacy-scaling-explorations/halo2) and [Axiom](https://github.com/axiom-crypto/halo2).
-It relies on a one-time universal trusted setup, for which we use the [Perpetual Powers of Tau](https://github.com/privacy-scaling-explorations/perpetualpowersoftau) 
- setup run by the Ethereum Foundation, specifically this [challenge](https://github.com/privacy-scaling-explorations/perpetualpowersoftau/blob/master/0084_jpwang_response/README.md). 
-To learn more about this trusted setup, see the [Details on Universal Trusted Setup](#details-on-universal-trusted-setup) section.
+### Proof Types
 
-### Security Parameters
+The [Continuations Design](/specs/architecture/continuations) uses the following STARK
+proof types:
 
-We now specify security parameters used in the proofs:
+- `app` — one proof per execution segment
+- `leaf` — aggregates app proofs
+- `internal-for-leaf` — aggregates leaf proofs
+- `internal-recursive` — recursively aggregates internal proofs
+- `root` — final STARK proof, input to EVM wrapping
 
-* **STARK proofs**: `app`, `leaf`, `internal`, `root`
-* **EVM proofs**: `static_verifier`
+### Parameters
 
-involved in the [Continuations Design](/specs/architecture/continuations) under default settings.
-These parameters are of three types:
+The WHIR protocol parameters that determine the security level are:
 
-* **FRI parameters**: `log_blowup`, `num_queries`, `query_proof_of_work_bits`, and `commit_proof_of_work_bits` to control the soundness of the FRI
-argument used to generate proofs for the STARKs.
-* **LogUp parameters**: `max_interaction_count`, `log_max_message_length`, and `log_up_pow_bits` are parameters
-controlling the soundness of the LogUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
-* **DEEP-ALI parameters**: `deep_pow_bits` to control the soundness of the DEEP algebraic linking (DEEP-ALI) argument used in the STARK protocol.
+| Parameter | Description |
+| --- | --- |
+| `log_blowup` | Base-2 log of the inverse rate of the code used in WHIR |
+| `num_rounds` | Number of WHIR rounds |
+| `k_whir` | Binary fold factor (number of sumcheck steps per WHIR round) |
+| `num_queries` | Per-round query schedule; each WHIR round has its own number of in-domain queries |
+| `mu_pow_bits` | Number of proof-of-work grinding bits for the mu sampling phase |
+| `folding_pow_bits` | Number of proof-of-work grinding bits for folding challenges |
+| `query_phase_pow_bits` | Number of proof-of-work grinding bits for the query phase |
+| `log_final_poly_len` | Base-2 log of the final polynomial coefficient count |
 
-The concrete parameter values used by OpenVM are specified in the table below.
+Under the default OpenVM settings, the concrete production parameters are shown
+below. The table also includes protocol-shape parameters that are not direct
+security knobs. Using Gruen's univariate skip technique from
+[Some Improvements for the PIOP for ZeroCheck](https://eprint.iacr.org/2024/108),
+the first univariate round uses a domain of size `2^{l_skip}`, effectively
+collapsing `l_skip` sumcheck rounds into one.
+`n_stack` is the number of remaining multilinear sumcheck rounds, so each stacked
+trace has height `2^{l_skip + n_stack}`. `w_stack` bounds the number of stacked
+columns, so each stacked trace has width at most `w_stack` and therefore contains at
+most `2^{l_skip + n_stack} * w_stack` cells.
 
-| Proof | Type | Security Bits | `log_blowup` | `num_queries` | `query_proof_of_work_bits` | `commit_proof_of_work_bits` | `max_interaction_count` | `log_max_message_length` | `log_up_pow_bits` | `deep_pow_bits` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `app` | STARK | 100 | 1 | 193 | 20 | 20 | `15 * 2^27 + 1` | 7 | 18 | 5 |
-| `leaf` | STARK | 100 | 1 | 193 | 20 | 20 | `15 * 2^27 + 1` | 7 | 18 | 5 |
-| `internal` | STARK | 100 | 2 | 118 | 20 | 16 | `15 * 2^27 + 1` | 7 | 18 | 5 |
-| `root` | STARK | 100 | 3 | 97 | 20 | 16 | `15 * 2^27 + 1` | 7 | 18 | 5 |
-| `static_verifier` | Halo2 | 100+ | -- | -- | -- | -- | -- | -- | -- | -- |
+| Proof | `log_blowup` | `l_skip` | `n_stack` | `w_stack` | `k_whir` | `num_rounds` | `num_queries` by round | `mu_pow_bits` | `folding_pow_bits` | `query_phase_pow_bits` | `log_final_poly_len` | Proximity regime |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `app` | 1 | 4 | 20 | 2048 | 3 | 5 | `[193, 97, 84, 81, 81]` | 15 | 5 | 20 | 9 | unique decoding |
+| `leaf` | 2 | 4 | 17 | 2048 | 3 | 4 | `[118, 88, 82, 81]` | 13 | 4 | 20 | 9 | unique decoding |
+| `internal-for-leaf` | 3 | 2 | 17 | 512 | 3 | 3 | `[67, 37, 25]` | 20 | 18 | 20 | 10 | list decoding, `m = 2` |
+| `internal-recursive` | 3 | 2 | 17 | 512 | 3 | 3 | `[67, 37, 25]` | 20 | 18 | 20 | 10 | list decoding, `m = 2` |
+| `root` | 4 | 2 | 19 | 9 | 3 | 4 | `[47, 30, 22, 17]` | 20 | 20 | 20 | 9 | list decoding, `m = 2` |
 
-### Details on Universal Trusted Setup
+Additional shared defaults:
 
-The [challenge file](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085) for our universal trusted setup
-was converted from its original format compatible with `snarkjs` and the Groth16 proof system to a format usable by halo2 using 
-the following [open-source code](https://github.com/axiom-crypto/phase2-bn254/blob/halo2/powersoftau/src/bin/convert_to_halo2.rs).
+- `log_up_pow_bits = 18` (number of proof-of-work grinding bits in LogUp)
+- `log_max_message_length = 7` (base-2 log)
+- `max_interaction_count = 2^31 - 2^27 + 1` (the BabyBear field modulus)
+- `max_constraint_degree = 4`
 
-To verify the conversion of the file [`challenge_0085`](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085), download the file and run:
+The `app` row above is the default SDK configuration, which uses
+`MAX_APP_LOG_STACKED_HEIGHT = 24`, so `n_stack = 24 - l_skip = 20`. The
+`internal-for-leaf` and `internal-recursive` layers intentionally share the same
+default production parameter set.
+
+These values are the default production settings configured in
+[stark-backend](https://github.com/openvm-org/stark-backend), which also includes a
+soundness calculator that computes the provable security level from a given set of
+parameters.
+
+## EVM Proofs
+
+The `root` STARK proof is wrapped into an EVM-verifiable proof (`static_verifier`)
+using halo2 with a KZG backend, as originally designed by
+[ZCash](https://zcash.github.io/halo2/) and forked by
+[PSE](https://github.com/privacy-scaling-explorations/halo2) and
+[Axiom](https://github.com/axiom-crypto/halo2). This step relies on a one-time
+universal trusted setup.
+
+### Trusted Setup
+
+We use the [Perpetual Powers of Tau](https://github.com/privacy-scaling-explorations/perpetualpowersoftau)
+setup run by the Ethereum Foundation, specifically this
+[challenge](https://github.com/privacy-scaling-explorations/perpetualpowersoftau/blob/master/0084_jpwang_response/README.md).
+
+The challenge file `challenge_0085` was converted from its original format compatible
+with `snarkjs` and the Groth16 proof
+system to a format usable by halo2 using the following
+[open-source code](https://github.com/axiom-crypto/phase2-bn254/blob/halo2/powersoftau/src/bin/convert_to_halo2.rs).
+
+To verify the conversion of the file `challenge_0085`, download it and run:
 
 ```bash
 git clone https://github.com/axiom-crypto/phase2-bn254.git
