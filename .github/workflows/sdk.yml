@@ -34,6 +34,10 @@ jobs:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -95,3 +99,7 @@ jobs:
         # if: ${{ github.event_name == 'push' }}
         run: |
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
