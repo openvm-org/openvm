@@ -3,7 +3,7 @@
 The `ColsRef` procedural macro is used in constraint generation to create column structs that have dynamic sizes.
 
 Note: this macro was originally created for use in the SHA-2 VM extension, where we reuse the same constraint generation code for three different circuits (SHA-256, SHA-512, and SHA-384).
-See the [SHA-2 VM extension](../../../../../../extensions/sha2/circuit/src/sha2_chip/air.rs) for an example of how to use the `ColsRef` macro to reuse constraint generation code over multiple circuits.
+See the [SHA-2 VM extension](../../../../../../extensions/sha2/circuit/src/sha2_chips/air.rs) for an example of how to use the `ColsRef` macro to reuse constraint generation code over multiple circuits.
 
 ## Overview
 
@@ -84,7 +84,7 @@ Annotating a struct named `ExampleCols` with `#[derive(ColsRef)]` and `#[config(
 
 The fields of `ExampleColsRef` have the same names as the fields of `ExampleCols`, but their types are transformed as follows:
 - type `T` becomes `&T`
-- type `[T; LEN]` becomes `&ArrayView1<T>` (see [ndarray](https://docs.rs/ndarray/latest/ndarray/index.html)) where `LEN` is an associated constant in `ExampleConfig`
+- type `[T; LEN]` becomes `ArrayView1<'a, T>` (see [ndarray](https://docs.rs/ndarray/latest/ndarray/index.html)) where `LEN` is an associated constant in `ExampleConfig`
     - the `ExampleColsRef::from` method will correctly infer the length of the array from the config
 - fields with names that end in `Cols` are assumed to be a columns struct that derives `ColsRef` and are transformed into the appropriate `ColsRef` type recursively
     - one restriction is that any nested `ColsRef` type must have the same config as the outer `ColsRef` type
@@ -101,7 +101,7 @@ The fields of `ExampleColsRefMut` are almost the same as the fields of `ExampleC
 Each of the `ExampleColsRef` and `ExampleColsRefMut` types has the following methods implemented:
 ```rust
 // Takes a slice of the correct length and returns an instance of the columns struct.
-pub const fn from<C: ExampleConfig>(slice: &[T]) -> Self;
+pub fn from<C: ExampleConfig>(slice: &[T]) -> Self;
 // Returns the number of cells in the struct
 pub const fn width<C: ExampleConfig>() -> usize;
 ```

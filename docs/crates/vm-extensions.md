@@ -42,9 +42,9 @@ The `VmCircuitExtension` trait is the most security critical, and it should have
 The VM circuit extension is specified by adding new AIRs in order using the `AirInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.AirInventory.html). The main APIs are
 - `inventory.add_air(air)` to add a new `air`, where `air` must implement the traits
 ```rust
-Air<AB> + BaseAirWithPublicValues<Val<SC>> + PartitionedBaseAir<Val<SC>> for AB: InteractionBuilder<F = Val<SC>>
+AnyAir<SC> + 'static
 ```
-(in other words, `air` is an AIR with interactions).
+where `AnyAir<SC>` is a supertrait for `Air<SymbolicRapBuilder> + BaseAirWithPublicValues + PartitionedBaseAir + Send + Sync` (in other words, `air` is an AIR with interactions).
 - `inventory.find_air::<ConcreteAir>()` returns an iterator of all preceding AIRs in the circuit which downcast to type `ConcreteAir: 'static`.
 
 The added AIRs may have dependencies on previously added AIRs, including those that may have been added by a previous VM extension. In these cases, the `inventory.find_air()` method should be used to retrieve the dependencies.
@@ -71,7 +71,7 @@ The `VmProverExtension` trait is therefore generic over the `ProverBackend` and 
 Since there are intended to be multiple `VmProverExtension`s for the same `EXT`, the `VmProverExtension` trait is meant to be implemented on a separate struct from `EXT` to get around Rust orphan rules. This separate struct is usually a [zero sized type](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZST).
 
 The VM prover extension is specified by adding new chips in order using the `ChipInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ChipInventory.html). The main functions are:
-- `inventory.add_executor_chip(chip)` adds a chip with an associated executor. Each executor must have exactly one chip associated to it, and this is currently used to determine the record arenas that the executor writes into during preflight execution. It is **required** that the executor chips are adds in the same order as the executors were added in the `VmExecutionExtension` implementation.
+- `inventory.add_executor_chip(chip)` adds a chip with an associated executor. Each executor must have exactly one chip associated to it, and this is currently used to determine the record arenas that the executor writes into during preflight execution. It is **required** that the executor chips are added in the same order as the executors were added in the `VmExecutionExtension` implementation.
 - `inventory.add_periphery_chip(chip)` adds a chip without an associated executor. Not every chip needs to have a corresponding executor.
 - `inventory.find_chip<ConcreteChip>()` returns an iterator of all preceding chips in the inventory, including those from other previous extensions, which downcast to type `ConcreteChip: 'static`. This may be used to obtain previously constructed data, configurations, or buffers.
 - `inventory.next_air::<ConcreteAir>()` returns `Ok(&air)` if the next AIR that was added in the `VmCircuitExtension` implementation is of type `ConcreteAir` and returns error otherwise. It is used to ensure that the associated AIR to each chip is the expected one. It can also be used to obtain configuration data or bus information from the corresponding AIR.
@@ -105,7 +105,7 @@ implement multiple `VmBuilder`s for different prover backends.
 
 ```rust
 pub trait VmExecutionConfig<F> {
-    type Executor: AnyEnum + Send + Sync;
+    type Executor: AnyEnum;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
@@ -159,7 +159,7 @@ The macro derives `VmCircuitConfig<SC>` on the new config struct for all `SC` wh
 Some of our extensions need to generate some code at build-time depending on the VM config (for example, the Algebra extension needs to call `moduli_init!` with the appropriate moduli).
 To accommodate this, we support build hooks in both `cargo openvm` and the SDK.
 To make use of this functionality, implement the `InitFileGenerator` trait.
-The `String` returned by the `generate_init_file_contents` must be valid Rust code.
+The `Option<String>` returned by `generate_init_file_contents` must contain valid Rust code when `Some`.
 It will be written to a `openvm_init.rs` file in the package's manifest directory, and then (unhygenically) included in the guest code in place of the `openvm::init!` macro.
 You can specify a custom file name at build time (by a `cargo openvm` option or an SDK method argument), in which case you must also pass it to `openvm::init!` as an argument.
 
@@ -179,7 +179,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
     fn create_chip_complex(
         &self,
         config: &Self::VmConfig,
-        airs: AirInventory<E::SC>,
+        circuit: AirInventory<E::SC>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
