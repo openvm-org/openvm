@@ -38,6 +38,10 @@ jobs:
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -76,3 +80,7 @@ jobs:
         working-directory: crates/circuits/mod-builder
         run: |
           cargo nextest run ${{ env.NEXTEST_ARGS }}
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
