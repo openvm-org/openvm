@@ -394,14 +394,12 @@ where
 
         loop {
             exec_state = self.execute_metered_until_suspend(exec_state)?;
-            // The execution has terminated.
-            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
-                break;
+            match &exec_state.exit_code {
+                Ok(Some(_)) => break,
+                Ok(None) => continue,
+                Err(_) => {}
             }
-            #[allow(clippy::question_mark)]
-            if let Err(e) = exec_state.exit_code {
-                return Err(e);
-            }
+            return Err(exec_state.exit_code.unwrap_err());
         }
         check_termination(exec_state.exit_code)?;
         let VmExecState { vm_state, ctx, .. } = exec_state;
