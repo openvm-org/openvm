@@ -88,7 +88,7 @@ The following invariants **must** be maintained by the memory architecture:
 2. In the MEMORY_BUS, the `address_space` is always in range `[1, 1 + 2^addr_space_height)` where `addr_space_height` is a configuration constant satisfying `addr_space_height < F::bits() - 2`. (Our current implementation only supports `addr_space_height` less than the max bits supported by the VariableRangeCheckerBus).
 3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
 
-Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during a single logical instruction execution is bounded by `num_interactions * num_rows_per_execution`.
+Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during a single logical instruction execution is bounded by `num_interactions * num_rows_per_execution`, where `num_interactions` is the number of interactions contributed by one trace row.
 
 Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `PersistentBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
 
@@ -104,7 +104,7 @@ Assume that the MEMORY_BUS interactions and the constraints mentioned above are 
 
 ### Time goes forward
 
-In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. For the OpenVM chips discussed here, the timestamp-growth bound justified in [Timestamp-growth bound for OpenVM chips](#timestamp-growth-bound-for-openvm-chips) guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $2^{\text{timestamp\_max\_bits}}$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. For the OpenVM chips discussed here, the timestamp-growth bound justified in [Timestamp-growth bound for OpenVM chips](#timestamp-growth-bound-for-openvm-chips) guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $2^{\text{timestamp\_max\_bits}}$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Timestamp-growth bound for OpenVM chips
 
@@ -135,7 +135,8 @@ The chips that fall into these categories are:
 | Sha2VmChip            | –               | –                 | Case 1.                                                    |
 | DeferralOutputChip    | –               | –                 | Case 1.                                                    |
 
-The PhantomChip satisfies the condition because `1 < 3`.
+For `PhantomChip`, `timestamp_delta = 1`, `num_interactions = 3`, and
+`num_rows_per_execution = 1`, so `timestamp_delta < num_interactions * num_rows_per_execution`.
 
 All the chips in Case 1 can use a variable number of trace rows to execute a single instruction,
 but their AIR constraints maintain that the timestamp increments by `1` per memory access and that

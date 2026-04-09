@@ -9,7 +9,8 @@ execution and aggregation, and a final EVM proof for on-chain verification.
 
 OpenVM uses [SWIRL](https://openvm.dev/swirl.pdf), a sumcheck-based proof system with
 [WHIR](https://eprint.iacr.org/2024/1586) as the polynomial commitment scheme, over
-the BabyBear field. The interaction argument uses GKR to reduce to sumcheck claims.
+the BabyBear field. The interaction argument uses GKR LogUp; see
+[Improving logarithmic derivative lookups using GKR](https://eprint.iacr.org/2023/1284).
 
 ### Assumptions
 
@@ -19,7 +20,12 @@ the BabyBear field. The interaction argument uses GKR to reduce to sumcheck clai
 - Soundness is based on provable proximity gaps theorems. It does **not** rely on the
   [ethSTARK toy problem conjecture](https://eprint.iacr.org/2021/582) or any
   [proximity gaps conjectures](https://eprint.iacr.org/2020/654).
-- We use proof-of-work grinding to increase bits of security.
+- We use proof-of-work grinding to increase the prover work required to bias
+  Fiat-Shamir challenges. In our security accounting, a `w`-bit grinding
+  condition contributes `w` bits of security to the round in which it is
+  applied, and costs about `2^w` additional Fiat-Shamir permutation
+  invocations in expectation; the concrete cost depends on the instantiated
+  permutation (here, Poseidon2).
 
 ### Proof Types
 
@@ -36,8 +42,6 @@ proof types:
 
 The WHIR protocol parameters that determine the security level are:
 
-All logarithms in this section are base 2.
-
 | Parameter | Description |
 | --- | --- |
 | `log_blowup` | Base-2 log of the inverse rate of the code used in WHIR |
@@ -49,7 +53,16 @@ All logarithms in this section are base 2.
 | `query_phase_pow_bits` | Number of proof-of-work grinding bits for the query phase |
 | `log_final_poly_len` | Base-2 log of the final polynomial coefficient count |
 
-Under the default OpenVM settings, the concrete production parameters are:
+Under the default OpenVM settings, the concrete production parameters are shown
+below. The table also includes protocol-shape parameters that are not direct
+security knobs. Using Gruen's univariate skip technique from
+[Some Improvements for the PIOP for ZeroCheck](https://eprint.iacr.org/2024/108),
+the first univariate round uses a domain of size `2^{l_skip}`, effectively
+collapsing `l_skip` sumcheck rounds into one.
+`n_stack` is the number of remaining multilinear sumcheck rounds, so each stacked
+trace has height `2^{l_skip + n_stack}`. `w_stack` bounds the number of stacked
+columns, so each stacked trace has width at most `w_stack` and therefore contains at
+most `2^{l_skip + n_stack} * w_stack` cells.
 
 | Proof | `log_blowup` | `l_skip` | `n_stack` | `w_stack` | `k_whir` | `num_rounds` | `num_queries` by round | `mu_pow_bits` | `folding_pow_bits` | `query_phase_pow_bits` | `log_final_poly_len` | Proximity regime |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -63,7 +76,7 @@ Additional shared defaults:
 
 - `log_up_pow_bits = 18` (number of proof-of-work grinding bits in LogUp)
 - `log_max_message_length = 7` (base-2 log)
-- `max_interaction_count = 2^31 - 1` (the BabyBear field modulus)
+- `max_interaction_count = 2^31 - 2^27 + 1` (the BabyBear field modulus)
 - `max_constraint_degree = 4`
 
 The `app` row above is the default SDK configuration, which uses
@@ -91,12 +104,12 @@ We use the [Perpetual Powers of Tau](https://github.com/privacy-scaling-explorat
 setup run by the Ethereum Foundation, specifically this
 [challenge](https://github.com/privacy-scaling-explorations/perpetualpowersoftau/blob/master/0084_jpwang_response/README.md).
 
-The [challenge file](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085)
-was converted from its original format compatible with `snarkjs` and the Groth16 proof
+The challenge file `challenge_0085` was converted from its original format compatible
+with `snarkjs` and the Groth16 proof
 system to a format usable by halo2 using the following
 [open-source code](https://github.com/axiom-crypto/phase2-bn254/blob/halo2/powersoftau/src/bin/convert_to_halo2.rs).
 
-To verify the conversion of the file [`challenge_0085`](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085), download the file and run:
+To verify the conversion of the file `challenge_0085`, download it and run:
 
 ```bash
 git clone https://github.com/axiom-crypto/phase2-bn254.git
