@@ -22,6 +22,12 @@ runs:
     - name: Configure sccache S3 backend
       shell: bash
       run: |
+        if [[ -z "${{ inputs.s3-bucket }}" ]]; then
+          echo "::warning::S3 bucket not configured, sccache will use local cache only"
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          exit 0
+        fi
+
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_BUCKET=${{ inputs.s3-bucket }}" >> $GITHUB_ENV
         echo "SCCACHE_REGION=${{ inputs.s3-region }}" >> $GITHUB_ENV
@@ -30,7 +36,8 @@ runs:
         # Auto-detect CUDA architecture for cache key partitioning
         PREFIX="${{ inputs.s3-key-prefix }}"
         if command -v nvidia-smi &> /dev/null; then
-          CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' || echo "unknown")
+          CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' || true)
+          CUDA_ARCH="${CUDA_ARCH:-unknown}"
           PREFIX="${PREFIX:+${PREFIX}/}cuda-${CUDA_ARCH}"
           echo "Detected CUDA architecture: $CUDA_ARCH"
         fi

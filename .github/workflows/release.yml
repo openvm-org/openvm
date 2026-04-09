@@ -31,6 +31,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -55,3 +59,7 @@ jobs:
 
       - name: Sync ~/.openvm with S3 bucket in tagged dir
         run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

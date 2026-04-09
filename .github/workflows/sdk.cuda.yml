@@ -29,6 +29,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/setup-sccache
+        with:
+          s3-bucket: ${{ vars.OPENVM_S3_SCCACHE_BUCKET }}
+          s3-region: ${{ vars.OPENVM_S3_REGION }}
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
       - name: Verify GPU setup
@@ -55,3 +59,7 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
           cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
