@@ -20,7 +20,7 @@ use strum::{EnumCount, EnumDiscriminants};
 #[cfg(feature = "cuda")]
 use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator as GpuExpBitsLenTraceGenerator;
 use crate::{
-    primitives::exp_bits_len::cpu::ExpBitsLenTraceGenerator,
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
         WhirPreflight,
@@ -985,7 +985,7 @@ impl WhirModule {
     }
 
     fn enqueue_pow_requests_for_proof(
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         preflight: &Preflight,
         params: &SystemParams,
         query_layout: &WhirQueryLayout,
@@ -1106,7 +1106,7 @@ impl WhirModule {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
     ) -> WhirBlobCpu {
         let params = &child_vk.inner.params;
         let k_whir = params.k_whir();
@@ -1205,7 +1205,7 @@ impl WhirModule {
 }
 
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for WhirModule {
-    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenCpuTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -1213,7 +1213,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proofs = proofs.iter().collect_vec();

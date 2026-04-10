@@ -86,7 +86,7 @@ use crate::{
         sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord, GkrSumcheckTraceGenerator},
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord, GkrXiSamplerTraceGenerator},
     },
-    primitives::exp_bits_len::cpu::ExpBitsLenTraceGenerator,
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
         TraceGenModule,
@@ -319,7 +319,7 @@ impl GkrModule {
         _child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
     ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -561,7 +561,7 @@ impl GkrModule {
 }
 
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for GkrModule {
-    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenCpuTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -569,7 +569,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proof_refs = proofs.iter().collect_vec();

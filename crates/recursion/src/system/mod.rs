@@ -37,7 +37,7 @@ use crate::{
     gkr::GkrModule,
     primitives::{
         bus::{ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus, RightShiftBus},
-        exp_bits_len::{cpu::ExpBitsLenTraceGenerator, ExpBitsLenAir},
+        exp_bits_len::{ExpBitsLenAir, ExpBitsLenCpuTraceGenerator},
         pow::{PowerCheckerAir, PowerCheckerCpuTraceGenerator},
     },
     proof_shape::ProofShapeModule,
@@ -515,7 +515,7 @@ impl<'a> TraceModuleRef<'a> {
         preflights: &[Preflight],
         cached_trace_record: Option<&CachedTraceRecord>,
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         external_data: &VerifierExternalData,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
@@ -1153,7 +1153,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 
         let power_checker_gen =
             Arc::new(PowerCheckerCpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::default());
-        let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
+        let exp_bits_len_gen = ExpBitsLenCpuTraceGenerator::default();
 
         let (module_required, power_checker_required, exp_bits_len_required) =
             self.split_required_heights(external_data.required_heights);
