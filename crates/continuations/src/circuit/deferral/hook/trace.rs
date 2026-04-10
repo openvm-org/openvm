@@ -1,12 +1,6 @@
 use std::borrow::Borrow;
 
-#[cfg(feature = "cuda")]
-use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::GpuBackend;
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
@@ -29,14 +23,13 @@ pub struct DeferralHookPreCtx<PB: ProverBackend> {
 }
 
 // Trait used to remain generic in PB.
-pub trait DeferralHookTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
+pub trait DeferralHookTraceGen<PB: ProverBackend> {
     fn new() -> Self;
 
     fn pre_verifier_subcircuit_tracegen(
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<PB::Val>>,
-        device_ctx: &DC,
     ) -> DeferralHookPreCtx<PB>;
 }
 
@@ -55,7 +48,7 @@ fn normalize_leaf_children(
     (leaf_children, num_real_leaves)
 }
 
-impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralHookTraceGenImpl {
+impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -64,7 +57,6 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralH
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
-        _device_ctx: &(),
     ) -> DeferralHookPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (leaf_children, num_real_leaves) = normalize_leaf_children(leaf_children);
         let super::decommit::MerkleDecommitTraceCtx {
@@ -112,36 +104,6 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralH
                 .chain(onion_p2_inputs)
                 .collect(),
             poseidon2_permute_inputs: verifier_p2_permute_inputs,
-        }
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl DeferralHookTraceGen<GpuBackend, GpuDeviceCtx> for DeferralHookTraceGenImpl {
-    fn new() -> Self {
-        Self
-    }
-
-    fn pre_verifier_subcircuit_tracegen(
-        &self,
-        proof: &Proof<SC>,
-        leaf_children: Vec<DeferralIoCommit<F>>,
-        device_ctx: &GpuDeviceCtx,
-    ) -> DeferralHookPreCtx<GpuBackend> {
-        let DeferralHookPreCtx {
-            verifier_pvs_ctx,
-            decommit_ctx,
-            onion_ctx,
-            poseidon2_compress_inputs,
-            poseidon2_permute_inputs,
-        } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children, &());
-
-        DeferralHookPreCtx {
-            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx, device_ctx),
-            decommit_ctx: cpu_proving_ctx_to_gpu(decommit_ctx, device_ctx),
-            onion_ctx: cpu_proving_ctx_to_gpu(onion_ctx, device_ctx),
-            poseidon2_compress_inputs,
-            poseidon2_permute_inputs,
         }
     }
 }

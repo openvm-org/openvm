@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
+use openvm_cpu_backend::CpuBackend;
 use openvm_recursion_circuit::{
     batch_constraint::expr_eval::CachedTraceRecord,
     system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen},
@@ -10,7 +11,7 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::{DeviceDataTransporter, ProverBackend, ProvingContext},
-    EngineDeviceCtx, StarkEngine, SystemParams,
+    StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
 use p3_bn254::Bn254;
@@ -50,8 +51,6 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         E: StarkEngine<SC = RootSC>,
         E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
         <E::PB as ProverBackend>::Matrix: Clone,
-        S: VerifierTraceGen<E::PB, RootSC, EngineDeviceCtx<E>>,
-        T: RootTraceGen<E::PB, EngineDeviceCtx<E>>,
     {
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, RootSC>(&ctx.per_trace, &self.circuit.airs());
@@ -84,8 +83,8 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     where
         E: StarkEngine<SC = RootSC>,
         E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
-        S: VerifierTraceGen<E::PB, RootSC, EngineDeviceCtx<E>>,
-        T: RootTraceGen<E::PB, EngineDeviceCtx<E>>,
+        S: VerifierTraceGen<CpuBackend<RootSC>, RootSC>,
+        T: RootTraceGen<CpuBackend<RootSC>>,
         E::PD: DeviceDataTransporter<RootSC, E::PB> + Clone,
         <E::PB as ProverBackend>::Val: Field + PrimeField32,
         <E::PB as ProverBackend>::Matrix: Clone,
@@ -135,8 +134,8 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     where
         E: StarkEngine<SC = RootSC>,
         E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
-        S: VerifierTraceGen<E::PB, RootSC, EngineDeviceCtx<E>>,
-        T: RootTraceGen<E::PB, EngineDeviceCtx<E>>,
+        S: VerifierTraceGen<CpuBackend<RootSC>, RootSC>,
+        T: RootTraceGen<CpuBackend<RootSC>>,
         <E::PB as ProverBackend>::Val: Field + PrimeField32,
         <E::PB as ProverBackend>::Matrix: Clone,
     {

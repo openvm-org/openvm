@@ -8,13 +8,15 @@ use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::EngineDeviceCtx;
 use openvm_stark_backend::{
     interaction::BusIndex,
     keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
     proof::{Proof, TraceVData},
     prover::{AirProvingContext, CommittedTraceData, ProverBackend},
-    AirRef, EngineDeviceCtx, FiatShamirTranscript, StarkEngine, StarkProtocolConfig,
-    TranscriptHistory, TranscriptLog,
+    AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
+    TranscriptLog,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::BasedVectorSpace;
@@ -85,13 +87,7 @@ pub struct VerifierExternalData<'a> {
 }
 
 // Trait to make tracegen functions generic on ProverBackend.
-// `DC` is the device context type (e.g., `GpuDeviceCtx` for GPU, `()` for CPU).
-pub trait VerifierTraceGen<
-    PB: ProverBackend,
-    SC: StarkProtocolConfig<F = F>,
-    DC: Clone + Send + Sync,
->
-{
+pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
     fn new(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
         config: VerifierConfig,
@@ -101,9 +97,7 @@ pub trait VerifierTraceGen<
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<PB>
-    where
-        DC: From<EngineDeviceCtx<E>>;
+    ) -> CommittedTraceData<PB>;
 
     fn cached_trace_record(
         &self,
@@ -122,7 +116,6 @@ pub trait VerifierTraceGen<
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         external_data: &mut VerifierExternalData,
-        device_ctx: &DC,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 
@@ -134,7 +127,6 @@ pub trait VerifierTraceGen<
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        device_ctx: &DC,
         initial_transcript: TS,
     ) -> Vec<AirProvingContext<PB>> {
         let poseidon2_compress_inputs = vec![];
@@ -149,6 +141,63 @@ pub trait VerifierTraceGen<
         };
 
         self.generate_proving_ctxs::<TS>(
+            child_vk,
+            cached_trace_ctx,
+            proofs,
+            &mut external_data,
+            initial_transcript,
+        )
+        .unwrap()
+    }
+}
+
+#[cfg(feature = "cuda")]
+pub trait GpuVerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
+    fn commit_child_vk_gpu<E: StarkEngine<SC = SC, PB = PB>>(
+        &self,
+        engine: &E,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CommittedTraceData<PB>
+    where
+        EngineDeviceCtx<E>: Into<GpuDeviceCtx>;
+
+    #[allow(clippy::ptr_arg)]
+    fn generate_proving_ctxs_gpu<
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    >(
+        &self,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        cached_trace_ctx: CachedTraceCtx<PB>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
+        external_data: &mut VerifierExternalData,
+        device_ctx: &GpuDeviceCtx,
+        initial_transcript: TS,
+    ) -> Option<Vec<AirProvingContext<PB>>>;
+
+    fn generate_proving_ctxs_base_gpu<
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    >(
+        &self,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        cached_trace_ctx: CachedTraceCtx<PB>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
+        device_ctx: &GpuDeviceCtx,
+        initial_transcript: TS,
+    ) -> Vec<AirProvingContext<PB>> {
+        let poseidon2_compress_inputs = vec![];
+        let range_check_inputs = vec![];
+
+        let mut external_data = VerifierExternalData {
+            poseidon2_compress_inputs: &poseidon2_compress_inputs,
+            poseidon2_permute_inputs: &poseidon2_compress_inputs,
+            range_check_inputs: &range_check_inputs,
+            required_heights: None,
+            final_transcript_state: None,
+        };
+
+        self.generate_proving_ctxs_gpu::<TS>(
             child_vk,
             cached_trace_ctx,
             proofs,
@@ -434,32 +483,6 @@ struct MerklePrecomputation {
     codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>,
 }
 
-trait MerklePrecomputationDeviceCtx {
-    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        device_ctx: &Self,
-    ) -> MerklePrecomputation;
-}
-
-impl MerklePrecomputationDeviceCtx for () {
-    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        _device_ctx: &Self,
-    ) -> MerklePrecomputation {
-        VerifierSubCircuit::<MAX_NUM_PROOFS>::compute_merkle_precomputation(proof)
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl MerklePrecomputationDeviceCtx for GpuDeviceCtx {
-    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        device_ctx: &Self,
-    ) -> MerklePrecomputation {
-        VerifierSubCircuit::<MAX_NUM_PROOFS>::compute_merkle_precomputation_cuda(proof, device_ctx)
-    }
-}
-
 #[derive(Clone, Copy, strum_macros::Display)]
 enum TraceModuleRef<'a> {
     Transcript(&'a TranscriptModule),
@@ -700,22 +723,30 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
     {
         let mut preflight = self.run_preflight_without_merkle(sponge, child_vk, proof);
-        Self::apply_merkle_precomputation(proof, &mut preflight, &());
+        Self::apply_merkle_precomputation_cpu(proof, &mut preflight);
 
         preflight
     }
 
-    /// Computes merkle precomputation (hashing opened rows) and writes results into the preflight.
-    #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
-    fn apply_merkle_precomputation<DC>(
+    fn apply_merkle_precomputation_cpu(
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
-        device_ctx: &DC,
-    ) where
-        DC: MerklePrecomputationDeviceCtx,
-    {
-        let merkle_precomputation =
-            DC::compute_merkle_precomputation::<MAX_NUM_PROOFS>(proof, device_ctx);
+    ) {
+        let merkle_precomputation = Self::compute_merkle_precomputation(proof);
+        preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
+        preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
+        preflight.initial_row_states = merkle_precomputation.initial_row_states;
+        preflight.codeword_states = merkle_precomputation.codeword_states;
+    }
+
+    #[cfg(feature = "cuda")]
+    #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
+    fn apply_merkle_precomputation(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &mut Preflight,
+        device_ctx: &GpuDeviceCtx,
+    ) {
+        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof, device_ctx);
         preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
         preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
         preflight.initial_row_states = merkle_precomputation.initial_row_states;
@@ -1066,7 +1097,7 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
 }
 
 impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
-    VerifierTraceGen<CpuBackend<SC>, SC, ()> for VerifierSubCircuit<MAX_NUM_PROOFS>
+    VerifierTraceGen<CpuBackend<SC>, SC> for VerifierSubCircuit<MAX_NUM_PROOFS>
 {
     fn new(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
@@ -1079,10 +1110,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<CpuBackend<SC>>
-    where
-        (): From<EngineDeviceCtx<E>>,
-    {
+    ) -> CommittedTraceData<CpuBackend<SC>> {
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
@@ -1103,7 +1131,6 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         cached_trace_ctx: CachedTraceCtx<CpuBackend<SC>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         external_data: &mut VerifierExternalData,
-        _device_ctx: &(),
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1137,7 +1164,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         });
         #[cfg(feature = "cuda")]
         for (proof, preflight) in proofs.iter().zip(preflights.iter_mut()) {
-            Self::apply_merkle_precomputation(proof, preflight, _device_ctx);
+            Self::apply_merkle_precomputation_cpu(proof, preflight);
         }
 
         if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
@@ -1340,38 +1367,23 @@ pub mod cuda_tracegen {
     }
 
     impl<HS: GpuHashScheme, const MAX_NUM_PROOFS: usize>
-        VerifierTraceGen<GenericGpuBackend<HS>, HS::SC, openvm_cuda_common::stream::GpuDeviceCtx>
-        for VerifierSubCircuit<MAX_NUM_PROOFS>
+        GpuVerifierTraceGen<GenericGpuBackend<HS>, HS::SC> for VerifierSubCircuit<MAX_NUM_PROOFS>
     {
-        fn new(
-            child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
-            config: VerifierConfig,
-        ) -> Self {
-            Self::new_with_options(child_mvk, config)
-        }
-
-        fn commit_child_vk<E: StarkEngine<SC = HS::SC, PB = GenericGpuBackend<HS>>>(
+        fn commit_child_vk_gpu<E: StarkEngine<SC = HS::SC, PB = GenericGpuBackend<HS>>>(
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         ) -> CommittedTraceData<GenericGpuBackend<HS>>
         where
-            GpuDeviceCtx: From<EngineDeviceCtx<E>>,
+            EngineDeviceCtx<E>: Into<GpuDeviceCtx>,
         {
             let device_ctx: GpuDeviceCtx = engine.device().device_ctx().clone().into();
             self.batch_constraint
                 .commit_child_vk_gpu(engine, child_vk, &device_ctx)
         }
 
-        fn cached_trace_record(
-            &self,
-            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        ) -> CachedTraceRecord {
-            self.batch_constraint.cached_trace_record(child_vk)
-        }
-
         #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
-        fn generate_proving_ctxs<
+        fn generate_proving_ctxs_gpu<
             TS: FiatShamirTranscript<BabyBearPoseidon2Config>
                 + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
         >(

@@ -2,13 +2,7 @@ use std::{borrow::Borrow, iter::once};
 
 use itertools::Itertools;
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-#[cfg(feature = "cuda")]
-use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_cpu_backend::CpuBackend;
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::GpuBackend;
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
 use openvm_stark_backend::{
     proof::Proof,
@@ -112,7 +106,7 @@ fn generate_poseidon2_inputs(
 }
 
 // Trait used to remain generic in PB
-pub trait DeferralInnerTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
+pub trait DeferralInnerTraceGen<PB: ProverBackend> {
     fn new() -> Self;
     fn pre_verifier_subcircuit_tracegen(
         &self,
@@ -120,13 +114,12 @@ pub trait DeferralInnerTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
-        device_ctx: &DC,
     ) -> DeferralInnerPreCtx<PB>;
 }
 
 pub struct DeferralInnerTraceGenImpl;
 
-impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralInnerTraceGenImpl {
+impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInnerTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -137,7 +130,6 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for Deferral
         child_is_agg: bool,
         child_vk_commit: VkCommit<F>,
         child_merkle_depth: Option<usize>,
-        _device_ctx: &(),
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (poseidon2_compress_inputs, poseidon2_permute_inputs) =
             generate_poseidon2_inputs(proofs, child_is_agg, child_merkle_depth);
@@ -153,44 +145,6 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for Deferral
                 child_merkle_depth,
             ),
             input_ctx: super::input::generate_proving_ctx(proofs, child_is_agg),
-            poseidon2_compress_inputs,
-            poseidon2_permute_inputs,
-        }
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl DeferralInnerTraceGen<GpuBackend, GpuDeviceCtx> for DeferralInnerTraceGenImpl {
-    fn new() -> Self {
-        Self
-    }
-
-    fn pre_verifier_subcircuit_tracegen(
-        &self,
-        proofs: &[Proof<BabyBearPoseidon2Config>],
-        child_is_agg: bool,
-        child_vk_commit: VkCommit<F>,
-        child_merkle_depth: Option<usize>,
-        device_ctx: &GpuDeviceCtx,
-    ) -> DeferralInnerPreCtx<GpuBackend> {
-        let DeferralInnerPreCtx {
-            verifier_pvs_ctx,
-            def_pvs_ctx,
-            input_ctx,
-            poseidon2_compress_inputs,
-            poseidon2_permute_inputs,
-        } = <Self as DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::pre_verifier_subcircuit_tracegen(
-            self,
-            proofs,
-            child_is_agg,
-            child_vk_commit,
-            child_merkle_depth,
-            &(),
-        );
-        DeferralInnerPreCtx {
-            verifier_pvs_ctx: cpu_proving_ctx_to_gpu(verifier_pvs_ctx, device_ctx),
-            def_pvs_ctx: cpu_proving_ctx_to_gpu(def_pvs_ctx, device_ctx),
-            input_ctx: cpu_proving_ctx_to_gpu(input_ctx, device_ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
         }

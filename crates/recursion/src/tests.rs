@@ -23,6 +23,8 @@ use openvm_stark_sdk::{
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
+#[cfg(feature = "cuda")]
+use crate::system::GpuVerifierTraceGen;
 use crate::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierSubCircuit, VerifierTraceGen,
 };
@@ -83,7 +85,6 @@ fn run_test<const MAX_NUM_PROOFS: usize, Fx: TestFixture<BabyBearPoseidon2Config
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         &proofs,
-        &(),
         default_duplex_sponge_recorder(),
     );
     debug(parent_engine, &circuit.airs(), ctxs);
@@ -158,7 +159,6 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         &[proof],
-        &(),
         default_duplex_sponge_recorder(),
     );
     debug(&parent_engine, &circuit.airs(), ctxs);
@@ -496,13 +496,11 @@ fn test_recursion_circuit_dag_commit_subair() {
     let cached_trace_record = <VerifierSubCircuit<2> as VerifierTraceGen<
         CpuBackend<BabyBearPoseidon2Config>,
         BabyBearPoseidon2Config,
-        (),
     >>::cached_trace_record(&circuit, &vk);
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         CachedTraceCtx::Records(cached_trace_record),
         &[proof],
-        &(),
         default_duplex_sponge_recorder(),
     );
     assert!(ctxs[0].cached_mains.is_empty());
@@ -656,7 +654,6 @@ fn test_recursion_circuit_w_stack_too_small() {
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         std::slice::from_ref(&proof),
-        &(),
         default_duplex_sponge_recorder(),
     );
 
@@ -721,15 +718,14 @@ mod cuda {
         }
 
         let vk_commit_data_cpu = circuit.commit_child_vk(&cpu_engine, &vk);
-        let vk_commit_data_gpu = circuit.commit_child_vk(&gpu_engine, &vk);
+        let vk_commit_data_gpu = circuit.commit_child_vk_gpu(&gpu_engine, &vk);
         let cpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_cpu),
             &proofs,
-            &(),
             default_duplex_sponge_recorder(),
         );
-        let gpu_proving_ctxs = circuit.generate_proving_ctxs_base(
+        let gpu_proving_ctxs = circuit.generate_proving_ctxs_base_gpu(
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_gpu),
             &proofs,
