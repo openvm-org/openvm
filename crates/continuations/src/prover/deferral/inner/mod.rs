@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use eyre::Result;
 use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
@@ -39,8 +39,7 @@ pub enum DeferralChildVkKind {
 pub struct DeferralInnerProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: DeferralInnerTraceGen<PB, DC>,
-    DC: Clone + Send + Sync = (),
+    T,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -53,16 +52,12 @@ pub struct DeferralInnerProver<
     circuit: Arc<DeferralInnerCircuit<S>>,
 
     self_vk_pcs_data: Option<CommittedTraceData<PB>>,
-    _phantom: PhantomData<DC>,
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: DeferralInnerTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > DeferralInnerProver<PB, S, T, DC>
+impl<PB, S, T> DeferralInnerProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
@@ -73,11 +68,16 @@ where
         child_merkle_depth: Option<usize>,
     ) -> Result<Proof<SC>>
     where
-        DC: From<EngineDeviceCtx<E>>,
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferralInnerTraceGen<PB, EngineDeviceCtx<E>>,
     {
         let engine = E::new(self.pk.params.clone());
-        let device_ctx: DC = engine.device().device_ctx().clone().into();
-        let ctx = self.generate_proving_ctx(proofs, child_vk_kind, child_merkle_depth, &device_ctx);
+        let ctx = self.generate_proving_ctx(
+            proofs,
+            child_vk_kind,
+            child_merkle_depth,
+            engine.device().device_ctx(),
+        );
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
@@ -96,7 +96,11 @@ where
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         system_params: SystemParams,
         is_self_recursive: bool,
-    ) -> Self {
+    ) -> Self
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferralInnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
@@ -123,7 +127,6 @@ where
             child_vk_pcs_data,
             circuit,
             self_vk_pcs_data,
-            _phantom: PhantomData,
         }
     }
 
@@ -131,7 +134,11 @@ where
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
-    ) -> Self {
+    ) -> Self
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferralInnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
@@ -158,7 +165,6 @@ where
             child_vk_pcs_data,
             circuit,
             self_vk_pcs_data,
-            _phantom: PhantomData,
         }
     }
 

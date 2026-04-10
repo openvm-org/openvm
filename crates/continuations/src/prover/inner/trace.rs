@@ -18,24 +18,26 @@ use crate::{
     SC,
 };
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: InnerTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > InnerAggregationProver<PB, S, T, DC>
+impl<PB, S, T> InnerAggregationProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proofs: &[Proof<SC>],
         child_vk_kind: ChildVkKind,
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
         device_ctx: &DC,
-    ) -> ProvingContext<PB> {
+    ) -> ProvingContext<PB>
+    where
+        S: VerifierTraceGen<PB, SC, DC>,
+        T: InnerTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
 
         let (child_vk, child_vk_pcs_data) = match child_vk_kind {

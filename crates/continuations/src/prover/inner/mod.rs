@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use eyre::Result;
 use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
@@ -30,8 +30,7 @@ mod trace;
 pub struct InnerAggregationProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: InnerTraceGen<PB, DC>,
-    DC: Clone + Send + Sync = (),
+    T,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -45,7 +44,6 @@ pub struct InnerAggregationProver<
     circuit: Arc<InnerCircuit<S>>,
 
     self_vk_pcs_data: Option<CommittedTraceData<PB>>,
-    _phantom: PhantomData<DC>,
 }
 
 /// Struct to determine if InnerAggregationProver is proving a special case,
@@ -57,13 +55,10 @@ pub enum ChildVkKind {
     RecursiveSelf,
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: InnerTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > InnerAggregationProver<PB, S, T, DC>
+impl<PB, S, T> InnerAggregationProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
@@ -75,16 +70,16 @@ where
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
     ) -> Result<Proof<SC>>
     where
-        DC: From<EngineDeviceCtx<E>>,
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
     {
         let engine = E::new(self.pk.params.clone());
-        let device_ctx: DC = engine.device().device_ctx().clone().into();
         let ctx = self.generate_proving_ctx(
             proofs,
             child_vk_kind,
             proofs_type,
             absent_trace_pvs,
-            &device_ctx,
+            engine.device().device_ctx(),
         );
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
@@ -107,7 +102,8 @@ where
         child_vk_kind: ChildVkKind,
     ) -> Result<Proof<SC>>
     where
-        DC: From<EngineDeviceCtx<E>>,
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
     {
         self.agg_prove::<E>(proofs, child_vk_kind, ProofsType::Vm, None)
     }
@@ -116,7 +112,11 @@ where
         system_params: SystemParams,
         is_self_recursive: bool,
         def_hook_cached_commit: Option<Digest>,
-    ) -> Self {
+    ) -> Self
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
@@ -147,7 +147,6 @@ where
             child_vk_pcs_data,
             circuit,
             self_vk_pcs_data,
-            _phantom: PhantomData,
         }
     }
 
@@ -156,7 +155,11 @@ where
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
         def_hook_cached_commit: Option<Digest>,
-    ) -> Self {
+    ) -> Self
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
@@ -187,7 +190,6 @@ where
             child_vk_pcs_data,
             circuit,
             self_vk_pcs_data,
-            _phantom: PhantomData,
         }
     }
 

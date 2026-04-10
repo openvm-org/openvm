@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use eyre::Result;
 use openvm_recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
@@ -29,8 +29,7 @@ mod trace;
 pub struct DeferralHookProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: DeferralHookTraceGen<PB, DC>,
-    DC: Clone + Send + Sync = (),
+    T,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -41,16 +40,12 @@ pub struct DeferralHookProver<
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
     circuit: Arc<DeferralHookCircuit<S>>,
-    _phantom: PhantomData<DC>,
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: DeferralHookTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > DeferralHookProver<PB, S, T, DC>
+impl<PB, S, T> DeferralHookProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
@@ -60,11 +55,11 @@ where
         leaf_children: Vec<DeferralIoCommit<F>>,
     ) -> Result<Proof<SC>>
     where
-        DC: From<EngineDeviceCtx<E>>,
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferralHookTraceGen<PB, EngineDeviceCtx<E>>,
     {
         let engine = E::new(self.pk.params.clone());
-        let device_ctx: DC = engine.device().device_ctx().clone().into();
-        let ctx = self.generate_proving_ctx(proof, leaf_children, &device_ctx);
+        let ctx = self.generate_proving_ctx(proof, leaf_children, engine.device().device_ctx());
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
@@ -85,6 +80,8 @@ where
         system_params: SystemParams,
     ) -> Self
     where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferralHookTraceGen<PB, EngineDeviceCtx<E>>,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,
@@ -117,7 +114,6 @@ where
             child_vk,
             child_vk_pcs_data,
             circuit,
-            _phantom: PhantomData,
         }
     }
 
@@ -127,6 +123,8 @@ where
         pk: Arc<MultiStarkProvingKey<SC>>,
     ) -> Self
     where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferralHookTraceGen<PB, EngineDeviceCtx<E>>,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,
@@ -158,7 +156,6 @@ where
             child_vk,
             child_vk_pcs_data,
             circuit,
-            _phantom: PhantomData,
         }
     }
 

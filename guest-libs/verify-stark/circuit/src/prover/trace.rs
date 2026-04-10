@@ -20,23 +20,25 @@ use tracing::instrument;
 
 use crate::{prover::DeferredVerifyProver, DeferredVerifyTraceGen, PreVerifierData};
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: DeferredVerifyTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > DeferredVerifyProver<PB, S, T, DC>
+impl<PB, S, T> DeferredVerifyProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
         device_ctx: &DC,
-    ) -> ProvingContext<PB> {
+    ) -> ProvingContext<PB>
+    where
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
+        T: DeferredVerifyTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         assert_eq!(
             user_pvs_proof.public_values.len(),
             self.circuit.num_user_pvs

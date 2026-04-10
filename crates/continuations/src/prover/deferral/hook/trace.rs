@@ -19,22 +19,24 @@ use crate::{
     SC,
 };
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: DeferralHookTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > DeferralHookProver<PB, S, T, DC>
+impl<PB, S, T> DeferralHookProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proof: Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
         device_ctx: &DC,
-    ) -> ProvingContext<PB> {
+    ) -> ProvingContext<PB>
+    where
+        S: VerifierTraceGen<PB, SC, DC>,
+        T: DeferralHookTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         let DeferralHookPreCtx {
             verifier_pvs_ctx,
             decommit_ctx,

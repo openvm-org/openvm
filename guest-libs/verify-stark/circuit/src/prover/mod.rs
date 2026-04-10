@@ -42,12 +42,8 @@ pub type DeferredVerifyCpuCircuitProver = DeferredVerifyCircuitProver<
 >;
 
 #[cfg(feature = "cuda")]
-pub type DeferredVerifyGpuProver = DeferredVerifyProver<
-    GpuBackend,
-    VerifierSubCircuit<1>,
-    DeferredVerifyTraceGenImpl,
-    openvm_cuda_common::stream::GpuDeviceCtx,
->;
+pub type DeferredVerifyGpuProver =
+    DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 #[cfg(feature = "cuda")]
 pub type DeferredVerifyGpuCircuitProver = DeferredVerifyCircuitProver<
     BabyBearPoseidon2GpuEngine,
@@ -59,7 +55,6 @@ pub struct DeferredVerifyProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
     T,
-    DC: Clone + Send + Sync = (),
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -69,16 +64,12 @@ pub struct DeferredVerifyProver<
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
     circuit: Arc<DeferredVerifyCircuit<S>>,
-    _phantom_dc: PhantomData<DC>,
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
-        T: DeferredVerifyTraceGen<PB, DC>,
-        DC: Clone + Send + Sync,
-    > DeferredVerifyProver<PB, S, T, DC>
+impl<PB, S, T> DeferredVerifyProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
@@ -89,12 +80,16 @@ where
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
     ) -> Result<Proof<SC>>
     where
-        DC: From<EngineDeviceCtx<E>>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
     {
         let engine = E::new(self.pk.params.clone());
-        let device_ctx: DC = engine.device().device_ctx().clone().into();
-        let ctx =
-            self.generate_proving_ctx(proof, user_pvs_proof, deferral_merkle_proofs, &device_ctx);
+        let ctx = self.generate_proving_ctx(
+            proof,
+            user_pvs_proof,
+            deferral_merkle_proofs,
+            engine.device().device_ctx(),
+        );
         #[cfg(debug_assertions)]
         debug_constraints(&self.circuit, &ctx, &engine);
         let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
@@ -111,7 +106,8 @@ where
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
     ) -> Result<Proof<SC>>
     where
-        DC: From<EngineDeviceCtx<E>>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
     {
         self.prove::<E>(proof, user_pvs_proof, None)
     }
@@ -125,6 +121,8 @@ where
         def_idx: usize,
     ) -> Self
     where
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
@@ -161,7 +159,6 @@ where
             child_vk,
             child_vk_pcs_data,
             circuit,
-            _phantom_dc: PhantomData,
         }
     }
 
@@ -176,6 +173,8 @@ where
         def_idx: usize,
     ) -> Self
     where
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
@@ -214,7 +213,6 @@ where
             child_vk,
             child_vk_pcs_data,
             circuit,
-            _phantom_dc: PhantomData,
         }
     }
 
@@ -240,7 +238,7 @@ pub struct DeferredVerifyCircuitProver<
     S: AggregationSubCircuit + VerifierTraceGen<E::PB, SC, EngineDeviceCtx<E>>,
     T: DeferredVerifyTraceGen<E::PB, EngineDeviceCtx<E>>,
 > {
-    prover: DeferredVerifyProver<E::PB, S, T, EngineDeviceCtx<E>>,
+    prover: DeferredVerifyProver<E::PB, S, T>,
     phantom: PhantomData<E>,
 }
 
@@ -251,7 +249,7 @@ where
     S: AggregationSubCircuit + VerifierTraceGen<E::PB, SC, EngineDeviceCtx<E>>,
     T: DeferredVerifyTraceGen<E::PB, EngineDeviceCtx<E>>,
 {
-    pub fn new(prover: DeferredVerifyProver<E::PB, S, T, EngineDeviceCtx<E>>) -> Self {
+    pub fn new(prover: DeferredVerifyProver<E::PB, S, T>) -> Self {
         Self {
             prover,
             phantom: PhantomData,
@@ -266,7 +264,6 @@ where
     T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
     E: StarkEngine<PB = PB, SC = SC>,
     PB::Matrix: Clone,
-    EngineDeviceCtx<E>: From<EngineDeviceCtx<E>>,
 {
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.prover.get_vk()
