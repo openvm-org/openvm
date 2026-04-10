@@ -77,7 +77,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use strum::EnumCount;
 
 #[cfg(feature = "cuda")]
-use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator;
+use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator as GpuExpBitsLenTraceGenerator;
 use crate::{
     gkr::{
         bus::{GkrLayerInputBus, GkrLayerOutputBus, GkrXiSamplerBus},
@@ -86,7 +86,7 @@ use crate::{
         sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord, GkrSumcheckTraceGenerator},
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord, GkrXiSamplerTraceGenerator},
     },
-    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
+    primitives::exp_bits_len::cpu::ExpBitsLenTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
         TraceGenModule,
@@ -319,7 +319,7 @@ impl GkrModule {
         _child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -561,7 +561,7 @@ impl GkrModule {
 }
 
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for GkrModule {
-    type ModuleSpecificCtx<'a> = ExpBitsLenCpuTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -569,7 +569,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proof_refs = proofs.iter().collect_vec();
@@ -662,7 +662,7 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for GkrModule {
-        type ModuleSpecificCtx<'a> = (&'a ExpBitsLenTraceGenerator, &'a GpuDeviceCtx);
+        type ModuleSpecificCtx<'a> = (&'a GpuExpBitsLenTraceGenerator, &'a GpuDeviceCtx);
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(

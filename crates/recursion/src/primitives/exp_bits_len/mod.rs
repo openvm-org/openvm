@@ -18,3 +18,11 @@ pub type ExpBitsLenTraceGenerator = ExpBitsLenGpuTraceGenerator;
 
 #[cfg(not(feature = "cuda"))]
 pub type ExpBitsLenTraceGenerator = ExpBitsLenCpuTraceGenerator;
+
+pub mod cpu {
+    #[cfg(feature = "cuda")]
+    pub type ExpBitsLenTraceGenerator = super::ExpBitsLenCpuTraceGenerator;
+
+    #[cfg(not(feature = "cuda"))]
+    pub type ExpBitsLenTraceGenerator = super::ExpBitsLenTraceGenerator;
+}

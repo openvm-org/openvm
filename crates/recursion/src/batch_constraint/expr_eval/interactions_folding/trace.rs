@@ -348,7 +348,7 @@ pub(in crate::batch_constraint) mod cuda {
             expr_evals: &MultiVecWithBounds<EF, 2>,
             eq_3b_blob: &Eq3bBlob,
             preflights: &[PreflightGpu],
-            _ctx: &GpuDeviceCtx,
+            _device_ctx: &GpuDeviceCtx,
         ) -> Self {
             let l_skip = vk.system_params.l_skip;
             let interactions = vk

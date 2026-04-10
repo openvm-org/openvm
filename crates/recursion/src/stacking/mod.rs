@@ -582,7 +582,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for StackingModule {
-        type ModuleSpecificCtx<'a> = &'a openvm_cuda_common::stream::GpuDeviceCtx;
+        type ModuleSpecificCtx<'a> = openvm_cuda_common::stream::GpuDeviceCtx;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -590,7 +590,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            device_ctx: &&openvm_cuda_common::stream::GpuDeviceCtx,
+            device_ctx: &openvm_cuda_common::stream::GpuDeviceCtx,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let blob = StackingBlob::new(child_vk, proofs, preflights, device_ctx);

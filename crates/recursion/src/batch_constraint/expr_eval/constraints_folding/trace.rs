@@ -214,7 +214,7 @@ pub(in crate::batch_constraint) mod cuda {
             vk: &VerifyingKeyGpu,
             expr_evals: &MultiVecWithBounds<EF, 2>,
             preflights: &[PreflightGpu],
-            _ctx: &GpuDeviceCtx,
+            _device_ctx: &GpuDeviceCtx,
         ) -> Self {
             let constraints = vk
                 .cpu

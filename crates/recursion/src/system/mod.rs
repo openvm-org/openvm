@@ -37,7 +37,7 @@ use crate::{
     gkr::GkrModule,
     primitives::{
         bus::{ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus, RightShiftBus},
-        exp_bits_len::{ExpBitsLenAir, ExpBitsLenCpuTraceGenerator},
+        exp_bits_len::{cpu::ExpBitsLenTraceGenerator, ExpBitsLenAir},
         pow::{PowerCheckerAir, PowerCheckerCpuTraceGenerator},
     },
     proof_shape::ProofShapeModule,
@@ -515,7 +515,7 @@ impl<'a> TraceModuleRef<'a> {
         preflights: &[Preflight],
         cached_trace_record: Option<&CachedTraceRecord>,
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
-        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         external_data: &VerifierExternalData,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
@@ -1153,7 +1153,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 
         let power_checker_gen =
             Arc::new(PowerCheckerCpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::default());
-        let exp_bits_len_gen = ExpBitsLenCpuTraceGenerator::default();
+        let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
 
         let (module_required, power_checker_required, exp_bits_len_required) =
             self.split_required_heights(external_data.required_heights);
@@ -1240,7 +1240,8 @@ pub mod cuda_tracegen {
     use crate::{
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
         primitives::{
-            exp_bits_len::ExpBitsLenTraceGenerator, pow::cuda::PowerCheckerGpuTraceGenerator,
+            exp_bits_len::ExpBitsLenTraceGenerator as GpuExpBitsLenTraceGenerator,
+            pow::cuda::PowerCheckerGpuTraceGenerator,
         },
     };
 
@@ -1260,7 +1261,7 @@ pub mod cuda_tracegen {
             device_ctx: &openvm_cuda_common::stream::GpuDeviceCtx,
             cached_trace_record: Option<&CachedTraceRecord>,
             pow_checker_gen: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
-            exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+            exp_bits_len_gen: &GpuExpBitsLenTraceGenerator,
             external_data: &VerifierExternalData,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
@@ -1309,7 +1310,7 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    &device_ctx,
+                    device_ctx,
                     required_heights,
                 ),
                 TraceModuleRef::Whir(module) => module.generate_proving_ctxs(
@@ -1428,7 +1429,7 @@ pub mod cuda_tracegen {
             let power_checker_gen = Arc::new(
                 PowerCheckerGpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::hybrid(device_ctx.clone()),
             );
-            let exp_bits_len_gen = ExpBitsLenTraceGenerator::new(device_ctx.clone());
+            let exp_bits_len_gen = GpuExpBitsLenTraceGenerator::new(device_ctx.clone());
 
             let (module_required, power_checker_required, exp_bits_len_required) =
                 self.split_required_heights(external_data.required_heights);
