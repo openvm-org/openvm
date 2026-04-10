@@ -170,9 +170,9 @@ instruction uses `1` trace row in the `KeccakfOpAir` and `24` rows in the separa
 In the AIR constraints:
 
 - `1` `execute_and_increment_pc` (`3`), `1` register read (`4`), `1` pointer range check (`1`),
-  `50` word writes (`200`), `100` byte range checks (`50`), and `2` keccakf state bus sends (`2`).
+  `50` word writes (`200`), `100` paired byte range checks (`100`), and `2` keccakf state bus sends (`2`).
 
-In total, there are at least `260` interactions per row. Since `timestamp_delta = 51 < 260`, the
+In total, there are at least `310` interactions per row. Since `timestamp_delta = 51 < 310`, the
 condition is satisfied.
 
 ### Memory consistency
