@@ -3,7 +3,7 @@
 The `ColsRef` procedural macro is used in constraint generation to create column structs that have dynamic sizes.
 
 Note: this macro was originally created for use in the SHA-2 VM extension, where we reuse the same constraint generation code for three different circuits (SHA-256, SHA-512, and SHA-384).
-See the [SHA-2 VM extension](../../../../../../extensions/sha2/circuit/src/sha2_chips/air.rs) for an example of how to use the `ColsRef` macro to reuse constraint generation code over multiple circuits.
+See the [SHA-2 block hasher AIR](../../../../../../extensions/sha2/circuit/src/sha2_chips/block_hasher_chip/air.rs) and [SHA-2 main AIR](../../../../../../extensions/sha2/circuit/src/sha2_chips/main_chip/air.rs) for examples of how to use the `ColsRef` macro to reuse constraint generation code over multiple circuits.
 
 ## Overview
 
