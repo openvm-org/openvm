@@ -13,8 +13,8 @@ use openvm_stark_backend::{
     keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
     proof::{Proof, TraceVData},
     prover::{AirProvingContext, CommittedTraceData, ProverBackend},
-    AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
-    TranscriptLog,
+    AirRef, EngineDeviceCtx, FiatShamirTranscript, StarkEngine, StarkProtocolConfig,
+    TranscriptHistory, TranscriptLog,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::BasedVectorSpace;
@@ -101,7 +101,9 @@ pub trait VerifierTraceGen<
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<PB>;
+    ) -> CommittedTraceData<PB>
+    where
+        DC: From<EngineDeviceCtx<E>>;
 
     fn cached_trace_record(
         &self,
@@ -432,6 +434,32 @@ struct MerklePrecomputation {
     codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>,
 }
 
+trait MerklePrecomputationDeviceCtx {
+    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        device_ctx: &Self,
+    ) -> MerklePrecomputation;
+}
+
+impl MerklePrecomputationDeviceCtx for () {
+    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        _device_ctx: &Self,
+    ) -> MerklePrecomputation {
+        VerifierSubCircuit::<MAX_NUM_PROOFS>::compute_merkle_precomputation(proof)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl MerklePrecomputationDeviceCtx for GpuDeviceCtx {
+    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        device_ctx: &Self,
+    ) -> MerklePrecomputation {
+        VerifierSubCircuit::<MAX_NUM_PROOFS>::compute_merkle_precomputation_cuda(proof, device_ctx)
+    }
+}
+
 #[derive(Clone, Copy, strum_macros::Display)]
 enum TraceModuleRef<'a> {
     Transcript(&'a TranscriptModule),
@@ -672,35 +700,22 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
     {
         let mut preflight = self.run_preflight_without_merkle(sponge, child_vk, proof);
-        Self::apply_merkle_precomputation(proof, &mut preflight);
+        Self::apply_merkle_precomputation(proof, &mut preflight, &());
 
         preflight
     }
 
-    /// Computes merkle precomputation (hashing opened rows) and writes results
-    /// into the preflight on CPU.
+    /// Computes merkle precomputation (hashing opened rows) and writes results into the preflight.
     #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
-    pub fn apply_merkle_precomputation(
+    fn apply_merkle_precomputation<DC>(
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
-    ) {
-        let merkle_precomputation = Self::compute_merkle_precomputation(proof);
-
-        preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
-        preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
-        preflight.initial_row_states = merkle_precomputation.initial_row_states;
-        preflight.codeword_states = merkle_precomputation.codeword_states;
-    }
-
-    #[cfg(feature = "cuda")]
-    #[tracing::instrument(name = "apply_merkle_precomputation_cuda", skip_all)]
-    pub fn apply_merkle_precomputation_cuda(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        preflight: &mut Preflight,
-        device_ctx: &GpuDeviceCtx,
-    ) {
-        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof, device_ctx);
-
+        device_ctx: &DC,
+    ) where
+        DC: MerklePrecomputationDeviceCtx,
+    {
+        let merkle_precomputation =
+            DC::compute_merkle_precomputation::<MAX_NUM_PROOFS>(proof, device_ctx);
         preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
         preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
         preflight.initial_row_states = merkle_precomputation.initial_row_states;
@@ -1064,7 +1079,10 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<CpuBackend<SC>> {
+    ) -> CommittedTraceData<CpuBackend<SC>>
+    where
+        (): From<EngineDeviceCtx<E>>,
+    {
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
@@ -1119,7 +1137,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         });
         #[cfg(feature = "cuda")]
         for (proof, preflight) in proofs.iter().zip(preflights.iter_mut()) {
-            Self::apply_merkle_precomputation(proof, preflight);
+            Self::apply_merkle_precomputation(proof, preflight, _device_ctx);
         }
 
         if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
@@ -1216,6 +1234,7 @@ pub mod cuda_tracegen {
     use std::iter::zip;
 
     use openvm_cuda_backend::{hash_scheme::GpuHashScheme, GenericGpuBackend, GpuBackend};
+    use openvm_stark_backend::prover::ProverDevice;
 
     use super::*;
     use crate::{
@@ -1334,11 +1353,11 @@ pub mod cuda_tracegen {
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        ) -> CommittedTraceData<GenericGpuBackend<HS>> {
-            // GPU impl: create a GpuDeviceCtx for this commit operation.
-            // This is OK because the engine's device is a GpuDevice which owns a GpuDeviceCtx.
-            let device_ctx =
-                openvm_cuda_common::stream::GpuDeviceCtx::for_current_device().unwrap();
+        ) -> CommittedTraceData<GenericGpuBackend<HS>>
+        where
+            GpuDeviceCtx: From<EngineDeviceCtx<E>>,
+        {
+            let device_ctx: GpuDeviceCtx = engine.device().device_ctx().clone().into();
             self.batch_constraint
                 .commit_child_vk_gpu(engine, child_vk, &device_ctx)
         }
@@ -1392,7 +1411,7 @@ pub mod cuda_tracegen {
 
             // Merkle precomputation launches CUDA kernels, so run serially on main thread.
             for (proof, preflight) in proofs.iter().zip(preflights_cpu.iter_mut()) {
-                Self::apply_merkle_precomputation_cuda(proof, preflight, device_ctx);
+                Self::apply_merkle_precomputation(proof, preflight, device_ctx);
             }
 
             if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
