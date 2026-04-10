@@ -8,7 +8,7 @@ This chip efficiently range checks tuples of values using a single interaction w
 - `tuple`: Array of N columns (columns 0 to N-1) containing all possible tuple combinations within the specified ranges.
 - `mult`: Multiplicity column (column N) tracking the number of range checks requested for each tuple.
 
-The `sizes` parameter in `RangeTupleCheckerBus` defines the maximum value for each dimension.
+The `sizes` parameter in `RangeTupleCheckerBus` defines the range size (exclusive upper bound) for each dimension.
 
 As an example, for a 2-dimensional tuple with `sizes = [2, 4]`, the `tuple` column contains these 8 combinations in order:
 ```

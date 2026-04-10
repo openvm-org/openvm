@@ -252,7 +252,7 @@ Lookup table of AIR shape properties. For each AIR present in the child proof (i
 - `property_idx = 2` (NeedRot): 1 if the AIR needs rotated trace access, 0 otherwise.
 
 **Provider:** ProofShapeAir.
-**Consumers:** SymbolicExpressionAir, InteractionsFoldingAir, OpeningClaimsAir.
+**Consumers:** SymbolicExpressionAir, InteractionsFoldingAir, ConstraintsFoldingAir, OpeningClaimsAir.
 
 **Invariants:**
 - `sort_idx` values are contiguous within a proof.
@@ -727,10 +727,10 @@ Passes the shape parameters `n_lift`, `n_logup`, and `num_interactions` for each
 Eq3bAir, which needs them to determine the hypercube range and the number of interaction
 rows over which to compute equality polynomial evaluations.
 
-**Send set:** One message per present AIR.
+**Table:** One message per present AIR.
 
-**Producers:** ProofShapeAir (send).
-**Consumers:** Eq3bAir (receive).
+**Provider:** ProofShapeAir (add_key_with_lookups).
+**Consumers:** Eq3bAir (lookup_key).
 
 ---
 
@@ -892,8 +892,8 @@ Coordinates xi challenge sampling between the GKR layer processing and the xi sa
 
 **Send set:** One message per xi challenge.
 
-**Producers:** GkrLayerAir (send).
-**Consumers:** GkrXiSamplerAir (receive).
+**Producers:** GkrInputAir (send), GkrXiSamplerAir (send).
+**Consumers:** GkrXiSamplerAir (receive), GkrInputAir (receive).
 
 ---
 
@@ -1192,7 +1192,7 @@ Lookup table of equality polynomial values `eq_n(xi, r)` indexed by dimension `n
 **Table:** For each dimension `n` and each variant, the evaluated eq polynomial value.
 
 **Provider:** EqNsAir.
-**Consumers:** SymbolicExpressionAir, InteractionsFoldingAir.
+**Consumers:** ExpressionClaimAir, ConstraintsFoldingAir.
 
 ---
 
@@ -1588,7 +1588,7 @@ Carries the MLE evaluation of the final polynomial. After all WHIR rounds, the r
 |---|---|
 | **Type** | Permutation, per-proof |
 | **Source** | `whir/bus.rs` |
-| **Message** | `{proof_idx: F, depth: F, node_idx: F, num_nodes_in_layer: F, value: [F; D_EF]}` |
+| **Message** | `{proof_idx: F, depth: F, node_idx: F, num_nodes_in_layer: F, tidx_final_poly_start: F, value: [F; D_EF]}` |
 
 Internal bus for the final polynomial's MLE evaluation tree folding. The MLE evaluation is computed as a binary tree of partial products, and this bus carries values between tree layers.
 
@@ -1601,6 +1601,7 @@ Internal bus for the final polynomial's MLE evaluation tree folding. The MLE eva
 - `depth` is the tree depth (0 = root).
 - `node_idx` is the node's position within its layer.
 - `num_nodes_in_layer` is the total nodes at this depth.
+- `tidx_final_poly_start` is the transcript index at which final polynomial coefficients start.
 - Note: `proof_idx` appears as an explicit field in the message struct in addition to the per-proof prefix prepended by the bus macro.
 
 ---
@@ -1660,7 +1661,7 @@ Carries cached trace commitments from the verifier subcircuit to enclosing circu
 **Send set:** One message per cached trace partition per present AIR (sent by ProofShapeAir when the AIR has cached traces).
 
 **Sender:** ProofShapeAir (in the recursion crate).
-**Receivers:** Enclosing circuit verifier AIRs in the continuations crate -- inner verifier (`inner/verifier/air.rs`), root verifier (`root/verifier/air.rs`), inner VM PVs AIR (`inner/vm_pvs/air.rs`), inner deferral PVs AIR (`inner/def_pvs/air.rs`), and deferral hook verifier (`deferral/hook/verifier/air.rs`).
+**Receivers:** Enclosing circuit verifier AIRs in the continuations crate -- inner verifier (`inner/verifier/air.rs`), root verifier (`root/verifier/air.rs`), inner VM PVs AIR (`inner/vm_pvs/air.rs`), inner deferral PVs AIR (`inner/def_pvs/air.rs`), deferral hook verifier (`deferral/hook/verifier/air.rs`), deferral inner input AIR (`deferral/inner/input/air.rs`), and deferral inner verifier AIR (`deferral/inner/verifier/air.rs`).
 
 **Invariants:**
 - `cached_commit` is a Poseidon2 digest of the cached trace.

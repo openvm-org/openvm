@@ -38,7 +38,7 @@ There are two cases to consider:
 \end{aligned}
 ```
 
-From the lower `max_bits` limb decomposition of $`y - x - 1`$, we constrain that the reconstructed value is equal to $`y - x - 1 - 2^{\texttt{max\_bits}}`$.
+From the lower `max_bits` limb decomposition of $`y - x - 1 + 2^{\texttt{max\_bits}}`$, we constrain that the reconstructed value is equal to $`y - x - 1`$.
 
 2. When $`x \geq y`$:
 
@@ -51,9 +51,9 @@ From the lower `max_bits` limb decomposition of $`y - x - 1`$, we constrain that
 \end{aligned}
 ```
 
-From the lower `max_bits` limb decomposition of $`y - x - 1`$, we constrain that the reconstructed value is equal to $`y - x - 1`$.
+From the lower `max_bits` limb decomposition of $`y - x - 1 + 2^{\texttt{max\_bits}}`$, we constrain that the reconstructed value is equal to $`y - x - 1 + 2^{\texttt{max\_bits}}`$.
 
-We combine constraints for both cases by constraining that the reconstructed value equals $`y - x - 1 - \texttt{out} \cdot 2^{\texttt{max\_bits}}`$.
+We combine constraints for both cases by constraining that the reconstructed value equals $`y - x - 1 + (1 - \texttt{out}) \cdot 2^{\texttt{max\_bits}}`$.
 
 **Constraints:**
 
