@@ -20,7 +20,7 @@ use strum::{EnumCount, EnumDiscriminants};
 #[cfg(feature = "cuda")]
 use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator;
 use crate::{
-    primitives::exp_bits_len::{ExpBitsLenCpuTraceGenerator, ExpBitsLenSink},
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
         WhirPreflight,
@@ -984,14 +984,12 @@ impl WhirModule {
             .push(eval_final_poly_at_u(&proof.whir_proof.final_poly, &u[t..]));
     }
 
-    fn enqueue_pow_requests_for_proof<T>(
-        exp_bits_len_gen: &T,
+    fn enqueue_pow_requests_for_proof(
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         preflight: &Preflight,
         params: &SystemParams,
         query_layout: &WhirQueryLayout,
-    ) where
-        T: ExpBitsLenSink + Sync,
-    {
+    ) {
         let mu_pow_bits = params.whir.mu_pow_bits;
         let folding_pow_bits = params.whir.folding_pow_bits;
         let query_phase_pow_bits = params.whir.query_phase_pow_bits;
@@ -1103,16 +1101,13 @@ impl WhirModule {
     }
 
     #[tracing::instrument(skip_all)]
-    fn generate_blob<T>(
+    fn generate_blob(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &T,
-    ) -> WhirBlobCpu
-    where
-        T: ExpBitsLenSink + Sync,
-    {
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
+    ) -> WhirBlobCpu {
         let params = &child_vk.inner.params;
         let k_whir = params.k_whir();
         let num_queries_per_round = num_queries_per_round(params);

@@ -86,7 +86,7 @@ use crate::{
         sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord, GkrSumcheckTraceGenerator},
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord, GkrXiSamplerTraceGenerator},
     },
-    primitives::exp_bits_len::{ExpBitsLenCpuTraceGenerator, ExpBitsLenSink},
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
         TraceGenModule,
@@ -314,16 +314,13 @@ impl AirModule for GkrModule {
 
 impl GkrModule {
     #[tracing::instrument(skip_all)]
-    fn generate_blob<T>(
+    fn generate_blob(
         &self,
         _child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &T,
-    ) -> GkrBlobCpu
-    where
-        T: ExpBitsLenSink + Sync,
-    {
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
+    ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
 
         // NOTE: we only collect the zipped vec because rayon vs itertools has different treatment
