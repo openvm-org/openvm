@@ -934,8 +934,8 @@ impl WhirModule {
                         let width = opened_rows[0].len();
                         for c in 0..width {
                             let mu_pow = mu_pow_iter.next().unwrap();
-                            for j in 0..(1 << k_whir) {
-                                codeword_vals[j] += *mu_pow * opened_rows[j][c];
+                            for (cv, row) in codeword_vals.iter_mut().zip(opened_rows.iter()) {
+                                *cv += *mu_pow * row[c];
                             }
                         }
                     }
