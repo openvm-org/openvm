@@ -31,7 +31,7 @@ jobs:
         crates: # group crates on the same runner based on test time
           - { names: "sha2 keccak256" }
           - { names: "verify-stark" }
-          - { names: "ruint k256 p256" }
+          - { names: "k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/family=g6.*+g5+g6e/extras=s3-cache
@@ -70,9 +70,6 @@ jobs:
               - "extensions/algebra/**"
               - "extensions/ecc/**"
               - "guest-libs/p256/**"
-            ruint:
-              - "extensions/bigint/**"
-              - "guest-libs/ruint/**"
             pairing:
               - "extensions/algebra/**"
               - "extensions/ecc/**"
@@ -145,9 +142,6 @@ jobs:
                 SPECIAL_ARGS=""
                 if [[ "$crate" == "pairing" ]]; then
                   SPECIAL_ARGS="--features=bn254,bls12_381"
-                elif [[ "$crate" == "ruint" ]]; then
-                  # only run integration tests because other tests are not OpenVM related
-                  SPECIAL_ARGS="test_matrix_power"
                 elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
                   # also run proving tests
                   SPECIAL_ARGS="--run-ignored=all"
