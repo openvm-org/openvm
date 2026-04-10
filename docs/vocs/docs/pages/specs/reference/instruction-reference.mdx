@@ -86,8 +86,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Deferral | `DeferralOpcode::CALL` | CALL |
-| Deferral | `DeferralOpcode::OUTPUT` | OUTPUT |
+| Deferral | `DeferralOpcode::CALL` | CALL_RV32 |
+| Deferral | `DeferralOpcode::OUTPUT` | OUTPUT_RV32 |
 
 ## Keccak Extension
 
@@ -95,8 +95,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Keccak | `XorinOpcode::XORIN` | XORIN |
-| Keccak | `KeccakfOpcode::KECCAKF` | KECCAKF |
+| Keccak | `XorinOpcode::XORIN` | XORIN_RV32 |
+| Keccak | `KeccakfOpcode::KECCAKF` | KECCAKF_RV32 |
 
 ## SHA-2 Extension
 
@@ -145,12 +145,12 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `Rv32ModularArithmeticOpcode::SETUP_MULDIV` | SETUP_MULDIVMOD_RV32\<N\> |
 | Algebra | `Rv32ModularArithmeticOpcode::IS_EQ` | ISEQMOD_RV32\<N\> |
 | Algebra | `Rv32ModularArithmeticOpcode::SETUP_ISEQ` | SETUP_ISEQMOD_RV32\<N\> |
-| Algebra | `Fp2Opcode::ADD` | ADD\<Fp2\> |
-| Algebra | `Fp2Opcode::SUB` | SUB\<Fp2\> |
-| Algebra | `Fp2Opcode::SETUP_ADDSUB` | SETUP_ADDSUB\<Fp2\> |
-| Algebra | `Fp2Opcode::MUL` | MUL\<Fp2\> |
-| Algebra | `Fp2Opcode::DIV` | DIV\<Fp2\> |
-| Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV\<Fp2\> |
+| Algebra | `Fp2Opcode::ADD` | ADD_RV32\<Fp2\> |
+| Algebra | `Fp2Opcode::SUB` | SUB_RV32\<Fp2\> |
+| Algebra | `Fp2Opcode::SETUP_ADDSUB` | SETUP_ADDSUB_RV32\<Fp2\> |
+| Algebra | `Fp2Opcode::MUL` | MUL_RV32\<Fp2\> |
+| Algebra | `Fp2Opcode::DIV` | DIV_RV32\<Fp2\> |
+| Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV_RV32\<Fp2\> |
 
 #### Phantom Sub-Instructions
 
@@ -165,10 +165,10 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
+| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE_RV32\<C\> |
+| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE_RV32\<C\> |
+| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE_RV32\<C\> |
+| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE_RV32\<C\> |
 
 ## Pairing Extension
 

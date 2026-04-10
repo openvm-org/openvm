@@ -196,7 +196,7 @@ This circuit proves that:
   - The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))`
 - If `opcode` is `lui`, then
   - `to_pc == pc + 4`
-  - `compose(rd) == imm * 2^8`
+  - `compose(rd) == imm * 2^12`
 
 #### 6. [JALR](./jalr/core.rs)
 
@@ -205,11 +205,13 @@ Given:
 - `rs1` is the decomposition of the operand, with its limbs assumed to be in the range `[0, 2^RV32_CELL_BITS)`
 - `rd` is the decomposition of the result
 - `imm` is the immediate value
-- `to_pc_limbs` is the decomposition into 16-bit limbs of the destination program address
+- `to_pc_least_sig_bit` is the least significant bit of `compose(rs1) + imm`
+- `to_pc_limbs` is the decomposition of the remaining destination program address bits, where `to_pc_limbs[0]` is 15 bits and `to_pc_limbs[1]` contains the upper bits
 
 This circuit proves that:
 
-- `compose(to_pc_limbs) == compose(rs1) + imm`
+- `to_pc_least_sig_bit + 2 * compose(to_pc_limbs) == compose(rs1) + imm`
+- The destination program address is `2 * compose(to_pc_limbs)`, so the least significant bit is cleared as required by `jalr`
 - `compose(rd) == pc + 4`
 - Each limb of `rd` is in the range `[0, 2^RV32_CELL_BITS)`
 - The most significant limb of `rd` is in the range `[0, 2^(PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))`
@@ -278,7 +280,10 @@ Given:
 
 This circuit proves that:
 
-- `compose(a) == floor((compose(b) * compose(c)) / 2^32)`
+- Let `u32(x) = compose(x)`, and let `i32(x)` denote the signed 32-bit integer with bit decomposition `x`.
+- If `opcode` is `mulh`, then `compose(a) = floor((i32(b) * i32(c) mod 2^64) / 2^32)`.
+- If `opcode` is `mulhsu`, then `compose(a) = floor((i32(b) * u32(c) mod 2^64) / 2^32)`.
+- If `opcode` is `mulhu`, then `compose(a) = floor((u32(b) * u32(c)) / 2^32)`.
 - Each limb of `a` is in the range `[0, 2^RV32_CELL_BITS)`
 
 #### 12. [Shift](./shift/core.rs)
