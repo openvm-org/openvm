@@ -280,7 +280,10 @@ Given:
 
 This circuit proves that:
 
-- `compose(a) == floor((compose(b) * compose(c)) / 2^32)`
+- Let `u32(x) = compose(x)`, and let `i32(x)` denote the signed 32-bit integer with bit decomposition `x`.
+- If `opcode` is `mulh`, then `compose(a) = floor((i32(b) * i32(c) mod 2^64) / 2^32)`.
+- If `opcode` is `mulhsu`, then `compose(a) = floor((i32(b) * u32(c) mod 2^64) / 2^32)`.
+- If `opcode` is `mulhu`, then `compose(a) = floor((u32(b) * u32(c)) / 2^32)`.
 - Each limb of `a` is in the range `[0, 2^RV32_CELL_BITS)`
 
 #### 12. [Shift](./shift/core.rs)

@@ -154,7 +154,7 @@ We range check the quotient to be a valid signed `limb_bit` representation i.e. 
 0 \leq q_i + 2^{\texttt{limb\_bits}} < 2^{\texttt{limb\_bits}+1}
 ```
 
-Finally, we calculate the remainder limbs $`[r_0, r_1, \ldots, r_{n-1}]`$ where $`r_i = a_i - q_i * m_i`$ and constrain it to 0.
+Finally, we calculate the remainder limbs $`[r_0, r_1, \ldots, r_{n-1}]`$ where $`r_i = a_i - (q * m)_i`$, and $`(q * m)_i`$ denotes the `i`th limb of the big-integer product of `q` and `m`, and constrain it to 0.
 
 ```math
 \begin{align}

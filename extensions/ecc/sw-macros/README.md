@@ -64,6 +64,11 @@ Similar to `moduli_declare!`, this macro also creates extern functions for arith
 extern "C" {
     fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
     fn sw_double_extern_func_Secp256k1Point(rd: usize, rs1: usize);
+    fn sw_setup_extern_func_Secp256k1Point(
+        uninit: *mut core::ffi::c_void,
+        p1: *const u8,
+        p2: *const u8,
+    );
 }
 ```
 
@@ -73,7 +78,7 @@ extern "C" {
 #[allow(non_snake_case)]
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_2 {
-    use :openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+    use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
     #[no_mangle]
     extern "C" fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize) {
