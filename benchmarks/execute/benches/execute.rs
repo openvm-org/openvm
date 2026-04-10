@@ -58,7 +58,6 @@ const APP_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
-    "factorial_iterative_u256",
     "revm_snailtracer",
     "keccak256",
     "keccak256_iter",
