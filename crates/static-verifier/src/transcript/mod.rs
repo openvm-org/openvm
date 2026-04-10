@@ -143,7 +143,19 @@ fn constrain_base_baby_bear_decomposition(
         top_quotient,
         QuantumCell::Constant(bounds.top_quotient_max_fe),
     );
-    let lower_is_valid = range.is_big_less_than_safe(ctx, lower, bounds.lower_max_plus_one.clone());
+    // Range-check lower against p^k (not lower_max_plus_one) because lower can be
+    // any value in [0, p^k - 1] and p^k may need more bits than lower_max_plus_one.
+    // Using is_big_less_than_safe with lower_max_plus_one would derive an insufficient
+    // range_bits from lower_max_plus_one.bits() (e.g. 152 vs the 155 bits needed).
+    let lower_range_bits =
+        (bounds.pow_k.bits() as usize).div_ceil(range.lookup_bits()) * range.lookup_bits();
+    range.range_check(ctx, lower, lower_range_bits);
+    let lower_is_valid = range.is_less_than(
+        ctx,
+        lower,
+        QuantumCell::Constant(biguint_to_fe(&bounds.lower_max_plus_one)),
+        lower_range_bits,
+    );
     let lower_is_invalid = gate.not(ctx, lower_is_valid);
     let lower_violation = gate.mul(ctx, at_top_boundary, lower_is_invalid);
     gate.assert_is_const(ctx, &lower_violation, &Fr::ZERO);
