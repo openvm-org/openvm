@@ -29,7 +29,7 @@ impl VmBuilder<E> for Rv32PairingGpuBuilder {
         &self,
         config: &Rv32PairingConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
-        device: &openvm_cuda_backend::GpuDevice,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -43,7 +43,7 @@ impl VmBuilder<E> for Rv32PairingGpuBuilder {
             &Rv32ModularBuilder,
             &config.modular,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;

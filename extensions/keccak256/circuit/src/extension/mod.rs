@@ -91,7 +91,7 @@ where
         &self,
         config: &Keccak256Rv32Config,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -100,7 +100,7 @@ where
             &SystemCpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;

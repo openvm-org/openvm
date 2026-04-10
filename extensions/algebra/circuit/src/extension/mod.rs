@@ -125,7 +125,7 @@ where
         &self,
         config: &Rv32ModularConfig,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -134,7 +134,7 @@ where
             &SystemCpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.base, inventory)?;
@@ -167,7 +167,7 @@ where
         &self,
         config: &Rv32ModularWithFp2Config,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -176,7 +176,7 @@ where
             &Rv32ModularCpuBuilder,
             &config.modular,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;

@@ -392,7 +392,7 @@ where
         &self,
         config: &SystemConfig,
         airs: AirInventory<SC>,
-        _device: &E::PD,
+        _device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
         ChipInventoryError,

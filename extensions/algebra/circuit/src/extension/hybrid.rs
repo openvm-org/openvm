@@ -30,7 +30,7 @@ use openvm_rv32_adapters::{
     Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
 };
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, StarkEngine};
+use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 use strum::EnumCount;
 
 use crate::{
@@ -446,7 +446,7 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
         &self,
         config: &Rv32ModularConfig,
         circuit: AirInventory<SC>,
-        device: &<E as StarkEngine>::PD,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -455,7 +455,7 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
             &SystemGpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.base, inventory)?;
@@ -484,7 +484,7 @@ impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
         &self,
         config: &Rv32ModularWithFp2Config,
         circuit: AirInventory<SC>,
-        device: &<E as StarkEngine>::PD,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -493,7 +493,7 @@ impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
             &Rv32ModularHybridBuilder,
             &config.modular,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(

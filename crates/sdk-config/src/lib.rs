@@ -346,7 +346,7 @@ where
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -356,7 +356,7 @@ where
             &SystemCpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
@@ -414,7 +414,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
-        device: &openvm_cuda_backend::GpuDevice,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -426,7 +426,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             &SystemGpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {

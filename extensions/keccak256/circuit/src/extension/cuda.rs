@@ -88,7 +88,7 @@ impl VmBuilder<E> for Keccak256Rv32GpuBuilder {
         &self,
         config: &Keccak256Rv32Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
-        device: &openvm_cuda_backend::GpuDevice,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<
             <E as StarkEngine>::SC,
@@ -102,7 +102,7 @@ impl VmBuilder<E> for Keccak256Rv32GpuBuilder {
             &SystemGpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;

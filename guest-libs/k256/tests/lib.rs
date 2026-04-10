@@ -166,7 +166,7 @@ mod guest_tests {
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<SC>,
-                device: &E::PD,
+                device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
             ) -> Result<
                 VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
                 ChipInventoryError,
@@ -175,7 +175,7 @@ mod guest_tests {
                     &Rv32WeierstrassBuilder,
                     &config.weierstrass,
                     circuit,
-                    device,
+                    device_ctx,
                 )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<E, _, _>::extend_prover(
@@ -197,7 +197,7 @@ mod guest_tests {
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<BabyBearPoseidon2Config>,
-                device: &openvm_circuit::openvm_cuda_backend::GpuDevice,
+                device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
             ) -> Result<
                 VmChipComplex<
                     BabyBearPoseidon2Config,
@@ -212,7 +212,7 @@ mod guest_tests {
                         &Rv32WeierstrassBuilder,
                         &config.weierstrass,
                         circuit,
-                        device,
+                        device_ctx,
                     )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(

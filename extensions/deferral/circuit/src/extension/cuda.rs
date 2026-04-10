@@ -115,7 +115,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
-        device: &openvm_cuda_backend::GpuDevice,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -129,7 +129,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
             &SystemGpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(

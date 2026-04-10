@@ -76,7 +76,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         &self,
         config: &SystemConfig,
         airs: AirInventory<BabyBearPoseidon2Config>,
-        device: &openvm_cuda_backend::GpuDevice,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -86,11 +86,11 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let ctx = device.device_ctx.clone();
+        let device_ctx = device_ctx.clone();
         let range_bus = airs.range_checker().bus;
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
             Arc::new(VariableRangeCheckerChip::new(range_bus)),
-            ctx.clone(),
+            device_ctx.clone(),
         ));
 
         let mut inventory = ChipInventory::new(airs);
@@ -119,12 +119,13 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
             max_buffer_size,
             sbox_registers,
-            ctx.clone(),
+            device_ctx.clone(),
         ));
         inventory.add_periphery_chip(hasher_chip.clone());
-        let system = SystemChipInventoryGPU::new(config, range_checker, hasher_chip, ctx.clone());
+        let system =
+            SystemChipInventoryGPU::new(config, range_checker, hasher_chip, device_ctx.clone());
 
-        let phantom_chip = PhantomChipGPU::new(ctx.clone());
+        let phantom_chip = PhantomChipGPU::new(device_ctx.clone());
         inventory.add_executor_chip(phantom_chip);
 
         Ok(VmChipComplex { system, inventory })
