@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Download ~/.openvm setup artifacts
-HALO2_DIR="halo2/src/v1.5"
+HALO2_DIR="halo2/src/v2.0"
 mkdir -p ~/.openvm
 mkdir -p ~/.openvm/$HALO2_DIR
 mkdir -p ~/.openvm/$HALO2_DIR/interfaces
