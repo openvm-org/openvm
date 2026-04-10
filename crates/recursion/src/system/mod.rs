@@ -434,32 +434,6 @@ struct MerklePrecomputation {
     codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>,
 }
 
-trait MerklePrecomputationDeviceCtx {
-    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        device_ctx: &Self,
-    ) -> MerklePrecomputation;
-}
-
-impl MerklePrecomputationDeviceCtx for () {
-    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        _device_ctx: &Self,
-    ) -> MerklePrecomputation {
-        VerifierSubCircuit::<MAX_NUM_PROOFS>::compute_merkle_precomputation(proof)
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl MerklePrecomputationDeviceCtx for GpuDeviceCtx {
-    fn compute_merkle_precomputation<const MAX_NUM_PROOFS: usize>(
-        proof: &Proof<BabyBearPoseidon2Config>,
-        device_ctx: &Self,
-    ) -> MerklePrecomputation {
-        VerifierSubCircuit::<MAX_NUM_PROOFS>::compute_merkle_precomputation_cuda(proof, device_ctx)
-    }
-}
-
 #[derive(Clone, Copy, strum_macros::Display)]
 enum TraceModuleRef<'a> {
     Transcript(&'a TranscriptModule),
@@ -700,22 +674,30 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
     {
         let mut preflight = self.run_preflight_without_merkle(sponge, child_vk, proof);
-        Self::apply_merkle_precomputation(proof, &mut preflight, &());
+        Self::apply_merkle_precomputation_cpu(proof, &mut preflight);
 
         preflight
     }
 
-    /// Computes merkle precomputation (hashing opened rows) and writes results into the preflight.
-    #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
-    fn apply_merkle_precomputation<DC>(
+    fn apply_merkle_precomputation_cpu(
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
-        device_ctx: &DC,
-    ) where
-        DC: MerklePrecomputationDeviceCtx,
-    {
-        let merkle_precomputation =
-            DC::compute_merkle_precomputation::<MAX_NUM_PROOFS>(proof, device_ctx);
+    ) {
+        let merkle_precomputation = Self::compute_merkle_precomputation(proof);
+        preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
+        preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
+        preflight.initial_row_states = merkle_precomputation.initial_row_states;
+        preflight.codeword_states = merkle_precomputation.codeword_states;
+    }
+
+    #[cfg(feature = "cuda")]
+    #[tracing::instrument(name = "apply_merkle_precomputation", skip_all)]
+    fn apply_merkle_precomputation(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &mut Preflight,
+        device_ctx: &GpuDeviceCtx,
+    ) {
+        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof, device_ctx);
         preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
         preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
         preflight.initial_row_states = merkle_precomputation.initial_row_states;
@@ -1137,7 +1119,7 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
         });
         #[cfg(feature = "cuda")]
         for (proof, preflight) in proofs.iter().zip(preflights.iter_mut()) {
-            Self::apply_merkle_precomputation(proof, preflight, _device_ctx);
+            Self::apply_merkle_precomputation_cpu(proof, preflight);
         }
 
         if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
