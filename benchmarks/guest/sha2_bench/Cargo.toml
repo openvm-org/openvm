@@ -1,0 +1,11 @@
+[package]
+name = "openvm-sha2-bench-program"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm = { workspace = true, features = ["std"] }
+openvm-sha2.workspace = true
+
+[features]
+default = []
