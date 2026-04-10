@@ -45,6 +45,8 @@ pub mod sha256 {
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
             timestamp_max_bits: u32,
+            d_scratch: *mut u32,
+            scratch_words: usize,
             stream: cudaStream_t,
         ) -> i32;
 
@@ -128,6 +130,7 @@ pub mod sha256 {
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
         timestamp_max_bits: u32,
+        d_scratch: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha256_first_pass_tracegen(
@@ -144,6 +147,8 @@ pub mod sha256 {
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             timestamp_max_bits,
+            d_scratch.as_mut_ptr(),
+            d_scratch.len(),
             stream,
         );
         CudaError::from_result(result)
@@ -220,6 +225,8 @@ pub mod sha512 {
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
             timestamp_max_bits: u32,
+            d_scratch: *mut u64,
+            scratch_words: usize,
             stream: cudaStream_t,
         ) -> i32;
 
@@ -303,6 +310,7 @@ pub mod sha512 {
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
         timestamp_max_bits: u32,
+        d_scratch: &DeviceBuffer<u64>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let result = launch_sha512_first_pass_tracegen(
@@ -319,6 +327,8 @@ pub mod sha512 {
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             timestamp_max_bits,
+            d_scratch.as_mut_ptr(),
+            d_scratch.len(),
             stream,
         );
         CudaError::from_result(result)
