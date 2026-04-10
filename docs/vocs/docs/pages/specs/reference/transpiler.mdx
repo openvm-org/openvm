@@ -147,10 +147,10 @@ Each VM extension's behavior is specified below.
 
 ### Keccak Extension
 
-| RISC-V Inst | OpenVM Instruction                           |
-| ----------- | -------------------------------------------- |
-| xorin       | XORIN `ind(rd), ind(rs1), ind(rs2), 1, 2`   |
-| keccakf     | KECCAKF `ind(rd), _, _, 1, 2`               |
+| RISC-V Inst | OpenVM Instruction                             |
+| ----------- | ---------------------------------------------  |
+| xorin       | XORIN_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| keccakf     | KECCAKF_RV32 `ind(rd), _, _, 1, 2`             |
 
 ### SHA-2 Extension
 
@@ -161,12 +161,12 @@ Each VM extension's behavior is specified below.
 
 ### Deferral Extension
 
-The 12-bit immediate encodes both the sub-opcode and deferral index: `imm[1:0]` selects CALL (`0x0`) vs OUTPUT (`0x1`), and `def_idx = imm[11:2]` identifies which [deferral function](/specs/architecture/deferral) to invoke. In addition to transpiling instructions, the deferral transpiler extension writes the initial input accumulator values (the `def_circuit_commit` for each configured deferral circuit) into the [deferral address space](/specs/openvm/isa#address-spaces) (address space `4`) via `modify_initial_memory`.
+The 12-bit immediate encodes both the sub-opcode and deferral index: `imm[1:0]` selects CALL_RV32 (`0x0`) vs OUTPUT_RV32 (`0x1`), and `def_idx = imm[11:2]` identifies which [deferral function](/specs/architecture/deferral) to invoke. In addition to transpiling instructions, the deferral transpiler extension writes the initial input accumulator values (the `def_circuit_commit` for each configured deferral circuit) into the [deferral address space](/specs/openvm/isa#address-spaces) (address space `4`) via `modify_initial_memory`.
 
-| RISC-V Inst | OpenVM Instruction                           |
-| ----------- | -------------------------------------------- |
-| def_call    | CALL `ind(rd), ind(rs1), def_idx, 1, 2`      |
-| def_output  | OUTPUT `ind(rd), ind(rs1), def_idx, 1, 2`    |
+| RISC-V Inst | OpenVM Instruction                             |
+| ----------- | ---------------------------------------------- |
+| def_call    | CALL_RV32 `ind(rd), ind(rs1), def_idx, 1, 2`   |
+| def_output  | OUTPUT_RV32 `ind(rd), ind(rs1), def_idx, 1, 2` |
 
 ### BigInt Extension
 
@@ -204,10 +204,10 @@ The 12-bit immediate encodes both the sub-opcode and deferral index: `imm[1:0]` 
 
 | RISC-V Inst  | OpenVM Instruction                                                                                                                                 |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| addcomplex   | ADD\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                     |
-| subcomplex   | SUB\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                     |
-| mulcomplex   | MUL\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                     |
-| divcomplex   | DIV\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                     |
+| addcomplex   | ADD_RV32\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                |
+| subcomplex   | SUB_RV32\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                |
+| mulcomplex   | MUL_RV32\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                |
+| divcomplex   | DIV_RV32\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                |
 | setupcomplex | SETUP_ADDSUB_RV32\<Fp2\> `ind(rd), ind(rs1), 0, 1, 2` if `rs2 = x0`, SETUP_MULDIV_RV32\<Fp2\> `ind(rd), ind(rs1), 0, 1, 2` if `rs2 = x1` |
 
 ### Elliptic Curve Extension

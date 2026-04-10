@@ -12,7 +12,7 @@ We will first describe the SHA-256 algorithm, and then describe the differences 
 See the [FIPS standard](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf) for reference. In particular, sections 6.2, 6.4, and 6.5.
 
 In short the SHA-256 algorithm works as follows.
-1. Pad the message to 512 bits and split it into 512-bit 'blocks'.
+1. Pad the message to a multiple of 512 bits and split it into 512-bit 'blocks'.
 2. Initialize a hash state consisting of eight 32-bit words to a specific constant value.
 3. For each block, 
     1. split the message into 16 32-bit words and produce 48 more words based on them. The 16 message words together with the 48 additional words are called the 'message schedule'.
@@ -82,7 +82,7 @@ So if `a_i` and `e_i` denote the values of `a` and `e` after the `i`th round, fo
 
 The algorithm for computing the message schedule involves message schedule words from 16 rounds ago.
 Since we can only constrain two rows at a time, we cannot access data from more than four rounds ago for the first round in each row.
-So, we maintain intermediate values that we call `intermed_4`, `intermed_8` and `intermed_12`, where `intermed_i = w_i + sig_0(w_{i+1})` where `w_i` is the value of `w` from `i` rounds ago and `sig_0` denotes the `sigma_0` function from the FIPS spec.
+So, we maintain intermediate values that we call `intermed_4`, `intermed_8` and `intermed_12`, where `intermed_i = w_i + sig_0(w_{i-1})` where `w_i` is the value of `w` from `i` rounds ago and `sig_0` denotes the `sigma_0` function from the FIPS spec.
 Since we can reliably constrain values from four rounds ago, we can build up `intermed_16` from these values, which is needed for computing the message schedule.
 
 
