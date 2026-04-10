@@ -45,9 +45,10 @@ We also have access to each of the specific functions that the pairing check uti
 
 ### Multi-Miller loop
 
-The multi-Miller loop can also be run separately by importing the `MultiMillerLoop` trait:
+The multi-Miller loop can also be run separately by importing the `MultiMillerLoop` trait. This trait currently comes from the `openvm-pairing-guest` crate, so add `openvm-pairing-guest` as a dependency alongside `openvm-pairing`.
 
 ```rust
+use openvm_pairing::bls12_381::Bls12_381;
 use openvm_pairing_guest::pairing::MultiMillerLoop;
 
 struct MillerLoopInput {
