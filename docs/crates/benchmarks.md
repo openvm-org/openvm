@@ -66,7 +66,7 @@ The behavior of `openvm::io::read_vec` and `openvm::io::read` differs when run o
 On the host machine, when you run `cargo run --features std`, each `read_vec` call will read bytes to end from stdin. For example here is how you would run the fibonacci guest program:
 
 ```bash
-# from programs/fibonacci
+# from benchmarks/guest/fibonacci
 printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 ```
 
@@ -75,7 +75,7 @@ printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 #### Local Builds
 
 By default, if you run `cargo build` or `cargo run` from the guest program root directory, it will
-build with target set to your **host** machine, while running `bench_from_exe` in the bench script will build with target set to `openvm`. If you want to directly build for `openvm` (more specifically a special RISC-V target), run `cargo openvm build` and it will output a RISC-V ELF file to `target/riscv32im-risc0-zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
+build with target set to your **host** machine. If you want to directly build for `openvm` (more specifically a special RISC-V target), run `cargo openvm build` and it will output a RISC-V ELF file to `target/riscv32im-risc0-zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
 
 ```bash
 rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/openvm-fibonacci-program
@@ -139,7 +139,7 @@ The benchmark must be run with special configuration so that additional metrics 
 OUTPUT_PATH="metrics.json" GUEST_SYMBOLS_PATH="guest.syms" cargo run --release --bin <benchmark_name> --features perf-metrics -- --profiling
 ```
 
-Add `--features aggregation,perf-metrics` to run with leaf aggregation. The `perf-metrics` feature tells the VM to run with additional metric collection. The `--profiling` CLI argument tells the script to build the guest program with `profile=profiling` so that the guest program is compiled without stripping debug symbols. When the `perf-metrics` feature is enabled, the `GUEST_SYMBOLS_PATH` environment variable must be set to the file path where function symbols of the guest program will be exported. Those symbols are then used to annotate the flamegraph with function names.
+The `perf-metrics` feature tells the VM to run with additional metric collection. The `--profiling` CLI argument tells the script to build the guest program with `profile=profiling` so that the guest program is compiled without stripping debug symbols. When the `perf-metrics` feature is enabled, the `GUEST_SYMBOLS_PATH` environment variable must be set to the file path where function symbols of the guest program will be exported. Those symbols are then used to annotate the flamegraph with function names.
 
 After the collected metrics are written to `$OUTPUT_PATH`, these flamegraphs can be generated if you have [inferno-flamegraph](https://crates.io/crates/inferno) installed. Install via
 
@@ -159,11 +159,11 @@ The flamegraphs will be written to `*.svg` files in `.bench_metrics/flamegraphs`
 
 Benchmarks are run on every pull request. By default, only the App VM is benchmarked. To run end-to-end benchmarks for EVM proofs, add the `run-benchmark-e2e` label to your pull request. Pull request benchmarks do not run with additional profiling for flamegraphs.
 
-You can also manually trigger benchmarks by using workflow dispatch from [this page](https://github.com/openvm-org/openvm/actions/workflows/benchmarks.yml). Here you will have the option to run with leaf aggregation, run end-to-end benchmarks, and run with additional profiling for flamegraphs. If flamegraphs are enabled, the workflow will generate flamegraphs and create a new markdown file in the [`benchmark-results` branch](https://github.com/openvm-org/openvm/tree/benchmark-results) displaying the flamegraphs. You can find a path to the markdown file in the workflow run details.
+You can also manually trigger benchmarks by using workflow dispatch from [this page](https://github.com/openvm-org/openvm/actions/workflows/benchmarks.yml). Here you will have the option to run end-to-end benchmarks and run with additional profiling for flamegraphs. If flamegraphs are enabled, the workflow will generate flamegraphs and create a new markdown file in the [`benchmark-results` branch](https://github.com/openvm-org/openvm/tree/benchmark-results) displaying the flamegraphs. You can find a path to the markdown file in the workflow run details.
 
 ## Adding a Benchmark to CI
 
-To add the benchmark to CI, update the [ci/benchmark-config.json](../../ci/benchmark-config.json) file and set it's configuration parameters. To make the benchmark run on every PR, follow the existing format with `"e2e_bench": false`. To make the benchmark run only when label `run-benchmark-e2e` is present, set `"e2e_bench": true` and specify values for `root_log_blowup` and `internal_log_blowup`.
+To add the benchmark to CI, update the [ci/benchmark-config.json](../../ci/benchmark-config.json) file and set its configuration parameters. The `name` field should match the benchmark binary name, `id` should be unique, and `working_directory` should point to the directory where the benchmark is run. To make the benchmark run on every PR, follow the existing format with `"e2e_bench": false`. To make the benchmark run only when label `run-benchmark-e2e` is present, set `"e2e_bench": true`.
 
 The `benchmarks.yml` file reads this JSON and generates a matrix of inputs for the [.github/workflows/benchmark-call.yml](../../.github/workflows/benchmark-call.yml) file, a reusable workflow for running the benchmark, collecting metrics, and storing and displaying results.
 

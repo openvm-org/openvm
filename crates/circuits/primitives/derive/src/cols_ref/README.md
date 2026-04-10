@@ -3,7 +3,7 @@
 The `ColsRef` procedural macro is used in constraint generation to create column structs that have dynamic sizes.
 
 Note: this macro was originally created for use in the SHA-2 VM extension, where we reuse the same constraint generation code for three different circuits (SHA-256, SHA-512, and SHA-384).
-See the [SHA-2 VM extension](../../../../../../extensions/sha2/circuit/src/sha2_chips/air.rs) for an example of how to use the `ColsRef` macro to reuse constraint generation code over multiple circuits.
+See the [SHA-2 block hasher AIR](../../../../../../extensions/sha2/circuit/src/sha2_chips/block_hasher_chip/air.rs) and [SHA-2 main AIR](../../../../../../extensions/sha2/circuit/src/sha2_chips/main_chip/air.rs) for examples of how to use the `ColsRef` macro to reuse constraint generation code over multiple circuits.
 
 ## Overview
 
@@ -86,10 +86,10 @@ The fields of `ExampleColsRef` have the same names as the fields of `ExampleCols
 - type `T` becomes `&T`
 - type `[T; LEN]` becomes `ArrayView1<'a, T>` (see [ndarray](https://docs.rs/ndarray/latest/ndarray/index.html)) where `LEN` is an associated constant in `ExampleConfig`
     - the `ExampleColsRef::from` method will correctly infer the length of the array from the config
-- fields with names that end in `Cols` are assumed to be a columns struct that derives `ColsRef` and are transformed into the appropriate `ColsRef` type recursively
+- fields whose type name ends in `Cols` are assumed to be a columns struct that derives `ColsRef` and are transformed into the appropriate `ColsRef` type recursively
     - one restriction is that any nested `ColsRef` type must have the same config as the outer `ColsRef` type
 - fields that are annotated with `#[aligned_borrow]` are assumed to derive `AlignedBorrow` and are borrowed from the input slice. The new type is a reference to the `AlignedBorrow` type
-    - if a field whose name ends in `Cols` is annotated with `#[aligned_borrow]`, then the aligned borrow takes precedence, and the field is not transformed into an `ArrayView`
+    - if a field whose type name ends in `Cols` is annotated with `#[aligned_borrow]`, then the aligned borrow takes precedence, and the field is not transformed into an `ArrayView`
 - nested arrays of `U` become `&ArrayViewX<U>` where `X` is the number of dimensions in the nested array type
     - `U` can be either the generic type `T` or a type that derives `AlignedBorrow`. In the latter case, the field must be annotated with `#[aligned_borrow]`
     - the `ArrayViewX` type provides a `X`-dimensional view into the row slice 

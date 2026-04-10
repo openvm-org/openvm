@@ -241,7 +241,7 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 }
 ```
 
-The `AirInventory` contains a `keygen` method that generates the proving and verifying keys from the collected AIRs.
+The collected `AirInventory` can be converted into AIRs with `into_airs()`, which `VirtualMachine::new_with_keygen` passes to `MultiStarkKeygenBuilder` to generate the proving and verifying keys.
 
 #### Trace Generation
 
