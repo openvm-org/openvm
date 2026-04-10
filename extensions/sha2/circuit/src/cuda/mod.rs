@@ -134,10 +134,7 @@ where
 /// Generic hybrid GPU wrapper that reuses CPU block-hasher tracegen.
 pub struct Sha2BlockHasherChipGpu<C: Sha2Config> {
     records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
-    range_checker: Arc<VariableRangeCheckerChipGPU>,
     bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
-    pointer_max_bits: u32,
-    timestamp_max_bits: u32,
     _marker: PhantomData<C>,
 }
 
@@ -166,7 +163,7 @@ where
 
         let rows_used = num_records * C::ROWS_PER_BLOCK;
         let trace_height = next_power_of_two_or_zero(rows_used);
-        let device_ctx = &self.range_checker.device_ctx;
+        let device_ctx = &self.bitwise_lookup.device_ctx;
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, C::BLOCK_HASHER_WIDTH, device_ctx);
 
@@ -191,11 +188,13 @@ where
                     )
                     .unwrap();
 
-                    // Scratch for two-phase tracegen: state[8] + w_buf[BLOCK_WORDS] per row per block
+                    // Scratch for two-phase tracegen: state[8] + w_buf[BLOCK_WORDS] u32s per row
+                    // per block.
+                    // 17 rows * (8 + 16) * 4 bytes = 1632 bytes/block, vs
+                    // 17 * 456 * 4 = 31008 bytes/block for the trace matrix (~5.3% overhead).
                     let scratch_words_per_block = C::ROWS_PER_BLOCK * (8 + C::BLOCK_WORDS);
-                    let blocks_to_fill = trace_height / C::ROWS_PER_BLOCK;
                     let d_scratch = DeviceBuffer::<u32>::with_capacity(
-                        blocks_to_fill * scratch_words_per_block,
+                        num_blocks as usize * scratch_words_per_block,
                     );
 
                     cuda_abi::sha256::sha256_first_pass_tracegen(
@@ -206,11 +205,8 @@ where
                         &d_record_offsets,
                         num_blocks,
                         &d_prev_hashes,
-                        self.pointer_max_bits,
-                        &self.range_checker.count,
                         &self.bitwise_lookup.count,
                         8,
-                        self.timestamp_max_bits,
                         &d_scratch,
                         device_ctx.stream.as_raw(),
                     )
@@ -247,10 +243,13 @@ where
                     )
                     .unwrap();
 
+                    // Scratch for two-phase tracegen: state[8] + w_buf[BLOCK_WORDS] u64s per row
+                    // per block.
+                    // 21 rows * (8 + 16) * 8 bytes = 4032 bytes/block, vs
+                    // 21 * 903 * 4 = 75852 bytes/block for the trace matrix (~5.3% overhead).
                     let scratch_words_per_block = C::ROWS_PER_BLOCK * (8 + C::BLOCK_WORDS);
-                    let blocks_to_fill = trace_height / C::ROWS_PER_BLOCK;
                     let d_scratch = DeviceBuffer::<u64>::with_capacity(
-                        blocks_to_fill * scratch_words_per_block,
+                        num_blocks as usize * scratch_words_per_block,
                     );
 
                     cuda_abi::sha512::sha512_first_pass_tracegen(
@@ -261,11 +260,8 @@ where
                         &d_record_offsets,
                         num_blocks,
                         &d_prev_hashes,
-                        self.pointer_max_bits,
-                        &self.range_checker.count,
                         &self.bitwise_lookup.count,
                         8,
-                        self.timestamp_max_bits,
                         &d_scratch,
                         device_ctx.stream.as_raw(),
                     )
@@ -297,17 +293,11 @@ where
 impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
     pub fn new(
         records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
-        pointer_max_bits: u32,
-        timestamp_max_bits: u32,
     ) -> Self {
         Self {
             records,
-            range_checker,
             bitwise_lookup,
-            pointer_max_bits,
-            timestamp_max_bits,
             _marker: PhantomData,
         }
     }
