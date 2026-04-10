@@ -91,3 +91,7 @@ path = "src/bin/rkyv.rs"
 [[bin]]
 name = "revm_transfer"
 path = "src/bin/revm_transfer.rs"
+
+[[bin]]
+name = "sha2_bench"
+path = "src/bin/sha2_bench.rs"
