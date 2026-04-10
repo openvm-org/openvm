@@ -10,7 +10,7 @@ use openvm_circuit::{
     },
     system::memory::dimensions::MemoryDimensions,
 };
-use openvm_continuations::{CommitBytes, RootSC, SC};
+use openvm_continuations::{prover::engine_device_ctx, CommitBytes, RootSC, SC};
 use openvm_sdk_config::SdkVmBuilder;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
@@ -99,20 +99,13 @@ impl RootProver {
         &self,
         input: VmStarkProof,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "cuda")] {
-                let engine = E::new(self.0.get_pk().params.clone());
-                let root_device_ctx = &engine.device().device_ctx;
-            } else {
-                let root_device_ctx = &();
-            }
-        }
+        let engine = E::new(self.0.get_pk().params.clone());
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0.generate_proving_ctx(
                 input.inner,
                 &input.user_pvs_proof,
                 input.deferral_merkle_proofs.as_ref(),
-                root_device_ctx,
+                engine_device_ctx(&engine),
             )
         });
         ctx
