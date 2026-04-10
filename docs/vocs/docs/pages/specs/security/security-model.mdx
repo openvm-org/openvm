@@ -25,7 +25,7 @@ the BabyBear field. The interaction argument uses GKR LogUp; see
   condition contributes `w` bits of security to the round in which it is
   applied, and costs about `2^w` additional Fiat-Shamir permutation
   invocations in expectation; the concrete cost depends on the instantiated
-  permutation (here, Poseidon2).
+  permutation (here, Poseidon2). In our [parameter choices](#parameters), `w <= 20`.
 
 ### Proof Types
 
@@ -85,9 +85,10 @@ The `app` row above is the default SDK configuration, which uses
 default production parameter set.
 
 These values are the default production settings configured in
-[stark-backend](https://github.com/openvm-org/stark-backend), which also includes a
-soundness calculator that computes the provable security level from a given set of
-parameters.
+[stark-backend](https://github.com/openvm-org/stark-backend/blob/v2.0.0-beta.1/crates/stark-backend/tests/soundness.rs#L258), 
+which also includes a
+[soundness calculator](https://github.com/openvm-org/stark-backend/blob/v2.0.0-beta.1/crates/stark-backend/src/soundness.rs#L20) 
+that computes the provable security level from a given set of parameters.
 
 ## EVM Proofs
 
