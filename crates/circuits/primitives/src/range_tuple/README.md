@@ -2,7 +2,7 @@
 
 This chip efficiently range checks tuples of values using a single interaction when the product of their ranges is relatively small (less than ~2^20). For example, when checking pairs `(x, y)` against their respective bit limits, this approach is more efficient than performing separate range checks.
 
-**Note:** This chip requires that the product of the range sizes is a power of 2.
+**Note:** This chip requires that each range size is a power of 2 (i.e., each value in `sizes` must be a power of 2).
 
 **Columns:**
 - `tuple`: Array of N columns (columns 0 to N-1) containing all possible tuple combinations within the specified ranges.
