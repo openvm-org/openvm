@@ -40,7 +40,7 @@ jobs:
       - name: Run tests
         working-directory: crates/continuations
         run: |
-          rustup component add rust-src --toolchain nightly-2025-08-02
+          rustup component add rust-src --toolchain nightly-2026-01-18
           cargo nextest run
 
       - name: sccache stats
