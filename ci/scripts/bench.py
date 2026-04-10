@@ -14,7 +14,7 @@ def run_cargo_command(
     kzg_params_dir,
     profile="release",
 ):
-    toolchain = "+1.90"
+    toolchain = "+1.91"
     if "tco" in feature_flags:
         toolchain = "+nightly-2026-01-18"
     # Command to run (for best performance but slower builds, use --profile maxperf)
