@@ -17,7 +17,7 @@ openvm-keccak256.workspace = true
 openvm-sha2.workspace = true
 openvm-k256.workspace = true
 openvm-p256.workspace = true
-openvm-ruint.workspace = true
+openvm-bigint-guest.workspace = true
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 serde = "1.0"
 
