@@ -17,7 +17,7 @@ OpenVM is a modular zkVM (zero-knowledge virtual machine) framework built on STA
 
 ### Rust Toolchain
 
-- Rust 1.90.0 (stable), specified in `rust-toolchain.toml`
+- Rust 1.91.1 (stable), specified in `rust-toolchain.toml`
 - Nightly is only needed for:
   - `rustfmt` (unstable formatting options)
   - guest program compilation / some integration tests (requires `rust-src`, pinned nightly: `nightly-2026-01-18`)
