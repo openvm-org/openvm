@@ -26,9 +26,17 @@ use crate::{
 };
 
 fn run_mock(expect_satisfied: bool, build: impl FnOnce(&mut BaseCircuitBuilder<Fr>)) {
+    run_mock_with_lookup_bits(expect_satisfied, 16, build);
+}
+
+fn run_mock_with_lookup_bits(
+    expect_satisfied: bool,
+    lookup_bits: usize,
+    build: impl FnOnce(&mut BaseCircuitBuilder<Fr>),
+) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(17)
-        .use_lookup_bits(16)
+        .use_lookup_bits(lookup_bits)
         .use_instance_columns(1);
     build(&mut builder);
 
@@ -226,4 +234,19 @@ fn transcript_sample_bits_rejects_bits_equal_31() {
         result.is_err(),
         "sample_bits(31) must be rejected to match backend bound semantics",
     );
+}
+
+#[test]
+fn transcript_decomp() {
+    run_mock_with_lookup_bits(true, 11, |builder| {
+        let range = builder.range_chip();
+        let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
+
+        let ctx = builder.main(0);
+        let gate = range.gate();
+
+        let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
+        let sample = transcript.sample(ctx);
+        gate.assert_is_const(ctx, &sample.value, sample.value.value());
+    });
 }
