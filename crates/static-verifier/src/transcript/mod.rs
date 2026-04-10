@@ -30,17 +30,21 @@ use crate::{
 const NUM_OBS_PER_WORD: usize = 8;
 
 /// Number of BabyBear samples extracted from one BN254 word (base-BabyBear decomposition).
-/// = largest k such that p^(k+1) <= q; evaluates to 7
-const NUM_SAMPLES_PER_WORD: usize = 7;
+/// Must match `compute_num_samples_per_elem` in `MultiFieldTranscript`.
+const NUM_SAMPLES_PER_WORD: usize = 5;
 
 /// Precomputed bounds for the base-BabyBear hint decomposition.
+///
+/// Below `k = NUM_SAMPLES_PER_WORD`.
 struct BaseBabyBearDecompBounds {
-    /// Maximum value of the top quotient (floor((q-1) / p^7)).
-    top_quotient_max: u64,
+    /// floor((q-1) / p^k) as a field element, for the boundary equality check.
+    top_quotient_max_fe: Fr,
+    /// floor((q-1) / p^k) + 1, for the range check.
+    top_quotient_max_plus_one: BigUint,
     /// One more than the maximum lower part when top quotient is at its max.
     lower_max_plus_one: BigUint,
-    /// p^7 as a BigUint.
-    pow7: BigUint,
+    /// p^k as a BigUint.
+    pow_k: BigUint,
 }
 
 fn base_baby_bear_decomp_bounds() -> &'static BaseBabyBearDecompBounds {
@@ -50,19 +54,20 @@ fn base_baby_bear_decomp_bounds() -> &'static BaseBabyBearDecompBounds {
         let one = BigUint::from(1u64);
         let modulus = <Bn254Scalar as P3Field>::order();
         let modulus_minus_one = &modulus - &one;
-        let pow7 = p.pow(NUM_SAMPLES_PER_WORD as u32);
-        let q7_max = &modulus_minus_one / &pow7;
-        let lower_max = modulus_minus_one - &q7_max * &pow7;
+        let pow_k = p.pow(NUM_SAMPLES_PER_WORD as u32);
+        let q_k_max = &modulus_minus_one / &pow_k;
+        let lower_max = modulus_minus_one - &q_k_max * &pow_k;
         BaseBabyBearDecompBounds {
-            top_quotient_max: u64::try_from(&q7_max).expect("top quotient bound should fit in u64"),
+            top_quotient_max_fe: biguint_to_fe(&q_k_max),
+            top_quotient_max_plus_one: &q_k_max + &one,
             lower_max_plus_one: lower_max + one,
-            pow7,
+            pow_k,
         }
     })
 }
 
-/// Decompose a BN254 field element into 7 base-BabyBear (BabyBear prime) digits using
-/// the witness-and-verify (hint) approach.
+/// Decompose a BN254 field element into base-BabyBear digits using the
+/// witness-and-verify (hint) approach.
 ///
 /// This helper only computes the decomposition off-circuit and loads the resulting
 /// digits plus top quotient as witnesses. Constraints must be enforced separately.
@@ -110,11 +115,9 @@ fn constrain_base_baby_bear_decomposition(
     for digit in output_digits {
         range.check_less_than_safe(ctx, digit.value, BABY_BEAR_MODULUS_U64);
     }
-    let top_quotient_upper_bound = bounds
-        .top_quotient_max
-        .checked_add(1)
-        .expect("top quotient bound must be strictly less than u64::MAX");
-    range.check_less_than_safe(ctx, top_quotient, top_quotient_upper_bound);
+    let top_quotient_valid =
+        range.is_big_less_than_safe(ctx, top_quotient, bounds.top_quotient_max_plus_one.clone());
+    gate.assert_is_const(ctx, &top_quotient_valid, &Fr::ONE);
 
     // Verify recomposition: lower = sum(digit_i * p^i)
     let lower = gate.inner_product(
@@ -125,11 +128,11 @@ fn constrain_base_baby_bear_decomposition(
             .map(|power| QuantumCell::Constant(biguint_to_fe(&power))),
     );
 
-    // packed == top_quotient * p^7 + lower
+    // packed == top_quotient * p^k + lower
     let recomposed = gate.mul_add(
         ctx,
         top_quotient,
-        QuantumCell::Constant(biguint_to_fe(&bounds.pow7)),
+        QuantumCell::Constant(biguint_to_fe(&bounds.pow_k)),
         lower,
     );
     ctx.constrain_equal(&packed, &recomposed);
@@ -138,7 +141,7 @@ fn constrain_base_baby_bear_decomposition(
     let at_top_boundary = gate.is_equal(
         ctx,
         top_quotient,
-        QuantumCell::Constant(Fr::from(bounds.top_quotient_max)),
+        QuantumCell::Constant(bounds.top_quotient_max_fe),
     );
     let lower_is_valid = range.is_big_less_than_safe(ctx, lower, bounds.lower_max_plus_one.clone());
     let lower_is_invalid = gate.not(ctx, lower_is_valid);
