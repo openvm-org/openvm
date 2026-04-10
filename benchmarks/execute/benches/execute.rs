@@ -45,8 +45,8 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
     openvm_cpu_backend::{CpuBackend, CpuDevice},
     openvm_stark_backend::{
-        self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, StarkEngine,
-        StarkProtocolConfig, SystemParams, Val,
+        self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, EngineDeviceCtx,
+        StarkEngine, StarkProtocolConfig, SystemParams, Val,
     },
     p3_baby_bear::BabyBear,
 };
@@ -188,7 +188,7 @@ where
         &self,
         config: &ExecuteConfig,
         circuit: AirInventory<SC>,
-        device: &E::PD,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -197,7 +197,7 @@ where
             &SystemCpuBuilder,
             &config.system,
             circuit,
-            device,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;

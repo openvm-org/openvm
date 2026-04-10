@@ -42,10 +42,10 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace_width =
             DeferralCallAdapterCols::<F>::width() + DeferralCallCoreCols::<F>::width();
-        let ctx = &self.range_checker.device_ctx;
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(ctx).unwrap();
-        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
             call::tracegen(
@@ -66,7 +66,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
                 // Length in F elements; the CUDA side converts to record count.
                 self.poseidon2.records.len(),
                 self.address_bits,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral call trace");
         }

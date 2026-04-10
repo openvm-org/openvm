@@ -56,13 +56,13 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 offsets.push(OffsetInfo::new(prev_offset as u32, idx));
             }
         }
-        let ctx = &self.range_checker.device_ctx;
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(ctx).unwrap();
-        let d_record_offsets = offsets.to_device_on(ctx).unwrap();
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_record_offsets = offsets.to_device_on(device_ctx).unwrap();
 
         let trace_height = next_power_of_two_or_zero(offsets.len());
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, width, ctx);
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, width, device_ctx);
 
         unsafe {
             tracegen(
@@ -76,7 +76,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS as u32,
                 self.timestamp_max_bits as u32,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

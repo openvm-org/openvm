@@ -9,7 +9,7 @@ use crate::{cuda_abi::encoder, encoder::Encoder, utils::test_device_ctx};
 
 #[test]
 fn test_cuda_encoder_with_invalid_row() {
-    let ctx = test_device_ctx();
+    let device_ctx = test_device_ctx();
     // Max number of flags for k = 6
     let num_flags = 461;
     let max_degree = 5;
@@ -29,7 +29,7 @@ fn test_cuda_encoder_with_invalid_row() {
         expected_k,
     ));
 
-    let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(num_flags, expected_k, &ctx);
+    let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(num_flags, expected_k, &device_ctx);
     unsafe {
         encoder::dummy_tracegen(
             gpu_matrix.buffer(),
@@ -37,17 +37,17 @@ fn test_cuda_encoder_with_invalid_row() {
             max_degree,
             reserve_invalid,
             expected_k as u32,
-            ctx.stream.as_raw(),
+            device_ctx.stream.as_raw(),
         )
         .unwrap();
     };
 
-    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &ctx);
+    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &device_ctx);
 }
 
 #[test]
 fn test_cuda_encoder_without_invalid_row() {
-    let ctx = test_device_ctx();
+    let device_ctx = test_device_ctx();
     let num_flags = 18;
     let max_degree = 2;
     let reserve_invalid = false;
@@ -66,7 +66,7 @@ fn test_cuda_encoder_without_invalid_row() {
         expected_k,
     ));
 
-    let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(num_flags, expected_k, &ctx);
+    let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(num_flags, expected_k, &device_ctx);
     unsafe {
         encoder::dummy_tracegen(
             gpu_matrix.buffer(),
@@ -74,10 +74,10 @@ fn test_cuda_encoder_without_invalid_row() {
             max_degree,
             reserve_invalid,
             expected_k as u32,
-            ctx.stream.as_raw(),
+            device_ctx.stream.as_raw(),
         )
         .unwrap();
     };
 
-    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &ctx);
+    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &device_ctx);
 }

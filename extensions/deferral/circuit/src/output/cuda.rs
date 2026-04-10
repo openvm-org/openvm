@@ -112,12 +112,12 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
         let rows_used = per_row.len();
         let trace_height = next_power_of_two_or_zero(rows_used);
         let trace_width = DeferralOutputCols::<F>::width();
-        let ctx = &self.range_checker.device_ctx;
-        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
+        let device_ctx = &self.range_checker.device_ctx;
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
-        let d_raw_records = records.to_device_on(ctx).unwrap();
-        let d_per_call = per_call.to_device_on(ctx).unwrap();
-        let d_per_row = per_row.to_device_on(ctx).unwrap();
+        let d_raw_records = records.to_device_on(device_ctx).unwrap();
+        let d_per_call = per_call.to_device_on(device_ctx).unwrap();
+        let d_per_row = per_row.to_device_on(device_ctx).unwrap();
 
         unsafe {
             output::tracegen(
@@ -140,7 +140,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 &self.poseidon2.idx,
                 // Length in F elements; the CUDA side converts to record count.
                 self.poseidon2.records.len(),
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral output trace");
         }

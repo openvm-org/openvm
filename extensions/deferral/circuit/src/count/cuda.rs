@@ -13,7 +13,7 @@ use crate::{count::DeferralCircuitCountCols, cuda_abi::count};
 pub struct DeferralCircuitCountChipGpu {
     pub count: Arc<DeviceBuffer<u32>>,
     pub num_deferral_circuits: usize,
-    pub ctx: GpuDeviceCtx,
+    pub device_ctx: GpuDeviceCtx,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
@@ -28,7 +28,8 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
 
         let trace_width = DeferralCircuitCountCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(self.num_deferral_circuits);
-        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, &self.ctx);
+        let trace =
+            DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, &self.device_ctx);
 
         unsafe {
             count::tracegen(
@@ -36,13 +37,13 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCircuitCountChipGpu {
                 trace_height,
                 &self.count,
                 self.num_deferral_circuits,
-                self.ctx.stream.as_raw(),
+                self.device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral count trace");
         }
 
         self.count
-            .fill_zero_on(&self.ctx)
+            .fill_zero_on(&self.device_ctx)
             .expect("Failed to reset deferral count");
         AirProvingContext::simple_no_pis(trace)
     }

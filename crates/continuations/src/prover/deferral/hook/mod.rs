@@ -59,15 +59,16 @@ where
         T: DeferralHookTraceGen<PB, EngineDeviceCtx<E>>,
     {
         let engine = E::new(self.pk.params.clone());
-        let ctx = self.generate_proving_ctx(proof, leaf_children, engine.device().device_ctx());
+        let proving_ctx =
+            self.generate_proving_ctx(proof, leaf_children, engine.device().device_ctx());
         if tracing::enabled!(tracing::Level::DEBUG) {
-            trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
+            trace_heights_tracing_info::<_, SC>(&proving_ctx.per_trace, &self.circuit.airs());
         }
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
-            crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
+            crate::prover::debug_constraints(&self.circuit, &proving_ctx, &engine);
         }
-        let proof = engine.prove(&self.d_pk, ctx)?;
+        let proof = engine.prove(&self.d_pk, proving_ctx)?;
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
             engine.verify(&self.vk, &proof)?;

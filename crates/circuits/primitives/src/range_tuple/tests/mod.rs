@@ -210,8 +210,8 @@ fn test_cuda_range_tuple() {
         })
         .collect::<Vec<_>>();
 
-    let ctx = crate::utils::test_device_ctx();
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus.sizes, ctx));
+    let device_ctx = crate::utils::test_device_ctx();
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus.sizes, device_ctx));
     let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), random_values);
 
     let airs: Vec<AirRef<SC>> = vec![
@@ -237,10 +237,10 @@ fn test_cuda_range_tuple_hybrid() {
     let mut rng = create_seeded_rng();
     let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.random_range(1..5));
     let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
-    let ctx = crate::utils::test_device_ctx();
+    let device_ctx = crate::utils::test_device_ctx();
     let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::hybrid(
         Arc::new(RangeTupleCheckerChip::new(bus)),
-        ctx.clone(),
+        device_ctx.clone(),
     ));
 
     let gpu_values = (0..NUM_INPUTS)
@@ -274,7 +274,7 @@ fn test_cuda_range_tuple_hybrid() {
                 .chain(cpu_values.iter().map(|v| F::from_u32(v[2]))),
         )
         .collect::<Vec<_>>()
-        .to_device_on(&ctx)
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let dummy_air = DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index);

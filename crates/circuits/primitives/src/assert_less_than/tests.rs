@@ -263,18 +263,18 @@ fn test_cuda_assert_less_than_tracegen() {
     let decomp: usize = 8;
     const AUX_LEN: usize = 4;
 
-    let ctx = test_device_ctx();
+    let device_ctx = test_device_ctx();
     let num_pairs = 4;
-    let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 + AUX_LEN, &ctx);
+    let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 + AUX_LEN, &device_ctx);
     let pairs = vec![[14321, 26883], [0, 1], [28, 120], [337, 456]]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
-        .to_device_on(&ctx)
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let rc_num_bins = (1 << (decomp + 1)) as usize;
-    let rc_histogram = DeviceBuffer::<u32>::with_capacity_on(rc_num_bins, &ctx);
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity_on(rc_num_bins, &device_ctx);
 
     unsafe {
         assert_less_than_dummy_tracegen(
@@ -284,7 +284,7 @@ fn test_cuda_assert_less_than_tracegen() {
             max_bits,
             AUX_LEN,
             &rc_histogram,
-            ctx.stream.as_raw(),
+            device_ctx.stream.as_raw(),
         )
         .unwrap();
     }
@@ -304,5 +304,5 @@ fn test_cuda_assert_less_than_tracegen() {
             .collect(),
         3 + AUX_LEN,
     ));
-    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace, &ctx);
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace, &device_ctx);
 }

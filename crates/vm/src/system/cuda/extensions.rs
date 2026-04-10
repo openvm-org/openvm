@@ -38,7 +38,7 @@ pub fn get_inventory_range_checker(
 pub fn get_or_create_bitwise_op_lookup(
     inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
 ) -> Result<Arc<BitwiseOperationLookupChipGPU<8>>, ChipInventoryError> {
-    let ctx = get_inventory_range_checker(inventory).device_ctx.clone();
+    let device_ctx = get_inventory_range_checker(inventory).device_ctx.clone();
     let bitwise_lu = {
         let existing_chip = inventory
             .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
@@ -50,7 +50,7 @@ pub fn get_or_create_bitwise_op_lookup(
 
             let chip = Arc::new(BitwiseOperationLookupChipGPU::hybrid(
                 Arc::new(BitwiseOperationLookupChip::new(air.bus)),
-                ctx,
+                device_ctx,
             ));
             inventory.add_periphery_chip(chip.clone());
             chip

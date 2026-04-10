@@ -33,12 +33,13 @@ fn test_cuda_deferral_count_tracegen_equivalence() {
         }
     }
 
-    let ctx = GpuDeviceCtx {
+    let device_ctx = GpuDeviceCtx {
         device_id: get_device().unwrap() as u32,
         stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     };
-    let count = Arc::new(counts.to_device_on(&ctx).unwrap());
-    let gpu_chip = DeferralCircuitCountChipGpu::new(count, NUM_DEFERRAL_CIRCUITS, ctx.clone());
+    let count = Arc::new(counts.to_device_on(&device_ctx).unwrap());
+    let gpu_chip =
+        DeferralCircuitCountChipGpu::new(count, NUM_DEFERRAL_CIRCUITS, device_ctx.clone());
 
     let cpu_trace = <DeferralCircuitCountChip as Chip<
         (),
@@ -50,5 +51,5 @@ fn test_cuda_deferral_count_tracegen_equivalence() {
         .common_main;
 
     let cpu_trace_cm = ColMajorMatrix::from_row_major(&cpu_trace);
-    assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, &gpu_trace, &ctx);
+    assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, &gpu_trace, &device_ctx);
 }

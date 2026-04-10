@@ -39,10 +39,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LessThanChipGpu {
         let trace_width = Rv32BaseAluAdapterCols::<F>::width()
             + LessThanCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let ctx = &self.range_checker.device_ctx;
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
             tracegen(
@@ -53,7 +53,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LessThanChipGpu {
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
                 self.timestamp_max_bits as u32,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

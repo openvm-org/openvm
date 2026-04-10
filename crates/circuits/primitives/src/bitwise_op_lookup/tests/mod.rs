@@ -300,10 +300,10 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
 
     let mut rng = create_seeded_rng();
     let bus = BitwiseOperationLookupBus::new(0);
-    let ctx = test_device_ctx();
+    let device_ctx = test_device_ctx();
     let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::hybrid(
         Arc::new(BitwiseOperationLookupChip::new(bus)),
-        ctx.clone(),
+        device_ctx.clone(),
     ));
 
     let gpu_random_values = (0..NUM_INPUTS)
@@ -342,7 +342,7 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
                 .chain(cpu_values.iter().map(|v| F::from_u32(v[3]))),
         )
         .collect::<Vec<_>>()
-        .to_device_on(&ctx)
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let dummy_air = DummyInteractionAir::new(4, true, bus.inner.index);

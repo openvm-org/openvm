@@ -37,10 +37,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
             + LoadSignExtendCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
-        let ctx = &self.range_checker.device_ctx;
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, ctx);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
 
         unsafe {
             tracegen(
@@ -51,7 +51,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

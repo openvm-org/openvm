@@ -146,7 +146,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_is_equal_against_cpu_full() {
-    let ctx = test_device_ctx();
+    let device_ctx = test_device_ctx();
     let mut rng = create_seeded_rng();
 
     for log_height in 1..=16 {
@@ -166,16 +166,16 @@ fn test_cuda_is_equal_against_cpu_full() {
             })
             .collect();
 
-        let inputs_x = vec_x.as_slice().to_device_on(&ctx).unwrap();
-        let inputs_y = vec_y.as_slice().to_device_on(&ctx).unwrap();
+        let inputs_x = vec_x.as_slice().to_device_on(&device_ctx).unwrap();
+        let inputs_y = vec_y.as_slice().to_device_on(&device_ctx).unwrap();
 
-        let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(n, 2, &ctx);
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(n, 2, &device_ctx);
         unsafe {
             is_equal::dummy_tracegen(
                 gpu_matrix.buffer(),
                 &inputs_x,
                 &inputs_y,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -196,6 +196,6 @@ fn test_cuda_is_equal_against_cpu_full() {
             2,
         ));
 
-        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &ctx);
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &device_ctx);
     }
 }

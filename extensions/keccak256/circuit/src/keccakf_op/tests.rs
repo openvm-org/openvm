@@ -243,11 +243,11 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
 
     // Create GPU Perm chip with shared records
     let perm_air = KeccakfPermAir::new(air.keccakf_state_bus);
-    let ctx = GpuDeviceCtx {
+    let device_ctx = GpuDeviceCtx {
         device_id: get_device().unwrap() as u32,
         stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
     };
-    let perm_chip = KeccakfPermChipGpu::new(shared_records, ctx);
+    let perm_chip = KeccakfPermChipGpu::new(shared_records, device_ctx);
 
     CudaTestHarness {
         op_harness,

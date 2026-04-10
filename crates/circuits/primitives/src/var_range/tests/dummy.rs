@@ -111,14 +111,14 @@ pub mod cuda {
     impl<RA> Chip<RA, GpuBackend> for DummyInteractionChipGPU {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len();
-            let ctx = &self.range_checker.device_ctx;
-            let trace = DeviceMatrix::<F>::with_capacity_on(height, DUMMY_TRACE_WIDTH, ctx);
+            let device_ctx = &self.range_checker.device_ctx;
+            let trace = DeviceMatrix::<F>::with_capacity_on(height, DUMMY_TRACE_WIDTH, device_ctx);
             unsafe {
                 dummy_tracegen(
                     &self.data,
                     trace.buffer(),
                     &self.range_checker.count,
-                    ctx.stream.as_raw(),
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

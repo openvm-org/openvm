@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
     },
     Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder, VmExecutionConfig,
 };
-use openvm_continuations::RootSC;
+use openvm_continuations::{prover::engine_device_ctx, RootSC};
 use openvm_stark_backend::{
     keygen::types::MultiStarkProvingKey, p3_field::PrimeField32, prover::ProvingContext,
     StarkEngine, SystemParams, Val,
@@ -19,9 +19,7 @@ use {
 };
 
 use crate::{
-    prover::{
-        engine_device_ctx, vm::types::VmProvingKey, AggProver, DeferralPathProver, StarkProver,
-    },
+    prover::{vm::types::VmProvingKey, AggProver, DeferralPathProver, StarkProver},
     StdIn, F, SC,
 };
 

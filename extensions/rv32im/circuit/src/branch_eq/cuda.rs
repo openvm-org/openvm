@@ -34,10 +34,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchEqualChipGpu {
         let trace_width = BranchEqualCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width()
             + Rv32BranchAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
-        let ctx = &self.range_checker.device_ctx;
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, ctx);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
             tracegen(
@@ -46,7 +46,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchEqualChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

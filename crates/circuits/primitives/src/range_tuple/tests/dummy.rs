@@ -27,16 +27,20 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<N> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let height = self.data.len() / N;
         let width = N + 1;
-        let ctx = &self.range_tuple_checker.device_ctx;
-        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, ctx);
-        let d_sizes = self.range_tuple_checker.sizes.to_device_on(ctx).unwrap();
+        let device_ctx = &self.range_tuple_checker.device_ctx;
+        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
+        let d_sizes = self
+            .range_tuple_checker
+            .sizes
+            .to_device_on(device_ctx)
+            .unwrap();
         unsafe {
             dummy_tracegen(
                 &self.data,
                 trace.buffer(),
                 &self.range_tuple_checker.count,
                 &d_sizes,
-                ctx.stream.as_raw(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

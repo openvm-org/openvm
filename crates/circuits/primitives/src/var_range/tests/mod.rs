@@ -278,8 +278,8 @@ fn test_cuda_var_range() {
         .map(|_| rng.random::<u32>() & RANGE_BIT_MASK)
         .collect();
 
-    let ctx = crate::utils::test_device_ctx();
-    let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(bus, ctx));
+    let device_ctx = crate::utils::test_device_ctx();
+    let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(bus, device_ctx));
     let dummy_chip = DummyInteractionChipGPU::new(range_checker.clone(), random_values);
 
     let airs: Vec<AirRef<SC>> = vec![
@@ -305,10 +305,10 @@ fn test_cuda_var_range_hybrid() {
 
     let mut rng = create_seeded_rng();
     let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
-    let ctx = crate::utils::test_device_ctx();
+    let device_ctx = crate::utils::test_device_ctx();
     let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
         Arc::new(VariableRangeCheckerChip::new(bus)),
-        ctx.clone(),
+        device_ctx.clone(),
     ));
 
     let gpu_random_values: Vec<u32> = (0..NUM_INPUTS)
@@ -335,7 +335,7 @@ fn test_cuda_var_range_hybrid() {
                 .chain(cpu_pairs.iter().map(|pair| F::from_u32(pair[1]))),
         )
         .collect::<Vec<_>>()
-        .to_device_on(&ctx)
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let dummy_air = DummyInteractionAir::new(2, true, bus.index());
