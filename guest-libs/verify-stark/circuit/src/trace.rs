@@ -17,6 +17,11 @@ use openvm_stark_backend::{
 };
 use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 use p3_field::PrimeField32;
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu,
+    openvm_cuda_backend::GpuBackend, openvm_cuda_common::stream::GpuDeviceCtx,
+};
 
 use crate::{
     output::DeferralOutputCtx,
@@ -34,7 +39,7 @@ pub struct PreVerifierData<PB: ProverBackend> {
 }
 
 // Trait used to remain generic in PB
-pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
+pub trait DeferredVerifyTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
     fn new(deferral_enabled: bool) -> Self;
 
     // Returns the AIR proving contexts, Poseidon2 and range inputs, and the data
@@ -46,6 +51,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        device_ctx: &DC,
     ) -> PreVerifierData<PB>;
 
     fn generate_verifier_pvs_ctx(
@@ -54,6 +60,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
         record: DeferredVerifyPvsRecord<PB::Val>,
         final_transcript_state: [PB::Val; POSEIDON2_WIDTH],
         output_commit: [PB::Val; DIGEST_SIZE],
+        device_ctx: &DC,
     ) -> AirProvingContext<PB>;
 }
 
@@ -61,7 +68,7 @@ pub struct DeferredVerifyTraceGenImpl {
     pub deferral_enabled: bool,
 }
 
-impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
+impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -73,6 +80,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         memory_dimensions: MemoryDimensions,
         def_idx: usize,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        _device_ctx: &(),
     ) -> PreVerifierData<CpuBackend<SC>> {
         let (verifier_pvs_record, verifier_p2_compress_inputs, verifier_p2_permute_inputs) =
             generate_record(proof);
@@ -143,6 +151,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         record: DeferredVerifyPvsRecord<F>,
         final_transcript_state: [F; POSEIDON2_WIDTH],
         output_commit: [F; DIGEST_SIZE],
+        _device_ctx: &(),
     ) -> AirProvingContext<CpuBackend<SC>> {
         super::verifier::generate_proving_ctx(
             proof,
@@ -150,6 +159,75 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
             final_transcript_state,
             output_commit,
             self.deferral_enabled,
+        )
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl DeferredVerifyTraceGen<GpuBackend, GpuDeviceCtx> for DeferredVerifyTraceGenImpl {
+    fn new(deferral_enabled: bool) -> Self {
+        Self { deferral_enabled }
+    }
+
+    fn pre_verifier_subcircuit_tracegen(
+        &self,
+        proof: &Proof<SC>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
+        memory_dimensions: MemoryDimensions,
+        def_idx: usize,
+        deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
+        device_ctx: &GpuDeviceCtx,
+    ) -> PreVerifierData<GpuBackend> {
+        let PreVerifierData {
+            pre_verifier_ctxs,
+            post_verifier_ctxs: post_verifier_ctx,
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
+            range_inputs,
+            verifier_pvs_record,
+            output_commit,
+        } = <Self as DeferredVerifyTraceGen<CpuBackend<SC>, ()>>::pre_verifier_subcircuit_tracegen(
+            self,
+            proof,
+            user_pvs_proof,
+            memory_dimensions,
+            def_idx,
+            deferral_merkle_proofs,
+            &(),
+        );
+
+        PreVerifierData {
+            pre_verifier_ctxs: pre_verifier_ctxs
+                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, device_ctx)),
+            post_verifier_ctxs: post_verifier_ctx
+                .into_iter()
+                .map(|air_ctx| cpu_proving_ctx_to_gpu(air_ctx, device_ctx))
+                .collect_vec(),
+            poseidon2_compress_inputs,
+            poseidon2_permute_inputs,
+            range_inputs,
+            verifier_pvs_record,
+            output_commit,
+        }
+    }
+
+    fn generate_verifier_pvs_ctx(
+        &self,
+        proof: &Proof<SC>,
+        record: DeferredVerifyPvsRecord<F>,
+        final_transcript_state: [F; POSEIDON2_WIDTH],
+        output_commit: [F; DIGEST_SIZE],
+        device_ctx: &GpuDeviceCtx,
+    ) -> AirProvingContext<GpuBackend> {
+        cpu_proving_ctx_to_gpu(
+            super::verifier::generate_proving_ctx(
+                proof,
+                record,
+                final_transcript_state,
+                output_commit,
+                self.deferral_enabled,
+            ),
+            device_ctx,
         )
     }
 }

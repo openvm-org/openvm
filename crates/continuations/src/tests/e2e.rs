@@ -743,7 +743,7 @@ fn test_deferral_e2e() -> Result<()> {
     );
     let root_vk = root_prover.get_vk();
     let engine = RootEngine::new(root_vk.inner.params.clone());
-    let proving_ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB>(
+    let proving_ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB, _>(
         combined_proof,
         &user_pvs_proof,
         Some(&merkle_proofs),
