@@ -18,7 +18,7 @@ impl Default for StaticVerifierShape {
     fn default() -> Self {
         Self {
             k: DEFAULT_HALO2_VERIFIER_K,
-            lookup_bits: 11,
+            lookup_bits: DEFAULT_HALO2_VERIFIER_K - 1,
             minimum_rows: 20,
             instance_columns: 1,
         }
