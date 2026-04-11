@@ -27,9 +27,6 @@ jobs:
       - name: Set version
         run: echo "version=${{ github.event.inputs.version || 'v2.0.0-beta.2' }}" >> $GITHUB_ENV
 
-      - name: Install solc # svm should support arm64 linux
-        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -38,6 +35,9 @@ jobs:
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Install solc # svm should support arm64 linux
+        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
       # Checkout and test tagged version
       - name: Checkout tagged version
