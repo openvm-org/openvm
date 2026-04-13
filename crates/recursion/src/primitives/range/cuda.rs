@@ -1,24 +1,26 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{copy::cuda_memcpy, memory_manager::MemTracker};
+use openvm_cuda_common::{copy::cuda_memcpy_on, memory_manager::MemTracker, stream::GpuDeviceCtx};
 
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};
 
-#[derive(Debug)]
 pub struct RangeCheckerGpuTraceGenerator<const NUM_BITS: usize> {
     trace: DeviceMatrix<F>,
-}
-
-impl<const NUM_BITS: usize> Default for RangeCheckerGpuTraceGenerator<NUM_BITS> {
-    fn default() -> Self {
-        let trace = DeviceMatrix::with_capacity(1 << NUM_BITS, RangeCheckerCols::<u8>::width());
-        trace.buffer().fill_zero().unwrap();
-        Self { trace }
-    }
+    device_ctx: GpuDeviceCtx,
 }
 
 impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
-    pub fn from_vals(vals: &[usize]) -> Self {
-        let res = Self::default();
+    pub fn new(device_ctx: GpuDeviceCtx) -> Self {
+        let trace = DeviceMatrix::with_capacity_on(
+            1 << NUM_BITS,
+            RangeCheckerCols::<u8>::width(),
+            &device_ctx,
+        );
+        trace.buffer().fill_zero_on(&device_ctx).unwrap();
+        Self { trace, device_ctx }
+    }
+
+    pub fn from_vals(vals: &[usize], device_ctx: GpuDeviceCtx) -> Self {
+        let res = Self::new(device_ctx);
         if vals.is_empty() {
             return res;
         }
@@ -29,10 +31,11 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
         }
 
         unsafe {
-            cuda_memcpy::<false, true>(
+            cuda_memcpy_on::<false, true>(
                 res.count_mut_ptr().cast(),
                 count.as_ptr().cast(),
                 std::mem::size_of_val(count.as_slice()),
+                &res.device_ctx,
             )
             .unwrap();
         }
@@ -50,7 +53,13 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
     pub fn generate_trace(self) -> DeviceMatrix<F> {
         let mem = MemTracker::start("tracegen.range_checker");
         unsafe {
-            range_checker_tracegen(self.count_ptr(), self.trace.buffer(), NUM_BITS).unwrap();
+            range_checker_tracegen(
+                self.count_ptr(),
+                self.trace.buffer(),
+                NUM_BITS,
+                self.device_ctx.stream.as_raw(),
+            )
+            .unwrap();
         }
         mem.emit_metrics();
         self.trace

@@ -154,7 +154,8 @@ extern "C" int _keccakf_op_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(KeccakfOpCols<uint8_t>));
@@ -163,7 +164,7 @@ extern "C" int _keccakf_op_tracegen(
     uint32_t records_to_fill = height / NUM_OP_ROWS_PER_INS;
 
     auto [grid, block] = kernel_launch_params(records_to_fill, 256);
-    keccakf_op_tracegen<<<grid, block>>>(
+    keccakf_op_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         num_records,

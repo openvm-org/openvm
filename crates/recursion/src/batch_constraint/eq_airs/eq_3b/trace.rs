@@ -235,13 +235,13 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-    use openvm_cuda_common::copy::MemCopyH2D;
+    use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
     use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
     use crate::{
         batch_constraint::cuda_abi::eq_3b_tracegen,
-        cuda::{preflight::PreflightGpu, to_device_or_nullptr},
+        cuda::{preflight::PreflightGpu, to_device_or_nullptr_on},
         tracegen::ModuleChip,
         utils::MultiVecWithBounds,
     };
@@ -251,6 +251,7 @@ pub(in crate::batch_constraint) mod cuda {
             &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
             &'a Eq3bBlob,
             &'a [PreflightGpu],
+            &'a GpuDeviceCtx,
         );
 
         #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
@@ -259,7 +260,7 @@ pub(in crate::batch_constraint) mod cuda {
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
         ) -> Option<AirProvingContext<GpuBackend>> {
-            let (child_vk, blob, preflights) = ctx;
+            let (child_vk, blob, preflights, device_ctx) = ctx;
             debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
 
             let num_proofs = preflights.len();
@@ -312,16 +313,16 @@ pub(in crate::batch_constraint) mod cuda {
             } else {
                 num_valid_rows.max(1).next_power_of_two()
             };
-            let d_trace = DeviceMatrix::with_capacity(height, width);
+            let d_trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
-            let d_records = to_device_or_nullptr(&device_records.data).unwrap();
-            let d_record_bounds = device_records.bounds[0].to_device().unwrap();
-            let d_record_idxs = to_device_or_nullptr(&record_idxs.data).unwrap();
-            let d_record_idxs_bounds = record_idxs.bounds[0].to_device().unwrap();
-            let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
-            let d_n_logups = n_logups.to_device().unwrap();
-            let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
-            let d_xi_bounds = all_xi.bounds[0].to_device().unwrap();
+            let d_records = to_device_or_nullptr_on(&device_records.data, device_ctx).unwrap();
+            let d_record_bounds = device_records.bounds[0].to_device_on(device_ctx).unwrap();
+            let d_record_idxs = to_device_or_nullptr_on(&record_idxs.data, device_ctx).unwrap();
+            let d_record_idxs_bounds = record_idxs.bounds[0].to_device_on(device_ctx).unwrap();
+            let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device_on(device_ctx).unwrap();
+            let d_n_logups = n_logups.to_device_on(device_ctx).unwrap();
+            let d_xis = to_device_or_nullptr_on(&all_xi.data, device_ctx).unwrap();
+            let d_xi_bounds = all_xi.bounds[0].to_device_on(device_ctx).unwrap();
 
             unsafe {
                 eq_3b_tracegen(
@@ -338,6 +339,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_n_logups,
                     &d_xis,
                     &d_xi_bounds,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

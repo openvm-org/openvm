@@ -40,11 +40,12 @@ extern "C" int _phantom_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<PhantomRecord> d_records
+    DeviceBufferConstView<PhantomRecord> d_records,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(PhantomCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    phantom_tracegen<<<grid, block>>>(d_trace, height, width, d_records);
+    phantom_tracegen<<<grid, block, 0, stream>>>(d_trace, height, width, d_records);
     return CHECK_KERNEL();
 }

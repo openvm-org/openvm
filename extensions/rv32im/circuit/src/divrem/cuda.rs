@@ -45,9 +45,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
 
         let tuple_checker_sizes = self.range_tuple_checker.sizes;
         let tuple_checker_sizes = UInt2::new(tuple_checker_sizes[0], tuple_checker_sizes[1]);
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(padded_height, trace_width);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
         unsafe {
             tracegen(
                 d_trace.buffer(),
@@ -60,6 +61,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
                 self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

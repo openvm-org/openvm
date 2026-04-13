@@ -26,13 +26,14 @@ extern "C" int _encoder_tracegen(
     uint32_t num_flags,
     uint32_t max_degree,
     bool reserve_invalid,
-    uint32_t expected_k
+    uint32_t expected_k,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(num_flags);
     uint32_t k = compute_k(num_flags, max_degree, reserve_invalid);
     assert(k == expected_k);
 
-    cukernel_encoder_tracegen<<<grid, block>>>(trace, num_flags, max_degree, reserve_invalid, k);
+    cukernel_encoder_tracegen<<<grid, block, 0, stream>>>(trace, num_flags, max_degree, reserve_invalid, k);
 
     return CHECK_KERNEL();
 }

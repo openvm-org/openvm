@@ -85,6 +85,11 @@ pub use test_utils::*;
 mod test_utils {
     #[cfg(feature = "cuda")]
     use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+    #[cfg(feature = "cuda")]
+    use openvm_cuda_common::{
+        common::get_device,
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
+    };
     use openvm_stark_backend::{test_utils::test_system_params_small, StarkEngine};
     use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::setup_tracing};
 
@@ -99,6 +104,14 @@ mod test_utils {
         setup_tracing();
         BabyBearPoseidon2GpuEngine::new(test_system_params_small(4, 12, 4))
     }
+
+    #[cfg(feature = "cuda")]
+    pub fn test_device_ctx() -> GpuDeviceCtx {
+        GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        }
+    }
 }
 
 #[cfg(all(feature = "touchemall", feature = "cuda"))]
@@ -106,16 +119,29 @@ pub use touchemall::*;
 #[cfg(all(feature = "touchemall", feature = "cuda"))]
 mod touchemall {
     use openvm_cuda_backend::{prelude::F, GpuBackend};
+    use openvm_cuda_common::{
+        common::get_device,
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
+    };
     use openvm_stark_backend::prover::AirProvingContext;
 
+    fn touchemall_device_ctx() -> GpuDeviceCtx {
+        GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        }
+    }
+
     pub fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>, name: &str) {
-        use openvm_cuda_common::copy::MemCopyD2H;
+        use openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize};
         use openvm_stark_backend::prover::MatrixDimensions;
 
+        // Synchronize all GPU work before reading the trace on a different stream.
+        device_synchronize().unwrap();
         let trace = &proving_ctx.common_main;
         let height = trace.height();
         let width = trace.width();
-        let trace = trace.to_host().unwrap();
+        let trace = trace.to_host_on(&touchemall_device_ctx()).unwrap();
         for r in 0..height {
             for c in 0..width {
                 let value = trace[c * height + r];

@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
     },
     Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder, VmExecutionConfig,
 };
-use openvm_continuations::RootSC;
+use openvm_continuations::{prover::engine_device_ctx, RootSC};
 use openvm_stark_backend::{
     keygen::types::MultiStarkProvingKey, p3_field::PrimeField32, prover::ProvingContext,
     StarkEngine, SystemParams, Val,
@@ -92,11 +92,13 @@ where
         None,
     );
 
+    let engine = RootE::new(root_prover.get_pk().params.clone());
     let root_proving_ctx: ProvingContext<<RootE as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
             agg_proof.deferral_merkle_proofs.as_ref(),
+            engine_device_ctx(&engine),
         )
         .unwrap();
 

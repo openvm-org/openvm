@@ -61,11 +61,14 @@ impl<SC: StarkProtocolConfig<F = F>, T: RowMajorChip<F>> ModuleChip<CpuBackend<S
 
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda {
+    use openvm_cuda_common::stream::GpuDeviceCtx;
+
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
 
     pub(crate) struct StandardTracegenGpuCtx<'a> {
         pub vk: &'a VerifyingKeyGpu,
         pub proofs: &'a [ProofGpu],
         pub preflights: &'a [PreflightGpu],
+        pub device_ctx: &'a GpuDeviceCtx,
     }
 }

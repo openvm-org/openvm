@@ -188,6 +188,11 @@ use openvm_circuit::arch::{
     testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
     DenseRecordArena,
 };
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{CudaStream, GpuDeviceCtx, StreamGuard},
+};
 
 #[cfg(feature = "cuda")]
 use crate::{
@@ -238,7 +243,11 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
 
     // Create GPU Perm chip with shared records
     let perm_air = KeccakfPermAir::new(air.keccakf_state_bus);
-    let perm_chip = KeccakfPermChipGpu::new(shared_records);
+    let device_ctx = GpuDeviceCtx {
+        device_id: get_device().unwrap() as u32,
+        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+    };
+    let perm_chip = KeccakfPermChipGpu::new(shared_records, device_ctx);
 
     CudaTestHarness {
         op_harness,

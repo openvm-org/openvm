@@ -202,13 +202,16 @@ mod ec_addne_tests {
             tester.address_bits(),
         );
 
-        let hybrid_chip = HybridWeierstrassChip::new(get_ec_addne_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
+        let hybrid_chip = HybridWeierstrassChip::new(
+            get_ec_addne_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker().device_ctx.clone(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -651,14 +654,17 @@ mod ec_double_tests {
             tester.address_bits(),
             a_biguint.clone(),
         );
-        let hybrid_chip = HybridWeierstrassChip::new(get_ec_double_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-            a_biguint,
-        ));
+        let hybrid_chip = HybridWeierstrassChip::new(
+            get_ec_double_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+                a_biguint,
+            ),
+            tester.range_checker().device_ctx.clone(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }

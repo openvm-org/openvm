@@ -75,13 +75,14 @@ extern "C" int _merkle_precomputation_hash_vectors(
     const VectorDescriptor *d_descriptors,
     size_t num_vectors,
     Fp *d_pre_states,
-    Fp *d_post_states
+    Fp *d_post_states,
+    cudaStream_t stream
 ) {
     if (num_vectors == 0) {
         return cudaSuccess;
     }
     auto [grid, block] = kernel_launch_params(num_vectors);
-    cukernel_hash_vectors<<<grid, block, 0, cudaStreamPerThread>>>(
+    cukernel_hash_vectors<<<grid, block, 0, stream>>>(
         d_data, d_descriptors, num_vectors, d_pre_states, d_post_states
     );
     return CHECK_KERNEL();

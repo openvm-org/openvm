@@ -290,14 +290,15 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         None,
         None,
     );
-    let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
+    let engine = RootEngine::new(root_prover.get_vk().inner.params.clone());
+    let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
         internal_recursive_proof,
         &user_pvs_proof,
+        &engine.device().device_ctx,
     );
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let vk = root_prover.get_vk();
-    let engine = RootEngine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
     Ok(())
 }
@@ -325,10 +326,12 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
     );
     let root_pk = root_base_prover.get_pk();
+    let engine = RootEngine::new(root_pk.params.clone());
     let ctx = root_base_prover
-        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
+        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof.clone(),
             &user_pvs_proof,
+            &engine.device().device_ctx,
         )
         .unwrap();
     let mut trace_heights = ctx
@@ -349,10 +352,12 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
         Some(trace_heights.clone()),
     );
+    let engine2 = RootEngine::new(root_prover.get_pk().params.clone());
     let ctx = root_prover
-        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
+        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof,
             &user_pvs_proof,
+            &engine2.device().device_ctx,
         )
         .unwrap();
 

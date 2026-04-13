@@ -1,9 +1,9 @@
 use itertools::Itertools;
-use openvm_cuda_common::d_buffer::DeviceBuffer;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
-use crate::cuda::{to_device_or_nullptr, types::PublicValueData};
+use crate::cuda::{to_device_or_nullptr_on, types::PublicValueData};
 
 /*
  * Tracegen information (i.e. records) on a GPU device. Each field should
@@ -52,10 +52,11 @@ impl ProofGpu {
     pub fn new(
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
+        device_ctx: &GpuDeviceCtx,
     ) -> Self {
         ProofGpu {
             cpu: proof.clone(),
-            proof_shape: Self::proof_shape(vk, proof),
+            proof_shape: Self::proof_shape(vk, proof, device_ctx),
             gkr: Self::gkr(proof),
             batch_constraint: Self::batch_constraint(proof),
             stacking: Self::stacking(proof),
@@ -66,6 +67,7 @@ impl ProofGpu {
     fn proof_shape(
         _vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
+        device_ctx: &GpuDeviceCtx,
     ) -> ProofShapeProofGpu {
         let num_airs = proof.public_values.len();
         let public_values = proof
@@ -87,7 +89,7 @@ impl ProofGpu {
             })
             .collect_vec();
         ProofShapeProofGpu {
-            public_values: to_device_or_nullptr(&public_values).unwrap(),
+            public_values: to_device_or_nullptr_on(&public_values, device_ctx).unwrap(),
         }
     }
 

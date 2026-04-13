@@ -15,10 +15,11 @@ __global__ void range_checker_tracegen(const uint32_t *count, Fp *trace, size_t 
 extern "C" int _range_checker_recursion_tracegen(
     const uint32_t *d_count,
     Fp *d_trace,
-    size_t num_bits
+    size_t num_bits,
+    cudaStream_t stream
 ) {
     size_t height = 1 << num_bits;
     auto [grid, block] = kernel_launch_params(height);
-    range_checker_tracegen<<<grid, block>>>(d_count, d_trace, height);
+    range_checker_tracegen<<<grid, block, 0, stream>>>(d_count, d_trace, height);
     return CHECK_KERNEL();
 }

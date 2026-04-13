@@ -19,17 +19,18 @@ use crate::{
 };
 
 impl<S: AggregationSubCircuit, T> RootProver<S, T> {
-    pub fn generate_proving_ctx<PB>(
+    pub fn generate_proving_ctx<PB, DC: Clone + Send + Sync>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
+        device_ctx: &DC,
     ) -> Option<ProvingContext<PB>>
     where
         PB: ProverBackend<Val = F, Challenge = EF>,
         PB::Matrix: Clone,
-        S: VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
+        S: VerifierTraceGen<PB, RootSC, DC>,
+        T: RootTraceGen<PB, DC>,
     {
         assert_eq!(
             user_pvs_proof.public_values.len(),
@@ -41,12 +42,14 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             &proof,
             user_pvs_proof,
             self.circuit.memory_dimensions,
+            device_ctx,
         );
         let (post_verifier_subcircuit_ctxs, other_compress_inputs) =
             self.agg_node_tracegen.generate_other_proving_ctxs(
                 &proof,
                 self.circuit.memory_dimensions,
                 deferral_merkle_proofs,
+                device_ctx,
             );
         pre_data
             .poseidon2_compress_inputs
@@ -73,6 +76,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             CachedTraceCtx::Records(self.cached_trace_record.clone()),
             &[proof],
             &mut external_data,
+            device_ctx,
             default_duplex_sponge_recorder(),
         );
 
@@ -88,21 +92,22 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     }
 
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_no_def<PB>(
+    pub fn generate_proving_ctx_no_def<PB, DC: Clone + Send + Sync>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        device_ctx: &DC,
     ) -> Option<ProvingContext<PB>>
     where
         PB: ProverBackend<Val = F, Challenge = EF>,
         PB::Matrix: Clone,
-        S: VerifierTraceGen<PB, RootSC>,
-        T: RootTraceGen<PB>,
+        S: VerifierTraceGen<PB, RootSC, DC>,
+        T: RootTraceGen<PB, DC>,
     {
         assert!(
             self.circuit.def_hook_commit.is_none(),
             "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
         );
-        self.generate_proving_ctx(proof, user_pvs_proof, None)
+        self.generate_proving_ctx(proof, user_pvs_proof, None, device_ctx)
     }
 }

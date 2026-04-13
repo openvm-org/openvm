@@ -93,7 +93,6 @@ fn main() -> eyre::Result<()> {
         "--std=c++17",
         "--expt-relaxed-constexpr",
         "-Xfatbin=-compress-all",
-        "--default-stream=per-thread",
     ]);
 
     cmd.arg("-gencode")

@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{
         ColMajorMatrix, CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey,
-        MatrixDimensions, ProverBackend, ProvingContext, TraceCommitter,
+        MatrixDimensions, ProverBackend, ProverDevice, ProvingContext, TraceCommitter,
     },
     verifier::VerifierError,
     Com, StarkEngine, StarkProtocolConfig, Val,
@@ -408,7 +408,8 @@ where
         d_pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
         let circuit = config.create_airs()?;
-        let chip_complex = builder.create_chip_complex(&config, circuit)?;
+        let chip_complex =
+            builder.create_chip_complex(&config, circuit, engine.device().device_ctx())?;
         let executor = VmExecutor::<Val<E::SC>, _>::new(config)?;
         Ok(Self {
             engine,

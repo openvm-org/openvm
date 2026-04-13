@@ -100,7 +100,8 @@ extern "C" int _persistent_boundary_tracegen(
     size_t num_records,
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
-    size_t poseidon2_capacity
+    size_t poseidon2_capacity,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(height);
     BoundaryRecord<PERSISTENT_CHUNK, BLOCKS_PER_CHUNK> *d_records =
@@ -109,7 +110,7 @@ extern "C" int _persistent_boundary_tracegen(
     // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
     assert(poseidon2_capacity % 16 == 0 && "poseidon2_capacity must be a multiple of 16");
     size_t poseidon2_record_capacity = poseidon2_capacity / 16;
-    cukernel_persistent_boundary_tracegen<<<grid, block>>>(
+    cukernel_persistent_boundary_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

@@ -119,12 +119,13 @@ extern "C" int _non_initial_opened_values_tracegen(
     const size_t *round_row_offsets_d,
     size_t rows_per_proof,
     const size_t *query_offsets_d,
-    size_t total_queries
+    size_t total_queries,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height);
 
-    non_initial_opened_values_tracegen<<<grid, block>>>(
+    non_initial_opened_values_tracegen<<<grid, block, 0, stream>>>(
         trace_d,
         num_valid_rows,
         height,
