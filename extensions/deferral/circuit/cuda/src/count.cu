@@ -35,9 +35,10 @@ extern "C" int _deferral_count_tracegen(
     Fp *d_trace,
     const size_t height,
     const uint32_t *d_count,
-    const size_t num_def_circuits
+    const size_t num_def_circuits,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(height);
-    deferral_count_tracegen<<<grid, block>>>(d_trace, height, d_count, num_def_circuits);
+    deferral_count_tracegen<<<grid, block, 0, stream>>>(d_trace, height, d_count, num_def_circuits);
     return CHECK_KERNEL();
 }

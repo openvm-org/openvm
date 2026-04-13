@@ -64,14 +64,15 @@ extern "C" int _rv32_shift_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv32_shift_tracegen<<<grid, block>>>(
+    rv32_shift_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

@@ -18,6 +18,7 @@ use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
@@ -36,6 +37,7 @@ pub struct HybridWeierstrassChip<
     const BLOCK_SIZE: usize,
 > {
     cpu: WeierstrassChip<F, NUM_READS, BLOCKS, BLOCK_SIZE>,
+    device_ctx: GpuDeviceCtx,
 }
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
@@ -78,7 +80,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
         let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx)
+        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
     }
 }
 
@@ -101,6 +103,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
 
         let bitwise_lu_gpu = get_or_create_bitwise_op_lookup(inventory)?;
         let bitwise_lu = bitwise_lu_gpu.cpu_chip.clone().unwrap();
+        let device_ctx = range_checker_gpu.device_ctx.clone();
 
         for curve in extension.supported_curves.iter() {
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
@@ -120,7 +123,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(addne));
+                inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
@@ -131,7 +134,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     pointer_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(double));
+                inventory.add_executor_chip(HybridWeierstrassChip::new(double, device_ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -147,7 +150,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(addne));
+                inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
@@ -158,7 +161,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     pointer_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(double));
+                inventory.add_executor_chip(HybridWeierstrassChip::new(double, device_ctx.clone()));
             } else {
                 panic!("Modulus too large");
             }
@@ -184,6 +187,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
         &self,
         config: &Rv32WeierstrassConfig,
         circuit: AirInventory<SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -192,6 +196,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
             &Rv32ModularHybridBuilder,
             &config.modular,
             circuit,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(

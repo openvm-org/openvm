@@ -54,7 +54,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         // Register KeccakfPermChip (periphery chip - added BEFORE OpChip to ensure OpChip tracegen
         // runs first)
         inventory.next_air::<KeccakfPermAir>()?;
-        let perm_chip = KeccakfPermChipGpu::new(shared_records.clone());
+        let perm_chip =
+            KeccakfPermChipGpu::new(shared_records.clone(), range_checker.device_ctx.clone());
         inventory.add_periphery_chip(perm_chip);
 
         // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery
@@ -87,6 +88,7 @@ impl VmBuilder<E> for Keccak256Rv32GpuBuilder {
         &self,
         config: &Keccak256Rv32Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<
             <E as StarkEngine>::SC,
@@ -96,8 +98,12 @@ impl VmBuilder<E> for Keccak256Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;

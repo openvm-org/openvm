@@ -2,6 +2,7 @@ use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,
+    stream::cudaStream_t,
 };
 
 pub mod xorin {
@@ -19,6 +20,7 @@ pub mod xorin {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -34,6 +36,7 @@ pub mod xorin {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_xorin_tracegen(
@@ -47,6 +50,7 @@ pub mod xorin {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -67,6 +71,7 @@ pub mod keccakf_op {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -82,6 +87,7 @@ pub mod keccakf_op {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_keccakf_op_tracegen(
@@ -95,6 +101,7 @@ pub mod keccakf_op {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -112,6 +119,7 @@ pub mod keccakf_perm {
             num_records: usize,
             d_round_states: *mut u64,
             round_state_words: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -123,6 +131,7 @@ pub mod keccakf_perm {
         d_records: &DeviceBuffer<u8>,
         num_records: usize,
         d_round_states: &DeviceBuffer<u64>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_keccakf_perm_tracegen(
@@ -133,6 +142,7 @@ pub mod keccakf_perm {
             num_records,
             d_round_states.as_mut_ptr(),
             d_round_states.len(),
+            stream,
         ))
     }
 }

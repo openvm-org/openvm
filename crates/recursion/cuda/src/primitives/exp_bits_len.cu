@@ -135,12 +135,13 @@ extern "C" int _exp_bits_len_tracegen(
     size_t num_requests,
     Fp *d_trace,
     size_t height,
-    size_t num_valid_rows
+    size_t num_valid_rows,
+    cudaStream_t stream
 ) {
     size_t total_jobs = num_requests + (height - num_valid_rows);
     if (total_jobs > 0) {
         auto [grid, block] = kernel_launch_params(total_jobs);
-        exp_bits_len_tracegen_kernel<<<grid, block>>>(
+        exp_bits_len_tracegen_kernel<<<grid, block, 0, stream>>>(
             d_requests, num_requests, d_trace, height, num_valid_rows
         );
         int err = CHECK_KERNEL();

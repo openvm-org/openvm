@@ -897,6 +897,7 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
+    use openvm_cuda_common::stream::GpuDeviceCtx;
 
     use super::*;
     use crate::{
@@ -928,7 +929,12 @@ pub mod cuda_tracegen {
             let cached_trace_record = ctx.2;
             match self {
                 Eq3b => eq_airs::Eq3bTraceGenerator.generate_proving_ctx(
-                    &(&child_vk.cpu, &blob.common_blob.eq_3b_blob, preflights),
+                    &(
+                        &child_vk.cpu,
+                        &blob.common_blob.eq_3b_blob,
+                        preflights,
+                        ctx.0.device_ctx,
+                    ),
                     required_height,
                 ),
                 SymbolicExpression {
@@ -945,13 +951,20 @@ pub mod cuda_tracegen {
                         preflights,
                         expr_evals: &blob.common_blob.expr_evals,
                         cached_trace_record: &cached_trace_record,
+                        device_ctx: ctx.0.device_ctx,
                     },
                     required_height,
                 ),
                 InteractionsFolding => expr_eval::InteractionsFoldingTraceGenerator
-                    .generate_proving_ctx(&(child_vk, preflights, &blob.if_blob), required_height),
+                    .generate_proving_ctx(
+                        &(child_vk, preflights, &blob.if_blob, ctx.0.device_ctx),
+                        required_height,
+                    ),
                 ConstraintsFolding => expr_eval::ConstraintsFoldingTraceGenerator
-                    .generate_proving_ctx(&(child_vk, preflights, &blob.cf_blob), required_height),
+                    .generate_proving_ctx(
+                        &(child_vk, preflights, &blob.cf_blob, ctx.0.device_ctx),
+                        required_height,
+                    ),
                 _ => unreachable!(),
             }
         }
@@ -970,17 +983,23 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            device_ctx: &GpuDeviceCtx,
         ) -> Self {
             let cpu_proofs = proofs.iter().map(|p| &p.cpu).collect_vec();
             let cpu_preflights = preflights.iter().map(|p| &p.cpu).collect_vec();
             let common_blob = BatchConstraintBlob::new(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
-            let cf_blob =
-                ConstraintsFoldingBlobGpu::new(child_vk, &common_blob.expr_evals, preflights);
+            let cf_blob = ConstraintsFoldingBlobGpu::new(
+                child_vk,
+                &common_blob.expr_evals,
+                preflights,
+                device_ctx,
+            );
             let if_blob = InteractionsFoldingBlobGpu::new(
                 child_vk,
                 &common_blob.expr_evals,
                 &common_blob.eq_3b_blob,
                 preflights,
+                device_ctx,
             );
             let expr_claim_blob =
                 generate_expression_claim_blob(&cf_blob.folded_claims, &if_blob.folded_claims);
@@ -997,6 +1016,7 @@ pub mod cuda_tracegen {
         type ModuleSpecificCtx<'a> = (
             Option<&'a CachedTraceRecord>,
             Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+            &'a openvm_cuda_common::stream::GpuDeviceCtx,
         );
 
         #[tracing::instrument(skip_all)]
@@ -1010,12 +1030,14 @@ pub mod cuda_tracegen {
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let cached_trace_record = module_ctx.0;
             let pow_checker = module_ctx.1.clone();
-            let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights);
+            let device_ctx = module_ctx.2;
+            let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights, device_ctx);
             let ctx = (
                 StandardTracegenGpuCtx {
                     vk: child_vk,
                     proofs,
                     preflights,
+                    device_ctx,
                 },
                 &blob,
                 cached_trace_record,
@@ -1101,7 +1123,9 @@ pub mod cuda_tracegen {
                     (
                         idx,
                         trace.map(|m| {
-                            AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                            AirProvingContext::simple_no_pis(
+                                transport_matrix_h2d_row(&m, device_ctx).unwrap(),
+                            )
                         }),
                     )
                 })
@@ -1124,6 +1148,7 @@ pub mod cuda_tracegen {
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+            device_ctx: &GpuDeviceCtx,
         ) -> CommittedTraceData<E::PB>
         where
             E: StarkEngine,
@@ -1131,10 +1156,11 @@ pub mod cuda_tracegen {
                 Val = F,
                 Matrix = openvm_cuda_backend::base::DeviceMatrix<F>,
             >,
+            E::PD: TraceCommitter<E::PB>,
         {
             let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let d_cached_trace = transport_matrix_h2d_row(&cached_trace).unwrap();
+            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, device_ctx).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {
                 commitment,

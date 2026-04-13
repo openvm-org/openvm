@@ -49,9 +49,10 @@ extern "C" int _bitwise_dummy_tracegen(
     Fp *d_trace,
     DeviceBufferConstView<DummyRecord> records,
     uint32_t *bitwise_count,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(records.len());
-    bitwise_dummy_tracegen<<<grid, block>>>(d_trace, records, bitwise_count, bitwise_num_bits);
+    bitwise_dummy_tracegen<<<grid, block, 0, stream>>>(d_trace, records, bitwise_count, bitwise_num_bits);
     return CHECK_KERNEL();
 }

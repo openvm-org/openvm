@@ -40,28 +40,29 @@ extern "C" int _range_tuple_dummy_tracegen(
     uint32_t *d_rc_count,
     size_t data_height,
     uint32_t *sizes,
-    size_t sizes_len
+    size_t sizes_len,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(data_height);
     switch (sizes_len) {
     case 1: {
         range_tuple_dummy_tracegen<1>
-            <<<grid, block>>>(d_data, d_trace, d_rc_count, data_height, sizes);
+            <<<grid, block, 0, stream>>>(d_data, d_trace, d_rc_count, data_height, sizes);
         break;
     }
     case 2: {
         range_tuple_dummy_tracegen<2>
-            <<<grid, block>>>(d_data, d_trace, d_rc_count, data_height, sizes);
+            <<<grid, block, 0, stream>>>(d_data, d_trace, d_rc_count, data_height, sizes);
         break;
     }
     case 3: {
         range_tuple_dummy_tracegen<3>
-            <<<grid, block>>>(d_data, d_trace, d_rc_count, data_height, sizes);
+            <<<grid, block, 0, stream>>>(d_data, d_trace, d_rc_count, data_height, sizes);
         break;
     }
     case 4: {
         range_tuple_dummy_tracegen<4>
-            <<<grid, block>>>(d_data, d_trace, d_rc_count, data_height, sizes);
+            <<<grid, block, 0, stream>>>(d_data, d_trace, d_rc_count, data_height, sizes);
         break;
     }
     default:

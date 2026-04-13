@@ -10,6 +10,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
@@ -38,18 +39,26 @@ impl SystemChipInventoryGPU {
         config: &SystemConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         let cpu_range_checker = range_checker.cpu_chip.clone().unwrap();
 
         // We create an empty program chip: the program should be loaded later (and can be swapped
         // out). The execution frequencies are supplied only after execution.
-        let program_chip = ProgramChipGPU::new();
-        let connector_chip = VmConnectorChipGPU::new(VmConnectorChip::new(
-            cpu_range_checker.clone(),
-            config.memory_config.timestamp_max_bits,
-        ));
+        let program_chip = ProgramChipGPU::new(device_ctx.clone());
+        let connector_chip = VmConnectorChipGPU::new(
+            VmConnectorChip::new(
+                cpu_range_checker.clone(),
+                config.memory_config.timestamp_max_bits,
+            ),
+            device_ctx.clone(),
+        );
 
-        let memory_inventory = MemoryInventoryGPU::new(config.memory_config.clone(), hasher_chip);
+        let memory_inventory = MemoryInventoryGPU::new(
+            config.memory_config.clone(),
+            hasher_chip,
+            device_ctx.clone(),
+        );
 
         Self {
             program: program_chip,

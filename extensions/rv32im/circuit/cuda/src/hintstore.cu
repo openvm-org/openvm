@@ -209,12 +209,13 @@ extern "C" int _hintstore_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(Rv32HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    hintstore_tracegen<<<grid, block>>>(
+    hintstore_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

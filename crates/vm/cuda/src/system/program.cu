@@ -47,12 +47,13 @@ extern "C" int _program_cached_tracegen(
     DeviceBufferConstView<ProgramExecutionCols<Fp>> d_records,
     uint32_t pc_base,
     uint32_t pc_step,
-    size_t terminate_opcode
+    size_t terminate_opcode,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(ProgramExecutionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    program_cached_tracegen<<<grid, block>>>(
+    program_cached_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, width, d_records, pc_base, pc_step, terminate_opcode
     );
     return CHECK_KERNEL();

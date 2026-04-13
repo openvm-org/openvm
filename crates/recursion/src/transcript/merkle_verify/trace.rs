@@ -334,7 +334,7 @@ pub fn compute_combination_indices(k: usize, i: usize) -> Option<CombinationIndi
 pub mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 
     use super::*;
     use crate::{
@@ -452,6 +452,7 @@ pub mod cuda {
     #[tracing::instrument(level = "trace", skip_all)]
     pub(crate) fn generate_trace(
         blob: &TranscriptBlob,
+        device_ctx: &GpuDeviceCtx,
         required_height: Option<usize>,
     ) -> Option<DeviceMatrix<F>> {
         let merkle_blob = &blob.merkle_verify_blob;
@@ -464,21 +465,23 @@ pub mod cuda {
         } else {
             merkle_blob.total_rows.next_power_of_two().max(1)
         };
-        let mut trace = DeviceMatrix::with_capacity(trace_height, trace_width);
-        trace.buffer().fill_zero().unwrap();
+        let mut trace = DeviceMatrix::with_capacity_on(trace_height, trace_width, device_ctx);
+        trace.buffer().fill_zero_on(device_ctx).unwrap();
 
         if merkle_blob.total_rows == 0 || merkle_blob.records.is_empty() {
             return Some(trace);
         }
 
-        let d_records = merkle_blob.records.to_device().unwrap();
-        let d_leaf_hashes = merkle_blob.leaf_hashes.to_device().unwrap();
-        let d_siblings = merkle_blob.sibling_hashes.to_device().unwrap();
-        let d_proof_row_starts: DeviceBuffer<usize> =
-            merkle_blob.proof_row_starts.to_device().unwrap();
+        let d_records = merkle_blob.records.to_device_on(device_ctx).unwrap();
+        let d_leaf_hashes = merkle_blob.leaf_hashes.to_device_on(device_ctx).unwrap();
+        let d_siblings = merkle_blob.sibling_hashes.to_device_on(device_ctx).unwrap();
+        let d_proof_row_starts: DeviceBuffer<usize> = merkle_blob
+            .proof_row_starts
+            .to_device_on(device_ctx)
+            .unwrap();
         let scratch_len = merkle_blob.records.len() * merkle_blob.num_leaves * DIGEST_SIZE;
-        let d_leaf_scratch = DeviceBuffer::<F>::with_capacity(scratch_len);
-        d_leaf_scratch.fill_zero().unwrap();
+        let d_leaf_scratch = DeviceBuffer::<F>::with_capacity_on(scratch_len, device_ctx);
+        d_leaf_scratch.fill_zero_on(device_ctx).unwrap();
 
         unsafe {
             cuda_abi::merkle_verify_tracegen(
@@ -494,6 +497,7 @@ pub mod cuda {
                 &d_proof_row_starts,
                 merkle_blob.num_proofs,
                 &d_leaf_scratch,
+                device_ctx.stream.as_raw(),
             )
             .expect("failed to launch merkle verify tracegen");
         }

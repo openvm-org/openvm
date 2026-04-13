@@ -181,7 +181,8 @@ extern "C" int _xorin_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
@@ -189,7 +190,7 @@ extern "C" int _xorin_tracegen(
 
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    xorin_tracegen<<<grid, block>>>(
+    xorin_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

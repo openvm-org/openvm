@@ -95,7 +95,7 @@ __host__ inline int affine_scan_by_key(
     size_t n,
     void *d_temp,
     size_t temp_n,
-    cudaStream_t stream = cudaStreamPerThread
+    cudaStream_t stream
 ) {
     if (!d_keys || !d_affines || n == 0) {
         return 0;
@@ -116,7 +116,7 @@ __host__ inline int get_affine_scan_by_key_temp_bytes(
     AffineFpExt *d_affines,
     size_t n,
     size_t &temp_bytes_out,
-    cudaStream_t stream = cudaStreamPerThread
+    cudaStream_t stream
 ) {
     if (!d_keys || !d_affines || n == 0) {
         temp_bytes_out = 0;

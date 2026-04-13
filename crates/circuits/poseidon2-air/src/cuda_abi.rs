@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 pub mod poseidon2 {
     /// Poseidon2 tracegen on GPU (parallelized over rows)
@@ -23,8 +23,13 @@ pub mod poseidon2 {
     use super::*;
 
     extern "C" {
-        fn _poseidon2_dummy_tracegen(output: *mut F, inputs: *mut F, sbox_regs: u32, n: u32)
-            -> i32;
+        fn _poseidon2_dummy_tracegen(
+            output: *mut F,
+            inputs: *mut F,
+            sbox_regs: u32,
+            n: u32,
+            stream: cudaStream_t,
+        ) -> i32;
     }
 
     pub unsafe fn dummy_tracegen(
@@ -32,12 +37,14 @@ pub mod poseidon2 {
         d_inputs: &DeviceBuffer<F>,
         sbox_regs: u32,
         n: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_poseidon2_dummy_tracegen(
             d_output.as_mut_ptr(),
             d_inputs.as_mut_ptr(),
             sbox_regs,
             n,
+            stream,
         ))
     }
 }

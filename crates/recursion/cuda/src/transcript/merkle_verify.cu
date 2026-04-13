@@ -239,13 +239,14 @@ extern "C" int _merkle_verify_tracegen(
     size_t num_valid_rows,
     const size_t *proof_row_starts,
     size_t num_proofs,
-    Fp *leaf_scratch
+    Fp *leaf_scratch,
+    cudaStream_t stream
 ) {
     if (num_records == 0 || num_valid_rows == 0) {
         return cudaSuccess;
     }
     auto [grid, block] = kernel_launch_params(num_records, 512);
-    cukernel_merkle_verify_tracegen<<<grid, block>>>(
+    cukernel_merkle_verify_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
@@ -43,9 +43,10 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
 
         let trace_width = NUM_XORIN_VM_COLS;
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
             cuda_abi::xorin::tracegen(
@@ -57,6 +58,7 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -106,10 +108,11 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
         let num_records = records.len() / RECORD_SIZE;
         let trace_width = NUM_KECCAKF_OP_COLS;
         let trace_height = next_power_of_two_or_zero(num_records * NUM_OP_ROWS_PER_INS);
+        let device_ctx = &self.range_checker.device_ctx;
 
         // Transfer records to GPU
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
             cuda_abi::keccakf_op::tracegen(
@@ -121,6 +124,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
                 RV32_CELL_BITS,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -141,6 +145,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
 #[derive(new)]
 pub struct KeccakfPermChipGpu {
     pub shared_records: SharedKeccakfRecordsGpu,
+    pub device_ctx: GpuDeviceCtx,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
@@ -162,12 +167,16 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
         let trace_width = NUM_KECCAKF_PERM_COLS;
         let trace_height = next_power_of_two_or_zero(num_records * NUM_ROUNDS);
 
-        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+        let d_trace =
+            DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, &self.device_ctx);
         // Scratch buffer for two-phase tracegen: 25 u64 lanes per round per permutation.
         // 24 rounds * 25 lanes * 8 bytes = 4800 bytes/perm, vs 24 * 2634 * 4 = 252864 bytes/perm
         // for the trace matrix (~1.9% overhead).
         let blocks_to_fill = trace_height.div_ceil(NUM_ROUNDS);
-        let d_round_states = DeviceBuffer::<u64>::with_capacity(blocks_to_fill * NUM_ROUNDS * 25);
+        let d_round_states = DeviceBuffer::<u64>::with_capacity_on(
+            blocks_to_fill * NUM_ROUNDS * 25,
+            &self.device_ctx,
+        );
 
         unsafe {
             cuda_abi::keccakf_perm::tracegen(
@@ -176,6 +185,7 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
                 &d_records,
                 num_records,
                 &d_round_states,
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
