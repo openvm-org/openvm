@@ -1,9 +1,9 @@
-use core::cmp::min;
+use core::{cmp::min, fmt};
 
 #[cfg(feature = "import_sha2")]
 use sha2::digest::{
     consts::{U32, U48, U64},
-    FixedOutput, HashMarker, Output, OutputSizeUser, Update,
+    FixedOutput, FixedOutputReset, HashMarker, Output, OutputSizeUser, Reset, Update,
 };
 
 // We store static padding bytes here so that we don't need to allocate a vector when padding in
@@ -27,7 +27,7 @@ const SHA256_H: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct Sha256 {
     // the current hasher state, in 32-bit words
     state: [u32; SHA256_STATE_WORDS],
@@ -102,6 +102,12 @@ impl Sha256 {
     }
 }
 
+impl fmt::Debug for Sha256 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha256 { .. }")
+    }
+}
+
 // We will implement FixedOutput, Default, Update, and HashMarker for Sha256 so that
 // the blanket implementation of sha2::Digest is available.
 // See: https://docs.rs/sha2/latest/sha2/trait.Digest.html#impl-Digest-for-D
@@ -129,6 +135,21 @@ impl FixedOutput for Sha256 {
 #[cfg(feature = "import_sha2")]
 impl HashMarker for Sha256 {}
 
+#[cfg(feature = "import_sha2")]
+impl Reset for Sha256 {
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(feature = "import_sha2")]
+impl FixedOutputReset for Sha256 {
+    fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
+        out.copy_from_slice(&self.clone().finalize());
+        self.reset();
+    }
+}
+
 const SHA512_STATE_WORDS: usize = 8;
 const SHA512_BLOCK_BYTES: usize = 128;
 const SHA512_DIGEST_BYTES: usize = 64;
@@ -145,7 +166,7 @@ pub const SHA512_H: [u64; 8] = [
     0x5be0cd19137e2179,
 ];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct Sha512 {
     // the current hasher state
     state: [u64; SHA512_STATE_WORDS],
@@ -220,6 +241,12 @@ impl Sha512 {
     }
 }
 
+impl fmt::Debug for Sha512 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha512 { .. }")
+    }
+}
+
 // We will implement FixedOutput, Default, Update, and HashMarker for Sha512 so that
 // the blanket implementation of sha2::Digest is available.
 // See: https://docs.rs/sha2/latest/sha2/trait.Digest.html#impl-Digest-for-D
@@ -247,6 +274,21 @@ impl FixedOutput for Sha512 {
 #[cfg(feature = "import_sha2")]
 impl HashMarker for Sha512 {}
 
+#[cfg(feature = "import_sha2")]
+impl Reset for Sha512 {
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(feature = "import_sha2")]
+impl FixedOutputReset for Sha512 {
+    fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
+        out.copy_from_slice(&self.clone().finalize());
+        self.reset();
+    }
+}
+
 const SHA384_DIGEST_BYTES: usize = 48;
 
 // Initial state for SHA-384 in 64-bit words
@@ -261,7 +303,7 @@ pub const SHA384_H: [u64; 8] = [
     0x47b5481dbefa4fa4,
 ];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct Sha384 {
     inner: Sha512,
 }
@@ -296,6 +338,12 @@ impl Sha384 {
     }
 }
 
+impl fmt::Debug for Sha384 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha384 { .. }")
+    }
+}
+
 // We will implement FixedOutput, Default, Update, and HashMarker for Sha384 so that
 // the blanket implementation of sha2::Digest is available.
 // See: https://docs.rs/sha2/latest/sha2/trait.Digest.html#impl-Digest-for-D
@@ -322,3 +370,18 @@ impl FixedOutput for Sha384 {
 
 #[cfg(feature = "import_sha2")]
 impl HashMarker for Sha384 {}
+
+#[cfg(feature = "import_sha2")]
+impl Reset for Sha384 {
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(feature = "import_sha2")]
+impl FixedOutputReset for Sha384 {
+    fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
+        out.copy_from_slice(&self.clone().finalize());
+        self.reset();
+    }
+}
