@@ -193,8 +193,9 @@ where
                     // 17 rows * (8 + 16) * 4 bytes = 1632 bytes/block, vs
                     // 17 * 456 * 4 = 31008 bytes/block for the trace matrix (~5.3% overhead).
                     let scratch_words_per_block = C::ROWS_PER_BLOCK * (8 + C::BLOCK_WORDS);
-                    let d_scratch = DeviceBuffer::<u32>::with_capacity(
+                    let d_scratch = DeviceBuffer::<u32>::with_capacity_on(
                         num_blocks as usize * scratch_words_per_block,
+                        device_ctx,
                     );
 
                     cuda_abi::sha256::sha256_first_pass_tracegen(
@@ -248,8 +249,9 @@ where
                     // 21 rows * (8 + 16) * 8 bytes = 4032 bytes/block, vs
                     // 21 * 903 * 4 = 75852 bytes/block for the trace matrix (~5.3% overhead).
                     let scratch_words_per_block = C::ROWS_PER_BLOCK * (8 + C::BLOCK_WORDS);
-                    let d_scratch = DeviceBuffer::<u64>::with_capacity(
+                    let d_scratch = DeviceBuffer::<u64>::with_capacity_on(
                         num_blocks as usize * scratch_words_per_block,
+                        device_ctx,
                     );
 
                     cuda_abi::sha512::sha512_first_pass_tracegen(

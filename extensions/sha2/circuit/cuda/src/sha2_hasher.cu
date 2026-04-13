@@ -517,10 +517,12 @@ template <typename V> struct Sha2TraceHelper {
 
 // ===== BLOCK HASHER KERNELS =====
 
-// Two-phase trace generation for coalesced column-major stores.
+// Three-phase trace generation for coalesced column-major stores.
 // Phase 1 (1 thread per block): runs SHA-2 rounds, stores {a..h, w_buf} before each row to scratch.
-// Phase 2 (1 thread per row): loads row state from scratch, writes trace columns (coalesced).
-// The second-loop cross-row dependencies stay in sha2_first_pass_phase3.
+// Phase 2 (1 thread per row): loads row state from scratch and replays the round logic, writing
+//   trace columns with coalesced column-major stores (scratch reads are still per-block strided).
+// Phase 3 (1 thread per block): cross-row dependencies (intermed_4 -> intermed_8 -> intermed_12,
+//   plus carry/intermed plumbing into the digest row).
 
 static constexpr size_t SHA2_SCRATCH_STATE = 8; // a,b,c,d,e,f,g,h
 
@@ -599,10 +601,12 @@ __global__ void sha2_first_pass_phase2(
     uint32_t global_block_idx = static_cast<uint32_t>(absolute_row / V::ROWS_PER_BLOCK);
     uint32_t row_in_block = static_cast<uint32_t>(absolute_row % V::ROWS_PER_BLOCK);
 
+    // Defensive guard: caller launches min(rows_used, trace_height) threads, so every launched
+    // thread should map to a valid block. Kept for safety if the launch params ever change.
+    if (global_block_idx >= total_num_blocks || global_block_idx >= num_records) return;
+
     RowSlice row(trace + absolute_row, trace_height);
     row.fill_zero(0, Sha2Layout<V>::WIDTH);
-
-    if (global_block_idx >= total_num_blocks || global_block_idx >= num_records) return;
 
     using SL = Sha2ScratchLayout<V>;
     const typename V::Word *row_scratch =
@@ -755,11 +759,9 @@ __global__ void sha2_first_pass_phase2(
             }
         }
 
+        typename V::Word work_vars[8] = {a, b, c, d, e, f, g, h};
         for (int i = 0; i < static_cast<int>(V::HASH_WORDS); i++) {
-            typename V::Word work_val =
-                (i == 0) ? a : (i == 1 ? b : (i == 2 ? c : (i == 3 ? d
-                    : (i == 4 ? e : (i == 5 ? f : (i == 6 ? g : h))))));
-            typename V::Word fh_val = prev_hash[i] + work_val;
+            typename V::Word fh_val = prev_hash[i] + work_vars[i];
             for (uint32_t limb = 0; limb < V::WORD_U8S; limb++) {
                 SHA2INNER_WRITE_DIGEST(V, inner_row, final_hash[i][limb],
                     Fp(word_to_u8_limb<V>(fh_val, limb)));
@@ -1073,8 +1075,8 @@ int launch_sha2_fill_invalid_rows(
     cudaStream_t stream
 ) {
     sha2_fill_first_dummy_row<V><<<1, 1, 0, stream>>>(d_trace, trace_height, rows_used);
-    if (CHECK_KERNEL() != 0) {
-        return -1;
+    if (int r = CHECK_KERNEL()) {
+        return r;
     }
 
     auto [grid_size, block_size] = kernel_launch_params(trace_height - rows_used, 256);
