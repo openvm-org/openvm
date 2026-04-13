@@ -121,6 +121,48 @@ mod tests {
         Ok(())
     }
 
+    fn test_sha2_reset_base() -> Result<()> {
+        let config = Sha2Rv32Config::default();
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "sha2_reset",
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Sha2TranspilerExtension),
+        )?;
+
+        let stdin = StdIn::default();
+        let executor = VmExecutor::new(config.clone())?;
+        let interpreter = executor.instance(&openvm_exe)?;
+        #[allow(unused_variables)]
+        let state = interpreter.execute(stdin.clone(), None)?;
+
+        #[cfg(feature = "aot")]
+        {
+            use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
+            let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
+            let naive_state = naive_interpreter.execute(stdin, None)?;
+            let assert_vm_state_eq =
+                |lhs: &VmState<BabyBear, GuestMemory>, rhs: &VmState<BabyBear, GuestMemory>| {
+                    assert_eq!(lhs.pc(), rhs.pc());
+                    for r in 0..32 {
+                        let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                        let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                        assert_eq!(a, b);
+                    }
+                };
+            assert_vm_state_eq(&state, &naive_state);
+        }
+
+        Ok(())
+    }
+
     #[test]
     fn test_sha256_run() -> Result<()> {
         test_sha2_base("SHA256ShortMsg.rsp", Sha2Type::Sha256, false)?;
@@ -137,6 +179,11 @@ mod tests {
     fn test_sha512_run() -> Result<()> {
         test_sha2_base("SHA512ShortMsg.rsp", Sha2Type::Sha512, false)?;
         test_sha2_base("SHA512LongMsg.rsp", Sha2Type::Sha512, false)
+    }
+
+    #[test]
+    fn test_sha2_reset_run() -> Result<()> {
+        test_sha2_reset_base()
     }
 
     #[test]
