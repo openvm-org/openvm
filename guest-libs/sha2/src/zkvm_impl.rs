@@ -145,8 +145,8 @@ impl Reset for Sha256 {
 #[cfg(feature = "import_sha2")]
 impl FixedOutputReset for Sha256 {
     fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
-        out.copy_from_slice(&self.clone().finalize());
-        self.reset();
+        let prev = core::mem::replace(self, Self::new());
+        out.copy_from_slice(&prev.finalize());
     }
 }
 
@@ -284,8 +284,8 @@ impl Reset for Sha512 {
 #[cfg(feature = "import_sha2")]
 impl FixedOutputReset for Sha512 {
     fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
-        out.copy_from_slice(&self.clone().finalize());
-        self.reset();
+        let prev = core::mem::replace(self, Self::new());
+        out.copy_from_slice(&prev.finalize());
     }
 }
 
@@ -381,7 +381,7 @@ impl Reset for Sha384 {
 #[cfg(feature = "import_sha2")]
 impl FixedOutputReset for Sha384 {
     fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
-        out.copy_from_slice(&self.clone().finalize());
-        self.reset();
+        let prev = core::mem::replace(self, Self::new());
+        out.copy_from_slice(&prev.finalize());
     }
 }
