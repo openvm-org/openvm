@@ -21,6 +21,10 @@ use openvm_cuda_backend::{
     prelude::{EF, F, SC},
     BabyBearPoseidon2GpuEngine, GpuBackend, ProverError,
 };
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
+};
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
@@ -250,18 +254,27 @@ impl GpuChipTestBuilder {
     pub fn new(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(bus),
-        )));
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
+            Arc::new(VariableRangeCheckerChip::new(bus)),
+            device_ctx.clone(),
+        ));
         Self {
             memory: DeviceMemoryTester::new(
                 default_tracing_memory(&mem_config),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
+                device_ctx.clone(),
             ),
-            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
+            execution: DeviceExecutionTester::new(
+                ExecutionBus::new(EXECUTION_BUS),
+                device_ctx.clone(),
+            ),
+            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS), device_ctx),
             streams: Default::default(),
             var_range_checker: range_checker,
             bitwise_op_lookup: None,
@@ -275,16 +288,20 @@ impl GpuChipTestBuilder {
     }
 
     pub fn with_bitwise_op_lookup(mut self, bus: BitwiseOperationLookupBus) -> Self {
-        self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::hybrid(Arc::new(
-            BitwiseOperationLookupChip::new(bus),
-        ))));
+        let device_ctx = self.var_range_checker.device_ctx.clone();
+        self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::hybrid(
+            Arc::new(BitwiseOperationLookupChip::new(bus)),
+            device_ctx,
+        )));
         self
     }
 
     pub fn with_range_tuple_checker(mut self, bus: RangeTupleCheckerBus<2>) -> Self {
-        self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::hybrid(Arc::new(
-            RangeTupleCheckerChip::new(bus),
-        ))));
+        let device_ctx = self.var_range_checker.device_ctx.clone();
+        self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::hybrid(
+            Arc::new(RangeTupleCheckerChip::new(bus)),
+            device_ctx,
+        )));
         self
     }
 
@@ -532,7 +549,16 @@ impl GpuChipTester {
             check_trace_validity(&proving_ctx, &air.name());
         }
         let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_trace);
-        assert_eq_host_and_device_matrix_col_maj(&expected_trace_cm, &proving_ctx.common_main);
+        device_synchronize().unwrap();
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        assert_eq_host_and_device_matrix_col_maj(
+            &expected_trace_cm,
+            &proving_ctx.common_main,
+            &device_ctx,
+        );
         self.airs.push(Arc::new(air) as AirRef<SC>);
         self.ctxs.push(proving_ctx);
         self

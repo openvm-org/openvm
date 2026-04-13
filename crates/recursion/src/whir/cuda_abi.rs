@@ -1,5 +1,5 @@
 use openvm_cuda_backend::prelude::{EF, F};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 pub use crate::system::PoseidonStatePair;
 use crate::whir::{final_poly_query_eval::FinalPolyQueryEvalRecord, folding::FoldRecord};
@@ -26,6 +26,7 @@ extern "C" {
         stacking_widths_offsets: *const usize,
         mu_pows: *const EF,
         num_proofs: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _final_poly_query_eval_tracegen(
@@ -39,6 +40,7 @@ extern "C" {
         round_offsets_d: *const usize,
         log_final_poly_len: usize,
         num_queries_per_round_d: *const usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _non_initial_opened_values_tracegen(
@@ -58,6 +60,7 @@ extern "C" {
         rows_per_proof: usize,
         query_offsets_d: *const usize,
         total_queries: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _whir_folding_tracegen(
@@ -68,6 +71,7 @@ extern "C" {
         num_rounds: u32,
         total_queries: u32,
         k_whir: u32,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
@@ -97,6 +101,7 @@ pub unsafe fn initial_opened_values_tracegen(
     stacking_widths_offsets: &DeviceBuffer<usize>,
     mu_pows: &DeviceBuffer<EF>,
     num_proofs: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_initial_opened_values_tracegen(
         trace_d.as_mut_ptr(),
@@ -119,6 +124,7 @@ pub unsafe fn initial_opened_values_tracegen(
         stacking_widths_offsets.as_ptr(),
         mu_pows.as_ptr(),
         num_proofs,
+        stream,
     ))
 }
 
@@ -134,6 +140,7 @@ pub unsafe fn final_poly_query_eval_tracegen(
     round_offsets_d: &DeviceBuffer<usize>,
     log_final_poly_len: usize,
     num_queries_per_round_d: &DeviceBuffer<usize>,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_final_poly_query_eval_tracegen(
         trace_d.as_mut_ptr(),
@@ -146,6 +153,7 @@ pub unsafe fn final_poly_query_eval_tracegen(
         round_offsets_d.as_ptr(),
         log_final_poly_len,
         num_queries_per_round_d.as_ptr(),
+        stream,
     ))
 }
 
@@ -167,6 +175,7 @@ pub unsafe fn non_initial_opened_values_tracegen(
     rows_per_proof: usize,
     query_offsets_d: &DeviceBuffer<usize>,
     total_queries: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_non_initial_opened_values_tracegen(
         trace_d.as_mut_ptr(),
@@ -185,9 +194,11 @@ pub unsafe fn non_initial_opened_values_tracegen(
         rows_per_proof,
         query_offsets_d.as_ptr(),
         total_queries,
+        stream,
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn whir_folding_tracegen(
     trace_d: &DeviceBuffer<F>,
     num_valid_rows: u32,
@@ -196,6 +207,7 @@ pub unsafe fn whir_folding_tracegen(
     num_rounds: u32,
     num_queries: u32,
     k_whir: u32,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_whir_folding_tracegen(
         trace_d.as_mut_ptr(),
@@ -205,5 +217,6 @@ pub unsafe fn whir_folding_tracegen(
         num_rounds,
         num_queries,
         k_whir,
+        stream,
     ))
 }

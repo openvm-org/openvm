@@ -1,5 +1,5 @@
 use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_cuda_common::{memory_manager::MemTracker, stream::GpuDeviceCtx};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
@@ -16,6 +16,7 @@ pub(in crate::whir) struct FoldingGpuCtx<'a> {
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
     pub num_proofs: usize,
+    pub device_ctx: &'a GpuDeviceCtx,
 }
 
 pub(in crate::whir) struct FoldingGpuTraceGenerator;
@@ -32,6 +33,7 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
         let blob = ctx.blob;
         let params = ctx.params;
         let num_proofs = ctx.num_proofs;
+        let device_ctx = ctx.device_ctx;
 
         let mem = MemTracker::start("tracegen.whir_folding");
         let num_rounds = params.num_whir_rounds();
@@ -53,7 +55,7 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
             num_valid_rows.next_power_of_two()
         };
         let width = WhirFoldingCols::<F>::width();
-        let trace = DeviceMatrix::with_capacity(height, width);
+        let trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         if num_valid_rows > 0 {
             unsafe {
@@ -65,6 +67,7 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
                     u32::try_from(num_rounds).expect("num_rounds must fit in u32"),
                     u32::try_from(total_queries).expect("total_queries must fit in u32"),
                     u32::try_from(k_whir).expect("k_whir must fit in u32"),
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
             }

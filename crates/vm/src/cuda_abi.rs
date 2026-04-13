@@ -4,6 +4,7 @@ use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,
+    stream::cudaStream_t,
 };
 
 pub mod boundary {
@@ -20,6 +21,7 @@ pub mod boundary {
             d_poseidon2_raw_buffer: *mut F,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -33,6 +35,7 @@ pub mod boundary {
         num_records: usize,
         d_poseidon2_raw_buffer: &DeviceBuffer<F>,
         d_poseidon2_buffer_idx: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_persistent_boundary_tracegen(
             d_trace.as_mut_ptr(),
@@ -45,6 +48,7 @@ pub mod boundary {
             d_poseidon2_buffer_idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.
             d_poseidon2_raw_buffer.len(),
+            stream,
         ))
     }
 }
@@ -58,6 +62,7 @@ pub mod phantom {
             height: usize,
             width: usize,
             d_records: DeviceBufferView,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -66,20 +71,19 @@ pub mod phantom {
         height: usize,
         width: usize,
         d_records: &DeviceBuffer<u8>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_phantom_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
             d_records.view(),
+            stream,
         ))
     }
 }
 
 pub mod poseidon2 {
-    use openvm_cuda_common::{copy::cuda_memcpy, error::MemCopyError};
-    use openvm_poseidon2_air::POSEIDON2_WIDTH;
-
     use super::*;
 
     extern "C" {
@@ -91,6 +95,7 @@ pub mod poseidon2 {
             d_counts: *mut u32,
             num_records: usize,
             sbox_regs: usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _system_poseidon2_deduplicate_records_get_temp_bytes(
@@ -99,6 +104,7 @@ pub mod poseidon2 {
             num_records: usize,
             d_num_records: *mut usize,
             h_temp_bytes_out: *mut usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _system_poseidon2_deduplicate_records(
@@ -110,9 +116,11 @@ pub mod poseidon2 {
             d_num_records: *mut usize,
             d_temp_storage: *mut std::ffi::c_void,
             temp_storage_bytes: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -121,6 +129,7 @@ pub mod poseidon2 {
         d_counts: &DeviceBuffer<u32>,
         num_records: usize,
         sbox_regs: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_system_poseidon2_tracegen(
             d_trace.as_mut_ptr(),
@@ -130,6 +139,7 @@ pub mod poseidon2 {
             d_counts.as_mut_ptr(),
             num_records,
             sbox_regs,
+            stream,
         ))
     }
 
@@ -139,6 +149,7 @@ pub mod poseidon2 {
         num_records: usize,
         d_num_records: &DeviceBuffer<usize>,
         h_temp_bytes_out: &mut usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_system_poseidon2_deduplicate_records_get_temp_bytes(
             d_records.as_mut_ptr(),
@@ -146,21 +157,22 @@ pub mod poseidon2 {
             num_records,
             d_num_records.as_mut_ptr(),
             h_temp_bytes_out,
+            stream,
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn deduplicate_records(
         d_records: &DeviceBuffer<F>,
         d_counts: &DeviceBuffer<u32>,
+        d_records_out: &DeviceBuffer<F>,
+        d_counts_out: &DeviceBuffer<u32>,
         num_records: usize,
         d_num_records: &DeviceBuffer<usize>,
         d_temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        // CUB ReduceByKey requires non-overlapping input and output ranges.
-        // Allocate separate output buffers, then copy results back.
-        let d_records_out = DeviceBuffer::<F>::with_capacity(num_records * POSEIDON2_WIDTH);
-        let d_counts_out = DeviceBuffer::<u32>::with_capacity(num_records);
         CudaError::from_result(_system_poseidon2_deduplicate_records(
             d_records.as_mut_ptr(),
             d_counts.as_mut_ptr(),
@@ -170,26 +182,8 @@ pub mod poseidon2 {
             d_num_records.as_mut_ptr(),
             d_temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
-        ))?;
-        let records_bytes = num_records * POSEIDON2_WIDTH * std::mem::size_of::<F>();
-        let counts_bytes = num_records * std::mem::size_of::<u32>();
-        let map_err = |e: MemCopyError| match e {
-            MemCopyError::Cuda(e) => e,
-            other => panic!("{other}"),
-        };
-        cuda_memcpy::<true, true>(
-            d_records.as_mut_raw_ptr(),
-            d_records_out.as_raw_ptr(),
-            records_bytes,
-        )
-        .map_err(map_err)?;
-        cuda_memcpy::<true, true>(
-            d_counts.as_mut_raw_ptr(),
-            d_counts_out.as_raw_ptr(),
-            counts_bytes,
-        )
-        .map_err(map_err)?;
-        Ok(())
+            stream,
+        ))
     }
 }
 
@@ -201,6 +195,7 @@ pub mod inventory {
             d_flags: *mut u32,
             in_num_records: usize,
             h_temp_bytes_out: *mut usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _inventory_merge_records(
@@ -214,6 +209,7 @@ pub mod inventory {
             d_temp_storage: *mut std::ffi::c_void,
             temp_storage_bytes: usize,
             out_num_records: *mut usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -229,6 +225,7 @@ pub mod inventory {
         d_temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
         d_out_num_records: &DeviceBuffer<usize>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_inventory_merge_records(
             d_in_records.as_ptr(),
@@ -241,6 +238,7 @@ pub mod inventory {
             d_temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
             d_out_num_records.as_mut_ptr(),
+            stream,
         ))
     }
 
@@ -248,11 +246,13 @@ pub mod inventory {
         d_flags: &DeviceBuffer<u32>,
         in_num_records: usize,
         h_temp_bytes_out: &mut usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_inventory_merge_records_get_temp_bytes(
             d_flags.as_mut_ptr(),
             in_num_records,
             h_temp_bytes_out,
+            stream,
         ))
     }
 }
@@ -269,6 +269,7 @@ pub mod program {
             pc_base: u32,
             pc_step: u32,
             terminate_opcode: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -281,6 +282,7 @@ pub mod program {
         pc_base: u32,
         pc_step: u32,
         terminate_opcode: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_program_cached_tracegen(
             d_trace.as_mut_ptr(),
@@ -290,6 +292,7 @@ pub mod program {
             pc_base,
             pc_step,
             terminate_opcode,
+            stream,
         ))
     }
 }
@@ -310,6 +313,7 @@ mod testing {
                 height: usize,
                 width: usize,
                 d_records: DeviceBufferView,
+                stream: cudaStream_t,
             ) -> i32;
         }
 
@@ -318,6 +322,7 @@ mod testing {
             height: usize,
             width: usize,
             d_records: &DeviceBuffer<u8>,
+            stream: cudaStream_t,
         ) -> Result<(), CudaError> {
             assert!(height.is_power_of_two());
             CudaError::from_result(_execution_testing_tracegen(
@@ -325,6 +330,7 @@ mod testing {
                 height,
                 width,
                 d_records.view(),
+                stream,
             ))
         }
     }
@@ -340,6 +346,7 @@ mod testing {
                 d_records: *const F,
                 num_records: usize,
                 block_size: usize,
+                stream: cudaStream_t,
             ) -> i32;
         }
 
@@ -350,6 +357,7 @@ mod testing {
             d_records: &DeviceBuffer<F>,
             num_records: usize,
             block_size: usize,
+            stream: cudaStream_t,
         ) -> Result<(), CudaError> {
             assert!(height.is_power_of_two());
             assert!(height >= num_records);
@@ -361,6 +369,7 @@ mod testing {
                 d_records.as_ptr(),
                 num_records,
                 block_size,
+                stream,
             ))
         }
     }
@@ -375,6 +384,7 @@ mod testing {
                 width: usize,
                 d_records: *const u8,
                 num_records: usize,
+                stream: cudaStream_t,
             ) -> i32;
         }
 
@@ -384,6 +394,7 @@ mod testing {
             width: usize,
             d_records: &DeviceBuffer<u8>,
             num_records: usize,
+            stream: cudaStream_t,
         ) -> Result<(), CudaError> {
             assert!(height.is_power_of_two());
             assert!(height >= num_records);
@@ -393,6 +404,7 @@ mod testing {
                 width,
                 d_records.as_ptr(),
                 num_records,
+                stream,
             ))
         }
     }

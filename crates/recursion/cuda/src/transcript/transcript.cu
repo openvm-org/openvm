@@ -113,7 +113,8 @@ extern "C" int _transcript_air_tracegen(
     TranscriptAirRecord **d_records,
     Fp *d_poseidon2_buffer,
     uint32_t *h_poseidon2_offsets,
-    uint32_t num_proofs
+    uint32_t num_proofs,
+    cudaStream_t stream
 ) {
     assert(width == sizeof(TranscriptCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -121,7 +122,7 @@ extern "C" int _transcript_air_tracegen(
     SWITCH_BLOCK(
         num_proofs,
         NUM_PROOFS,
-        (transcript_air_tracegen_kernel<NUM_PROOFS><<<grid, block>>>(
+        (transcript_air_tracegen_kernel<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_trace,
              height,
              Array<uint32_t, NUM_PROOFS>(h_row_bounds),

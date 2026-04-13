@@ -100,14 +100,15 @@ extern "C" int _whir_folding_tracegen(
     const FoldRecord *records,
     uint32_t num_rounds,
     uint32_t total_queries,
-    uint32_t k_whir
+    uint32_t k_whir,
+    cudaStream_t stream
 ) {
     if (height == 0) {
         return 0;
     }
 
     auto [grid, block] = kernel_launch_params(height);
-    whir_folding_tracegen_kernel<<<grid, block>>>(
+    whir_folding_tracegen_kernel<<<grid, block, 0, stream>>>(
         trace,
         num_valid_rows,
         height,

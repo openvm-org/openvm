@@ -20,21 +20,25 @@ use crate::{
     SC,
 };
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: DeferralInnerTraceGen<PB>,
-    > DeferralInnerProver<PB, S, T>
+impl<PB, S, T> DeferralInnerProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proofs: &[Proof<SC>],
         child_vk_kind: DeferralChildVkKind,
         child_merkle_depth: Option<usize>,
-    ) -> ProvingContext<PB> {
+        device_ctx: &DC,
+    ) -> ProvingContext<PB>
+    where
+        S: VerifierTraceGen<PB, SC, DC>,
+        T: DeferralInnerTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
         assert!((1..=2).contains(&proofs.len()));
         assert!(
@@ -69,6 +73,7 @@ where
             child_is_agg,
             child_vk_commit,
             child_merkle_depth,
+            device_ctx,
         );
 
         let range_check_inputs = vec![];
@@ -88,6 +93,7 @@ where
                 CachedTraceCtx::PcsData(child_vk_pcs_data),
                 proofs,
                 &mut external_data,
+                device_ctx,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();

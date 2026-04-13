@@ -7,8 +7,9 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{
         CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
+        ProverDevice,
     },
-    StarkEngine, SystemParams,
+    EngineDeviceCtx, StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use openvm_verify_stark_host::pvs::{DeferralPvs, VkCommit};
@@ -29,7 +30,7 @@ mod trace;
 pub struct InnerAggregationProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: InnerTraceGen<PB>,
+    T,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -54,12 +55,10 @@ pub enum ChildVkKind {
     RecursiveSelf,
 }
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: InnerTraceGen<PB>,
-    > InnerAggregationProver<PB, S, T>
+impl<PB, S, T> InnerAggregationProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
@@ -69,12 +68,22 @@ where
         child_vk_kind: ChildVkKind,
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
-    ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proofs, child_vk_kind, proofs_type, absent_trace_pvs);
+    ) -> Result<Proof<SC>>
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
+        let engine = E::new(self.pk.params.clone());
+        let ctx = self.generate_proving_ctx(
+            proofs,
+            child_vk_kind,
+            proofs_type,
+            absent_trace_pvs,
+            engine.device().device_ctx(),
+        );
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
-        let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
         if crate::prover::debug_checks_enabled() {
             crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
@@ -91,23 +100,23 @@ where
         &self,
         proofs: &[Proof<SC>],
         child_vk_kind: ChildVkKind,
-    ) -> Result<Proof<SC>> {
+    ) -> Result<Proof<SC>>
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         self.agg_prove::<E>(proofs, child_vk_kind, ProofsType::Vm, None)
     }
-}
-
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: InnerTraceGen<PB>,
-    > InnerAggregationProver<PB, S, T>
-{
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         system_params: SystemParams,
         is_self_recursive: bool,
         def_hook_cached_commit: Option<Digest>,
-    ) -> Self {
+    ) -> Self
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
@@ -146,7 +155,11 @@ impl<
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
         def_hook_cached_commit: Option<Digest>,
-    ) -> Self {
+    ) -> Self
+    where
+        S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
+        T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
+    {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {

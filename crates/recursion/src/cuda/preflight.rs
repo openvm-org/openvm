@@ -2,13 +2,13 @@ use std::iter::once;
 
 use itertools::Itertools;
 use openvm_cuda_backend::prelude::EF;
-use openvm_cuda_common::d_buffer::DeviceBuffer;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 
 use crate::{
     cuda::{
-        to_device_or_nullptr,
+        to_device_or_nullptr_on,
         types::{TraceHeight, TraceMetadata},
     },
     proof_shape::proof_shape::compute_air_shape_lookup_counts,
@@ -81,14 +81,15 @@ impl PreflightGpu {
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
+        device_ctx: &GpuDeviceCtx,
     ) -> Self {
         PreflightGpu {
             cpu: preflight.clone(),
             transcript: Self::transcript(preflight),
-            proof_shape: Self::proof_shape(vk, proof, preflight),
+            proof_shape: Self::proof_shape(vk, proof, preflight, device_ctx),
             gkr: Self::gkr(preflight),
-            batch_constraint: Self::batch_constraint(preflight),
-            stacking: Self::stacking(preflight),
+            batch_constraint: Self::batch_constraint(preflight, device_ctx),
+            stacking: Self::stacking(preflight, device_ctx),
             whir: Self::whir(preflight),
         }
     }
@@ -101,6 +102,7 @@ impl PreflightGpu {
         vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
+        device_ctx: &GpuDeviceCtx,
     ) -> ProofShapePreflightGpu {
         let mut sorted_cached_commits: Vec<Digest> = vec![];
         let mut cidx = 1;
@@ -175,11 +177,14 @@ impl PreflightGpu {
         }
 
         ProofShapePreflightGpu {
-            sorted_trace_heights: to_device_or_nullptr(&sorted_trace_heights).unwrap(),
-            sorted_trace_metadata: to_device_or_nullptr(&sorted_trace_metadata).unwrap(),
-            sorted_cached_commits: to_device_or_nullptr(&sorted_cached_commits).unwrap(),
-            per_row_tidx: to_device_or_nullptr(&per_row_tidx).unwrap(),
-            pvs_tidx: to_device_or_nullptr(&pvs_tidx_by_air_id).unwrap(),
+            sorted_trace_heights: to_device_or_nullptr_on(&sorted_trace_heights, device_ctx)
+                .unwrap(),
+            sorted_trace_metadata: to_device_or_nullptr_on(&sorted_trace_metadata, device_ctx)
+                .unwrap(),
+            sorted_cached_commits: to_device_or_nullptr_on(&sorted_cached_commits, device_ctx)
+                .unwrap(),
+            per_row_tidx: to_device_or_nullptr_on(&per_row_tidx, device_ctx).unwrap(),
+            pvs_tidx: to_device_or_nullptr_on(&pvs_tidx_by_air_id, device_ctx).unwrap(),
             post_tidx: preflight.proof_shape.post_tidx,
             num_present: preflight.proof_shape.sorted_trace_vdata.len(),
             n_max: preflight.proof_shape.n_max,
@@ -194,15 +199,23 @@ impl PreflightGpu {
         GkrPreflightGpu { _dummy: 0 }
     }
 
-    fn batch_constraint(preflight: &Preflight) -> BatchConstraintPreflightGpu {
+    fn batch_constraint(
+        preflight: &Preflight,
+        device_ctx: &GpuDeviceCtx,
+    ) -> BatchConstraintPreflightGpu {
         BatchConstraintPreflightGpu {
-            sumcheck_rnd: to_device_or_nullptr(&preflight.batch_constraint.sumcheck_rnd).unwrap(),
+            sumcheck_rnd: to_device_or_nullptr_on(
+                &preflight.batch_constraint.sumcheck_rnd,
+                device_ctx,
+            )
+            .unwrap(),
         }
     }
 
-    fn stacking(preflight: &Preflight) -> StackingPreflightGpu {
+    fn stacking(preflight: &Preflight, device_ctx: &GpuDeviceCtx) -> StackingPreflightGpu {
         StackingPreflightGpu {
-            sumcheck_rnd: to_device_or_nullptr(&preflight.stacking.sumcheck_rnd).unwrap(),
+            sumcheck_rnd: to_device_or_nullptr_on(&preflight.stacking.sumcheck_rnd, device_ctx)
+                .unwrap(),
         }
     }
 

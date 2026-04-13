@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::{Digest, F};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 use crate::{
     cuda::types::{AirData, PublicValueData, TraceHeight, TraceMetadata},
@@ -20,6 +20,7 @@ extern "C" {
         d_per_proof: *const ProofShapePerProof,
         num_proofs: usize,
         inputs: *const ProofShapeTracegenInputs,
+        stream: cudaStream_t,
     ) -> i32;
     fn _public_values_recursion_tracegen(
         d_trace: *mut F,
@@ -28,6 +29,7 @@ extern "C" {
         d_pvs_tidx: *const *const usize,
         num_proofs: usize,
         num_pvs: usize,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
@@ -43,6 +45,7 @@ pub unsafe fn proof_shape_tracegen(
     d_per_proof: &DeviceBuffer<ProofShapePerProof>,
     num_proofs: usize,
     inputs: &ProofShapeTracegenInputs,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_proof_shape_tracegen(
         d_trace.as_mut_ptr(),
@@ -55,6 +58,7 @@ pub unsafe fn proof_shape_tracegen(
         d_per_proof.as_ptr(),
         num_proofs,
         inputs as *const ProofShapeTracegenInputs,
+        stream,
     ))
 }
 
@@ -65,6 +69,7 @@ pub unsafe fn public_values_tracegen(
     d_pvs_tidx: Vec<*const usize>,
     num_proofs: usize,
     num_pvs: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_public_values_recursion_tracegen(
         d_trace.as_mut_ptr(),
@@ -73,5 +78,6 @@ pub unsafe fn public_values_tracegen(
         d_pvs_tidx.as_ptr(),
         num_proofs,
         num_pvs,
+        stream,
     ))
 }

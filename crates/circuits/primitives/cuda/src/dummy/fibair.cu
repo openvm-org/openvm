@@ -16,9 +16,9 @@ __global__ void cukernel_fibair_tracegen(Fp *output, uint32_t a, uint32_t b, uin
     }
 }
 
-extern "C" int _fibair_tracegen(Fp *output, uint32_t a, uint32_t b, uint32_t n) {
+extern "C" int _fibair_tracegen(Fp *output, uint32_t a, uint32_t b, uint32_t n, cudaStream_t stream) {
     dim3 grid(1);
     dim3 block(1);
-    cukernel_fibair_tracegen<<<grid, block>>>(output, a, b, n);
+    cukernel_fibair_tracegen<<<grid, block, 0, stream>>>(output, a, b, n);
     return CHECK_KERNEL();
 }

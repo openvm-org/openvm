@@ -62,7 +62,8 @@ extern "C" int _rv32_less_than_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     // We require the height to be a power of two for the tracegen to work
     assert((height & (height - 1)) == 0);
@@ -70,7 +71,7 @@ extern "C" int _rv32_less_than_tracegen(
     assert(width == sizeof(LessThanCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
-    rv32_less_than_tracegen<<<grid, block>>>(
+    rv32_less_than_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

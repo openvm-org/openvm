@@ -96,6 +96,7 @@ impl VmBuilder<E> for Sha2Rv32GpuBuilder {
         &self,
         config: &Sha2Rv32Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<
             <E as StarkEngine>::SC,
@@ -105,8 +106,12 @@ impl VmBuilder<E> for Sha2Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;

@@ -467,7 +467,8 @@ extern "C" int _proof_shape_tracegen(
     Digest **d_cached_commits,
     ProofShapePerProof *d_per_proof,
     size_t num_proofs,
-    ProofShapeTracegenInputs *inputs
+    ProofShapeTracegenInputs *inputs,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height);
@@ -477,7 +478,7 @@ extern "C" int _proof_shape_tracegen(
         (SWITCH_BLOCK(
             inputs->max_cached,
             MAX_CACHED,
-            (proof_shape_tracegen<NUM_PROOFS, MAX_CACHED><<<grid, block>>>(
+            (proof_shape_tracegen<NUM_PROOFS, MAX_CACHED><<<grid, block, 0, stream>>>(
                  d_trace,
                  height,
                  d_air_data,

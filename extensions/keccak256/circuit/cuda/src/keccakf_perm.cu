@@ -142,7 +142,8 @@ extern "C" int _keccakf_perm_tracegen(
     DeviceBufferConstView<KeccakfOpRecord> d_records,
     size_t num_records,
     uint64_t *d_round_states,
-    size_t round_state_words
+    size_t round_state_words,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(KeccakfPermCols<uint8_t>));
@@ -154,7 +155,7 @@ extern "C" int _keccakf_perm_tracegen(
 
     // Phase 1: compute keccak-f, store round states to scratch
     auto [p1_grid, p1_block] = kernel_launch_params(blocks_to_fill, 128);
-    keccakf_perm_phase1<<<p1_grid, p1_block>>>(
+    keccakf_perm_phase1<<<p1_grid, p1_block, 0, stream>>>(
         d_round_states, static_cast<uint32_t>(num_records), blocks_to_fill, d_records
     );
     int result = CHECK_KERNEL();
@@ -164,7 +165,7 @@ extern "C" int _keccakf_perm_tracegen(
 
     // Phase 2: write trace with coalesced stores (one thread per row)
     auto [p2_grid, p2_block] = kernel_launch_params(height, 256);
-    keccakf_perm_phase2<<<p2_grid, p2_block>>>(
+    keccakf_perm_phase2<<<p2_grid, p2_block, 0, stream>>>(
         d_trace, height, static_cast<uint32_t>(num_records), d_records, d_round_states
     );
     return CHECK_KERNEL();

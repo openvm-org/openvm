@@ -10,8 +10,8 @@ __global__ void cukernel_iszero_tracegen(Fp *output, Fp *inputs, uint32_t n) {
     IsZero::generate_subrow(inputs[tid], inv, out);
 }
 
-extern "C" int _iszero_tracegen(Fp *output, Fp *inputs, uint32_t n) {
+extern "C" int _iszero_tracegen(Fp *output, Fp *inputs, uint32_t n, cudaStream_t stream) {
     auto [grid, block] = kernel_launch_params(n);
-    cukernel_iszero_tracegen<<<grid, block>>>(output, inputs, n);
+    cukernel_iszero_tracegen<<<grid, block, 0, stream>>>(output, inputs, n);
     return CHECK_KERNEL();
 }
