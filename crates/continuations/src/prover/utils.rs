@@ -6,6 +6,7 @@ use openvm_stark_backend::{
 
 use crate::circuit::Circuit;
 
+#[cfg(debug_assertions)]
 pub(crate) fn debug_checks_enabled() -> bool {
     std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
 }
