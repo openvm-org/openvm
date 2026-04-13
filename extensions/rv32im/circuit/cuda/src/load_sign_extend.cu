@@ -124,13 +124,14 @@ extern "C" int _rv32_load_sign_extend_tracegen(
     size_t pointer_max_bits,
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadSignExtendCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv32_load_sign_extend_tracegen<<<grid, block>>>(
+    rv32_load_sign_extend_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

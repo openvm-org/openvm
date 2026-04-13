@@ -9,16 +9,16 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::program_testing;
 
-pub struct DeviceProgramTester(ProgramTester<F>);
+pub struct DeviceProgramTester(ProgramTester<F>, GpuDeviceCtx);
 
 impl DeviceProgramTester {
-    pub fn new(bus: ProgramBus) -> Self {
-        Self(ProgramTester::new(bus))
+    pub fn new(bus: ProgramBus, device_ctx: GpuDeviceCtx) -> Self {
+        Self(ProgramTester::new(bus), device_ctx)
     }
 
     pub fn bus(&self) -> ProgramBus {
@@ -38,7 +38,8 @@ impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
         if height == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
-        let trace = DeviceMatrix::<F>::with_capacity(height, width);
+        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, &self.1);
+        trace.buffer().fill_zero_on(&self.1).unwrap();
 
         let records = &self.0.records;
         let num_records = records.len();
@@ -46,9 +47,16 @@ impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
         unsafe {
             let bytes_size = num_records * size_of::<ProgramExecutionCols<F>>();
             let records_bytes = from_raw_parts(records.as_ptr() as *const u8, bytes_size);
-            let records = records_bytes.to_device().unwrap();
-            program_testing::tracegen(trace.buffer(), height, width, &records, num_records)
-                .unwrap();
+            let records = records_bytes.to_device_on(&self.1).unwrap();
+            program_testing::tracegen(
+                trace.buffer(),
+                height,
+                width,
+                &records,
+                num_records,
+                self.1.stream.as_raw(),
+            )
+            .unwrap();
         }
         AirProvingContext::simple_no_pis(trace)
     }

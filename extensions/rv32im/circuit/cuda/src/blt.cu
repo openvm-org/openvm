@@ -59,14 +59,15 @@ extern "C" int _blt_tracegen(
     uint32_t rc_bins,
     uint32_t *d_bw,
     uint32_t bw_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThanCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
-    blt_tracegen<<<grid, block>>>(
+    blt_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_rc, rc_bins, d_bw, bw_bits, timestamp_max_bits
     );
     return CHECK_KERNEL();

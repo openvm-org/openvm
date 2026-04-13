@@ -411,13 +411,16 @@ mod cuda_tests {
             dummy_bitwise_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(get_fp2_addsub_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
+        let hybrid_chip = HybridFp2Chip::new(
+            get_fp2_addsub_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker().device_ctx.clone(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -455,13 +458,16 @@ mod cuda_tests {
             dummy_bitwise_chip,
             tester.address_bits(),
         );
-        let hybrid_chip = HybridFp2Chip::new(get_fp2_muldiv_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
+        let hybrid_chip = HybridFp2Chip::new(
+            get_fp2_muldiv_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.cpu_bitwise_op_lookup(),
+                tester.address_bits(),
+            ),
+            tester.range_checker().device_ctx.clone(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }

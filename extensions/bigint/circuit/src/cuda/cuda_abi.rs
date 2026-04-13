@@ -4,6 +4,7 @@ use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,
+    stream::cudaStream_t,
 };
 
 pub mod alu256 {
@@ -21,6 +22,7 @@ pub mod alu256 {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -34,6 +36,7 @@ pub mod alu256 {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_alu256_tracegen(
@@ -47,6 +50,7 @@ pub mod alu256 {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -66,6 +70,7 @@ pub mod beq256 {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -79,6 +84,7 @@ pub mod beq256 {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_branch_equal256_tracegen(
@@ -92,6 +98,7 @@ pub mod beq256 {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -111,6 +118,7 @@ pub mod lt256 {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -124,6 +132,7 @@ pub mod lt256 {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_less_than256_tracegen(
@@ -137,6 +146,7 @@ pub mod lt256 {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -156,6 +166,7 @@ pub mod blt256 {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -169,6 +180,7 @@ pub mod blt256 {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_branch_less_than256_tracegen(
@@ -182,6 +194,7 @@ pub mod blt256 {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -201,6 +214,7 @@ pub mod shift256 {
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -214,6 +228,7 @@ pub mod shift256 {
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_shift256_tracegen(
@@ -227,6 +242,7 @@ pub mod shift256 {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }
@@ -250,6 +266,7 @@ pub mod mul256 {
             range_tuple_sizes: UInt2,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -265,6 +282,7 @@ pub mod mul256 {
         range_tuple_sizes: UInt2,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_multiplication256_tracegen(
@@ -280,6 +298,7 @@ pub mod mul256 {
             range_tuple_sizes,
             pointer_max_bits,
             timestamp_max_bits,
+            stream,
         ))
     }
 }

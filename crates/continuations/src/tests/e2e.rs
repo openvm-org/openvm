@@ -53,9 +53,9 @@ use crate::{
         inner::ProofsType,
     },
     prover::{
-        ChildVkKind, DeferralChildVkKind, DeferralHookGpuProver as DeferralHookProver,
-        DeferralInnerGpuProver as DeferralInnerProver, InnerGpuProver as InnerProver,
-        RootGpuProver as RootProver,
+        engine_device_ctx, ChildVkKind, DeferralChildVkKind,
+        DeferralHookGpuProver as DeferralHookProver, DeferralInnerGpuProver as DeferralInnerProver,
+        InnerGpuProver as InnerProver, RootGpuProver as RootProver,
     },
     SC,
 };
@@ -741,16 +741,16 @@ fn test_deferral_e2e() -> Result<()> {
         Some(def_hook_commit.into()),
         None,
     );
-    let ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB>(
+    let root_vk = root_prover.get_vk();
+    let engine = RootEngine::new(root_vk.inner.params.clone());
+    let proving_ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB, _>(
         combined_proof,
         &user_pvs_proof,
         Some(&merkle_proofs),
+        engine_device_ctx(&engine),
     );
     warn!("proving root (GPU)");
-    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
-
-    let root_vk = root_prover.get_vk();
-    let engine = RootEngine::new(root_vk.inner.params.clone());
+    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(proving_ctx.unwrap())?;
     engine.verify(&root_vk, &root_proof)?;
 
     Ok(())

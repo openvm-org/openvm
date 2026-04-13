@@ -35,9 +35,10 @@ extern "C" int _range_checker_tracegen(
     const uint32_t *d_count,
     const uint32_t *d_cpu_count,
     Fp *d_trace,
-    size_t num_bins
+    size_t num_bins,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(num_bins);
-    range_checker_tracegen<<<grid, block>>>(d_count, d_cpu_count, d_trace, num_bins);
+    range_checker_tracegen<<<grid, block, 0, stream>>>(d_count, d_cpu_count, d_trace, num_bins);
     return CHECK_KERNEL();
 }

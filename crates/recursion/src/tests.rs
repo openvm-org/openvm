@@ -83,6 +83,7 @@ fn run_test<const MAX_NUM_PROOFS: usize, Fx: TestFixture<BabyBearPoseidon2Config
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         &proofs,
+        &(),
         default_duplex_sponge_recorder(),
     );
     debug(parent_engine, &circuit.airs(), ctxs);
@@ -157,6 +158,7 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         &[proof],
+        &(),
         default_duplex_sponge_recorder(),
     );
     debug(&parent_engine, &circuit.airs(), ctxs);
@@ -494,11 +496,13 @@ fn test_recursion_circuit_dag_commit_subair() {
     let cached_trace_record = <VerifierSubCircuit<2> as VerifierTraceGen<
         CpuBackend<BabyBearPoseidon2Config>,
         BabyBearPoseidon2Config,
+        (),
     >>::cached_trace_record(&circuit, &vk);
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         CachedTraceCtx::Records(cached_trace_record),
         &[proof],
+        &(),
         default_duplex_sponge_recorder(),
     );
     assert!(ctxs[0].cached_mains.is_empty());
@@ -652,6 +656,7 @@ fn test_recursion_circuit_w_stack_too_small() {
         &vk,
         CachedTraceCtx::PcsData(vk_commit_data),
         std::slice::from_ref(&proof),
+        &(),
         default_duplex_sponge_recorder(),
     );
 
@@ -702,6 +707,7 @@ mod cuda {
         let ref_engine = BabyBearPoseidon2RefEngine::<DuplexSponge>::new(params.clone());
         let cpu_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
         let gpu_engine = BabyBearPoseidon2GpuEngine::new(params);
+        let gpu_device_ctx = gpu_engine.device().device_ctx.clone();
         let (pk, vk) = fx.keygen(&ref_engine);
         assert!(num_proofs <= 5);
         let proofs = (0..num_proofs)
@@ -720,24 +726,26 @@ mod cuda {
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_cpu),
             &proofs,
+            &(),
             default_duplex_sponge_recorder(),
         );
-        let gpu_ctx = circuit.generate_proving_ctxs_base(
+        let gpu_proving_ctxs = circuit.generate_proving_ctxs_base(
             &vk,
             CachedTraceCtx::PcsData(vk_commit_data_gpu),
             &proofs,
+            &gpu_device_ctx,
             default_duplex_sponge_recorder(),
         );
 
         #[cfg(feature = "touchemall")]
-        for (i, gpu) in gpu_ctx.iter().enumerate() {
+        for (i, gpu) in gpu_proving_ctxs.iter().enumerate() {
             let gpu = &gpu.common_main;
             let name = circuit.airs::<SC>()[i].name();
 
             let width = gpu.width();
             let height = gpu.height();
 
-            let gpu = gpu.to_host().unwrap();
+            let gpu = gpu.to_host_on(&gpu_device_ctx).unwrap();
 
             for r in 0..height {
                 for c in 0..width {
@@ -761,7 +769,7 @@ mod cuda {
             cpu_ctx.len() - 1, // exp_bits is non-deterministic when multi-threaded
         ];
 
-        for (i, (cpu, gpu)) in zip_eq(cpu_ctx, gpu_ctx).enumerate() {
+        for (i, (cpu, gpu)) in zip_eq(cpu_ctx, gpu_proving_ctxs).enumerate() {
             let cpu = cpu.common_main;
             let gpu = gpu.common_main;
             assert_eq!(gpu.width(), cpu.width(), "Width mismatch at AIR {i}");
@@ -772,7 +780,7 @@ mod cuda {
             if non_deterministic_air_idxs.contains(&i) {
                 continue;
             }
-            let gpu = gpu.to_host().unwrap();
+            let gpu = gpu.to_host_on(&gpu_device_ctx).unwrap();
             let cpu_height = cpu.height();
             let cpu_width = cpu.width();
 

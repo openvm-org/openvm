@@ -219,12 +219,13 @@ extern "C" int _initial_opened_values_tracegen(
     size_t *stacking_chunks_psums_per_proof,
     size_t *stacking_widths_psums_per_proof,
     FpExt *mu_pows,
-    size_t num_proofs
+    size_t num_proofs,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    SWITCH_BLOCK(num_proofs, NUM_PROOFS, (initial_opened_values_tracegen<NUM_PROOFS><<<grid, block>>>(
+    SWITCH_BLOCK(num_proofs, NUM_PROOFS, (initial_opened_values_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(
         trace_d,
         num_valid_rows,
         height,

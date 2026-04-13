@@ -1,10 +1,10 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_cuda_common::{memory_manager::MemTracker, stream::GpuDeviceCtx};
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use p3_field::TwoAdicField;
 
 use crate::{
-    cuda::to_device_or_nullptr,
+    cuda::to_device_or_nullptr_on,
     tracegen::ModuleChip,
     whir::{
         cuda_abi::non_initial_opened_values_tracegen, cuda_tracegen::WhirBlobGpu,
@@ -16,6 +16,7 @@ use crate::{
 pub(in crate::whir) struct NonInitialOpenedValuesGpuCtx<'a> {
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
+    pub device_ctx: &'a GpuDeviceCtx,
 }
 
 pub(in crate::whir) struct NonInitialOpenedValuesGpuTraceGenerator;
@@ -31,6 +32,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
     ) -> Option<AirProvingContext<GpuBackend>> {
         let blob = ctx.blob;
         let params = ctx.params;
+        let device_ctx = ctx.device_ctx;
 
         let mem = MemTracker::start("tracegen.whir_non_initial_opened_values");
         let num_valid_rows = blob.codeword_opened_values.len();
@@ -43,7 +45,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
             num_valid_rows.next_power_of_two()
         };
         let width = NonInitialOpenedValuesCols::<F>::width();
-        let trace_d = DeviceMatrix::with_capacity(height, width);
+        let trace_d = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         let num_rounds = params.num_whir_rounds();
         let num_queries_per_round = num_queries_per_round(params);
@@ -61,8 +63,9 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
         }
         let rows_per_proof = *round_row_offsets.last().unwrap();
 
-        let round_row_offsets_d = to_device_or_nullptr(&round_row_offsets).unwrap();
-        let round_query_offsets_d = to_device_or_nullptr(query_layout.query_offsets()).unwrap();
+        let round_row_offsets_d = to_device_or_nullptr_on(&round_row_offsets, device_ctx).unwrap();
+        let round_query_offsets_d =
+            to_device_or_nullptr_on(query_layout.query_offsets(), device_ctx).unwrap();
 
         let omega_k = F::two_adic_generator(k_whir);
         unsafe {
@@ -83,6 +86,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
                 rows_per_proof,
                 &round_query_offsets_d,
                 total_queries,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

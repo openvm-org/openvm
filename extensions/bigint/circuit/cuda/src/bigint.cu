@@ -97,14 +97,15 @@ extern "C" int _alu256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(BaseAlu256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    alu256_tracegen<<<grid, block>>>(
+    alu256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
@@ -173,14 +174,15 @@ extern "C" int _branch_equal256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(BranchEqual256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    branch_equal256_tracegen<<<grid, block>>>(
+    branch_equal256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
@@ -245,14 +247,15 @@ extern "C" int _less_than256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(LessThan256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    less_than256_tracegen<<<grid, block>>>(
+    less_than256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
@@ -317,14 +320,15 @@ extern "C" int _branch_less_than256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThan256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    branch_less_than256_tracegen<<<grid, block>>>(
+    branch_less_than256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
@@ -392,14 +396,15 @@ extern "C" int _shift256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(Shift256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    shift256_tracegen<<<grid, block>>>(
+    shift256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
@@ -471,14 +476,15 @@ extern "C" int _multiplication256_tracegen(
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(Multiplication256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    multiplication256_tracegen<<<grid, block>>>(
+    multiplication256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

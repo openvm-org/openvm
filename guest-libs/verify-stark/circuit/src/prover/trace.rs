@@ -20,21 +20,25 @@ use tracing::instrument;
 
 use crate::{prover::DeferredVerifyProver, DeferredVerifyTraceGen, PreVerifierData};
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: DeferredVerifyTraceGen<PB>,
-    > DeferredVerifyProver<PB, S, T>
+impl<PB, S, T> DeferredVerifyProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
-    ) -> ProvingContext<PB> {
+        device_ctx: &DC,
+    ) -> ProvingContext<PB>
+    where
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC, DC>,
+        T: DeferredVerifyTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         assert_eq!(
             user_pvs_proof.public_values.len(),
             self.circuit.num_user_pvs
@@ -54,6 +58,7 @@ where
             self.circuit.memory_dimensions,
             self.circuit.def_idx,
             deferral_merkle_proofs,
+            device_ctx,
         );
 
         let mut final_transcript_state = [F::ZERO; POSEIDON2_WIDTH];
@@ -74,6 +79,7 @@ where
                 CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone()),
                 proof_slice,
                 &mut external_data,
+                device_ctx,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();
@@ -83,6 +89,7 @@ where
             verifier_pvs_record,
             final_transcript_state,
             output_commit,
+            device_ctx,
         );
 
         ProvingContext {

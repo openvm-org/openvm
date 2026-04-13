@@ -292,6 +292,7 @@ pub fn compute_dag_onion_commit(
     let cached_trace_record = VerifierTraceGen::<
         CpuBackend<BabyBearPoseidon2Config>,
         BabyBearPoseidon2Config,
+        (),
     >::cached_trace_record(&verifier_circuit, internal_recursive_vk);
 
     // Despite the name, this returns the DAG onion commit for when there is no cached trace

@@ -391,6 +391,7 @@ mod cuda_tracegen {
         type ModuleSpecificCtx<'a> = (
             Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             &'a [usize],
+            &'a openvm_cuda_common::stream::GpuDeviceCtx,
         );
 
         #[tracing::instrument(skip_all)]
@@ -406,9 +407,11 @@ mod cuda_tracegen {
 
             let pow_checker_gpu = &ctx.0;
             let external_range_checks = ctx.1;
+            let device_ctx = ctx.2;
 
             let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::from_vals(
                 external_range_checks,
+                device_ctx.clone(),
             ));
             let proof_shape_chip = proof_shape::cuda::ProofShapeChipGpu::<4, 8>::new(
                 self.idx_encoder.width(),
@@ -426,7 +429,7 @@ mod cuda_tracegen {
                 tracing::trace_span!("wrapper.generate_trace", air = "ProofShape").in_scope(
                     || {
                         proof_shape_chip.generate_proving_ctx(
-                            &(child_vk, preflights),
+                            &(child_vk, preflights, device_ctx),
                             required_heights.map(|heights| heights[0]),
                         )
                     },
@@ -437,7 +440,7 @@ mod cuda_tracegen {
                 tracing::trace_span!("wrapper.generate_trace", air = "PublicValues").in_scope(
                     || {
                         pvs::cuda::PublicValuesGpuTraceGenerator.generate_proving_ctx(
-                            &(proofs, preflights),
+                            &(proofs, preflights, device_ctx),
                             required_heights.map(|heights| heights[1]),
                         )
                     },
@@ -450,7 +453,10 @@ mod cuda_tracegen {
             // trace or sync power checker multiplicities to CPU.
             tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
                 ctxs.push(AirProvingContext::simple_no_pis(
-                    Arc::try_unwrap(range_checker_gpu).unwrap().generate_trace(),
+                    Arc::try_unwrap(range_checker_gpu)
+                        .ok()
+                        .expect("range checker still shared")
+                        .generate_trace(),
                 ));
             });
 
