@@ -632,6 +632,8 @@ __global__ void sha2_first_pass_phase2(
         RowSlice inner_row = row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
         helper.write_flags_round(inner_row, row_in_block, global_block_idx + 1);
 
+        // Rounds below are identical to Phase 1's round loop; we replay them to derive per-limb
+        // carries and intermediates for the trace without storing per-round state in scratch.
         for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
             uint32_t t = row_in_block * V::ROUNDS_PER_ROW + j;
             typename V::Word w_val;
@@ -1022,7 +1024,9 @@ int launch_sha2_first_pass_tracegen(
     cudaStream_t stream
 ) {
     using SL = Sha2ScratchLayout<V>;
-    assert(scratch_words >= static_cast<size_t>(total_num_blocks) * SL::WORDS_PER_BLOCK);
+    if (scratch_words < static_cast<size_t>(total_num_blocks) * SL::WORDS_PER_BLOCK) {
+        return cudaErrorInvalidValue;
+    }
 
     // Phase 1: compute SHA-2 rounds, snapshot state before each row
     {
