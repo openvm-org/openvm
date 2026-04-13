@@ -55,14 +55,15 @@ extern "C" int _public_values_recursion_tracegen(
     PublicValueData **d_pvs_data,
     size_t **d_pvs_tidx,
     size_t num_proofs,
-    size_t num_pvs
+    size_t num_pvs,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height);
     SWITCH_BLOCK(
         num_proofs,
         NUM_PROOFS,
-        (public_values_tracegen<NUM_PROOFS><<<grid, block>>>(
+        (public_values_tracegen<NUM_PROOFS><<<grid, block, 0, stream>>>(
              d_trace,
              height,
              PtrArray<PublicValueData, NUM_PROOFS>(d_pvs_data),

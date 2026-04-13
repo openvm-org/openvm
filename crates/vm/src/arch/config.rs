@@ -8,7 +8,9 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{
+    p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -86,6 +88,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,

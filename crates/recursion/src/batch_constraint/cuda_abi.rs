@@ -2,7 +2,7 @@
 
 use openvm_circuit_primitives::cuda_abi::UInt2;
 use openvm_cuda_backend::prelude::{EF, F};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 use crate::{
     batch_constraint::{
@@ -57,6 +57,7 @@ extern "C" {
         d_sumcheck_rnds: *const EF,
         d_sumcheck_bounds: *const usize,
         d_cached_records: *const CachedGpuRecord,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _eq_3b_tracegen(
@@ -73,6 +74,7 @@ extern "C" {
         n_logups: *const usize,
         xis: *const EF,
         xi_bounds: *const usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _constraints_folding_tracegen_temp_bytes(
@@ -80,6 +82,7 @@ extern "C" {
         d_cur_sum_evals: *mut AffineFpExt,
         num_valid_rows: u32,
         temp_bytes_out: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _constraints_folding_tracegen(
@@ -100,6 +103,7 @@ extern "C" {
         l_skip: u32,
         d_temp_buffer: *mut core::ffi::c_void,
         temp_bytes: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _interaction_folding_tracegen_temp_bytes(
@@ -109,6 +113,7 @@ extern "C" {
         d_cur_sum_evals: *mut AffineFpExt,
         num_valid_rows: u32,
         temp_bytes_out: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _interactions_folding_tracegen(
@@ -132,6 +137,7 @@ extern "C" {
         l_skip: u32,
         d_temp_buffer: *mut core::ffi::c_void,
         temp_bytes: usize,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
@@ -161,6 +167,7 @@ pub unsafe fn sym_expr_common_tracegen(
     d_sumcheck_rnds: &DeviceBuffer<EF>,
     d_sumcheck_bounds: &DeviceBuffer<usize>,
     d_cached_records: Option<&DeviceBuffer<CachedGpuRecord>>,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     let cached_records_ptr = d_cached_records.map_or(::core::ptr::null(), |b| b.as_ptr());
     CudaError::from_result(_sym_expr_common_tracegen(
@@ -188,6 +195,7 @@ pub unsafe fn sym_expr_common_tracegen(
         d_sumcheck_rnds.as_ptr(),
         d_sumcheck_bounds.as_ptr(),
         cached_records_ptr,
+        stream,
     ))
 }
 
@@ -206,6 +214,7 @@ pub unsafe fn eq_3b_tracegen(
     d_n_logups: &DeviceBuffer<usize>,
     d_xis: &DeviceBuffer<EF>,
     d_xi_bounds: &DeviceBuffer<usize>,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_eq_3b_tracegen(
         d_trace.as_mut_ptr(),
@@ -221,6 +230,7 @@ pub unsafe fn eq_3b_tracegen(
         d_n_logups.as_ptr(),
         d_xis.as_ptr(),
         d_xi_bounds.as_ptr(),
+        stream,
     ))
 }
 
@@ -228,6 +238,7 @@ pub unsafe fn constraints_folding_tracegen_temp_bytes(
     d_proof_and_sort_idxs: &DeviceBuffer<UInt2>,
     d_cur_sum_evals: &DeviceBuffer<AffineFpExt>,
     num_valid_rows: u32,
+    stream: cudaStream_t,
 ) -> Result<usize, CudaError> {
     let mut temp_bytes = 0usize;
     CudaError::from_result(_constraints_folding_tracegen_temp_bytes(
@@ -235,6 +246,7 @@ pub unsafe fn constraints_folding_tracegen_temp_bytes(
         d_cur_sum_evals.as_mut_ptr(),
         num_valid_rows,
         &mut temp_bytes as *mut usize,
+        stream,
     ))?;
     Ok(temp_bytes)
 }
@@ -258,6 +270,7 @@ pub unsafe fn constraints_folding_tracegen(
     l_skip: u32,
     d_temp_buffer: &DeviceBuffer<u8>,
     temp_bytes: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_constraints_folding_tracegen(
         d_trace.as_mut_ptr(),
@@ -277,6 +290,7 @@ pub unsafe fn constraints_folding_tracegen(
         l_skip,
         d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
         temp_bytes,
+        stream,
     ))
 }
 
@@ -286,6 +300,7 @@ pub unsafe fn interactions_folding_tracegen_temp_bytes(
     d_idx_keys: &DeviceBuffer<UInt2>,
     d_cur_sum_evals: &DeviceBuffer<AffineFpExt>,
     num_valid_rows: u32,
+    stream: cudaStream_t,
 ) -> Result<usize, CudaError> {
     let mut temp_bytes = 0usize;
     CudaError::from_result(_interaction_folding_tracegen_temp_bytes(
@@ -295,6 +310,7 @@ pub unsafe fn interactions_folding_tracegen_temp_bytes(
         d_cur_sum_evals.as_mut_ptr(),
         num_valid_rows,
         &mut temp_bytes as *mut usize,
+        stream,
     ))?;
     Ok(temp_bytes)
 }
@@ -321,6 +337,7 @@ pub unsafe fn interactions_folding_tracegen(
     l_skip: u32,
     d_temp_buffer: &DeviceBuffer<u8>,
     temp_bytes: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_interactions_folding_tracegen(
         d_trace.as_mut_ptr(),
@@ -343,5 +360,6 @@ pub unsafe fn interactions_folding_tracegen(
         l_skip,
         d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
         temp_bytes,
+        stream,
     ))
 }

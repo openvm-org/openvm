@@ -153,14 +153,15 @@ extern "C" int _inventory_merge_records(
     uint32_t *d_positions,
     void *d_temp_storage,
     size_t temp_storage_bytes,
-    size_t *out_num_records
+    size_t *out_num_records,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(in_num_records);
     InRec const *in = reinterpret_cast<InRec const *>(d_in_records);
     OutRec *tmp_out = reinterpret_cast<OutRec *>(d_tmp_records);
     OutRec *out = reinterpret_cast<OutRec *>(d_out_records);
 
-    cukernel_build_candidates<<<grid, block>>>(
+    cukernel_build_candidates<<<grid, block, 0, stream>>>(
         in,
         in_num_records,
         d_initial_mem,
@@ -177,13 +178,13 @@ extern "C" int _inventory_merge_records(
         d_flags,
         d_positions,
         in_num_records,
-        cudaStreamPerThread
+        stream
     );
     if (int err = CHECK_KERNEL(); err) {
         return err;
     }
 
-    cukernel_scatter_compact<<<grid, block>>>(
+    cukernel_scatter_compact<<<grid, block, 0, stream>>>(
         tmp_out,
         d_flags,
         d_positions,
@@ -197,7 +198,8 @@ extern "C" int _inventory_merge_records(
 extern "C" int _inventory_merge_records_get_temp_bytes(
     uint32_t *d_flags,
     size_t in_num_records,
-    size_t *h_temp_bytes_out
+    size_t *h_temp_bytes_out,
+    cudaStream_t stream
 ) {
     size_t temp_bytes = 0;
     cub::DeviceScan::ExclusiveSum(
@@ -206,7 +208,7 @@ extern "C" int _inventory_merge_records_get_temp_bytes(
         d_flags,
         d_flags,
         in_num_records,
-        cudaStreamPerThread
+        stream
     );
     *h_temp_bytes_out = temp_bytes;
     return CHECK_KERNEL();

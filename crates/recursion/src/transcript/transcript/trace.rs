@@ -2,7 +2,7 @@
 pub mod cuda {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::copy::MemCopyH2D;
+    use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 
     use crate::{
         cuda::preflight::PreflightGpu,
@@ -103,6 +103,7 @@ pub mod cuda {
     pub(crate) fn generate_trace(
         preflights_gpu: &[PreflightGpu],
         blob: &TranscriptBlob,
+        device_ctx: &GpuDeviceCtx,
         required_height: Option<usize>,
     ) -> Option<DeviceMatrix<F>> {
         let mut num_valid_rows = 0usize;
@@ -115,12 +116,19 @@ pub mod cuda {
             .map(|v| {
                 num_valid_rows += v.len();
                 row_bounds.push(num_valid_rows as u32);
-                v.to_device().unwrap()
+                v.to_device_on(device_ctx).unwrap()
             })
             .collect_vec();
         let transcript_values = preflights_gpu
             .iter()
-            .map(|preflight| preflight.cpu.transcript.values().to_device().unwrap())
+            .map(|preflight| {
+                preflight
+                    .cpu
+                    .transcript
+                    .values()
+                    .to_device_on(device_ctx)
+                    .unwrap()
+            })
             .collect_vec();
         let start_states = preflights_gpu
             .iter()
@@ -133,7 +141,7 @@ pub mod cuda {
                     .flatten()
                     .copied()
                     .collect_vec()
-                    .to_device()
+                    .to_device_on(device_ctx)
                     .unwrap()
             })
             .collect_vec();
@@ -147,7 +155,7 @@ pub mod cuda {
             num_valid_rows.next_power_of_two()
         };
         let width = TranscriptCols::<usize>::width();
-        let d_trace = DeviceMatrix::with_capacity(height, width);
+        let d_trace = DeviceMatrix::with_capacity_on(height, width, device_ctx);
 
         let d_transcript_values = transcript_values.iter().map(|b| b.as_ptr()).collect_vec();
         let d_start_states = start_states.iter().map(|b| b.as_ptr()).collect_vec();
@@ -165,6 +173,7 @@ pub mod cuda {
                 &blob.poseidon2_buffer,
                 &blob.transcript_air_blob.poseidon2_offsets,
                 preflights_gpu.len(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

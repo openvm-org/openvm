@@ -7,9 +7,10 @@ use openvm_circuit::{
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::{
-    copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
+    copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
+    stream::GpuDeviceCtx,
 };
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
@@ -22,6 +23,7 @@ use super::{
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
+    pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
@@ -54,10 +56,15 @@ impl MemoryInventoryGPU {
         unsafe { std::mem::transmute::<F, u32>(value) }
     }
 
-    pub fn new(config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
+    pub fn new(
+        config: MemoryConfig,
+        hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
+        device_ctx: GpuDeviceCtx,
+    ) -> Self {
         Self {
-            boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer()),
-            merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
+            device_ctx: device_ctx.clone(),
+            boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer(), device_ctx.clone()),
+            merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone(), device_ctx),
             initial_memory: Vec::new(),
             merkle_records: None,
             #[cfg(feature = "metrics")]
@@ -83,7 +90,7 @@ impl MemoryInventoryGPU {
                 DeviceBuffer::new()
             } else {
                 raw_mem
-                    .to_device()
+                    .to_device_on(&self.device_ctx)
                     .expect("failed to copy memory to device")
             });
             self.merkle_tree
@@ -116,11 +123,12 @@ impl MemoryInventoryGPU {
                 let one_cell_size = layout.size();
                 let mut values = vec![0u8; one_cell_size * DIGEST_WIDTH];
                 unsafe {
-                    cuda_memcpy::<true, false>(
+                    cuda_memcpy_on::<true, false>(
                         values.as_mut_ptr() as *mut std::ffi::c_void,
                         self.initial_memory[ADDR_SPACE_OFFSET as usize].as_ptr()
                             as *const std::ffi::c_void,
                         values.len(),
+                        &self.device_ctx,
                     )
                     .unwrap();
                     for i in 0..DIGEST_WIDTH {
@@ -144,7 +152,7 @@ impl MemoryInventoryGPU {
                     MERKLE_TOUCHED_BLOCK_WIDTH,
                 )
             };
-            let d_merkle_touched_memory = merkle_words.to_device().unwrap();
+            let d_merkle_touched_memory = merkle_words.to_device_on(&self.device_ctx).unwrap();
 
             let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
@@ -174,22 +182,35 @@ impl MemoryInventoryGPU {
             let in_num_records = in_records.len();
             let out_words = in_num_records
                 * (std::mem::size_of::<MemoryInventoryRecord<8, 2>>() / std::mem::size_of::<u32>());
-            let d_in_records = in_records.to_device().unwrap().as_buffer::<u32>();
-            let d_tmp_records = DeviceBuffer::<u32>::with_capacity(out_words);
-            let d_out_records = DeviceBuffer::<u32>::with_capacity(out_words);
-            let d_out_num_records = DeviceBuffer::<usize>::with_capacity(1);
-            let d_flags = DeviceBuffer::<u32>::with_capacity(in_num_records);
-            let d_positions = DeviceBuffer::<u32>::with_capacity(in_num_records);
-            let d_initial_mem = self.boundary.initial_leaves.to_device().unwrap();
+            let d_in_records = in_records
+                .to_device_on(&self.device_ctx)
+                .unwrap()
+                .as_buffer::<u32>();
+            let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
+            let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
+            let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
+            let d_flags = DeviceBuffer::<u32>::with_capacity_on(in_num_records, &self.device_ctx);
+            let d_positions =
+                DeviceBuffer::<u32>::with_capacity_on(in_num_records, &self.device_ctx);
+            let d_initial_mem = self
+                .boundary
+                .initial_leaves
+                .to_device_on(&self.device_ctx)
+                .unwrap();
             let mut temp_bytes = 0usize;
             unsafe {
-                inventory::merge_records_get_temp_bytes(&d_flags, in_num_records, &mut temp_bytes)
-                    .expect("merge_records_get_temp_bytes failed");
+                inventory::merge_records_get_temp_bytes(
+                    &d_flags,
+                    in_num_records,
+                    &mut temp_bytes,
+                    self.device_ctx.stream.as_raw(),
+                )
+                .expect("merge_records_get_temp_bytes failed");
             }
             let d_temp_storage = if temp_bytes == 0 {
                 DeviceBuffer::<u8>::new()
             } else {
-                DeviceBuffer::<u8>::with_capacity(temp_bytes)
+                DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.device_ctx)
             };
             unsafe {
                 inventory::merge_records(
@@ -203,17 +224,22 @@ impl MemoryInventoryGPU {
                     &d_temp_storage,
                     temp_bytes,
                     &d_out_num_records,
+                    self.device_ctx.stream.as_raw(),
                 )
                 .expect("merge_records failed");
             }
 
             // Send records to boundary chip
-            let out_num_records = d_out_num_records.to_host().unwrap()[0];
+            let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
             self.boundary
                 .finalize_records_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
 
             // Send records to memory merkle tree
-            let out_records = self.boundary.records().to_host().unwrap();
+            let out_records = self
+                .boundary
+                .records()
+                .to_host_on(&self.device_ctx)
+                .unwrap();
             let record_words = 4 + DIGEST_WIDTH;
             let mut merkle_records = Vec::with_capacity(out_num_records);
             for i in 0..out_num_records {
@@ -234,7 +260,7 @@ impl MemoryInventoryGPU {
                     merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
                 )
             };
-            self.merkle_records = Some(merkle_words.to_device().unwrap());
+            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
             let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
@@ -283,6 +309,10 @@ mod tests {
         },
     };
     use openvm_cuda_backend::prelude::F;
+    use openvm_cuda_common::{
+        common::get_device,
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
+    };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
     use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -318,8 +348,17 @@ mod tests {
         .next_power_of_two()
             * 2
             * DIGEST_WIDTH;
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip);
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            max_buffer_size,
+            1,
+            device_ctx.clone(),
+        ));
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);
 
         let ctxs = inventory.generate_proving_ctxs(Vec::new());
@@ -392,8 +431,17 @@ mod tests {
         .next_power_of_two()
             * 2
             * DIGEST_WIDTH;
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
-        let mut inventory = MemoryInventoryGPU::new(mem_config.clone(), hasher_chip);
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            max_buffer_size,
+            1,
+            device_ctx.clone(),
+        ));
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);
 
         let touched_memory = vec![

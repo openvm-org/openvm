@@ -176,11 +176,12 @@ extern "C" int _eq_3b_tracegen(
     const size_t *rows_per_proof_bounds_d,
     const size_t *n_logups_d,
     const FpExt *xis_d,
-    const size_t *xi_bounds_d
+    const size_t *xi_bounds_d,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height, 512);
-    eq_3b_tracegen<<<grid, block>>>(
+    eq_3b_tracegen<<<grid, block, 0, stream>>>(
         trace_d,
         num_valid_rows,
         height,

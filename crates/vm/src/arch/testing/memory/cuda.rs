@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
 use openvm_instructions::DEFERRAL_AS;
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -46,18 +46,23 @@ impl DeviceMemoryTester {
         mem_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
         let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         let sbox_regs = 1;
         let poseidon2_periphery = Arc::new(Poseidon2PeripheryChipGPU::new(
             1 << 20, // probably enough for our tests
             sbox_regs,
+            device_ctx.clone(),
         ));
-        let mut inventory =
-            MemoryInventoryGPU::new(mem_config.clone(), poseidon2_periphery.clone());
+        let mut inventory = MemoryInventoryGPU::new(
+            mem_config.clone(),
+            poseidon2_periphery.clone(),
+            device_ctx.clone(),
+        );
         inventory.set_initial_memory(&memory.data.memory);
         Self {
-            chip: FixedSizeMemoryTester::new(mem_bus),
+            chip: FixedSizeMemoryTester::new(mem_bus, device_ctx),
             memory,
             inventory,
             hasher_chip: Some(poseidon2_periphery),
@@ -104,11 +109,11 @@ impl DeviceMemoryTester {
     }
 }
 
-pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>);
+pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>, GpuDeviceCtx);
 
 impl FixedSizeMemoryTester {
-    pub fn new(bus: MemoryBus) -> Self {
-        Self(MemoryDummyChip::new(MemoryDummyAir::new(bus)))
+    pub fn new(bus: MemoryBus, device_ctx: GpuDeviceCtx) -> Self {
+        Self(MemoryDummyChip::new(MemoryDummyAir::new(bus)), device_ctx)
     }
 
     pub fn send(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32) {
@@ -133,15 +138,17 @@ impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
         records.resize(height * width, F::ZERO);
         let num_records = height;
 
-        let trace = DeviceMatrix::<F>::with_capacity(height, width);
+        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, &self.1);
+        trace.buffer().fill_zero_on(&self.1).unwrap();
         unsafe {
             memory_testing::tracegen(
                 trace.buffer(),
                 height,
                 width,
-                &records.to_device().unwrap(),
+                &records.to_device_on(&self.1).unwrap(),
                 num_records,
                 DEFAULT_BLOCK_SIZE,
+                self.1.stream.as_raw(),
             )
             .unwrap();
         }

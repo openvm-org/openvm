@@ -31,11 +31,12 @@ extern "C" int _pow_checker_tracegen(
     const uint32_t *d_cpu_pow_count,
     const uint32_t *d_cpu_range_count,
     Fp *d_trace,
-    size_t n
+    size_t n,
+    cudaStream_t stream
 ) {
     assert(n == N);
     auto [grid, block] = kernel_launch_params(N);
-    pow_checker_tracegen<<<grid, block>>>(
+    pow_checker_tracegen<<<grid, block, 0, stream>>>(
         d_pow_count, d_range_count, d_cpu_pow_count, d_cpu_range_count, d_trace
     );
     return CHECK_KERNEL();

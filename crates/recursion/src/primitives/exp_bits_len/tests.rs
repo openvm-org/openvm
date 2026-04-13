@@ -2,6 +2,11 @@ use core::borrow::Borrow;
 use std::borrow::BorrowMut;
 
 use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{CudaStream, GpuDeviceCtx, StreamGuard},
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     any_air_arc_vec,
@@ -339,8 +344,12 @@ mod cuda_tests {
                 .expect("trace height should be unconstrained")
         };
 
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
         let gpu_trace = {
-            let gpu_gen = ExpBitsLenGpuTraceGenerator::default();
+            let gpu_gen = ExpBitsLenGpuTraceGenerator::new(device_ctx.clone());
             gpu_gen.add_requests(requests.iter().map(|req| {
                 (
                     F::from_u32(req.base),
@@ -353,6 +362,6 @@ mod cuda_tests {
                 .expect("trace height should be unconstrained")
         };
 
-        assert_eq_host_and_device_matrix(Arc::new(cpu_trace), &gpu_trace);
+        assert_eq_host_and_device_matrix(Arc::new(cpu_trace), &gpu_trace, &device_ctx);
     }
 }
