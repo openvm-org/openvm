@@ -73,7 +73,11 @@ impl Keccak256 {
     }
 
     /// Finalizes the hash computation and writes the result to a raw pointer.
-    fn finalize_ptr(&mut self, output: *mut u8) {
+    ///
+    /// # Safety
+    ///
+    /// `output` must point to a buffer that is at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
+    unsafe fn finalize_ptr(&mut self, output: *mut u8) {
         // Apply Keccak padding (pad10*1): 0x01 at current position, 0x80 at end of rate
         self.state.0[self.idx] ^= 0x01;
         self.state.0[KECCAK_RATE - 1] ^= 0x80;
@@ -89,13 +93,16 @@ impl Keccak256 {
 
     /// Finalizes the hash computation and writes the result to the output buffer.
     ///
-    /// The output buffer must be at least `KECCAK_OUTPUT_SIZE` (32) bytes.
+    /// # Safety
+    ///
+    /// `output` must be at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
     #[inline(always)]
-    pub fn finalize(mut self, output: &mut [u8]) {
+    pub unsafe fn finalize(mut self, output: &mut [u8]) {
         debug_assert!(
             output.len() >= KECCAK_OUTPUT_SIZE,
             "output buffer too small"
         );
+        // SAFETY: caller guarantees output is at least KECCAK_OUTPUT_SIZE bytes.
         self.finalize_ptr(output.as_mut_ptr());
     }
 }
@@ -123,7 +130,7 @@ static KECCAK256_HASHER: Mutex<Keccak256> = Mutex::new(Keccak256::new());
 /// [`sha3`]: https://docs.rs/sha3/latest/sha3/
 /// [`tiny_keccak`]: https://docs.rs/tiny-keccak/latest/tiny_keccak/
 #[no_mangle]
-pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
+pub unsafe extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     let mut hasher = KECCAK256_HASHER.lock();
     hasher.update_ptr(bytes, len);
     hasher.finalize_ptr(output);
@@ -133,5 +140,7 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 /// Sets `output` to the keccak256 hash of `input`.
 #[inline(always)]
 pub fn set_keccak256(input: &[u8], output: &mut [u8; KECCAK_OUTPUT_SIZE]) {
-    native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr());
+    // SAFETY: output is exactly KECCAK_OUTPUT_SIZE bytes, and input.as_ptr() is valid for
+    // input.len() bytes.
+    unsafe { native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr()) };
 }
