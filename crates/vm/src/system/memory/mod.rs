@@ -82,7 +82,6 @@ impl MemoryAirInventory {
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
         };
         let boundary = PersistentBoundaryAir::<CHUNK> {
-            memory_dims,
             memory_bus,
             merkle_bus,
             compression_bus,

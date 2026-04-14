@@ -15,7 +15,6 @@ use openvm_stark_backend::{
     prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
-use rustc_hash::FxHashSet;
 use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
@@ -23,8 +22,8 @@ use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
     primitives::Chip,
     system::memory::{
-        controller::CHUNK, dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress,
-        MemoryImage, TimestampedEquipartition,
+        controller::CHUNK, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        TimestampedEquipartition,
     },
 };
 
@@ -61,7 +60,6 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 ///   `merkle_bus`.
 #[derive(Clone, Debug)]
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
-    pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
@@ -141,14 +139,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    pub touched_labels: TouchedLabels<F, CHUNK>,
+    touched_labels: Option<Vec<FinalTouchedLabel<F, CHUNK>>>,
     overridden_height: Option<usize>,
-}
-
-#[derive(Debug)]
-pub enum TouchedLabels<F, const CHUNK: usize> {
-    Running(FxHashSet<(u32, u32)>),
-    Final(Vec<FinalTouchedLabel<F, CHUNK>>),
 }
 
 #[derive(Debug)]
@@ -192,69 +184,25 @@ pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
         .collect()
 }
 
-impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
-    fn default() -> Self {
-        Self::Running(FxHashSet::default())
-    }
-}
-
-impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
-    fn touch(&mut self, address_space: u32, label: u32) {
-        match self {
-            TouchedLabels::Running(touched_labels) => {
-                touched_labels.insert((address_space, label));
-            }
-            _ => panic!("Cannot touch after finalization"),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            TouchedLabels::Running(touched_labels) => touched_labels.is_empty(),
-            TouchedLabels::Final(touched_labels) => touched_labels.is_empty(),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            TouchedLabels::Running(touched_labels) => touched_labels.len(),
-            TouchedLabels::Final(touched_labels) => touched_labels.len(),
-        }
-    }
-}
-
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     pub fn new(
-        memory_dimensions: MemoryDimensions,
         memory_bus: MemoryBus,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
         Self {
             air: PersistentBoundaryAir {
-                memory_dims: memory_dimensions,
                 memory_bus,
                 merkle_bus,
                 compression_bus,
             },
-            touched_labels: Default::default(),
+            touched_labels: None,
             overridden_height: None,
         }
     }
 
     pub fn set_overridden_height(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
-    }
-
-    pub fn touch_range(&mut self, address_space: u32, pointer: u32, len: u32) {
-        if len == 0 {
-            return;
-        }
-        let start_label = pointer / CHUNK as u32;
-        let end_label = (pointer + len - 1) / CHUNK as u32;
-        for label in start_label..=end_label {
-            self.touched_labels.touch(address_space, label);
-        }
     }
 
     /// Finalize the boundary chip with per-block timestamped memory.
@@ -309,7 +257,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             hasher.receive(&l.init_values);
             hasher.receive(&l.final_values);
         }
-        self.touched_labels = TouchedLabels::Final(final_touched_labels);
+        self.touched_labels = Some(final_touched_labels);
     }
 }
 
@@ -320,9 +268,13 @@ where
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let trace = {
+            let touched_labels = self
+                .touched_labels
+                .as_ref()
+                .expect("Cannot generate trace before finalization");
             let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-            let mut height = (2 * self.touched_labels.len()).next_power_of_two();
+            let mut height = (2 * touched_labels.len()).next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
                 oh = oh.next_power_of_two();
                 assert!(
@@ -332,11 +284,6 @@ where
                 height = oh;
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
-
-            let touched_labels = match &self.touched_labels {
-                TouchedLabels::Final(touched_labels) => touched_labels,
-                _ => panic!("Cannot generate trace before finalization"),
-            };
 
             rows.par_chunks_mut(2 * width)
                 .zip(touched_labels.par_iter())
