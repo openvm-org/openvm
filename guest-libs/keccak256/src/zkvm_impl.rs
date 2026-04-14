@@ -140,6 +140,7 @@ pub unsafe extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: 
 /// Sets `output` to the keccak256 hash of `input`.
 #[inline(always)]
 pub fn set_keccak256(input: &[u8], output: &mut [u8; KECCAK_OUTPUT_SIZE]) {
-    // SAFETY: output is exactly KECCAK_OUTPUT_SIZE bytes, and input.as_ptr() is valid for input.len() bytes.
+    // SAFETY: output is exactly KECCAK_OUTPUT_SIZE bytes, and input.as_ptr() is valid for
+    // input.len() bytes.
     unsafe { native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr()) };
 }
