@@ -601,8 +601,6 @@ __global__ void sha2_first_pass_phase2(
     uint32_t global_block_idx = static_cast<uint32_t>(absolute_row / V::ROWS_PER_BLOCK);
     uint32_t row_in_block = static_cast<uint32_t>(absolute_row % V::ROWS_PER_BLOCK);
 
-    // Defensive guard: caller launches min(rows_used, trace_height) threads, so every launched
-    // thread should map to a valid block. Kept for safety if the launch params ever change.
     if (global_block_idx >= total_num_blocks || global_block_idx >= num_records) return;
 
     RowSlice row(trace + absolute_row, trace_height);
@@ -1039,8 +1037,7 @@ int launch_sha2_first_pass_tracegen(
     // Phase 2: write trace with coalesced stores (1 thread per row)
     {
         size_t rows_used = static_cast<size_t>(total_num_blocks) * V::ROWS_PER_BLOCK;
-        size_t rows = (rows_used < trace_height) ? rows_used : trace_height;
-        auto [grid_size, block_size] = kernel_launch_params(rows, 256);
+        auto [grid_size, block_size] = kernel_launch_params(rows_used, 256);
         sha2_first_pass_phase2<V><<<grid_size, block_size, 0, stream>>>(
             d_trace, trace_height, total_num_blocks, num_records,
             d_prev_hashes, d_scratch, d_bitwise_lookup, bitwise_num_bits);
