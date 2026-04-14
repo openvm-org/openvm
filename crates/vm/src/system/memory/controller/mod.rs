@@ -110,7 +110,6 @@ impl<F: VmField> MemoryController<F> {
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface {
             boundary_chip: PersistentBoundaryChip::new(
-                memory_dims,
                 memory_bus,
                 merkle_bus,
                 compression_bus,
