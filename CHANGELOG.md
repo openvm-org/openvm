@@ -7,6 +7,35 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v1.6.0
+
+### Changed
+- (Transpiler) Reject non-contiguous executable segments in ELF decoder.
+- (Circuits/VM) Add boolean constraints to `PhantomAir` (`is_valid`) and `VmConnectorAir` (`is_terminate`) bus interaction multiplicities.
+- (Circuits/SHA-256) Enforce that the `Sha256Air` trace ends on a padding row.
+- (Circuits/SHA-256) Add range checks on byte limbs in `Sha256VmAir` message length comparison to prevent field-modulus wraparound.
+- (Circuits/SHA-256) Enforce `is_last_block` is constant across all rows within a block in `Sha256VmAir`.
+- (Circuits/SHA-256) Constrain padding block count after the terminal marker in `Sha256VmAir` to prevent extra padding blocks.
+- (Circuits/Keccak) Add terminal finalization constraint to `KeccakVmAir` to ensure partial tail rows (since 24 never divides a power of two) cannot contain enabled instructions.
+- (Circuits/Keccak) Add explicit boolean assertion on `is_enabled` in `KeccakVmAir`.
+- (Circuits/Memory) Anchor the root node's `as_label` and `address_label` to zero in `MemoryMerkleAir`.
+- (Recursion) Constrain `air_perm_by_height` in the recursive STARK verifier to be a valid permutation of AIR indices.
+- (Recursion) Add bounds checks for unchecked `builder.get` on dynamic arrays in the recursive STARK verifier and continuations verifier to prevent out-of-bounds reads from malicious proof data.
+- (Recursion) Zero-fill the `mask` array in `verify_raps` to prevent reads of uninitialized memory in the permutation check.
+- (Recursion) Validate that each AIR proof's `exposed_values_after_challenge` length matches verifier key advice, preventing injection of extra post-challenge exposed-value vectors.
+- (Recursion) Fix `add_felt_exti` ASM lowering to correctly compute `lhs + rhs[0]` for the base coefficient instead of silently dropping `rhs[0]`.
+- (Recursion) Constrain `VERIFY_BATCH` inside-row hashing to start at the correct `opened_values` index and prevent `opened_index` from advancing across row boundaries.
+- (Guest Library/IO) Add checked arithmetic to hint stream read and deserialization buffer allocation to prevent integer overflow from untrusted hint lengths.
+- (Guest Library/Algebra) Ensure zero is always reported as a perfect square in modular arithmetic.
+- (Guest Library/Pairing) Add Fp6 subfield checks for the hinted scalar factor in `openvm-pairing` BN254/BLS12-381 pairing check optimization.
+- (Guest Library/ECC) Make all `from_xy_*` point constructors `unsafe` since they do not perform subgroup membership checks.
+- (Guest Library/ECC) Reject the identity point (point at infinity) as a valid public key in ECDSA verification.
+- (Guest Library/ruint) Restrict zkVM-accelerated bitwise intrinsics (`and`, `or`, `xor`) to 256-bit `Uint` types only. Fix `cmp` fallback to avoid infinite recursion on non-256-bit types.
+- (Guest Library/ruint) Fix OOB read in `ruint` shift intrinsics by passing correctly sized buffer.
+
+### Removed
+- (Recursion) Delete dead and buggy `ConstraintCompiler` code.
+
 ## v1.5.0 (2026-02-05)
 
 ### Added
