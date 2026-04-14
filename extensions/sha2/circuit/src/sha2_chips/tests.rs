@@ -618,13 +618,8 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         tester.timestamp_max_bits() as u32,
     );
 
-    let block_gpu_chip = Sha2BlockHasherChipGpu::new(
-        shared_records_gpu.clone(),
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.address_bits() as u32,
-        tester.timestamp_max_bits() as u32,
-    );
+    let block_gpu_chip =
+        Sha2BlockHasherChipGpu::new(shared_records_gpu.clone(), tester.bitwise_op_lookup());
 
     let bitwise_gpu = tester.bitwise_op_lookup();
     let bitwise_air = BitwiseOperationLookupAir::new(bitwise_bus);
