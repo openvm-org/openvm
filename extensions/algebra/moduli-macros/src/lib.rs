@@ -392,6 +392,9 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
 
                     fn from_le_bytes(bytes: &[u8]) -> Option<Self> {
+                        if bytes.len() != #limbs {
+                            return None;
+                        }
                         let elt = Self::from_le_bytes_unchecked(bytes);
                         if elt.is_reduced() {
                             Some(elt)
@@ -401,6 +404,9 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
 
                     fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+                        if bytes.len() != #limbs {
+                            return None;
+                        }
                         let elt = Self::from_be_bytes_unchecked(bytes);
                         if elt.is_reduced() {
                             Some(elt)
