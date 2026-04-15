@@ -1,0 +1,11 @@
+[package]
+name = "rvr-openvm-ir"
+description = "Typed IR for lifted OpenVM instructions"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
