@@ -11,10 +11,10 @@ pub fn msm<EcPoint: Group, Scalar: IntMod>(coeffs: &[Scalar], bases: &[EcPoint])
 where
     for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,
 {
-    debug_assert_eq!(
+    assert_eq!(
         coeffs.len(),
         bases.len(),
-        "msm: coefficients and bases must have the same length"
+        "msm requires matching scalar/base lengths"
     );
     let coeffs: Vec<_> = coeffs.iter().map(|c| c.as_le_bytes()).collect();
     let mut acc = EcPoint::IDENTITY;
