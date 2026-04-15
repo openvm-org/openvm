@@ -36,30 +36,24 @@ impl Keccak256 {
 
     /// XOR input bytes into state at the current index and advance the index.
     #[inline(always)]
-    unsafe fn xorin(&mut self, input: *const u8, len: usize) {
-        unsafe {
-            openvm_keccak256_guest::native_xorin(self.state.0[self.idx..].as_mut_ptr(), input, len);
-        }
+    fn xorin(&mut self, input: *const u8, len: usize) {
+        openvm_keccak256_guest::native_xorin(self.state.0[self.idx..].as_mut_ptr(), input, len);
         self.idx += len;
     }
 
     /// Keccak-f[1600] permutation using native zkvm instruction.
     #[inline(always)]
     fn keccakf(&mut self) {
-        unsafe {
-            openvm_keccak256_guest::native_keccakf(self.state.0.as_mut_ptr());
-        }
+        openvm_keccak256_guest::native_keccakf(self.state.0.as_mut_ptr());
     }
 
     /// Absorbs input data into the sponge state from a raw pointer.
-    unsafe fn update_ptr(&mut self, mut input: *const u8, mut len: usize) {
+    fn update_ptr(&mut self, mut input: *const u8, mut len: usize) {
         while len > 0 {
             let to_absorb = min(len, KECCAK_RATE - self.idx);
 
             // XOR input into state
-            unsafe {
-                self.xorin(input, to_absorb);
-            }
+            self.xorin(input, to_absorb);
 
             // If we filled the rate portion, apply the permutation
             if self.idx == KECCAK_RATE {
@@ -75,20 +69,11 @@ impl Keccak256 {
     /// Absorbs input data into the sponge state.
     #[inline(always)]
     pub fn update(&mut self, input: &[u8]) {
-        unsafe {
-            self.update_ptr(input.as_ptr(), input.len());
-        }
+        self.update_ptr(input.as_ptr(), input.len());
     }
 
     /// Finalizes the hash computation and writes the result to a raw pointer.
-<<<<<<< HEAD
-    ///
-    /// # Safety
-    ///
-    /// `output` must point to a buffer that is at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
-=======
->>>>>>> 0df1312af (fix: mark sha2 and keccak functions as unsafe)
-    unsafe fn finalize_ptr(&mut self, output: *mut u8) {
+    fn finalize_ptr(&mut self, output: *mut u8) {
         // Apply Keccak padding (pad10*1): 0x01 at current position, 0x80 at end of rate
         self.state.0[self.idx] ^= 0x01;
         self.state.0[KECCAK_RATE - 1] ^= 0x80;
@@ -104,23 +89,14 @@ impl Keccak256 {
 
     /// Finalizes the hash computation and writes the result to the output buffer.
     ///
-    /// # Safety
-    ///
-    /// `output` must be at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
+    /// The output buffer must be at least `KECCAK_OUTPUT_SIZE` (32) bytes.
     #[inline(always)]
-    pub unsafe fn finalize(mut self, output: &mut [u8]) {
+    pub fn finalize(mut self, output: &mut [u8]) {
         debug_assert!(
             output.len() >= KECCAK_OUTPUT_SIZE,
             "output buffer too small"
         );
-<<<<<<< HEAD
-        // SAFETY: caller guarantees output is at least KECCAK_OUTPUT_SIZE bytes.
         self.finalize_ptr(output.as_mut_ptr());
-=======
-        unsafe {
-            self.finalize_ptr(output.as_mut_ptr());
-        }
->>>>>>> 0df1312af (fix: mark sha2 and keccak functions as unsafe)
     }
 }
 
@@ -147,7 +123,7 @@ static KECCAK256_HASHER: Mutex<Keccak256> = Mutex::new(Keccak256::new());
 /// [`sha3`]: https://docs.rs/sha3/latest/sha3/
 /// [`tiny_keccak`]: https://docs.rs/tiny-keccak/latest/tiny_keccak/
 #[no_mangle]
-pub unsafe extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     let mut hasher = KECCAK256_HASHER.lock();
     hasher.update_ptr(bytes, len);
     hasher.finalize_ptr(output);
@@ -157,13 +133,5 @@ pub unsafe extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: 
 /// Sets `output` to the keccak256 hash of `input`.
 #[inline(always)]
 pub fn set_keccak256(input: &[u8], output: &mut [u8; KECCAK_OUTPUT_SIZE]) {
-<<<<<<< HEAD
-    // SAFETY: output is exactly KECCAK_OUTPUT_SIZE bytes, and input.as_ptr() is valid for
-    // input.len() bytes.
-    unsafe { native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr()) };
-=======
-    unsafe {
-        native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr());
-    }
->>>>>>> 0df1312af (fix: mark sha2 and keccak functions as unsafe)
+    native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr());
 }

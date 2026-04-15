@@ -16,7 +16,7 @@ pub const MIN_ALIGN: usize = 4;
 
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
-pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
+pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     if len == 0 {
         return;
     }
@@ -58,7 +58,7 @@ pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: us
 
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
-pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
+pub extern "C" fn native_keccakf(buffer: *mut u8) {
     unsafe {
         if buffer as usize % MIN_ALIGN == 0 {
             __native_keccakf(buffer);
