@@ -781,19 +781,21 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl openvm_algebra_guest::Reduce for #struct_name {
-                fn reduce_le_bytes(bytes: &[u8]) -> Self {
-                    let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
-                    // base should be 2 ^ #limbs which exceeds what Self can represent
-                    let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(&[255u8; #limbs]);
-                    base += <Self as openvm_algebra_guest::IntMod>::ONE;
-                    for chunk in bytes.chunks(#limbs).rev() {
-                        res = res * &base + <Self as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(chunk);
+                impl openvm_algebra_guest::Reduce for #struct_name {
+                    fn reduce_le_bytes(bytes: &[u8]) -> Self {
+                        let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
+                        // base should be 2 ^ #limbs which exceeds what Self can represent
+                        let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(&[255u8; #limbs]);
+                        base += <Self as openvm_algebra_guest::IntMod>::ONE;
+                        for chunk in bytes.chunks(#limbs).rev() {
+                            let mut padded = [0u8; #limbs];
+                            padded[..chunk.len()].copy_from_slice(chunk);
+                            res = res * &base + <Self as openvm_algebra_guest::IntMod>::from_repr(padded);
+                        }
+                        openvm_algebra_guest::IntMod::assert_reduced(&res);
+                        res
                     }
-                    openvm_algebra_guest::IntMod::assert_reduced(&res);
-                    res
                 }
-            }
         });
 
         output.push(result);
