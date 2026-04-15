@@ -442,7 +442,9 @@ where
         // This should get compiled out:
         assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
         // IntMod limbs are currently always bytes
-        assert_eq!(sig.len(), <C as IntrinsicCurve>::Scalar::NUM_LIMBS * 2);
+        if sig.len() != <C as IntrinsicCurve>::Scalar::NUM_LIMBS * 2 {
+            return Err(Error::new());
+        }
         // Signature is default encoded in big endian bytes
         let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
         // Note: Scalar internally stores using little endian
@@ -513,7 +515,9 @@ where
     // This should get compiled out:
     assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
     // IntMod limbs are currently always bytes
-    assert_eq!(sig.len(), Scalar::<C>::NUM_LIMBS * 2);
+    if sig.len() != Scalar::<C>::NUM_LIMBS * 2 {
+        return Err(Error::new());
+    }
     // Signature is default encoded in big endian bytes
     let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
     // Note: Scalar internally stores using little endian
