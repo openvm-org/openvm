@@ -73,6 +73,27 @@ members = [
     "guest-libs/verify-stark/guest",
     "crates/static-verifier",
     "scripts",
+
+    # rvr
+    "crates/rvr/rvr-state",
+    "crates/rvr/rvr-openvm",
+    "crates/rvr/rvr-openvm-ir",
+    "crates/rvr/rvr-openvm-lift",
+    "crates/rvr/rvr-openvm-ffi-common",
+    "extensions/keccak256/rvr",
+    "extensions/keccak256/rvr/ffi",
+    "extensions/sha2/rvr",
+    "extensions/sha2/rvr/ffi",
+    "extensions/bigint/rvr",
+    "extensions/bigint/rvr/ffi",
+    "extensions/algebra/rvr",
+    "extensions/algebra/rvr/ffi",
+    "extensions/ecc/rvr",
+    "extensions/ecc/rvr/ffi",
+    "extensions/pairing/rvr",
+    "extensions/pairing/rvr/ffi",
+    "extensions/deferral/rvr",
+    "extensions/deferral/rvr/ffi",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -181,6 +202,31 @@ openvm-verify-stark-guest = { path = "guest-libs/verify-stark/guest", default-fe
 openvm-deferral-circuit = { path = "extensions/deferral/circuit", default-features = false }
 openvm-deferral-guest = { path = "extensions/deferral/guest", default-features = false }
 openvm-deferral-transpiler = { path = "extensions/deferral/transpiler", default-features = false }
+
+# rvr
+rvr-state = { path = "crates/rvr/rvr-state" }
+rvr-openvm = { path = "crates/rvr/rvr-openvm" }
+rvr-openvm-ir = { path = "crates/rvr/rvr-openvm-ir" }
+rvr-openvm-lift = { path = "crates/rvr/rvr-openvm-lift" }
+rvr-openvm-ext-ffi-common = { path = "crates/rvr/rvr-openvm-ffi-common" }
+rvr-openvm-ext-keccak = { path = "extensions/keccak256/rvr" }
+rvr-openvm-ext-keccak-ffi = { path = "extensions/keccak256/rvr/ffi" }
+rvr-openvm-ext-sha2 = { path = "extensions/sha2/rvr" }
+rvr-openvm-ext-sha2-ffi = { path = "extensions/sha2/rvr/ffi" }
+rvr-openvm-ext-bigint = { path = "extensions/bigint/rvr" }
+rvr-openvm-ext-bigint-ffi = { path = "extensions/bigint/rvr/ffi" }
+rvr-openvm-ext-algebra = { path = "extensions/algebra/rvr" }
+rvr-openvm-ext-algebra-ffi = { path = "extensions/algebra/rvr/ffi" }
+rvr-openvm-ext-ecc = { path = "extensions/ecc/rvr" }
+rvr-openvm-ext-ecc-ffi = { path = "extensions/ecc/rvr/ffi" }
+rvr-openvm-ext-pairing = { path = "extensions/pairing/rvr" }
+rvr-openvm-ext-pairing-ffi = { path = "extensions/pairing/rvr/ffi" }
+rvr-openvm-ext-deferral = { path = "extensions/deferral/rvr" }
+rvr-openvm-ext-deferral-ffi = { path = "extensions/deferral/rvr/ffi" }
+
+# rvr external
+nix = { version = "0.29", features = ["mman"] }
+generic-array = "=0.14.6"
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }

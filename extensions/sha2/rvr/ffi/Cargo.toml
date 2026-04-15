@@ -1,0 +1,16 @@
+[package]
+name = "rvr-openvm-ext-sha2-ffi"
+description = "SHA-2 staticlib backend for rvr-openvm-ext-sha2"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rvr-openvm-ext-ffi-common.workspace = true
+sha2 = { workspace = true, features = ["compress"] }
+generic-array.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "rvr-openvm-ext-deferral-ffi"
+description = "Staticlib backend for rvr-openvm-ext-deferral"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rvr-openvm-ext-ffi-common.workspace = true
