@@ -1,0 +1,19 @@
+[package]
+name = "rvr-openvm-ext-keccak-ffi"
+description = "Keccak-f[1600] staticlib backend for rvr-openvm-ext-keccak"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[features]
+default = ["backend-openssl"]
+backend-openssl = []
+backend-xkcp = []
+
+[build-dependencies]
+cc = "1"

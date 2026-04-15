@@ -540,7 +540,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -674,7 +674,7 @@ checksum = "ae9abaedb9123ebe4b1527bc88a0409d65b2727c3de89a289284ba91ad70ae99"
 dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "reqwest 0.13.2",
  "serde_json",
  "tower",
@@ -1743,6 +1743,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
+dependencies = [
+ "serde",
+ "unty",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2220,7 +2230,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35584c5fcba8059780748866387fb97c5a203bcfc563fc3d0790af406727a117"
 dependencies = [
  "anyhow",
- "bincode",
+ "bincode 1.3.3",
  "colored",
  "glob",
  "libc",
@@ -3069,7 +3079,7 @@ dependencies = [
  "pem-rfc7468",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
- "sec1 0.7.3",
+ "sec1 0.7.1",
  "serde_json",
  "serdect",
  "subtle",
@@ -3193,7 +3203,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3507,7 +3517,7 @@ dependencies = [
  "dyn-clone",
  "foundry-compilers-artifacts",
  "foundry-compilers-core",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "path-slash",
  "rayon",
  "semver 1.0.27",
@@ -3759,9 +3769,9 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "0.14.7"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
+checksum = "bff49e947297f3312447abdca79f45f4738097cc82b06e72054d2223f601f1b9"
 dependencies = [
  "typenum",
  "version_check",
@@ -4595,7 +4605,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8880,7 +8890,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8938,7 +8948,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8975,6 +8985,257 @@ dependencies = [
  "quick-error",
  "tempfile",
  "wait-timeout",
+]
+
+[[package]]
+name = "rvr-openvm"
+version = "2.0.0-beta.2"
+dependencies = [
+ "bincode 2.0.1",
+ "eyre",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "libloading 0.8.9",
+ "num-bigint 0.4.6",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-circuit",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-ecc-transpiler",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-pairing-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "openvm-verify-stark-circuit",
+ "openvm-verify-stark-host",
+ "rand 0.8.5",
+ "rand 0.9.2",
+ "rvr-openvm-ext-algebra",
+ "rvr-openvm-ext-bigint",
+ "rvr-openvm-ext-deferral",
+ "rvr-openvm-ext-ecc",
+ "rvr-openvm-ext-ffi-common",
+ "rvr-openvm-ext-keccak",
+ "rvr-openvm-ext-pairing",
+ "rvr-openvm-ext-sha2",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+ "rvr-state",
+ "serde",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "rvr-openvm-ext-algebra"
+version = "2.0.0-beta.2"
+dependencies = [
+ "num-bigint 0.4.6",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-stark-backend",
+ "rand 0.9.2",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+ "strum 0.26.3",
+]
+
+[[package]]
+name = "rvr-openvm-ext-algebra-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "blstrs",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "paste",
+ "rvr-openvm-ext-ffi-common",
+]
+
+[[package]]
+name = "rvr-openvm-ext-bigint"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-bigint-transpiler",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+ "strum 0.26.3",
+]
+
+[[package]]
+name = "rvr-openvm-ext-bigint-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "rvr-openvm-ext-ffi-common",
+]
+
+[[package]]
+name = "rvr-openvm-ext-deferral"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-circuit",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
+ "openvm-instructions",
+ "openvm-stark-backend",
+ "rvr-openvm-ext-ffi-common",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+]
+
+[[package]]
+name = "rvr-openvm-ext-deferral-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "rvr-openvm-ext-ffi-common",
+]
+
+[[package]]
+name = "rvr-openvm-ext-ecc"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-instructions",
+ "openvm-stark-backend",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+ "strum 0.26.3",
+]
+
+[[package]]
+name = "rvr-openvm-ext-ecc-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "blstrs",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "num-bigint 0.4.6",
+ "openvm-circuit-primitives",
+ "openvm-ecc-circuit",
+ "openvm-mod-circuit-builder",
+ "rvr-openvm-ext-algebra-ffi",
+ "rvr-openvm-ext-ffi-common",
+]
+
+[[package]]
+name = "rvr-openvm-ext-ffi-common"
+version = "2.0.0-beta.2"
+
+[[package]]
+name = "rvr-openvm-ext-keccak"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-keccak256-transpiler",
+ "openvm-stark-backend",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+]
+
+[[package]]
+name = "rvr-openvm-ext-keccak-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "rvr-openvm-ext-pairing"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-instructions",
+ "openvm-pairing-transpiler",
+ "openvm-stark-backend",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+]
+
+[[package]]
+name = "rvr-openvm-ext-pairing-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "openvm-ecc-guest",
+ "openvm-pairing-guest",
+ "rvr-openvm-ext-algebra-ffi",
+ "rvr-openvm-ext-ffi-common",
+]
+
+[[package]]
+name = "rvr-openvm-ext-sha2"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-sha2-transpiler",
+ "openvm-stark-backend",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+]
+
+[[package]]
+name = "rvr-openvm-ext-sha2-ffi"
+version = "2.0.0-beta.2"
+dependencies = [
+ "generic-array",
+ "rvr-openvm-ext-ffi-common",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "rvr-openvm-ir"
+version = "2.0.0-beta.2"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "rvr-openvm-lift"
+version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "rvr-openvm-ir",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rvr-state"
+version = "2.0.0-beta.2"
+dependencies = [
+ "nix",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -9062,9 +9323,9 @@ dependencies = [
 
 [[package]]
 name = "sec1"
-version = "0.7.3"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3e97a565f76233a6003f9f5c54be1d9c5bdfa3eccfb189469f11ec4901c47dc"
+checksum = "48518a2b5775ba8ca5b46596aae011caa431e6ce7e4a67ead66d92f08884220e"
 dependencies = [
  "base16ct 0.2.0",
  "der 0.7.10",
@@ -9513,7 +9774,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89cc442a507abb490f3c2f5e2a0be2626b1d9d9ea2137fb240c6ddf5a8377e24"
 dependencies = [
- "bincode",
+ "bincode 1.3.3",
  "ethereum-types",
  "getset",
  "halo2-base",
@@ -9610,7 +9871,7 @@ dependencies = [
  "derive_more 2.1.1",
  "dunce",
  "inturn",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "itoa",
  "normalize-path",
  "once_map",
@@ -9646,7 +9907,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags",
  "bumpalo",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "memchr",
  "num-bigint 0.4.6",
  "num-rational",
@@ -10060,7 +10321,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -10782,6 +11043,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "unty"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11149,7 +11416,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

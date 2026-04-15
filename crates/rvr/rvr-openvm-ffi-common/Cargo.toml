@@ -1,0 +1,8 @@
+[package]
+name = "rvr-openvm-ext-ffi-common"
+description = "Shared FFI declarations for rvr-openvm extensions"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true

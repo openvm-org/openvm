@@ -1,0 +1,23 @@
+[package]
+name = "rvr-openvm-ext-ecc-ffi"
+description = "ECC staticlib for rvr-openvm-ext-ecc"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rvr-openvm-ext-algebra-ffi.workspace = true
+rvr-openvm-ext-ffi-common.workspace = true
+
+openvm-circuit-primitives.workspace = true
+openvm-ecc-circuit.workspace = true
+openvm-mod-circuit-builder.workspace = true
+
+blstrs.workspace = true
+halo2curves-axiom.workspace = true
+num-bigint.workspace = true
