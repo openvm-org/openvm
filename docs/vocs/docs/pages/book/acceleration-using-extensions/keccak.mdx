@@ -12,8 +12,8 @@ The `openvm-keccak256` guest library builds on these to provide `native_keccak25
 In the external library, you can do the following:
 
 ```rust
-extern "C" {
-    fn native_keccak256(input: *const u8, len: usize, output: *mut u8);
+unsafe extern "C" {
+    unsafe fn native_keccak256(input: *const u8, len: usize, output: *mut u8);
 }
 
 fn keccak256(input: &[u8]) -> [u8; 32] {

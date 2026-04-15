@@ -37,14 +37,21 @@ impl Keccak256 {
     /// XOR input bytes into state at the current index and advance the index.
     #[inline(always)]
     fn xorin(&mut self, input: *const u8, len: usize) {
-        openvm_keccak256_guest::native_xorin(self.state.0[self.idx..].as_mut_ptr(), input, len);
+        // SAFETY: buffer points into the 200-byte AlignedState with at least len bytes available,
+        // and the caller guarantees input is valid for len bytes.
+        unsafe {
+            openvm_keccak256_guest::native_xorin(self.state.0[self.idx..].as_mut_ptr(), input, len);
+        }
         self.idx += len;
     }
 
     /// Keccak-f[1600] permutation using native zkvm instruction.
     #[inline(always)]
     fn keccakf(&mut self) {
-        openvm_keccak256_guest::native_keccakf(self.state.0.as_mut_ptr());
+        // SAFETY: state is a 200-byte AlignedState, satisfying the KECCAK_WIDTH_BYTES requirement.
+        unsafe {
+            openvm_keccak256_guest::native_keccakf(self.state.0.as_mut_ptr());
+        }
     }
 
     /// Absorbs input data into the sponge state from a raw pointer.

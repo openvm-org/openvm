@@ -14,9 +14,15 @@ pub const KECCAK_RATE: usize = 136;
 pub const KECCAK_OUTPUT_SIZE: usize = 32;
 pub const MIN_ALIGN: usize = 4;
 
+/// XOR `len` bytes from `input` into `buffer` using the native XORIN instruction.
+///
+/// # Safety
+///
+/// - `buffer` must point to a buffer of at least `len` bytes.
+/// - `input` must point to a buffer of at least `len` bytes.
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
-pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
+pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     if len == 0 {
         return;
     }
@@ -36,14 +42,16 @@ pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
             let actual_buffer = if buffer_aligned && len_aligned {
                 buffer
             } else {
-                aligned_buffer = AlignedBuf::new(buffer, adjusted_len, MIN_ALIGN);
+                aligned_buffer = AlignedBuf::uninit(adjusted_len, MIN_ALIGN);
+                core::ptr::copy_nonoverlapping(buffer, aligned_buffer.ptr, len);
                 aligned_buffer.ptr
             };
 
             let actual_input = if input_aligned && len_aligned {
                 input
             } else {
-                aligned_input = AlignedBuf::new(input, adjusted_len, MIN_ALIGN);
+                aligned_input = AlignedBuf::uninit(adjusted_len, MIN_ALIGN);
+                core::ptr::copy_nonoverlapping(input, aligned_input.ptr, len);
                 aligned_input.ptr
             };
 
@@ -56,9 +64,14 @@ pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     }
 }
 
+/// Apply the Keccak-f[1600] permutation to the 200-byte state buffer.
+///
+/// # Safety
+///
+/// - `buffer` must point to a buffer of at least `KECCAK_WIDTH_BYTES` (200) bytes.
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
-pub extern "C" fn native_keccakf(buffer: *mut u8) {
+pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
     unsafe {
         if buffer as usize % MIN_ALIGN == 0 {
             __native_keccakf(buffer);
