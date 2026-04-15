@@ -87,11 +87,15 @@ impl Sha256 {
     }
 
     fn compress(&mut self) {
-        openvm_sha2_guest::zkvm_sha256_impl(
-            self.state.as_ptr() as *const u8,
-            self.buffer.as_ptr(),
-            self.state.as_mut_ptr() as *mut u8,
-        );
+        // SAFETY: `state` and `buffer` are fixed-size arrays with the required byte lengths
+        // (32 and 64), and `state` is used as both input and output.
+        unsafe {
+            openvm_sha2_guest::zkvm_sha256_impl(
+                self.state.as_ptr() as *const u8,
+                self.buffer.as_ptr(),
+                self.state.as_mut_ptr() as *mut u8,
+            );
+        }
     }
 
     #[cfg(not(feature = "import_sha2"))]
@@ -226,11 +230,15 @@ impl Sha512 {
     }
 
     fn compress(&mut self) {
-        openvm_sha2_guest::zkvm_sha512_impl(
-            self.state.as_ptr() as *const u8,
-            self.buffer.as_ptr(),
-            self.state.as_mut_ptr() as *mut u8,
-        );
+        // SAFETY: `state` and `buffer` are fixed-size arrays with the required byte lengths
+        // (64 and 128), and `state` is used as both input and output.
+        unsafe {
+            openvm_sha2_guest::zkvm_sha512_impl(
+                self.state.as_ptr() as *const u8,
+                self.buffer.as_ptr(),
+                self.state.as_mut_ptr() as *mut u8,
+            );
+        }
     }
 
     #[cfg(not(feature = "import_sha2"))]

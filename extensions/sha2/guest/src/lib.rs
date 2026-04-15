@@ -31,7 +31,7 @@ pub enum Sha2BaseFunct7 {
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-pub extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *mut u8) {
+pub unsafe extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *mut u8) {
     // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 4
     // bytes.
 
@@ -90,7 +90,7 @@ pub extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-pub extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, output: *mut u8) {
+pub unsafe extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, output: *mut u8) {
     // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 4
     // bytes.
 
