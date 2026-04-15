@@ -42,22 +42,29 @@ pub extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *
         let input_is_aligned = input as usize % MIN_ALIGN == 0;
         let output_is_aligned = output as usize % MIN_ALIGN == 0;
 
+        // Keep temporary aligned buffers alive until after the intrinsic returns.
+        let aligned_state;
         let state_ptr = if state_is_aligned {
             state
         } else {
-            AlignedBuf::new(state, 32, MIN_ALIGN).ptr
+            aligned_state = AlignedBuf::new(state, 32, MIN_ALIGN);
+            aligned_state.ptr as *const u8
         };
 
+        let aligned_input;
         let input_ptr = if input_is_aligned {
             input
         } else {
-            AlignedBuf::new(input, 64, MIN_ALIGN).ptr
+            aligned_input = AlignedBuf::new(input, 64, MIN_ALIGN);
+            aligned_input.ptr as *const u8
         };
 
+        let aligned_output;
         let output_ptr = if output_is_aligned {
             output
         } else {
-            AlignedBuf::uninit(32, MIN_ALIGN).ptr
+            aligned_output = AlignedBuf::uninit(32, MIN_ALIGN);
+            aligned_output.ptr
         };
 
         __native_sha256_compress(state_ptr, input_ptr, output_ptr);
@@ -94,22 +101,29 @@ pub extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, output: *
         let input_is_aligned = input as usize % MIN_ALIGN == 0;
         let output_is_aligned = output as usize % MIN_ALIGN == 0;
 
+        // Keep temporary aligned buffers alive until after the intrinsic returns.
+        let aligned_state;
         let state_ptr = if state_is_aligned {
             state
         } else {
-            AlignedBuf::new(state, 64, MIN_ALIGN).ptr
+            aligned_state = AlignedBuf::new(state, 64, MIN_ALIGN);
+            aligned_state.ptr as *const u8
         };
 
+        let aligned_input;
         let input_ptr = if input_is_aligned {
             input
         } else {
-            AlignedBuf::new(input, 128, MIN_ALIGN).ptr
+            aligned_input = AlignedBuf::new(input, 128, MIN_ALIGN);
+            aligned_input.ptr as *const u8
         };
 
+        let aligned_output;
         let output_ptr = if output_is_aligned {
             output
         } else {
-            AlignedBuf::uninit(64, MIN_ALIGN).ptr
+            aligned_output = AlignedBuf::uninit(64, MIN_ALIGN);
+            aligned_output.ptr
         };
 
         __native_sha512_compress(state_ptr, input_ptr, output_ptr);
