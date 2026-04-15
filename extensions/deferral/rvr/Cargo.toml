@@ -1,0 +1,19 @@
+[package]
+name = "rvr-openvm-ext-deferral"
+description = "rvr lifter for the OpenVM deferral extension"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+rvr-openvm-ext-ffi-common.workspace = true
+rvr-openvm-ir.workspace = true
+rvr-openvm-lift.workspace = true
+
+openvm-circuit.workspace = true
+openvm-deferral-circuit.workspace = true
+openvm-deferral-transpiler.workspace = true
+openvm-instructions.workspace = true
+openvm-stark-backend.workspace = true

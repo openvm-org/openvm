@@ -1,0 +1,12 @@
+[package]
+name = "rvr-state"
+description = "Guest state types shared with the C tracer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+nix.workspace = true
