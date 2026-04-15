@@ -1,0 +1,20 @@
+[package]
+name = "rvr-openvm-ext-pairing-ffi"
+description = "Pairing staticlib for rvr-openvm-ext-pairing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rvr-openvm-ext-algebra-ffi.workspace = true
+rvr-openvm-ext-ffi-common.workspace = true
+
+openvm-ecc-guest.workspace = true
+openvm-pairing-guest = { workspace = true, features = ["halo2curves", "bn254", "bls12_381"] }
+
+halo2curves-axiom.workspace = true

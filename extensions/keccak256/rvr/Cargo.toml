@@ -1,0 +1,17 @@
+[package]
+name = "rvr-openvm-ext-keccak"
+description = "rvr lifter for the OpenVM keccak256 extension"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+rvr-openvm-ir.workspace = true
+rvr-openvm-lift.workspace = true
+
+openvm-circuit.workspace = true
+openvm-instructions.workspace = true
+openvm-keccak256-transpiler.workspace = true
+openvm-stark-backend.workspace = true
