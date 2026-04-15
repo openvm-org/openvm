@@ -1,0 +1,17 @@
+[package]
+name = "rvr-openvm-ext-sha2"
+description = "rvr lifter for the OpenVM sha2 extension"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+rvr-openvm-ir.workspace = true
+rvr-openvm-lift.workspace = true
+
+openvm-circuit.workspace = true
+openvm-instructions.workspace = true
+openvm-sha2-transpiler.workspace = true
+openvm-stark-backend.workspace = true
