@@ -24,10 +24,8 @@ impl Keccak256 {
 
     /// Finalizes the hash computation and writes the result to the output buffer.
     ///
-    /// # Safety
-    ///
-    /// `output` must be at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
-    pub unsafe fn finalize(self, output: &mut [u8]) {
+    /// The output buffer must be at least `KECCAK_OUTPUT_SIZE` (32) bytes.
+    pub fn finalize(self, output: &mut [u8]) {
         debug_assert!(
             output.len() >= super::KECCAK_OUTPUT_SIZE,
             "output buffer too small"
@@ -47,6 +45,5 @@ impl Default for Keccak256 {
 pub fn set_keccak256(input: &[u8], output: &mut [u8; KECCAK_OUTPUT_SIZE]) {
     let mut hasher = Keccak256::new();
     hasher.update(input);
-    // SAFETY: output is exactly KECCAK_OUTPUT_SIZE bytes.
-    unsafe { hasher.finalize(output) };
+    hasher.finalize(output);
 }
