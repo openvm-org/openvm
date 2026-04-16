@@ -11,16 +11,12 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-#[cfg(feature = "aot")]
-use openvm_instructions::riscv::RV32_REGISTER_AS;
-#[cfg(feature = "aot")]
-use openvm_riscv_transpiler::MulOpcode;
 use openvm_riscv_transpiler::MulWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use super::MulWExecutor;
 #[cfg(feature = "aot")]
 use crate::common::*;
-use super::MulWExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -93,7 +89,8 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for MulWExecutor<A>
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for super::MultiplicationExecutor<A, { RV64_WORD_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -188,7 +185,8 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for MulWExecutor<A>
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for super::MultiplicationExecutor<A, { RV64_WORD_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -221,10 +219,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MulWPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1: [u8; RV64_WORD_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV64_WORD_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs1: [u8; RV64_WORD_NUM_LIMBS] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV64_WORD_NUM_LIMBS] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
     let rs1 = u32::from_le_bytes(rs1);
     let rs2 = u32::from_le_bytes(rs2);
     let rd_word = rs1.wrapping_mul(rs2);
@@ -253,8 +249,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MulWPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<MulWPreCompute>>())
-            .borrow();
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<MulWPreCompute>>()).borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

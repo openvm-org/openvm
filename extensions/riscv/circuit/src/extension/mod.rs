@@ -133,11 +133,9 @@ pub enum Rv64IExecutor {
 )]
 pub enum Rv64MExecutor {
     Multiplication(Rv64MultiplicationExecutor),
-    #[cfg(not(feature = "aot"))]
     MulW(Rv64MulWExecutor),
     MultiplicationHigh(Rv64MulHExecutor),
     DivRem(Rv64DivRemExecutor),
-    #[cfg(not(feature = "aot"))]
     DivRemW(Rv64DivRemWExecutor),
 }
 
@@ -652,10 +650,7 @@ impl<F> VmExecutionExtension<F> for Rv64M {
             Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
-        #[cfg(not(feature = "aot"))]
-        let mul_w =
-            Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
-        #[cfg(not(feature = "aot"))]
+        let mul_w = Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
         inventory.add_executor(mul_w, MulWOpcode::iter().map(|x| x.global_opcode()))?;
 
         let mul_h = Rv64MulHExecutor::new(Rv64MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
@@ -664,10 +659,8 @@ impl<F> VmExecutionExtension<F> for Rv64M {
         let div_rem = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
         inventory.add_executor(div_rem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
 
-        #[cfg(not(feature = "aot"))]
         let divrem_w =
             Rv64DivRemWExecutor::new(Rv64MultWAdapterExecutor, DivRemWOpcode::CLASS_OFFSET);
-        #[cfg(not(feature = "aot"))]
         inventory.add_executor(divrem_w, DivRemWOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
