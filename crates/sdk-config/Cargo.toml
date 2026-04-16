@@ -74,6 +74,9 @@ aot = [
     "openvm-ecc-circuit/aot",
     "openvm-pairing-circuit/aot",
 ]
+rvr = [
+    "openvm-circuit/rvr",
+]
 perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
