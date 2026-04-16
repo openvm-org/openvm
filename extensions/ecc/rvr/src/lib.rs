@@ -7,7 +7,6 @@
 
 use std::path::{Path, PathBuf};
 
-use openvm_circuit::arch::ExecutorInventory;
 use openvm_ecc_circuit::CurveConfig;
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
@@ -16,7 +15,7 @@ use openvm_instructions::instruction::Instruction;
 use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrExtensionCtx};
 use strum::EnumCount;
 
 #[derive(Debug, Clone, Copy)]
@@ -182,10 +181,9 @@ impl EccExtension {
     }
 
     /// Create with resolved chip indices from the VM config.
-    pub fn new<E>(
+    pub fn new(
         curves_info: Vec<u32>,
-        _inventory: &ExecutorInventory<E>,
-        _executor_idx_to_air_idx: &[usize],
+        _ctx: &RvrExtensionCtx,
         staticlib_path: PathBuf,
     ) -> Self {
         // ECC currently uses the pure fast path, so inventory/chip mapping are
@@ -193,10 +191,9 @@ impl EccExtension {
         Self::from_curve_ids(curves_info, staticlib_path)
     }
 
-    pub fn new_from_configs<E>(
+    pub fn new_from_configs(
         curves: Vec<CurveConfig>,
-        _inventory: &ExecutorInventory<E>,
-        _executor_idx_to_air_idx: &[usize],
+        _ctx: &RvrExtensionCtx,
         staticlib_path: PathBuf,
     ) -> Self {
         // ECC currently uses the pure fast path, so inventory/chip mapping are

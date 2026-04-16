@@ -9053,7 +9053,6 @@ dependencies = [
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
- "openvm-circuit",
  "openvm-instructions",
  "openvm-stark-backend",
  "rand 0.9.2",
@@ -9080,7 +9079,6 @@ name = "rvr-openvm-ext-bigint"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-bigint-transpiler",
- "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
@@ -9121,7 +9119,6 @@ dependencies = [
 name = "rvr-openvm-ext-ecc"
 version = "2.0.0-beta.2"
 dependencies = [
- "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-instructions",
@@ -9153,7 +9150,6 @@ version = "2.0.0-beta.2"
 name = "rvr-openvm-ext-keccak"
 version = "2.0.0-beta.2"
 dependencies = [
- "openvm-circuit",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
  "openvm-stark-backend",
@@ -9194,7 +9190,6 @@ dependencies = [
 name = "rvr-openvm-ext-sha2"
 version = "2.0.0-beta.2"
 dependencies = [
- "openvm-circuit",
  "openvm-instructions",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
@@ -9222,7 +9217,6 @@ dependencies = [
 name = "rvr-openvm-lift"
 version = "2.0.0-beta.2"
 dependencies = [
- "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",

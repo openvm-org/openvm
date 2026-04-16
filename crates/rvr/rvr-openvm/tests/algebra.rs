@@ -79,12 +79,11 @@ fn make_modular_ext(
     harness: &utils::VmTestHarness<Rv32ModularCpuBuilder>,
     moduli: Vec<BigUint>,
 ) -> AlgebraExtension {
-    let inventory = harness.inventory().unwrap();
+    let ctx = harness.rvr_extension_ctx().unwrap();
     AlgebraExtension::new(
         moduli,
         vec![],
-        &inventory,
-        harness.air_idx(),
+        &ctx,
         build_algebra_staticlib(),
     )
 }
@@ -94,12 +93,11 @@ fn make_modular_with_fp2_ext(
     moduli: Vec<BigUint>,
     fp2_moduli: Vec<BigUint>,
 ) -> AlgebraExtension {
-    let inventory = harness.inventory().unwrap();
+    let ctx = harness.rvr_extension_ctx().unwrap();
     AlgebraExtension::new(
         moduli,
         fp2_moduli,
-        &inventory,
-        harness.air_idx(),
+        &ctx,
         build_algebra_staticlib(),
     )
 }

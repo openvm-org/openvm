@@ -111,8 +111,8 @@ fn build_keccak_exe() -> Result<VmExe<F>> {
 }
 
 fn make_keccak_ext(harness: &utils::VmTestHarness<Keccak256Rv32CpuBuilder>) -> KeccakExtension {
-    let inventory = harness.inventory().unwrap();
-    KeccakExtension::new(&inventory, harness.air_idx(), build_keccak_staticlib())
+    let ctx = harness.rvr_extension_ctx().unwrap();
+    KeccakExtension::new(&ctx, build_keccak_staticlib())
 }
 
 // ── Pure execution test ─────────────────────────────────────────────────────

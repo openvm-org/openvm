@@ -122,19 +122,17 @@ fn register_extensions(
     curve_ids: Vec<u32>,
     moduli: Vec<BigUint>,
 ) {
-    let inventory = harness.inventory().unwrap();
-    let air_idx = harness.air_idx().to_vec();
+    let ctx = harness.rvr_extension_ctx().unwrap();
 
     // Algebra extension handles modular arithmetic opcodes
     let algebra_ext = AlgebraExtension::new(
         moduli,
         vec![],
-        &inventory,
-        &air_idx,
+        &ctx,
         build_algebra_staticlib(),
     );
     // ECC extension handles Weierstrass opcodes
-    let ecc_ext = EccExtension::new(curve_ids, &inventory, &air_idx, build_ecc_staticlib());
+    let ecc_ext = EccExtension::new(curve_ids, &ctx, build_ecc_staticlib());
 
     harness.register(algebra_ext);
     harness.register(ecc_ext);

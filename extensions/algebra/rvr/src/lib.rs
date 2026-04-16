@@ -10,14 +10,13 @@ use std::path::{Path, PathBuf};
 use num_bigint::BigUint;
 use openvm_algebra_circuit::find_non_qr;
 use openvm_algebra_transpiler::{Fp2Opcode, ModularPhantom, Rv32ModularArithmeticOpcode};
-use openvm_circuit::arch::ExecutorInventory;
 use openvm_instructions::instruction::Instruction;
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrExtensionCtx};
 use strum::EnumCount;
 
 // ── Modular arithmetic operations ────────────────────────────────────────────
@@ -501,15 +500,14 @@ impl AlgebraExtension {
         }
     }
 
-    pub fn new<E>(
+    pub fn new(
         moduli: Vec<BigUint>,
         fp2_moduli: Vec<BigUint>,
-        _inventory: &ExecutorInventory<E>,
-        _executor_idx_to_air_idx: &[usize],
+        _ctx: &RvrExtensionCtx,
         staticlib_path: PathBuf,
     ) -> Self {
         // Algebra currently uses the pure fast path for both metered and non-metered
-        // lifting, so inventory/chip mapping are intentionally unused here.
+        // lifting, so chip mappings are intentionally unused here.
         Self::new_pure(moduli, fp2_moduli, staticlib_path)
     }
 }

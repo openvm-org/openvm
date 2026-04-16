@@ -144,12 +144,11 @@ fn make_algebra_ext(
     harness: &utils::VmTestHarness<Rv32PairingCpuBuilder>,
     moduli: Vec<num_bigint::BigUint>,
 ) -> AlgebraExtension {
-    let inventory = harness.inventory().unwrap();
+    let ctx = harness.rvr_extension_ctx().unwrap();
     AlgebraExtension::new(
         moduli.clone(),
         moduli,
-        &inventory,
-        harness.air_idx(),
+        &ctx,
         build_algebra_staticlib(),
     )
 }

@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use openvm_circuit::arch::{ExecutorInventory, VmField};
+use openvm_circuit::arch::VmField;
 use openvm_deferral_circuit::{
     generate_deferral_results, poseidon2::deferral_poseidon2_chip, RawDeferralResult,
 };
@@ -19,7 +19,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, resolve_opcode_air_idx, RvrExtension};
+use rvr_openvm_lift::{decode_reg, resolve_opcode_air_idx, RvrExtension, RvrExtensionCtx};
 
 // ── IR Nodes ──────────────────────────────────────────────────────────────────
 
@@ -133,21 +133,9 @@ impl DeferralRvrExtension {
     }
 
     /// Create with chip indices resolved from the VM config.
-    pub fn new<F: VmField, E>(
-        inventory: &ExecutorInventory<E>,
-        executor_idx_to_air_idx: &[usize],
-        staticlib_path: PathBuf,
-    ) -> Self {
-        let call_chip_idx = resolve_opcode_air_idx(
-            DeferralOpcode::CALL.global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
-        let output_chip_idx = resolve_opcode_air_idx(
-            DeferralOpcode::OUTPUT.global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
+    pub fn new<F: VmField>(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Self {
+        let call_chip_idx = resolve_opcode_air_idx(DeferralOpcode::CALL.global_opcode(), ctx);
+        let output_chip_idx = resolve_opcode_air_idx(DeferralOpcode::OUTPUT.global_opcode(), ctx);
         // Poseidon2 periphery chip: in extend_circuit, the hasher is added
         // right before the CALL chip. Due to reverse ordering of AIR indices,
         // poseidon2_air_idx = call_air_idx + 1.

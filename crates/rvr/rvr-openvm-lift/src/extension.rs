@@ -3,8 +3,56 @@
 use std::path::{Path, PathBuf};
 
 use openvm_instructions::instruction::Instruction;
+use openvm_instructions::VmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
+
+/// Data needed by extension crates to resolve opcode/chip metadata when
+/// registering rvr extension handlers.
+#[derive(Clone, Debug, Default)]
+pub struct RvrExtensionCtx {
+    /// Pairs of `(opcode, executor_idx)`.
+    pub opcode_to_executor_idx: Vec<(VmOpcode, usize)>,
+    /// `executor_idx -> air_idx` mapping.
+    pub executor_idx_to_air_idx: Vec<usize>,
+}
+
+impl RvrExtensionCtx {
+    pub fn new(
+        opcode_to_executor_idx: Vec<(VmOpcode, usize)>,
+        executor_idx_to_air_idx: Vec<usize>,
+    ) -> Self {
+        Self {
+            opcode_to_executor_idx,
+            executor_idx_to_air_idx,
+        }
+    }
+
+    pub fn resolve_opcode_executor_idx(&self, opcode: VmOpcode) -> Option<usize> {
+        self.opcode_to_executor_idx
+            .iter()
+            .find_map(|(candidate, executor_idx)| {
+                if *candidate == opcode {
+                    Some(*executor_idx)
+                } else {
+                    None
+                }
+            })
+    }
+
+    pub fn resolve_opcode_air_idx(&self, opcode: VmOpcode) -> Option<u32> {
+        let executor_idx = self.resolve_opcode_executor_idx(opcode)?;
+        self.executor_idx_to_air_idx
+            .get(executor_idx)
+            .map(|air_idx| *air_idx as u32)
+    }
+
+    pub fn require_opcode_air_idx(&self, opcode: VmOpcode) -> u32 {
+        self.resolve_opcode_air_idx(opcode).unwrap_or_else(|| {
+            panic!("opcode {opcode:?} not found in rvr extension context mappings")
+        })
+    }
+}
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
 /// and knows how to lift them to IR (with self-describing codegen via `ExtInstr::emit_c`).

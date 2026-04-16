@@ -7,13 +7,12 @@
 
 use std::path::{Path, PathBuf};
 
-use openvm_circuit::arch::ExecutorInventory;
 use openvm_instructions::instruction::Instruction;
 use openvm_instructions::LocalOpcode;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, resolve_opcode_air_idx, RvrExtension};
+use rvr_openvm_lift::{decode_reg, resolve_opcode_air_idx, RvrExtension, RvrExtensionCtx};
 
 /// keccak-f[1600]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
@@ -102,21 +101,9 @@ impl KeccakExtension {
     }
 
     /// Resolves chip indices from the VM config.
-    pub fn new<E>(
-        inventory: &ExecutorInventory<E>,
-        executor_idx_to_air_idx: &[usize],
-        asm_staticlib_path: PathBuf,
-    ) -> Self {
-        let xorin_chip_idx = resolve_opcode_air_idx(
-            XorinOpcode::XORIN.global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
-        let keccakf_op_chip_idx = resolve_opcode_air_idx(
-            KeccakfOpcode::KECCAKF.global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
+    pub fn new(ctx: &RvrExtensionCtx, asm_staticlib_path: PathBuf) -> Self {
+        let xorin_chip_idx = resolve_opcode_air_idx(XorinOpcode::XORIN.global_opcode(), ctx);
+        let keccakf_op_chip_idx = resolve_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode(), ctx);
         // KeccakfPermAir is inserted right before KeccakfOpAir in
         // Keccak256Rv32::extend_circuit, and the chip indices are set in
         // reverse order.

@@ -10,16 +10,15 @@ use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
     Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
 };
-use openvm_circuit::arch::ExecutorInventory;
 use openvm_instructions::instruction::Instruction;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
-use openvm_instructions::{LocalOpcode, VmOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
-use rvr_openvm_lift::RvrExtension;
+use rvr_openvm_lift::{resolve_opcode_air_idx, RvrExtension, RvrExtensionCtx};
 use strum::EnumCount;
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
@@ -262,40 +261,24 @@ impl Int256Extension {
     }
 
     /// Create a new `Int256Extension`, resolving chip indices from the VM config.
-    pub fn new<E>(
-        inventory: &ExecutorInventory<E>,
-        executor_idx_to_air_idx: &[usize],
-        staticlib_path: PathBuf,
-    ) -> Self {
-        let base_alu_chip_idx = resolve_opcode_air_idx(
-            Rv32BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
-        let shift_chip_idx = resolve_opcode_air_idx(
-            Rv32Shift256Opcode(ShiftOpcode::SLL).global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
+    pub fn new(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Self {
+        let base_alu_chip_idx =
+            resolve_opcode_air_idx(Rv32BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(), ctx);
+        let shift_chip_idx =
+            resolve_opcode_air_idx(Rv32Shift256Opcode(ShiftOpcode::SLL).global_opcode(), ctx);
         let less_than_chip_idx = resolve_opcode_air_idx(
             Rv32LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
+            ctx,
         );
-        let mul_chip_idx = resolve_opcode_air_idx(
-            Rv32Mul256Opcode(MulOpcode::MUL).global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
+        let mul_chip_idx =
+            resolve_opcode_air_idx(Rv32Mul256Opcode(MulOpcode::MUL).global_opcode(), ctx);
         let branch_eq_chip_idx = resolve_opcode_air_idx(
             Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
+            ctx,
         );
         let branch_lt_chip_idx = resolve_opcode_air_idx(
             Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
+            ctx,
         );
 
         Self {
@@ -334,19 +317,6 @@ impl Int256Extension {
             panic!("unknown Int256 opcode: {opcode:#x}");
         }
     }
-}
-
-/// Resolve an opcode to its AIR index using the executor inventory.
-fn resolve_opcode_air_idx<E>(
-    opcode: VmOpcode,
-    inventory: &ExecutorInventory<E>,
-    executor_idx_to_air_idx: &[usize],
-) -> u32 {
-    let executor_idx = *inventory
-        .instruction_lookup
-        .get(&opcode)
-        .unwrap_or_else(|| panic!("opcode {opcode:?} not found in executor inventory"));
-    executor_idx_to_air_idx[executor_idx as usize] as u32
 }
 
 /// Decode register index from OpenVM operand (divided by RV32_REGISTER_NUM_LIMBS).
