@@ -897,6 +897,12 @@ fn run_mul_unsigned_sanity_test() {
     }
 }
 
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
 #[cfg(feature = "cuda")]
 type GpuHarness =
     GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
