@@ -11,6 +11,10 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
+#[cfg(feature = "aot")]
+use openvm_instructions::riscv::RV32_REGISTER_AS;
+#[cfg(feature = "aot")]
+use openvm_riscv_transpiler::MulOpcode;
 use openvm_riscv_transpiler::MulWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -94,7 +98,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        inst.opcode == MulWOpcode::MULW.global_opcode()
+        inst.opcode == MulOpcode::MUL.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
@@ -202,11 +206,11 @@ where
 
         asm_str += &update_height_change_asm(chip_idx, 1)?;
         // read [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // read [c:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // write [a:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
 
         Ok(asm_str)
     }

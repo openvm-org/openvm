@@ -13,6 +13,10 @@ use openvm_instructions::{
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
+#[cfg(feature = "aot")]
+use openvm_instructions::riscv::RV32_REGISTER_AS;
+#[cfg(feature = "aot")]
+use openvm_riscv_transpiler::DivRemOpcode;
 use openvm_riscv_transpiler::DivRemWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -111,8 +115,8 @@ where
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
-        let local_opcode = DivRemWOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        if d.as_canonical_u32() != RV64_REGISTER_AS {
+        let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(AotError::InvalidInstruction);
         }
 
@@ -134,10 +138,10 @@ where
             ".asm_divrem_{}_{}",
             pc,
             match local_opcode {
-                DivRemWOpcode::DIVW => "divw",
-                DivRemWOpcode::DIVUW => "divuw",
-                DivRemWOpcode::REMW => "remw",
-                DivRemWOpcode::REMUW => "remuw",
+                DivRemOpcode::DIV => "div",
+                DivRemOpcode::DIVU => "divu",
+                DivRemOpcode::REM => "rem",
+                DivRemOpcode::REMU => "remu",
             }
         );
         let done_label = format!("{label_prefix}__done");
@@ -146,7 +150,7 @@ where
         let overflow_label = format!("{label_prefix}__overflow");
         let normal_label = format!("{label_prefix}__normal");
         match local_opcode {
-            DivRemWOpcode::DIVW => {
+            DivRemOpcode::DIV => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
@@ -170,7 +174,7 @@ where
                 asm_str += &format!("{overflow_label}:\n");
                 asm_str += "   mov edx, eax\n";
             }
-            DivRemWOpcode::DIVUW => {
+            DivRemOpcode::DIVU => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
@@ -181,7 +185,7 @@ where
                 asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, -1\n";
             }
-            DivRemWOpcode::REMW => {
+            DivRemOpcode::REM => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
@@ -201,7 +205,7 @@ where
                 asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, eax\n";
             }
-            DivRemWOpcode::REMUW => {
+            DivRemOpcode::REMU => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
@@ -287,11 +291,11 @@ where
 
         asm_str += &update_height_change_asm(chip_idx, 1)?;
         // read [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // read [c:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // write [a:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
 
         Ok(asm_str)
     }
