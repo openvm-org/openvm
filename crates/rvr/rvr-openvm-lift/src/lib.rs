@@ -21,4 +21,4 @@ pub use convert::{
     ConvertError,
 };
 pub use extension::{ExtensionRegistry, RvrExtension, RvrExtensionCtx, VmRvrExtension};
-pub use helpers::{decode_reg, resolve_opcode_air_idx};
+pub use helpers::decode_reg;

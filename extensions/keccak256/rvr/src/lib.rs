@@ -12,7 +12,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, resolve_opcode_air_idx, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{decode_reg, RvrExtension, RvrExtensionCtx};
 
 /// keccak-f[1600]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
@@ -102,8 +102,8 @@ impl KeccakExtension {
 
     /// Resolves chip indices from the VM config.
     pub fn new(ctx: &RvrExtensionCtx, asm_staticlib_path: PathBuf) -> Self {
-        let xorin_chip_idx = resolve_opcode_air_idx(XorinOpcode::XORIN.global_opcode(), ctx);
-        let keccakf_op_chip_idx = resolve_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode(), ctx);
+        let xorin_chip_idx = ctx.require_opcode_air_idx(XorinOpcode::XORIN.global_opcode());
+        let keccakf_op_chip_idx = ctx.require_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode());
         // KeccakfPermAir is inserted right before KeccakfOpAir in
         // Keccak256Rv32::extend_circuit, and the chip indices are set in
         // reverse order.

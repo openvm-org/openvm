@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
-use rvr_openvm_lift::{resolve_opcode_air_idx, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{RvrExtension, RvrExtensionCtx};
 use strum::EnumCount;
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
@@ -263,22 +263,17 @@ impl Int256Extension {
     /// Create a new `Int256Extension`, resolving chip indices from the VM config.
     pub fn new(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Self {
         let base_alu_chip_idx =
-            resolve_opcode_air_idx(Rv32BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(), ctx);
+            ctx.require_opcode_air_idx(Rv32BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode());
         let shift_chip_idx =
-            resolve_opcode_air_idx(Rv32Shift256Opcode(ShiftOpcode::SLL).global_opcode(), ctx);
-        let less_than_chip_idx = resolve_opcode_air_idx(
-            Rv32LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
-            ctx,
-        );
+            ctx.require_opcode_air_idx(Rv32Shift256Opcode(ShiftOpcode::SLL).global_opcode());
+        let less_than_chip_idx =
+            ctx.require_opcode_air_idx(Rv32LessThan256Opcode(LessThanOpcode::SLT).global_opcode());
         let mul_chip_idx =
-            resolve_opcode_air_idx(Rv32Mul256Opcode(MulOpcode::MUL).global_opcode(), ctx);
-        let branch_eq_chip_idx = resolve_opcode_air_idx(
-            Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
-            ctx,
-        );
-        let branch_lt_chip_idx = resolve_opcode_air_idx(
+            ctx.require_opcode_air_idx(Rv32Mul256Opcode(MulOpcode::MUL).global_opcode());
+        let branch_eq_chip_idx = ctx
+            .require_opcode_air_idx(Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode());
+        let branch_lt_chip_idx = ctx.require_opcode_air_idx(
             Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
-            ctx,
         );
 
         Self {
