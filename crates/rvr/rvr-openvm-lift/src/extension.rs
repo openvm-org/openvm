@@ -1,5 +1,6 @@
 //! Extension registry for plugging in new opcode families.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use openvm_instructions::instruction::Instruction;
@@ -11,8 +12,8 @@ use rvr_openvm_ir::LiftedInstr;
 /// registering rvr extension handlers.
 #[derive(Clone, Debug, Default)]
 pub struct RvrExtensionCtx {
-    /// Pairs of `(opcode, executor_idx)`.
-    pub opcode_to_executor_idx: Vec<(VmOpcode, usize)>,
+    /// `opcode -> executor_idx` mapping.
+    pub opcode_to_executor_idx: HashMap<VmOpcode, usize>,
     /// `executor_idx -> air_idx` mapping.
     pub executor_idx_to_air_idx: Vec<usize>,
 }
@@ -23,21 +24,13 @@ impl RvrExtensionCtx {
         executor_idx_to_air_idx: Vec<usize>,
     ) -> Self {
         Self {
-            opcode_to_executor_idx,
+            opcode_to_executor_idx: opcode_to_executor_idx.into_iter().collect(),
             executor_idx_to_air_idx,
         }
     }
 
     pub fn resolve_opcode_executor_idx(&self, opcode: VmOpcode) -> Option<usize> {
-        self.opcode_to_executor_idx
-            .iter()
-            .find_map(|(candidate, executor_idx)| {
-                if *candidate == opcode {
-                    Some(*executor_idx)
-                } else {
-                    None
-                }
-            })
+        self.opcode_to_executor_idx.get(&opcode).copied()
     }
 
     pub fn resolve_opcode_air_idx(&self, opcode: VmOpcode) -> Option<u32> {
