@@ -73,6 +73,7 @@ cuda = [
 ]
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot"]
+rvr = []
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }
