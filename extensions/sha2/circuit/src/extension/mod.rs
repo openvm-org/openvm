@@ -26,6 +26,10 @@ use openvm_rv32im_circuit::{
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 
 use crate::{Sha2BlockHasherChip, Sha2BlockHasherVmAir, Sha2MainAir, Sha2MainChip, Sha2VmExecutor};
@@ -112,6 +116,9 @@ where
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha2;
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Sha2 {}
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(

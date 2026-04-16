@@ -20,6 +20,10 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -63,6 +67,9 @@ impl PairingCurve {
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {}
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
