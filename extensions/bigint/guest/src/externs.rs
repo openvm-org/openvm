@@ -4,6 +4,10 @@ use openvm_platform::custom_insn_r;
 
 use super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -16,6 +20,10 @@ unsafe extern "C" fn zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, 
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_sub_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -28,6 +36,10 @@ unsafe extern "C" fn zkvm_u256_wrapping_sub_impl(result: *mut u8, a: *const u8, 
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_mul_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -40,6 +52,10 @@ unsafe extern "C" fn zkvm_u256_wrapping_mul_impl(result: *mut u8, a: *const u8, 
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_bitxor_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -52,6 +68,10 @@ unsafe extern "C" fn zkvm_u256_bitxor_impl(result: *mut u8, a: *const u8, b: *co
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_bitand_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -64,6 +84,10 @@ unsafe extern "C" fn zkvm_u256_bitand_impl(result: *mut u8, a: *const u8, b: *co
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_bitor_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -76,6 +100,10 @@ unsafe extern "C" fn zkvm_u256_bitor_impl(result: *mut u8, a: *const u8, b: *con
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_shl_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -88,6 +116,10 @@ unsafe extern "C" fn zkvm_u256_wrapping_shl_impl(result: *mut u8, a: *const u8, 
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_wrapping_shr_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -100,6 +132,10 @@ unsafe extern "C" fn zkvm_u256_wrapping_shr_impl(result: *mut u8, a: *const u8, 
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - All pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_arithmetic_shr_impl(result: *mut u8, a: *const u8, b: *const u8) {
     custom_insn_r!(
@@ -112,6 +148,9 @@ unsafe extern "C" fn zkvm_u256_arithmetic_shr_impl(result: *mut u8, a: *const u8
     );
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - Both pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool {
     let mut is_equal: u32;
@@ -127,6 +166,9 @@ unsafe extern "C" fn zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool {
     return is_equal == 1;
 }
 
+/// # Safety
+/// - `a` and `b` must point to valid, readable `[u8; 32]` buffers.
+/// - Both pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering {
     let mut cmp_result = MaybeUninit::<[u8; 32]>::uninit();
@@ -156,6 +198,10 @@ unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering 
     return Ordering::Equal;
 }
 
+/// # Safety
+/// - `a` must point to a valid, readable `[u8; 32]` buffer.
+/// - `result` must point to a valid, writable `[u8; 32]` buffer.
+/// - Both pointers must be 4-byte aligned.
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_clone_impl(result: *mut u8, a: *const u8) {
     let zero = &[0u8; 32] as *const _ as *const u8;
