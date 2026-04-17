@@ -11,6 +11,7 @@ use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
+mod alu_w;
 mod branch;
 mod jalr;
 mod loadstore;
@@ -18,6 +19,7 @@ mod mul;
 mod rdwrite;
 
 pub use alu::*;
+pub use alu_w::*;
 pub use branch::*;
 pub use jalr::*;
 pub use loadstore::*;
