@@ -33,10 +33,9 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
         inst: &Instruction<F>,
         data: &mut MultiPreCompute,
     ) -> Result<(), StaticProgramError> {
-        assert_eq!(
-            MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
-            MulOpcode::MUL
-        );
+        if MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)) != MulOpcode::MUL {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
