@@ -37,7 +37,7 @@ use openvm_riscv_transpiler::{
     // Rv64HintStoreOpcode,
     Rv64JalLuiOpcode,
     Rv64JalrOpcode,
-    // Rv64LoadStoreOpcode,
+    Rv64LoadStoreOpcode,
     Rv64Phantom,
     ShiftOpcode,
     ShiftWOpcode,
@@ -117,8 +117,7 @@ pub enum Rv64IExecutor {
     JalLui(Rv64JalLuiExecutor),
     Jalr(Rv64JalrExecutor),
     Auipc(Rv64AuipcExecutor),
-    // TEMP: disabled until ported to RV64
-    // LoadStore(Rv32LoadStoreExecutor),
+    LoadStore(Rv64LoadStoreExecutor),
     // LoadSignExtend(Rv32LoadSignExtendExecutor),
 }
 
@@ -261,8 +260,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // TEMP: pointer_max_bits only used by disabled load_store/load_sign_extend
-        // let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let base_alu =
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
@@ -288,18 +286,17 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         );
         inventory.add_executor(shift_w, ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // TEMP: disabled until ported to RV64
-        // let load_store = LoadStoreExecutor::new(
-        //     Rv32LoadStoreAdapterExecutor::new(pointer_max_bits),
-        //     Rv64LoadStoreOpcode::CLASS_OFFSET,
-        // );
-        // inventory.add_executor(
-        //     load_store,
-        //     Rv64LoadStoreOpcode::iter()
-        //         .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
-        //         .map(|x| x.global_opcode()),
-        // )?;
-        //
+        let load_store = Rv64LoadStoreExecutor::new(
+            Rv64LoadStoreAdapterExecutor::new(pointer_max_bits),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            load_store,
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|x| x.global_opcode()),
+        )?;
+
         // let load_sign_extend =
         //     LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(pointer_max_bits));
         // inventory.add_executor(
@@ -363,8 +360,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        // TEMP: pointer_max_bits only used by disabled load_store/load_sign_extend
-        // let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -413,18 +409,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(shift_w);
 
-        // TEMP: disabled until ported to RV64
-        // let load_store = Rv32LoadStoreAir::new(
-        //     Rv32LoadStoreAdapterAir::new(
-        //         memory_bridge,
-        //         exec_bridge,
-        //         range_checker,
-        //         pointer_max_bits,
-        //     ),
-        //     LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
-        // );
-        // inventory.add_air(load_store);
-        //
+        let load_store = Rv64LoadStoreAir::new(
+            Rv64LoadStoreAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                pointer_max_bits,
+            ),
+            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(load_store);
+
         // let load_sign_extend = Rv32LoadSignExtendAir::new(
         //     Rv32LoadStoreAdapterAir::new(
         //         memory_bridge,
@@ -487,8 +482,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        // TEMP: pointer_max_bits only used by disabled load_store/load_sign_extend
-        // let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         let bitwise_lu = {
@@ -564,17 +558,16 @@ where
         );
         inventory.add_executor_chip(shift_w);
 
-        // TEMP: disabled until ported to RV64
-        // inventory.next_air::<Rv32LoadStoreAir>()?;
-        // let load_store_chip = Rv32LoadStoreChip::new(
-        //     LoadStoreFiller::new(
-        //         Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
-        //         Rv64LoadStoreOpcode::CLASS_OFFSET,
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(load_store_chip);
-        //
+        inventory.next_air::<Rv64LoadStoreAir>()?;
+        let load_store_chip = Rv64LoadStoreChip::new(
+            LoadStoreFiller::new(
+                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv64LoadStoreOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(load_store_chip);
+
         // inventory.next_air::<Rv32LoadSignExtendAir>()?;
         // let load_sign_extend = Rv32LoadSignExtendChip::new(
         //     LoadSignExtendFiller::new(
