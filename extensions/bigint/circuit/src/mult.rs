@@ -178,7 +178,9 @@ impl Rv32Multiplication256Executor {
         }
         let local_opcode =
             MulOpcode::from_usize(opcode.local_opcode_idx(Rv32Mul256Opcode::CLASS_OFFSET));
-        assert_eq!(local_opcode, MulOpcode::MUL);
+        if local_opcode != MulOpcode::MUL {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         *data = MultPreCompute {
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
