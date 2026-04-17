@@ -23,8 +23,9 @@ use crate::{
 
 // (proof_idx, query_idx, coset_idx, commit_idx, col_chunk_idx)
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
-pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
+pub struct InitialOpenedValuesCols<T> {
     pub proof_idx: T,
     pub query_idx: T,
     pub commit_idx: T,

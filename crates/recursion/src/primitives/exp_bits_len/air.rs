@@ -15,6 +15,7 @@ use crate::primitives::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct ExpBitsLenCols<T> {
     /// Marks rows that belong to an `ExpBitsLen` request rather than trailing padding.

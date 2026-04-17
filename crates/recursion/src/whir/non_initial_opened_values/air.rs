@@ -21,8 +21,9 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
-pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols<T> {
+pub struct NonInitialOpenedValuesCols<T> {
     pub is_enabled: T,
     // Indices
     pub proof_idx: T,

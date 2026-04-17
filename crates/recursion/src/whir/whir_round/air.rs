@@ -24,6 +24,7 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct WhirRoundCols<T, const ENC_WIDTH: usize> {
     pub is_enabled: T,

@@ -50,6 +50,7 @@ use crate::{
 /// ```
 ///
 /// `is_interaction` is derived as `1 - group_idx` (not a separate column).
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct ExpressionClaimCols<T> {

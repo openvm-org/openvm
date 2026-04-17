@@ -20,6 +20,7 @@ use crate::{
 // perf(ayush): can probably get rid of this whole air if challenges -> transcript
 // interactions are constrained in batch constraint module
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrXiSamplerCols<T> {
     /// Whether the current row is enabled (i.e. not padding)

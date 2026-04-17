@@ -22,6 +22,7 @@ use crate::{
     utils::{assert_one_ext, ext_field_add, ext_field_multiply, ext_field_one_minus},
 };
 
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Clone, Copy)]
 #[repr(C)]
 pub struct EqUniCols<T> {

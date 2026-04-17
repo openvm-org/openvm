@@ -70,6 +70,7 @@ pub(crate) enum NodeKind {
     InteractionBusIndex = 13,
 }
 
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct CachedSymbolicExpressionColumns<T> {
@@ -87,6 +88,7 @@ pub struct CachedSymbolicExpressionColumns<T> {
     pub(in crate::batch_constraint) constraint_idx: T,
 }
 
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct SingleMainSymbolicExpressionColumns<T> {

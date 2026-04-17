@@ -29,6 +29,7 @@ use crate::{
     },
 };
 
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Clone, Copy)]
 #[repr(C)]
 pub struct EqNsColumns<T> {

@@ -38,6 +38,7 @@ use crate::{
 /// (Second part) Standard merkle proof, the next row will be Poseidon2 compression of `c` and the
 /// sibling of `c`.
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct MerkleVerifyCols<T> {
     /// Index of the proof this row is for

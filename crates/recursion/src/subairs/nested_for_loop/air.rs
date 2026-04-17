@@ -14,6 +14,7 @@ use p3_field::PrimeCharacteristicRing;
 pub struct NestedForLoopSubAir<const DEPTH_MINUS_ONE: usize>;
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
 pub struct NestedForLoopIoCols<T, const DEPTH_MINUS_ONE: usize> {
     /// Whether the current row is enabled (i.e. not padding)

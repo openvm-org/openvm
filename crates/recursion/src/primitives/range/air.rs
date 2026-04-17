@@ -11,6 +11,7 @@ use p3_matrix::Matrix;
 use crate::primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage};
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Debug)]
 pub struct RangeCheckerCols<T> {
     pub value: T,

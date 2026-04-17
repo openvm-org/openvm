@@ -28,6 +28,7 @@ use crate::{
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct UnivariateSumcheckCols<T> {

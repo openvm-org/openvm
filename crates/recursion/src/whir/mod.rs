@@ -45,14 +45,14 @@ use crate::{
 };
 
 mod bus;
-mod final_poly_mle_eval;
-mod final_poly_query_eval;
+pub mod final_poly_mle_eval;
+pub mod final_poly_query_eval;
 pub mod folding;
-mod initial_opened_values;
-mod non_initial_opened_values;
-mod query;
-mod sumcheck;
-mod whir_round;
+pub mod initial_opened_values;
+pub mod non_initial_opened_values;
+pub mod query;
+pub mod sumcheck;
+pub mod whir_round;
 
 pub(crate) fn num_queries_per_round(params: &SystemParams) -> Vec<usize> {
     params

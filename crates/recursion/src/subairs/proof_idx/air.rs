@@ -7,6 +7,7 @@ use p3_field::PrimeCharacteristicRing;
 pub struct ProofIdxSubAir;
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
 pub struct ProofIdxIoCols<T> {
     /// Whether the current row is enabled (i.e. not padding)

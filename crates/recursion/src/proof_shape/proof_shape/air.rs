@@ -39,6 +39,7 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Debug)]
 pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub proof_idx: F,

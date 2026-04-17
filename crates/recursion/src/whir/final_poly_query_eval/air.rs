@@ -21,8 +21,9 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
-pub(in crate::whir::final_poly_query_eval) struct FinalPolyQueryEvalCols<T> {
+pub struct FinalPolyQueryEvalCols<T> {
     pub is_enabled: T,
     // loop indices
     pub proof_idx: T,

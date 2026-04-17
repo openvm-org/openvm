@@ -29,6 +29,7 @@ pub fn default_poseidon2_sub_chip<
 }
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct DagCommitCols<T> {
     pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,

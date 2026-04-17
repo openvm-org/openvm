@@ -26,6 +26,7 @@ use crate::{
 /// Each row in `SumcheckAir` constrains a round of sumcheck. Rows are grouped
 /// into groups of size `k_whir`.
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct SumcheckCols<T> {
     pub is_enabled: T,

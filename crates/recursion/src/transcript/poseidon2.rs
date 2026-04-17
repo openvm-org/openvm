@@ -21,6 +21,7 @@ pub const CHUNK: usize = 8;
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct Poseidon2Cols<T, const SBOX_REGISTERS: usize> {
     pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,

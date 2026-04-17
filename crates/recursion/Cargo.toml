@@ -39,6 +39,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
+lean = ["openvm-stark-backend/lean"]
 parallel = ["openvm-circuit/parallel"]
 
 cuda = [

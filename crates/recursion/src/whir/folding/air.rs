@@ -16,6 +16,7 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow)]
 pub struct WhirFoldingCols<T> {
     pub is_valid: T,

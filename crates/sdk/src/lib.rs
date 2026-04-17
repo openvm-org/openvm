@@ -75,6 +75,8 @@ pub mod fs;
 #[cfg(feature = "evm-prove")]
 pub mod halo2_params;
 pub mod keygen;
+#[cfg(feature = "lean")]
+pub mod lean;
 pub mod prover;
 #[cfg(feature = "evm-verify")]
 mod solidity;

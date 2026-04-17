@@ -24,6 +24,7 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrLayerSumcheckCols<T> {
     /// Whether the current row is enabled (i.e. not padding)

@@ -22,6 +22,7 @@ use crate::{
 };
 
 #[repr(C)]
+#[cfg_attr(feature = "lean", derive(openvm_stark_backend::lean::LeanColumns))]
 #[derive(AlignedBorrow, Debug)]
 pub struct TranscriptCols<T> {
     pub proof_idx: T,
