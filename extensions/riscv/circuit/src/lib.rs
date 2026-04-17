@@ -22,6 +22,7 @@ pub mod adapters;
 // TEMP: commented out modules not yet ported to RV64
 mod auipc;
 mod base_alu;
+mod base_alu_w;
 mod branch_eq;
 mod branch_lt;
 pub mod common;
@@ -35,9 +36,11 @@ mod less_than;
 mod mul;
 mod mulh;
 mod shift;
+mod shift_w;
 
 pub use auipc::*;
 pub use base_alu::*;
+pub use base_alu_w::{Rv64BaseAluWAir, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
 pub use branch_eq::*;
 pub use branch_lt::*;
 pub use divrem::*;
@@ -50,6 +53,7 @@ pub use less_than::*;
 pub use mul::*;
 pub use mulh::*;
 pub use shift::*;
+pub use shift_w::{Rv64ShiftWAir, Rv64ShiftWChip, Rv64ShiftWExecutor};
 
 mod extension;
 pub use extension::*;
