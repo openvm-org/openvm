@@ -23,20 +23,24 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
     BaseAluOpcode,
+    BaseAluWOpcode,
     BranchEqualOpcode,
     BranchLessThanOpcode,
     DivRemOpcode,
+    DivRemWOpcode,
     LessThanOpcode,
     MulHOpcode,
     MulOpcode,
+    MulWOpcode,
     Rv64AuipcOpcode,
     // TEMP: disabled until ported to RV64
     // Rv64HintStoreOpcode,
     Rv64JalLuiOpcode,
     Rv64JalrOpcode,
-    // Rv64LoadStoreOpcode,
+    Rv64LoadStoreOpcode,
     Rv64Phantom,
     ShiftOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -104,15 +108,16 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 )]
 pub enum Rv64IExecutor {
     BaseAlu(Rv64BaseAluExecutor),
+    BaseAluW(Rv64BaseAluWExecutor),
     LessThan(Rv64LessThanExecutor),
     Shift(Rv64ShiftExecutor),
+    ShiftW(Rv64ShiftWExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
     BranchLessThan(Rv64BranchLessThanExecutor),
     JalLui(Rv64JalLuiExecutor),
     Jalr(Rv64JalrExecutor),
     Auipc(Rv64AuipcExecutor),
-    // TEMP: disabled until ported to RV64
-    // LoadStore(Rv32LoadStoreExecutor),
+    LoadStore(Rv64LoadStoreExecutor),
     // LoadSignExtend(Rv32LoadSignExtendExecutor),
 }
 
@@ -127,8 +132,10 @@ pub enum Rv64IExecutor {
 )]
 pub enum Rv64MExecutor {
     Multiplication(Rv64MultiplicationExecutor),
+    MulW(Rv64MulWExecutor),
     MultiplicationHigh(Rv64MulHExecutor),
     DivRem(Rv64DivRemExecutor),
+    DivRemW(Rv64DivRemWExecutor),
 }
 
 /// RISC-V 64-bit Io Instruction Executors
@@ -253,12 +260,18 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // TEMP: pointer_max_bits only used by disabled load_store/load_sign_extend
-        // let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let base_alu =
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let base_alu_w =
+            Rv64BaseAluWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            base_alu_w,
+            BaseAluWOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         let lt =
             Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
@@ -267,18 +280,23 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
-        // TEMP: disabled until ported to RV64
-        // let load_store = LoadStoreExecutor::new(
-        //     Rv32LoadStoreAdapterExecutor::new(pointer_max_bits),
-        //     Rv64LoadStoreOpcode::CLASS_OFFSET,
-        // );
-        // inventory.add_executor(
-        //     load_store,
-        //     Rv64LoadStoreOpcode::iter()
-        //         .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
-        //         .map(|x| x.global_opcode()),
-        // )?;
-        //
+        let shift_w = Rv64ShiftWExecutor::new(
+            Rv64BaseAluWAdapterExecutor::new(),
+            ShiftWOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(shift_w, ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let load_store = Rv64LoadStoreExecutor::new(
+            Rv64LoadStoreAdapterExecutor::new(pointer_max_bits),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            load_store,
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|x| x.global_opcode()),
+        )?;
+
         // let load_sign_extend =
         //     LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(pointer_max_bits));
         // inventory.add_executor(
@@ -342,8 +360,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        // TEMP: pointer_max_bits only used by disabled load_store/load_sign_extend
-        // let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -364,6 +381,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(base_alu);
 
+        let base_alu_w = Rv64BaseAluWAir::new(
+            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::base_alu_w::BaseAluWCoreAir::new(bitwise_lu, BaseAluWOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(base_alu_w);
+
         let lt = Rv64LessThanAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             LessThanCoreAir::new(bitwise_lu, LessThanOpcode::CLASS_OFFSET),
@@ -376,18 +399,27 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(shift);
 
-        // TEMP: disabled until ported to RV64
-        // let load_store = Rv32LoadStoreAir::new(
-        //     Rv32LoadStoreAdapterAir::new(
-        //         memory_bridge,
-        //         exec_bridge,
-        //         range_checker,
-        //         pointer_max_bits,
-        //     ),
-        //     LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
-        // );
-        // inventory.add_air(load_store);
-        //
+        let shift_w = Rv64ShiftWAir::new(
+            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::shift_w::ShiftWCoreAir::new(
+                bitwise_lu,
+                range_checker,
+                ShiftWOpcode::CLASS_OFFSET,
+            ),
+        );
+        inventory.add_air(shift_w);
+
+        let load_store = Rv64LoadStoreAir::new(
+            Rv64LoadStoreAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                pointer_max_bits,
+            ),
+            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(load_store);
+
         // let load_sign_extend = Rv32LoadSignExtendAir::new(
         //     Rv32LoadStoreAdapterAir::new(
         //         memory_bridge,
@@ -450,8 +482,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        // TEMP: pointer_max_bits only used by disabled load_store/load_sign_extend
-        // let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         let bitwise_lu = {
@@ -481,6 +512,17 @@ where
         );
         inventory.add_executor_chip(base_alu);
 
+        inventory.next_air::<Rv64BaseAluWAir>()?;
+        let base_alu_w = Rv64BaseAluWChip::new(
+            crate::base_alu_w::BaseAluWFiller::new(
+                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                BaseAluWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(base_alu_w);
+
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(
             LessThanFiller::new(
@@ -504,17 +546,28 @@ where
         );
         inventory.add_executor_chip(shift);
 
-        // TEMP: disabled until ported to RV64
-        // inventory.next_air::<Rv32LoadStoreAir>()?;
-        // let load_store_chip = Rv32LoadStoreChip::new(
-        //     LoadStoreFiller::new(
-        //         Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
-        //         Rv64LoadStoreOpcode::CLASS_OFFSET,
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(load_store_chip);
-        //
+        inventory.next_air::<Rv64ShiftWAir>()?;
+        let shift_w = Rv64ShiftWChip::new(
+            crate::shift_w::ShiftWFiller::new(
+                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_w);
+
+        inventory.next_air::<Rv64LoadStoreAir>()?;
+        let load_store_chip = Rv64LoadStoreChip::new(
+            LoadStoreFiller::new(
+                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv64LoadStoreOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(load_store_chip);
+
         // inventory.next_air::<Rv32LoadSignExtendAir>()?;
         // let load_sign_extend = Rv32LoadSignExtendChip::new(
         //     LoadSignExtendFiller::new(
@@ -590,11 +643,18 @@ impl<F> VmExecutionExtension<F> for Rv64M {
             Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
+        let mul_w = Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
+        inventory.add_executor(mul_w, MulWOpcode::iter().map(|x| x.global_opcode()))?;
+
         let mul_h = Rv64MulHExecutor::new(Rv64MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
         inventory.add_executor(mul_h, MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
         let div_rem = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
         inventory.add_executor(div_rem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let divrem_w =
+            Rv64DivRemWExecutor::new(Rv64MultWAdapterExecutor, DivRemWOpcode::CLASS_OFFSET);
+        inventory.add_executor(divrem_w, DivRemWOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
     }
@@ -645,6 +705,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
         );
         inventory.add_air(mult);
 
+        let mul_w = Rv64MulWAir::new(
+            Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::mul_w::MulWCoreAir::new(range_tuple_checker, MulWOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(mul_w);
+
         let mul_h = Rv64MulHAir::new(
             Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
             MulHCoreAir::new(bitwise_lu, range_tuple_checker),
@@ -656,6 +722,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
             DivRemCoreAir::new(bitwise_lu, range_tuple_checker, DivRemOpcode::CLASS_OFFSET),
         );
         inventory.add_air(div_rem);
+
+        let divrem_w = Rv64DivRemWAir::new(
+            Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::divrem_w::DivRemWCoreAir::new(
+                bitwise_lu,
+                range_tuple_checker,
+                DivRemWOpcode::CLASS_OFFSET,
+            ),
+        );
+        inventory.add_air(divrem_w);
 
         Ok(())
     }
@@ -723,6 +799,17 @@ where
         );
         inventory.add_executor_chip(mult);
 
+        inventory.next_air::<Rv64MulWAir>()?;
+        let mul_w = Rv64MulWChip::new(
+            crate::mul_w::MulWFiller::new(
+                Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
+                range_tuple_checker.clone(),
+                MulWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(mul_w);
+
         inventory.next_air::<Rv64MulHAir>()?;
         let mul_h = Rv64MulHChip::new(
             MulHFiller::new(
@@ -745,6 +832,18 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(div_rem);
+
+        inventory.next_air::<Rv64DivRemWAir>()?;
+        let divrem_w = Rv64DivRemWChip::new(
+            crate::divrem_w::DivRemWFiller::new(
+                Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_tuple_checker.clone(),
+                DivRemWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(divrem_w);
 
         Ok(())
     }
