@@ -344,7 +344,7 @@ where
 
 #[derive(Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub(super) enum DivRemCoreSpecialCase {
+pub(crate) enum DivRemCoreSpecialCase {
     None,
     ZeroDivisor,
     SignedOverflow,
@@ -567,7 +567,7 @@ where
 // Returns (quotient, remainder, x_sign, y_sign, q_sign, case) where case = 0 for normal, 1
 // for zero divisor, and 2 for signed overflow
 #[inline(always)]
-pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
@@ -644,7 +644,7 @@ pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 }
 
 #[inline(always)]
-pub(super) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(
+pub(crate) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
     cmp: bool,
@@ -661,7 +661,7 @@ pub(super) fn run_sltu_diff_idx<const NUM_LIMBS: usize>(
 
 // returns carries of d * q + r
 #[inline(always)]
-pub(super) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_mul_carries<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     d: &[u32; NUM_LIMBS],
     q: &[u32; NUM_LIMBS],

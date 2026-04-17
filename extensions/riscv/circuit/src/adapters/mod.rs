@@ -16,6 +16,7 @@ mod branch;
 mod jalr;
 mod loadstore;
 mod mul;
+mod mul_w;
 mod rdwrite;
 
 pub use alu::*;
@@ -24,6 +25,7 @@ pub use branch::*;
 pub use jalr::*;
 pub use loadstore::*;
 pub use mul::*;
+pub use mul_w::*;
 pub use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     RV64_WORD_NUM_LIMBS,
