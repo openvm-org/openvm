@@ -1,13 +1,16 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{
-    Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
+    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_CELL_BITS,
+    RV64_WORD_NUM_LIMBS,
 };
+use super::shift::{ShiftCoreAir, ShiftExecutor, ShiftFiller};
 
-mod core;
 mod execution;
-pub use core::*;
+
+pub type ShiftWCoreAir = ShiftCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type ShiftWExecutor<A> = ShiftExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type ShiftWFiller<A> = ShiftFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -17,14 +20,6 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv32ShiftAir =
-    VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
-pub type Rv32ShiftExecutor = ShiftExecutor<
-    Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>,
-    RV32_REGISTER_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
-pub type Rv32ShiftChip<F> = VmChipWrapper<
-    F,
-    ShiftFiller<Rv32BaseAluAdapterFiller<RV32_CELL_BITS>, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
->;
+pub type Rv64ShiftWAir = VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftWCoreAir>;
+pub type Rv64ShiftWExecutor = ShiftWExecutor<Rv64BaseAluWAdapterExecutor>;
+pub type Rv64ShiftWChip<F> = VmChipWrapper<F, ShiftWFiller<Rv64BaseAluWAdapterFiller>>;
