@@ -8,48 +8,192 @@ use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_circuit_primitives::{encoder::Encoder, AlignedBorrow, AlignedBytesBorrow, SubAir};
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
+use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
+
+const LOADSTORE_SELECTOR_CASES: usize = 30;
+const LOADSTORE_SELECTOR_MAX_DEGREE: u32 = 2;
+pub(crate) const LOADSTORE_SELECTOR_WIDTH: usize = 7;
 
 #[derive(Debug, Clone, Copy)]
-enum InstructionOpcode {
-    LoadW0,
+enum InstructionCase {
+    LoadD0,
+    LoadWu0,
+    LoadWu4,
     LoadHu0,
     LoadHu2,
+    LoadHu4,
+    LoadHu6,
     LoadBu0,
     LoadBu1,
     LoadBu2,
     LoadBu3,
+    LoadBu4,
+    LoadBu5,
+    LoadBu6,
+    LoadBu7,
+    StoreD0,
     StoreW0,
+    StoreW4,
     StoreH0,
     StoreH2,
+    StoreH4,
+    StoreH6,
     StoreB0,
     StoreB1,
     StoreB2,
     StoreB3,
+    StoreB4,
+    StoreB5,
+    StoreB6,
+    StoreB7,
 }
 
-use InstructionOpcode::*;
+use InstructionCase::*;
 
-/// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
-/// This chip uses read_data and prev_data to constrain the write_data
-/// It also handles the shifting in case of not 4 byte aligned instructions
-/// This chips treats each (opcode, shift) pair as a separate instruction
+impl InstructionCase {
+    const ALL: [Self; LOADSTORE_SELECTOR_CASES] = [
+        LoadD0, LoadWu0, LoadWu4, LoadHu0, LoadHu2, LoadHu4, LoadHu6, LoadBu0, LoadBu1, LoadBu2,
+        LoadBu3, LoadBu4, LoadBu5, LoadBu6, LoadBu7, StoreD0, StoreW0, StoreW4, StoreH0, StoreH2,
+        StoreH4, StoreH6, StoreB0, StoreB1, StoreB2, StoreB3, StoreB4, StoreB5, StoreB6, StoreB7,
+    ];
+
+    fn opcode(self) -> Rv64LoadStoreOpcode {
+        match self {
+            LoadD0 => LOADD,
+            LoadWu0 | LoadWu4 => LOADWU,
+            LoadHu0 | LoadHu2 | LoadHu4 | LoadHu6 => LOADHU,
+            LoadBu0 | LoadBu1 | LoadBu2 | LoadBu3 | LoadBu4 | LoadBu5 | LoadBu6 | LoadBu7 => LOADBU,
+            StoreD0 => STORED,
+            StoreW0 | StoreW4 => STOREW,
+            StoreH0 | StoreH2 | StoreH4 | StoreH6 => STOREH,
+            StoreB0 | StoreB1 | StoreB2 | StoreB3 | StoreB4 | StoreB5 | StoreB6 | StoreB7 => STOREB,
+        }
+    }
+
+    fn shift(self) -> usize {
+        match self {
+            LoadD0 | StoreD0 => 0,
+            LoadWu0 | StoreW0 | LoadHu0 | StoreH0 | LoadBu0 | StoreB0 => 0,
+            LoadBu1 | StoreB1 => 1,
+            LoadHu2 | StoreH2 | LoadBu2 | StoreB2 => 2,
+            LoadBu3 | StoreB3 => 3,
+            LoadWu4 | StoreW4 | LoadHu4 | StoreH4 | LoadBu4 | StoreB4 => 4,
+            LoadBu5 | StoreB5 => 5,
+            LoadHu6 | StoreH6 | LoadBu6 | StoreB6 => 6,
+            LoadBu7 | StoreB7 => 7,
+        }
+    }
+
+    fn is_load(self) -> bool {
+        matches!(
+            self,
+            LoadD0
+                | LoadWu0
+                | LoadWu4
+                | LoadHu0
+                | LoadHu2
+                | LoadHu4
+                | LoadHu6
+                | LoadBu0
+                | LoadBu1
+                | LoadBu2
+                | LoadBu3
+                | LoadBu4
+                | LoadBu5
+                | LoadBu6
+                | LoadBu7
+        )
+    }
+
+    fn width(self) -> usize {
+        match self.opcode() {
+            LOADD | STORED => 8,
+            LOADWU | STOREW => 4,
+            LOADHU | STOREH => 2,
+            LOADBU | STOREB => 1,
+            _ => unreachable!("loadstore core should not handle sign-extension loads"),
+        }
+    }
+
+    fn from_opcode_shift(opcode: Rv64LoadStoreOpcode, shift: usize) -> Self {
+        match (opcode, shift) {
+            (LOADD, 0) => LoadD0,
+            (LOADWU, 0) => LoadWu0,
+            (LOADWU, 4) => LoadWu4,
+            (LOADHU, 0) => LoadHu0,
+            (LOADHU, 2) => LoadHu2,
+            (LOADHU, 4) => LoadHu4,
+            (LOADHU, 6) => LoadHu6,
+            (LOADBU, 0) => LoadBu0,
+            (LOADBU, 1) => LoadBu1,
+            (LOADBU, 2) => LoadBu2,
+            (LOADBU, 3) => LoadBu3,
+            (LOADBU, 4) => LoadBu4,
+            (LOADBU, 5) => LoadBu5,
+            (LOADBU, 6) => LoadBu6,
+            (LOADBU, 7) => LoadBu7,
+            (STORED, 0) => StoreD0,
+            (STOREW, 0) => StoreW0,
+            (STOREW, 4) => StoreW4,
+            (STOREH, 0) => StoreH0,
+            (STOREH, 2) => StoreH2,
+            (STOREH, 4) => StoreH4,
+            (STOREH, 6) => StoreH6,
+            (STOREB, 0) => StoreB0,
+            (STOREB, 1) => StoreB1,
+            (STOREB, 2) => StoreB2,
+            (STOREB, 3) => StoreB3,
+            (STOREB, 4) => StoreB4,
+            (STOREB, 5) => StoreB5,
+            (STOREB, 6) => StoreB6,
+            (STOREB, 7) => StoreB7,
+            _ => unreachable!(
+                "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
+            ),
+        }
+    }
+}
+
+fn loadstore_encoder() -> Encoder {
+    let encoder = Encoder::new(
+        LOADSTORE_SELECTOR_CASES,
+        LOADSTORE_SELECTOR_MAX_DEGREE,
+        true,
+    );
+    debug_assert_eq!(encoder.width(), LOADSTORE_SELECTOR_WIDTH);
+    encoder
+}
+
+pub(crate) fn selector_point_for_opcode_shift(
+    opcode: Rv64LoadStoreOpcode,
+    shift: usize,
+) -> [u32; LOADSTORE_SELECTOR_WIDTH] {
+    loadstore_encoder()
+        .get_flag_pt(InstructionCase::from_opcode_shift(opcode, shift) as usize)
+        .try_into()
+        .unwrap()
+}
+
+/// LoadStore Core Chip handles byte/halfword/word into doubleword conversions and unsigned
+/// extends. This chip uses read_data and prev_data to constrain the write_data. It also handles
+/// the shifting in case of not 8 byte aligned instructions. This chip treats each `(opcode,
+/// shift)` pair as a separate instruction.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
-    pub flags: [T; 4],
+    pub selector: [T; LOADSTORE_SELECTOR_WIDTH],
     /// we need to keep the degree of is_valid and is_load to 1
     pub is_valid: T,
     pub is_load: T,
@@ -61,9 +205,19 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
+    encoder: Encoder,
+}
+
+impl<const NUM_CELLS: usize> LoadStoreCoreAir<NUM_CELLS> {
+    pub fn new(offset: usize) -> Self {
+        Self {
+            offset,
+            encoder: loadstore_encoder(),
+        }
+    }
 }
 
 impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<NUM_CELLS> {
@@ -90,132 +244,82 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadStoreCoreCols<AB::Var, NUM_CELLS> = (*local_core).borrow();
         let LoadStoreCoreCols::<AB::Var, NUM_CELLS> {
+            selector,
+            is_valid,
+            is_load,
             read_data,
             prev_data,
             write_data,
-            flags,
-            is_valid,
-            is_load,
         } = *cols;
 
-        let get_expr_12 = |x: &AB::Expr| (x.clone() - AB::Expr::ONE) * (x.clone() - AB::Expr::TWO);
+        self.encoder.eval(builder, &selector);
 
-        builder.assert_bool(is_valid);
-        let sum = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
-            builder.assert_zero(flag * get_expr_12(&flag.into()));
-            acc + flag
-        });
-        builder.assert_zero(sum.clone() * get_expr_12(&sum));
-        // when sum is 0, is_valid must be 0
-        builder.when(get_expr_12(&sum)).assert_zero(is_valid);
+        let selector_flags = self.encoder.flags::<AB>(&selector);
+        let expected_is_valid = self.encoder.is_valid::<AB>(&selector);
+        let expected_is_load = InstructionCase::ALL
+            .iter()
+            .fold(AB::Expr::ZERO, |acc, &case| {
+                if case.is_load() {
+                    acc + selector_flags[case as usize].clone()
+                } else {
+                    acc
+                }
+            });
 
-        // We will use the InstructionOpcode enum to encode the opcodes
-        // the appended digit to each opcode is the shift amount
-        let inv_2 = AB::F::from_canonical_u32(2).inverse();
-        let mut opcode_flags = vec![];
-        for flag in flags {
-            opcode_flags.push(flag * (flag - AB::F::ONE) * inv_2);
-        }
-        for flag in flags {
-            opcode_flags.push(flag * (sum.clone() - AB::F::TWO) * AB::F::NEG_ONE);
-        }
-        (0..4).for_each(|i| {
-            ((i + 1)..4).for_each(|j| opcode_flags.push(flags[i] * flags[j]));
-        });
+        builder.assert_eq(is_valid, expected_is_valid.clone());
+        builder.assert_eq(is_load, expected_is_load.clone());
 
-        let opcode_when = |idxs: &[InstructionOpcode]| -> AB::Expr {
-            idxs.iter().fold(AB::Expr::ZERO, |acc, &idx| {
-                acc + opcode_flags[idx as usize].clone()
-            })
-        };
-
-        // Constrain that is_load matches the opcode
-        builder.assert_eq(
-            is_load,
-            opcode_when(&[LoadW0, LoadHu0, LoadHu2, LoadBu0, LoadBu1, LoadBu2, LoadBu3]),
-        );
-        builder.when(is_load).assert_one(is_valid);
-
-        // There are three parts to write_data:
-        // - 1st limb is always read_data
-        // - 2nd to (NUM_CELLS/2)th limbs are:
-        //   - read_data if loadw/loadhu/storew/storeh
-        //   - prev_data if storeb
-        //   - zero if loadbu
-        // - (NUM_CELLS/2 + 1)th to last limbs are:
-        //   - read_data if loadw/storew
-        //   - prev_data if storeb/storeh
-        //   - zero if loadbu/loadhu
-        // Shifting needs to be carefully handled in case by case basis
-        // refer to [run_write_data] for the expected behavior in each case
-        for (i, cell) in write_data.iter().enumerate() {
-            // handling loads, expected_load_val = 0 if a store operation is happening
-            let expected_load_val = if i == 0 {
-                opcode_when(&[LoadW0, LoadHu0, LoadBu0]) * read_data[0]
-                    + opcode_when(&[LoadBu1]) * read_data[1]
-                    + opcode_when(&[LoadHu2, LoadBu2]) * read_data[2]
-                    + opcode_when(&[LoadBu3]) * read_data[3]
-            } else if i < NUM_CELLS / 2 {
-                opcode_when(&[LoadW0, LoadHu0]) * read_data[i]
-                    + opcode_when(&[LoadHu2]) * read_data[i + 2]
-            } else {
-                opcode_when(&[LoadW0]) * read_data[i]
-            };
-
-            // handling stores, expected_store_val = 0 if a load operation is happening
-            let expected_store_val = if i == 0 {
-                opcode_when(&[StoreW0, StoreH0, StoreB0]) * read_data[i]
-                    + opcode_when(&[StoreH2, StoreB1, StoreB2, StoreB3]) * prev_data[i]
-            } else if i == 1 {
-                opcode_when(&[StoreB1]) * read_data[i - 1]
-                    + opcode_when(&[StoreW0, StoreH0]) * read_data[i]
-                    + opcode_when(&[StoreH2, StoreB0, StoreB2, StoreB3]) * prev_data[i]
-            } else if i == 2 {
-                opcode_when(&[StoreH2, StoreB2]) * read_data[i - 2]
-                    + opcode_when(&[StoreW0]) * read_data[i]
-                    + opcode_when(&[StoreH0, StoreB0, StoreB1, StoreB3]) * prev_data[i]
-            } else if i == 3 {
-                opcode_when(&[StoreB3]) * read_data[i - 3]
-                    + opcode_when(&[StoreH2]) * read_data[i - 2]
-                    + opcode_when(&[StoreW0]) * read_data[i]
-                    + opcode_when(&[StoreH0, StoreB0, StoreB1, StoreB2]) * prev_data[i]
-            } else {
-                opcode_when(&[StoreW0]) * read_data[i]
-                    + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3]) * prev_data[i]
-                    + opcode_when(&[StoreH0])
-                        * if i < NUM_CELLS / 2 {
-                            read_data[i]
-                        } else {
-                            prev_data[i]
-                        }
-                    + opcode_when(&[StoreH2])
-                        * if i - 2 < NUM_CELLS / 2 {
-                            read_data[i - 2]
-                        } else {
-                            prev_data[i]
-                        }
-            };
-            let expected_val = expected_load_val + expected_store_val;
-            builder.assert_eq(*cell, expected_val);
-        }
-
-        let expected_opcode = opcode_when(&[LoadW0]) * AB::Expr::from_canonical_u8(LOADW as u8)
-            + opcode_when(&[LoadHu0, LoadHu2]) * AB::Expr::from_canonical_u8(LOADHU as u8)
-            + opcode_when(&[LoadBu0, LoadBu1, LoadBu2, LoadBu3])
-                * AB::Expr::from_canonical_u8(LOADBU as u8)
-            + opcode_when(&[StoreW0]) * AB::Expr::from_canonical_u8(STOREW as u8)
-            + opcode_when(&[StoreH0, StoreH2]) * AB::Expr::from_canonical_u8(STOREH as u8)
-            + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3])
-                * AB::Expr::from_canonical_u8(STOREB as u8);
+        let expected_opcode = InstructionCase::ALL
+            .iter()
+            .fold(AB::Expr::ZERO, |acc, &case| {
+                acc + selector_flags[case as usize].clone()
+                    * AB::Expr::from_canonical_u8(case.opcode() as u8)
+            });
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
-        let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::ONE
-            + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::TWO
-            + opcode_when(&[LoadBu3]) * AB::Expr::from_canonical_u32(3);
+        let load_shift_amount = InstructionCase::ALL
+            .iter()
+            .fold(AB::Expr::ZERO, |acc, &case| {
+                if case.is_load() {
+                    acc + selector_flags[case as usize].clone()
+                        * AB::Expr::from_canonical_usize(case.shift())
+                } else {
+                    acc
+                }
+            });
+        let store_shift_amount = InstructionCase::ALL
+            .iter()
+            .fold(AB::Expr::ZERO, |acc, &case| {
+                if case.is_load() {
+                    acc
+                } else {
+                    acc + selector_flags[case as usize].clone()
+                        * AB::Expr::from_canonical_usize(case.shift())
+                }
+            });
 
-        let store_shift_amount = opcode_when(&[StoreB1]) * AB::Expr::ONE
-            + opcode_when(&[StoreH2, StoreB2]) * AB::Expr::TWO
-            + opcode_when(&[StoreB3]) * AB::Expr::from_canonical_u32(3);
+        for (i, cell) in write_data.iter().enumerate() {
+            let expected = InstructionCase::ALL
+                .iter()
+                .fold(AB::Expr::ZERO, |acc, &case| {
+                    let width = case.width();
+                    let shift = case.shift();
+                    debug_assert!(shift + width <= NUM_CELLS);
+                    let term = if case.is_load() {
+                        if i < width {
+                            read_data[i + shift].into()
+                        } else {
+                            AB::Expr::ZERO
+                        }
+                    } else if i >= shift && i < shift + width {
+                        read_data[i - shift].into()
+                    } else {
+                        prev_data[i].into()
+                    };
+                    acc + selector_flags[case as usize].clone() * term
+                });
+            builder.assert_eq(*cell, expected);
+        }
 
         AdapterAirContext {
             to_pc: None,
@@ -243,7 +347,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
     pub local_opcode: u8,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
-    // Note: `prev_data` can be from native address space, so we need to use u32
+    // Note: `prev_data` can be from native address space, so we need to use u32.
     pub prev_data: [u32; NUM_CELLS],
 }
 
@@ -253,13 +357,24 @@ pub struct LoadStoreExecutor<A, const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
-#[derive(Clone, derive_new::new)]
+#[derive(Clone)]
 pub struct LoadStoreFiller<
-    A = Rv32LoadStoreAdapterFiller,
-    const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
+    A = Rv64LoadStoreAdapterFiller,
+    const NUM_CELLS: usize = RV64_REGISTER_NUM_LIMBS,
 > {
     adapter: A,
     pub offset: usize,
+    encoder: Encoder,
+}
+
+impl<A, const NUM_CELLS: usize> LoadStoreFiller<A, NUM_CELLS> {
+    pub fn new(adapter: A, offset: usize) -> Self {
+        Self {
+            adapter,
+            offset,
+            encoder: loadstore_encoder(),
+        }
+    }
 }
 
 impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA> for LoadStoreExecutor<A, NUM_CELLS>
@@ -337,36 +452,20 @@ where
         let core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
-        let shift = record.shift_amount;
+        let shift = record.shift_amount as usize;
+        let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift);
 
-        let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift as usize);
-        // Writing in reverse order
         core_row.write_data = write_data.map(F::from_canonical_u32);
         core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
         core_row.read_data = record.read_data.map(F::from_canonical_u8);
-        core_row.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
+        core_row.is_load = F::from_bool(matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU));
         core_row.is_valid = F::ONE;
-        let flags = &mut core_row.flags;
-        *flags = [F::ZERO; 4];
-        match (opcode, shift) {
-            (LOADW, 0) => flags[0] = F::TWO,
-            (LOADHU, 0) => flags[1] = F::TWO,
-            (LOADHU, 2) => flags[2] = F::TWO,
-            (LOADBU, 0) => flags[3] = F::TWO,
-
-            (LOADBU, 1) => flags[0] = F::ONE,
-            (LOADBU, 2) => flags[1] = F::ONE,
-            (LOADBU, 3) => flags[2] = F::ONE,
-            (STOREW, 0) => flags[3] = F::ONE,
-
-            (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
-            (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
-            (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
-            (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
-            (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
-            (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
-            _ => unreachable!(),
-        };
+        let pt: [u32; LOADSTORE_SELECTOR_WIDTH] = self
+            .encoder
+            .get_flag_pt(InstructionCase::from_opcode_shift(opcode, shift) as usize)
+            .try_into()
+            .unwrap();
+        core_row.selector = pt.map(F::from_canonical_u32);
     }
 }
 
@@ -378,42 +477,57 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
     prev_data: [u32; NUM_CELLS],
     shift: usize,
 ) -> [u32; NUM_CELLS] {
-    match (opcode, shift) {
-        (LOADW, 0) => {
-            read_data.map(|x| x as u32)
-        },
-        (LOADBU, 0) | (LOADBU, 1) | (LOADBU, 2) | (LOADBU, 3) => {
-           let mut wrie_data = [0; NUM_CELLS];
-           wrie_data[0] = read_data[shift] as u32;
-           wrie_data
-        }
-        (LOADHU, 0) | (LOADHU, 2) => {
-            let mut write_data = [0; NUM_CELLS];
-            for (i, cell) in write_data.iter_mut().take(NUM_CELLS / 2).enumerate() {
-                *cell = read_data[i + shift] as u32;
+    debug_assert_eq!(NUM_CELLS, RV64_REGISTER_NUM_LIMBS);
+    let word_width = NUM_CELLS / 2;
+    let half_width = NUM_CELLS / 4;
+
+    match opcode {
+        LOADD if shift == 0 => read_data.map(u32::from),
+        LOADWU if shift == 0 || shift == word_width => array::from_fn(|i| {
+            if i < word_width {
+                read_data[i + shift] as u32
+            } else {
+                0
             }
-            write_data
-        }
-        (STOREW, 0) => {
-            read_data.map(|x| x as u32)
-        },
-        (STOREB, 0) | (STOREB, 1) | (STOREB, 2) | (STOREB, 3) => {
-            let mut write_data = prev_data;
-            write_data[shift] = read_data[0] as u32;
-            write_data
-        }
-        (STOREH, 0) | (STOREH, 2) => {
+        }),
+        LOADHU if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
             array::from_fn(|i| {
-                if i >= shift && i < (NUM_CELLS / 2 + shift){
+                if i < half_width {
+                    read_data[i + shift] as u32
+                } else {
+                    0
+                }
+            })
+        }
+        LOADBU if shift < NUM_CELLS => array::from_fn(|i| {
+            if i == 0 {
+                read_data[shift] as u32
+            } else {
+                0
+            }
+        }),
+        STORED if shift == 0 => read_data.map(u32::from),
+        STOREW if shift == 0 || shift == word_width => array::from_fn(|i| {
+            if i >= shift && i < shift + word_width {
+                read_data[i - shift] as u32
+            } else {
+                prev_data[i]
+            }
+        }),
+        STOREH if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
+            array::from_fn(|i| {
+                if i >= shift && i < shift + half_width {
                     read_data[i - shift] as u32
                 } else {
                     prev_data[i]
                 }
             })
         }
-        // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
-        // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
-        // This requirement is non-trivial to remove, because we use it to ensure that `ptr_val - shift + 4 <= 2^pointer_max_bits`.
+        STOREB if shift < NUM_CELLS => {
+            let mut write_data = prev_data;
+            write_data[shift] = read_data[0] as u32;
+            write_data
+        }
         _ => unreachable!(
             "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
         ),
