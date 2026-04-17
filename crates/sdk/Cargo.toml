@@ -78,26 +78,21 @@ evm-verify = [
     "dep:tempfile",
 ]
 # Optional Solidity code formatting; requires Rust 1.91+ due to foundry/alloy transitive deps.
-evm-verify-fmt = [
-    "evm-verify",
-    "dep:forge-fmt",
+evm-verify-fmt = ["evm-verify", "dep:forge-fmt"]
+metrics = [
+    "dep:metrics",
+    "openvm-continuations/metrics",
+    "openvm-sdk-config/metrics",
 ]
-metrics = ["dep:metrics", "openvm-continuations/metrics", "openvm-sdk-config/metrics"]
-aot = [
-    "openvm-circuit/aot",
-    "openvm-sdk-config/aot",
-]
-tco = [
-    "openvm-circuit/tco",
-    "openvm-sdk-config/tco",
-]
+aot = ["openvm-circuit/aot", "openvm-sdk-config/aot"]
+tco = ["openvm-circuit/tco", "openvm-sdk-config/tco"]
 unprotected = ["openvm-circuit/unprotected"]
 
 # for guest profiling:
 perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
-    "openvm-sdk-config/perf-metrics"
+    "openvm-sdk-config/perf-metrics",
 ]
 
 # turns on stark-backend debugger in all proofs
@@ -105,6 +100,7 @@ stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
 
 async = ["tokio"]
+lean = ["openvm-recursion-circuit/lean", "openvm-stark-backend/lean"]
 parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
@@ -117,10 +113,7 @@ cuda = [
     "openvm-continuations/cuda",
     "openvm-verify-stark-circuit/cuda",
 ]
-cell-profiling = [
-    "evm-prove",
-    "openvm-static-verifier/cell-profiling",
-]
+cell-profiling = ["evm-prove", "openvm-static-verifier/cell-profiling"]
 
 # [[example]]
 # name = "sdk_evm"
