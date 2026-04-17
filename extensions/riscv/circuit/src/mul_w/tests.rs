@@ -10,13 +10,23 @@ use openvm_circuit::{
 };
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
+        testing::{
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            RANGE_TUPLE_CHECKER_BUS,
+        },
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::range_tuple::{
-    RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    range_tuple::{
+        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+        SharedRangeTupleCheckerChip,
+    },
 };
 use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
@@ -29,7 +39,10 @@ use openvm_instructions::{
 };
 #[cfg(feature = "aot")]
 use openvm_riscv_transpiler::BaseAluOpcode::ADD;
-use openvm_riscv_transpiler::MulOpcode::{self, MUL};
+use openvm_riscv_transpiler::{
+    MulOpcode,
+    MulWOpcode::{self, MULW},
+};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::FieldAlgebra,
@@ -50,56 +63,59 @@ use {
     },
 };
 
-use super::core::run_mul;
+use super::{MulWCoreAir, MulWFiller, Rv64MulWChip};
 #[cfg(feature = "aot")]
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
+        Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
-    mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
-    test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
-    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
+    mul::MultiplicationCoreCols,
+    test_utils::{get_verification_error, rv64_rand_write_register_or_imm},
+    Rv64MulWAir, Rv64MulWExecutor,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1u32 << RV32_CELL_BITS),
-    (MAX_NUM_LIMBS * (1u32 << RV32_CELL_BITS)),
+    (1u32 << RV64_CELL_BITS),
+    (MAX_NUM_LIMBS * (1u32 << RV64_CELL_BITS)),
 ];
 
 type F = BabyBear;
-type Harness = TestChipHarness<
-    F,
-    Rv32MultiplicationExecutor,
-    Rv32MultiplicationAir,
-    Rv32MultiplicationChip<F>,
->;
+type Harness = TestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChip<F>>;
+type MulWCoreCols<T> = MultiplicationCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+
+#[inline(always)]
+fn run_mulw(
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let rs1 = u32::from_le_bytes(*x);
+    let rs2 = u32::from_le_bytes(*y);
+    let rd_word = rs1.wrapping_mul(rs2);
+    (rd_word as i32 as i64 as u64).to_le_bytes()
+}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (
-    Rv32MultiplicationAir,
-    Rv32MultiplicationExecutor,
-    Rv32MultiplicationChip<F>,
-) {
-    let air = Rv32MultiplicationAir::new(
-        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
-        MultiplicationCoreAir::new(*range_tuple_chip.bus(), MulOpcode::CLASS_OFFSET),
+) -> (Rv64MulWAir, Rv64MulWExecutor, Rv64MulWChip<F>) {
+    let air = Rv64MulWAir::new(
+        Rv64MultWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        MulWCoreAir::new(*range_tuple_chip.bus(), MulWOpcode::CLASS_OFFSET),
     );
-    let executor =
-        Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
-    let chip = Rv32MultiplicationChip::<F>::new(
-        MultiplicationFiller::new(
-            Rv32MultAdapterFiller,
+    let executor = Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
+    let chip = Rv64MulWChip::<F>::new(
+        MulWFiller::new(
+            Rv64MultWAdapterFiller::new(bitwise_chip.clone()),
             range_tuple_chip,
-            MulOpcode::CLASS_OFFSET,
+            MulWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -107,11 +123,19 @@ fn create_harness_fields(
 }
 
 fn create_harness(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &VmChipTestBuilder<F>,
 ) -> (
     Harness,
+    (
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    ),
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
@@ -119,12 +143,17 @@ fn create_harness(
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
+        bitwise_chip.clone(),
         range_tuple_chip.clone(),
         tester.memory_helper(),
     );
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-    (harness, (range_tuple_chip.air, range_tuple_chip))
+    (
+        harness,
+        (bitwise_chip.air, bitwise_chip),
+        (range_tuple_chip.air, range_tuple_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -133,24 +162,25 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
-    opcode: MulOpcode,
-    b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
-    c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
-) {
+    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let c = c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
-        rv32_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
-
+        rv64_rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
     instruction.e = F::ZERO;
     tester.execute(executor, arena, &instruction);
 
-    let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
+    let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let expected = run_mulw(&b_word, &c_word);
     assert_eq!(
-        a.map(F::from_canonical_u8),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    )
+        expected.map(F::from_canonical_u8),
+        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+    );
+    expected
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -161,11 +191,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_rv32_mul_rand_test() {
+fn run_rv64_mulw_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, range_tuple) = create_harness(&mut tester);
+    let (mut harness, bitwise, range_tuple) = create_harness(&tester);
     let num_ops = 100;
     for _ in 0..num_ops {
         set_and_execute(
@@ -173,7 +203,6 @@ fn run_rv32_mul_rand_test() {
             &mut harness.executor,
             &mut harness.arena,
             &mut rng,
-            MUL,
             None,
             None,
         );
@@ -182,6 +211,7 @@ fn run_rv32_mul_rand_test() {
     let tester = tester
         .build()
         .load(harness)
+        .load_periphery(bitwise)
         .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
@@ -195,34 +225,57 @@ fn run_rv32_mul_rand_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
-fn run_negative_mul_test(
-    opcode: MulOpcode,
-    prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
-    b: [u8; RV32_REGISTER_NUM_LIMBS],
-    c: [u8; RV32_REGISTER_NUM_LIMBS],
+fn run_negative_mulw_test(
+    prank_a: [u32; RV64_WORD_NUM_LIMBS],
+    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prank_is_valid: bool,
+    prank_result_sign: Option<u32>,
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, range_tuple) = create_harness(&mut tester);
+    let (mut harness, bitwise, range_tuple) = create_harness(&tester);
 
     set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
-        opcode,
         Some(b),
         Some(c),
     );
 
+    let default_result_sign =
+        prank_result_sign.unwrap_or((prank_a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1);
+
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut MulWCoreCols<F> = core_row.borrow_mut();
+
         cols.a = prank_a.map(F::from_canonical_u32);
+        if let Some(prank_b) = prank_b {
+            let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_b_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.b = prank_b_word.map(F::from_canonical_u32);
+            adapter_cols.rs1_high = prank_b_high.map(F::from_canonical_u32);
+        }
+        if let Some(prank_c) = prank_c {
+            let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_c_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.c = prank_c_word.map(F::from_canonical_u32);
+            adapter_cols.rs2_high = prank_c_high.map(F::from_canonical_u32);
+        }
+        adapter_cols.result_sign = F::from_canonical_u32(default_result_sign);
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -231,31 +284,94 @@ fn run_negative_mul_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .load_periphery(range_tuple)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
-fn rv32_mul_wrong_negative_test() {
-    run_negative_mul_test(
-        MUL,
+fn rv64_mulw_wrong_negative_test() {
+    run_negative_mulw_test(
         [63, 247, 125, 234],
-        [51, 109, 78, 142],
-        [197, 85, 150, 32],
+        [51, 109, 78, 142, 0, 0, 0, 0],
+        [197, 85, 150, 32, 0, 0, 0, 0],
+        None,
+        None,
         true,
+        None,
         true,
     );
 }
 
 #[test]
-fn rv32_mul_is_valid_false_negative_test() {
-    run_negative_mul_test(
-        MUL,
+fn rv64_mulw_is_valid_false_negative_test() {
+    run_negative_mulw_test(
         [63, 247, 125, 234],
-        [51, 109, 78, 142],
-        [197, 85, 150, 32],
+        [51, 109, 78, 142, 0, 0, 0, 0],
+        [197, 85, 150, 32, 0, 0, 0, 0],
+        None,
+        None,
         false,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_adapter_wrong_rs1_upper_negative_test() {
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 13, 14, 15, 16],
+        [2, 0, 0, 0, 21, 22, 23, 24],
+        Some([1, 0, 0, 0, 99, 98, 97, 96]),
+        None,
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_adapter_wrong_rs2_upper_negative_test() {
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 13, 14, 15, 16],
+        [2, 0, 0, 0, 21, 22, 23, 24],
+        None,
+        Some([2, 0, 0, 0, 95, 94, 93, 92]),
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_wrong_upper_sign_extension_negative_test() {
+    // 1 * 2 = 2 (positive), so result_sign must be 0.
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        Some(1),
+        true,
+    );
+}
+
+#[test]
+fn rv64_mulw_wrong_upper_sign_extension_negative_to_zero_test() {
+    // 0x80000000 * 1 = 0x80000000 (negative), so result_sign must be 1.
+    run_negative_mulw_test(
+        [0, 0, 0, 128],
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        Some(0),
         true,
     );
 }
@@ -267,18 +383,32 @@ fn rv32_mul_is_valid_false_negative_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_mul_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [197, 85, 150, 32];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [51, 109, 78, 142];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [63, 247, 125, 232];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 205];
-    let (result, carry) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+fn run_mulw_sanity_test() {
+    let x: [u8; RV64_WORD_NUM_LIMBS] = [197, 85, 150, 32];
+    let y: [u8; RV64_WORD_NUM_LIMBS] = [51, 109, 78, 142];
+    let z: [u8; RV64_WORD_NUM_LIMBS] = [63, 247, 125, 232];
+    let c: [u32; RV64_WORD_NUM_LIMBS] = [39, 100, 126, 205];
+    let (result, carry) = crate::mul::run_mul::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(&x, &y);
+    for i in 0..RV64_WORD_NUM_LIMBS {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
     }
 }
 
+#[test]
+fn run_mulw_sign_extension_test() {
+    // MULW of 0x80000000 * 1 = 0x80000000, sign-extended to 0xFFFFFFFF_80000000
+    let result = run_mulw(&[0, 0, 0, 128], &[1, 0, 0, 0]);
+    assert_eq!(result, [0, 0, 0, 128, 255, 255, 255, 255]);
+
+    // MULW of 1 * 1 = 1, sign-extended to 0x00000000_00000001
+    let result = run_mulw(&[1, 0, 0, 0], &[1, 0, 0, 0]);
+    assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
+
+    // MULW of 0xFFFFFFFF * 0xFFFFFFFF = 1, sign-extended to 0x00000000_00000001
+    let result = run_mulw(&[255, 255, 255, 255], &[255, 255, 255, 255]);
+    assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
+}
 #[cfg(feature = "aot")]
 fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
     let program = Program::from_instructions(&instructions);
