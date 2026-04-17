@@ -255,9 +255,7 @@ where
         self.encoder.eval(builder, &selector);
 
         let selector_flags = self.encoder.flags::<AB>(&selector);
-        let expected_is_valid = selector_flags
-            .iter()
-            .fold(AB::Expr::ZERO, |acc, flag| acc + flag.clone());
+        let expected_is_valid = self.encoder.is_valid::<AB>(&selector);
         let expected_is_load = InstructionCase::ALL
             .iter()
             .fold(AB::Expr::ZERO, |acc, &case| {
@@ -359,13 +357,24 @@ pub struct LoadStoreExecutor<A, const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
-#[derive(Clone, derive_new::new)]
+#[derive(Clone)]
 pub struct LoadStoreFiller<
     A = Rv64LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV64_REGISTER_NUM_LIMBS,
 > {
     adapter: A,
     pub offset: usize,
+    encoder: Encoder,
+}
+
+impl<A, const NUM_CELLS: usize> LoadStoreFiller<A, NUM_CELLS> {
+    pub fn new(adapter: A, offset: usize) -> Self {
+        Self {
+            adapter,
+            offset,
+            encoder: loadstore_encoder(),
+        }
+    }
 }
 
 impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA> for LoadStoreExecutor<A, NUM_CELLS>
@@ -451,8 +460,12 @@ where
         core_row.read_data = record.read_data.map(F::from_canonical_u8);
         core_row.is_load = F::from_bool(matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU));
         core_row.is_valid = F::ONE;
-        core_row.selector =
-            selector_point_for_opcode_shift(opcode, shift).map(F::from_canonical_u32);
+        let pt: [u32; LOADSTORE_SELECTOR_WIDTH] = self
+            .encoder
+            .get_flag_pt(InstructionCase::from_opcode_shift(opcode, shift) as usize)
+            .try_into()
+            .unwrap();
+        core_row.selector = pt.map(F::from_canonical_u32);
     }
 }
 
