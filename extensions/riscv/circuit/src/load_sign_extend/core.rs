@@ -16,7 +16,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
@@ -27,21 +27,25 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
+use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
 
-/// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
-/// This chip uses read_data to construct write_data
+/// LoadSignExtend Core Chip handles byte/halfword/word into doubleword conversions through sign
+/// extend. This chip uses read_data to construct write_data.
 /// prev_data columns are not used in constraints defined in the CoreAir, but are used in
-/// constraints by the Adapter shifted_read_data is the read_data shifted by (shift_amount & 2),
-/// this reduces the number of opcode flags needed using this shifted data we can generate the
-/// write_data as if the shift_amount was 0 for loadh and 0 or 1 for loadb
+/// constraints by the Adapter. shifted_read_data is the read_data shifted by (shift_amount & 4),
+/// this reduces the number of opcode flags needed. Using this shifted data we can generate the
+/// write_data as if the shift_amount was 0..3 for loadb, 0 or 2 for loadh, and 0 for loadw.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
-    /// This chip treats loadb with 0 shift and loadb with 1 shift as different instructions
+    /// This chip treats each (opcode, inner_shift) pair as a different instruction
     pub opcode_loadb_flag0: T,
     pub opcode_loadb_flag1: T,
-    pub opcode_loadh_flag: T,
+    pub opcode_loadb_flag2: T,
+    pub opcode_loadb_flag3: T,
+    pub opcode_loadh_flag0: T,
+    pub opcode_loadh_flag1: T,
+    pub opcode_loadw_flag: T,
 
     pub shift_most_sig_bit: T,
     // The bit that is extended to the remaining bits
@@ -90,12 +94,18 @@ where
             prev_data,
             opcode_loadb_flag0: is_loadb0,
             opcode_loadb_flag1: is_loadb1,
-            opcode_loadh_flag: is_loadh,
+            opcode_loadb_flag2: is_loadb2,
+            opcode_loadb_flag3: is_loadb3,
+            opcode_loadh_flag0: is_loadh0,
+            opcode_loadh_flag1: is_loadh2,
+            opcode_loadw_flag: is_loadw,
             data_most_sig_bit,
             shift_most_sig_bit,
         } = *cols;
 
-        let flags = [is_loadb0, is_loadb1, is_loadh];
+        let flags = [
+            is_loadb0, is_loadb1, is_loadb2, is_loadb3, is_loadh0, is_loadh2, is_loadw,
+        ];
 
         let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
@@ -106,31 +116,43 @@ where
         builder.assert_bool(data_most_sig_bit);
         builder.assert_bool(shift_most_sig_bit);
 
-        let expected_opcode = (is_loadb0 + is_loadb1) * AB::F::from_canonical_u8(LOADB as u8)
-            + is_loadh * AB::F::from_canonical_u8(LOADH as u8)
+        let expected_opcode = (is_loadb0 + is_loadb1 + is_loadb2 + is_loadb3)
+            * AB::F::from_canonical_u8(LOADB as u8)
+            + (is_loadh0 + is_loadh2) * AB::F::from_canonical_u8(LOADH as u8)
+            + is_loadw * AB::F::from_canonical_u8(LOADW as u8)
             + AB::Expr::from_canonical_usize(Rv64LoadStoreOpcode::CLASS_OFFSET);
 
         let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
 
-        // there are three parts to write_data:
-        // - 1st limb is always shifted_read_data
-        // - 2nd to (NUM_CELLS/2)th limbs are read_data if loadh and sign extended if loadb
-        // - (NUM_CELLS/2 + 1)th to last limbs are always sign extended limbs
+        let sd = shifted_read_data;
+
+        // there are four parts to write_data:
+        // - 1st limb is the sign-extended byte (selected by opcode and inner_shift)
+        // - 2nd limb is read_data if loadh/loadw and sign extended if loadb
+        // - 3rd to 4th limbs are read_data if loadw and sign extended otherwise
+        // - 5th to last limbs are always sign extended limbs
         let write_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             if i == 0 {
-                (is_loadh + is_loadb0) * shifted_read_data[i].into()
-                    + is_loadb1 * shifted_read_data[i + 1].into()
-            } else if i < NUM_CELLS / 2 {
-                shifted_read_data[i] * is_loadh + (is_loadb0 + is_loadb1) * limb_mask.clone()
+                (is_loadb0 + is_loadh0 + is_loadw) * sd[0]
+                    + is_loadb1 * sd[1]
+                    + (is_loadb2 + is_loadh2) * sd[2]
+                    + is_loadb3 * sd[3]
+            } else if i == 1 {
+                (is_loadh0 + is_loadw) * sd[1]
+                    + is_loadh2 * sd[3]
+                    + (is_loadb0 + is_loadb1 + is_loadb2 + is_loadb3) * limb_mask.clone()
+            } else if i < 4 {
+                is_loadw * sd[i] + (is_valid.clone() - is_loadw) * limb_mask.clone()
             } else {
                 limb_mask.clone()
             }
         });
 
         // Constrain that most_sig_bit is correct
-        let most_sig_limb = shifted_read_data[0] * is_loadb0
-            + shifted_read_data[1] * is_loadb1
-            + shifted_read_data[NUM_CELLS / 2 - 1] * is_loadh;
+        let most_sig_limb = is_loadb0 * sd[0]
+            + (is_loadb1 + is_loadh0) * sd[1]
+            + is_loadb2 * sd[2]
+            + (is_loadb3 + is_loadh2 + is_loadw) * sd[3];
 
         self.range_bus
             .range_check(
@@ -141,14 +163,18 @@ where
             .eval(builder, is_valid.clone());
 
         // Unshift the shifted_read_data to get the original read_data
-        let read_data = array::from_fn(|i| {
+        let read_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
             select(
                 shift_most_sig_bit,
-                shifted_read_data[(i + NUM_CELLS - 2) % NUM_CELLS],
-                shifted_read_data[i],
+                sd[(i + NUM_CELLS - 4) % NUM_CELLS],
+                sd[i],
             )
         });
-        let load_shift_amount = shift_most_sig_bit * AB::Expr::TWO + is_loadb1;
+
+        let load_shift_amount = shift_most_sig_bit * AB::Expr::from_canonical_u32(4)
+            + is_loadb1
+            + (is_loadb2 + is_loadh2) * AB::Expr::TWO
+            + is_loadb3 * AB::Expr::from_canonical_u32(3);
 
         AdapterAirContext {
             to_pc: None,
@@ -174,6 +200,7 @@ where
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
     pub is_byte: bool,
+    pub is_word: bool,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
     pub prev_data: [u8; NUM_CELLS],
@@ -186,9 +213,9 @@ pub struct LoadSignExtendExecutor<A, const NUM_CELLS: usize, const LIMB_BITS: us
 
 #[derive(Clone, derive_new::new)]
 pub struct LoadSignExtendFiller<
-    A = Rv32LoadStoreAdapterFiller,
-    const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
-    const LIMB_BITS: usize = RV32_CELL_BITS,
+    A = Rv64LoadStoreAdapterFiller,
+    const NUM_CELLS: usize = RV64_REGISTER_NUM_LIMBS,
+    const LIMB_BITS: usize = RV64_CELL_BITS,
 > {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
@@ -240,6 +267,7 @@ where
             .read(state.memory, instruction, &mut adapter_record);
 
         core_record.is_byte = local_opcode == LOADB;
+        core_record.is_word = local_opcode == LOADW;
         core_record.prev_data = tmp.0 .0.map(|x| x as u8);
         core_record.read_data = tmp.0 .1;
         core_record.shift_amount = tmp.1;
@@ -281,11 +309,19 @@ where
 
         let core_row: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
-        let shift = record.shift_amount;
+        let shift = record.shift_amount as usize;
+        let shift_most_sig_bit = (shift >> 2) & 1;
+        let inner_shift = shift & 3;
+
+        let mut shifted = record.read_data;
+        shifted.rotate_left(shift_most_sig_bit * 4);
+
         let most_sig_limb = if record.is_byte {
-            record.read_data[shift as usize]
+            shifted[inner_shift]
+        } else if record.is_word {
+            shifted[3]
         } else {
-            record.read_data[NUM_CELLS / 2 - 1 + shift as usize]
+            shifted[inner_shift + 1]
         };
 
         let most_sig_bit = most_sig_limb & (1 << 7);
@@ -293,14 +329,22 @@ where
             .add_count((most_sig_limb - most_sig_bit) as u32, 7);
 
         core_row.prev_data = record.prev_data.map(F::from_canonical_u8);
-        core_row.shifted_read_data = record.read_data.map(F::from_canonical_u8);
-        core_row.shifted_read_data.rotate_left((shift & 2) as usize);
+        core_row.shifted_read_data = shifted.map(F::from_canonical_u8);
 
         core_row.data_most_sig_bit = F::from_bool(most_sig_bit != 0);
-        core_row.shift_most_sig_bit = F::from_bool(shift & 2 == 2);
-        core_row.opcode_loadh_flag = F::from_bool(!record.is_byte);
-        core_row.opcode_loadb_flag1 = F::from_bool(record.is_byte && ((shift & 1) == 1));
-        core_row.opcode_loadb_flag0 = F::from_bool(record.is_byte && ((shift & 1) == 0));
+        core_row.shift_most_sig_bit = F::from_bool(shift_most_sig_bit == 1);
+
+        let is_byte = record.is_byte;
+        let is_word = record.is_word;
+        let is_half = !is_byte && !is_word;
+
+        core_row.opcode_loadb_flag0 = F::from_bool(is_byte && inner_shift == 0);
+        core_row.opcode_loadb_flag1 = F::from_bool(is_byte && inner_shift == 1);
+        core_row.opcode_loadb_flag2 = F::from_bool(is_byte && inner_shift == 2);
+        core_row.opcode_loadb_flag3 = F::from_bool(is_byte && inner_shift == 3);
+        core_row.opcode_loadh_flag0 = F::from_bool(is_half && inner_shift == 0);
+        core_row.opcode_loadh_flag1 = F::from_bool(is_half && inner_shift == 2);
+        core_row.opcode_loadw_flag = F::from_bool(is_word);
     }
 }
 
@@ -311,18 +355,43 @@ pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
     read_data: [u8; NUM_CELLS],
     shift: usize,
 ) -> [u8; NUM_CELLS] {
-    match (opcode, shift) {
-        (LOADH, 0) | (LOADH, 2) => {
-            let ext = (read_data[NUM_CELLS / 2 - 1 + shift] >> 7) * u8::MAX;
+    assert!(
+        NUM_CELLS > 4,
+        "sign extension must extend at least one byte"
+    );
+    match opcode {
+        LOADW => {
+            assert!(
+                shift == 0 || shift == 4,
+                "LOADW requires 4-byte aligned shift, got {shift}"
+            );
+            assert!(shift + 4 <= NUM_CELLS);
+            let ext = (read_data[shift + 3] >> 7) * u8::MAX;
             array::from_fn(|i| {
-                if i < NUM_CELLS / 2 {
+                if i < 4 {
                     read_data[i + shift]
                 } else {
                     ext
                 }
             })
         }
-        (LOADB, 0) | (LOADB, 1) | (LOADB, 2) | (LOADB, 3) => {
+        LOADH => {
+            assert!(
+                shift % 2 == 0,
+                "LOADH requires 2-byte aligned shift, got {shift}"
+            );
+            debug_assert!(shift + 2 <= NUM_CELLS);
+            let ext = (read_data[shift + 1] >> 7) * u8::MAX;
+            array::from_fn(|i| {
+                if i < 2 {
+                    read_data[i + shift]
+                } else {
+                    ext
+                }
+            })
+        }
+        LOADB => {
+            debug_assert!(shift < NUM_CELLS);
             let ext = (read_data[shift] >> 7) * u8::MAX;
             array::from_fn(|i| {
                 if i == 0 {
@@ -333,8 +402,8 @@ pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
             })
         }
         // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
-        // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
-        // This requirement is non-trivial to remove, because we use it to ensure that `ptr_val - shift + 4 <= 2^pointer_max_bits`.
+        // The circuit requires that `shift = ptr_val % 8` so that `ptr_val - shift` is a multiple of 8.
+        // This requirement is non-trivial to remove, because we use it to ensure that `ptr_val - shift + 8 <= 2^pointer_max_bits`.
         _ => unreachable!(
             "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
         ),
