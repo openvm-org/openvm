@@ -14,10 +14,13 @@ mod utils;
 use std::{collections::VecDeque, path::PathBuf, process::Command, slice::from_ref, sync::Arc};
 
 use eyre::Result;
-use openvm_circuit::arch::{
-    deferral::{DeferralResult, DeferralState},
-    execution_mode::{MeteredCostCtx, MeteredCtx},
-    Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
+use openvm_circuit::{
+    arch::{
+        deferral::{DeferralResult, DeferralState},
+        execution_mode::{MeteredCostCtx, MeteredCtx},
+        Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
+    },
+    utils::TestStarkEngine,
 };
 use openvm_deferral_circuit::{
     DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
@@ -40,7 +43,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security,
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine, DIGEST_SIZE},
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE},
     },
     p3_baby_bear::BabyBear,
 };
@@ -55,7 +58,7 @@ use rvr_openvm_ext_deferral::{DeferralCircuitInputs, DeferralRvrExtension};
 use rvr_openvm_lift::ExtensionRegistry;
 
 type F = BabyBear;
-type Engine = BabyBearPoseidon2CpuEngine;
+type Engine = TestStarkEngine;
 
 // ── Constants matching the guest programs ──────────────────────────────────────
 
