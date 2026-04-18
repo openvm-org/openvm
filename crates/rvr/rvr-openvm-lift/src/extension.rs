@@ -1,10 +1,11 @@
 //! Extension registry for plugging in new opcode families.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::VmOpcode;
+use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
 
@@ -95,20 +96,11 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
 /// Trait implemented by OpenVM extension owner types to contribute their rvr
 /// lifting/codegen extensions during config assembly.
 pub trait VmRvrExtension<F: PrimeField32> {
-    fn extend_rvr(
-        &self,
-        _registry: &mut ExtensionRegistry<F>,
-        _ctx: &RvrExtensionCtx,
-    ) {
-    }
+    fn extend_rvr(&self, _registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {}
 }
 
 impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> {
-    fn extend_rvr(
-        &self,
-        registry: &mut ExtensionRegistry<F>,
-        ctx: &RvrExtensionCtx,
-    ) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
         if let Some(ext) = self {
             ext.extend_rvr(registry, ctx);
         }

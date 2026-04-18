@@ -10,9 +10,7 @@ use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
     Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
 };
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
@@ -270,8 +268,9 @@ impl Int256Extension {
             ctx.require_opcode_air_idx(Rv32LessThan256Opcode(LessThanOpcode::SLT).global_opcode());
         let mul_chip_idx =
             ctx.require_opcode_air_idx(Rv32Mul256Opcode(MulOpcode::MUL).global_opcode());
-        let branch_eq_chip_idx = ctx
-            .require_opcode_air_idx(Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode());
+        let branch_eq_chip_idx = ctx.require_opcode_air_idx(
+            Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+        );
         let branch_lt_chip_idx = ctx.require_opcode_air_idx(
             Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
         );

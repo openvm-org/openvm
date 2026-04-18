@@ -6,16 +6,17 @@
 //! Pre-computed deferral results are produced by [`precompute`] and stored in
 //! `OpenVmIoState.deferral` before execution.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use openvm_circuit::arch::VmField;
 use openvm_deferral_circuit::{
     generate_deferral_results, poseidon2::deferral_poseidon2_chip, RawDeferralResult,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};

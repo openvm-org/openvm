@@ -8,8 +8,7 @@
 #[path = "utils.rs"]
 mod utils;
 
-use std::path::PathBuf;
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
 use num_bigint::BigUint;
@@ -125,12 +124,7 @@ fn register_extensions(
     let ctx = harness.rvr_extension_ctx().unwrap();
 
     // Algebra extension handles modular arithmetic opcodes
-    let algebra_ext = AlgebraExtension::new(
-        moduli,
-        vec![],
-        &ctx,
-        build_algebra_staticlib(),
-    );
+    let algebra_ext = AlgebraExtension::new(moduli, vec![], &ctx, build_algebra_staticlib());
     // ECC extension handles Weierstrass opcodes
     let ecc_ext = EccExtension::new(curve_ids, &ctx, build_ecc_staticlib());
 

@@ -5,8 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
@@ -125,7 +124,8 @@ impl Sha2Extension {
     /// - `staticlib_path`: path to the pre-built sha2 staticlib
     pub fn new(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Self {
         // SHA-256 main chip AIR index
-        let sha256_main_chip_idx = ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA256.global_opcode());
+        let sha256_main_chip_idx =
+            ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA256.global_opcode());
 
         // SHA-256 block hasher: in extend_circuit, the block hasher is added right before
         // the main chip. Due to reverse ordering of AIR indices,
@@ -133,7 +133,8 @@ impl Sha2Extension {
         let sha256_block_hasher_chip_idx = sha256_main_chip_idx + 1;
 
         // SHA-512 main chip AIR index
-        let sha512_main_chip_idx = ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA512.global_opcode());
+        let sha512_main_chip_idx =
+            ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA512.global_opcode());
 
         // SHA-512 block hasher: same pattern as SHA-256.
         let sha512_block_hasher_chip_idx = sha512_main_chip_idx + 1;

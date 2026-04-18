@@ -6,8 +6,7 @@
 #[path = "utils.rs"]
 mod utils;
 
-use std::path::PathBuf;
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
 use halo2curves_axiom::{
@@ -21,8 +20,7 @@ use halo2curves_axiom::{
 use openvm_algebra_circuit::Fp2Extension;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_ecc_circuit::WeierstrassExtension;
-use openvm_ecc_guest::algebra::field::FieldExtension;
-use openvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use openvm_instructions::exe::VmExe;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension as OvmPairingExtension, Rv32PairingConfig, Rv32PairingCpuBuilder,
@@ -145,12 +143,7 @@ fn make_algebra_ext(
     moduli: Vec<num_bigint::BigUint>,
 ) -> AlgebraExtension {
     let ctx = harness.rvr_extension_ctx().unwrap();
-    AlgebraExtension::new(
-        moduli.clone(),
-        moduli,
-        &ctx,
-        build_algebra_staticlib(),
-    )
+    AlgebraExtension::new(moduli.clone(), moduli, &ctx, build_algebra_staticlib())
 }
 
 fn make_pairing_ext() -> PairingExtension {

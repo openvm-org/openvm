@@ -25,9 +25,9 @@ use openvm_rv32im_circuit::{
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};

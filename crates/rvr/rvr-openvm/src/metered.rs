@@ -1,15 +1,16 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use openvm_circuit::arch::{
-    execution_mode::metered::{
-        ctx::DEFAULT_PAGE_BITS, segment_ctx::SegmentationConfig,
-        segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
+use openvm_circuit::{
+    arch::{
+        execution_mode::metered::{
+            ctx::DEFAULT_PAGE_BITS,
+            segment_ctx::{SegmentationConfig, DEFAULT_SEGMENT_CHECK_INSNS},
+        },
+        ExecutorInventory, SystemConfig,
     },
-    ExecutorInventory, SystemConfig,
+    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, CHUNK as MERKLE_CHUNK},
 };
-use openvm_circuit::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
-use openvm_circuit::system::memory::CHUNK as MERKLE_CHUNK;
 use openvm_instructions::{
     exe::VmExe, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
 };
@@ -36,7 +37,8 @@ const PV_PAGE_BUF_CAP: usize = 1 << 12;
 // TODO: justify this bound (audit max deferral pages per instruction).
 const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
 
-/// Constant overhead for interaction memory (matches OpenVM's DEFAULT_INTERACTION_CONSTANT_OVERHEAD).
+/// Constant overhead for interaction memory (matches OpenVM's
+/// DEFAULT_INTERACTION_CONSTANT_OVERHEAD).
 const INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
 
 const NO_CHIP: u32 = u32::MAX;

@@ -7,8 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
@@ -103,7 +102,8 @@ impl KeccakExtension {
     /// Resolves chip indices from the VM config.
     pub fn new(ctx: &RvrExtensionCtx, asm_staticlib_path: PathBuf) -> Self {
         let xorin_chip_idx = ctx.require_opcode_air_idx(XorinOpcode::XORIN.global_opcode());
-        let keccakf_op_chip_idx = ctx.require_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode());
+        let keccakf_op_chip_idx =
+            ctx.require_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode());
         // KeccakfPermAir is inserted right before KeccakfOpAir in
         // Keccak256Rv32::extend_circuit, and the chip indices are set in
         // reverse order.

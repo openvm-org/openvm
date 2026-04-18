@@ -28,10 +28,10 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
-use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::VmRvrExtension;
+use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 

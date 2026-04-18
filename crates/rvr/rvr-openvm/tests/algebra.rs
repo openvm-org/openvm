@@ -3,9 +3,7 @@
 #[path = "utils.rs"]
 mod utils;
 
-use std::path::PathBuf;
-use std::process::Command;
-use std::str::FromStr;
+use std::{path::PathBuf, process::Command, str::FromStr};
 
 use eyre::Result;
 use num_bigint::BigUint;
@@ -80,12 +78,7 @@ fn make_modular_ext(
     moduli: Vec<BigUint>,
 ) -> AlgebraExtension {
     let ctx = harness.rvr_extension_ctx().unwrap();
-    AlgebraExtension::new(
-        moduli,
-        vec![],
-        &ctx,
-        build_algebra_staticlib(),
-    )
+    AlgebraExtension::new(moduli, vec![], &ctx, build_algebra_staticlib())
 }
 
 fn make_modular_with_fp2_ext(
@@ -94,12 +87,7 @@ fn make_modular_with_fp2_ext(
     fp2_moduli: Vec<BigUint>,
 ) -> AlgebraExtension {
     let ctx = harness.rvr_extension_ctx().unwrap();
-    AlgebraExtension::new(
-        moduli,
-        fp2_moduli,
-        &ctx,
-        build_algebra_staticlib(),
-    )
+    AlgebraExtension::new(moduli, fp2_moduli, &ctx, build_algebra_staticlib())
 }
 
 // ── Modular: little.rs ───────────────────────────────────────────────────────

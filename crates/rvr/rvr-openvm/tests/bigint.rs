@@ -3,8 +3,7 @@
 #[path = "utils.rs"]
 mod utils;
 
-use std::path::PathBuf;
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
 use openvm_bigint_circuit::{Int256Rv32Config, Int256Rv32CpuBuilder};
