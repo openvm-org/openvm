@@ -130,21 +130,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         tester.write(2, input_ptr + 8 * i, input_chunk);
     }
 
-    let mut rd_val = [F::ZERO; 8];
-    for (i, &b) in (buffer_ptr as u32).to_le_bytes().iter().enumerate() {
-        rd_val[i] = F::from_u8(b);
-    }
-    tester.write(1, rd, rd_val);
-    let mut rs1_val = [F::ZERO; 8];
-    for (i, &b) in (input_ptr as u32).to_le_bytes().iter().enumerate() {
-        rs1_val[i] = F::from_u8(b);
-    }
-    tester.write(1, rs1, rs1_val);
-    let mut rs2_val = [F::ZERO; 8];
-    for (i, &b) in (buffer_length as u32).to_le_bytes().iter().enumerate() {
-        rs2_val[i] = F::from_u8(b);
-    }
-    tester.write(1, rs2, rs2_val);
+    tester.write(1, rd, (buffer_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, (input_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, (buffer_length as u64).to_le_bytes().map(F::from_u8));
     tester.execute(
         executor,
         arena,

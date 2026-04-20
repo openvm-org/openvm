@@ -114,11 +114,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let rd = gen_pointer(rng, 8);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    let mut rd_val = [F::ZERO; 8];
-    for (i, &b) in (buffer_ptr as u32).to_le_bytes().iter().enumerate() {
-        rd_val[i] = F::from_u8(b);
-    }
-    tester.write(1, rd, rd_val);
+    tester.write(1, rd, (buffer_ptr as u64).to_le_bytes().map(F::from_u8));
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
 
     for i in 0..(MAX_LEN / 8) {

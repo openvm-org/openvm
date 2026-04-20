@@ -8,7 +8,10 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus,
+    utils::{compose, not},
+};
 use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
 };
@@ -190,25 +193,26 @@ impl XorinVmAir {
                 .eval(builder, is_enabled);
         }
 
-        let compose_low_limbs = |limbs: &[AB::Var]| -> AB::Expr {
-            let mut result = AB::Expr::ZERO;
-            for (i, &limb) in limbs[..RV64_WORD_NUM_LIMBS].iter().enumerate() {
-                result += limb * AB::F::from_u32(1 << (RV64_CELL_BITS * i) as u32);
-            }
-            result
-        };
-
         builder.assert_eq(
             instruction.buffer_ptr,
-            compose_low_limbs(&instruction.buffer_ptr_limbs),
+            compose(
+                &instruction.buffer_ptr_limbs[..RV64_WORD_NUM_LIMBS],
+                RV64_CELL_BITS,
+            ),
         );
 
         builder.assert_eq(
             instruction.input_ptr,
-            compose_low_limbs(&instruction.input_ptr_limbs),
+            compose(
+                &instruction.input_ptr_limbs[..RV64_WORD_NUM_LIMBS],
+                RV64_CELL_BITS,
+            ),
         );
 
-        builder.assert_eq(instruction.len, compose_low_limbs(&instruction.len_limbs));
+        builder.assert_eq(
+            instruction.len,
+            compose(&instruction.len_limbs[..RV64_WORD_NUM_LIMBS], RV64_CELL_BITS),
+        );
 
         timestamp
     }

@@ -156,7 +156,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
 ) {
     let rd_ptr = pre_compute.a as u32;
     let buffer_ptr_reg: [u8; 8] = exec_state.vm_read(RV64_REGISTER_AS, rd_ptr);
-    let buffer_ptr = u32::from_le_bytes(buffer_ptr_reg[..4].try_into().unwrap());
+    let buffer_ptr_u64 = u64::from_le_bytes(buffer_ptr_reg);
+    debug_assert_eq!(buffer_ptr_u64 >> 32, 0, "keccakf buffer pointer upper 4 bytes must be zero");
+    let buffer_ptr = buffer_ptr_u64 as u32;
 
     let preimage: &[u8] =
         exec_state.host_read_slice(RV64_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);

@@ -8,7 +8,7 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
 use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
 };
@@ -93,13 +93,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 .eval(builder, is_valid);
         }
         // Now it is safe to cast buffer_ptr to F (compose from low limbs)
-        let buffer_ptr: AB::Expr = {
-            let mut result = AB::Expr::ZERO;
-            for (i, &limb) in buffer_ptr_limbs[..RV64_WORD_NUM_LIMBS].iter().enumerate() {
-                result += limb * AB::F::from_u32(1 << (RV64_CELL_BITS * i) as u32);
-            }
-            result
-        };
+        let buffer_ptr: AB::Expr =
+            compose(&buffer_ptr_limbs[..RV64_WORD_NUM_LIMBS], RV64_CELL_BITS);
 
         // ======== Constrain that post-state consists of bytes =========
         // We know that the pre-state buffer consists of bytes due to the invariant of Address Space
