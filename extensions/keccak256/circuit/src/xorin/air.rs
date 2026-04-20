@@ -9,9 +9,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
-use openvm_instructions::riscv::{
-    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -120,8 +118,8 @@ impl XorinVmAir {
                     buffer_reg_ptr.into(),
                     input_reg_ptr.into(),
                     len_reg_ptr.into(),
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
-                    AB::Expr::from_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_MEMORY_AS),
                 ],
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
@@ -142,7 +140,7 @@ impl XorinVmAir {
         ) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), ptr),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
                     value,
                     timestamp.clone(),
                     aux,
@@ -152,17 +150,28 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
+        // Assert upper 4 limbs of each pointer register are zero (RV64 pointer constraint)
+        for limb in &instruction.buffer_ptr_limbs[4..] {
+            builder.when(is_enabled).assert_zero(*limb);
+        }
+        for limb in &instruction.input_ptr_limbs[4..] {
+            builder.when(is_enabled).assert_zero(*limb);
+        }
+        for limb in &instruction.len_limbs[4..] {
+            builder.when(is_enabled).assert_zero(*limb);
+        }
+
         // SAFETY: this approach only works when self.ptr_max_bits >= 24
-        // because we are only range checking the last limb
+        // because we are only range checking limb[3] (the MSB of the lower 4 address bytes)
         let need_range_check = [
-            *instruction.buffer_ptr_limbs.last().unwrap(),
-            *instruction.input_ptr_limbs.last().unwrap(),
-            *instruction.len_limbs.last().unwrap(),
-            *instruction.len_limbs.last().unwrap(),
+            instruction.buffer_ptr_limbs[3],
+            instruction.input_ptr_limbs[3],
+            instruction.len_limbs[3],
+            instruction.len_limbs[3],
         ];
 
         let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * 4 - self.ptr_max_bits));
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
@@ -223,7 +232,7 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
                     [
                         input[0].into(),
                         input[1].into(),
@@ -252,7 +261,7 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
                     [
                         input[0].into(),
                         input[1].into(),
@@ -321,7 +330,7 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
                     [
                         output[0].into(),
                         output[1].into(),
