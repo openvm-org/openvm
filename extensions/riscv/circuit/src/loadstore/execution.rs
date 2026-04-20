@@ -13,7 +13,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -71,7 +71,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
-        let is_native_store = e_u32 == NATIVE_AS;
+        let is_native_store = e_u32 == DEFERRAL_AS;
 
         *data = LoadStorePreCompute {
             imm_extended,
@@ -473,7 +473,7 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreDOp {
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         _shift_amount: usize,
     ) -> bool {
-        *write_data = read_data.map(F::from_canonical_u8);
+        *write_data = read_data.map(F::from_u8);
         true
     }
 }
@@ -491,10 +491,10 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreWOp {
         if shift_amount != 0 && shift_amount != 4 {
             return false;
         }
-        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
-        write_data[shift_amount + 1] = F::from_canonical_u8(read_data[1]);
-        write_data[shift_amount + 2] = F::from_canonical_u8(read_data[2]);
-        write_data[shift_amount + 3] = F::from_canonical_u8(read_data[3]);
+        write_data[shift_amount] = F::from_u8(read_data[0]);
+        write_data[shift_amount + 1] = F::from_u8(read_data[1]);
+        write_data[shift_amount + 2] = F::from_u8(read_data[2]);
+        write_data[shift_amount + 3] = F::from_u8(read_data[3]);
         true
     }
 }
@@ -512,8 +512,8 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreHOp {
         if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
             return false;
         }
-        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
-        write_data[shift_amount + 1] = F::from_canonical_u8(read_data[1]);
+        write_data[shift_amount] = F::from_u8(read_data[0]);
+        write_data[shift_amount + 1] = F::from_u8(read_data[1]);
         true
     }
 }
@@ -528,7 +528,7 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreBOp {
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
+        write_data[shift_amount] = F::from_u8(read_data[0]);
         true
     }
 }

@@ -32,7 +32,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 use super::{tracing_read, tracing_write};
@@ -91,7 +91,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
@@ -103,7 +103,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         });
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rs1_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
                 rs1_data,
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -119,7 +119,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         });
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rs2_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
                 rs2_data,
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -128,18 +128,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
 
         // Sign-extend the 32-bit result to 64 bits.
         builder.assert_bool(local.result_sign);
-        let sign_mask = AB::Expr::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
+        let sign_mask = AB::Expr::from_u32(1 << (RV64_CELL_BITS - 1));
         let result_word_msl = ctx.writes[0][RV64_WORD_NUM_LIMBS - 1].clone();
         self.bitwise_lookup_bus
             .send_xor(
                 result_word_msl.clone(),
                 sign_mask.clone(),
                 result_word_msl + sign_mask.clone()
-                    - AB::Expr::from_canonical_u32(2) * local.result_sign * sign_mask,
+                    - AB::Expr::from_u32(2) * local.result_sign * sign_mask,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
         let sign_extend_limb =
-            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
+            AB::Expr::from_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
         let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 ctx.writes[0][i].clone()
@@ -149,7 +149,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         });
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rd_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
                 write_data,
                 timestamp_pp(),
                 &local.writes_aux,
@@ -163,11 +163,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
-                    AB::Expr::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
                     AB::Expr::ZERO,
                 ],
                 local.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -298,7 +298,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
 
         adapter_row
             .writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp,
@@ -321,13 +321,13 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
         self.bitwise_lookup_chip
             .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
 
-        adapter_row.result_sign = F::from_canonical_u8(record.result_sign);
-        adapter_row.rs2_high = record.rs2_high.map(F::from_canonical_u8);
-        adapter_row.rs1_high = record.rs1_high.map(F::from_canonical_u8);
-        adapter_row.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
-        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-        adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.result_sign = F::from_u8(record.result_sign);
+        adapter_row.rs2_high = record.rs2_high.map(F::from_u8);
+        adapter_row.rs1_high = record.rs1_high.map(F::from_u8);
+        adapter_row.rs2_ptr = F::from_u32(record.rs2_ptr);
+        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
+        adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

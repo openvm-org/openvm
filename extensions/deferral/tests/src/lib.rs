@@ -16,9 +16,9 @@ mod tests {
     };
     use openvm_deferral_transpiler::DeferralTranspilerExtension;
     use openvm_instructions::{exe::VmExe, DEFERRAL_AS};
-    use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::DIGEST_SIZE,
@@ -43,9 +43,9 @@ mod tests {
         system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
         Rv32DeferralConfig {
             system,
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
+            rv32i: Rv64I,
+            rv32m: Rv64M::default(),
+            io: Rv64Io,
             deferral: make_deferral_extension(num_deferrals),
         }
     }
@@ -88,9 +88,9 @@ mod tests {
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(DeferralTranspilerExtension::new(
                     config.deferral.def_circuit_commits.clone(),
                 )),

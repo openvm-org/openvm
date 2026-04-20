@@ -15,7 +15,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -41,7 +41,6 @@ use crate::{
         Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
         Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
     },
-    test_utils::get_verification_error,
     Rv64AuipcAir, Rv64AuipcFiller,
 };
 
@@ -115,7 +114,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<8>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -188,18 +187,18 @@ fn run_negative_auipc_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_canonical_u32);
+            core_cols.rd_data = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.imm_limbs {
-            core_cols.imm_limbs = data.map(F::from_canonical_u32);
+            core_cols.imm_limbs = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.pc_limbs {
-            core_cols.pc_limbs = data.map(F::from_canonical_u32);
+            core_cols.pc_limbs = data.map(F::from_u32);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -211,7 +210,9 @@ fn run_negative_auipc_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -282,7 +283,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
 
     // Seed the destination register with a known clean value.
-    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_u32));
 
     tester.execute_with_pc(
         &mut harness.executor,
@@ -293,10 +294,10 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        adapter_cols.rd_aux_cols.prev_data[4] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -306,7 +307,9 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(true));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

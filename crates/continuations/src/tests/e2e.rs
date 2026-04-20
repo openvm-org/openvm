@@ -24,9 +24,9 @@ use openvm_recursion_circuit::{
     prelude::DIGEST_SIZE,
     utils::{poseidon2_hash_slice, poseidon2_hash_slice_with_states},
 };
-use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
 use openvm_stark_sdk::{
@@ -315,9 +315,9 @@ fn test_deferral_e2e() -> Result<()> {
 
     let config = Rv32DeferralConfig {
         system: system.clone(),
-        rv32i: Rv32I,
-        rv32m: Rv32M::default(),
-        io: Rv32Io,
+        rv32i: Rv64I,
+        rv32m: Rv64M::default(),
+        io: Rv64Io,
         deferral: make_deferral_extension(transpiler_commits.clone()),
     };
 
@@ -328,9 +328,9 @@ fn test_deferral_e2e() -> Result<()> {
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(DeferralTranspilerExtension::new(transpiler_commits)),
     )?;
 

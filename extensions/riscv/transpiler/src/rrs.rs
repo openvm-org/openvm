@@ -269,9 +269,9 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
         Instruction::new(
             Rv64JalrOpcode::JALR.global_opcode(),
-            F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
-            F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
-            F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
+            F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+            F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+            F::from_u32((dec_insn.imm as u32) & 0xffff),
             F::ONE,
             F::ZERO,
             F::from_bool(dec_insn.rd != 0),
@@ -295,9 +295,9 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         }
         Instruction::new(
             Rv64AuipcOpcode::AUIPC.global_opcode(),
-            F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+            F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::ZERO,
-            F::from_canonical_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
+            F::from_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
             F::ONE, // rd is a register
             F::ZERO,
             F::ZERO,

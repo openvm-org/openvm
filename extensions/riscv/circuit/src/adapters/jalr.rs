@@ -27,7 +27,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 use super::RV64_REGISTER_NUM_LIMBS;
@@ -80,7 +80,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::Expr::from_usize(timestamp_delta - 1)
         };
 
         let write_count = local_cols.needs_write;
@@ -93,7 +93,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(RV64_REGISTER_AS),
                     local_cols.rs1_ptr,
                 ),
                 ctx.reads[0].clone(),
@@ -105,7 +105,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::F::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(RV64_REGISTER_AS),
                     local_cols.rd_ptr,
                 ),
                 ctx.writes[0].clone(),
@@ -116,7 +116,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         let to_pc = ctx
             .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP));
+            .unwrap_or(local_cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP));
 
         // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
@@ -126,7 +126,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
                     AB::Expr::ZERO,
                     write_count.into(),
                     ctx.instruction.imm_sign,
@@ -134,7 +134,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
                 local_cols.from_state,
                 ExecutionState {
                     pc: to_pc,
-                    timestamp: timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                    timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -252,13 +252,13 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
         if record.rd_ptr != u32::MAX {
             adapter_row
                 .rd_aux_cols
-                .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+                .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
             mem_helper.fill(
                 record.writes_aux.prev_timestamp,
                 record.from_timestamp + 1,
                 adapter_row.rd_aux_cols.as_mut(),
             );
-            adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+            adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
         } else {
             adapter_row.rd_ptr = F::ZERO;
         }
@@ -268,8 +268,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
             record.from_timestamp,
             adapter_row.rs1_aux_cols.as_mut(),
         );
-        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

@@ -24,7 +24,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 use super::{tracing_write, RV64_REGISTER_NUM_LIMBS};
@@ -76,12 +76,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rs1_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -90,7 +90,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rs2_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -99,7 +99,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rd_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local.writes_aux,
@@ -113,11 +113,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
-                    AB::Expr::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
                     AB::Expr::ZERO,
                 ],
                 local.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -233,7 +233,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultAdapterFiller {
 
         adapter_row
             .writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp + 2,
@@ -252,11 +252,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultAdapterFiller {
             adapter_row.reads_aux[0].as_mut(),
         );
 
-        adapter_row.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
-        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-        adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        adapter_row.rs2_ptr = F::from_u32(record.rs2_ptr);
+        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
+        adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }
