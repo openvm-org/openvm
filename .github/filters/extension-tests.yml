@@ -16,22 +16,22 @@ cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/extension-tests.cuda.yml"
   - "scripts/gpu_driver_setup.sh"
-rv32im: &rv32im
+riscv: &riscv
   - *shared
-  - "extensions/rv32im/**"
+  - "extensions/riscv/**"
   - "extensions/rv32-adapters/**"
 keccak256:
-  - *rv32im
+  - *riscv
   - "extensions/keccak256/**"
 sha2:
-  - *rv32im
+  - *riscv
   - "extensions/sha2/**"
 bigint:
-  - *rv32im
+  - *riscv
   - "extensions/bigint/**"
   - "extensions/rv32-adapters/**"
 algebra: &algebra
-  - *rv32im
+  - *riscv
   - "extensions/algebra/**"
   - "extensions/ecc/**"
   - "extensions/pairing/guest/**"
@@ -41,11 +41,11 @@ ecc:
   - "crates/sdk/**"
   - "crates/sdk-config/**"
 pairing:
-  - *rv32im
+  - *riscv
   - "extensions/algebra/**"
   - "extensions/ecc/**"
   - "extensions/rv32-adapters/**"
   - "extensions/pairing/**"
 deferral:
-  - *rv32im
+  - *riscv
   - "extensions/deferral/**"

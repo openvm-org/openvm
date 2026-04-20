@@ -99,9 +99,9 @@ jobs:
 
           for extension in "${extensions[@]}"; do
             [[ -f "extensions/$extension/circuit/Cargo.toml" ]] || continue
-            if [[ "${{ inputs.cuda_group }}" == "rv32im" && "$extension" != "rv32im" ]]; then
+            if [[ "${{ inputs.cuda_group }}" == "riscv" && "$extension" != "riscv" ]]; then
               continue
-            elif [[ "${{ inputs.cuda_group }}" == "extensions" && "$extension" == "rv32im" ]]; then
+            elif [[ "${{ inputs.cuda_group }}" == "extensions" && "$extension" == "riscv" ]]; then
               continue
             fi
 
