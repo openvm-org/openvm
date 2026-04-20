@@ -1,10 +1,12 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::{
-    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_CELL_BITS,
-    RV64_WORD_NUM_LIMBS,
+use super::{
+    adapters::{
+        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
+        RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
+    },
+    base_alu::{BaseAluCoreAir, BaseAluExecutor, BaseAluFiller},
 };
-use super::base_alu::{BaseAluCoreAir, BaseAluExecutor, BaseAluFiller};
 
 mod execution;
 pub type BaseAluWCoreAir = BaseAluCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
