@@ -2,11 +2,10 @@
 mod tests {
     #[cfg(feature = "rvr")]
     use std::{env, process::Command};
-    use std::{collections::HashMap, sync::Arc};
 
     use eyre::Result;
     use openvm_circuit::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::{
             merkle::{public_values::UserPublicValuesProof, MerkleTree},
             online::LinearMemory,
@@ -18,12 +17,14 @@ mod tests {
         SystemOpcode,
     };
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
-    use openvm_riscv_guest::{hint_load_by_key_encode, MAX_HINT_BUFFER_DWORDS};
+    use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
         Rv64MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
@@ -37,7 +38,7 @@ mod tests {
     const RVR_OOB_CHILD_ENV: &str = "OPENVM_RVR_OOB_CHILD";
 
     #[cfg(test)]
-    fn test_rv32im_config() -> Rv64ImConfig {
+    fn test_rv64im_config() -> Rv64ImConfig {
         Rv64ImConfig {
             rv64i: Rv64IConfig {
                 system: test_system_config(),
@@ -49,7 +50,7 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn execute_rvr_example(program_name: &str) {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf =
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
         let exe = VmExe::from_elf(
@@ -82,7 +83,7 @@ mod tests {
     }
 
     #[test_case("fibonacci", 1)]
-    fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv64i(example_name: &str, min_segments: usize) -> Result<()> {
         let config = Rv64IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
@@ -92,14 +93,14 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        change_rv32m_insn_to_nop(&mut exe);
+        change_rv64m_insn_to_nop(&mut exe);
         air_test_with_min_segments(Rv64IBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test]
     fn test_suspend() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -136,8 +137,8 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+    fn test_rv64im(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -152,8 +153,8 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+    fn test_rv64im_std(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             example_name,
@@ -173,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -182,31 +183,8 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
+        let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
         air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
-        Ok(())
-    }
-
-    #[test]
-    fn test_hint_load_by_key() -> Result<()> {
-        let config = test_rv32im_config();
-        let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
-        let exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv64ITranspilerExtension)
-                .with_extension(Rv64MTranspilerExtension)
-                .with_extension(Rv64IoTranspilerExtension),
-        )?;
-        // stdin will be read after reading kv_store
-        let stdin = vec![[0, 1, 2].map(F::from_canonical_u8).to_vec()];
-        let mut streams: Streams<F> = stdin.into();
-        let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
-        streams.kv_store = Arc::new(HashMap::from([(
-            "key".as_bytes().to_vec(),
-            hint_load_by_key_encode(&input),
-        )]));
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, streams, 1);
         Ok(())
     }
 
@@ -216,7 +194,7 @@ mod tests {
     #[test]
     #[ignore = "slow test: processes >1MB of data"]
     fn test_hint_buffer_chunking() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_large_buffer", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -226,14 +204,14 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
 
-        // Create input buffer larger than MAX_HINT_BUFFER_DWORDS
+        // Create input buffer larger than MAX_HINT_BUFFER_WORDS
         // This will require chunking to succeed
         let expected_words = MAX_HINT_BUFFER_DWORDS + 100;
         let expected_len = expected_words * RV64_REGISTER_NUM_LIMBS;
 
         // Create data with a pattern that can be verified
         let data: Vec<F> = (0..expected_len)
-            .map(|i| F::from_canonical_u8((i % 256) as u8))
+            .map(|i| F::from_u8((i % 256) as u8))
             .collect();
 
         let input = vec![data];
@@ -243,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -266,7 +244,7 @@ mod tests {
         let input = serialized_foo
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![input], 1);
         Ok(())
@@ -295,8 +273,8 @@ mod tests {
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let mut config = test_rv32im_config();
-        config.rv32i.system = config.rv32i.system.with_public_values(64);
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -328,7 +306,7 @@ mod tests {
                         .into_iter()
                         .flat_map(|x| x.to_le_bytes())
                 )
-                .map(F::from_canonical_u8)
+                .map(F::from_u8)
                 .collect::<Vec<_>>()
         );
         Ok(())
@@ -336,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -351,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_heap_overflow() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -363,7 +341,7 @@ mod tests {
 
         let executor = VmExecutor::new(config)?;
         let instance = executor.instance(&exe)?;
-        let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
+        let input = vec![[0, 0, 0, 1].map(F::from_u8).to_vec()];
         match instance.execute(input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
@@ -373,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_hashmap() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "hashmap",
@@ -393,7 +371,7 @@ mod tests {
 
     #[test]
     fn test_tiny_mem_test() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "tiny-mem-test",
@@ -416,10 +394,9 @@ mod tests {
     // AOT and RVR skip this test since it is not a trusted program: both
     // compile to native code without OpenVM's runtime memory bounds checks,
     // so an out-of-bounds load doesn't surface as a Rust panic.
-    // TODO: add an untrusted/protected mode to rvr that does bounds checking.
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     fn test_load_x0() {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
@@ -487,7 +464,7 @@ mod tests {
     #[test_case("getrandom_v02", vec!["getrandom-v02", "getrandom-unsupported"])]
     #[test_case("getrandom_v02", vec!["getrandom-v02/custom"])]
     fn test_getrandom_unsupported(program: &str, features: Vec<&str>) {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             program,
@@ -506,10 +483,10 @@ mod tests {
         air_test(Rv64ImBuilder, config, exe);
     }
 
-    // For testing programs that should only execute RV32I:
+    // For testing programs that should only execute RV64I:
     // The ELF might still have Mul instructions even though the program doesn't use them. We
     // mask those to NOP here.
-    fn change_rv32m_insn_to_nop(exe: &mut VmExe<F>) {
+    fn change_rv64m_insn_to_nop(exe: &mut VmExe<F>) {
         for (insn, _) in exe
             .program
             .instructions_and_debug_infos
