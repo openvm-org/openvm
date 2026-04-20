@@ -111,10 +111,14 @@ where
         if !def_inputs.is_empty() {
             let def_prover = self.def_prover.as_ref().unwrap();
             let def_hook_proofs = def_prover.deferral_prover.prove(def_inputs)?;
-            let def_proof = def_prover.agg_prover.prove_def(def_hook_proofs)?;
-            stark_proof =
-                self.agg_prover
-                    .prove_mixed(stark_proof, def_proof, &mut internal_metadata)?;
+            let (def_proof, def_internal_recursive_layer) =
+                def_prover.agg_prover.prove_def(def_hook_proofs)?;
+            stark_proof = self.agg_prover.prove_mixed(
+                stark_proof,
+                def_proof,
+                &mut internal_metadata,
+                def_internal_recursive_layer,
+            )?;
         }
 
         // We add one additional internal_recursive layer to reduce the proof size.
