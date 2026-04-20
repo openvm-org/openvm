@@ -115,7 +115,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) {
     let num_words = match opcode {
         HINT_STORED => 1,
-        HINT_BUFFER => rng.gen_range(1..28),
+        HINT_BUFFER => rng.random_range(1..28),
     } as u32;
 
     let a = if opcode == HINT_BUFFER {
@@ -175,7 +175,7 @@ fn rand_hintstore_test() {
     let (mut harness, bitwise) = create_harness(&mut tester);
     let num_ops: usize = 100;
     for _ in 0..num_ops {
-        let opcode = if rng.gen_bool(0.5) {
+        let opcode = if rng.random_bool(0.5) {
             HINT_STORED
         } else {
             HINT_BUFFER
@@ -477,7 +477,7 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
 fn run_negative_hintstore_test(
     opcode: Rv64HintStoreOpcode,
     prank_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -591,7 +591,7 @@ fn test_cuda_rand_hintstore_tracegen() {
     let mut harness = create_cuda_harness(&tester);
     let num_ops = 50;
     for _ in 0..num_ops {
-        let opcode = if rng.gen_bool(0.5) {
+        let opcode = if rng.random_bool(0.5) {
             HINT_STOREW
         } else {
             HINT_BUFFER

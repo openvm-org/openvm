@@ -157,8 +157,7 @@ where
 
         self.range_bus
             .range_check(
-                most_sig_limb
-                    - data_most_sig_bit * AB::Expr::from_u32(1 << (LIMB_BITS - 1)),
+                most_sig_limb - data_most_sig_bit * AB::Expr::from_u32(1 << (LIMB_BITS - 1)),
                 LIMB_BITS - 1,
             )
             .eval(builder, is_valid.clone());
@@ -378,7 +377,7 @@ pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
         }
         LOADH => {
             assert!(
-                shift % 2 == 0,
+                shift.is_multiple_of(2),
                 "LOADH requires 2-byte aligned shift, got {shift}"
             );
             debug_assert!(shift + 2 <= NUM_CELLS);

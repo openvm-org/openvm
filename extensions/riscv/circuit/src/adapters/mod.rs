@@ -59,9 +59,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
 /// inverse of `compose`
 pub fn decompose<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_u32(
-            ((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32,
-        )
+        F::from_u32(((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32)
     })
 }
 
@@ -291,14 +289,13 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
     u64::from_le_bytes(memory_read(memory, RV64_REGISTER_AS, ptr))
 }
 
-pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>>(
-    data: [V; RV64_REGISTER_NUM_LIMBS],
+pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(
+    data: [V; N],
 ) -> T {
-    panic!("broken for rv64");
     data.into_iter()
         .enumerate()
         .fold(T::ZERO, |acc, (i, limb)| {
-            acc + limb * T::from_u32(1 << (i * RV64_CELL_BITS))
+            acc + limb * T::from_u64(1u64 << (i * RV64_CELL_BITS))
         })
 }
 
