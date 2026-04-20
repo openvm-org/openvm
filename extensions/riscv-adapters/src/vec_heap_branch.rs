@@ -24,16 +24,17 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_riscv_circuit::adapters::{
-    abstract_compose, tracing_read, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_riscv_circuit::adapters::{tracing_read, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::BaseAir,
+    p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
+
+/// Number of low limbs of an RV64 register used as a 32-bit pointer.
+const POINTER_LIMBS: usize = 4;
 
 /// This adapter reads from NUM_READS <= 2 pointers (for branch operations).
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -41,9 +42,11 @@ use openvm_stark_backend::{
 /// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` from the heap,
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
+/// * Registers are 8 bytes (RV64). Only the low 4 bytes encode a pointer; the high 4 bytes are
+///   constrained to zero.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
-pub struct Rv32VecHeapBranchAdapterCols<
+pub struct Rv64VecHeapBranchAdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -52,7 +55,7 @@ pub struct Rv32VecHeapBranchAdapterCols<
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
-    pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
+    pub rs_val: [[T; RV64_REGISTER_NUM_LIMBS]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
@@ -60,7 +63,7 @@ pub struct Rv32VecHeapBranchAdapterCols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32VecHeapBranchAdapterAir<
+pub struct Rv64VecHeapBranchAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -68,15 +71,15 @@ pub struct Rv32VecHeapBranchAdapterAir<
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: BitwiseOperationLookupBus,
-    /// The max number of bits for an address in memory
+    /// The max number of bits for an address in memory (<= 32).
     address_bits: usize,
 }
 
 impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
-    BaseAir<F> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    BaseAir<F> for Rv64VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     fn width(&self) -> usize {
-        Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width()
+        Rv64VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width()
     }
 }
 
@@ -85,7 +88,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const READ_SIZE: usize,
-    > VmAdapterAir<AB> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    > VmAdapterAir<AB> for Rv64VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     type Interface = VecHeapBranchAdapterInterface<AB::Expr, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
 
@@ -95,7 +98,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv32VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let cols: &Rv64VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -104,11 +107,11 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs
+        // Read register values for rs (8 bytes each)
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), ptr),
+                    MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
                     val,
                     timestamp_pp(),
                     aux,
@@ -116,19 +119,24 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits -
-        // (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))). This ensures that no overflow
-        // occurs when computing memory pointers.
+        // Assert upper 4 bytes of each register value are zero (pointers fit in 32 bits).
+        for val in cols.rs_val.iter() {
+            for limb in &val[POINTER_LIMBS..] {
+                builder
+                    .when(ctx.instruction.is_valid.clone())
+                    .assert_zero(*limb);
+            }
+        }
+
+        // Range-check byte 3 of each register value to constrain pointer < 2^address_bits.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
-            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
+            .map(|val| val[POINTER_LIMBS - 1])
             .collect();
 
-        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
-        // the correct amount of bits
         let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * POINTER_LIMBS - self.address_bits));
 
         for pair in need_range_check.chunks(2) {
             self.bus
@@ -139,10 +147,19 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the u32 register value into single field element
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
+        // Compose the low 4 bytes of each register value into a single field element.
+        let compose_ptr = |v: [AB::Var; RV64_REGISTER_NUM_LIMBS]| -> AB::Expr {
+            let mut acc = AB::Expr::ZERO;
+            let mut mult = AB::Expr::ONE;
+            for limb in v.iter().take(POINTER_LIMBS) {
+                acc += (*limb) * mult.clone();
+                mult *= AB::Expr::from_u32(1 << RV64_CELL_BITS);
+            }
+            acc
+        };
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose_ptr);
 
-        let e = AB::F::from_u32(RV32_MEMORY_AS);
+        let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -173,7 +190,7 @@ impl<
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
                     ctx.instruction.immediate,
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -184,7 +201,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let cols: &Rv64VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             local.borrow();
         cols.from_state.pc
     }
@@ -193,7 +210,7 @@ impl<
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32VecHeapBranchAdapterRecord<
+pub struct Rv64VecHeapBranchAdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -202,14 +219,14 @@ pub struct Rv32VecHeapBranchAdapterRecord<
     pub from_timestamp: u32,
 
     pub rs_ptrs: [u32; NUM_READS],
-    pub rs_vals: [u32; NUM_READS],
+    pub rs_vals: [u64; NUM_READS],
 
     pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
     pub reads_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct Rv32VecHeapBranchAdapterExecutor<
+pub struct Rv64VecHeapBranchAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -218,13 +235,13 @@ pub struct Rv32VecHeapBranchAdapterExecutor<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32VecHeapBranchAdapterFiller<
+pub struct Rv64VecHeapBranchAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
 > {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
 }
 
 impl<
@@ -233,14 +250,14 @@ impl<
         const BLOCKS_PER_READ: usize,
         const READ_SIZE: usize,
     > AdapterTraceExecutor<F>
-    for Rv32VecHeapBranchAdapterExecutor<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    for Rv64VecHeapBranchAdapterExecutor<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     const WIDTH: usize =
-        Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
+        Rv64VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = ();
     type RecordMut<'a> =
-        &'a mut Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
+        &'a mut Rv64VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -252,19 +269,19 @@ impl<
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
+        record: &mut &mut Rv64VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
     ) -> Self::ReadData {
         let &Instruction { a, b, d, e, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
-        // Read register values
+        // Read register values (8 bytes each)
         record.rs_vals = from_fn(|i| {
             record.rs_ptrs[i] = if i == 0 { a } else { b }.as_canonical_u32();
-            u32::from_le_bytes(tracing_read(
+            u64::from_le_bytes(tracing_read(
                 memory,
-                RV32_REGISTER_AS,
+                RV64_REGISTER_AS,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
             ))
@@ -273,14 +290,14 @@ impl<
         // Read memory values
         from_fn(|i| {
             debug_assert!(
-                (record.rs_vals[i] + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
-                    < (1 << self.pointer_max_bits) as u32
+                record.rs_vals[i] + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
+                    < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
                 tracing_read(
                     memory,
-                    RV32_MEMORY_AS,
-                    record.rs_vals[i] + (j * READ_SIZE) as u32,
+                    RV64_MEMORY_AS,
+                    record.rs_vals[i] as u32 + (j * READ_SIZE) as u32,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
             })
@@ -304,30 +321,30 @@ impl<
         const BLOCKS_PER_READ: usize,
         const READ_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv32VecHeapBranchAdapterFiller<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    for Rv64VecHeapBranchAdapterFiller<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     const WIDTH: usize =
-        Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
+        Rv64VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let record: &Rv64VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv32VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let cols: &mut Rv64VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             adapter_row.borrow_mut();
 
         // Range checks:
         // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * POINTER_LIMBS);
+        let limb_shift_bits = RV64_CELL_BITS * POINTER_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV64_CELL_BITS * (POINTER_LIMBS - 1);
         self.bitwise_lookup_chip.request_range(
-            (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
+            ((record.rs_vals[0] as u32) >> MSL_SHIFT) << limb_shift_bits,
             if NUM_READS > 1 {
-                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
+                ((record.rs_vals[1] as u32) >> MSL_SHIFT) << limb_shift_bits
             } else {
                 0
             },

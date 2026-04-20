@@ -1,6 +1,6 @@
 [package]
-name = "openvm-rv32-adapters"
-description = "OpenVM adapters for rv32 intrinsics"
+name = "openvm-riscv-adapters"
+description = "OpenVM adapters for riscv intrinsics"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
