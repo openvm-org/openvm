@@ -44,7 +44,7 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub opcode_loadb_flag2: T,
     pub opcode_loadb_flag3: T,
     pub opcode_loadh_flag0: T,
-    pub opcode_loadh_flag1: T,
+    pub opcode_loadh_flag2: T,
     pub opcode_loadw_flag: T,
 
     pub shift_most_sig_bit: T,
@@ -97,7 +97,7 @@ where
             opcode_loadb_flag2: is_loadb2,
             opcode_loadb_flag3: is_loadb3,
             opcode_loadh_flag0: is_loadh0,
-            opcode_loadh_flag1: is_loadh2,
+            opcode_loadh_flag2: is_loadh2,
             opcode_loadw_flag: is_loadw,
             data_most_sig_bit,
             shift_most_sig_bit,
@@ -343,7 +343,7 @@ where
         core_row.opcode_loadb_flag2 = F::from_bool(is_byte && inner_shift == 2);
         core_row.opcode_loadb_flag3 = F::from_bool(is_byte && inner_shift == 3);
         core_row.opcode_loadh_flag0 = F::from_bool(is_half && inner_shift == 0);
-        core_row.opcode_loadh_flag1 = F::from_bool(is_half && inner_shift == 2);
+        core_row.opcode_loadh_flag2 = F::from_bool(is_half && inner_shift == 2);
         core_row.opcode_loadw_flag = F::from_bool(is_word);
     }
 }

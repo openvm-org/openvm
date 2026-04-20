@@ -321,7 +321,7 @@ fn run_negative_load_sign_extend_test(
             core_cols.opcode_loadb_flag2 = F::from_bool(opcode_flags[2]);
             core_cols.opcode_loadb_flag3 = F::from_bool(opcode_flags[3]);
             core_cols.opcode_loadh_flag0 = F::from_bool(opcode_flags[4]);
-            core_cols.opcode_loadh_flag1 = F::from_bool(opcode_flags[5]);
+            core_cols.opcode_loadh_flag2 = F::from_bool(opcode_flags[5]);
             core_cols.opcode_loadw_flag = F::from_bool(opcode_flags[6]);
         }
 
