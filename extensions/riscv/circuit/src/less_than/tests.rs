@@ -16,7 +16,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LessThanOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -43,7 +43,7 @@ use crate::{
     },
     less_than::LessThanCoreCols,
     test_utils::{
-        generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
+        generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm,
     },
     LessThanFiller, Rv64LessThanAir, Rv64LessThanExecutor,
 };
@@ -243,7 +243,7 @@ fn run_negative_less_than_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
@@ -254,10 +254,10 @@ fn run_negative_less_than_test(
             cols.c_msb_f = i32_to_f(c_msb);
         }
         if let Some(diff_marker) = prank_vals.diff_marker {
-            cols.diff_marker = diff_marker.map(F::from_canonical_u32);
+            cols.diff_marker = diff_marker.map(F::from_u32);
         }
         if let Some(diff_val) = prank_vals.diff_val {
-            cols.diff_val = F::from_canonical_u32(diff_val);
+            cols.diff_val = F::from_u32(diff_val);
         }
         cols.cmp_result = F::from_bool(prank_cmp_result);
 
@@ -270,7 +270,9 @@ fn run_negative_less_than_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -492,16 +494,16 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         // Prank c[4] = 1 (matches b[4], so no diff at limb 4)
         cols.c[4] = F::ONE;
         // Move diff_marker from limb 4 to limb 0 and update diff_val
-        cols.diff_marker = [0, 0, 0, 0, 0, 0, 0, 0].map(F::from_canonical_u32);
+        cols.diff_marker = [0, 0, 0, 0, 0, 0, 0, 0].map(F::from_u32);
         cols.diff_marker[0] = F::ONE;
         // diff = (c[0] - b[0]) * (2*cmp_result - 1) = (5 - 10) * (-1) = 5
-        cols.diff_val = F::from_canonical_u32(5);
+        cols.diff_val = F::from_u32(5);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
@@ -511,7 +513,9 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(false));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

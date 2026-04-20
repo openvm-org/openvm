@@ -15,7 +15,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -42,7 +42,7 @@ use crate::{
     },
     base_alu::BaseAluCoreCols,
     test_utils::{
-        generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
+        generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm,
     },
     BaseAluFiller, Rv64BaseAluAir,
 };
@@ -138,7 +138,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.execute(executor, arena, &instruction);
 
     let a = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c)
-        .map(F::from_canonical_u8);
+        .map(F::from_u8);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
@@ -163,8 +163,10 @@ fn rand_rv64_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 8]);
     tester.write(2, 1032, [F::ONE; 8]);
-    let sm: [F; 16] = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 16]);
+    let sm_lo: [F; 8] = tester.read(2, 1024);
+    let sm_hi: [F; 8] = tester.read(2, 1032);
+    assert_eq!(sm_lo, [F::ONE; 8]);
+    assert_eq!(sm_hi, [F::ONE; 8]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -195,14 +197,16 @@ fn rand_rv64_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
 fn rand_rv64_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
-    let mut tester = VmChipTestBuilder::default_persistent();
+    let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 8]);
     tester.write(2, 1032, [F::ONE; 8]);
-    let sm: [F; 16] = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 16]);
+    let sm_lo: [F; 8] = tester.read(2, 1024);
+    let sm_hi: [F; 8] = tester.read(2, 1032);
+    assert_eq!(sm_lo, [F::ONE; 8]);
+    assert_eq!(sm_hi, [F::ONE; 8]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -260,12 +264,12 @@ fn run_negative_alu_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut BaseAluCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_u32);
         if let Some(prank_c) = prank_c {
-            cols.c = prank_c.map(F::from_canonical_u32);
+            cols.c = prank_c.map(F::from_u32);
         }
         if let Some(prank_opcode_flags) = prank_opcode_flags {
             cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);
@@ -283,7 +287,9 @@ fn run_negative_alu_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

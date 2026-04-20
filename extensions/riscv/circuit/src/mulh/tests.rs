@@ -44,7 +44,7 @@ use openvm_riscv_transpiler::BaseAluOpcode::ADD;
 use openvm_riscv_transpiler::MulHOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -78,8 +78,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS,
     },
     mulh::{MulHCoreCols, Rv64MulHChip},
-    test_utils::get_verification_error,
-    MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
+        MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
 };
 #[cfg(feature = "aot")]
 use crate::{Rv64ImBuilder, Rv64ImConfig};
@@ -171,8 +170,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs2 = gen_pointer(rng, 8);
     let rd = gen_pointer(rng, 8);
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));
 
     tester.execute(
         executor,
@@ -182,7 +181,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (a, _, _, _, _) = run_mulh::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c);
     assert_eq!(
-        a.map(F::from_canonical_u32),
+        a.map(F::from_u32),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     );
 }
@@ -257,13 +256,13 @@ fn run_negative_mulh_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut MulHCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_canonical_u32);
-        cols.a_mul = prank_a_mul.map(F::from_canonical_u32);
-        cols.b_ext = F::from_canonical_u32(prank_b_ext);
-        cols.c_ext = F::from_canonical_u32(prank_c_ext);
+        cols.a = prank_a.map(F::from_u32);
+        cols.a_mul = prank_a_mul.map(F::from_u32);
+        cols.b_ext = F::from_u32(prank_b_ext);
+        cols.c_ext = F::from_u32(prank_c_ext);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
@@ -274,7 +273,9 @@ fn run_negative_mulh_test(
         .load_periphery(bitwise)
         .load_periphery(range_tuple)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

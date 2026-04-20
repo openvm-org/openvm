@@ -24,7 +24,7 @@ use openvm_riscv_transpiler::BaseAluOpcode::ADD;
 use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -54,8 +54,7 @@ use crate::{
         Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
-    test_utils::get_verification_error,
-    Rv64JalrAir, Rv64JalrFiller,
+        Rv64JalrAir, Rv64JalrFiller,
 };
 
 const IMM_BITS: usize = 16;
@@ -138,7 +137,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let to_pc = rng.gen_range(0..(1 << PC_BITS));
 
     let rs1 = rs1.unwrap_or(into_limbs((to_pc as u32).wrapping_sub(imm_ext)));
-    let rs1 = rs1.map(F::from_canonical_u32);
+    let rs1 = rs1.map(F::from_u32);
 
     tester.write(1, b, rs1);
 
@@ -172,7 +171,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
 
     assert_eq!(next_pc & !1, final_pc);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<8>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -260,28 +259,28 @@ fn run_negative_jalr_test_with_rd_ptr(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_canonical_u32);
+            core_cols.rd_data = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.rs1_data {
-            core_cols.rs1_data = data.map(F::from_canonical_u32);
+            core_cols.rs1_data = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.to_pc_least_sig_bit {
-            core_cols.to_pc_least_sig_bit = F::from_canonical_u32(data);
+            core_cols.to_pc_least_sig_bit = F::from_u32(data);
         }
         if let Some(data) = prank_vals.to_pc_limbs {
-            core_cols.to_pc_limbs = data.map(F::from_canonical_u32);
+            core_cols.to_pc_limbs = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.imm_sign {
-            core_cols.imm_sign = F::from_canonical_u32(data);
+            core_cols.imm_sign = F::from_u32(data);
         }
         if let Some(rd_ptr) = prank_vals.rd_ptr {
-            adapter_cols.rd_ptr = F::from_canonical_u32(rd_ptr);
+            adapter_cols.rd_ptr = F::from_u32(rd_ptr);
         }
         if let Some(needs_write) = prank_vals.needs_write {
             adapter_cols.needs_write = F::from_bool(needs_write);
@@ -296,7 +295,9 @@ fn run_negative_jalr_test_with_rd_ptr(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -393,8 +394,8 @@ fn rs1_upper_bytes_trace_tamper_negative_test() {
 
     // Seed the same source register with a poisoned value, then overwrite with a clean one so
     // the execution is initially valid.
-    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_canonical_u32));
-    tester.write(1, rs1_ptr, clean_rs1.map(F::from_canonical_u32));
+    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_u32));
+    tester.write(1, rs1_ptr, clean_rs1.map(F::from_u32));
 
     tester.execute_with_pc(
         &mut harness.executor,
@@ -408,7 +409,7 @@ fn rs1_upper_bytes_trace_tamper_negative_test() {
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
         let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
@@ -425,7 +426,9 @@ fn rs1_upper_bytes_trace_tamper_negative_test() {
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(true));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -442,8 +445,8 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
 
     // Seed the destination register with a known clean value.
-    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
-    tester.write(1, rs1_ptr, into_limbs(rs1_low).map(F::from_canonical_u32));
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_u32));
+    tester.write(1, rs1_ptr, into_limbs(rs1_low).map(F::from_u32));
 
     tester.execute_with_pc(
         &mut harness.executor,
@@ -457,10 +460,10 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        adapter_cols.rd_aux_cols.prev_data[4] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -470,7 +473,9 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(true));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -527,7 +532,7 @@ fn overflow_negative_tests() {
         Some(0),
         JalrPrankValues {
             to_pc_limbs: Some([
-                (F::NEG_ONE * F::from_canonical_u32((1 << 14) + 1)).as_canonical_u32(),
+                (F::NEG_ONE * F::from_u32((1 << 14) + 1)).as_canonical_u32(),
                 1,
             ]),
             ..Default::default()

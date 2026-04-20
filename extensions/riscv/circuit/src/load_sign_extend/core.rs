@@ -23,8 +23,8 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    BaseAirWithPublicValues,
 };
 
 use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
@@ -117,12 +117,12 @@ where
         builder.assert_bool(shift_most_sig_bit);
 
         let expected_opcode = (is_loadb0 + is_loadb1 + is_loadb2 + is_loadb3)
-            * AB::F::from_canonical_u8(LOADB as u8)
-            + (is_loadh0 + is_loadh2) * AB::F::from_canonical_u8(LOADH as u8)
-            + is_loadw * AB::F::from_canonical_u8(LOADW as u8)
-            + AB::Expr::from_canonical_usize(Rv64LoadStoreOpcode::CLASS_OFFSET);
+            * AB::F::from_u8(LOADB as u8)
+            + (is_loadh0 + is_loadh2) * AB::F::from_u8(LOADH as u8)
+            + is_loadw * AB::F::from_u8(LOADW as u8)
+            + AB::Expr::from_usize(Rv64LoadStoreOpcode::CLASS_OFFSET);
 
-        let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
+        let limb_mask = data_most_sig_bit * AB::Expr::from_u32((1 << LIMB_BITS) - 1);
 
         let sd = shifted_read_data;
 
@@ -157,7 +157,7 @@ where
         self.range_bus
             .range_check(
                 most_sig_limb
-                    - data_most_sig_bit * AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)),
+                    - data_most_sig_bit * AB::Expr::from_u32(1 << (LIMB_BITS - 1)),
                 LIMB_BITS - 1,
             )
             .eval(builder, is_valid.clone());
@@ -171,10 +171,10 @@ where
             )
         });
 
-        let load_shift_amount = shift_most_sig_bit * AB::Expr::from_canonical_u32(4)
+        let load_shift_amount = shift_most_sig_bit * AB::Expr::from_u32(4)
             + is_loadb1
             + (is_loadb2 + is_loadh2) * AB::Expr::TWO
-            + is_loadb3 * AB::Expr::from_canonical_u32(3);
+            + is_loadb3 * AB::Expr::from_u32(3);
 
         AdapterAirContext {
             to_pc: None,
@@ -328,8 +328,8 @@ where
         self.range_checker_chip
             .add_count((most_sig_limb - most_sig_bit) as u32, 7);
 
-        core_row.prev_data = record.prev_data.map(F::from_canonical_u8);
-        core_row.shifted_read_data = shifted.map(F::from_canonical_u8);
+        core_row.prev_data = record.prev_data.map(F::from_u8);
+        core_row.shifted_read_data = shifted.map(F::from_u8);
 
         core_row.data_most_sig_bit = F::from_bool(most_sig_bit != 0);
         core_row.shift_most_sig_bit = F::from_bool(shift_most_sig_bit == 1);

@@ -10,10 +10,10 @@ use openvm_circuit::{
         SystemChipInventoryGPU,
     },
 };
-use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_sha2_air::{Sha256Config, Sha512Config};
-use openvm_stark_sdk::{config::baby_bear_poseidon2::BabyBearPoseidon2Config, engine::StarkEngine};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
 use crate::{
@@ -40,10 +40,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha256_shared_records = Arc::new(Mutex::new(None));
         let sha256_block_gpu = Sha2BlockHasherChipGpu::<Sha256Config>::new(
             sha256_shared_records.clone(),
-            range_checker_gpu.clone(),
             bitwise_gpu.clone(),
-            pointer_max_bits as u32,
-            timestamp_max_bits as u32,
         );
         inventory.add_periphery_chip(sha256_block_gpu);
 
@@ -62,10 +59,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha512_shared_records = Arc::new(Mutex::new(None));
         let sha512_block_gpu = Sha2BlockHasherChipGpu::<Sha512Config>::new(
             sha512_shared_records.clone(),
-            range_checker_gpu.clone(),
             bitwise_gpu.clone(),
-            pointer_max_bits as u32,
-            timestamp_max_bits as u32,
         );
         inventory.add_periphery_chip(sha512_block_gpu);
 
@@ -96,6 +90,7 @@ impl VmBuilder<E> for Sha2Rv32GpuBuilder {
         &self,
         config: &Sha2Rv32Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<
             <E as StarkEngine>::SC,
@@ -105,8 +100,12 @@ impl VmBuilder<E> for Sha2Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv32m, inventory)?;

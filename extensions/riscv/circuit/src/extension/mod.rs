@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -27,12 +27,8 @@ use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
     ShiftOpcode, ShiftWOpcode,
 };
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
-};
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -224,16 +220,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             phantom::Rv64PrintStrSubEx,
             PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
         )?;
-        inventory.add_phantom_sub_executor(
-            phantom::Rv64HintLoadByKeySubEx,
-            PhantomDiscriminant(Rv64Phantom::HintLoadByKey as u16),
-        )?;
 
         Ok(())
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -353,10 +345,11 @@ pub struct Rv64ImCpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, SC, RA> VmProverExtension<E, RA, Rv64I> for Rv64ImCpuProverExt
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
@@ -543,7 +536,7 @@ impl<F> VmExecutionExtension<F> for Rv64M {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -624,10 +617,11 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, SC, RA> VmProverExtension<E, RA, Rv64M> for Rv64ImCpuProverExt
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
@@ -751,7 +745,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64Io {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -791,10 +785,11 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64Io {
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, SC, RA> VmProverExtension<E, RA, Rv64Io> for Rv64ImCpuProverExt
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
@@ -849,7 +844,6 @@ mod phantom {
     pub struct Rv64HintInputSubEx;
     pub struct Rv64HintRandomSubEx;
     pub struct Rv64PrintStrSubEx;
-    pub struct Rv64HintLoadByKeySubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv64HintInputSubEx {
         fn phantom_execute(
@@ -874,7 +868,7 @@ mod phantom {
                 hint_len
                     .to_le_bytes()
                     .iter()
-                    .map(|b| F::from_canonical_u8(*b)),
+                    .map(|b| F::from_u8(*b)),
             );
             // Pad the hint payload to full dwords so RV64 `HINT_BUFFER` reads can consume it.
             let capacity = hint.len().div_ceil(HINT_DWORD_BYTES) * HINT_DWORD_BYTES;
@@ -903,7 +897,7 @@ mod phantom {
             let len = read_rv64_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>()))
+                std::iter::repeat_with(|| F::from_u8(rng.gen::<u8>()))
                     .take(len * HINT_DWORD_BYTES),
             );
             Ok(())
@@ -932,61 +926,4 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintLoadByKeySubEx {
-        fn phantom_execute(
-            &self,
-            memory: &GuestMemory,
-            streams: &mut Streams<F>,
-            _: &mut StdRng,
-            _: PhantomDiscriminant,
-            a: u32,
-            b: u32,
-            _: u16,
-        ) -> eyre::Result<()> {
-            let ptr = read_rv64_register(memory, a) as u32;
-            let len = read_rv64_register(memory, b) as u32;
-            let key: Vec<u8> = (0..len)
-                .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
-                .collect();
-            if let Some(val) = streams.kv_store.get(&key) {
-                let to_push = hint_load_by_key_decode::<F>(val);
-                for input in to_push.into_iter().rev() {
-                    streams.input_stream.push_front(input);
-                }
-            } else {
-                bail!("Rv64HintLoadByKey: key not found");
-            }
-            Ok(())
-        }
-    }
-
-    pub fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
-        let mut offset = 0;
-        let len = extract_u64(value, offset) as usize;
-        offset += HINT_DWORD_BYTES;
-        let mut ret = Vec::with_capacity(len);
-        for _ in 0..len {
-            let v_len = extract_u64(value, offset) as usize;
-            offset += HINT_DWORD_BYTES;
-            let v = (0..v_len)
-                .map(|_| {
-                    let word = extract_u64(value, offset);
-                    offset += HINT_DWORD_BYTES;
-                    assert_eq!(
-                        word >> 32,
-                        0,
-                        "hint_load_by_key payload elements must be zero-extended u32s"
-                    );
-                    let ret = F::from_canonical_u32(word as u32);
-                    ret
-                })
-                .collect();
-            ret.push(v);
-        }
-        ret
-    }
-
-    fn extract_u64(value: &[u8], offset: usize) -> u64 {
-        u64::from_le_bytes(value[offset..offset + HINT_DWORD_BYTES].try_into().unwrap())
-    }
 }
