@@ -7,8 +7,11 @@ use openvm_circuit::{
         online::{GuestMemory, TracingMemory},
     },
 };
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    DEFERRAL_AS,
+};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 mod alu;
 mod alu_w;
@@ -56,7 +59,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
 /// inverse of `compose`
 pub fn decompose<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_canonical_u32(
+        F::from_u32(
             ((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32,
         )
     })
@@ -88,6 +91,28 @@ pub fn imm_to_u64(imm: u32) -> u64 {
     // Sign-extend from 24 bits to 64 bits:
     let sign_extended = ((imm as i32) << 8) >> 8;
     sign_extended as i64 as u64
+}
+
+#[inline(always)]
+pub fn memory_read_deferral<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
+where
+    F: PrimeField32,
+{
+    // SAFETY: address space `DEFERRAL_AS` has cell type `F`
+    unsafe { memory.read::<F, N>(DEFERRAL_AS, ptr) }
+}
+
+#[inline(always)]
+pub fn timed_write_deferral<F, const BLOCK_SIZE: usize>(
+    memory: &mut TracingMemory,
+    ptr: u32,
+    vals: [F; BLOCK_SIZE],
+) -> (u32, [F; BLOCK_SIZE])
+where
+    F: PrimeField32,
+{
+    // SAFETY: deferral address space has cell type `F`
+    unsafe { memory.write::<F, BLOCK_SIZE>(DEFERRAL_AS, ptr, vals) }
 }
 
 #[inline(always)]
@@ -143,13 +168,13 @@ pub fn timed_read<const N: usize>(
     //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
-        unsafe { memory.read::<u8, N, 1>(address_space, ptr) }
+        unsafe { memory.read::<u8, N>(address_space, ptr) }
     } else {
-        unsafe { memory.read::<u8, N, RV64_REGISTER_NUM_LIMBS>(address_space, ptr) }
+        unsafe { memory.read::<u8, N>(address_space, ptr) }
     }
     #[cfg(not(feature = "legacy-v1-3-mem-align"))]
     unsafe {
-        memory.read::<u8, N, RV64_REGISTER_NUM_LIMBS>(address_space, ptr)
+        memory.read::<u8, N>(address_space, ptr)
     }
 }
 
@@ -171,13 +196,13 @@ pub fn timed_write<const N: usize>(
     //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
-        unsafe { memory.write::<u8, N, 1>(address_space, ptr, data) }
+        unsafe { memory.write::<u8, N>(address_space, ptr, data) }
     } else {
-        unsafe { memory.write::<u8, N, RV64_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+        unsafe { memory.write::<u8, N>(address_space, ptr, data) }
     }
     #[cfg(not(feature = "legacy-v1-3-mem-align"))]
     unsafe {
-        memory.write::<u8, N, RV64_REGISTER_NUM_LIMBS>(address_space, ptr, data)
+        memory.write::<u8, N>(address_space, ptr, data)
     }
 }
 
@@ -266,14 +291,14 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
     u64::from_le_bytes(memory_read(memory, RV64_REGISTER_AS, ptr))
 }
 
-pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
+pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>>(
     data: [V; RV64_REGISTER_NUM_LIMBS],
 ) -> T {
     panic!("broken for rv64");
     data.into_iter()
         .enumerate()
         .fold(T::ZERO, |acc, (i, limb)| {
-            acc + limb * T::from_canonical_u32(1 << (i * RV64_CELL_BITS))
+            acc + limb * T::from_u32(1 << (i * RV64_CELL_BITS))
         })
 }
 

@@ -27,7 +27,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
-use openvm_rv32im_circuit::adapters::{
+use openvm_riscv_circuit::adapters::{
     memory_read, read_rv32_register, tracing_read, tracing_write,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
