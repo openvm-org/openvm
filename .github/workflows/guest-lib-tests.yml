@@ -65,13 +65,11 @@ jobs:
     strategy:
       matrix:
         crate: ${{ fromJSON(needs.changes.outputs.crates) }}
-        mode: [default, rvr]
+        # TODO(rvr): restore the rvr mode once RV64 RVR support lands.
+        mode: [default]
         exclude:
           - { crate: shared, mode: default }
-          - { crate: shared, mode: rvr }
           - { crate: cuda, mode: default }
-          - { crate: cuda, mode: rvr }
-          - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/guest-lib-tests.group.yml

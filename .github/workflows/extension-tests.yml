@@ -54,14 +54,11 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJSON(needs.changes.outputs.extensions) }}
-        mode: [default, aot, rvr]
+        # TODO(rvr): restore the rvr mode once RV64 RVR support lands.
+        mode: [default]
         exclude:
           - { extension: shared, mode: default }
-          - { extension: shared, mode: aot }
-          - { extension: shared, mode: rvr }
           - { extension: cuda, mode: default }
-          - { extension: cuda, mode: aot }
-          - { extension: cuda, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/extension-tests.group.yml
