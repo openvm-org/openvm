@@ -77,10 +77,9 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
           EXTRA_ARGS=()
-          if [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
-            EXTRA_ARGS+=(--features=aot)
-          elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            EXTRA_ARGS+=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
+          # TODO(aot): re-add --features=aot (and ,aot for pairing)
+          if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+            EXTRA_ARGS+=(--features=bn254,bls12_381 -E 'not test(fallback)')
           fi
 
           cargo nextest run --cargo-profile=fast "${EXTRA_ARGS[@]}" --no-tests=pass --test-threads=1

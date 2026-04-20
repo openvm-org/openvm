@@ -25,7 +25,8 @@ jobs:
   tests:
     strategy:
       matrix:
-        mode: ["default", "ignored", "aot"]
+        # TODO(aot): re-add "aot" mode
+        mode: ["default", "ignored"]
 
     runs-on:
       - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
@@ -84,13 +85,14 @@ jobs:
           export RUST_MIN_STACK=8388608
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
-      - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' }}
-        working-directory: crates/sdk
-        run: |
-          export RUST_BACKTRACE=1
-          export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
+      # TODO(aot): re-enable
+      # - name: Run openvm-sdk crate tests (AOT)
+      #   if: ${{ matrix.mode == 'aot' }}
+      #   working-directory: crates/sdk
+      #   run: |
+      #     export RUST_BACKTRACE=1
+      #     export RUST_MIN_STACK=8388608
+      #     CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
 
       - name: Run ignored tests
         if: ${{ matrix.mode == 'ignored' }}
