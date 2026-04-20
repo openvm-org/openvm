@@ -83,6 +83,10 @@ where
         S: AggregationSubCircuit + VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
         T: DeferredVerifyTraceGen<PB, EngineDeviceCtx<E>>,
     {
+        assert!(
+            deferral_merkle_proofs.is_none() || self.circuit.def_hook_commit.is_some(),
+            "def_hook_commit must be defined to verify child proof with deferrals"
+        );
         let engine = E::new(self.pk.params.clone());
         let ctx = self.generate_proving_ctx(
             proof,
@@ -111,6 +115,7 @@ where
     {
         self.prove::<E>(proof, user_pvs_proof, None)
     }
+
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         internal_recursive_cached_commit: CommitBytes,
@@ -272,8 +277,12 @@ where
     fn prove(&self, input_bytes: &[u8]) -> Proof<SC> {
         let vm_proof = VmStarkProof::decode_from_bytes(input_bytes).unwrap();
         self.prover
-            .prove_no_def::<E>(vm_proof.inner, &vm_proof.user_pvs_proof)
-            .expect("DeferredVerifyProver::prove_no_def failed")
+            .prove::<E>(
+                vm_proof.inner,
+                &vm_proof.user_pvs_proof,
+                vm_proof.deferral_merkle_proofs.as_ref(),
+            )
+            .expect("DeferredVerifyProver::prove failed")
     }
 
     fn get_def_idx(&self) -> usize {
