@@ -53,7 +53,7 @@ Note: in nextest, `--cargo-profile` selects the Cargo build profile; `--profile`
 ```bash
 # Run tests for a specific crate (most common pattern)
 cargo nextest run --cargo-profile=fast -p openvm-circuit       # VM crate tests
-cargo nextest run --cargo-profile=fast -p openvm-rv32im-circuit # extension circuit tests
+cargo nextest run --cargo-profile=fast -p openvm-riscv-circuit # extension circuit tests
 
 # If nextest isn't installed, fall back to cargo test
 cargo test -p openvm-circuit

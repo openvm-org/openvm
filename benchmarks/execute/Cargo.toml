@@ -50,7 +50,7 @@ tco = [
     "openvm-ecc-circuit/tco",
     "openvm-keccak256-circuit/tco",
     "openvm-pairing-circuit/tco",
-    "openvm-rv32im-circuit/tco",
+    "openvm-riscv-circuit/tco",
     "openvm-sha2-circuit/tco",
 ]
 aot = [
@@ -60,7 +60,7 @@ aot = [
     "openvm-ecc-circuit/aot",
     "openvm-keccak256-circuit/aot",
     "openvm-pairing-circuit/aot",
-    "openvm-rv32im-circuit/aot",
+    "openvm-riscv-circuit/aot",
     "openvm-sha2-circuit/aot",
 ]
 mimalloc = ["openvm-circuit/mimalloc"]

@@ -100,9 +100,9 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 
 #### RV32IM
 
-- [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit): Circuit extension for RV32IM instructions and IO instructions.
-- [`openvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions and IO instructions.
-- [`openvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
+- [`openvm-riscv-circuit`](../../extensions/rv32im/circuit): Circuit extension for RV32IM instructions and IO instructions.
+- [`openvm-riscv-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions and IO instructions.
+- [`openvm-riscv-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
 - [`openvm-rv32-adapters`](../../extensions/rv32-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 32-bit architecture.
 - [`openvm-rv32im-integration-tests`](../../extensions/rv32im/tests): Integration tests for the RV32IM extension.
 

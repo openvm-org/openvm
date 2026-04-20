@@ -16,14 +16,13 @@ openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-rv32im-transpiler = { workspace = true, optional = true }
+openvm-riscv-transpiler = { workspace = true, optional = true }
 
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 openvm-cpu-backend = { workspace = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
-openvm-riscv-transpiler = { workspace = true, optional = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -63,7 +62,6 @@ test-case.workspace = true
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-riscv-transpiler.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]

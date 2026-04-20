@@ -18,8 +18,8 @@ use openvm_continuations::{
     SC,
 };
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
-use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
-use openvm_rv32im_transpiler::{
+use openvm_riscv_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
+use openvm_riscv_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{
