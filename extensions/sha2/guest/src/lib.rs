@@ -35,7 +35,7 @@ pub unsafe extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, ou
     // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 8
     // bytes.
 
-    // The minimum alignment required for the buffers (RV64 memory is accessed in 8-byte blocks).
+    // The minimum alignment required for the buffers
     const MIN_ALIGN: usize = 8;
     unsafe {
         let state_is_aligned = state as usize % MIN_ALIGN == 0;
@@ -94,7 +94,7 @@ pub unsafe extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, ou
     // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 8
     // bytes.
 
-    // The minimum alignment required for the buffers (RV64 memory is accessed in 8-byte blocks).
+    // The minimum alignment required for the buffers
     const MIN_ALIGN: usize = 8;
     unsafe {
         let state_is_aligned = state as usize % MIN_ALIGN == 0;
