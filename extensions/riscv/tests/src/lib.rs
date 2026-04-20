@@ -35,7 +35,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32im_config() -> Rv64ImConfig {
         Rv64ImConfig {
-            rv32i: Rv32IConfig {
+            rv64i: Rv64IConfig {
                 system: test_system_config(),
                 ..Default::default()
             },
@@ -45,7 +45,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = Rv64IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
             elf,
@@ -55,7 +55,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
         change_rv32m_insn_to_nop(&mut exe);
-        air_test_with_min_segments(Rv32IBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64IBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -108,7 +108,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -129,7 +129,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -145,7 +145,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
         Ok(())
     }
 
@@ -176,7 +176,7 @@ mod tests {
             .collect();
 
         let input = vec![data];
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
         Ok(())
     }
 
@@ -207,7 +207,7 @@ mod tests {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_u8)
             .collect();
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![input], 1);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![input], 1);
         Ok(())
     }
 
@@ -262,7 +262,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 
@@ -304,7 +304,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 
@@ -324,7 +324,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 
@@ -368,7 +368,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
     }
 
     // For testing programs that should only execute RV32I:

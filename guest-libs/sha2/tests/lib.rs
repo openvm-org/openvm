@@ -131,9 +131,9 @@ mod tests {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Sha2TranspilerExtension),
         )?;
 

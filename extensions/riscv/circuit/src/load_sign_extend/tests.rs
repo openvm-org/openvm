@@ -27,7 +27,7 @@ use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
     adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller},
     load_sign_extend::LoadSignExtendCoreCols,
-        LoadSignExtendFiller, Rv64LoadSignExtendAir, Rv64LoadSignExtendChip,
+    LoadSignExtendFiller, Rv64LoadSignExtendAir, Rv64LoadSignExtendChip,
     Rv64LoadSignExtendExecutor,
 };
 
@@ -95,8 +95,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm: Option<u32>,
     imm_sign: Option<u32>,
 ) {
-    let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = imm_sign.unwrap_or(rng.random_range(0..2));
     let imm_ext = imm + imm_sign * (0xffff0000);
 
     let alignment = match opcode {
@@ -106,7 +106,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         _ => unreachable!(),
     };
 
-    let ptr_val: u32 = rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     // rs1 is 8 bytes, but only low 4 bytes used for address
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
@@ -121,12 +121,12 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write(1, b, rs1.map(F::from_u8));
 
     let some_prev_data: [F; RV64_REGISTER_NUM_LIMBS] = if a != 0 {
-        array::from_fn(|_| F::from_u8(rng.gen()))
+        array::from_fn(|_| F::from_u8(rng.random()))
     } else {
         [F::ZERO; RV64_REGISTER_NUM_LIMBS]
     };
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
-        read_data.unwrap_or(array::from_fn(|_| rng.gen()));
+        read_data.unwrap_or(array::from_fn(|_| rng.random()));
 
     tester.write(1, a, some_prev_data);
     tester.write(
@@ -280,7 +280,7 @@ fn run_negative_load_sign_extend_test(
     imm: Option<u32>,
     imm_sign: Option<u32>,
     prank_vals: LoadSignExtPrankValues,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();

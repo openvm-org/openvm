@@ -130,7 +130,7 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_riscv_circuit::adapters::{memory_read, read_rv32_register};
+    use openvm_riscv_circuit::adapters::{memory_read, read_rv64_register};
     use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 
@@ -149,8 +149,12 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = read_rv32_register(memory, a);
-            let rs2 = read_rv32_register(memory, b);
+            let rs1: u32 = read_rv64_register(memory, a)
+                .try_into()
+                .expect("rs1 register value exceeds u32 range");
+            let rs2: u32 = read_rv64_register(memory, b)
+                .try_into()
+                .expect("rs2 register value exceeds u32 range");
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }

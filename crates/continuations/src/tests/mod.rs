@@ -9,7 +9,7 @@ use openvm_circuit::{
     system::memory::merkle::public_values::UserPublicValuesProof,
     utils::test_utils::test_system_config,
 };
-use openvm_riscv_circuit::{Rv32IConfig, Rv32ImBuilder, Rv64ImConfig};
+use openvm_riscv_circuit::{Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
@@ -98,7 +98,7 @@ pub(in crate::tests) fn root_system_params() -> SystemParams {
 
 pub(in crate::tests) fn test_rv32im_config() -> Rv64ImConfig {
     Rv64ImConfig {
-        rv32i: Rv32IConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config().with_max_segment_len(1 << LOG_MAX_TRACE_HEIGHT),
             ..Default::default()
         },
@@ -132,7 +132,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
         .to_vec();
 
     let engine = Engine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
