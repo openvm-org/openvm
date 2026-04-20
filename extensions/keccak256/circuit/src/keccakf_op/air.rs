@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 
 use crate::{
     keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS},
-    KECCAK_WORD_SIZE,
+    KECCAK_MEMORY_BLOCK,
 };
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -111,8 +111,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // ======== Constrain new writes of `buffer` to memory =========
         // NOTE: we use the _next_ row's `buffer` as the pre-state
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
-            local.preimage.chunks_exact(KECCAK_WORD_SIZE),
-            local.postimage.chunks_exact(KECCAK_WORD_SIZE),
+            local.preimage.chunks_exact(KECCAK_MEMORY_BLOCK),
+            local.postimage.chunks_exact(KECCAK_MEMORY_BLOCK),
             local.buffer_word_aux
         )
         .enumerate()
@@ -127,10 +127,10 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             //   a previous valid write at `ptr`. Assuming the invariant that all previous memory
             //   accesses are valid and timestamp always moves forward, the new write to `ptr` must
             //   be valid as well.
-            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * KECCAK_WORD_SIZE);
-            let prev_data: &[_; KECCAK_WORD_SIZE] = prev_word.try_into().unwrap();
+            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * KECCAK_MEMORY_BLOCK);
+            let prev_data: &[_; KECCAK_MEMORY_BLOCK] = prev_word.try_into().unwrap();
             // post_word consists of bytes due to range checks above
-            let data: &[_; KECCAK_WORD_SIZE] = post_word.try_into().unwrap();
+            let data: &[_; KECCAK_MEMORY_BLOCK] = post_word.try_into().unwrap();
             let write_aux = MemoryWriteAuxCols {
                 base: base_aux,
                 prev_data: *prev_data,
