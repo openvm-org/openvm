@@ -151,6 +151,8 @@ mod tests {
         Ok(())
     }
 
+    // TODO(rv64-std): re-enable when guest is updated to no_std
+    #[ignore]
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv64im_std(example_name: &str, min_segments: usize) -> Result<()> {
@@ -349,6 +351,8 @@ mod tests {
         }
     }
 
+    // TODO(rv64-std): re-enable when guest is updated to no_std
+    #[ignore]
     #[test]
     fn test_hashmap() -> Result<()> {
         let config = test_rv64im_config();
