@@ -90,10 +90,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    local_cols.rs1_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -102,10 +99,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    local_cols.rd_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,

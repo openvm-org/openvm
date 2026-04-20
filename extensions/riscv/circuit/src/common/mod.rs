@@ -148,7 +148,6 @@ mod aot {
         //     }
         // }
         // ```
-        //
         // For a specific RV32 instruction, the variables can be treated as constants at AOT
         // compilation time:
         // - `address_space`: always a constant because it is derived from an Instruction
@@ -232,8 +231,8 @@ mod aot {
         //     }
         // }
         // ```
-        //
-        // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
+        // For a specific RV32 instruction, the variables can be treated as constants at AOT
+        // compilation time:
         // Inputs:
         // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.
         // - `address_space`: always a constant because it is derived from an Instruction

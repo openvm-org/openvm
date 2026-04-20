@@ -5,12 +5,7 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_REGISTER_AS, RV64_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, JAL};
 use openvm_stark_backend::p3_field::PrimeField32;
 
