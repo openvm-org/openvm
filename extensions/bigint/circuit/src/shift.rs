@@ -3,13 +3,13 @@ use std::{
     mem::size_of,
 };
 
-use openvm_bigint_transpiler::Rv32Shift256Opcode;
+use openvm_bigint_transpiler::Rv64Shift256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_circuit::ShiftExecutor;
@@ -18,10 +18,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv32Shift256Executor, INT256_NUM_LIMBS,
+    AluAdapterExecutor, Rv64Shift256Executor, INT256_NUM_LIMBS,
 };
 
-impl Rv32Shift256Executor {
+impl Rv64Shift256Executor {
     pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
         Self(ShiftExecutor::new(adapter, offset))
     }
@@ -45,7 +45,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv32Shift256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv64Shift256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftPreCompute>()
     }
@@ -84,7 +84,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv32Shift256Executor {
 #[cfg(feature = "aot")]
 impl<F: PrimeField32> AotExecutor<F> for Rv32Shift256Executor {}
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32Shift256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64Shift256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
@@ -132,13 +132,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
     pre_compute: &ShiftPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rs1_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rs1_ptr) as u32);
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rs2_ptr) as u32);
     let rd = OP::compute(rs1, rs2);
-    write_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+    write_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rd_ptr) as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
@@ -169,7 +169,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Sh
     execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
 }
 
-impl Rv32Shift256Executor {
+impl Rv64Shift256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -186,7 +186,7 @@ impl Rv32Shift256Executor {
             ..
         } = inst;
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = ShiftPreCompute {
@@ -195,7 +195,7 @@ impl Rv32Shift256Executor {
             c: c.as_canonical_u32() as u8,
         };
         let local_opcode =
-            ShiftOpcode::from_usize(opcode.local_opcode_idx(Rv32Shift256Opcode::CLASS_OFFSET));
+            ShiftOpcode::from_usize(opcode.local_opcode_idx(Rv64Shift256Opcode::CLASS_OFFSET));
         Ok(local_opcode)
     }
 }

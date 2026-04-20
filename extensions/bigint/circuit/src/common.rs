@@ -4,7 +4,7 @@ use openvm_circuit::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_BLOCKS, INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{INT256_NUM_BLOCKS, INT256_NUM_LIMBS, RV64_CELL_BITS};
 
 /// Read a 256-bit integer as 8 separate 4-byte block reads.
 #[inline(always)]
@@ -78,8 +78,8 @@ pub(crate) fn u256_lt(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) 
 #[inline(always)]
 pub(crate) fn i256_lt(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
     // true for negative. false for positive
-    let rs1_sign = rs1[INT256_NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1) == 1;
-    let rs2_sign = rs2[INT256_NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1) == 1;
+    let rs1_sign = rs1[INT256_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1) == 1;
+    let rs2_sign = rs2[INT256_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1) == 1;
     let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
     let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
     for i in (0..4).rev() {
