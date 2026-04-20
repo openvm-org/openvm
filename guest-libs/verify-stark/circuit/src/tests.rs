@@ -66,9 +66,9 @@ cfg_if::cfg_if! {
 
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
-fn test_rv32im_config() -> Rv64ImConfig {
+fn test_rv64im_config() -> Rv64ImConfig {
     Rv64ImConfig {
-        rv32i: Rv64IConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -84,7 +84,7 @@ fn run_leaf_aggregation(
     Proof<SC>,
     UserPublicValuesProof<DIGEST_SIZE, F>,
 )> {
-    let config = test_rv32im_config();
+    let config = test_rv64im_config();
     let elf = Elf::decode(
         include_bytes!("../../../../crates/continuations/programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
@@ -176,7 +176,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         user_pvs_proof,
     ) = run_full_aggregation(10, child_extra_recursive_layers)?;
 
-    let system_config = test_rv32im_config().rv32i.system;
+    let system_config = test_rv64im_config().rv64i.system;
     let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
         internal_recursive_vk.clone(),
         internal_recursive_pcs_data.commitment.into(),

@@ -74,7 +74,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS,
     },
     mulh::{MulHCoreCols, Rv64MulHChip},
-        MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
+    MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
 };
 #[cfg(feature = "aot")]
 use crate::{Rv64ImBuilder, Rv64ImConfig};
@@ -234,7 +234,7 @@ fn run_negative_mulh_test(
     prank_a_mul: [u32; RV64_REGISTER_NUM_LIMBS],
     prank_b_ext: u32,
     prank_c_ext: u32,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -681,7 +681,7 @@ fn test_aot_mulh_randomized() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let value_i32 = rng.random_range(-(1i32 << 11)..(1i32 << 11));
         let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
         instructions.push(add_immediate(offset, imm_field));
         expected.insert(offset, value_i32 as u32);

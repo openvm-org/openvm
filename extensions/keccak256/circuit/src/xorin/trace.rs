@@ -18,7 +18,7 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_riscv_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{read_rv64_register, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::xorin::{columns::XorinVmCols, XorinVmExecutor, XorinVmFiller};
@@ -102,7 +102,7 @@ where
 
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
-        let len = read_rv32_register(guest_mem, c.as_canonical_u32()) as usize;
+        let len = read_rv64_register(guest_mem, c.as_canonical_u32()) as usize;
         // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
