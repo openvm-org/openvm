@@ -900,7 +900,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut executor_enum_fields = Vec::new();
     let mut create_executors = Vec::new();
     let mut create_airs = Vec::new();
-    let mut create_rvr_extensions = Vec::new();
+    let mut extend_rvr = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut rvr_where_predicates: Vec<syn::WherePredicate> = Vec::new();
@@ -927,11 +927,11 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         rvr_where_predicates.push(parse_quote! {
             #extension_ty: ::rvr_openvm_lift::VmRvrExtension<F>
         });
-        create_rvr_extensions.push(quote! {
+        extend_rvr.push(quote! {
             <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
                 &self.#ext_field_name,
-                &mut registry,
-                &ctx,
+                registry,
+                ctx,
             );
         });
         create_airs.push(quote! {
@@ -953,6 +953,9 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     });
     rvr_where_predicates.push(parse_quote! {
         #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<F, Executor = #source_executor_type>
+    });
+    rvr_where_predicates.push(parse_quote! {
+        #source_field_ty: ::rvr_openvm_lift::VmRvrExtension<F>
     });
     let execution_where_clause = quote! { where #(#execution_where_predicates),* };
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
@@ -999,6 +1002,22 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         }
 
         #[cfg(feature = "rvr")]
+        impl<F: ::openvm_circuit::arch::VmField> ::rvr_openvm_lift::VmRvrExtension<F> for #name #rvr_where_clause {
+            fn extend_rvr(
+                &self,
+                registry: &mut ::rvr_openvm_lift::ExtensionRegistry<F>,
+                ctx: &::rvr_openvm_lift::RvrExtensionCtx,
+            ) {
+                <#source_field_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
+                    &self.#source_name,
+                    registry,
+                    ctx,
+                );
+                #(#extend_rvr)*
+            }
+        }
+
+        #[cfg(feature = "rvr")]
         impl #name {
             pub fn create_rvr_extensions<F>(
                 &self,
@@ -1016,7 +1035,11 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                     air_idx.to_vec(),
                 );
                 let mut registry = ::rvr_openvm_lift::ExtensionRegistry::new();
-                #(#create_rvr_extensions)*
+                <Self as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
+                    self,
+                    &mut registry,
+                    &ctx,
+                );
                 registry
             }
         }

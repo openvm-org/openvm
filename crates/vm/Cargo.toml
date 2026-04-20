@@ -17,6 +17,7 @@ openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true, optional = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
@@ -94,7 +95,7 @@ aot = [
     "dep:tempfile",
 ]
 # rvr execution backend
-rvr = []
+rvr = ["dep:rvr-openvm-lift"]
 # Disable bounds checking in memory operations for performance
 unprotected = []
 # performance features:

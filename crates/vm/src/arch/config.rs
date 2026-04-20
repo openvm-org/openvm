@@ -331,6 +331,12 @@ impl AsMut<SystemConfig> for SystemConfig {
 // Default implementation uses no init file
 impl InitFileGenerator for SystemConfig {}
 
+#[cfg(feature = "rvr")]
+impl<F: openvm_stark_backend::p3_field::PrimeField32> ::rvr_openvm_lift::VmRvrExtension<F>
+    for SystemConfig
+{
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
 pub struct AddressSpaceHostConfig {
     /// The number of memory cells in each address space, where a memory cell refers to a single
