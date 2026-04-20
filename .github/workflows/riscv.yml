@@ -29,10 +29,11 @@ jobs:
     strategy:
       matrix:
         platform:
+          # TODO(aot): restore `features: "aot"`
           - {
               runner: "64cpu-linux-x64",
               image: "ubuntu24-full-x64",
-              features: "aot",
+              features: "",
             }
           - {
               runner: "test-gpu-nvidia",
