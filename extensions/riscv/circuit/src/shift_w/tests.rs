@@ -18,7 +18,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::ShiftWOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -48,7 +48,7 @@ use crate::{
     },
     shift::ShiftCoreCols,
     test_utils::{
-        generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
+        generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm,
     },
     Rv64ShiftWAir, Rv64ShiftWExecutor,
 };
@@ -181,7 +181,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let (expected, _, _) = run_shift_w(opcode, &b_word, &c_word);
     assert_eq!(
-        expected.map(F::from_canonical_u8),
+        expected.map(F::from_u8),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     );
     expected
@@ -264,48 +264,48 @@ fn run_negative_shift_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut ShiftWCoreCols<F> = core_row.borrow_mut();
 
-        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
             let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
                 prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-            cols.b = prank_b_word.map(F::from_canonical_u32);
+            cols.b = prank_b_word.map(F::from_u32);
             let prank_rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            adapter_cols.rs1_high = prank_rs1_high.map(F::from_canonical_u32);
+            adapter_cols.rs1_high = prank_rs1_high.map(F::from_u32);
         }
         if let Some(prank_c) = prank_c {
             let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
                 prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-            cols.c = prank_c_word.map(F::from_canonical_u32);
+            cols.c = prank_c_word.map(F::from_u32);
             let prank_rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            adapter_cols.rs2_high = prank_rs2_high.map(F::from_canonical_u32);
+            adapter_cols.rs2_high = prank_rs2_high.map(F::from_u32);
         }
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
-            cols.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
+            cols.bit_multiplier_left = F::from_u32(bit_multiplier_left);
         }
         if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
-            cols.bit_multiplier_right = F::from_canonical_u32(bit_multiplier_right);
+            cols.bit_multiplier_right = F::from_u32(bit_multiplier_right);
         }
         if let Some(b_sign) = prank_vals.b_sign {
-            cols.b_sign = F::from_canonical_u32(b_sign);
+            cols.b_sign = F::from_u32(b_sign);
         }
         if let Some(result_sign) = prank_vals.result_sign {
-            adapter_cols.result_sign = F::from_canonical_u32(result_sign);
+            adapter_cols.result_sign = F::from_u32(result_sign);
         }
         if let Some(bit_shift_marker) = prank_vals.bit_shift_marker {
-            cols.bit_shift_marker = bit_shift_marker.map(F::from_canonical_u32);
+            cols.bit_shift_marker = bit_shift_marker.map(F::from_u32);
         }
         if let Some(limb_shift_marker) = prank_vals.limb_shift_marker {
-            cols.limb_shift_marker = limb_shift_marker.map(F::from_canonical_u32);
+            cols.limb_shift_marker = limb_shift_marker.map(F::from_u32);
         }
         if let Some(bit_shift_carry) = prank_vals.bit_shift_carry {
-            cols.bit_shift_carry = bit_shift_carry.map(F::from_canonical_u32);
+            cols.bit_shift_carry = bit_shift_carry.map(F::from_u32);
         }
 
         *trace = RowMajorMatrix::new(values, trace.width());
@@ -317,7 +317,9 @@ fn run_negative_shift_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

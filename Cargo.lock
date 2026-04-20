@@ -5952,7 +5952,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-platform",
  "openvm-poseidon2-air",
- "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-baby-bear",
