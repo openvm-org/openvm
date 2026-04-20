@@ -33,7 +33,7 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32im_config() -> Rv64ImConfig {
+    fn test_rv64im_config() -> Rv64ImConfig {
         Rv64ImConfig {
             rv64i: Rv64IConfig {
                 system: test_system_config(),
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn test_suspend() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -99,7 +99,7 @@ mod tests {
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -115,7 +115,7 @@ mod tests {
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             example_name,
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     #[ignore = "slow test: processes >1MB of data"]
     fn test_hint_buffer_chunking() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_large_buffer", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_heap_overflow() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_hashmap() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "hashmap",
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_tiny_mem_test() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "tiny-mem-test",
@@ -332,7 +332,7 @@ mod tests {
     #[should_panic]
     #[cfg(not(feature = "aot"))] // AOT skips this test since it is not a trusted program
     fn test_load_x0() {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
@@ -352,7 +352,7 @@ mod tests {
     #[test_case("getrandom_v02", vec!["getrandom-v02", "getrandom-unsupported"])]
     #[test_case("getrandom_v02", vec!["getrandom-v02/custom"])]
     fn test_getrandom_unsupported(program: &str, features: Vec<&str>) {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             program,

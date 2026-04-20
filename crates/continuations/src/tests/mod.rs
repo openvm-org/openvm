@@ -96,7 +96,7 @@ pub(in crate::tests) fn root_system_params() -> SystemParams {
     root_params_with_100_bits_security()
 }
 
-pub(in crate::tests) fn test_rv32im_config() -> Rv64ImConfig {
+pub(in crate::tests) fn test_rv64im_config() -> Rv64ImConfig {
     Rv64ImConfig {
         rv64i: Rv64IConfig {
             system: test_system_config().with_max_segment_len(1 << LOG_MAX_TRACE_HEIGHT),
@@ -114,7 +114,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
     Proof<SC>,
     UserPublicValuesProof<DIGEST_SIZE, F>,
 )> {
-    let config = test_rv32im_config();
+    let config = test_rv64im_config();
     let elf = Elf::decode(
         include_bytes!("../../programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
@@ -216,7 +216,7 @@ fn test_two_segments_leaf_aggregation() -> Result<()> {
 #[test_case(true ; "def_hook_cached_commit set")]
 fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
-    let config = test_rv32im_config();
+    let config = test_rv64im_config();
 
     let engine = Engine::new(app_system_params());
     let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
@@ -279,7 +279,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         user_pvs_proof,
     ) = run_full_aggregation(10, extra_recursive_layers)?;
 
-    let system_config = test_rv32im_config().rv32i.system;
+    let system_config = test_rv64im_config().rv64i.system;
 
     let root_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk,
@@ -314,7 +314,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         user_pvs_proof,
     ) = run_full_aggregation(10, 1)?;
 
-    let system_config = test_rv32im_config().rv32i.system;
+    let system_config = test_rv64im_config().rv64i.system;
 
     let root_base_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk.clone(),
