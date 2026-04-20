@@ -49,9 +49,9 @@ pub struct Keccak256Rv64Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv64I,
+    pub rv64i: Rv64I,
     #[extension]
-    pub rv32m: Rv64M,
+    pub rv64m: Rv64M,
     #[extension]
     pub io: Rv64Io,
     #[extension]
@@ -62,8 +62,8 @@ impl Default for Keccak256Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            rv32i: Rv64I,
-            rv32m: Rv64M::default(),
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
             io: Rv64Io,
             keccak: Keccak256,
         }
@@ -103,8 +103,8 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Keccak256CpuProverExt,
