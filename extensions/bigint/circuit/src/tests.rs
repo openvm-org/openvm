@@ -25,11 +25,6 @@ use openvm_instructions::{
     riscv::RV32_CELL_BITS,
     LocalOpcode,
 };
-use openvm_rv32_adapters::{
-    rv32_heap_branch_default, rv32_write_heap_default, Rv32VecHeapAdapterAir,
-    Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller, Rv32VecHeapBranchAdapterAir,
-    Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
-};
 use openvm_riscv_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
     BaseAluCoreAir, BaseAluFiller, BranchEqualCoreAir, BranchEqualFiller, BranchLessThanCoreAir,
@@ -38,6 +33,11 @@ use openvm_riscv_circuit::{
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
+};
+use openvm_rv32_adapters::{
+    rv32_heap_branch_default, rv32_write_heap_default, Rv32VecHeapAdapterAir,
+    Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller, Rv32VecHeapBranchAdapterAir,
+    Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
 };
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};

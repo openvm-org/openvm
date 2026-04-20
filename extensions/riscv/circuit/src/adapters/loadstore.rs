@@ -9,15 +9,13 @@ use openvm_circuit::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
-    system::{
-        memory::{
-            offline_checker::{
-                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-                MemoryWriteAuxCols,
-            },
-            online::TracingMemory,
-            MemoryAddress, MemoryAuxColsFactory,
+    system::memory::{
+        offline_checker::{
+            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols,
         },
+        online::TracingMemory,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -164,10 +162,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         // read rs1
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    local_cols.rs1_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
                 local_cols.rs1_data,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -181,10 +176,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         }
 
         // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
-        let limbs_01 = local_cols.rs1_data[0]
-            + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV64_CELL_BITS);
-        let limbs_23 = local_cols.rs1_data[2]
-            + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV64_CELL_BITS);
+        let limbs_01 =
+            local_cols.rs1_data[0] + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV64_CELL_BITS);
+        let limbs_23 =
+            local_cols.rs1_data[2] + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV64_CELL_BITS);
 
         let inv = AB::F::from_u32(1 << (RV64_CELL_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;

@@ -11,9 +11,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
-use openvm_stark_backend::{
-    p3_field::PrimeField32, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;

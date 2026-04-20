@@ -65,9 +65,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 let dec_insn = IType::new(instruction_u32);
                 Some(Instruction {
                     opcode: SystemOpcode::TERMINATE.global_opcode(),
-                    c: F::from_u8(
-                        dec_insn.imm.try_into().expect("exit code must be byte"),
-                    ),
+                    c: F::from_u8(dec_insn.imm.try_into().expect("exit code must be byte")),
                     ..Default::default()
                 })
             }

@@ -39,10 +39,7 @@ use openvm_instructions::{
 };
 #[cfg(feature = "aot")]
 use openvm_riscv_transpiler::BaseAluOpcode::ADD;
-use openvm_riscv_transpiler::{
-    MulOpcode,
-    MulWOpcode::{self, MULW},
-};
+use openvm_riscv_transpiler::MulWOpcode::{self, MULW};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -72,7 +69,7 @@ use crate::{
         Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
-    test_utils::{rv64_rand_write_register_or_imm},
+    test_utils::rv64_rand_write_register_or_imm,
     Rv64MulWAir, Rv64MulWExecutor,
 };
 
@@ -165,8 +162,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let c = c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
@@ -233,7 +230,7 @@ fn run_negative_mulw_test(
     prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prank_is_valid: bool,
     prank_result_sign: Option<u32>,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -520,7 +517,7 @@ fn test_aot_mul_randomized_pairs() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let value_i32 = rng.random_range(-(1i32 << 11)..(1i32 << 11));
         let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
         instructions.push(add_immediate(offset, imm_field));
         expected.insert(offset, value_i32 as u32);
