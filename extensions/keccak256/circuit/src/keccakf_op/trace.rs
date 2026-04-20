@@ -81,6 +81,7 @@ pub struct KeccakfRecord {
     pub timestamp: u32,
     pub rd_ptr: u32,
     pub buffer_ptr: u32,
+    pub rd_reg: [u8; 8],
     pub rd_aux: MemoryReadAuxRecord,
     pub buffer_word_aux: [MemoryReadAuxRecord; KECCAK_WIDTH_WORDS],
     pub preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
@@ -137,13 +138,13 @@ where
         record.pc = *state.pc;
         record.timestamp = state.memory.timestamp();
         record.rd_ptr = rd_ptr;
-        let rd_reg: [u8; 8] = tracing_read(
+        record.rd_reg = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             rd_ptr,
             &mut record.rd_aux.prev_timestamp,
         );
-        let buffer_ptr = u32::from_le_bytes(rd_reg[..4].try_into().unwrap());
+        let buffer_ptr = u32::from_le_bytes(record.rd_reg[..4].try_into().unwrap());
         record.buffer_ptr = buffer_ptr;
 
         let guest_mem = state.memory.data();
@@ -208,11 +209,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 row.fill(F::ZERO);
 
                 let postimage_buffer_bytes = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
-                let buffer_ptr_u8 = record.buffer_ptr.to_le_bytes();
-                let mut buffer_ptr_limbs = [F::ZERO; 8];
-                for i in 0..4 {
-                    buffer_ptr_limbs[i] = F::from_u8(buffer_ptr_u8[i]);
-                }
 
                 let local: &mut KeccakfOpCols<F> = row.borrow_mut();
 
@@ -220,7 +216,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_u32(record.timestamp);
                 local.rd_ptr = F::from_u32(record.rd_ptr);
-                local.buffer_ptr_limbs = buffer_ptr_limbs;
+                local.buffer_ptr_limbs = record.rd_reg.map(F::from_u8);
 
                 for (dst, &byte) in local.preimage.iter_mut().zip(&record.preimage_buffer_bytes) {
                     *dst = F::from_u8(byte);
@@ -246,7 +242,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 }
 
                 let limb_shift = 1u32 << (RV64_CELL_BITS * 4 - self.pointer_max_bits) as u32;
-                let scaled_limb = (buffer_ptr_u8[3] as u32) * limb_shift;
+                let scaled_limb = (record.rd_reg[3] as u32) * limb_shift;
                 self.bitwise_lookup_chip
                     .request_range(scaled_limb, scaled_limb);
 

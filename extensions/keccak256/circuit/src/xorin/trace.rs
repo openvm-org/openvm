@@ -45,6 +45,9 @@ pub struct XorinVmRecordHeader {
     pub buffer: u32,
     pub input: u32,
     pub len: u32,
+    pub buffer_reg: [u8; 8],
+    pub input_reg: [u8; 8],
+    pub len_reg: [u8; 8],
     pub buffer_limbs: [u8; 136],
     pub input_limbs: [u8; 136],
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
@@ -124,29 +127,32 @@ where
         record.inner.rs1_ptr = b.as_canonical_u32();
         record.inner.rs2_ptr = c.as_canonical_u32();
 
-        let buffer_reg: [u8; 8] = tracing_read(
+        record.inner.buffer_reg = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             record.inner.rd_ptr,
             &mut record.inner.register_aux_cols[0].prev_timestamp,
         );
-        record.inner.buffer = u32::from_le_bytes(buffer_reg[..4].try_into().unwrap());
+        record.inner.buffer =
+            u32::from_le_bytes(record.inner.buffer_reg[..4].try_into().unwrap());
 
-        let input_reg: [u8; 8] = tracing_read(
+        record.inner.input_reg = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             record.inner.rs1_ptr,
             &mut record.inner.register_aux_cols[1].prev_timestamp,
         );
-        record.inner.input = u32::from_le_bytes(input_reg[..4].try_into().unwrap());
+        record.inner.input =
+            u32::from_le_bytes(record.inner.input_reg[..4].try_into().unwrap());
 
-        let len_reg: [u8; 8] = tracing_read(
+        record.inner.len_reg = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             record.inner.rs2_ptr,
             &mut record.inner.register_aux_cols[2].prev_timestamp,
         );
-        record.inner.len = u32::from_le_bytes(len_reg[..4].try_into().unwrap());
+        record.inner.len =
+            u32::from_le_bytes(record.inner.len_reg[..4].try_into().unwrap());
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
@@ -227,26 +233,11 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
         trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
-        let buffer_ptr_u8: [u8; 4] = record.buffer.to_le_bytes();
-        let mut buffer_ptr_limbs = [F::ZERO; 8];
-        for i in 0..4 {
-            buffer_ptr_limbs[i] = F::from_u8(buffer_ptr_u8[i]);
-        }
-        trace_row.instruction.buffer_ptr_limbs = buffer_ptr_limbs;
+        trace_row.instruction.buffer_ptr_limbs = record.buffer_reg.map(F::from_u8);
         trace_row.instruction.input_ptr = F::from_u32(record.input);
-        let input_ptr_u8: [u8; 4] = record.input.to_le_bytes();
-        let mut input_ptr_limbs = [F::ZERO; 8];
-        for i in 0..4 {
-            input_ptr_limbs[i] = F::from_u8(input_ptr_u8[i]);
-        }
-        trace_row.instruction.input_ptr_limbs = input_ptr_limbs;
+        trace_row.instruction.input_ptr_limbs = record.input_reg.map(F::from_u8);
         trace_row.instruction.len = F::from_u32(record.len);
-        let len_u8: [u8; 4] = record.len.to_le_bytes();
-        let mut len_limbs = [F::ZERO; 8];
-        for i in 0..4 {
-            len_limbs[i] = F::from_u8(len_u8[i]);
-        }
-        trace_row.instruction.len_limbs = len_limbs;
+        trace_row.instruction.len_limbs = record.len_reg.map(F::from_u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
 
         for i in 0..(record.len / 4) {
@@ -311,15 +302,11 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        let buffer_ptr_bytes = record.buffer.to_le_bytes();
-        let input_ptr_bytes = record.input.to_le_bytes();
-        let len_bytes = record.len.to_le_bytes();
-
         let need_range_check = [
-            &buffer_ptr_bytes[3],
-            &input_ptr_bytes[3],
-            &len_bytes[3],
-            &len_bytes[3],
+            &record.buffer_reg[3],
+            &record.input_reg[3],
+            &record.len_reg[3],
+            &record.len_reg[3],
         ];
 
         let limb_shift = 1 << (RV64_CELL_BITS * 4 - self.pointer_max_bits);
