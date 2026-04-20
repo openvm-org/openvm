@@ -10,9 +10,9 @@ on:
 #     - "crates/circuits/primitives/**"
 #     - "crates/vm/**"
 #     - "crates/toolchain/**"
-      - "extensions/rv32im/circuit/**"
-      - "extensions/rv32im/transpiler/**"
-      - "extensions/rv32im/guest/**"
+      - "extensions/riscv/circuit/**"
+      - "extensions/riscv/transpiler/**"
+      - "extensions/riscv/guest/**"
 #     - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 
