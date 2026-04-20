@@ -18,7 +18,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::ShiftOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -47,7 +47,7 @@ use crate::{
         RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     test_utils::{
-        generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
+        generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm,
     },
     Rv64ShiftAir, Rv64ShiftExecutor, ShiftFiller,
 };
@@ -148,7 +148,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c);
     assert_eq!(
-        a.map(F::from_canonical_u8),
+        a.map(F::from_u8),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     )
 }
@@ -232,28 +232,28 @@ fn run_negative_shift_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
-        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_u32);
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
-            cols.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
+            cols.bit_multiplier_left = F::from_u32(bit_multiplier_left);
         }
         if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
-            cols.bit_multiplier_right = F::from_canonical_u32(bit_multiplier_right);
+            cols.bit_multiplier_right = F::from_u32(bit_multiplier_right);
         }
         if let Some(b_sign) = prank_vals.b_sign {
-            cols.b_sign = F::from_canonical_u32(b_sign);
+            cols.b_sign = F::from_u32(b_sign);
         }
         if let Some(bit_shift_marker) = prank_vals.bit_shift_marker {
-            cols.bit_shift_marker = bit_shift_marker.map(F::from_canonical_u32);
+            cols.bit_shift_marker = bit_shift_marker.map(F::from_u32);
         }
         if let Some(limb_shift_marker) = prank_vals.limb_shift_marker {
-            cols.limb_shift_marker = limb_shift_marker.map(F::from_canonical_u32);
+            cols.limb_shift_marker = limb_shift_marker.map(F::from_u32);
         }
         if let Some(bit_shift_carry) = prank_vals.bit_shift_carry {
-            cols.bit_shift_carry = bit_shift_carry.map(F::from_canonical_u32);
+            cols.bit_shift_carry = bit_shift_carry.map(F::from_u32);
         }
 
         *trace = RowMajorMatrix::new(values, trace.width());
@@ -265,7 +265,9 @@ fn run_negative_shift_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -445,7 +447,7 @@ fn rv64_shift_adapter_imm_sign_extension_negative_test() {
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.c[4] = F::ONE;
@@ -458,7 +460,9 @@ fn rv64_shift_adapter_imm_sign_extension_negative_test() {
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(false));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

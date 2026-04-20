@@ -30,10 +30,10 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
 use crate::adapters::{read_rv64_register, tracing_read, tracing_write};
@@ -96,16 +96,16 @@ impl<F: Field> PartitionedBaseAir<F> for Rv64HintStoreAir {}
 impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).unwrap();
         let local_cols: &Rv64HintStoreCols<AB::Var> = (*local).borrow();
-        let next = main.row_slice(1);
+        let next = main.row_slice(1).unwrap();
         let next_cols: &Rv64HintStoreCols<AB::Var> = (*next).borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::Expr::from_usize(timestamp_delta - 1)
         };
 
         builder.assert_bool(local_cols.is_single);
@@ -142,13 +142,13 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let mut mem_ptr = AB::Expr::ZERO;
         let mut next_mem_ptr = AB::Expr::ZERO;
         for i in (0..RV64_REGISTER_NUM_LIMBS).rev() {
-            rem_words = rem_words * AB::F::from_canonical_u32(1 << RV64_CELL_BITS)
+            rem_words = rem_words * AB::F::from_u32(1 << RV64_CELL_BITS)
                 + local_cols.rem_words_limbs[i];
-            next_rem_words = next_rem_words * AB::F::from_canonical_u32(1 << RV64_CELL_BITS)
+            next_rem_words = next_rem_words * AB::F::from_u32(1 << RV64_CELL_BITS)
                 + next_cols.rem_words_limbs[i];
-            mem_ptr = mem_ptr * AB::F::from_canonical_u32(1 << RV64_CELL_BITS)
+            mem_ptr = mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS)
                 + local_cols.mem_ptr_limbs[i];
-            next_mem_ptr = next_mem_ptr * AB::F::from_canonical_u32(1 << RV64_CELL_BITS)
+            next_mem_ptr = next_mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS)
                 + next_cols.mem_ptr_limbs[i];
         }
 
@@ -170,7 +170,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(RV64_REGISTER_AS),
                     local_cols.mem_ptr_ptr,
                 ),
                 local_cols.mem_ptr_limbs,
@@ -183,7 +183,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::F::from_canonical_u32(RV64_REGISTER_AS),
+                    AB::F::from_u32(RV64_REGISTER_AS),
                     local_cols.num_words_ptr,
                 ),
                 local_cols.rem_words_limbs,
@@ -195,16 +195,16 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // write hint
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV64_MEMORY_AS), mem_ptr.clone()),
+                MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
                 local_cols.data,
                 timestamp_pp(),
                 &local_cols.write_aux,
             )
             .eval(builder, is_valid.clone());
         let expected_opcode = (local_cols.is_single
-            * AB::F::from_canonical_usize(HINT_STORED as usize + self.offset))
+            * AB::F::from_usize(HINT_STORED as usize + self.offset))
             + (local_cols.is_buffer
-                * AB::F::from_canonical_usize(HINT_BUFFER as usize + self.offset));
+                * AB::F::from_usize(HINT_BUFFER as usize + self.offset));
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -213,11 +213,11 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
                     local_cols.is_buffer * (local_cols.num_words_ptr),
                     local_cols.mem_ptr_ptr.into(),
                     AB::Expr::ZERO,
-                    AB::Expr::from_canonical_u32(RV64_REGISTER_AS),
-                    AB::Expr::from_canonical_u32(RV64_MEMORY_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_MEMORY_AS),
                 ],
                 local_cols.from_state,
-                rem_words.clone() * AB::F::from_canonical_usize(timestamp_delta),
+                rem_words.clone() * AB::F::from_usize(timestamp_delta),
             )
             .eval(builder, is_start.clone());
 
@@ -242,11 +242,11 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[3]
-                    * AB::F::from_canonical_usize(
+                    * AB::F::from_usize(
                         1 << (4 * RV64_CELL_BITS - self.pointer_max_bits),
                     ),
                 local_cols.rem_words_limbs[RV64_REGISTER_NUM_LIMBS - 1 - REM_WORD_NUM_ZERO_LIMBS]
-                    * AB::F::from_canonical_usize(
+                    * AB::F::from_usize(
                         1 << ((RV64_REGISTER_NUM_LIMBS - REM_WORD_NUM_ZERO_LIMBS) * RV64_CELL_BITS
                             - MAX_HINT_BUFFER_DWORDS_BITS),
                     ),
@@ -288,10 +288,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // before we overflow the field.
         when_buffer_transition.assert_eq(
             next_mem_ptr.clone() - mem_ptr.clone(),
-            AB::F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS),
+            AB::F::from_usize(RV64_REGISTER_NUM_LIMBS),
         );
         when_buffer_transition.assert_eq(
-            timestamp + AB::F::from_canonical_usize(timestamp_delta),
+            timestamp + AB::F::from_usize(timestamp_delta),
             next_cols.from_state.timestamp,
         );
     }
@@ -629,7 +629,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                                 timestamp + 1,
                                 cols.num_words_aux_cols.as_mut(),
                             );
-                            cols.num_words_ptr = F::from_canonical_u32(record.inner.num_words_ptr);
+                            cols.num_words_ptr = F::from_u32(record.inner.num_words_ptr);
                         } else {
                             mem_helper.fill_zero(cols.num_words_aux_cols.as_mut());
                             cols.num_words_ptr = F::ZERO;
@@ -638,12 +638,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         cols.is_buffer_start = F::from_bool(idx == 0 && !is_single);
 
                         // Note: writing in reverse
-                        cols.data = var.data.map(|x| F::from_canonical_u8(x));
+                        cols.data = var.data.map(|x| F::from_u8(x));
 
                         cols.write_aux.set_prev_data(
                             var.data_write_aux
                                 .prev_data
-                                .map(|x| F::from_canonical_u8(x)),
+                                .map(|x| F::from_u8(x)),
                         );
                         mem_helper.fill(
                             var.data_write_aux.prev_timestamp,
@@ -663,15 +663,15 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
 
                         mem_ptr -= RV64_REGISTER_NUM_LIMBS as u32;
                         cols.mem_ptr_limbs =
-                            (mem_ptr as u64).to_le_bytes().map(F::from_canonical_u8);
-                        cols.mem_ptr_ptr = F::from_canonical_u32(record.inner.mem_ptr_ptr);
+                            (mem_ptr as u64).to_le_bytes().map(F::from_u8);
+                        cols.mem_ptr_ptr = F::from_u32(record.inner.mem_ptr_ptr);
 
-                        cols.from_state.timestamp = F::from_canonical_u32(timestamp);
-                        cols.from_state.pc = F::from_canonical_u32(record.inner.from_pc);
+                        cols.from_state.timestamp = F::from_u32(timestamp);
+                        cols.from_state.pc = F::from_u32(record.inner.from_pc);
 
                         cols.rem_words_limbs = ((num_words - idx as u32) as u64)
                             .to_le_bytes()
-                            .map(F::from_canonical_u8);
+                            .map(F::from_u8);
                         cols.is_buffer = F::from_bool(!is_single);
                         cols.is_single = F::from_bool(is_single);
                     });

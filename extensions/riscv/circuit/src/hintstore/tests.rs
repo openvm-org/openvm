@@ -24,7 +24,7 @@ use openvm_riscv_transpiler::{
     MAX_HINT_BUFFER_DWORDS,
 };
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -42,7 +42,7 @@ use {
 };
 
 use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
-use crate::{test_utils::get_verification_error, Rv64HintStoreFiller};
+use crate::Rv64HintStoreFiller;
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
@@ -103,7 +103,7 @@ fn create_harness<RA: Arena>(
 
 /// Convert a `u32` value to the 8-limb register representation (upper 4 limbs zero).
 fn u32_to_rv64_limbs(x: u32) -> [F; RV64_REGISTER_NUM_LIMBS] {
-    (x as u64).to_le_bytes().map(F::from_canonical_u8)
+    (x as u64).to_le_bytes().map(F::from_u8)
 }
 
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
@@ -132,7 +132,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mut input = Vec::with_capacity(num_words as usize * RV64_REGISTER_NUM_LIMBS);
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
         input.extend(data);
         tester.streams_mut().hint_stream.extend(data);
     }
@@ -222,7 +222,7 @@ fn test_hint_buffer_exceeds_max_words() {
     tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -253,7 +253,7 @@ fn test_hint_buffer_rem_words_upper_limbs_zero() {
     tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -267,12 +267,12 @@ fn test_hint_buffer_rem_words_upper_limbs_zero() {
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Only limbs 0 and 1 of `rem_words` may carry information; limbs 2..8 are asserted
         // zero by the AIR. Setting limb 2 non-zero must be rejected as a constraint error.
         let mut limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
-        limbs[2] = F::from_canonical_u8(1);
+        limbs[2] = F::from_u8(1);
         cols.rem_words_limbs = limbs;
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -284,7 +284,9 @@ fn test_hint_buffer_rem_words_upper_limbs_zero() {
         .load_periphery(bitwise)
         .finalize();
 
-    tester.simple_test_with_expected_error(get_verification_error(false));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -303,7 +305,7 @@ fn test_hint_buffer_rem_words_range_check() {
     tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -317,7 +319,7 @@ fn test_hint_buffer_rem_words_range_check() {
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // The AIR scales `rem_words_limbs[1]` by `1 << 6`, requiring the result to fit in a
         // byte (so `limb[1] < 4` under `MAX_HINT_BUFFER_DWORDS_BITS = 10`). Setting limb 1 to
@@ -325,8 +327,8 @@ fn test_hint_buffer_rem_words_range_check() {
         // `limb[0]` with `1 − 1024` in F so the composed `rem_words` stays at 1; otherwise
         // the end-row `assert_one(rem_words)` constraint would fail first and shadow the
         // interaction error we want to observe.
-        cols.rem_words_limbs[1] = F::from_canonical_u32(4);
-        cols.rem_words_limbs[0] = F::ONE - F::from_canonical_u32(1024);
+        cols.rem_words_limbs[1] = F::from_u32(4);
+        cols.rem_words_limbs[0] = F::ONE - F::from_u32(1024);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -337,7 +339,9 @@ fn test_hint_buffer_rem_words_range_check() {
         .load_periphery(bitwise)
         .finalize();
 
-    tester.simple_test_with_expected_error(get_verification_error(true));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -356,7 +360,7 @@ fn test_hint_buffer_mem_ptr_upper_limbs_zero() {
     tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -370,11 +374,11 @@ fn test_hint_buffer_mem_ptr_upper_limbs_zero() {
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Force one of the upper `mem_ptr` limbs (which must be zero under the AIR) to be
         // non-zero.
-        cols.mem_ptr_limbs[4] = F::from_canonical_u8(1);
+        cols.mem_ptr_limbs[4] = F::from_u8(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -385,7 +389,9 @@ fn test_hint_buffer_mem_ptr_upper_limbs_zero() {
         .load_periphery(bitwise)
         .finalize();
 
-    tester.simple_test_with_expected_error(get_verification_error(false));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -404,7 +410,7 @@ fn test_hint_buffer_mem_ptr_range_check() {
     tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -418,12 +424,12 @@ fn test_hint_buffer_mem_ptr_range_check() {
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // For the default `pointer_max_bits = 29`, the AIR scales `mem_ptr_limbs[3]` by
         // `1 << 3`, which forces `mem_ptr_limbs[3] < 32`. Setting the limb to 100 sends a
         // scaled value of 800 to the byte-range bitwise lookup, which has no matching row.
-        cols.mem_ptr_limbs[3] = F::from_canonical_u32(100);
+        cols.mem_ptr_limbs[3] = F::from_u32(100);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -434,7 +440,9 @@ fn test_hint_buffer_mem_ptr_range_check() {
         .load_periphery(bitwise)
         .finalize();
 
-    tester.simple_test_with_expected_error(get_verification_error(true));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -449,10 +457,10 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
     // so the preflight executor must panic before it reaches the data write.
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let mut mem_ptr_limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
-    mem_ptr_limbs[4] = F::from_canonical_u8(1);
+    mem_ptr_limbs[4] = F::from_u8(1);
     tester.write(RV64_REGISTER_AS as usize, b, mem_ptr_limbs);
 
-    let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+    let data = rng.next_u64().to_le_bytes().map(F::from_u8);
     tester.streams_mut().hint_stream.extend(data);
 
     tester.execute(
@@ -484,10 +492,10 @@ fn run_negative_hintstore_test(
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = prank_data {
-            cols.data = data.map(F::from_canonical_u32);
+            cols.data = data.map(F::from_u32);
         }
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -498,7 +506,9 @@ fn run_negative_hintstore_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
