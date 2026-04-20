@@ -24,7 +24,7 @@ use openvm_verify_stark_host::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
-    prover::DeferralProver,
+    prover::{DeferralProof, DeferralProver},
     DeferralInput, Sdk, StdIn,
 };
 
@@ -285,6 +285,75 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     let vk = evm_prover.root_prover.0.get_vk();
     let engine = RootE::new(vk.inner.params.clone());
     engine.verify(&vk, &proof)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
+    setup_tracing();
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
+    let (vs_sdk, vs_stdin, def_input) =
+        make_deferral_sdk(&fib_sdk, fib_proof, fib_baseline, app_params, agg_params)?;
+
+    let vs_elf = Elf::decode(
+        include_bytes!("../programs/examples/verify-stark.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
+
+    // ---- Step 1: Generate base VM and deferral proofs ----
+    let agg_prover = vs_sdk.agg_prover();
+    let app_proof = vs_sdk.app_prover(vs_exe)?.prove(vs_stdin)?;
+    let (vm_proof, mut internal_layer_metadata) = agg_prover.prove_vm(app_proof)?;
+
+    // We assume that the verify-stark program is small enough where only a single
+    // internal_recursive layer is needed to fully aggregate its proof.
+    assert_eq!(internal_layer_metadata.internal_recursive_layer, 1);
+
+    let def_prover = vs_sdk.def_path_prover.unwrap();
+    let def_hook_proofs = def_prover.deferral_prover.prove(&[def_input])?;
+    let (def_proof, mut def_internal_recursive_layer) =
+        def_prover.agg_prover.prove_def(def_hook_proofs)?;
+    assert_eq!(def_internal_recursive_layer, 1);
+
+    // ---- Step 2: Generate mixed proof with wrapped VM proof ----
+    let mut wrapped_vm_metadata = internal_layer_metadata.clone();
+    let mut wrapped_vm_proof = vm_proof.clone();
+    for _ in 0..2 {
+        wrapped_vm_proof = agg_prover.wrap_proof(wrapped_vm_proof, &mut wrapped_vm_metadata)?;
+    }
+    let wrapped_vm_mixed_proof = agg_prover.prove_mixed(
+        wrapped_vm_proof,
+        def_proof.clone(),
+        &mut wrapped_vm_metadata,
+        def_internal_recursive_layer,
+    )?;
+
+    // ---- Step 3: Generate mixed proof with wrapped deferral proof ----
+    let wrapped_def_proof = match def_proof {
+        DeferralProof::Present(mut p) => {
+            for _ in 0..2 {
+                p = agg_prover.wrap_def_inner(p, def_internal_recursive_layer)?;
+            }
+            def_internal_recursive_layer += 1;
+            DeferralProof::Present(p)
+        }
+        DeferralProof::Absent(_) => panic!("expected DeferralProof::Present"),
+    };
+    let wrapped_def_mixed_proof = agg_prover.prove_mixed(
+        vm_proof,
+        wrapped_def_proof,
+        &mut internal_layer_metadata,
+        def_internal_recursive_layer,
+    )?;
+
+    // ---- Step 4: Verify mixed proofs ----
+    let vk = agg_prover.internal_recursive_prover.get_vk();
+    let engine = E::new(vk.inner.params.clone());
+    engine.verify(&vk, &wrapped_vm_mixed_proof.inner)?;
+    engine.verify(&vk, &wrapped_def_mixed_proof.inner)?;
 
     Ok(())
 }
