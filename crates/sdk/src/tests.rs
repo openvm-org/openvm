@@ -336,8 +336,8 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
         DeferralProof::Present(mut p) => {
             for _ in 0..2 {
                 p = agg_prover.wrap_def_inner(p, def_internal_recursive_layer)?;
+                def_internal_recursive_layer += 1;
             }
-            def_internal_recursive_layer += 1;
             DeferralProof::Present(p)
         }
         DeferralProof::Absent(_) => panic!("expected DeferralProof::Present"),
