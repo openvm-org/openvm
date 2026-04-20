@@ -103,14 +103,14 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) where
     Rv64AuipcExecutor: PreflightExecutor<F, RA>,
 {
-    let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
-    let a = rng.gen_range(0..32) << 3;
+    let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
+    let a = rng.random_range(0..32) << 3;
 
     tester.execute_with_pc(
         executor,
         arena,
         &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
+        initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
@@ -169,7 +169,7 @@ fn run_negative_auipc_test(
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
     prank_vals: AuipcPrankValues,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -274,7 +274,7 @@ fn invalid_limb_negative_tests() {
 #[test]
 fn rd_upper_bytes_trace_tamper_negative_test() {
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&tester);
 
     let initial_pc = 0x1234;
     let imm = 16usize;
@@ -415,9 +415,9 @@ fn test_cuda_rand_auipc_tracegen() {
     let num_ops = 100;
 
     for _ in 0..num_ops {
-        let imm = rng.gen_range(0..(1 << IMM_BITS)) as usize;
+        let imm = rng.random_range(0..(1 << IMM_BITS)) as usize;
         let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-        let initial_pc = rng.gen_range(0..(1 << PC_BITS));
+        let initial_pc = rng.random_range(0..(1 << PC_BITS));
 
         tester.execute_with_pc(
             &mut harness.executor,
