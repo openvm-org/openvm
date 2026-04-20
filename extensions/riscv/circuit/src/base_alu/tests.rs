@@ -41,9 +41,7 @@ use crate::{
         RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     base_alu::BaseAluCoreCols,
-    test_utils::{
-        generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm,
-    },
+    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
     BaseAluFiller, Rv64BaseAluAir,
 };
 
@@ -112,8 +110,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
             ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
         } else {
@@ -123,7 +121,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     } else {
         (
             None,
-            c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX))),
+            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
         )
     };
 
@@ -137,8 +135,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let a = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c)
-        .map(F::from_u8);
+    let a = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c).map(F::from_u8);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
@@ -245,7 +242,7 @@ fn run_negative_alu_test(
     prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prank_opcode_flags: Option<[bool; 5]>,
     is_imm: Option<bool>,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();

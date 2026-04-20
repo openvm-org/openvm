@@ -1,10 +1,12 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::{
-    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_CELL_BITS,
-    RV64_WORD_NUM_LIMBS,
+use super::{
+    adapters::{
+        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
+        RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
+    },
+    shift::{ShiftCoreAir, ShiftExecutor, ShiftFiller},
 };
-use super::shift::{ShiftCoreAir, ShiftExecutor, ShiftFiller};
 
 mod execution;
 
