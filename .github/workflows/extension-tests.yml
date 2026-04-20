@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
         extension:
-          - { name: "rv32im", path: "rv32im", aot: false }
+          - { name: "riscv", path: "riscv", aot: false }
           - { name: "keccak256", path: "keccak256", aot: false }
           - { name: "sha2", path: "sha2", aot: false }
           - { name: "bigint", path: "bigint", aot: false }
@@ -36,7 +36,7 @@ jobs:
           - { name: "pairing", path: "pairing", aot: false }
           - { name: "deferral", path: "deferral", aot: false }
           # TODO(aot): re-enable
-          # - { name: "rv32im", path: "rv32im", aot: true }
+          # - { name: "riscv", path: "riscv", aot: true }
           # - { name: "keccak256", path: "keccak256", aot: true }
           # - { name: "sha2", path: "sha2", aot: true }
           # - { name: "bigint", path: "bigint", aot: true }
