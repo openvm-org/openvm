@@ -17,7 +17,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
-use crate::KECCAK_WORD_SIZE;
+use crate::KECCAK_MEMORY_BLOCK;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -165,21 +165,21 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let length_u32 = u32::from_le_bytes(length[..4].try_into().unwrap());
 
     // SAFETY: RV64_MEMORY_AS is memory address space of type u8
-    let num_reads = (length_u32 as usize).div_ceil(KECCAK_WORD_SIZE);
+    let num_reads = (length_u32 as usize).div_ceil(KECCAK_MEMORY_BLOCK);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
+            exec_state.vm_read::<u8, KECCAK_MEMORY_BLOCK>(
                 RV64_MEMORY_AS,
-                buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
+                buffer_u32 + (i * KECCAK_MEMORY_BLOCK) as u32,
             )
         })
         .collect();
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
+            exec_state.vm_read::<u8, KECCAK_MEMORY_BLOCK>(
                 RV64_MEMORY_AS,
-                input_u32 + (i * KECCAK_WORD_SIZE) as u32,
+                input_u32 + (i * KECCAK_MEMORY_BLOCK) as u32,
             )
         })
         .collect();
@@ -189,14 +189,16 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
         output_bytes[i] ^= input_bytes[i];
     }
 
-    // Write XOR result back to the buffer memory in KECCAK_WORD_SIZE chunks.
-    // Note: this means output_bytes has to be multiple of KECCAK_WORD_SIZE
-    // Todo: recheck the above condition is okay
-    for (i, chunk) in output_bytes.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-        let chunk: [u8; KECCAK_WORD_SIZE] = chunk.try_into().unwrap();
-        exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
+    // Write XOR result back to the buffer memory in 8-byte blocks.
+    // Note: this means output_bytes length is a multiple of KECCAK_MEMORY_BLOCK
+    for (i, chunk) in output_bytes
+        .chunks_exact(KECCAK_MEMORY_BLOCK)
+        .enumerate()
+    {
+        let chunk: [u8; KECCAK_MEMORY_BLOCK] = chunk.try_into().unwrap();
+        exec_state.vm_write::<u8, KECCAK_MEMORY_BLOCK>(
             RV64_MEMORY_AS,
-            buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            buffer_u32 + (i * KECCAK_MEMORY_BLOCK) as u32,
             &chunk,
         );
     }

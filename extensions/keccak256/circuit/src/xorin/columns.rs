@@ -2,7 +2,7 @@ use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryW
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS;
 
-use crate::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
+use crate::{KECCAK_MEMORY_BLOCK, KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -46,10 +46,10 @@ pub struct XorinSpongeCols<T> {
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
-    pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
-    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
+    pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_MEMORY_BLOCK],
+    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_MEMORY_BLOCK],
     pub buffer_bytes_write_aux_cols:
-        [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
+        [MemoryWriteAuxCols<T, KECCAK_MEMORY_BLOCK>; KECCAK_RATE_BYTES / KECCAK_MEMORY_BLOCK],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
-use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE};
+use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_MEMORY_BLOCK, KECCAK_WIDTH_BYTES};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -165,10 +165,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     if IS_E1 {
         exec_state.vm_write(RV64_MEMORY_AS, buffer_ptr, &postimage);
     } else {
-        for (word_idx, word) in postimage.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
+        for (word_idx, word) in postimage.chunks_exact(KECCAK_MEMORY_BLOCK).enumerate() {
+            exec_state.vm_write::<u8, KECCAK_MEMORY_BLOCK>(
                 RV64_MEMORY_AS,
-                buffer_ptr + (word_idx * KECCAK_WORD_SIZE) as u32,
+                buffer_ptr + (word_idx * KECCAK_MEMORY_BLOCK) as u32,
                 word.try_into().unwrap(),
             );
         }

@@ -51,9 +51,9 @@ pub struct XorinVmRecordHeader {
     pub buffer_limbs: [u8; 136],
     pub input_limbs: [u8; 136],
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
-    pub input_read_aux_cols: [MemoryReadAuxRecord; 34],
-    pub buffer_read_aux_cols: [MemoryReadAuxRecord; 34],
-    pub buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<4>; 34],
+    pub input_read_aux_cols: [MemoryReadAuxRecord; 17],
+    pub buffer_read_aux_cols: [MemoryReadAuxRecord; 17],
+    pub buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<8>; 17],
 }
 
 pub struct XorinVmRecordMut<'a> {
@@ -106,11 +106,11 @@ where
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
         let len = read_rv64_register(guest_mem, c.as_canonical_u32()) as u32 as usize;
-        // Safety: length has to be multiple of 4
+        // Safety: length has to be multiple of 8
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
-        debug_assert!(len.is_multiple_of(4));
-        let num_reads = len.div_ceil(4);
+        debug_assert!(len.is_multiple_of(8));
+        let num_reads = len.div_ceil(8);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because
         // XorinVmRecordLayout is a MultiRowLayout since get_num_rows() = 1, this will
@@ -158,26 +158,26 @@ where
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
         debug_assert!(record.inner.len < (1 << self.pointer_max_bits));
 
-        // read buffer
+        // read buffer in 8-byte blocks
         for idx in 0..num_reads {
-            let read = tracing_read::<4>(
+            let read = tracing_read::<8>(
                 state.memory,
                 RV64_MEMORY_AS,
-                record.inner.buffer + (idx * 4) as u32,
+                record.inner.buffer + (idx * 8) as u32,
                 &mut record.inner.buffer_read_aux_cols[idx].prev_timestamp,
             );
-            record.inner.buffer_limbs[4 * idx..4 * (idx + 1)].copy_from_slice(&read);
+            record.inner.buffer_limbs[8 * idx..8 * (idx + 1)].copy_from_slice(&read);
         }
 
-        // read input
+        // read input in 8-byte blocks
         for idx in 0..num_reads {
-            let read = tracing_read::<4>(
+            let read = tracing_read::<8>(
                 state.memory,
                 RV64_MEMORY_AS,
-                record.inner.input + (idx * 4) as u32,
+                record.inner.input + (idx * 8) as u32,
                 &mut record.inner.input_read_aux_cols[idx].prev_timestamp,
             );
-            record.inner.input_limbs[4 * idx..4 * (idx + 1)].copy_from_slice(&read);
+            record.inner.input_limbs[8 * idx..8 * (idx + 1)].copy_from_slice(&read);
         }
 
         let mut result = [0u8; 136];
@@ -191,14 +191,14 @@ where
             *x_xor_y = x ^ y;
         }
 
-        // write result
+        // write result in 8-byte blocks
         for idx in 0..num_reads {
-            let mut word: [u8; 4] = [0u8; 4];
-            word.copy_from_slice(&result[4 * idx..4 * (idx + 1)]);
+            let mut word: [u8; 8] = [0u8; 8];
+            word.copy_from_slice(&result[8 * idx..8 * (idx + 1)]);
             tracing_write(
                 state.memory,
                 RV64_MEMORY_AS,
-                record.inner.buffer + (idx * 4) as u32,
+                record.inner.buffer + (idx * 8) as u32,
                 word,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_timestamp,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_data,
@@ -249,7 +249,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
         let mut timestamp = record.timestamp;
         let record_len: usize = record.len as usize;
-        let num_reads: usize = record_len.div_ceil(4);
+        let num_reads: usize = record_len.div_ceil(8);
 
         for t in 0..3 {
             mem_helper.fill(
@@ -279,8 +279,10 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        // safety note: we leave the upper record_len..134 bytes with zeroes
-        // because they are just padding bytes and unused by the chip
+        // Fill all bytes that are covered by active 8-byte memory blocks.
+        // For non-padding bytes, postimage = preimage XOR input.
+        // For padding bytes within an active block, postimage = preimage (identity).
+        let bytes_covered = num_reads * 8;
         for i in 0..record_len {
             trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
@@ -289,6 +291,12 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             let b_val = record.buffer_limbs[i] as u32;
             let c_val = record.input_limbs[i] as u32;
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
+        }
+        // Padding bytes within active blocks: postimage = preimage
+        for i in record_len..bytes_covered {
+            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
+            trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
+            trace_row.sponge.postimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
         }
 
         for t in 0..num_reads {

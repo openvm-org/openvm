@@ -19,7 +19,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV64_CELL_BITS, LocalOpcode};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
@@ -46,7 +46,7 @@ const KECCAKF_STATE_BUS: BusIndex = 13;
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (KeccakfOpAir, KeccakfExecutor, KeccakfOpChip<F>) {
@@ -67,15 +67,15 @@ fn create_harness_fields(
 struct TestHarness<RA> {
     harness: Harness<RA>,
     bitwise: (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
     perm: (KeccakfPermAir, KeccakfPermChip),
 }
 
 fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarness<RA> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -112,16 +112,20 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rd = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, 8);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    tester.write(1, rd, (buffer_ptr as u32).to_le_bytes().map(F::from_u8));
+    let mut rd_val = [F::ZERO; 8];
+    for (i, &b) in (buffer_ptr as u32).to_le_bytes().iter().enumerate() {
+        rd_val[i] = F::from_u8(b);
+    }
+    tester.write(1, rd, rd_val);
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
 
-    for i in 0..(MAX_LEN / 4) {
-        let buffer_chunk: [F; 4] = rand_buffer_arr_f[4 * i..4 * i + 4]
+    for i in 0..(MAX_LEN / 8) {
+        let buffer_chunk: [F; 8] = rand_buffer_arr_f[8 * i..8 * i + 8]
             .try_into()
-            .expect("slice has length 4");
-        tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
+            .expect("slice has length 8");
+        tester.write(2, buffer_ptr + 8 * i, buffer_chunk);
     }
 
     tester.execute(
@@ -132,10 +136,10 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mut output_buffer = [0u8; MAX_LEN];
 
-    for i in 0..(MAX_LEN / 4) {
-        let output_chunk: [F; 4] = tester.read(2, buffer_ptr + 4 * i);
+    for i in 0..(MAX_LEN / 8) {
+        let output_chunk: [F; 8] = tester.read(2, buffer_ptr + 8 * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
-        output_buffer[4 * i..4 * i + 4].copy_from_slice(&output_chunk);
+        output_buffer[8 * i..8 * i + 8].copy_from_slice(&output_chunk);
     }
     let mut state: [u64; 25] =
         from_fn(|i| u64::from_le_bytes(rand_buffer[8 * i..8 * i + 8].try_into().unwrap()));
@@ -214,7 +218,7 @@ struct CudaTestHarness {
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
