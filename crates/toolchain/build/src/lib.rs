@@ -20,7 +20,7 @@ pub use self::config::GuestOptions;
 mod config;
 
 /// The rustc compiler [target](https://doc.rust-lang.org/rustc/targets/index.html).
-pub const RUSTC_TARGET: &str = "riscv32im-risc0-zkvm-elf";
+pub const RUSTC_TARGET: &str = "riscv64im-unknown-none-elf";
 /// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
 pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2026-01-18";
 
@@ -268,9 +268,10 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     // let rust_src = get_env_var("OPENVM_RUST_SRC");
     // if !rust_src.is_empty() {
     // TODO[jpw]: only do this for custom src once we make openvm toolchain
+    // TODO(rv64-std): restore `std` and `proc_macro` when guest std works
     args.extend_from_slice(&[
         "-Z",
-        "build-std=alloc,core,proc_macro,panic_abort,std",
+        "build-std=alloc,core,panic_abort",
         "-Z",
         "build-std-features=compiler-builtins-mem",
     ]);
@@ -312,6 +313,8 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             // https://docs.rs/getrandom/0.3.2/getrandom/index.html#opt-in-backends
             "--cfg",
             "getrandom_backend=\"custom\"",
+            "--cfg",
+            "openvm_intrinsics",
         ],
     ]
     .concat()

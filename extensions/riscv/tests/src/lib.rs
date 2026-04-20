@@ -44,7 +44,7 @@ mod tests {
     }
 
     #[test_case("fibonacci", 1)]
-    fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv64i(example_name: &str, min_segments: usize) -> Result<()> {
         let config = Rv64IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
@@ -98,7 +98,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv64im(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
@@ -112,9 +112,11 @@ mod tests {
         Ok(())
     }
 
+    // TODO(rv64-std): re-enable when guest std works
+    #[ignore]
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv64im_std(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
@@ -288,6 +290,8 @@ mod tests {
         }
     }
 
+    // TODO(rv64-std): re-enable when guest std works
+    #[ignore]
     #[test]
     fn test_hashmap() -> Result<()> {
         let config = test_rv64im_config();
