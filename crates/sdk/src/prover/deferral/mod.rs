@@ -40,6 +40,7 @@ pub use merkle::*;
 pub type DefAggProvingKey = AggProvingKey;
 
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
 pub enum DeferralProof {
     Present(Proof<SC>),
     Absent(DeferralPvs<F>),

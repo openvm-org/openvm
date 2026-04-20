@@ -5,7 +5,7 @@ use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
 use openvm_recursion_circuit::prelude::Digest;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing, proof::Proof,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
 use openvm_verify_stark_host::{pvs::DeferralPvs, VmStarkProof};
@@ -37,6 +37,7 @@ pub struct AggProver {
     pub agg_tree_config: AggregationTreeConfig,
 }
 
+#[derive(Clone)]
 pub struct InternalLayerMetadata {
     pub internal_recursive_layer: u32,
     pub internal_node_idx: u32,
@@ -220,7 +221,7 @@ impl AggProver {
         ))
     }
 
-    pub fn prove_def(&self, input: Vec<DeferralProof>) -> Result<DeferralProof> {
+    pub fn prove_def(&self, input: Vec<DeferralProof>) -> Result<(DeferralProof, u32)> {
         assert!(!input.is_empty());
 
         // Leaf round: hook-level → leaf-level
@@ -262,7 +263,7 @@ impl AggProver {
             layer += 1;
         }
 
-        Ok(proofs.pop().unwrap())
+        Ok((proofs.pop().unwrap(), layer))
     }
 
     pub fn prove_mixed(
@@ -270,10 +271,20 @@ impl AggProver {
         mut vm_proof: VmStarkProof,
         def_proof: DeferralProof,
         metadata: &mut InternalLayerMetadata,
+        def_internal_recursive_layer: u32,
     ) -> Result<VmStarkProof> {
-        let DeferralProof::Present(def_inner) = def_proof else {
+        let DeferralProof::Present(mut def_inner) = def_proof else {
             return Ok(vm_proof);
         };
+
+        // The VM and deferral proofs must be at the same stage in internal recursion, i.e.
+        // both have to be the parent of either internal-for-leaf or internal-recursive child
+        // proofs. If this is not the case, we wrap the internal-for-leaf parent proof here.
+        if metadata.internal_recursive_layer == 1 && def_internal_recursive_layer != 1 {
+            vm_proof = self.wrap_proof(vm_proof, metadata)?
+        } else if def_internal_recursive_layer == 1 && metadata.internal_recursive_layer != 1 {
+            def_inner = self.wrap_def_inner(def_inner, def_internal_recursive_layer)?
+        }
 
         vm_proof.inner = info_span!(
             "agg_layer",
@@ -316,6 +327,26 @@ impl AggProver {
                     None,
                 )
             })
+        })?;
+        Ok(proof)
+    }
+
+    pub(crate) fn wrap_def_inner(
+        &self,
+        mut proof: Proof<SC>,
+        def_internal_recursive_layer: u32,
+    ) -> Result<Proof<SC>> {
+        proof = info_span!(
+            "agg_layer",
+            group = format!("def_internal_recursive.{def_internal_recursive_layer}")
+        )
+        .in_scope(|| {
+            self.internal_recursive_prover.agg_prove::<E>(
+                &[proof],
+                ChildVkKind::RecursiveSelf,
+                ProofsType::Deferral,
+                None,
+            )
         })?;
         Ok(proof)
     }
