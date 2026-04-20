@@ -71,7 +71,7 @@ pub struct Rv64VecHeapBranchAdapterAir<
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub bus: BitwiseOperationLookupBus,
-    /// The max number of bits for an address in memory (<= 32).
+    /// The max number of bits for an address in memory
     address_bits: usize,
 }
 
@@ -107,7 +107,7 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs (8 bytes each)
+        // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
@@ -276,7 +276,7 @@ impl<
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
-        // Read register values (8 bytes each)
+        // Read register values
         record.rs_vals = from_fn(|i| {
             record.rs_ptrs[i] = if i == 0 { a } else { b }.as_canonical_u32();
             u64::from_le_bytes(tracing_read(

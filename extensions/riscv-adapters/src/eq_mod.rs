@@ -132,7 +132,7 @@ impl<
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs (8 bytes each)
+        // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(MemoryAddress::new(d, ptr), val, timestamp_pp(), aux)
@@ -200,7 +200,7 @@ impl<
             }
         }
 
-        // Write to rd register (8 bytes)
+        // Write to rd register
         self.memory_bridge
             .write(
                 MemoryAddress::new(d, cols.rd_ptr),
@@ -337,7 +337,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
-        // Read register values (8 bytes each)
+        // Read register values
         record.rs_val = from_fn(|i| {
             record.rs_ptr[i] = if i == 0 { b } else { c }.as_canonical_u32();
 
