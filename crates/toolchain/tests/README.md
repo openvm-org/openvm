@@ -4,7 +4,7 @@ This crate includes tests for OpenVM toolchain that involve starting from a Rust
 
 ## How to Add a Test
 
-1. Add a new guest program file to the `programs/examples` directory of the relevant extension test crate (e.g., [`extensions/rv32im/tests/programs/examples`](../../../extensions/rv32im/tests/programs/examples)).
+1. Add a new guest program file to the `programs/examples` directory of the relevant extension test crate (e.g., [`extensions/riscv/tests/programs/examples`](../../../extensions/riscv/tests/programs/examples)).
 
 See [Writing the Guest Program](../../../docs/crates/benchmarks.md#writing-the-guest-program) for more detailed instructions.
 

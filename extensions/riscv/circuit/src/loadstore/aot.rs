@@ -8,7 +8,7 @@ use openvm_circuit::{
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -98,7 +98,7 @@ fn is_aot_supported_impl<F: PrimeField32>(inst: &Instruction<F>) -> bool {
     if e_u32 == PUBLIC_VALUES_AS {
         return false;
     }
-    let is_native_store = e_u32 == NATIVE_AS;
+    let is_native_store = e_u32 == DEFERRAL_AS;
     // Writing into native address space is not supported in AOT.
     match local_opcode {
         Rv64LoadStoreOpcode::STOREW | Rv64LoadStoreOpcode::STOREH | Rv64LoadStoreOpcode::STOREB => {
@@ -145,7 +145,7 @@ fn generate_x86_asm_impl<F: PrimeField32>(
     let imm_sign = g.as_canonical_u32();
     let imm_extended = (imm + imm_sign * 0xffff0000) as i32;
     assert_ne!(
-        e_u32, NATIVE_AS,
+        e_u32, DEFERRAL_AS,
         "Storing into native address space should be handled by the fallback operation"
     );
 
