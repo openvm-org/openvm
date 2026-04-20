@@ -17,7 +17,7 @@ pub struct KeccakfOpCols<T> {
     /// Pointer to address space 1 `rd` register.
     /// The `rd` register holds the value of `buffer_ptr`.
     pub rd_ptr: T,
-    /// `buffer_ptr <- [rd_ptr:4]_1`.
+    /// `buffer_ptr <- [rd_ptr:8]_1`.
     /// Limbs of the pointer to address space 2 `buffer`.
     pub buffer_ptr_limbs: [T; RV64_REGISTER_NUM_LIMBS],
     /// The preimage state, to be permuted in the `keccakf` operation.
@@ -28,7 +28,7 @@ pub struct KeccakfOpCols<T> {
     /// `preimage`. However due to the interactions necessary for range checks, currently we
     /// determined it is better to minimum number of rows while using more main columns.
     pub postimage: [T; KECCAK_WIDTH_BYTES],
-    /// Auxiliary columns for timestamp checking for the read of `[rd_ptr:4]_1`.
+    /// Auxiliary columns for timestamp checking for the read of `[rd_ptr:8]_1`.
     pub rd_aux: MemoryReadAuxCols<T>,
     /// Auxiliary columns for timestamp checking of the writes to `buffer`. The writes are done one
     /// word at a time, and each write requires a separate previous timestamp.
