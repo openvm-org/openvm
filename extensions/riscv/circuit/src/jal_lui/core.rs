@@ -21,8 +21,8 @@ use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    BaseAirWithPublicValues,
 };
 
 use crate::adapters::{
@@ -95,9 +95,9 @@ where
         //   2 * rd[3] - 256 * is_sign_extend must be in [0, 255].
         self.bus
             .send_range(
-                rd[3] * (AB::Expr::from_canonical_u32(4) * is_jal + is_lui),
-                AB::Expr::from_canonical_u32(2) * rd[3]
-                    - is_sign_extend * AB::Expr::from_canonical_u32(1 << RV64_CELL_BITS),
+                rd[3] * (AB::Expr::from_u32(4) * is_jal + is_lui),
+                AB::Expr::from_u32(2) * rd[3]
+                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
             )
             .eval(builder, is_valid.clone());
 
@@ -106,24 +106,24 @@ where
             .skip(1)
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u32(1 << (i * RV64_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
             });
 
         // Constrain that imm * 2^4 is the correct composition of intermed_val in case of LUI
         builder.when(is_lui).assert_eq(
             intermed_val.clone(),
-            imm * AB::F::from_canonical_u32(1 << (12 - RV64_CELL_BITS)),
+            imm * AB::F::from_u32(1 << (12 - RV64_CELL_BITS)),
         );
 
-        let intermed_val = rd[0] + intermed_val * AB::Expr::from_canonical_u32(1 << RV64_CELL_BITS);
+        let intermed_val = rd[0] + intermed_val * AB::Expr::from_u32(1 << RV64_CELL_BITS);
         // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in
         // case of JAL
         builder.when(is_jal).assert_eq(
             intermed_val,
-            from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP),
+            from_pc + AB::F::from_u32(DEFAULT_PC_STEP),
         );
 
-        let sign_extend_limb = is_sign_extend * AB::Expr::from_canonical_u32(u8::MAX as u32);
+        let sign_extend_limb = is_sign_extend * AB::Expr::from_u32(u8::MAX as u32);
         let rd_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 rd[i].into()
@@ -132,12 +132,12 @@ where
             }
         });
 
-        let to_pc = from_pc + is_lui * AB::F::from_canonical_u32(DEFAULT_PC_STEP) + is_jal * imm;
+        let to_pc = from_pc + is_lui * AB::F::from_u32(DEFAULT_PC_STEP) + is_jal * imm;
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            is_lui * AB::F::from_canonical_u32(LUI as u32)
-                + is_jal * AB::F::from_canonical_u32(JAL as u32),
+            is_lui * AB::F::from_u32(LUI as u32)
+                + is_jal * AB::F::from_u32(JAL as u32),
         );
 
         AdapterAirContext {
@@ -256,8 +256,8 @@ where
         core_row.is_sign_extend = F::from_bool(is_sign_extend);
         core_row.is_lui = F::from_bool(!record.is_jal);
         core_row.is_jal = F::from_bool(record.is_jal);
-        core_row.rd_data = array::from_fn(|i| F::from_canonical_u8(record.rd_data[i]));
-        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.rd_data = array::from_fn(|i| F::from_u8(record.rd_data[i]));
+        core_row.imm = F::from_u32(record.imm);
     }
 }
 

@@ -1,6 +1,6 @@
 use openvm_circuit::arch::testing::{memory::gen_pointer, TestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
-use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
@@ -22,9 +22,9 @@ pub fn rv64_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, NUM_LIMBS));
     let rd = gen_pointer(rng, NUM_LIMBS);
 
-    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_canonical_u8));
+    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {
-        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_canonical_u8));
+        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
     }
 
     (
@@ -58,13 +58,3 @@ pub fn generate_rv64_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV64_RE
     )
 }
 
-/// Returns the corresponding verification error based on whether
-/// an interaction error or a constraint error is expected
-#[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
-pub fn get_verification_error(is_interaction_error: bool) -> VerificationError {
-    if is_interaction_error {
-        VerificationError::ChallengePhaseError
-    } else {
-        VerificationError::OodEvaluationMismatch
-    }
-}

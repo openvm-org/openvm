@@ -15,7 +15,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -41,8 +41,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
-    test_utils::get_verification_error,
-    BranchEqualCoreAir, BranchEqualFiller, Rv64BranchEqualAir, Rv64BranchEqualExecutor,
+        BranchEqualCoreAir, BranchEqualFiller, Rv64BranchEqualAir, Rv64BranchEqualExecutor,
 };
 
 type F = BabyBear;
@@ -110,8 +109,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, 8);
     let rs2 = gen_pointer(rng, 8);
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(
@@ -201,14 +200,14 @@ fn run_negative_branch_eq_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut BranchEqualCoreCols<F, RV64_REGISTER_NUM_LIMBS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         if let Some(cmp_result) = prank_cmp_result {
             cols.cmp_result = F::from_bool(cmp_result);
         }
         if let Some(diff_inv_marker) = prank_diff_inv_marker {
-            cols.diff_inv_marker = diff_inv_marker.map(F::from_canonical_u32);
+            cols.diff_inv_marker = diff_inv_marker.map(F::from_u32);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -218,7 +217,9 @@ fn run_negative_branch_eq_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -367,14 +368,14 @@ fn run_ne_sanity_test() {
     let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV64_REGISTER_NUM_LIMBS>(true, &x, &y);
     assert!(!cmp_result);
     assert_eq!(
-        diff_val * (F::from_canonical_u8(x[diff_idx]) - F::from_canonical_u8(y[diff_idx])),
+        diff_val * (F::from_u8(x[diff_idx]) - F::from_u8(y[diff_idx])),
         F::ONE
     );
 
     let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV64_REGISTER_NUM_LIMBS>(false, &x, &y);
     assert!(cmp_result);
     assert_eq!(
-        diff_val * (F::from_canonical_u8(x[diff_idx]) - F::from_canonical_u8(y[diff_idx])),
+        diff_val * (F::from_u8(x[diff_idx]) - F::from_u8(y[diff_idx])),
         F::ONE
     );
 }
