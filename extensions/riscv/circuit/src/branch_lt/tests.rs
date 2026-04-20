@@ -19,7 +19,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -47,8 +47,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
-    test_utils::get_verification_error,
-    BranchLessThanCoreAir, BranchLessThanFiller, Rv64BranchLessThanAir, Rv64BranchLessThanExecutor,
+        BranchLessThanCoreAir, BranchLessThanFiller, Rv64BranchLessThanAir, Rv64BranchLessThanExecutor,
 };
 
 type F = BabyBear;
@@ -136,8 +135,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, 8);
     let rs2 = gen_pointer(rng, 8);
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
     tester.execute_with_pc(
         executor,
@@ -265,7 +264,7 @@ fn run_negative_branch_lt_test(
     let ge_opcode = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut BranchLessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
@@ -276,10 +275,10 @@ fn run_negative_branch_lt_test(
             cols.b_msb_f = i32_to_f(b_msb);
         }
         if let Some(diff_marker) = prank_vals.diff_marker {
-            cols.diff_marker = diff_marker.map(F::from_canonical_u32);
+            cols.diff_marker = diff_marker.map(F::from_u32);
         }
         if let Some(diff_val) = prank_vals.diff_val {
-            cols.diff_val = F::from_canonical_u32(diff_val);
+            cols.diff_val = F::from_u32(diff_val);
         }
         cols.cmp_result = F::from_bool(prank_cmp_result);
         cols.cmp_lt = F::from_bool(ge_opcode ^ prank_cmp_result);
@@ -293,7 +292,9 @@ fn run_negative_branch_lt_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

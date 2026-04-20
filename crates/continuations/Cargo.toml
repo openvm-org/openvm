@@ -31,8 +31,8 @@ openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 
 [dev-dependencies]
-openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32im-transpiler = { workspace = true }
+openvm-riscv-circuit = { workspace = true, features = ["test-utils"] }
+openvm-riscv-transpiler = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
 openvm-instructions = { workspace = true }
@@ -59,7 +59,7 @@ cuda = [
     "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-riscv-circuit/cuda",
     "openvm-deferral-circuit/cuda",
     "openvm-recursion-circuit/cuda",
 ]

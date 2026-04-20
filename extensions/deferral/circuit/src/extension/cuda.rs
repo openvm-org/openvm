@@ -16,7 +16,7 @@ use openvm_cuda_backend::{
     prelude::F as CudaF, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::d_buffer::DeviceBuffer;
-use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
@@ -133,17 +133,17 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
+            &Rv64ImGpuProverExt,
             &config.rv32i,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
+            &Rv64ImGpuProverExt,
             &config.rv32m,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
+            &Rv64ImGpuProverExt,
             &config.io,
             inventory,
         )?;

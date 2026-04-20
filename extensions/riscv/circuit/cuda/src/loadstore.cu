@@ -29,7 +29,7 @@ template <size_t NUM_CELLS> struct LoadStoreCoreRecord {
     uint32_t prev_data[NUM_CELLS];
 };
 
-enum Rv64LoadStoreOpcode {
+enum Rv32LoadStoreOpcode {
     LOADW,
     /// LOADBU, LOADHU are unsigned extend opcodes, implemented in the same chip with LOADW
     LOADBU,
@@ -47,7 +47,7 @@ template <size_t NUM_CELLS> struct LoadStoreCore {
     template <typename T> using Cols = LoadStoreCoreCols<T, NUM_CELLS>;
 
     __device__ void fill_trace_row(RowSlice row, LoadStoreCoreRecord<NUM_CELLS> record) {
-        Rv64LoadStoreOpcode opcode = static_cast<Rv64LoadStoreOpcode>(record.local_opcode);
+        Rv32LoadStoreOpcode opcode = static_cast<Rv32LoadStoreOpcode>(record.local_opcode);
 
         COL_WRITE_VALUE(row, Cols, is_valid, 1);
         COL_WRITE_VALUE(

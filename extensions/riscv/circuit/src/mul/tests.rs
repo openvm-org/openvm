@@ -32,7 +32,7 @@ use openvm_riscv_transpiler::BaseAluOpcode::ADD;
 use openvm_riscv_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -59,7 +59,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS,
     },
     mul::{MultiplicationCoreCols, Rv64MultiplicationChip},
-    test_utils::{get_verification_error, rv64_rand_write_register_or_imm},
+    test_utils::{rv64_rand_write_register_or_imm},
     MultiplicationCoreAir, MultiplicationFiller, Rv64MultiplicationAir, Rv64MultiplicationExecutor,
 };
 
@@ -148,7 +148,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (a, _) = run_mul::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(&b, &c);
     assert_eq!(
-        a.map(F::from_canonical_u8),
+        a.map(F::from_u8),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     )
 }
@@ -219,10 +219,10 @@ fn run_negative_mul_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut MultiplicationCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_u32);
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -233,7 +233,9 @@ fn run_negative_mul_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(range_tuple)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

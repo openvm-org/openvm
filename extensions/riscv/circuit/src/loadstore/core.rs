@@ -16,8 +16,8 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    BaseAirWithPublicValues,
 };
 
 use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
@@ -273,7 +273,7 @@ where
             .iter()
             .fold(AB::Expr::ZERO, |acc, &case| {
                 acc + selector_flags[case as usize].clone()
-                    * AB::Expr::from_canonical_u8(case.opcode() as u8)
+                    * AB::Expr::from_u8(case.opcode() as u8)
             });
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
@@ -282,7 +282,7 @@ where
             .fold(AB::Expr::ZERO, |acc, &case| {
                 if case.is_load() {
                     acc + selector_flags[case as usize].clone()
-                        * AB::Expr::from_canonical_usize(case.shift())
+                        * AB::Expr::from_usize(case.shift())
                 } else {
                     acc
                 }
@@ -294,7 +294,7 @@ where
                     acc
                 } else {
                     acc + selector_flags[case as usize].clone()
-                        * AB::Expr::from_canonical_usize(case.shift())
+                        * AB::Expr::from_usize(case.shift())
                 }
             });
 
@@ -455,9 +455,9 @@ where
         let shift = record.shift_amount as usize;
         let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift);
 
-        core_row.write_data = write_data.map(F::from_canonical_u32);
-        core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
-        core_row.read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.write_data = write_data.map(F::from_u32);
+        core_row.prev_data = record.prev_data.map(F::from_u32);
+        core_row.read_data = record.read_data.map(F::from_u8);
         core_row.is_load = F::from_bool(matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU));
         core_row.is_valid = F::ONE;
         let pt: [u32; LOADSTORE_SELECTOR_WIDTH] = self
@@ -465,7 +465,7 @@ where
             .get_flag_pt(InstructionCase::from_opcode_shift(opcode, shift) as usize)
             .try_into()
             .unwrap();
-        core_row.selector = pt.map(F::from_canonical_u32);
+        core_row.selector = pt.map(F::from_u32);
     }
 }
 
