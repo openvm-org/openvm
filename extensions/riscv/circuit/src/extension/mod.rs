@@ -118,7 +118,7 @@ pub enum Rv64IExecutor {
     Jalr(Rv64JalrExecutor),
     Auipc(Rv64AuipcExecutor),
     LoadStore(Rv64LoadStoreExecutor),
-    // LoadSignExtend(Rv32LoadSignExtendExecutor),
+    LoadSignExtend(Rv64LoadSignExtendExecutor),
 }
 
 /// RISC-V 64-bit Multiplication Extension (RV64M) Instruction Executors
@@ -297,13 +297,18 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
                 .map(|x| x.global_opcode()),
         )?;
 
-        // let load_sign_extend =
-        //     LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(pointer_max_bits));
-        // inventory.add_executor(
-        //     load_sign_extend,
-        //     [Rv64LoadStoreOpcode::LOADB, Rv64LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
-        // )?;
-        //
+        let load_sign_extend =
+            Rv64LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(pointer_max_bits));
+        inventory.add_executor(
+            load_sign_extend,
+            [
+                Rv64LoadStoreOpcode::LOADB,
+                Rv64LoadStoreOpcode::LOADH,
+                Rv64LoadStoreOpcode::LOADW,
+            ]
+            .map(|x| x.global_opcode()),
+        )?;
+
         let beq = BranchEqualExecutor::new(
             Rv64BranchAdapterExecutor,
             BranchEqualOpcode::CLASS_OFFSET,
@@ -420,17 +425,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(load_store);
 
-        // let load_sign_extend = Rv32LoadSignExtendAir::new(
-        //     Rv32LoadStoreAdapterAir::new(
-        //         memory_bridge,
-        //         exec_bridge,
-        //         range_checker,
-        //         pointer_max_bits,
-        //     ),
-        //     LoadSignExtendCoreAir::new(range_checker),
-        // );
-        // inventory.add_air(load_sign_extend);
-        //
+        let load_sign_extend = Rv64LoadSignExtendAir::new(
+            Rv64LoadStoreAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                pointer_max_bits,
+            ),
+            LoadSignExtendCoreAir::new(range_checker),
+        );
+        inventory.add_air(load_sign_extend);
+
         let beq = Rv64BranchEqualAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
             BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
@@ -568,16 +573,16 @@ where
         );
         inventory.add_executor_chip(load_store_chip);
 
-        // inventory.next_air::<Rv32LoadSignExtendAir>()?;
-        // let load_sign_extend = Rv32LoadSignExtendChip::new(
-        //     LoadSignExtendFiller::new(
-        //         Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
-        //         range_checker.clone(),
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(load_sign_extend);
-        //
+        inventory.next_air::<Rv64LoadSignExtendAir>()?;
+        let load_sign_extend = Rv64LoadSignExtendChip::new(
+            LoadSignExtendFiller::new(
+                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                range_checker.clone(),
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(load_sign_extend);
+
         inventory.next_air::<Rv64BranchEqualAir>()?;
         let beq = Rv64BranchEqualChip::new(
             BranchEqualFiller::new(
