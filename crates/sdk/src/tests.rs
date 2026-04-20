@@ -3,8 +3,9 @@ use std::{slice::from_ref, sync::Arc};
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_circuit::arch::instructions::DEFERRAL_AS;
+use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_deferral_circuit::DeferralFn;
-use openvm_stark_backend::StarkEngine;
+use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security, internal_params_with_100_bits_security,
@@ -16,7 +17,10 @@ use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_circuit::extension::{
     get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
 };
-use openvm_verify_stark_host::vk::VmStarkVerifyingKey;
+use openvm_verify_stark_host::{
+    vk::{VerificationBaseline, VmStarkVerifyingKey},
+    VmStarkProof,
+};
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
@@ -38,19 +42,117 @@ cfg_if::cfg_if! {
     }
 }
 
-#[test]
-fn test_sdk_fibonacci() -> Result<()> {
-    setup_tracing();
+/// Creates a fibonacci SDK with standard test parameters.
+fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
+    let sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
+    (sdk, app_params, agg_params)
+}
+
+/// Generates a fibonacci VM STARK proof using the given SDK.
+fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, VerificationBaseline)> {
+    let fib_elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let fib_exe = fib_sdk.convert_to_exe(fib_elf)?;
+    let n = 100u64;
+    let mut stdin = StdIn::default();
+    stdin.write(&n);
+    Ok(fib_sdk.prove(fib_exe, stdin, &[])?)
+}
+
+/// Builds a DeferralProver from a base SDK.
+fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> DeferralProver {
+    let agg_prover = sdk.agg_prover();
+    let ir_vk = agg_prover.internal_recursive_prover.get_vk();
+    let ir_pcs_data = agg_prover
+        .internal_recursive_prover
+        .get_self_vk_pcs_data()
+        .unwrap();
+    let system_config = sdk.app_config().app_vm_config.as_ref().clone();
+    let memory_dimensions = system_config.memory_config.memory_dimensions();
+    let num_user_pvs = system_config.num_public_values;
+    let def_circuit_params = internal_params_with_100_bits_security();
+    let deferred_verify_prover = VerifyProver::new::<E>(
+        ir_vk,
+        ir_pcs_data.commitment.into(),
+        def_circuit_params,
+        memory_dimensions,
+        num_user_pvs,
+        None,
+        0,
+    );
+    let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
+    let hook_params = root_params_with_100_bits_security();
+    let agg_config = AggregationConfig {
+        params: agg_params.clone(),
+    };
+    DeferralProver::new(verify_stark_prover, agg_config, hook_params)
+}
+
+/// Builds a deferral-enabled verify-stark SDK from a fibonacci SDK and proof.
+///
+/// Returns the SDK, the verify-stark stdin, and the deferral input.
+fn make_deferral_sdk(
+    fib_sdk: &Sdk,
+    fib_proof: VmStarkProof,
+    fib_baseline: VerificationBaseline,
+    app_params: SystemParams,
+    agg_params: AggregationSystemParams,
+) -> Result<(Sdk, StdIn, DeferralInput)> {
+    let deferral_prover = make_deferral_prover(fib_sdk, &agg_params);
+    let deferral_ext =
+        deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+
+    let fib_vk = VmStarkVerifyingKey {
+        mvk: fib_sdk.agg_vk().as_ref().clone(),
+        baseline: fib_baseline,
+    };
+
+    let raw_results = get_raw_deferral_results(&fib_vk, from_ref(&fib_proof))?;
+    assert_eq!(raw_results.len(), 1);
+    let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
+    let output_raw = &raw_results[0].output_raw;
+    let app_exe_commit: [u8; 32] = output_raw[..32].try_into().unwrap();
+    let app_vm_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
+    let user_public_values = output_raw[64..].to_vec();
+    let deferral_state = get_deferral_state(&fib_vk, from_ref(&fib_proof), 0)?;
+
+    let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
+    vs_config.deferral = Some(deferral_ext);
+    vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
+
+    let vs_app_config = AppConfig::new(vs_config, app_params);
+    let vs_sdk = Sdk::builder()
+        .app_config(vs_app_config)
+        .agg_params(agg_params)
+        .deferral_prover(deferral_prover)
+        .build()?;
+
+    let mut vs_stdin = StdIn::default();
+    vs_stdin.write(&app_exe_commit);
+    vs_stdin.write(&app_vm_commit);
+    vs_stdin.write(&user_public_values);
+    vs_stdin.write(&input_commit);
+    vs_stdin.deferrals = vec![deferral_state];
+
+    let def_input = DeferralInput::from_inputs(&[fib_proof]);
+
+    Ok((vs_sdk, vs_stdin, def_input))
+}
+
+#[test]
+fn test_sdk_fibonacci() -> Result<()> {
+    setup_tracing();
+    let (sdk, _app_params, _agg_params) = make_fib_sdk();
 
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
     )?;
-
-    let sdk = Sdk::riscv32(app_params, agg_params);
     let app_exe = sdk.convert_to_exe(elf)?;
 
     let n = 1000u64;
@@ -77,109 +179,18 @@ fn test_sdk_fibonacci() -> Result<()> {
 
 #[test]
 fn test_verify_stark_deferral() -> Result<()> {
-    // ---- Step 1: Create a fibonacci proof ----
-    let n_stack = 19;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
-    let agg_params = AggregationSystemParams::default();
+    setup_tracing();
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
+    let (vs_sdk, vs_stdin, def_input) =
+        make_deferral_sdk(&fib_sdk, fib_proof, fib_baseline, app_params, agg_params)?;
 
-    let fib_elf = Elf::decode(
-        include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
-    )?;
-
-    let fib_sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
-    let fib_exe = fib_sdk.convert_to_exe(fib_elf)?;
-
-    let n = 100u64;
-    let mut fib_stdin = StdIn::default();
-    fib_stdin.write(&n);
-
-    let (fib_proof, fib_baseline) = fib_sdk.prove(fib_exe, fib_stdin, &[])?;
-
-    // ---- Step 2: Build the DeferredVerifyCircuitProver ----
-    let fib_agg_prover = fib_sdk.agg_prover();
-    let ir_vk = fib_agg_prover.internal_recursive_prover.get_vk();
-    let ir_pcs_data = fib_agg_prover
-        .internal_recursive_prover
-        .get_self_vk_pcs_data()
-        .unwrap();
-
-    let fib_system_config = fib_sdk.app_config().app_vm_config.as_ref().clone();
-    let memory_dimensions = fib_system_config.memory_config.memory_dimensions();
-    let num_user_pvs = fib_system_config.num_public_values;
-
-    let def_circuit_params = internal_params_with_100_bits_security();
-    let deferred_verify_prover = VerifyProver::new::<E>(
-        ir_vk,
-        ir_pcs_data.commitment.into(),
-        def_circuit_params,
-        memory_dimensions,
-        num_user_pvs,
-        None,
-        0,
-    );
-    let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
-
-    // ---- Step 3: Create DeferralProver ----
-    let hook_params = root_params_with_100_bits_security();
-    let agg_config = AggregationConfig {
-        params: agg_params.clone(),
-    };
-    let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
-
-    // ---- Step 4: Create DeferralExtension ----
-    let deferral_ext =
-        deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
-
-    // ---- Step 5: Compute deferral state and guest stdin values ----
-    let fib_vk = VmStarkVerifyingKey {
-        mvk: fib_sdk.agg_vk().as_ref().clone(),
-        baseline: fib_baseline,
-    };
-
-    // Get the raw results to extract input_commit and output for the guest stdin
-    let raw_results = get_raw_deferral_results(&fib_vk, from_ref(&fib_proof))?;
-    assert_eq!(raw_results.len(), 1);
-    let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
-    let output_raw = &raw_results[0].output_raw;
-    let app_exe_commit: [u8; 32] = output_raw[..32].try_into().unwrap();
-    let app_vm_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
-    let user_public_values = output_raw[64..].to_vec();
-
-    // Build the deferral state for execution
-    let deferral_state = get_deferral_state(&fib_vk, from_ref(&fib_proof), 0)?;
-
-    // ---- Step 6: Create verify-stark SDK with deferral ----
-    let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
-    vs_config.deferral = Some(deferral_ext);
-    vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-
-    let vs_app_config = AppConfig::new(vs_config, app_params);
-    let vs_sdk = Sdk::builder()
-        .app_config(vs_app_config)
-        .agg_params(agg_params)
-        .deferral_prover(deferral_prover)
-        .build()?;
-
-    // ---- Step 7: Build the verify-stark ELF ----
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
         MEM_SIZE as u32,
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    // ---- Step 8: Set up stdin for the verify-stark guest program ----
-    let mut vs_stdin = StdIn::default();
-    vs_stdin.write(&app_exe_commit);
-    vs_stdin.write(&app_vm_commit);
-    vs_stdin.write(&user_public_values);
-    vs_stdin.write(&input_commit);
-    vs_stdin.deferrals = vec![deferral_state];
-
-    // ---- Step 9: Create DeferralInput from the fibonacci proof ----
-    let def_input = DeferralInput::from_inputs(&[fib_proof]);
-
-    // ---- Step 10: Prove and verify ----
     let mut evm_prover = vs_sdk.evm_prover(vs_exe)?;
     let vs_proof = evm_prover.prove_unwrapped(vs_stdin, &[def_input])?;
 
@@ -191,40 +202,66 @@ fn test_verify_stark_deferral() -> Result<()> {
 }
 
 #[test]
-fn test_deferrals_enabled_without_usage() -> Result<()> {
-    let n_stack = 19;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
-    let agg_params = AggregationSystemParams::default();
+fn test_verify_stark_with_deferral_child() -> Result<()> {
+    setup_tracing();
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
+    let (vs_sdk, vs_stdin, def_input) =
+        make_deferral_sdk(&fib_sdk, fib_proof, fib_baseline, app_params, agg_params)?;
 
-    // ---- Step 1: Create dummy DeferralProver ----
-    let rv32_sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
-    let ir_prover = &rv32_sdk.agg_prover().internal_recursive_prover;
-    let ir_vk = ir_prover.get_vk();
-    let ir_pcs_data = ir_prover.get_self_vk_pcs_data().unwrap();
+    let vs_elf = Elf::decode(
+        include_bytes!("../programs/examples/verify-stark.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    let system_config = rv32_sdk.app_config().app_vm_config.as_ref().clone();
-    let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.num_public_values;
+    let (vs_proof, _) = vs_sdk.prove(vs_exe, vs_stdin, &[def_input])?;
+    assert!(
+        vs_proof.deferral_merkle_proofs.is_some(),
+        "deferral-enabled verify-stark child proof must carry deferral merkle proofs",
+    );
+    let expected_def_hook_commit = vs_sdk
+        .def_hook_commit()
+        .expect("deferral-enabled SDK should expose a deferral hook commit");
 
-    let def_circuit_params = internal_params_with_100_bits_security();
-    let deferred_verify_prover = VerifyProver::new::<E>(
-        ir_vk,
-        ir_pcs_data.commitment.into(),
-        def_circuit_params,
-        memory_dimensions,
-        num_user_pvs,
-        None,
+    // ---- Step 5: Feed the encoded proof through the trait adapter ----
+    let vs_agg_prover = vs_sdk.agg_prover();
+    let vs_ir_vk = vs_agg_prover.internal_recursive_prover.get_vk();
+    let vs_ir_pcs_data = vs_agg_prover
+        .internal_recursive_prover
+        .get_self_vk_pcs_data()
+        .unwrap();
+    let vs_system_config = vs_sdk.app_config().app_vm_config.as_ref().clone();
+
+    // This nested verifier is intentionally constructed in deferral-aware mode because the
+    // verify-stark child proof above was itself produced through a deferral-enabled SDK.
+    let nested_verify_prover = VerifyProver::new::<E>(
+        vs_ir_vk,
+        vs_ir_pcs_data.commitment.into(),
+        internal_params_with_100_bits_security(),
+        vs_system_config.memory_config.memory_dimensions(),
+        vs_system_config.num_public_values,
+        Some(expected_def_hook_commit),
         0,
     );
-    let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
+    let nested_verify_circuit_prover = VerifyCircuitProver::new(nested_verify_prover);
 
-    let hook_params = root_params_with_100_bits_security();
-    let agg_config = AggregationConfig {
-        params: agg_params.clone(),
-    };
-    let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+    let encoded_vs_proof = vs_proof.encode_to_vec()?;
+    let nested_def_proof = nested_verify_circuit_prover.prove(&encoded_vs_proof);
 
-    // ---- Step 2: Enable deferrals in SDK and prove ----
+    let vk = nested_verify_circuit_prover.get_vk();
+    let engine = E::new(vk.inner.params.clone());
+    engine.verify(&vk, &nested_def_proof)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_deferrals_enabled_without_usage() -> Result<()> {
+    setup_tracing();
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let deferral_prover = make_deferral_prover(&fib_sdk, &agg_params);
+
     let sdk = Sdk::builder()
         .app_config(AppConfig::riscv32(app_params))
         .agg_params(agg_params.clone())
