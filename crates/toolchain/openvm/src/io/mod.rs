@@ -55,17 +55,6 @@ fn hint_store_word(ptr: *mut u64) {
     }
 }
 
-/// Load hints by key and append into the input stream.
-#[allow(unused_variables)]
-#[inline(always)]
-pub fn hint_load_by_key(key: &[u8]) {
-    #[cfg(openvm_intrinsics)]
-    openvm_riscv_guest::hint_load_by_key(key.as_ptr(), key.len());
-    #[cfg(not(openvm_intrinsics))]
-    panic!("hint_load_by_key cannot run on non-zkVM platforms");
-}
-
-
 /// Read the next `len` bytes from the hint stream into a vector.
 pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
     let num_words = len.div_ceil(8);

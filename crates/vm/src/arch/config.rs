@@ -6,18 +6,12 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
-use openvm_instructions::{
-    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    NATIVE_AS,
-};
+use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::Field,
-    p3_util::log2_strict_usize,
+    p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::ExtensionRegistry;
@@ -73,7 +67,7 @@ pub trait VmConfig<SC>:
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
 {
 }
 
@@ -89,7 +83,7 @@ pub trait VmExecutionConfig<F> {
         F: PrimeField32;
 }
 
-pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 
@@ -107,6 +101,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -115,7 +110,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
 
 impl<SC, VC> VmConfig<SC> for VC
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     VC: Clone
         + Serialize
         + DeserializeOwned
@@ -129,11 +124,9 @@ where
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
-/// The minimum block size is 8 for RV64 (register width). RISC-V `lb` only requires alignment of 1
-/// and `lh` only requires alignment of 2 because the instructions are implemented by doing an
-/// access of block size 8.
-const DEFAULT_U8_BLOCK_SIZE: usize = 8;
-const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
+/// Default block size for memory bus interactions. RISC-V byte/halfword loads (`lb`/`lh`) need
+/// fewer bytes, but the adapter always reads a full 4-byte block from memory.
+pub const DEFAULT_BLOCK_SIZE: usize = 8;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
@@ -193,8 +186,6 @@ pub struct MemoryConfig {
     pub timestamp_max_bits: usize,
     /// Limb size used by the range checker
     pub decomp: usize,
-    /// Maximum N AccessAdapter AIR to support.
-    pub max_access_adapter_n: usize,
 }
 
 impl Default for MemoryConfig {
@@ -205,40 +196,21 @@ impl Default for MemoryConfig {
         addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
         addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
-        addr_spaces[NATIVE_AS as usize].num_cells = MAX_CELLS;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
 
 impl MemoryConfig {
     pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
-        // All except address spaces 0..4 default to native 32-bit field.
         // By default only address spaces 1..=4 have non-empty cell counts.
-        let mut addr_spaces = vec![
-            AddressSpaceHostConfig::new(
-                0,
-                DEFAULT_NATIVE_BLOCK_SIZE,
-                MemoryCellType::native32()
-            );
-            num_addr_spaces
-        ];
-        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
-        addr_spaces[RV32_REGISTER_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        let mut addr_spaces =
+            vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
+        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        addr_spaces[RV32_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
-        #[cfg(feature = "legacy-v1-3-mem-align")]
-        {
-            addr_spaces[RV32_MEMORY_AS as usize] =
-                AddressSpaceHostConfig::new(0, 1, MemoryCellType::U8);
-        }
-        #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-        {
-            addr_spaces[RV32_MEMORY_AS as usize] =
-                AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
-        }
+        addr_spaces[RV32_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
-        addr_spaces[PUBLIC_VALUES_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
         addr_spaces
     }
@@ -247,15 +219,8 @@ impl MemoryConfig {
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        addr_spaces[NATIVE_AS as usize].num_cells = 1 << 29;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
-    }
-
-    pub fn min_block_size_bits(&self) -> Vec<u8> {
-        self.addr_spaces
-            .iter()
-            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
-            .collect()
+        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
 
@@ -363,11 +328,6 @@ pub struct AddressSpaceHostConfig {
     /// The number of memory cells in each address space, where a memory cell refers to a single
     /// addressable unit of memory as defined by the ISA.
     pub num_cells: usize,
-    /// Minimum block size for memory accesses supported. This is a property of the address space
-    /// that is determined by the ISA.
-    ///
-    /// **Note**: Block size is in terms of memory cells.
-    pub min_block_size: usize,
     pub layout: MemoryCellType,
 }
 
@@ -378,8 +338,6 @@ impl AddressSpaceHostConfig {
     }
 }
 
-pub(crate) const MAX_CELL_BYTE_SIZE: usize = 8;
-
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryCellType {
     Null,
@@ -388,14 +346,14 @@ pub enum MemoryCellType {
     /// Represented in little-endian format.
     U32,
     /// `size` is the size in bytes of the native field type. This should not exceed 8.
-    Native {
+    F {
         size: u8,
     },
 }
 
 impl MemoryCellType {
-    pub fn native32() -> Self {
-        Self::Native {
+    pub fn field32() -> Self {
+        Self::F {
             size: size_of::<u32>() as u8,
         }
     }
@@ -408,7 +366,7 @@ impl AddressSpaceHostLayout for MemoryCellType {
             Self::U8 => size_of::<u8>(),
             Self::U16 => size_of::<u16>(),
             Self::U32 => size_of::<u32>(),
-            Self::Native { size } => *size as usize,
+            Self::F { size } => *size as usize,
         }
     }
 
@@ -422,10 +380,10 @@ impl AddressSpaceHostLayout for MemoryCellType {
     unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F {
         match self {
             Self::Null => unreachable!(),
-            Self::U8 => F::from_canonical_u8(*value.get_unchecked(0)),
-            Self::U16 => F::from_canonical_u16(core::ptr::read(value.as_ptr() as *const u16)),
-            Self::U32 => F::from_canonical_u32(core::ptr::read(value.as_ptr() as *const u32)),
-            Self::Native { .. } => core::ptr::read(value.as_ptr() as *const F),
+            Self::U8 => F::from_u8(*value.get_unchecked(0)),
+            Self::U16 => F::from_u16(core::ptr::read(value.as_ptr() as *const u16)),
+            Self::U32 => F::from_u32(core::ptr::read(value.as_ptr() as *const u32)),
+            Self::F { .. } => core::ptr::read(value.as_ptr() as *const F),
         }
     }
 }

@@ -25,7 +25,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::DivRemWOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -51,8 +51,7 @@ use crate::{
         Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     divrem::{run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase},
-    test_utils::get_verification_error,
-    Rv64DivRemWAir, Rv64DivRemWExecutor,
+        Rv64DivRemWAir, Rv64DivRemWExecutor,
 };
 
 type F = BabyBear;
@@ -184,8 +183,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_canonical_u32));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_canonical_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));
 
     let b_word: [u32; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let c_word: [u32; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -214,7 +213,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     }
 
     assert_eq!(
-        expected.map(F::from_canonical_u8),
+        expected.map(F::from_u8),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd_ptr)
     );
 }
@@ -389,29 +388,29 @@ fn run_negative_divremw_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut DivRemWCoreCols<F> = core_row.borrow_mut();
 
         if let Some(q) = prank_vals.q {
-            cols.q = q.map(F::from_canonical_u32);
+            cols.q = q.map(F::from_u32);
         }
         if let Some(r) = prank_vals.r {
-            cols.r = r.map(F::from_canonical_u32);
+            cols.r = r.map(F::from_u32);
             let r_sum = r.iter().sum::<u32>();
-            cols.r_sum_inv = F::from_canonical_u32(r_sum)
+            cols.r_sum_inv = F::from_u32(r_sum)
                 .try_inverse()
                 .unwrap_or(F::ZERO);
         }
         if let Some(r_prime) = prank_vals.r_prime {
-            cols.r_prime = r_prime.map(F::from_canonical_u32);
+            cols.r_prime = r_prime.map(F::from_u32);
             cols.r_inv = cols
                 .r_prime
-                .map(|r| (r - F::from_canonical_u32(256)).inverse());
+                .map(|r| (r - F::from_u32(256)).inverse());
         }
         if let Some(diff_val) = prank_vals.diff_val {
-            cols.lt_diff = F::from_canonical_u32(diff_val);
+            cols.lt_diff = F::from_u32(diff_val);
         }
         if let Some(zero_divisor) = prank_vals.zero_divisor {
             cols.zero_divisor = F::from_bool(zero_divisor);
@@ -424,18 +423,18 @@ fn run_negative_divremw_test(
                 rs1[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
             let rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 rs1[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            cols.b = rs1_word.map(F::from_canonical_u32);
-            adapter_cols.rs1_high = rs1_high.map(F::from_canonical_u32);
+            cols.b = rs1_word.map(F::from_u32);
+            adapter_cols.rs1_high = rs1_high.map(F::from_u32);
         }
         if let Some(rs2) = prank_vals.rs2 {
             let rs2_word: [u32; RV64_WORD_NUM_LIMBS] =
                 rs2[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
             let rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 rs2[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            cols.c = rs2_word.map(F::from_canonical_u32);
-            adapter_cols.rs2_high = rs2_high.map(F::from_canonical_u32);
+            cols.c = rs2_word.map(F::from_u32);
+            adapter_cols.rs2_high = rs2_high.map(F::from_u32);
         }
-        adapter_cols.result_sign = F::from_canonical_u32(default_result_sign);
+        adapter_cols.result_sign = F::from_u32(default_result_sign);
 
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -447,7 +446,9 @@ fn run_negative_divremw_test(
         .load_periphery(bitwise)
         .load_periphery(range_tuple)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
