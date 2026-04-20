@@ -4,7 +4,7 @@ shared: &shared
   - "crates/circuits/**"
   - "crates/vm/**"
   - "crates/toolchain/**"
-  - "extensions/rv32im/**"
+  - "extensions/riscv/**"
   - "extensions/rv32-adapters/**"
   - "Cargo.toml"
   - "Cargo.lock"

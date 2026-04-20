@@ -48,7 +48,7 @@ jobs:
     outputs:
       extensions: ${{ steps.tests.outputs.changes }}
       cuda: ${{ steps.tests.outputs.cuda }}
-      rv32im: ${{ steps.tests.outputs.rv32im }}
+      riscv: ${{ steps.tests.outputs.riscv }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -56,21 +56,21 @@ jobs:
         with:
           filters: .github/filters/extension-tests.yml
 
-  rv32im-cuda:
-    name: RV32IM
+  riscv-cuda:
+    name: RISC-V
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.rv32im == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.riscv == 'true'
     uses: ./.github/workflows/extension-tests.group.yml
     with:
-      runner_id: cuda-rv32im
+      runner_id: cuda-riscv
       machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
       extensions: ${{ (github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true') && 'all' || join(fromJSON(needs.changes.outputs.extensions), ' ') }}
       mode: cuda
-      cuda_group: rv32im
+      cuda_group: riscv
     secrets: inherit
 
   extensions-cuda:
-    name: non-RV32
+    name: non-RISC-V
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.extensions != '[]'
     uses: ./.github/workflows/extension-tests.group.yml
