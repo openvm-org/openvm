@@ -45,7 +45,7 @@ use openvm_riscv_transpiler::{
 };
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -72,7 +72,7 @@ use crate::{
         Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
-    test_utils::{get_verification_error, rv64_rand_write_register_or_imm},
+    test_utils::{rv64_rand_write_register_or_imm},
     Rv64MulWAir, Rv64MulWExecutor,
 };
 
@@ -177,7 +177,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let expected = run_mulw(&b_word, &c_word);
     assert_eq!(
-        expected.map(F::from_canonical_u8),
+        expected.map(F::from_u8),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     );
     expected
@@ -253,29 +253,29 @@ fn run_negative_mulw_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64MultWAdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut MulWCoreCols<F> = core_row.borrow_mut();
 
-        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
             let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
                 prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
             let prank_b_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            cols.b = prank_b_word.map(F::from_canonical_u32);
-            adapter_cols.rs1_high = prank_b_high.map(F::from_canonical_u32);
+            cols.b = prank_b_word.map(F::from_u32);
+            adapter_cols.rs1_high = prank_b_high.map(F::from_u32);
         }
         if let Some(prank_c) = prank_c {
             let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
                 prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
             let prank_c_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            cols.c = prank_c_word.map(F::from_canonical_u32);
-            adapter_cols.rs2_high = prank_c_high.map(F::from_canonical_u32);
+            cols.c = prank_c_word.map(F::from_u32);
+            adapter_cols.rs2_high = prank_c_high.map(F::from_u32);
         }
-        adapter_cols.result_sign = F::from_canonical_u32(default_result_sign);
+        adapter_cols.result_sign = F::from_u32(default_result_sign);
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -287,7 +287,9 @@ fn run_negative_mulw_test(
         .load_periphery(bitwise)
         .load_periphery(range_tuple)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

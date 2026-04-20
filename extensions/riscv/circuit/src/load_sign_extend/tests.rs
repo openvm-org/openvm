@@ -12,7 +12,7 @@ use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIM
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -27,8 +27,7 @@ use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
     adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller},
     load_sign_extend::LoadSignExtendCoreCols,
-    test_utils::get_verification_error,
-    LoadSignExtendFiller, Rv64LoadSignExtendAir, Rv64LoadSignExtendChip,
+        LoadSignExtendFiller, Rv64LoadSignExtendAir, Rv64LoadSignExtendChip,
     Rv64LoadSignExtendExecutor,
 };
 
@@ -119,10 +118,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = gen_pointer(rng, 8);
 
     let shift_amount = ptr_val % 8;
-    tester.write(1, b, rs1.map(F::from_canonical_u8));
+    tester.write(1, b, rs1.map(F::from_u8));
 
     let some_prev_data: [F; RV64_REGISTER_NUM_LIMBS] = if a != 0 {
-        array::from_fn(|_| F::from_canonical_u8(rng.gen()))
+        array::from_fn(|_| F::from_u8(rng.gen()))
     } else {
         [F::ZERO; RV64_REGISTER_NUM_LIMBS]
     };
@@ -133,7 +132,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write(
         2,
         (ptr_val - shift_amount) as usize,
-        read_data.map(F::from_canonical_u8),
+        read_data.map(F::from_u8),
     );
 
     tester.execute(
@@ -155,7 +154,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let write_data = run_write_data_sign_extend(opcode, read_data, shift_amount as usize);
     if a != 0 {
-        assert_eq!(write_data.map(F::from_canonical_u8), tester.read::<8>(1, a));
+        assert_eq!(write_data.map(F::from_u8), tester.read::<8>(1, a));
     } else {
         assert_eq!([F::ZERO; 8], tester.read::<8>(1, a));
     }
@@ -301,19 +300,19 @@ fn run_negative_load_sign_extend_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
         let core_cols: &mut LoadSignExtendCoreCols<F, RV64_REGISTER_NUM_LIMBS> =
             core_row.borrow_mut();
         if let Some(shifted_read_data) = read_data {
-            core_cols.shifted_read_data = shifted_read_data.map(F::from_canonical_u8);
+            core_cols.shifted_read_data = shifted_read_data.map(F::from_u8);
         }
         if let Some(data_most_sig_bit) = prank_vals.data_most_sig_bit {
-            core_cols.data_most_sig_bit = F::from_canonical_u32(data_most_sig_bit);
+            core_cols.data_most_sig_bit = F::from_u32(data_most_sig_bit);
         }
         if let Some(shift_most_sig_bit) = prank_vals.shift_most_sig_bit {
-            core_cols.shift_most_sig_bit = F::from_canonical_u32(shift_most_sig_bit);
+            core_cols.shift_most_sig_bit = F::from_u32(shift_most_sig_bit);
         }
         if let Some(opcode_flags) = prank_vals.opcode_flags {
             core_cols.opcode_loadb_flag0 = F::from_bool(opcode_flags[0]);
@@ -333,7 +332,9 @@ fn run_negative_load_sign_extend_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]

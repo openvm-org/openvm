@@ -5,16 +5,14 @@
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        VmBuilder, VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
+    p3_field::PrimeField32, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
@@ -146,11 +144,12 @@ impl Rv64ImConfig {
 #[derive(Clone)]
 pub struct Rv64ICpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv64ICpuBuilder
+impl<SC, E> VmBuilder<E> for Rv64ICpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv64IConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -159,13 +158,18 @@ where
     fn create_chip_complex(
         &self,
         config: &Rv64IConfig,
-        circuit: AirInventory<SC>,
+        circuit: AirInventory<E::SC>,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemCpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
@@ -176,11 +180,12 @@ where
 #[derive(Clone)]
 pub struct Rv64ImCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv64ImCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv64ImCpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv64ImConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -189,13 +194,18 @@ where
     fn create_chip_complex(
         &self,
         config: &Self::VmConfig,
-        circuit: AirInventory<SC>,
+        circuit: AirInventory<E::SC>,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv64ICpuBuilder, &config.rv64i, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &Rv64ICpuBuilder,
+            &config.rv64i,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
@@ -270,7 +280,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &Rv64IGpuBuilder,
-            &config.rv32i,
+            &config.rv64i,
             circuit,
         )?;
         let inventory = &mut chip_complex.inventory;
