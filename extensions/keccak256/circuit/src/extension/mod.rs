@@ -45,7 +45,7 @@ mod cuda;
 pub use cuda::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Keccak256Rv32Config {
+pub struct Keccak256Rv64Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
@@ -58,7 +58,7 @@ pub struct Keccak256Rv32Config {
     pub keccak: Keccak256,
 }
 
-impl Default for Keccak256Rv32Config {
+impl Default for Keccak256Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
@@ -71,25 +71,25 @@ impl Default for Keccak256Rv32Config {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Keccak256Rv32Config {}
+impl InitFileGenerator for Keccak256Rv64Config {}
 
 #[derive(Clone)]
-pub struct Keccak256Rv32CpuBuilder;
+pub struct Keccak256Rv64CpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Keccak256Rv32CpuBuilder
+impl<SC, E> VmBuilder<E> for Keccak256Rv64CpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Keccak256Rv32Config;
+    type VmConfig = Keccak256Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        config: &Keccak256Rv32Config,
+        config: &Keccak256Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<

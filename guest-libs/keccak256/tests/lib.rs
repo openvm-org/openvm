@@ -6,9 +6,9 @@ mod tests {
     use hex::FromHex;
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
-    use openvm_keccak256_circuit::Keccak256Rv32Config;
+    use openvm_keccak256_circuit::Keccak256Rv64Config;
     #[cfg(not(feature = "cuda"))]
-    use openvm_keccak256_circuit::Keccak256Rv32CpuBuilder as TestBuilder;
+    use openvm_keccak256_circuit::Keccak256Rv64CpuBuilder as TestBuilder;
     #[cfg(feature = "cuda")]
     use openvm_keccak256_circuit::Keccak256Rv32GpuBuilder as TestBuilder;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -67,7 +67,7 @@ mod tests {
     }
 
     fn test_keccak256_base(test_vector_file_name: &str, prove: bool) -> Result<()> {
-        let config = Keccak256Rv32Config::default();
+        let config = Keccak256Rv64Config::default();
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(

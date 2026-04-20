@@ -1,6 +1,6 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS;
 
 use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_WORDS};
 
@@ -19,7 +19,7 @@ pub struct KeccakfOpCols<T> {
     pub rd_ptr: T,
     /// `buffer_ptr <- [rd_ptr:4]_1`.
     /// Limbs of the pointer to address space 2 `buffer`.
-    pub buffer_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
+    pub buffer_ptr_limbs: [T; RV64_REGISTER_NUM_LIMBS],
     /// The preimage state, to be permuted in the `keccakf` operation.
     pub preimage: [T; KECCAK_WIDTH_BYTES],
     /// The postimage state after `keccakf` permute of `preimage`.
