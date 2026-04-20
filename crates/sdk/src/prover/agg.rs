@@ -278,7 +278,7 @@ impl AggProver {
         };
 
         // The VM and deferral proofs must be at the same stage in internal recursion, i.e.
-        // both have be the parent of either internal-for-leaf or internal-recursive child
+        // both have to be the parent of either internal-for-leaf or internal-recursive child
         // proofs. If this is not the case, we wrap the internal-for-leaf parent proof here.
         if metadata.internal_recursive_layer == 1 && def_internal_recursive_layer != 1 {
             vm_proof = self.wrap_proof(vm_proof, metadata)?
