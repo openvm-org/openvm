@@ -35,6 +35,15 @@ jobs:
           - { name: "ecc", path: "ecc", aot: false, rvr: false }
           - { name: "pairing", path: "pairing", aot: false, rvr: false }
           - { name: "deferral", path: "deferral", aot: false, rvr: false }
+          # TODO(aot): re-enable these once AOT CI is restored.
+          # - { name: "riscv", path: "riscv", aot: true, rvr: false }
+          # - { name: "keccak256", path: "keccak256", aot: true, rvr: false }
+          # - { name: "sha2", path: "sha2", aot: true, rvr: false }
+          # - { name: "bigint", path: "bigint", aot: true, rvr: false }
+          # - { name: "algebra", path: "algebra", aot: true, rvr: false }
+          # - { name: "ecc", path: "ecc", aot: true, rvr: false }
+          # - { name: "pairing", path: "pairing", aot: true, rvr: false }
+          # - { name: "deferral", path: "deferral", aot: true, rvr: false }
           # TODO(rvr): re-enable these once RV64 RVR support lands.
           # - { name: "riscv", path: "riscv", aot: false, rvr: true }
           # - { name: "keccak256", path: "keccak256", aot: false, rvr: true }
