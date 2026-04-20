@@ -106,10 +106,10 @@ where
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
         let len = read_rv64_register(guest_mem, c.as_canonical_u32()) as u32 as usize;
-        // Safety: length has to be multiple of 8
+        // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
-        debug_assert!(len.is_multiple_of(8));
+        debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(8);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because
@@ -182,14 +182,16 @@ where
 
         let mut result = [0u8; 136];
 
-        // execute xorin
-        for ((x_xor_y, &x), &y) in result
-            .iter_mut()
-            .zip(record.inner.buffer_limbs.iter())
-            .zip(record.inner.input_limbs.iter())
-        {
-            *x_xor_y = x ^ y;
+        // execute xorin — only XOR the first `len` active bytes
+        // Padding bytes in boundary 8-byte blocks keep the original buffer value
+        result[..len].copy_from_slice(&record.inner.buffer_limbs[..len]);
+        for i in 0..len {
+            result[i] ^= record.inner.input_limbs[i];
         }
+        // For the boundary block, fill remaining bytes with original buffer data
+        let bytes_covered = num_reads * 8;
+        result[len..bytes_covered]
+            .copy_from_slice(&record.inner.buffer_limbs[len..bytes_covered]);
 
         // write result in 8-byte blocks
         for idx in 0..num_reads {

@@ -89,7 +89,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         None => MAX_LEN,
     };
 
-    assert!(buffer_length.is_multiple_of(8));
+    assert!(buffer_length.is_multiple_of(4));
 
     let rand_buffer = get_random_message(rng, MAX_LEN);
     let mut rand_buffer_arr = [0u8; MAX_LEN];
@@ -104,21 +104,29 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs1 = gen_pointer(rng, 8);
     let rs2 = gen_pointer(rng, 8);
 
-    let buffer_ptr = gen_pointer(rng, buffer_length);
-    let input_ptr = gen_pointer(rng, buffer_length);
+    // Align buffer/input pointers to 8-byte blocks for memory bus compatibility
+    let num_blocks = buffer_length.div_ceil(8);
+    let aligned_len = num_blocks * 8;
+    let buffer_ptr = gen_pointer(rng, aligned_len);
+    let input_ptr = gen_pointer(rng, aligned_len);
 
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
     let rand_input_arr_f = rand_input_arr.map(F::from_u8);
 
-    for i in 0..(buffer_length / 8) {
-        let buffer_chunk: [F; 8] = rand_buffer_arr_f[8 * i..8 * i + 8]
-            .try_into()
-            .expect("slice has length 8");
+    // Write memory in 8-byte blocks; for the last partial block, pad with zeros
+    for i in 0..num_blocks {
+        let start = 8 * i;
+        let end = std::cmp::min(start + 8, MAX_LEN);
+        let mut buffer_chunk = [F::ZERO; 8];
+        for (j, &v) in rand_buffer_arr_f[start..end].iter().enumerate() {
+            buffer_chunk[j] = v;
+        }
         tester.write(2, buffer_ptr + 8 * i, buffer_chunk);
 
-        let input_chunk: [F; 8] = rand_input_arr_f[8 * i..8 * i + 8]
-            .try_into()
-            .expect("slice has length 8");
+        let mut input_chunk = [F::ZERO; 8];
+        for (j, &v) in rand_input_arr_f[start..end].iter().enumerate() {
+            input_chunk[j] = v;
+        }
         tester.write(2, input_ptr + 8 * i, input_chunk);
     }
 
@@ -150,9 +158,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mut output_buffer = [F::from_u8(0); MAX_LEN];
 
-    for i in 0..(buffer_length / 8) {
+    for i in 0..num_blocks {
         let output_chunk: [F; 8] = tester.read(2, buffer_ptr + 8 * i);
-        output_buffer[8 * i..8 * i + 8].copy_from_slice(&output_chunk);
+        let start = 8 * i;
+        let end = std::cmp::min(start + 8, MAX_LEN);
+        output_buffer[start..end].copy_from_slice(&output_chunk[..end - start]);
     }
 
     for i in 0..buffer_length {
@@ -169,7 +179,7 @@ fn xorin_chip_positive_tests() {
         let mut tester = VmChipTestBuilder::default();
         let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-        let buffer_length = Some(rng.random_range(1..=17) * 8);
+        let buffer_length = Some(rng.random_range(1..=34) * 4);
 
         set_and_execute(
             &mut tester,
