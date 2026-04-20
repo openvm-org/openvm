@@ -11,7 +11,10 @@ mod tests {
         },
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
-    use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
+    use openvm_instructions::{
+        exe::VmExe, instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
+        SystemOpcode,
+    };
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
     use openvm_riscv_guest::{hint_load_by_key_encode, MAX_HINT_BUFFER_DWORDS};
     use openvm_riscv_transpiler::{
@@ -188,7 +191,7 @@ mod tests {
         // Create input buffer larger than MAX_HINT_BUFFER_DWORDS
         // This will require chunking to succeed
         let expected_words = MAX_HINT_BUFFER_DWORDS + 100;
-        let expected_len = expected_words * 8;
+        let expected_len = expected_words * RV64_REGISTER_NUM_LIMBS;
 
         // Create data with a pattern that can be verified
         let data: Vec<F> = (0..expected_len)
