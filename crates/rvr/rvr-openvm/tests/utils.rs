@@ -126,8 +126,7 @@ pub fn rvr_extension_ctx<E>(
     let opcode_to_executor_idx = inventory
         .instruction_lookup
         .iter()
-        .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize))
-        .collect();
+        .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
     RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
 }
 

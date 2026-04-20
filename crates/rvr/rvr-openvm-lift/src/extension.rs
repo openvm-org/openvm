@@ -21,7 +21,7 @@ pub struct RvrExtensionCtx {
 
 impl RvrExtensionCtx {
     pub fn new(
-        opcode_to_executor_idx: Vec<(VmOpcode, usize)>,
+        opcode_to_executor_idx: impl IntoIterator<Item = (VmOpcode, usize)>,
         executor_idx_to_air_idx: Vec<usize>,
     ) -> Self {
         Self {

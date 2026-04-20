@@ -1028,8 +1028,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                 let opcode_to_executor_idx = inventory
                     .instruction_lookup
                     .iter()
-                    .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize))
-                    .collect();
+                    .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
                 let ctx = ::rvr_openvm_lift::RvrExtensionCtx::new(
                     opcode_to_executor_idx,
                     air_idx.to_vec(),
