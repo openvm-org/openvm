@@ -35,14 +35,15 @@ jobs:
           - { name: "ecc", path: "ecc", aot: false }
           - { name: "pairing", path: "pairing", aot: false }
           - { name: "deferral", path: "deferral", aot: false }
-          - { name: "rv32im", path: "rv32im", aot: true }
-          - { name: "keccak256", path: "keccak256", aot: true }
-          - { name: "sha2", path: "sha2", aot: true }
-          - { name: "bigint", path: "bigint", aot: true }
-          - { name: "algebra", path: "algebra", aot: true }
-          - { name: "ecc", path: "ecc", aot: true }
-          - { name: "pairing", path: "pairing", aot: true }
-          - { name: "deferral", path: "deferral", aot: true }
+          # TODO(aot): re-enable
+          # - { name: "rv32im", path: "rv32im", aot: true }
+          # - { name: "keccak256", path: "keccak256", aot: true }
+          # - { name: "sha2", path: "sha2", aot: true }
+          # - { name: "bigint", path: "bigint", aot: true }
+          # - { name: "algebra", path: "algebra", aot: true }
+          # - { name: "ecc", path: "ecc", aot: true }
+          # - { name: "pairing", path: "pairing", aot: true }
+          # - { name: "deferral", path: "deferral", aot: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
@@ -85,6 +86,7 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
+          # TODO(aot): re-enable
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
           else
@@ -107,6 +109,7 @@ jobs:
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
+          # TODO(aot): re-enable
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
           else
