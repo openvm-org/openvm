@@ -100,12 +100,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
         builder.assert_bool(local.rs2_as);
         let mut rs2_imm_when = builder.when(not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
-        for i in 3..RV64_REGISTER_NUM_LIMBS {
-            rs2_imm_when.assert_eq(rs2_sign.clone(), rs2_limbs[i].clone());
+        for limb in rs2_limbs.iter().take(RV64_REGISTER_NUM_LIMBS).skip(3) {
+            rs2_imm_when.assert_eq(rs2_sign.clone(), limb.clone());
         }
         rs2_imm_when.assert_zero(
-            rs2_sign.clone()
-                * (AB::Expr::from_usize((1 << RV64_CELL_BITS) - 1) - rs2_sign),
+            rs2_sign.clone() * (AB::Expr::from_usize((1 << RV64_CELL_BITS) - 1) - rs2_sign),
         );
         self.bitwise_lookup_bus
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())

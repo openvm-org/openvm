@@ -142,14 +142,13 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let mut mem_ptr = AB::Expr::ZERO;
         let mut next_mem_ptr = AB::Expr::ZERO;
         for i in (0..RV64_REGISTER_NUM_LIMBS).rev() {
-            rem_words = rem_words * AB::F::from_u32(1 << RV64_CELL_BITS)
-                + local_cols.rem_words_limbs[i];
+            rem_words =
+                rem_words * AB::F::from_u32(1 << RV64_CELL_BITS) + local_cols.rem_words_limbs[i];
             next_rem_words = next_rem_words * AB::F::from_u32(1 << RV64_CELL_BITS)
                 + next_cols.rem_words_limbs[i];
-            mem_ptr = mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS)
-                + local_cols.mem_ptr_limbs[i];
-            next_mem_ptr = next_mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS)
-                + next_cols.mem_ptr_limbs[i];
+            mem_ptr = mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS) + local_cols.mem_ptr_limbs[i];
+            next_mem_ptr =
+                next_mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS) + next_cols.mem_ptr_limbs[i];
         }
 
         // Constrain that if local is invalid, then the next state is invalid as well
@@ -169,10 +168,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // read mem_ptr
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    local_cols.mem_ptr_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
                 local_cols.mem_ptr_limbs,
                 timestamp_pp(),
                 &local_cols.mem_ptr_aux_cols,
@@ -182,10 +178,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // read num_words
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    local_cols.num_words_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
                 local_cols.rem_words_limbs,
                 timestamp_pp(),
                 &local_cols.num_words_aux_cols,
@@ -203,8 +196,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, is_valid.clone());
         let expected_opcode = (local_cols.is_single
             * AB::F::from_usize(HINT_STORED as usize + self.offset))
-            + (local_cols.is_buffer
-                * AB::F::from_usize(HINT_BUFFER as usize + self.offset));
+            + (local_cols.is_buffer * AB::F::from_usize(HINT_BUFFER as usize + self.offset));
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -242,9 +234,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[3]
-                    * AB::F::from_usize(
-                        1 << (4 * RV64_CELL_BITS - self.pointer_max_bits),
-                    ),
+                    * AB::F::from_usize(1 << (4 * RV64_CELL_BITS - self.pointer_max_bits)),
                 local_cols.rem_words_limbs[RV64_REGISTER_NUM_LIMBS - 1 - REM_WORD_NUM_ZERO_LIMBS]
                     * AB::F::from_usize(
                         1 << ((RV64_REGISTER_NUM_LIMBS - REM_WORD_NUM_ZERO_LIMBS) * RV64_CELL_BITS
@@ -640,11 +630,8 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         // Note: writing in reverse
                         cols.data = var.data.map(|x| F::from_u8(x));
 
-                        cols.write_aux.set_prev_data(
-                            var.data_write_aux
-                                .prev_data
-                                .map(|x| F::from_u8(x)),
-                        );
+                        cols.write_aux
+                            .set_prev_data(var.data_write_aux.prev_data.map(|x| F::from_u8(x)));
                         mem_helper.fill(
                             var.data_write_aux.prev_timestamp,
                             timestamp + 2,
@@ -662,8 +649,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         }
 
                         mem_ptr -= RV64_REGISTER_NUM_LIMBS as u32;
-                        cols.mem_ptr_limbs =
-                            (mem_ptr as u64).to_le_bytes().map(F::from_u8);
+                        cols.mem_ptr_limbs = (mem_ptr as u64).to_le_bytes().map(F::from_u8);
                         cols.mem_ptr_ptr = F::from_u32(record.inner.mem_ptr_ptr);
 
                         cols.from_state.timestamp = F::from_u32(timestamp);

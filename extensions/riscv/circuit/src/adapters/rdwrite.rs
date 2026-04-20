@@ -104,10 +104,7 @@ impl Rv64RdWriteAdapterAir {
         };
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    local_cols.rd_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp,
                 &local_cols.rd_aux_cols,

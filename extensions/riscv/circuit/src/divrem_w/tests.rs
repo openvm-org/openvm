@@ -51,7 +51,7 @@ use crate::{
         Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     divrem::{run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase},
-        Rv64DivRemWAir, Rv64DivRemWExecutor,
+    Rv64DivRemWAir, Rv64DivRemWExecutor,
 };
 
 type F = BabyBear;
@@ -161,7 +161,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         let b_word = generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng);
         b[..RV64_WORD_NUM_LIMBS].copy_from_slice(&b_word);
         for b_high in b[RV64_WORD_NUM_LIMBS..].iter_mut() {
-            *b_high = rng.gen_range(0..256);
+            *b_high = rng.random_range(0..256);
         }
         b
     });
@@ -169,11 +169,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         let mut c = [0; RV64_REGISTER_NUM_LIMBS];
         let c_word = limb_sra::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(
             generate_long_number::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(rng),
-            rng.gen_range(0..(RV64_WORD_NUM_LIMBS - 1)),
+            rng.random_range(0..(RV64_WORD_NUM_LIMBS - 1)),
         );
         c[..RV64_WORD_NUM_LIMBS].copy_from_slice(&c_word);
         for c_high in c[RV64_WORD_NUM_LIMBS..].iter_mut() {
-            *c_high = rng.gen_range(0..256);
+            *c_high = rng.random_range(0..256);
         }
         c
     });
@@ -208,9 +208,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let sign_extend_byte = ((1u16 << RV64_CELL_BITS) - 1) as u8
         * (result_word[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
     let mut expected = [sign_extend_byte; RV64_REGISTER_NUM_LIMBS];
-    for i in 0..RV64_WORD_NUM_LIMBS {
-        expected[i] = result_word[i];
-    }
+    expected[..RV64_WORD_NUM_LIMBS].copy_from_slice(&result_word[..RV64_WORD_NUM_LIMBS]);
 
     assert_eq!(
         expected.map(F::from_u8),
@@ -352,7 +350,7 @@ fn run_negative_divremw_test(
     b: [u32; RV64_REGISTER_NUM_LIMBS],
     c: [u32; RV64_REGISTER_NUM_LIMBS],
     prank_vals: DivRemWPrankValues,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -399,15 +397,11 @@ fn run_negative_divremw_test(
         if let Some(r) = prank_vals.r {
             cols.r = r.map(F::from_u32);
             let r_sum = r.iter().sum::<u32>();
-            cols.r_sum_inv = F::from_u32(r_sum)
-                .try_inverse()
-                .unwrap_or(F::ZERO);
+            cols.r_sum_inv = F::from_u32(r_sum).try_inverse().unwrap_or(F::ZERO);
         }
         if let Some(r_prime) = prank_vals.r_prime {
             cols.r_prime = r_prime.map(F::from_u32);
-            cols.r_inv = cols
-                .r_prime
-                .map(|r| (r - F::from_u32(256)).inverse());
+            cols.r_inv = cols.r_prime.map(|r| (r - F::from_u32(256)).inverse());
         }
         if let Some(diff_val) = prank_vals.diff_val {
             cols.lt_diff = F::from_u32(diff_val);

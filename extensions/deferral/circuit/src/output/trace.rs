@@ -28,7 +28,7 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    memory_read, read_rv32_register, tracing_read, tracing_write,
+    memory_read, read_rv64_register, tracing_read, tracing_write,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -175,7 +175,9 @@ where
         let deferral_idx = c.as_canonical_u32();
 
         // Do a non-tracing read to get the output_len and compute num_rows
-        let read_ptr = read_rv32_register(state.memory.data(), rs_ptr);
+        let read_ptr: u32 = read_rv64_register(state.memory.data(), rs_ptr)
+            .try_into()
+            .expect("read_ptr register value exceeds u32 range");
         let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
             memory_read(
                 state.memory.data(),
