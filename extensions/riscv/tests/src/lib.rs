@@ -188,7 +188,7 @@ mod tests {
         // Create input buffer larger than MAX_HINT_BUFFER_DWORDS
         // This will require chunking to succeed
         let expected_words = MAX_HINT_BUFFER_DWORDS + 100;
-        let expected_len = expected_words * 4;
+        let expected_len = expected_words * 8;
 
         // Create data with a pattern that can be verified
         let data: Vec<F> = (0..expected_len)
