@@ -54,7 +54,7 @@ use crate::{
         Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
-        Rv64JalrAir, Rv64JalrFiller,
+    Rv64JalrAir, Rv64JalrFiller,
 };
 
 const IMM_BITS: usize = 16;
@@ -129,19 +129,19 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     rd_ptr: Option<usize>,
 ) {
-    let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_sign = initial_imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm = initial_imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = initial_imm_sign.unwrap_or(rng.random_range(0..2));
     let imm_ext = imm + (imm_sign * 0xffff0000);
-    let a = rd_ptr.unwrap_or_else(|| rng.gen_range(0..32) << 3);
-    let b = rng.gen_range(1..32) << 3;
-    let to_pc = rng.gen_range(0..(1 << PC_BITS));
+    let a = rd_ptr.unwrap_or_else(|| rng.random_range(0..32) << 3);
+    let b = rng.random_range(1..32) << 3;
+    let to_pc = rng.random_range(0..(1 << PC_BITS));
 
     let rs1 = rs1.unwrap_or(into_limbs((to_pc as u32).wrapping_sub(imm_ext)));
     let rs1 = rs1.map(F::from_u32);
 
     tester.write(1, b, rs1);
 
-    let initial_pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
+    let initial_pc = initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
         executor,
         arena,
@@ -237,7 +237,7 @@ fn run_negative_jalr_test_with_rd_ptr(
     initial_imm_sign: Option<u32>,
     rd_ptr: Option<usize>,
     prank_vals: JalrPrankValues,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();

@@ -10,7 +10,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS};
+use openvm_instructions::{
+    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
+};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -45,7 +47,7 @@ use crate::{
         Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor,
         Rv64LoadStoreAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-        LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
+    LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
 };
 
 const IMM_BITS: usize = 16;
@@ -111,8 +113,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = imm_sign.unwrap_or(rng.random_range(0..2));
     let imm_ext = imm + imm_sign * 0xffff0000;
 
     let alignment = match opcode {
@@ -123,7 +125,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         _ => unreachable!("loadstore tests should not handle sign-extension load opcodes"),
     };
 
-    let ptr_val: u32 = rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let ptr = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
     let rs1_low = u32::from_le_bytes(rs1[..4].try_into().unwrap());
@@ -143,9 +145,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write(1, b, rs1.map(F::from_u8));
 
     let mut prev_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.gen_range(0..(1 << RV64_CELL_BITS))));
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
     let mut read_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.gen_range(0..(1 << RV64_CELL_BITS))));
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
 
     if is_load {
         if a == 0 {
@@ -155,7 +157,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         tester.write(mem_as, (ptr_val as usize) - shift_amount, read_data);
     } else {
         if mem_as == 4 {
-            prev_data = array::from_fn(|_| rng.gen());
+            prev_data = array::from_fn(|_| rng.random());
         }
         if a == 0 {
             read_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
@@ -373,7 +375,7 @@ fn run_negative_loadstore_test(
     imm: Option<u32>,
     imm_sign: Option<u32>,
     prank_vals: LoadStorePrankValues,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();

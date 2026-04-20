@@ -125,7 +125,6 @@ pub fn store_u64_to_native(native_addr: u64, x: u64) {
     panic!("store_to_native_u64 cannot run on non-zkVM platforms");
 }
 
-
 /// A no-alloc writer to print to stdout on host machine for debugging purposes.
 pub struct Writer;
 
