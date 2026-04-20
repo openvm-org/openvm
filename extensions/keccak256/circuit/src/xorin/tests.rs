@@ -173,9 +173,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 #[test]
 fn xorin_chip_positive_tests() {
     let num_ops: usize = 100;
+    let mut rng = create_seeded_rng();
 
     for _ in 0..num_ops {
-        let mut rng = create_seeded_rng();
         let mut tester = VmChipTestBuilder::default();
         let (mut harness, bitwise) = create_test_harness(&mut tester);
 
