@@ -216,35 +216,21 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
 
         // The three pointers are read as full RV64 registers, but this chip only supports
         // 32-bit-addressable memory, so the unused upper half of each register must be zero.
-        for limb in local
-            .instruction
-            .dst_ptr_limbs
-            .iter()
-            .skip(RV64_WORD_NUM_LIMBS)
-            .chain(
-                local
-                    .instruction
-                    .state_ptr_limbs
-                    .iter()
-                    .skip(RV64_WORD_NUM_LIMBS),
-            )
-            .chain(
-                local
-                    .instruction
-                    .input_ptr_limbs
-                    .iter()
-                    .skip(RV64_WORD_NUM_LIMBS),
-            )
-        {
+        for i in RV64_WORD_NUM_LIMBS..RV64_REGISTER_NUM_LIMBS {
             builder
                 .when(*local.instruction.is_enabled)
-                .assert_zero(*limb);
+                .assert_zero(local.instruction.dst_ptr_limbs[i]);
+            builder
+                .when(*local.instruction.is_enabled)
+                .assert_zero(local.instruction.state_ptr_limbs[i]);
+            builder
+                .when(*local.instruction.is_enabled)
+                .assert_zero(local.instruction.input_ptr_limbs[i]);
         }
 
         // range check the high byte of each 32-bit effective pointer
-        let shift = AB::Expr::from_usize(
-            1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.ptr_max_bits),
-        );
+        let shift =
+            AB::Expr::from_usize(1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.ptr_max_bits));
         let needs_range_check = [
             local.instruction.dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
             local.instruction.state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],

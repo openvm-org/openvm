@@ -17,7 +17,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV64_CELL_BITS, LocalOpcode};
 use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::{
@@ -51,7 +51,7 @@ type Harness<RA, C> = TestChipHarness<F, Sha2VmExecutor<C>, Sha2MainAir<C>, Sha2
 
 fn create_harness_fields<C: Sha2Config>(
     system_port: SystemPort,
-    bitwise_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     memory_helper: SharedMemoryHelper<F>,
     pointer_max_bits: usize,
 ) -> (Sha2MainAir<C>, Sha2VmExecutor<C>, Sha2MainChip<F, C>) {
@@ -76,8 +76,8 @@ fn create_harness_fields<C: Sha2Config>(
 struct TestHarness<RA, C: Sha2Config> {
     harness: Harness<RA, C>,
     bitwise: (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
     block_hasher: (Sha2BlockHasherVmAir<C>, Sha2BlockHasherChip<F, C>),
 }
@@ -86,7 +86,7 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> TestHarness<RA, C> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -582,7 +582,7 @@ struct GpuHarness<C: Sha2Config> {
     block_air: Sha2BlockHasherVmAir<C>,
     block_gpu: Sha2BlockHasherChipGpu<C>,
     block_cpu: Sha2BlockHasherChip<F, C>,
-    bitwise_air: BitwiseOperationLookupAir<RV32_CELL_BITS>,
+    bitwise_air: BitwiseOperationLookupAir<RV64_CELL_BITS>,
     bitwise_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
 }
 
@@ -590,7 +590,7 @@ struct GpuHarness<C: Sha2Config> {
 fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
     const GPU_MAX_INS_CAPACITY: usize = 8192;
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
