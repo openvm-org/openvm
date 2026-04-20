@@ -9,7 +9,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
-use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::riscv::{
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
+};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -159,57 +161,54 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
-        // Assert upper 4 limbs of each pointer register are zero (RV64 pointer constraint)
-        for limb in &instruction.buffer_ptr_limbs[4..] {
+        // Assert upper limbs of each pointer register are zero (RV64 pointer constraint)
+        for limb in &instruction.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS..] {
             builder.when(is_enabled).assert_zero(*limb);
         }
-        for limb in &instruction.input_ptr_limbs[4..] {
+        for limb in &instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS..] {
             builder.when(is_enabled).assert_zero(*limb);
         }
-        for limb in &instruction.len_limbs[4..] {
+        for limb in &instruction.len_limbs[RV64_WORD_NUM_LIMBS..] {
             builder.when(is_enabled).assert_zero(*limb);
         }
 
-        // SAFETY: this approach only works when self.ptr_max_bits >= 24
-        // because we are only range checking limb[3] (the MSB of the lower 4 address bytes)
+        // SAFETY: this approach only works when self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)
+        // because we are only range checking the MSB of the lower address bytes
         let need_range_check = [
-            instruction.buffer_ptr_limbs[3],
-            instruction.input_ptr_limbs[3],
-            instruction.len_limbs[3],
-            instruction.len_limbs[3],
+            instruction.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            instruction.len_limbs[RV64_WORD_NUM_LIMBS - 1],
+            instruction.len_limbs[RV64_WORD_NUM_LIMBS - 1],
         ];
 
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * 4 - self.ptr_max_bits));
+        let limb_shift = AB::F::from_usize(
+            1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits),
+        );
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, is_enabled);
         }
 
+        let compose_low_limbs = |limbs: &[AB::Var]| -> AB::Expr {
+            let mut result = AB::Expr::ZERO;
+            for (i, &limb) in limbs[..RV64_WORD_NUM_LIMBS].iter().enumerate() {
+                result += limb * AB::F::from_u32(1 << (RV64_CELL_BITS * i) as u32);
+            }
+            result
+        };
+
         builder.assert_eq(
             instruction.buffer_ptr,
-            instruction.buffer_ptr_limbs[0]
-                + instruction.buffer_ptr_limbs[1] * AB::F::from_u32(1 << 8)
-                + instruction.buffer_ptr_limbs[2] * AB::F::from_u32(1 << 16)
-                + instruction.buffer_ptr_limbs[3] * AB::F::from_u32(1 << 24),
+            compose_low_limbs(&instruction.buffer_ptr_limbs),
         );
 
         builder.assert_eq(
             instruction.input_ptr,
-            instruction.input_ptr_limbs[0]
-                + instruction.input_ptr_limbs[1] * AB::F::from_u32(1 << 8)
-                + instruction.input_ptr_limbs[2] * AB::F::from_u32(1 << 16)
-                + instruction.input_ptr_limbs[3] * AB::F::from_u32(1 << 24),
+            compose_low_limbs(&instruction.input_ptr_limbs),
         );
 
-        builder.assert_eq(
-            instruction.len,
-            instruction.len_limbs[0]
-                + instruction.len_limbs[1] * AB::F::from_u32(1 << 8)
-                + instruction.len_limbs[2] * AB::F::from_u32(1 << 16)
-                + instruction.len_limbs[3] * AB::F::from_u32(1 << 24),
-        );
+        builder.assert_eq(instruction.len, compose_low_limbs(&instruction.len_limbs));
 
         timestamp
     }

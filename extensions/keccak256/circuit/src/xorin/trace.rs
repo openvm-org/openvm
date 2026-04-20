@@ -15,7 +15,7 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{read_rv64_register, tracing_read, tracing_write};
@@ -313,13 +313,13 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         }
 
         let need_range_check = [
-            &record.buffer_reg[3],
-            &record.input_reg[3],
-            &record.len_reg[3],
-            &record.len_reg[3],
+            &record.buffer_reg[RV64_WORD_NUM_LIMBS - 1],
+            &record.input_reg[RV64_WORD_NUM_LIMBS - 1],
+            &record.len_reg[RV64_WORD_NUM_LIMBS - 1],
+            &record.len_reg[RV64_WORD_NUM_LIMBS - 1],
         ];
 
-        let limb_shift = 1 << (RV64_CELL_BITS * 4 - self.pointer_max_bits);
+        let limb_shift = 1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
 
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_chip

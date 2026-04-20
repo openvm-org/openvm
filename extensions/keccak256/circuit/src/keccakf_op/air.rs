@@ -9,7 +9,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::riscv::{
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
+};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
@@ -74,28 +76,30 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             )
             .eval(builder, is_valid);
 
-        // Assert upper 4 limbs of the register are zero (RV64 pointer constraint)
-        for limb in &buffer_ptr_limbs[4..] {
+        // Assert upper limbs of the register are zero (RV64 pointer constraint)
+        for limb in &buffer_ptr_limbs[RV64_WORD_NUM_LIMBS..] {
             builder.when(is_valid).assert_zero(*limb);
         }
 
         // Range check that buffer_ptr_limbs fits in [0, 2^ptr_max_bits) as u32
         {
-            assert!(self.ptr_max_bits >= RV64_CELL_BITS * 3);
-            let limb_shift =
-                AB::F::from_usize(1 << (RV64_CELL_BITS * 4 - self.ptr_max_bits));
-            let need_range_check = [buffer_ptr_limbs[3], buffer_ptr_limbs[3]];
-            for pair in need_range_check.chunks_exact(2) {
-                self.bitwise_lookup_bus
-                    .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-                    .eval(builder, is_valid);
-            }
+            assert!(self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1));
+            let limb_shift = AB::F::from_usize(
+                1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits),
+            );
+            let msb = buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1];
+            self.bitwise_lookup_bus
+                .send_range(msb * limb_shift, msb * limb_shift)
+                .eval(builder, is_valid);
         }
-        // Now it is safe to cast buffer_ptr to F (explicit 4-limb composition)
-        let buffer_ptr: AB::Expr = buffer_ptr_limbs[0]
-            + buffer_ptr_limbs[1] * AB::F::from_u32(1 << 8)
-            + buffer_ptr_limbs[2] * AB::F::from_u32(1 << 16)
-            + buffer_ptr_limbs[3] * AB::F::from_u32(1 << 24);
+        // Now it is safe to cast buffer_ptr to F (compose from low limbs)
+        let buffer_ptr: AB::Expr = {
+            let mut result = AB::Expr::ZERO;
+            for (i, &limb) in buffer_ptr_limbs[..RV64_WORD_NUM_LIMBS].iter().enumerate() {
+                result += limb * AB::F::from_u32(1 << (RV64_CELL_BITS * i) as u32);
+            }
+            result
+        };
 
         // ======== Constrain that post-state consists of bytes =========
         // We know that the pre-state buffer consists of bytes due to the invariant of Address Space

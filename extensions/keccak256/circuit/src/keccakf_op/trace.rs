@@ -19,7 +19,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{timed_write, tracing_read};
@@ -241,8 +241,9 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     timestamp += 1;
                 }
 
-                let limb_shift = 1u32 << (RV64_CELL_BITS * 4 - self.pointer_max_bits) as u32;
-                let scaled_limb = (record.rd_reg[3] as u32) * limb_shift;
+                let limb_shift =
+                    1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits) as u32;
+                let scaled_limb = (record.rd_reg[RV64_WORD_NUM_LIMBS - 1] as u32) * limb_shift;
                 self.bitwise_lookup_chip
                     .request_range(scaled_limb, scaled_limb);
 
