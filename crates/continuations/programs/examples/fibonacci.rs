@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(target_os = "zkvm", no_std)]
 
-use openvm::io::{read, reveal_u32};
+use openvm::io::{read, reveal_u64};
 
 openvm::entry!(main);
 
@@ -14,6 +14,5 @@ pub fn main() {
         a = b;
         b = c;
     }
-    reveal_u32(a as u32, 0);
-    reveal_u32((a >> 32) as u32, 1);
+    reveal_u64(a, 0);
 }

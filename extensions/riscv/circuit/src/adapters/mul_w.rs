@@ -25,9 +25,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_CELL_BITS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -138,8 +136,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
                     - AB::Expr::from_u32(2) * local.result_sign * sign_mask,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
-        let sign_extend_limb =
-            AB::Expr::from_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
+        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
         let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 ctx.writes[0][i].clone()
