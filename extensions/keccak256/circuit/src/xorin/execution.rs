@@ -185,7 +185,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
         .collect();
 
     let mut output_bytes = buffer_bytes;
-    for i in 0..output_bytes.len() {
+    // Only XOR the active bytes (first length_u32 bytes).
+    // Padding bytes in boundary 8-byte blocks remain unchanged.
+    for i in 0..(length_u32 as usize) {
         output_bytes[i] ^= input_bytes[i];
     }
 
