@@ -528,7 +528,7 @@ pub(crate) mod phantom {
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
-    use openvm_riscv_circuit::adapters::read_rv32_register;
+    use openvm_riscv_circuit::adapters::read_rv64_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
@@ -576,7 +576,9 @@ pub(crate) mod phantom {
                 bail!("Modulus too large")
             };
 
-            let rs1 = read_rv32_register(memory, a);
+            let rs1: u32 = read_rv64_register(memory, a)
+                .try_into()
+                .expect("rs1 register value exceeds u32 range");
             // SAFETY:
             // - MEMORY_AS consists of `u8`s
             // - MEMORY_AS is in bounds

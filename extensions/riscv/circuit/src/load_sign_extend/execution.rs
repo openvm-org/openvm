@@ -203,7 +203,7 @@ impl LoadSignExtOp for LoadHOp {
         read_data: &[u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: u32,
     ) -> Option<[u8; RV64_REGISTER_NUM_LIMBS]> {
-        if shift_amount % 2 != 0 {
+        if !shift_amount.is_multiple_of(2) {
             return None;
         }
         let half: [u8; 2] = array::from_fn(|i| read_data[shift_amount as usize + i]);

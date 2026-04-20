@@ -59,7 +59,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS,
     },
     mul::{MultiplicationCoreCols, Rv64MultiplicationChip},
-    test_utils::{rv64_rand_write_register_or_imm},
+    test_utils::rv64_rand_write_register_or_imm,
     MultiplicationCoreAir, MultiplicationFiller, Rv64MultiplicationAir, Rv64MultiplicationExecutor,
 };
 
@@ -137,8 +137,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let c = c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
@@ -201,7 +201,7 @@ fn run_negative_mul_test(
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_is_valid: bool,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -390,7 +390,7 @@ fn test_aot_mul_randomized_pairs() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let value_i32 = rng.random_range(-(1i32 << 11)..(1i32 << 11));
         let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
         instructions.push(add_immediate(offset, imm_field));
         expected.insert(offset, value_i32 as u32);
