@@ -12,7 +12,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -45,7 +45,7 @@ impl XorinVmExecutor {
         } = inst;
 
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -157,19 +157,19 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &XorinPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let buffer = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-    let input = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let length = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
-    let buffer_u32 = u32::from_le_bytes(buffer);
-    let input_u32 = u32::from_le_bytes(input);
-    let length_u32 = u32::from_le_bytes(length);
+    let buffer: [u8; 8] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32);
+    let input: [u8; 8] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
+    let length: [u8; 8] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
+    let buffer_u32 = u32::from_le_bytes(buffer[..4].try_into().unwrap());
+    let input_u32 = u32::from_le_bytes(input[..4].try_into().unwrap());
+    let length_u32 = u32::from_le_bytes(length[..4].try_into().unwrap());
 
-    // SAFETY: RV32_MEMORY_AS is memory address space of type u8
+    // SAFETY: RV64_MEMORY_AS is memory address space of type u8
     let num_reads = (length_u32 as usize).div_ceil(KECCAK_WORD_SIZE);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
             exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
             )
         })
@@ -178,7 +178,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
             exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 input_u32 + (i * KECCAK_WORD_SIZE) as u32,
             )
         })
@@ -195,7 +195,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     for (i, chunk) in output_bytes.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
         let chunk: [u8; KECCAK_WORD_SIZE] = chunk.try_into().unwrap();
         exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
-            RV32_MEMORY_AS,
+            RV64_MEMORY_AS,
             buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
             &chunk,
         );

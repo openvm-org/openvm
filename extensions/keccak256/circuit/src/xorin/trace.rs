@@ -15,7 +15,7 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{read_rv64_register, tracing_read, tracing_write};
@@ -124,26 +124,29 @@ where
         record.inner.rs1_ptr = b.as_canonical_u32();
         record.inner.rs2_ptr = c.as_canonical_u32();
 
-        record.inner.buffer = u32::from_le_bytes(tracing_read(
+        let buffer_reg: [u8; 8] = tracing_read(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.inner.rd_ptr,
             &mut record.inner.register_aux_cols[0].prev_timestamp,
-        ));
+        );
+        record.inner.buffer = u32::from_le_bytes(buffer_reg[..4].try_into().unwrap());
 
-        record.inner.input = u32::from_le_bytes(tracing_read(
+        let input_reg: [u8; 8] = tracing_read(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.inner.rs1_ptr,
             &mut record.inner.register_aux_cols[1].prev_timestamp,
-        ));
+        );
+        record.inner.input = u32::from_le_bytes(input_reg[..4].try_into().unwrap());
 
-        record.inner.len = u32::from_le_bytes(tracing_read(
+        let len_reg: [u8; 8] = tracing_read(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.inner.rs2_ptr,
             &mut record.inner.register_aux_cols[2].prev_timestamp,
-        ));
+        );
+        record.inner.len = u32::from_le_bytes(len_reg[..4].try_into().unwrap());
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
@@ -153,7 +156,7 @@ where
         for idx in 0..num_reads {
             let read = tracing_read::<4>(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.inner.buffer + (idx * 4) as u32,
                 &mut record.inner.buffer_read_aux_cols[idx].prev_timestamp,
             );
@@ -164,7 +167,7 @@ where
         for idx in 0..num_reads {
             let read = tracing_read::<4>(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.inner.input + (idx * 4) as u32,
                 &mut record.inner.input_read_aux_cols[idx].prev_timestamp,
             );
@@ -188,7 +191,7 @@ where
             word.copy_from_slice(&result[4 * idx..4 * (idx + 1)]);
             tracing_write(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.inner.buffer + (idx * 4) as u32,
                 word,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_timestamp,
@@ -225,30 +228,24 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
         trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
         let buffer_ptr_u8: [u8; 4] = record.buffer.to_le_bytes();
-        let buffer_ptr_limbs: [F; 4] = [
-            F::from_u8(buffer_ptr_u8[0]),
-            F::from_u8(buffer_ptr_u8[1]),
-            F::from_u8(buffer_ptr_u8[2]),
-            F::from_u8(buffer_ptr_u8[3]),
-        ];
+        let mut buffer_ptr_limbs = [F::ZERO; 8];
+        for i in 0..4 {
+            buffer_ptr_limbs[i] = F::from_u8(buffer_ptr_u8[i]);
+        }
         trace_row.instruction.buffer_ptr_limbs = buffer_ptr_limbs;
         trace_row.instruction.input_ptr = F::from_u32(record.input);
         let input_ptr_u8: [u8; 4] = record.input.to_le_bytes();
-        let input_ptr_limbs: [F; 4] = [
-            F::from_u8(input_ptr_u8[0]),
-            F::from_u8(input_ptr_u8[1]),
-            F::from_u8(input_ptr_u8[2]),
-            F::from_u8(input_ptr_u8[3]),
-        ];
+        let mut input_ptr_limbs = [F::ZERO; 8];
+        for i in 0..4 {
+            input_ptr_limbs[i] = F::from_u8(input_ptr_u8[i]);
+        }
         trace_row.instruction.input_ptr_limbs = input_ptr_limbs;
         trace_row.instruction.len = F::from_u32(record.len);
         let len_u8: [u8; 4] = record.len.to_le_bytes();
-        let len_limbs: [F; 4] = [
-            F::from_u8(len_u8[0]),
-            F::from_u8(len_u8[1]),
-            F::from_u8(len_u8[2]),
-            F::from_u8(len_u8[3]),
-        ];
+        let mut len_limbs = [F::ZERO; 8];
+        for i in 0..4 {
+            len_limbs[i] = F::from_u8(len_u8[i]);
+        }
         trace_row.instruction.len_limbs = len_limbs;
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
 
@@ -314,18 +311,18 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        let buffer_ptr_limbs = record.buffer.to_le_bytes();
-        let input_ptr_limbs = record.input.to_le_bytes();
-        let len_limbs = record.len.to_le_bytes();
+        let buffer_ptr_bytes = record.buffer.to_le_bytes();
+        let input_ptr_bytes = record.input.to_le_bytes();
+        let len_bytes = record.len.to_le_bytes();
 
         let need_range_check = [
-            buffer_ptr_limbs.last().unwrap(),
-            input_ptr_limbs.last().unwrap(),
-            len_limbs.last().unwrap(),
-            len_limbs.last().unwrap(),
+            &buffer_ptr_bytes[3],
+            &input_ptr_bytes[3],
+            &len_bytes[3],
+            &len_bytes[3],
         ];
 
-        let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
+        let limb_shift = 1 << (RV64_CELL_BITS * 4 - self.pointer_max_bits);
 
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_chip

@@ -9,14 +9,11 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_instructions::riscv::{
-    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::abstract_compose;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
-    p3_air::{Air, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
@@ -70,30 +67,35 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         let buffer_ptr_limbs = local.buffer_ptr_limbs;
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), rd_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
                 buffer_ptr_limbs,
                 timestamp_pp(),
                 &local.rd_aux,
             )
             .eval(builder, is_valid);
+
+        // Assert upper 4 limbs of the register are zero (RV64 pointer constraint)
+        for limb in &buffer_ptr_limbs[4..] {
+            builder.when(is_valid).assert_zero(*limb);
+        }
+
         // Range check that buffer_ptr_limbs fits in [0, 2^ptr_max_bits) as u32
         {
-            assert!(self.ptr_max_bits >= RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1));
-            let limb_shift = AB::F::from_usize(
-                1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
-            );
-            let need_range_check = [
-                buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-                buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            ];
+            assert!(self.ptr_max_bits >= RV64_CELL_BITS * 3);
+            let limb_shift =
+                AB::F::from_usize(1 << (RV64_CELL_BITS * 4 - self.ptr_max_bits));
+            let need_range_check = [buffer_ptr_limbs[3], buffer_ptr_limbs[3]];
             for pair in need_range_check.chunks_exact(2) {
                 self.bitwise_lookup_bus
                     .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                     .eval(builder, is_valid);
             }
         }
-        // Now it is safe to cast buffer_ptr to F
-        let buffer_ptr: AB::Expr = abstract_compose(local.buffer_ptr_limbs);
+        // Now it is safe to cast buffer_ptr to F (explicit 4-limb composition)
+        let buffer_ptr: AB::Expr = buffer_ptr_limbs[0]
+            + buffer_ptr_limbs[1] * AB::F::from_u32(1 << 8)
+            + buffer_ptr_limbs[2] * AB::F::from_u32(1 << 16)
+            + buffer_ptr_limbs[3] * AB::F::from_u32(1 << 24);
 
         // ======== Constrain that post-state consists of bytes =========
         // We know that the pre-state buffer consists of bytes due to the invariant of Address Space
@@ -135,7 +137,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             };
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::F::from_u32(RV32_MEMORY_AS), ptr),
+                    MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), ptr),
                     *data,
                     timestamp_pp(),
                     &write_aux,
@@ -151,8 +153,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                     rd_ptr.into(),
                     AB::Expr::ZERO,
                     AB::Expr::ZERO,
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
-                    AB::Expr::from_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_MEMORY_AS),
                 ],
                 ExecutionState::new(local.pc, local.timestamp),
                 AB::F::from_usize(timestamp_delta),
