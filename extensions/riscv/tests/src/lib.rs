@@ -112,7 +112,7 @@ mod tests {
         Ok(())
     }
 
-    // TODO(rv64-std): re-enable when guest std works
+    // TODO(rv64-std): re-enable when guest is updated to no_std
     #[ignore]
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
@@ -290,7 +290,7 @@ mod tests {
         }
     }
 
-    // TODO(rv64-std): re-enable when guest std works
+    // TODO(rv64-std): re-enable when guest is updated to no_std
     #[ignore]
     #[test]
     fn test_hashmap() -> Result<()> {

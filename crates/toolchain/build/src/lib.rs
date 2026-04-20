@@ -265,18 +265,12 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         args.push("--locked");
     }
 
-    // let rust_src = get_env_var("OPENVM_RUST_SRC");
-    // if !rust_src.is_empty() {
-    // TODO[jpw]: only do this for custom src once we make openvm toolchain
-    // TODO(rv64-std): restore `std` and `proc_macro` when guest std works
     args.extend_from_slice(&[
         "-Z",
         "build-std=alloc,core,panic_abort",
         "-Z",
         "build-std-features=compiler-builtins-mem",
     ]);
-    // cmd.env("__CARGO_TESTS_ONLY_SRC_ROOT", rust_src);
-    // }
 
     println!("Building guest package: cargo {}", args.join(" "));
 
