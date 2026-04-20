@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use openvm_circuit::arch::testing::TestBuilder;
-use openvm_instructions::riscv::RV32_MEMORY_AS;
+use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_sha2_air::Sha2Variant;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -47,19 +47,21 @@ pub fn write_slice_to_memory<F: PrimeField32>(
     data: &[u8],
     ptr: usize,
 ) {
-    data.chunks_exact(4).enumerate().for_each(|(i, chunk)| {
-        tester.write::<SHA2_WRITE_SIZE>(
-            RV32_MEMORY_AS as usize,
-            ptr + i * 4,
-            chunk
-                .iter()
-                .cloned()
-                .map(F::from_u8)
-                .collect_vec()
-                .try_into()
-                .unwrap(),
-        );
-    });
+    data.chunks_exact(SHA2_WRITE_SIZE)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            tester.write::<SHA2_WRITE_SIZE>(
+                RV64_MEMORY_AS as usize,
+                ptr + i * SHA2_WRITE_SIZE,
+                chunk
+                    .iter()
+                    .cloned()
+                    .map(F::from_u8)
+                    .collect_vec()
+                    .try_into()
+                    .unwrap(),
+            );
+        });
 }
 
 pub fn read_slice_from_memory<F: PrimeField32>(
@@ -70,7 +72,7 @@ pub fn read_slice_from_memory<F: PrimeField32>(
     let mut data = Vec::new();
     for i in 0..(len / SHA2_READ_SIZE) {
         data.extend_from_slice(
-            &tester.read::<SHA2_READ_SIZE>(RV32_MEMORY_AS as usize, ptr + i * SHA2_READ_SIZE),
+            &tester.read::<SHA2_READ_SIZE>(RV64_MEMORY_AS as usize, ptr + i * SHA2_READ_SIZE),
         );
     }
     data

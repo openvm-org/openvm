@@ -24,7 +24,7 @@ use openvm_riscv_circuit::{
     Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 
@@ -35,15 +35,15 @@ cfg_if::cfg_if! {
         mod cuda;
         pub use self::cuda::*;
         pub use self::cuda::Sha2GpuProverExt as Sha2ProverExt;
-        pub use self::cuda::Sha2Rv32GpuBuilder as Sha2Rv32Builder;
+        pub use self::cuda::Sha2Rv32GpuBuilder as Sha2Rv64Builder;
     } else {
         pub use self::Sha2CpuProverExt as Sha2ProverExt;
-        pub use self::Sha2Rv32CpuBuilder as Sha2Rv32Builder;
+        pub use self::Sha2Rv64CpuBuilder as Sha2Rv64Builder;
     }
 }
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Sha2Rv32Config {
+pub struct Sha2Rv64Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
@@ -56,7 +56,7 @@ pub struct Sha2Rv32Config {
     pub sha2: Sha2,
 }
 
-impl Default for Sha2Rv32Config {
+impl Default for Sha2Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
@@ -69,25 +69,25 @@ impl Default for Sha2Rv32Config {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Sha2Rv32Config {}
+impl InitFileGenerator for Sha2Rv64Config {}
 
 #[derive(Clone)]
-pub struct Sha2Rv32CpuBuilder;
+pub struct Sha2Rv64CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Sha2Rv32CpuBuilder
+impl<E, SC> VmBuilder<E> for Sha2Rv64CpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Sha2Rv32Config;
+    type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        config: &Sha2Rv32Config,
+        config: &Sha2Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -136,12 +136,12 @@ impl<F> VmExecutionExtension<F> for Sha2 {
         let pointer_max_bits = inventory.pointer_max_bits();
 
         let sha256_executor =
-            Sha2VmExecutor::<Sha256Config>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
-        inventory.add_executor(sha256_executor, [Rv32Sha2Opcode::SHA256.global_opcode()])?;
+            Sha2VmExecutor::<Sha256Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(sha256_executor, [Rv64Sha2Opcode::SHA256.global_opcode()])?;
 
         let sha512_executor =
-            Sha2VmExecutor::<Sha512Config>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
-        inventory.add_executor(sha512_executor, [Rv32Sha2Opcode::SHA512.global_opcode()])?;
+            Sha2VmExecutor::<Sha512Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(sha512_executor, [Rv64Sha2Opcode::SHA512.global_opcode()])?;
 
         Ok(())
     }
@@ -176,7 +176,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             bitwise_lu,
             inventory.pointer_max_bits(),
             sha2_bus_index,
-            Rv32Sha2Opcode::CLASS_OFFSET,
+            Rv64Sha2Opcode::CLASS_OFFSET,
         );
         inventory.add_air(sha256_main_air);
 
@@ -190,7 +190,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             bitwise_lu,
             inventory.pointer_max_bits(),
             sha2_bus_index,
-            Rv32Sha2Opcode::CLASS_OFFSET,
+            Rv64Sha2Opcode::CLASS_OFFSET,
         );
         inventory.add_air(sha512_main_air);
 

@@ -19,7 +19,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -55,7 +55,7 @@ fn create_harness_fields<C: Sha2Config>(
     memory_helper: SharedMemoryHelper<F>,
     pointer_max_bits: usize,
 ) -> (Sha2MainAir<C>, Sha2VmExecutor<C>, Sha2MainChip<F, C>) {
-    let executor = Sha2VmExecutor::<C>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+    let executor = Sha2VmExecutor::<C>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
     let empty_records = Arc::new(Mutex::new(None));
     let main_chip = Sha2MainChip::new(
         empty_records.clone(),
@@ -68,7 +68,7 @@ fn create_harness_fields<C: Sha2Config>(
         bitwise_chip.bus(),
         pointer_max_bits,
         SHA2_BUS_IDX,
-        Rv32Sha2Opcode::CLASS_OFFSET,
+        Rv64Sha2Opcode::CLASS_OFFSET,
     );
     (main_air, executor, main_chip)
 }
@@ -124,20 +124,20 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
-    opcode: Rv32Sha2Opcode,
+    opcode: Rv64Sha2Opcode,
     message: Option<&[u8]>,
     prev_state: Option<&[u8]>,
 ) {
-    let rd = gen_pointer(rng, 4);
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, 8);
+    let rs1 = gen_pointer(rng, 8);
+    let rs2 = gen_pointer(rng, 8);
 
-    let dst_ptr = gen_pointer(rng, 4);
-    let state_ptr = gen_pointer(rng, 4);
-    let input_ptr = gen_pointer(rng, 4);
-    tester.write(1, rd, (dst_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs1, (state_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs2, (input_ptr as u32).to_le_bytes().map(F::from_u8));
+    let dst_ptr = gen_pointer(rng, 8);
+    let state_ptr = gen_pointer(rng, 8);
+    let input_ptr = gen_pointer(rng, 8);
+    tester.write(1, rd, (dst_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, (state_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, (input_ptr as u64).to_le_bytes().map(F::from_u8));
 
     let default_message = get_random_message(rng, C::BLOCK_U8S);
     let message = message.unwrap_or(&default_message);
@@ -229,20 +229,20 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
-    opcode: Rv32Sha2Opcode,
+    opcode: Rv64Sha2Opcode,
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let rd = gen_pointer(rng, 4);
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, 8);
+    let rs1 = gen_pointer(rng, 8);
+    let rs2 = gen_pointer(rng, 8);
 
-    let state_ptr = gen_pointer(rng, 4);
+    let state_ptr = gen_pointer(rng, 8);
     let dst_ptr = state_ptr;
-    let input_ptr = gen_pointer(rng, 4);
-    tester.write(1, rd, (dst_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs1, (state_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs2, (input_ptr as u32).to_le_bytes().map(F::from_u8));
+    let input_ptr = gen_pointer(rng, 8);
+    tester.write(1, rd, (dst_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, (state_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, (input_ptr as u64).to_le_bytes().map(F::from_u8));
 
     // initial state as little-endian words
     let initial_state: Vec<u8> = C::get_h()
