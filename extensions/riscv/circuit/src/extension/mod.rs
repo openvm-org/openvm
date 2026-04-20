@@ -22,25 +22,10 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
-    BaseAluOpcode,
-    BaseAluWOpcode,
-    BranchEqualOpcode,
-    BranchLessThanOpcode,
-    DivRemOpcode,
-    DivRemWOpcode,
-    LessThanOpcode,
-    MulHOpcode,
-    MulOpcode,
-    MulWOpcode,
-    Rv64AuipcOpcode,
-    // TEMP: disabled until ported to RV64
-    // Rv64HintStoreOpcode,
-    Rv64JalLuiOpcode,
-    Rv64JalrOpcode,
-    Rv64LoadStoreOpcode,
-    Rv64Phantom,
-    ShiftOpcode,
-    ShiftWOpcode,
+    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
+    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
+    Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
+    ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -139,116 +124,9 @@ pub enum Rv64MExecutor {
 }
 
 /// RISC-V 64-bit Io Instruction Executors
-// TEMP: variants disabled until ported to RV64. Manual trait impls below.
-#[derive(Clone, Copy)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Rv64IoExecutor {
-    // HintStore(Rv32HintStoreExecutor),
-}
-
-// TEMP: Manual trait impls for empty executor enums.
-// All method bodies are unreachable since these enums have no variants.
-mod _empty_executor_impls {
-    use std::any::Any;
-
-    #[cfg(not(feature = "tco"))]
-    use openvm_circuit::arch::execution::ExecuteFunc;
-    #[cfg(feature = "tco")]
-    use openvm_circuit::arch::execution::Handler;
-    use openvm_circuit::{
-        arch::{
-            execution::{ExecutionError, InterpreterExecutor, InterpreterMeteredExecutor},
-            AnyEnum, ExecutionCtxTrait, MatrixRecordArena, MeteredExecutionCtxTrait,
-            PreflightExecutor, StaticProgramError, VmStateMut,
-        },
-        system::memory::online::TracingMemory,
-    };
-    use openvm_instructions::instruction::Instruction;
-    use openvm_stark_backend::p3_field::Field;
-
-    use super::Rv64IoExecutor;
-
-    macro_rules! impl_empty_executor {
-        ($ty:ty) => {
-            impl AnyEnum for $ty {
-                fn as_any_kind(&self) -> &dyn Any {
-                    match *self {}
-                }
-                fn as_any_kind_mut(&mut self) -> &mut dyn Any {
-                    match *self {}
-                }
-            }
-
-            impl<F: Field> InterpreterExecutor<F> for $ty {
-                fn pre_compute_size(&self) -> usize {
-                    match *self {}
-                }
-
-                #[cfg(not(feature = "tco"))]
-                fn pre_compute<Ctx: ExecutionCtxTrait>(
-                    &self,
-                    _pc: u32,
-                    _inst: &Instruction<F>,
-                    _data: &mut [u8],
-                ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-                    match *self {}
-                }
-
-                #[cfg(feature = "tco")]
-                fn handler<Ctx: ExecutionCtxTrait>(
-                    &self,
-                    _pc: u32,
-                    _inst: &Instruction<F>,
-                    _data: &mut [u8],
-                ) -> Result<Handler<F, Ctx>, StaticProgramError> {
-                    match *self {}
-                }
-            }
-
-            impl<F: Field> InterpreterMeteredExecutor<F> for $ty {
-                fn metered_pre_compute_size(&self) -> usize {
-                    match *self {}
-                }
-
-                #[cfg(not(feature = "tco"))]
-                fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
-                    &self,
-                    _air_idx: usize,
-                    _pc: u32,
-                    _inst: &Instruction<F>,
-                    _data: &mut [u8],
-                ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-                    match *self {}
-                }
-
-                #[cfg(feature = "tco")]
-                fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
-                    &self,
-                    _air_idx: usize,
-                    _pc: u32,
-                    _inst: &Instruction<F>,
-                    _data: &mut [u8],
-                ) -> Result<Handler<F, Ctx>, StaticProgramError> {
-                    match *self {}
-                }
-            }
-
-            impl<F: Field> PreflightExecutor<F> for $ty {
-                fn execute(
-                    &self,
-                    _state: VmStateMut<F, TracingMemory, MatrixRecordArena<F>>,
-                    _instruction: &Instruction<F>,
-                ) -> Result<(), ExecutionError> {
-                    match *self {}
-                }
-
-                fn get_opcode_name(&self, _opcode: usize) -> String {
-                    match *self {}
-                }
-            }
-        };
-    }
-
-    impl_empty_executor!(Rv64IoExecutor);
+    HintStore(Rv64HintStoreExecutor),
 }
 
 // ============ VmExtension Implementations ============
@@ -330,19 +208,19 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
-            phantom::Rv32HintInputSubEx,
+            phantom::Rv64HintInputSubEx,
             PhantomDiscriminant(Rv64Phantom::HintInput as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::Rv32HintRandomSubEx,
+            phantom::Rv64HintRandomSubEx,
             PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::Rv32PrintStrSubEx,
+            phantom::Rv64PrintStrSubEx,
             PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::Rv32HintLoadByKeySubEx,
+            phantom::Rv64HintLoadByKeySubEx,
             PhantomDiscriminant(Rv64Phantom::HintLoadByKey as u16),
         )?;
 
@@ -849,58 +727,56 @@ where
     }
 }
 
-// TEMP: Rv64Io chip registration disabled until ported to RV64.
-// Trait impls kept with empty bodies so downstream crates still compile.
-impl<F> VmExecutionExtension<F> for Rv64Io {
+impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
     type Executor = Rv64IoExecutor;
 
     fn extend_execution(
         &self,
-        _inventory: &mut ExecutorInventoryBuilder<F, Rv64IoExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Rv64IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // let pointer_max_bits = inventory.pointer_max_bits();
-        // let hint_store =
-        //     Rv32HintStoreExecutor::new(pointer_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
-        // inventory.add_executor(
-        //     hint_store,
-        //     Rv64HintStoreOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let pointer_max_bits = inventory.pointer_max_bits();
+        let hint_store =
+            Rv64HintStoreExecutor::new(pointer_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            hint_store,
+            Rv64HintStoreOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         Ok(())
     }
 }
 
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64Io {
-    fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
-        // let SystemPort {
-        //     execution_bus,
-        //     program_bus,
-        //     memory_bridge,
-        // } = inventory.system().port();
-        //
-        // let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        // let pointer_max_bits = inventory.pointer_max_bits();
-        //
-        // let bitwise_lu = {
-        //     let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-        //     if let Some(air) = existing_air {
-        //         air.bus
-        //     } else {
-        //         let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-        //         let air = BitwiseOperationLookupAir::<8>::new(bus);
-        //         inventory.add_air(air);
-        //         air.bus
-        //     }
-        // };
-        //
-        // let hint_store = Rv32HintStoreAir::new(
-        //     exec_bridge,
-        //     memory_bridge,
-        //     bitwise_lu,
-        //     Rv64HintStoreOpcode::CLASS_OFFSET,
-        //     pointer_max_bits,
-        // );
-        // inventory.add_air(hint_store);
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = inventory.system().port();
+
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let pointer_max_bits = inventory.pointer_max_bits();
+
+        let bitwise_lu = {
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+
+        let hint_store = Rv64HintStoreAir::new(
+            exec_bridge,
+            memory_bridge,
+            bitwise_lu,
+            Rv64HintStoreOpcode::CLASS_OFFSET,
+            pointer_max_bits,
+        );
+        inventory.add_air(hint_store);
 
         Ok(())
     }
@@ -918,33 +794,33 @@ where
     fn extend_prover(
         &self,
         _: &Rv64Io,
-        _inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
-        // let range_checker = inventory.range_checker()?.clone();
-        // let timestamp_max_bits = inventory.timestamp_max_bits();
-        // let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        // let pointer_max_bits = inventory.airs().pointer_max_bits();
-        //
-        // let bitwise_lu = {
-        //     let existing_chip = inventory
-        //         .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-        //         .next();
-        //     if let Some(chip) = existing_chip {
-        //         chip.clone()
-        //     } else {
-        //         let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-        //         let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-        //         inventory.add_periphery_chip(chip.clone());
-        //         chip
-        //     }
-        // };
-        //
-        // inventory.next_air::<Rv32HintStoreAir>()?;
-        // let hint_store = Rv32HintStoreChip::new(
-        //     Rv32HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone()),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(hint_store);
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+
+        inventory.next_air::<Rv64HintStoreAir>()?;
+        let hint_store = Rv64HintStoreChip::new(
+            Rv64HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(hint_store);
 
         Ok(())
     }
@@ -961,14 +837,16 @@ mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::StdRng, Rng};
 
-    use crate::adapters::{memory_read, read_rv64_register};
+    use crate::adapters::{memory_read, read_rv64_register, RV64_REGISTER_NUM_LIMBS};
 
-    pub struct Rv32HintInputSubEx;
-    pub struct Rv32HintRandomSubEx;
-    pub struct Rv32PrintStrSubEx;
-    pub struct Rv32HintLoadByKeySubEx;
+    const HINT_DWORD_BYTES: usize = RV64_REGISTER_NUM_LIMBS;
 
-    impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
+    pub struct Rv64HintInputSubEx;
+    pub struct Rv64HintRandomSubEx;
+    pub struct Rv64PrintStrSubEx;
+    pub struct Rv64HintLoadByKeySubEx;
+
+    impl<F: Field> PhantomSubExecutor<F> for Rv64HintInputSubEx {
         fn phantom_execute(
             &self,
             _: &GuestMemory,
@@ -986,21 +864,22 @@ mod phantom {
                 }
             };
             streams.hint_stream.clear();
+            let hint_len = hint.len() as u64;
             streams.hint_stream.extend(
-                (hint.len() as u32)
+                hint_len
                     .to_le_bytes()
                     .iter()
                     .map(|b| F::from_canonical_u8(*b)),
             );
-            // Extend by 0 for 4 byte alignment
-            let capacity = hint.len().div_ceil(4) * 4;
+            // Pad the hint payload to full dwords so RV64 `HINT_BUFFER` reads can consume it.
+            let capacity = hint.len().div_ceil(HINT_DWORD_BYTES) * HINT_DWORD_BYTES;
             hint.resize(capacity, F::ZERO);
             streams.hint_stream.extend(hint);
             Ok(())
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintRandomSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -1019,13 +898,14 @@ mod phantom {
             let len = read_rv64_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 4),
+                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>()))
+                    .take(len * HINT_DWORD_BYTES),
             );
             Ok(())
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32PrintStrSubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64PrintStrSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -1047,7 +927,7 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintLoadByKeySubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintLoadByKeySubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -1069,7 +949,7 @@ mod phantom {
                     streams.input_stream.push_front(input);
                 }
             } else {
-                bail!("Rv32HintLoadByKey: key not found");
+                bail!("Rv64HintLoadByKey: key not found");
             }
             Ok(())
         }
@@ -1077,16 +957,22 @@ mod phantom {
 
     pub fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
         let mut offset = 0;
-        let len = extract_u32(value, offset) as usize;
-        offset += 4;
+        let len = extract_u64(value, offset) as usize;
+        offset += HINT_DWORD_BYTES;
         let mut ret = Vec::with_capacity(len);
         for _ in 0..len {
-            let v_len = extract_u32(value, offset) as usize;
-            offset += 4;
+            let v_len = extract_u64(value, offset) as usize;
+            offset += HINT_DWORD_BYTES;
             let v = (0..v_len)
                 .map(|_| {
-                    let ret = F::from_canonical_u32(extract_u32(value, offset));
-                    offset += 4;
+                    let word = extract_u64(value, offset);
+                    offset += HINT_DWORD_BYTES;
+                    assert_eq!(
+                        word >> 32,
+                        0,
+                        "hint_load_by_key payload elements must be zero-extended u32s"
+                    );
+                    let ret = F::from_canonical_u32(word as u32);
                     ret
                 })
                 .collect();
@@ -1095,7 +981,7 @@ mod phantom {
         ret
     }
 
-    fn extract_u32(value: &[u8], offset: usize) -> u32 {
-        u32::from_le_bytes(value[offset..offset + 4].try_into().unwrap())
+    fn extract_u64(value: &[u8], offset: usize) -> u64 {
+        u64::from_le_bytes(value[offset..offset + HINT_DWORD_BYTES].try_into().unwrap())
     }
 }

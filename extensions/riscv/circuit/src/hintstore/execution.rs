@@ -8,7 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -18,7 +18,7 @@ use openvm_riscv_transpiler::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::Rv32HintStoreExecutor;
+use super::Rv64HintStoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -28,7 +28,7 @@ struct HintStorePreCompute {
     b: u8,
 }
 
-impl Rv32HintStoreExecutor {
+impl Rv64HintStoreExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -45,7 +45,7 @@ impl Rv32HintStoreExecutor {
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e.as_canonical_u32() != RV32_MEMORY_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = {
@@ -70,7 +70,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterExecutor<F> for Rv64HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -107,10 +107,7 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F> AotExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
-
-impl<F> InterpreterMeteredExecutor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterMeteredExecutor<F> for Rv64HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -153,8 +150,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F> AotMeteredExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
 /// Return the number of used rows.
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
@@ -162,18 +157,32 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<u32, ExecutionError> {
     let pc = exec_state.pc();
-    let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
+    let mem_ptr_limbs =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let mem_ptr_u64 = u64::from_le_bytes(mem_ptr_limbs);
+    assert_eq!(
+        mem_ptr_u64 >> 32,
+        0,
+        "mem_ptr upper 4 bytes must be zero for hintstore"
+    );
+    let mem_ptr = mem_ptr_u64 as u32;
 
     let num_words = if IS_HINT_STORED {
         1
     } else {
-        let num_words_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-        u32::from_le_bytes(num_words_limbs)
+        let num_words_limbs = exec_state
+            .vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+        let num_words_u64 = u64::from_le_bytes(num_words_limbs);
+        assert_eq!(
+            num_words_u64 >> 32,
+            0,
+            "num_words upper 4 bytes must be zero"
+        );
+        num_words_u64 as u32
     };
     debug_assert_ne!(num_words, 0);
 
-    // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+    // Bounds check: num_words must not exceed MAX_HINT_BUFFER_DWORDS
     if num_words > MAX_HINT_BUFFER_DWORDS as u32 {
         return Err(ExecutionError::HintBufferTooLarge {
             pc,
@@ -182,13 +191,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
         });
     }
 
-    if exec_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+    if exec_state.streams.hint_stream.len() < RV64_REGISTER_NUM_LIMBS * num_words as usize {
         let err = ExecutionError::HintOutOfBounds { pc };
         return Err(err);
     }
 
     for word_index in 0..num_words {
-        let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
+        let data: [u8; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
             exec_state
                 .streams
                 .hint_stream
@@ -197,8 +206,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
                 .as_canonical_u32() as u8
         });
         exec_state.vm_write(
-            RV32_MEMORY_AS,
-            mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
+            RV64_MEMORY_AS,
+            mem_ptr + (RV64_REGISTER_NUM_LIMBS as u32 * word_index),
             &data,
         );
     }
