@@ -16,7 +16,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -35,41 +35,41 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
-    crate::{Rv32HintStoreChipGpu, Rv32HintStoreLayout},
+    crate::{Rv64HintStoreChipGpu, Rv64HintStoreLayout},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
-use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreExecutor};
-use crate::{test_utils::get_verification_error, Rv32HintStoreFiller};
+use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
+use crate::{test_utils::get_verification_error, Rv64HintStoreFiller};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> =
-    TestChipHarness<F, Rv32HintStoreExecutor, Rv32HintStoreAir, Rv32HintStoreChip<F>, RA>;
+    TestChipHarness<F, Rv64HintStoreExecutor, Rv64HintStoreAir, Rv64HintStoreChip<F>, RA>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
-    Rv32HintStoreAir,
-    Rv32HintStoreExecutor,
-    Rv32HintStoreChip<F>,
+    Rv64HintStoreAir,
+    Rv64HintStoreExecutor,
+    Rv64HintStoreChip<F>,
 ) {
-    let air = Rv32HintStoreAir::new(
+    let air = Rv64HintStoreAir::new(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
         Rv64HintStoreOpcode::CLASS_OFFSET,
         address_bits,
     );
-    let executor = Rv32HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
-    let chip = Rv32HintStoreChip::<F>::new(
-        Rv32HintStoreFiller::new(address_bits, bitwise_chip),
+    let executor = Rv64HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
+    let chip = Rv64HintStoreChip::<F>::new(
+        Rv64HintStoreFiller::new(address_bits, bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -80,12 +80,12 @@ fn create_harness<RA: Arena>(
 ) -> (
     Harness<RA>,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -101,6 +101,11 @@ fn create_harness<RA: Arena>(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
+/// Convert a `u32` value to the 8-limb register representation (upper 4 limbs zero).
+fn u32_to_rv64_limbs(x: u32) -> [F; RV64_REGISTER_NUM_LIMBS] {
+    (x as u64).to_le_bytes().map(F::from_canonical_u8)
+}
+
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
@@ -109,29 +114,25 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     opcode: Rv64HintStoreOpcode,
 ) {
     let num_words = match opcode {
-        HINT_STOREW => 1,
+        HINT_STORED => 1,
         HINT_BUFFER => rng.gen_range(1..28),
     } as u32;
 
     let a = if opcode == HINT_BUFFER {
-        let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-        tester.write(
-            RV32_REGISTER_AS as usize,
-            a,
-            num_words.to_le_bytes().map(F::from_canonical_u8),
-        );
+        let a = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
         a
     } else {
         0
     };
 
-    let mem_ptr = gen_pointer(rng, 4) as u32;
-    let b = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+    let mem_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
-    let mut input = Vec::with_capacity(num_words as usize * 4);
+    let mut input = Vec::with_capacity(num_words as usize * RV64_REGISTER_NUM_LIMBS);
     for _ in 0..num_words {
-        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
         input.extend(data);
         tester.streams_mut().hint_stream.extend(data);
     }
@@ -141,14 +142,20 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
         ),
     );
 
     for idx in 0..num_words as usize {
-        let data = tester.read::<4>(RV32_MEMORY_AS as usize, mem_ptr as usize + idx * 4);
+        let data = tester.read::<RV64_REGISTER_NUM_LIMBS>(
+            RV64_MEMORY_AS as usize,
+            mem_ptr as usize + idx * RV64_REGISTER_NUM_LIMBS,
+        );
 
-        let expected: [F; 4] = input[idx * 4..(idx + 1) * 4].try_into().unwrap();
+        let expected: [F; RV64_REGISTER_NUM_LIMBS] = input
+            [idx * RV64_REGISTER_NUM_LIMBS..(idx + 1) * RV64_REGISTER_NUM_LIMBS]
+            .try_into()
+            .unwrap();
         assert_eq!(data, expected);
     }
 }
@@ -207,19 +214,15 @@ fn test_hint_buffer_exceeds_max_words() {
 
     let num_words = (MAX_HINT_BUFFER_DWORDS + 1) as u32;
 
-    let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(
-        RV32_REGISTER_AS as usize,
-        a,
-        num_words.to_le_bytes().map(F::from_canonical_u8),
-    );
+    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
 
-    let mem_ptr = gen_pointer(&mut rng, 4) as u32;
-    let b = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -228,13 +231,13 @@ fn test_hint_buffer_exceeds_max_words() {
         &mut harness.arena,
         &Instruction::from_usize(
             HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
         ),
     );
 }
 
 #[test]
-fn test_hint_buffer_rem_words_range_check() {
+fn test_hint_buffer_rem_words_upper_limbs_zero() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
@@ -242,19 +245,15 @@ fn test_hint_buffer_rem_words_range_check() {
 
     // Build a small, valid buffer instruction with 1 word so trace has 1 row.
     let num_words: u32 = 1;
-    let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(
-        RV32_REGISTER_AS as usize,
-        a,
-        num_words.to_le_bytes().map(F::from_canonical_u8),
-    );
+    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
 
-    let mem_ptr = gen_pointer(&mut rng, 4) as u32;
-    let b = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
-        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -263,15 +262,18 @@ fn test_hint_buffer_rem_words_range_check() {
         &mut harness.arena,
         &Instruction::from_usize(
             HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
         ),
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // Force `rem_words` to overflow MAX_HINT_BUFFER_WORDS_BITS on the start row.
-        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::from_canonical_u8(1), F::ZERO];
+        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        // Only limbs 0 and 1 of `rem_words` may carry information; limbs 2..8 are asserted
+        // zero by the AIR. Setting limb 2 non-zero must be rejected as a constraint error.
+        let mut limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+        limbs[2] = F::from_canonical_u8(1);
+        cols.rem_words_limbs = limbs;
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -285,10 +287,188 @@ fn test_hint_buffer_rem_words_range_check() {
     tester.simple_test_with_expected_error(get_verification_error(false));
 }
 
+#[test]
+fn test_hint_buffer_rem_words_range_check() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let num_words: u32 = 1;
+    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+
+    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+
+    for _ in 0..num_words {
+        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        tester.streams_mut().hint_stream.extend(data);
+    }
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_BUFFER.global_opcode(),
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
+    );
+
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        // The AIR scales `rem_words_limbs[1]` by `1 << 6`, requiring the result to fit in a
+        // byte (so `limb[1] < 4` under `MAX_HINT_BUFFER_DWORDS_BITS = 10`). Setting limb 1 to
+        // 4 sends 256 to the byte-range lookup, which has no matching row. We compensate
+        // `limb[0]` with `1 − 1024` in F so the composed `rem_words` stays at 1; otherwise
+        // the end-row `assert_one(rem_words)` constraint would fail first and shadow the
+        // interaction error we want to observe.
+        cols.rem_words_limbs[1] = F::from_canonical_u32(4);
+        cols.rem_words_limbs[0] = F::ONE - F::from_canonical_u32(1024);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
+fn test_hint_buffer_mem_ptr_upper_limbs_zero() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let num_words: u32 = 1;
+    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+
+    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+
+    for _ in 0..num_words {
+        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        tester.streams_mut().hint_stream.extend(data);
+    }
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_BUFFER.global_opcode(),
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
+    );
+
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        // Force one of the upper `mem_ptr` limbs (which must be zero under the AIR) to be
+        // non-zero.
+        cols.mem_ptr_limbs[4] = F::from_canonical_u8(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+
+    tester.simple_test_with_expected_error(get_verification_error(false));
+}
+
+#[test]
+fn test_hint_buffer_mem_ptr_range_check() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let num_words: u32 = 1;
+    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+
+    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+
+    for _ in 0..num_words {
+        let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+        tester.streams_mut().hint_stream.extend(data);
+    }
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_BUFFER.global_opcode(),
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
+    );
+
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        // For the default `pointer_max_bits = 29`, the AIR scales `mem_ptr_limbs[3]` by
+        // `1 << 3`, which forces `mem_ptr_limbs[3] < 32`. Setting the limb to 100 sends a
+        // scaled value of 800 to the byte-range bitwise lookup, which has no matching row.
+        cols.mem_ptr_limbs[3] = F::from_canonical_u32(100);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
+#[should_panic(expected = "mem_ptr upper 4 bytes must be zero for hintstore")]
+fn test_hintstore_rs1_upper_bytes_non_zero() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, _bitwise) = create_harness::<MatrixRecordArena<F>>(&mut tester);
+
+    // Write b with a non-zero byte in the upper half; `mem_ptr_u64 >> 32` is then non-zero,
+    // so the preflight executor must panic before it reaches the data write.
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let mut mem_ptr_limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+    mem_ptr_limbs[4] = F::from_canonical_u8(1);
+    tester.write(RV64_REGISTER_AS as usize, b, mem_ptr_limbs);
+
+    let data = rng.next_u64().to_le_bytes().map(F::from_canonical_u8);
+    tester.streams_mut().hint_stream.extend(data);
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_STORED.global_opcode(),
+            [0, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
     opcode: Rv64HintStoreOpcode,
-    prank_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    prank_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -305,7 +485,7 @@ fn run_negative_hintstore_test(
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = prank_data {
             cols.data = data.map(F::from_canonical_u32);
         }
@@ -323,7 +503,7 @@ fn run_negative_hintstore_test(
 
 #[test]
 fn negative_hintstore_tests() {
-    run_negative_hintstore_test(HINT_STORED, Some([92, 187, 45, 280]), true);
+    run_negative_hintstore_test(HINT_STORED, Some([92, 187, 45, 280, 17, 211, 64, 5]), true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
