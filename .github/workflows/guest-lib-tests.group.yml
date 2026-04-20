@@ -135,9 +135,7 @@ jobs:
                 extra_args=(--features=rvr)
               fi
             elif [[ "$crate" == "pairing" ]]; then
-              extra_args=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
-            elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
-              extra_args=(--features=aot)
+              extra_args=(--features=bn254,bls12_381 -E 'not test(fallback)')
             fi
 
             pushd "$test_dir"
