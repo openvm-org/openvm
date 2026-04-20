@@ -38,7 +38,7 @@ pub fn rv64_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
 pub fn generate_rv64_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV64_REGISTER_NUM_LIMBS]) {
-    let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
+    let mut imm: u32 = rng.random_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
     }
@@ -57,4 +57,3 @@ pub fn generate_rv64_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV64_RE
         ],
     )
 }
-
