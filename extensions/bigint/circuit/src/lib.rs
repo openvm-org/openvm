@@ -8,12 +8,6 @@ use openvm_circuit::{
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
-    Rv32VecHeapBranchAdapterAir, Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
-    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatBranchAdapterAir,
-    VecToFlatBranchAdapterExecutor,
-};
 use openvm_riscv_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
     BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir, BranchEqualExecutor,
@@ -21,6 +15,12 @@ use openvm_riscv_circuit::{
     LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
     MultiplicationExecutor, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor,
     Rv64M, Rv64MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
+};
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+    Rv32VecHeapBranchAdapterAir, Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
+    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatBranchAdapterAir,
+    VecToFlatBranchAdapterExecutor,
 };
 use serde::{Deserialize, Serialize};
 

@@ -95,8 +95,7 @@ where
 
         // Compute the most significant limb of PC
         let pc_msl = (from_pc - intermed_val)
-            * AB::F::from_usize(1 << (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)))
-                .inverse();
+            * AB::F::from_usize(1 << (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))).inverse();
 
         // The vector pc_limbs contains the actual limbs of PC in little endian order
         let pc_limbs = [rd_data[0]]
@@ -146,9 +145,7 @@ where
                 // 2^{PC_BITS-(RV64_WORD_NUM_LIMBS-1)*RV64_CELL_BITS})
                 need_range_check.push(
                     (*limb).clone()
-                        * AB::Expr::from_usize(
-                            1 << (pc_limbs.len() * RV64_CELL_BITS - PC_BITS),
-                        ),
+                        * AB::Expr::from_usize(1 << (pc_limbs.len() * RV64_CELL_BITS - PC_BITS)),
                 );
             } else {
                 need_range_check.push((*limb).clone());

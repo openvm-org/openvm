@@ -43,7 +43,7 @@ use crate::{
         RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::Rv64JalLuiCoreCols,
-        Rv64JalLuiAir, Rv64JalLuiFiller,
+    Rv64JalLuiAir, Rv64JalLuiFiller,
 };
 
 const IMM_BITS: usize = 20;
@@ -101,6 +101,7 @@ fn create_harness(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
@@ -111,13 +112,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     initial_pc: Option<u32>,
     rd_ptr: Option<usize>,
 ) {
-    let imm: i32 = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
+    let imm: i32 = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
     let imm = match opcode {
         JAL => ((imm >> 1) << 2) - (1 << IMM_BITS),
         LUI => imm,
     };
 
-    let a = rd_ptr.unwrap_or_else(|| rng.gen_range((opcode == LUI) as usize..32) << 3);
+    let a = rd_ptr.unwrap_or_else(|| rng.random_range((opcode == LUI) as usize..32) << 3);
     let needs_write = a != 0 || opcode == LUI;
 
     tester.execute_with_pc(
@@ -133,7 +134,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
             needs_write as isize,
             0,
         ),
-        initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
+        initial_pc.unwrap_or(rng.random_range(imm.unsigned_abs()..(1 << PC_BITS))),
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let final_pc = tester.last_to_pc().as_canonical_u32();
@@ -208,7 +209,7 @@ fn run_negative_jal_lui_test_with_rd_ptr(
     initial_pc: Option<u32>,
     rd_ptr: Option<usize>,
     prank_vals: JalLuiPrankValues,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -357,7 +358,7 @@ fn write_suppression_boundary_negative_test() {
 #[test]
 fn rd_upper_bytes_trace_tamper_negative_test() {
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&tester);
 
     let initial_pc = 0x1234;
     let imm = 16i32;

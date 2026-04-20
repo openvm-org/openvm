@@ -42,9 +42,7 @@ use crate::{
         RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
-    test_utils::{
-        generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm,
-    },
+    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
     LessThanFiller, Rv64LessThanAir, Rv64LessThanExecutor,
 };
 
@@ -110,8 +108,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
             ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
         } else {
@@ -121,7 +119,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     } else {
         (
             None,
-            c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX))),
+            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
         )
     };
 
@@ -224,7 +222,7 @@ fn run_negative_less_than_test(
     c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_cmp_result: bool,
     prank_vals: LessThanPrankValues<RV64_REGISTER_NUM_LIMBS>,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();

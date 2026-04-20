@@ -147,8 +147,7 @@ where
         self.range_bus
             .range_check(to_pc_limbs[0], 15)
             .eval(builder, is_valid);
-        let to_pc =
-            to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << 16);
+        let to_pc = to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << 16);
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
         let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {

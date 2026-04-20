@@ -176,6 +176,7 @@ fn loadstore_encoder() -> Encoder {
     encoder
 }
 
+#[cfg(test)]
 pub(crate) fn selector_point_for_opcode_shift(
     opcode: Rv64LoadStoreOpcode,
     shift: usize,
@@ -272,8 +273,7 @@ where
         let expected_opcode = InstructionCase::ALL
             .iter()
             .fold(AB::Expr::ZERO, |acc, &case| {
-                acc + selector_flags[case as usize].clone()
-                    * AB::Expr::from_u8(case.opcode() as u8)
+                acc + selector_flags[case as usize].clone() * AB::Expr::from_u8(case.opcode() as u8)
             });
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
@@ -281,8 +281,7 @@ where
             .iter()
             .fold(AB::Expr::ZERO, |acc, &case| {
                 if case.is_load() {
-                    acc + selector_flags[case as usize].clone()
-                        * AB::Expr::from_usize(case.shift())
+                    acc + selector_flags[case as usize].clone() * AB::Expr::from_usize(case.shift())
                 } else {
                     acc
                 }
@@ -293,8 +292,7 @@ where
                 if case.is_load() {
                     acc
                 } else {
-                    acc + selector_flags[case as usize].clone()
-                        * AB::Expr::from_usize(case.shift())
+                    acc + selector_flags[case as usize].clone() * AB::Expr::from_usize(case.shift())
                 }
             });
 
