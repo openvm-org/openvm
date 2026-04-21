@@ -135,11 +135,11 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // Neither `rem_words` nor `mem_ptr` materializes its upper zero bytes as columns;
         // those bytes are hardcoded to zero in the memory bus interactions below.
         //
-        // - `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the
-        //   low 2 bytes carry information.
-        // - `mem_ptr` is bounded by `2^pointer_max_bits` (29 bits by default), so only the
-        //   low 4 bytes carry information. The range check below scales `mem_ptr_limbs[3]`
-        //   into an 8-bit lookup, which requires `pointer_max_bits ∈ (24, 32]`.
+        // - `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the low 2
+        //   bytes carry information.
+        // - `mem_ptr` is bounded by `2^pointer_max_bits` (29 bits by default), so only the low 4
+        //   bytes carry information. The range check below scales `mem_ptr_limbs[3]` into an 8-bit
+        //   lookup, which requires `pointer_max_bits ∈ (24, 32]`.
 
         let mut rem_words = AB::Expr::ZERO;
         let mut next_rem_words = AB::Expr::ZERO;
