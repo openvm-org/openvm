@@ -1,5 +1,5 @@
 use openvm_sha2_air::{Sha256Config, Sha384Config, Sha512Config};
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
 
 use crate::{Sha2ColsRef, SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
@@ -10,7 +10,7 @@ pub trait Sha2MainChipConfig: Send + Sync + Clone {
     /// Number of bytes in a SHA state
     const STATE_BYTES: usize;
     /// OpenVM Opcode for the instruction
-    const OPCODE: Rv32Sha2Opcode;
+    const OPCODE: Rv64Sha2Opcode;
 
     // --- Provided ---
     const BLOCK_READS: usize = Self::BLOCK_BYTES / SHA2_READ_SIZE;
@@ -26,17 +26,17 @@ pub trait Sha2MainChipConfig: Send + Sync + Clone {
 impl Sha2MainChipConfig for Sha256Config {
     const BLOCK_BYTES: usize = 64;
     const STATE_BYTES: usize = 32;
-    const OPCODE: Rv32Sha2Opcode = Rv32Sha2Opcode::SHA256;
+    const OPCODE: Rv64Sha2Opcode = Rv64Sha2Opcode::SHA256;
 }
 
 impl Sha2MainChipConfig for Sha512Config {
     const BLOCK_BYTES: usize = 128;
     const STATE_BYTES: usize = 64;
-    const OPCODE: Rv32Sha2Opcode = Rv32Sha2Opcode::SHA512;
+    const OPCODE: Rv64Sha2Opcode = Rv64Sha2Opcode::SHA512;
 }
 
 impl Sha2MainChipConfig for Sha384Config {
     const BLOCK_BYTES: usize = Sha512Config::BLOCK_BYTES;
     const STATE_BYTES: usize = Sha512Config::STATE_BYTES;
-    const OPCODE: Rv32Sha2Opcode = Sha512Config::OPCODE;
+    const OPCODE: Rv64Sha2Opcode = Sha512Config::OPCODE;
 }
