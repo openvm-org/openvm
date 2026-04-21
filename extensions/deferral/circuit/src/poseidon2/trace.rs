@@ -90,13 +90,12 @@ where
     Val<SC>: VmField,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let current_height = if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
-            self.records.len()
-        } else {
-            0
-        };
-        let height = next_power_of_two_or_zero(current_height);
         let width = DeferralPoseidon2Cols::<Val<SC>>::width();
+        if !self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
+            let trace = RowMajorMatrix::new(vec![], width);
+            return AirProvingContext::simple_no_pis(trace);
+        }
+        let height = next_power_of_two_or_zero(self.records.len());
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
@@ -137,6 +136,8 @@ where
                 cols.capacity_mult = Val::<SC>::from_u32(capacity_mult);
             });
         self.records.clear();
+        self.nonempty
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         let trace = RowMajorMatrix::new(values, width);
         AirProvingContext::simple_no_pis(trace)
