@@ -199,17 +199,17 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
     tester.write::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs1_ptr,
-        a_base_addr.to_le_bytes().map(F::from_u8),
+        (a_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs2_ptr,
-        b_base_addr.to_le_bytes().map(F::from_u8),
+        (b_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rd_ptr,
-        result_base_addr.to_le_bytes().map(F::from_u8),
+        (result_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
 
     let a_c0_limbs: Vec<F> = biguint_to_limbs_vec(&a_c0, NUM_LIMBS)

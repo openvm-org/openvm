@@ -220,9 +220,9 @@ mod addsub_tests {
         let address2 = gen_pointer(rng, BLOCK_SIZE) as u32;
         let address3 = gen_pointer(rng, BLOCK_SIZE) as u32;
 
-        write_ptr_reg(tester, ptr_as, addr_ptr1, address1);
-        write_ptr_reg(tester, ptr_as, addr_ptr2, address2);
-        write_ptr_reg(tester, ptr_as, addr_ptr3, address3);
+        write_ptr_reg(tester, ptr_as, addr_ptr1, address1.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr2, address2.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr3, address3.into());
 
         let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS)
             .into_iter()
@@ -596,9 +596,9 @@ mod muldiv_tests {
         let address2 = gen_pointer(rng, BLOCK_SIZE) as u32;
         let address3 = gen_pointer(rng, BLOCK_SIZE) as u32;
 
-        write_ptr_reg(tester, ptr_as, addr_ptr1, address1);
-        write_ptr_reg(tester, ptr_as, addr_ptr2, address2);
-        write_ptr_reg(tester, ptr_as, addr_ptr3, address3);
+        write_ptr_reg(tester, ptr_as, addr_ptr1, address1.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr2, address2.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr3, address3.into());
 
         let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS)
             .into_iter()
