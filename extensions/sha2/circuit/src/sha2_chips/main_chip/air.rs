@@ -11,7 +11,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
 use openvm_instructions::riscv::{
-    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
@@ -205,8 +205,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             &local.mem.register_aux,
         ) {
             self.memory_bridge
-                .read::<_, _, SHA2_READ_SIZE>(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), ptr),
+                .read::<_, _, RV64_REGISTER_NUM_LIMBS>(
+                    MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
                     val.to_vec().try_into().unwrap_or_else(|_| panic!()), // can't unwrap because AB::Var doesn't impl Debug
                     timestamp_pp(),
                     aux,
@@ -214,15 +214,28 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        // range check the memory pointers
-        let shift = AB::Expr::from_usize(
-            1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.ptr_max_bits),
-        );
+        // The three pointers are read as full RV64 registers, but this chip only supports
+        // 32-bit-addressable memory, so the unused upper half of each register must be zero.
+        for i in RV64_WORD_NUM_LIMBS..RV64_REGISTER_NUM_LIMBS {
+            builder
+                .when(*local.instruction.is_enabled)
+                .assert_zero(local.instruction.dst_ptr_limbs[i]);
+            builder
+                .when(*local.instruction.is_enabled)
+                .assert_zero(local.instruction.state_ptr_limbs[i]);
+            builder
+                .when(*local.instruction.is_enabled)
+                .assert_zero(local.instruction.input_ptr_limbs[i]);
+        }
+
+        // range check the high byte of each 32-bit effective pointer
+        let shift =
+            AB::Expr::from_usize(1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.ptr_max_bits));
         let needs_range_check = [
-            local.instruction.dst_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            local.instruction.state_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
+            local.instruction.dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            local.instruction.state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1], /* needs_range_check must have even length */
         ];
         for pair in needs_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
@@ -237,8 +250,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                     (*local.instruction.dst_reg_ptr).into(),
                     (*local.instruction.state_reg_ptr).into(),
                     (*local.instruction.input_reg_ptr).into(),
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
-                    AB::Expr::from_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_MEMORY_AS),
                 ],
                 *local.instruction.from_state,
                 AB::F::from_usize(C::TIMESTAMP_DELTA),
@@ -252,12 +265,21 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let input_ptr_val = compose(&local.instruction.input_ptr_limbs.to_vec(), RV32_CELL_BITS);
+        // Upper 4 bytes of each pointer are constrained to zero, so only compose the low 4 bytes
+        // to form the 32-bit effective address. Composing all 8 would overflow the field.
+        let input_ptr_val = compose(
+            &local
+                .instruction
+                .input_ptr_limbs
+                .slice(s![..RV64_WORD_NUM_LIMBS])
+                .to_vec(),
+            RV64_CELL_BITS,
+        );
         for i in 0..C::BLOCK_READS {
             self.memory_bridge
                 .read::<_, _, SHA2_READ_SIZE>(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV32_MEMORY_AS),
+                        AB::Expr::from_u32(RV64_MEMORY_AS),
                         input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
                     local
@@ -275,12 +297,19 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        let state_ptr_val = compose(&local.instruction.state_ptr_limbs.to_vec(), RV32_CELL_BITS);
+        let state_ptr_val = compose(
+            &local
+                .instruction
+                .state_ptr_limbs
+                .slice(s![..RV64_WORD_NUM_LIMBS])
+                .to_vec(),
+            RV64_CELL_BITS,
+        );
         for i in 0..C::STATE_READS {
             self.memory_bridge
                 .read::<_, _, SHA2_READ_SIZE>(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV32_MEMORY_AS),
+                        AB::Expr::from_u32(RV64_MEMORY_AS),
                         state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
                     local
@@ -305,12 +334,19 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let dst_ptr_val = compose(&local.instruction.dst_ptr_limbs.to_vec(), RV32_CELL_BITS);
+        let dst_ptr_val = compose(
+            &local
+                .instruction
+                .dst_ptr_limbs
+                .slice(s![..RV64_WORD_NUM_LIMBS])
+                .to_vec(),
+            RV64_CELL_BITS,
+        );
         for i in 0..C::STATE_READS {
             self.memory_bridge
                 .write::<_, _, SHA2_WRITE_SIZE>(
                     MemoryAddress::new(
-                        AB::Expr::from_u32(RV32_MEMORY_AS),
+                        AB::Expr::from_u32(RV64_MEMORY_AS),
                         dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
                     local

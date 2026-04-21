@@ -18,7 +18,7 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::{tracing_read, tracing_write};
@@ -233,8 +233,8 @@ where
             ..
         } = instruction;
         debug_assert_eq!(opcode, C::OPCODE.global_opcode());
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
         let record = state.ctx.alloc(Sha2RecordLayout::new(Sha2Metadata {
             variant: C::VARIANT,
@@ -247,24 +247,32 @@ where
         record.inner.state_reg_ptr = b.as_canonical_u32();
         record.inner.input_reg_ptr = c.as_canonical_u32();
 
-        record.inner.dst_ptr = u32::from_le_bytes(tracing_read::<SHA2_READ_SIZE>(
+        // Pointers live in 8-byte RV64 registers; upper 4 bytes must be zero because
+        // this chip only supports 32-bit-addressable memory.
+        let dst_reg = u64::from_le_bytes(tracing_read::<RV64_REGISTER_NUM_LIMBS>(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.inner.dst_reg_ptr,
             &mut record.inner.register_reads_aux[0].prev_timestamp,
         ));
-        record.inner.state_ptr = u32::from_le_bytes(tracing_read::<SHA2_READ_SIZE>(
+        let state_reg = u64::from_le_bytes(tracing_read::<RV64_REGISTER_NUM_LIMBS>(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.inner.state_reg_ptr,
             &mut record.inner.register_reads_aux[1].prev_timestamp,
         ));
-        record.inner.input_ptr = u32::from_le_bytes(tracing_read::<SHA2_READ_SIZE>(
+        let input_reg = u64::from_le_bytes(tracing_read::<RV64_REGISTER_NUM_LIMBS>(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             record.inner.input_reg_ptr,
             &mut record.inner.register_reads_aux[2].prev_timestamp,
         ));
+        debug_assert_eq!(dst_reg >> 32, 0, "sha2 dst pointer upper 4 bytes must be zero");
+        debug_assert_eq!(state_reg >> 32, 0, "sha2 state pointer upper 4 bytes must be zero");
+        debug_assert_eq!(input_reg >> 32, 0, "sha2 input pointer upper 4 bytes must be zero");
+        record.inner.dst_ptr = dst_reg as u32;
+        record.inner.state_ptr = state_reg as u32;
+        record.inner.input_ptr = input_reg as u32;
 
         debug_assert!(
             record.inner.dst_ptr as usize + C::STATE_BYTES <= (1 << self.pointer_max_bits)
@@ -279,7 +287,7 @@ where
         for idx in 0..C::BLOCK_READS {
             let read = tracing_read::<SHA2_READ_SIZE>(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.inner.input_ptr + (idx * SHA2_READ_SIZE) as u32,
                 &mut record.input_reads_aux[idx].prev_timestamp,
             );
@@ -290,7 +298,7 @@ where
         for idx in 0..C::STATE_READS {
             let read = tracing_read::<SHA2_READ_SIZE>(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.inner.state_ptr + (idx * SHA2_READ_SIZE) as u32,
                 &mut record.state_reads_aux[idx].prev_timestamp,
             );
@@ -304,7 +312,7 @@ where
         for idx in 0..C::STATE_WRITES {
             tracing_write::<SHA2_WRITE_SIZE>(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.inner.dst_ptr + (idx * SHA2_WRITE_SIZE) as u32,
                 record.new_state[idx * SHA2_WRITE_SIZE..(idx + 1) * SHA2_WRITE_SIZE]
                     .try_into()

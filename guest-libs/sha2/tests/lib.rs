@@ -10,7 +10,7 @@ mod tests {
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sdk::StdIn;
-    use openvm_sha2_circuit::{Sha2Rv32Builder, Sha2Rv32Config};
+    use openvm_sha2_circuit::{Sha2Rv64Builder, Sha2Rv64Config};
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
@@ -67,7 +67,7 @@ mod tests {
     }
 
     fn test_sha2_base(test_vector_file_name: &str, sha2_type: Sha2Type, prove: bool) -> Result<()> {
-        let config = Sha2Rv32Config::default();
+        let config = Sha2Rv64Config::default();
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "sha2", &config)?;
         let openvm_exe = VmExe::from_elf(
@@ -93,7 +93,7 @@ mod tests {
         }
 
         if prove {
-            air_test_with_min_segments(Sha2Rv32Builder, config, openvm_exe, stdin, 1);
+            air_test_with_min_segments(Sha2Rv64Builder, config, openvm_exe, stdin, 1);
         } else {
             let executor = VmExecutor::new(config.clone())?;
             let interpreter = executor.instance(&openvm_exe)?;
@@ -122,7 +122,7 @@ mod tests {
     }
 
     fn test_sha2_reset_base() -> Result<()> {
-        let config = Sha2Rv32Config::default();
+        let config = Sha2Rv64Config::default();
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "sha2_reset",
