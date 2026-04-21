@@ -13,12 +13,12 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
+        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
     },
     LocalOpcode,
 };
@@ -261,20 +261,8 @@ where
         let e = AB::Expr::from_u32(RV64_MEMORY_AS);
 
         // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let rd_full: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                local.rd_val[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
-        let rs_full: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                local.rs_val[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let rd_full = expand_to_rv64_register(&local.rd_val);
+        let rs_full = expand_to_rv64_register(&local.rs_val);
 
         self.memory_bridge
             .read(

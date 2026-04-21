@@ -12,13 +12,13 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
+        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
     },
     LocalOpcode, DEFERRAL_AS,
 };
@@ -284,20 +284,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let e = AB::Expr::from_u32(RV64_MEMORY_AS);
 
         // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let rd_full: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                cols.rd_val[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
-        let rs_full: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                cols.rs_val[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let rd_full = expand_to_rv64_register(&cols.rd_val);
+        let rs_full = expand_to_rv64_register(&cols.rs_val);
 
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
