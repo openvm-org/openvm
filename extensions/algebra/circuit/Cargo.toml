@@ -18,7 +18,6 @@ openvm-cpu-backend = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-riscv-circuit = { workspace = true }
-openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
@@ -41,7 +40,6 @@ blstrs = { workspace = true, features = ["__private_bench"] }
 [dev-dependencies]
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 test-case = { workspace = true }
 
