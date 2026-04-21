@@ -111,8 +111,8 @@ where
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
-/// Default block size for memory bus interactions. RISC-V byte/halfword loads (`lb`/`lh`) need
-/// fewer bytes, but the adapter always reads a full 4-byte block from memory.
+/// Default block size (in bytes) for memory bus interactions. The adapter always reads/writes a
+/// full block even when the instruction accesses fewer bytes (e.g. RISC-V `lb`/`lh`).
 pub const DEFAULT_BLOCK_SIZE: usize = 8;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
