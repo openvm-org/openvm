@@ -5670,6 +5670,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
+ "openvm-riscv-adapters",
  "openvm-riscv-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",

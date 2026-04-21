@@ -19,7 +19,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -56,12 +56,12 @@ fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> (
     Harness<BLOCKS, BLOCK_SIZE>,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -99,12 +99,12 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> (
     Harness<BLOCKS, BLOCK_SIZE>,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -185,28 +185,28 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
         (a_c0, a_c1, b_c0, b_c1, op)
     };
 
-    let ptr_as = RV32_REGISTER_AS as usize;
-    let data_as = RV32_MEMORY_AS as usize;
+    let ptr_as = RV64_REGISTER_AS as usize;
+    let data_as = RV64_MEMORY_AS as usize;
 
-    let rs1_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-    let rs2_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-    let rd_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let a_base_addr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS) as u32;
-    let b_base_addr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS) as u32;
-    let result_base_addr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS) as u32;
+    let a_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let b_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
+    let result_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
 
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs1_ptr,
         a_base_addr.to_le_bytes().map(F::from_u8),
     );
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs2_ptr,
         b_base_addr.to_le_bytes().map(F::from_u8),
     );
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rd_ptr,
         result_base_addr.to_le_bytes().map(F::from_u8),
@@ -388,7 +388,7 @@ mod cuda_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -435,7 +435,7 @@ mod cuda_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
