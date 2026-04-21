@@ -21,13 +21,17 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     ColumnsAir, SubAir,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_sha2_air::{
     get_flag_pt_array, set_arrayview_from_u32_slice, small_sig0, small_sig1, word_into_bits,
     word_into_u16_limbs, word_into_u8_limbs, Sha256Config, Sha2BlockHasherSubAir,
     Sha2BlockHasherSubairConfig, Sha2RoundColsRefMut, Sha384Config, Sha512Config, SHA256_K,
 };
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, BaseAir},
@@ -62,11 +66,11 @@ type Harness<RA, C> = TestChipHarness<F, Sha2VmExecutor<C>, Sha2MainAir<C>, Sha2
 
 fn create_harness_fields<C: Sha2Config>(
     system_port: SystemPort,
-    bitwise_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     memory_helper: SharedMemoryHelper<F>,
     pointer_max_bits: usize,
 ) -> (Sha2MainAir<C>, Sha2VmExecutor<C>, Sha2MainChip<F, C>) {
-    let executor = Sha2VmExecutor::<C>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+    let executor = Sha2VmExecutor::<C>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
     let empty_records = Arc::new(Mutex::new(None));
     let main_chip = Sha2MainChip::new(
         empty_records.clone(),
@@ -79,7 +83,7 @@ fn create_harness_fields<C: Sha2Config>(
         bitwise_chip.bus(),
         pointer_max_bits,
         SHA2_BUS_IDX,
-        Rv32Sha2Opcode::CLASS_OFFSET,
+        Rv64Sha2Opcode::CLASS_OFFSET,
     );
     (main_air, executor, main_chip)
 }
@@ -87,8 +91,8 @@ fn create_harness_fields<C: Sha2Config>(
 struct TestHarness<RA, C: Sha2Config> {
     harness: Harness<RA, C>,
     bitwise: (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
     block_hasher: (Sha2BlockHasherVmAir<C>, Sha2BlockHasherChip<F, C>),
 }
@@ -97,7 +101,7 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> TestHarness<RA, C> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -135,20 +139,20 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
-    opcode: Rv32Sha2Opcode,
+    opcode: Rv64Sha2Opcode,
     message: Option<&[u8]>,
     prev_state: Option<&[u8]>,
 ) {
-    let rd = gen_pointer(rng, 4);
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let dst_ptr = gen_pointer(rng, 4);
-    let state_ptr = gen_pointer(rng, 4);
-    let input_ptr = gen_pointer(rng, 4);
-    tester.write(1, rd, (dst_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs1, (state_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs2, (input_ptr as u32).to_le_bytes().map(F::from_u8));
+    let dst_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let input_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(1, rd, (dst_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, (state_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, (input_ptr as u64).to_le_bytes().map(F::from_u8));
 
     let default_message = get_random_message(rng, C::BLOCK_U8S);
     let message = message.unwrap_or(&default_message);
@@ -240,20 +244,20 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
-    opcode: Rv32Sha2Opcode,
+    opcode: Rv64Sha2Opcode,
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let rd = gen_pointer(rng, 4);
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let state_ptr = gen_pointer(rng, 4);
+    let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let dst_ptr = state_ptr;
-    let input_ptr = gen_pointer(rng, 4);
-    tester.write(1, rd, (dst_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs1, (state_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs2, (input_ptr as u32).to_le_bytes().map(F::from_u8));
+    let input_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write(1, rd, (dst_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, (state_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, (input_ptr as u64).to_le_bytes().map(F::from_u8));
 
     // initial state as little-endian words
     let initial_state: Vec<u8> = C::get_h()
@@ -712,7 +716,7 @@ fn build_sha256_round_only_trace() -> RowMajorMatrix<F> {
 fn negative_sha256_round_only_trace_rejected() {
     disable_debug_builder();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -759,7 +763,7 @@ struct GpuHarness<C: Sha2Config> {
     block_air: Sha2BlockHasherVmAir<C>,
     block_gpu: Sha2BlockHasherChipGpu<C>,
     block_cpu: Sha2BlockHasherChip<F, C>,
-    bitwise_air: BitwiseOperationLookupAir<RV32_CELL_BITS>,
+    bitwise_air: BitwiseOperationLookupAir<RV64_CELL_BITS>,
     bitwise_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
 }
 
@@ -767,7 +771,7 @@ struct GpuHarness<C: Sha2Config> {
 fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
     const GPU_MAX_INS_CAPACITY: usize = 8192;
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
