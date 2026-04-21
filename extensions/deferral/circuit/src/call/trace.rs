@@ -20,7 +20,10 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{
+        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+        RV64_WORD_NUM_LIMBS,
+    },
 };
 use openvm_riscv_circuit::adapters::{tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -60,7 +63,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     address_bits: usize,
 }
 
@@ -174,10 +177,10 @@ where
         }
 
         // NOTE: this range check is done in the adapter AIR
-        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
         self.bitwise_lookup_chip.request_range(
-            (record.write_data.output_len[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            (record.write_data.output_len[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
             0,
         );
 
@@ -231,8 +234,8 @@ pub struct DeferralCallAdapterRecord<F> {
     pub rs_ptr: F,
 
     // Heap pointers and auxiliary records
-    pub rd_val: [u8; RV32_REGISTER_NUM_LIMBS],
-    pub rs_val: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub rd_val: [u8; RV64_REGISTER_NUM_LIMBS],
+    pub rs_val: [u8; RV64_REGISTER_NUM_LIMBS],
     pub rd_aux: MemoryReadAuxRecord,
     pub rs_aux: MemoryReadAuxRecord,
 
@@ -253,7 +256,7 @@ pub struct DeferralCallAdapterExecutor;
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     address_bits: usize,
 }
 
@@ -275,8 +278,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction { a, b, c, d, e, .. } = instruction;
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
         record.rd_ptr = a;
         record.rs_ptr = b;
 
@@ -297,7 +300,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             tracing_read(
                 memory,
                 e.as_canonical_u32(),
-                u32::from_le_bytes(record.rs_val) + (i * DEFAULT_BLOCK_SIZE) as u32,
+                u32::from_le_bytes(record.rs_val[..RV64_WORD_NUM_LIMBS].try_into().unwrap()) + (i * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.input_commit_aux[i].prev_timestamp,
             )
         });
@@ -341,7 +344,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { c, e, .. } = instruction;
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
         let output_len_full = from_fn(|i| {
             if i < F_NUM_BYTES {
@@ -356,7 +359,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             tracing_write(
                 memory,
                 e.as_canonical_u32(),
-                u32::from_le_bytes(record.rd_val) + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
+                u32::from_le_bytes(record.rd_val[..RV64_WORD_NUM_LIMBS].try_into().unwrap()) + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 memory_op_chunk(&output_commit_and_len, chunk_idx),
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_data,
@@ -404,12 +407,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
 
         // Range checks must happen before we start writing adapter columns,
         // since the record and columns share the same backing buffer.
-        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
 
         self.bitwise_lookup_chip.request_range(
-            (record.rd_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-            (record.rs_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            (record.rd_val[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            (record.rs_val[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
         );
 
         // Timestamps in AIR are assigned in strict sequence starting from
@@ -486,8 +489,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             timestamp_mm(),
             adapter_row.rd_aux.as_mut(),
         );
-        adapter_row.rs_val = record.rs_val.map(F::from_u8);
-        adapter_row.rd_val = record.rd_val.map(F::from_u8);
+        adapter_row.rs_val = std::array::from_fn(|i| F::from_u8(record.rs_val[i]));
+        adapter_row.rd_val = std::array::from_fn(|i| F::from_u8(record.rd_val[i]));
 
         adapter_row.rs_ptr = record.rs_ptr;
         adapter_row.rd_ptr = record.rd_ptr;
