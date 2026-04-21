@@ -9,8 +9,6 @@
 //!   - "single"   (1 deferral circuit, 3 calls) × Pure / MeteredCost / Metered
 //!   - "multiple" (2 circuits, cross-circuit isolation) × Pure / MeteredCost / Metered
 
-mod utils;
-
 use std::{collections::VecDeque, path::PathBuf, process::Command, slice::from_ref, sync::Arc};
 
 use eyre::Result;
@@ -18,7 +16,7 @@ use openvm_circuit::{
     arch::{
         deferral::{DeferralResult, DeferralState},
         execution_mode::{MeteredCostCtx, MeteredCtx},
-        Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
+        rvr as rvr_openvm, Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
     },
     utils::TestStarkEngine,
 };
@@ -56,6 +54,8 @@ use openvm_verify_stark_host::vk::VmStarkVerifyingKey;
 use rvr_openvm::DeferralData;
 use rvr_openvm_ext_deferral::{DeferralCircuitInputs, DeferralRvrExtension};
 use rvr_openvm_lift::ExtensionRegistry;
+
+use super::utils;
 
 type F = BabyBear;
 type Engine = TestStarkEngine;
@@ -338,7 +338,6 @@ impl DeferralTestHarness {
         circuit_inputs: Vec<DeferralCircuitInputs>,
     ) -> Result<()> {
         let ctx: MeteredCostCtx = self.vm.build_metered_cost_ctx();
-        let system_config: &SystemConfig = self.config.as_ref();
 
         // OpenVM reference
         let instance = self
@@ -351,15 +350,10 @@ impl DeferralTestHarness {
         let deferral = Self::make_deferral_data(&circuit_inputs);
         let ext = self.build_ext();
         let inventory = self.inventory()?;
+        let ext_ctx = utils::rvr_extension_ctx(&inventory, &self.air_idx);
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
-        let metered_cost_config = rvr_openvm::build_metered_cost_config(
-            exe,
-            &inventory,
-            &self.air_idx,
-            &ctx.widths,
-            system_config,
-            hint_buffer_opcode,
-        );
+        let metered_cost_config =
+            utils::build_metered_cost_config(exe, &ext_ctx, &ctx.widths, hint_buffer_opcode);
         let chips = metered_cost_config.chip_mapping();
         let mut extensions = ExtensionRegistry::new();
         extensions.register(ext);
@@ -424,11 +418,11 @@ impl DeferralTestHarness {
         let deferral = Self::make_deferral_data(&circuit_inputs);
         let ext = self.build_ext();
         let inventory = self.inventory()?;
+        let ext_ctx = utils::rvr_extension_ctx(&inventory, &self.air_idx);
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
-        let trace_config = rvr_openvm::build_metered_config(
+        let trace_config = utils::build_metered_config(
             exe,
-            &inventory,
-            &self.air_idx,
+            &ext_ctx,
             &widths,
             &interactions,
             &constant_trace_heights,

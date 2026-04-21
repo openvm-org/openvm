@@ -9,9 +9,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use openvm_circuit::arch::execution_mode::metered::segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm::{CProject, TracerMode};
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
     ExtensionRegistry,
@@ -19,10 +19,12 @@ use rvr_openvm_lift::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use super::debug::GuestDebugMap;
 use crate::{
-    debug::GuestDebugMap,
-    emit::{CProject, TracerMode},
-    toolchain,
+    arch::execution_mode::metered::{
+        ctx::DEFAULT_PAGE_BITS, segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
+    },
+    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, CHUNK},
 };
 
 /// A compiled rvr shared library ready for execution.
@@ -220,6 +222,10 @@ pub fn native_cache_key<F: PrimeField32 + Serialize>(
         TracerMode::MeteredCost => b"metered-cost".as_slice(),
         TracerMode::Metered => b"metered".as_slice(),
     });
+    hasher.update(
+        bincode::serde::encode_to_vec(openvm_compile_constants(), bincode::config::standard())
+            .map_err(|err| CompileError::CacheKey(err.to_string()))?,
+    );
     hasher.update([u8::from(debug_info)]);
     hasher.update(
         bincode::serde::encode_to_vec(exe, bincode::config::standard())
@@ -305,15 +311,15 @@ pub fn native_cache_stamp() -> String {
     const DEBUG_INFO_CACHE_VERSION: &str = "debug-info-v1";
 
     let mut hasher = Sha256::new();
+    hasher.update(rvr_openvm::backend_cache_stamp().as_bytes());
     for source in [
-        include_str!("../c/openvm_io.c"),
-        include_str!("../c/openvm_io.h"),
-        include_str!("../c/Makefile"),
         include_str!("compile.rs"),
         include_str!("execute.rs"),
-        include_str!("emit/context.rs"),
-        include_str!("emit/project.rs"),
-        include_str!("toolchain.rs"),
+        include_str!("debug.rs"),
+        include_str!("io.rs"),
+        include_str!("metered.rs"),
+        include_str!("metered_cost.rs"),
+        include_str!("state.rs"),
         DEBUG_INFO_CACHE_VERSION,
     ] {
         hasher.update(source.as_bytes());
@@ -416,6 +422,15 @@ fn hash_cache_stamp_path(
     Ok(())
 }
 
+fn openvm_compile_constants() -> (u32, u32, u32, u32) {
+    (
+        DEFAULT_SEGMENT_CHECK_INSNS as u32,
+        DEFAULT_PAGE_BITS as u32,
+        CHUNK.ilog2(),
+        PUBLIC_VALUES_AS,
+    )
+}
+
 pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
     let lib = unsafe {
         libloading::Library::new(lib_path)
@@ -451,9 +466,10 @@ fn compile_impl<F: PrimeField32>(
             .and_then(|debug_map| debug_map.get(pc).cloned())
     })?;
 
+    let (segment_check_insns, page_bits, chunk_bits, public_values_as) = openvm_compile_constants();
     let valid_pcs: std::collections::HashSet<u32> = ir.iter().map(|li| li.pc()).collect();
     let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets, DEFAULT_SEGMENT_CHECK_INSNS as u32);
+    let blocks = build_blocks(&ir, &extra_targets, segment_check_insns);
 
     let temp_dir = if opts.cache_dir.is_none() {
         Some(tempfile::tempdir()?)
@@ -465,7 +481,16 @@ fn compile_impl<F: PrimeField32>(
         .unwrap_or_else(|| temp_dir.as_ref().unwrap().path());
 
     let memory_bits = openvm_platform::memory::MEM_BITS as u8;
-    let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode, memory_bits);
+    let mut project = CProject::new(
+        output_dir,
+        &base_name,
+        opts.tracer_mode,
+        memory_bits,
+        page_bits,
+        chunk_bits,
+        segment_check_insns,
+        public_values_as,
+    );
 
     if let Some(chips) = opts.chips {
         project.pc_to_chip = Some(chips.pc_to_chip.clone());
@@ -584,13 +609,13 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
     let jobs = std::thread::available_parallelism()
         .map_or(4, |n| n.get().saturating_sub(2).max(1))
         .to_string();
-    let linker = toolchain::default_linker_or_lld();
+    let linker = rvr_openvm::default_linker_or_lld();
 
     eprintln!(
         "[rvr-openvm] Building native library: {total_objects} translation units with make -j{jobs}"
     );
 
-    if !toolchain::linker_exists(&linker) {
+    if !rvr_openvm::linker_exists(&linker) {
         return Err(CompileError::Toolchain(format!(
             "required linker '{linker}' not found in PATH; install lld or set RVR_LD/LD"
         )));
@@ -604,7 +629,7 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
         .arg("-s")
         .arg("shared")
         .args(make_args)
-        .env("CC", toolchain::default_compiler_command())
+        .env("CC", rvr_openvm::default_compiler_command())
         .env("LINKER", linker)
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
@@ -709,8 +734,7 @@ mod tests {
     use sha2::{Digest, Sha256};
     use tempfile::TempDir;
 
-    use super::{native_cache_key, CompileError, TracerMode};
-    use crate::ChipMapping;
+    use super::{native_cache_key, ChipMapping, CompileError, TracerMode};
 
     struct MockExtension {
         header_content: String,

@@ -1,9 +1,7 @@
-#[path = "utils.rs"]
-mod utils;
-
 use eyre::Result;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-use utils::{ExecutionMode::Pure, F};
+
+use super::utils::{self, ExecutionMode::Pure, F};
 
 #[test]
 fn test_guest_fibonacci() -> Result<()> {

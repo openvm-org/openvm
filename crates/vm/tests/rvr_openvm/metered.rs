@@ -1,9 +1,7 @@
-#[path = "utils.rs"]
-mod utils;
-
 use eyre::Result;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-use utils::{ExecutionMode::*, F};
+
+use super::utils::{self, ExecutionMode::*, F};
 
 // ── Prebuilt ELF tests (fast) ───────────────────────────────────────────────
 

@@ -4,9 +4,6 @@
 //! transpiler extension, compiles with rvr using the keccak rvr extension,
 //! executes, and compares against the OpenVM interpreter.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{collections::VecDeque, path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -18,7 +15,8 @@ use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_keccak::KeccakExtension;
-use utils::{ExecutionMode, F};
+
+use super::utils::{self, ExecutionMode, F};
 
 // ── Keccak-specific helpers ─────────────────────────────────────────────────
 

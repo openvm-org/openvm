@@ -1,38 +1,39 @@
-//! rvr-openvm: Compilation, linking, and execution bridge
-//! between OpenVM and rvr's C-based recompilation pipeline.
+//! rvr-openvm backend pieces shared by OpenVM integration.
 
-pub mod compile;
-pub mod debug;
+mod constants;
 pub mod emit;
-pub mod execute;
-pub mod io;
-pub mod metered;
-pub mod metered_cost;
-pub mod state;
 pub mod toolchain;
 
-pub use compile::{
-    compile, compile_cached, compile_metered, compile_metered_cached, compile_metered_cost,
-    compile_metered_cost_with_extensions, compile_metered_cost_with_limit,
-    compile_metered_with_extensions, compile_with_extensions, compile_with_limit,
-    compile_with_options, load_compiled_from_path, native_cache_key, native_cache_stamp,
-    ChipMapping, CompileError, CompileOptions, RvrCompiled,
-};
-pub use debug::{default_addr2line_cmd, GuestDebugMap};
-pub use emit::TracerMode;
-pub use execute::{
-    build_callbacks, build_io_state, execute, execute_metered, execute_metered_cost,
-    execute_metered_cost_with_limit, execute_with_limit, register_and_execute, ExecuteError,
-    RvrExecutionResult, RvrLimitedResult, RvrMeteredCostLimitedResult, RvrMeteredCostResult,
-};
-pub use io::DeferralData;
-pub use metered::{build_metered_config, MeteredConfig, RvrMeteredResult, RvrSegment};
-pub use metered_cost::{
-    build_metered_cost_config, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-    PureTracerData,
-};
+pub use constants::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
+pub use emit::{CProject, EmitContext, InstrCodegen, TracerMode};
+use sha2::{Digest, Sha256};
 pub use toolchain::{
-    default_addr2line_cmd as default_llvm_addr2line_cmd,
-    default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
-    default_linker,
+    default_addr2line_cmd, default_compiler, default_compiler_command, default_dwarfdump_cmd,
+    default_linker, default_linker_or_lld, linker_exists, Compiler,
 };
+
+/// Cache stamp for backend artifacts used by rvr-native compilation.
+///
+/// This covers codegen/runtime support living in the `rvr-openvm` backend crate.
+#[must_use]
+pub fn backend_cache_stamp() -> String {
+    let mut hasher = Sha256::new();
+    for source in [
+        include_str!("emit/context.rs"),
+        include_str!("emit/codegen.rs"),
+        include_str!("emit/project.rs"),
+        include_str!("toolchain.rs"),
+        include_str!("../c/openvm_io.c"),
+        include_str!("../c/openvm_io.h"),
+        include_str!("../c/openvm_state.h"),
+        include_str!("../c/openvm_tracer_pure.h"),
+        include_str!("../c/openvm_tracer_metered.h"),
+        include_str!("../c/openvm_tracer_metered_cost.h"),
+        include_str!("../c/rv_muldiv.h"),
+        include_str!("../c/rvr_ext_wrappers.c"),
+        include_str!("../c/Makefile"),
+    ] {
+        hasher.update(source.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}

@@ -16,7 +16,12 @@ openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
+openvm-platform = { workspace = true, optional = true }
 openvm-rv32im-transpiler = { workspace = true, optional = true }
+rvr-openvm-ext-ffi-common = { workspace = true, optional = true }
+rvr-openvm-ir = { workspace = true, optional = true }
+rvr-state = { workspace = true, optional = true }
+rvr-openvm = { workspace = true, optional = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-stark-backend = { workspace = true }
@@ -45,6 +50,8 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
+bincode = { version = "2.0.1", default-features = false, features = ["std", "serde"], optional = true }
+sha2 = { workspace = true, optional = true }
 abi_stable.workspace = true
 bytesize.workspace = true
 
@@ -63,6 +70,46 @@ test-case.workspace = true
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
+
+rvr-openvm-lift.workspace = true
+rvr-openvm-ext-algebra.workspace = true
+rvr-openvm-ext-bigint.workspace = true
+rvr-openvm-ext-deferral.workspace = true
+rvr-openvm-ext-ecc.workspace = true
+rvr-openvm-ext-keccak.workspace = true
+rvr-openvm-ext-pairing.workspace = true
+rvr-openvm-ext-sha2.workspace = true
+
+openvm.workspace = true
+openvm-algebra-circuit.workspace = true
+openvm-algebra-transpiler.workspace = true
+openvm-bigint-circuit.workspace = true
+openvm-bigint-transpiler.workspace = true
+openvm-deferral-circuit.workspace = true
+openvm-deferral-transpiler.workspace = true
+openvm-ecc-circuit.workspace = true
+openvm-ecc-guest.workspace = true
+openvm-ecc-transpiler.workspace = true
+openvm-keccak256-circuit.workspace = true
+openvm-keccak256-transpiler.workspace = true
+openvm-pairing-circuit.workspace = true
+openvm-pairing-guest = { workspace = true, features = ["halo2curves", "bn254", "bls12_381"] }
+openvm-pairing-transpiler.workspace = true
+openvm-rv32im-circuit.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm-sdk.workspace = true
+openvm-sha2-circuit.workspace = true
+openvm-sha2-transpiler.workspace = true
+openvm-toolchain-tests.workspace = true
+openvm-transpiler.workspace = true
+openvm-verify-stark-circuit.workspace = true
+openvm-verify-stark-host.workspace = true
+
+eyre.workspace = true
+halo2curves-axiom.workspace = true
+num-bigint.workspace = true
+rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
+tiny-keccak.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -95,7 +142,18 @@ aot = [
     "dep:tempfile",
 ]
 # rvr execution backend
-rvr = ["dep:rvr-openvm-lift"]
+rvr = [
+    "dep:rvr-openvm",
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-ffi-common",
+    "dep:rvr-openvm-ir",
+    "dep:rvr-state",
+    "dep:openvm-platform",
+    "dep:libloading",
+    "dep:tempfile",
+    "dep:bincode",
+    "dep:sha2",
+]
 # Disable bounds checking in memory operations for performance
 unprotected = []
 # performance features:

@@ -7,6 +7,7 @@ use std::{
 };
 
 use eyre::{Context, ContextCompat, Result};
+use openvm_circuit::arch::rvr as rvr_openvm;
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_transpiler::{

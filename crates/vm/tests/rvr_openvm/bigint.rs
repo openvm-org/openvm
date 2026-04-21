@@ -1,8 +1,5 @@
 //! Int256 extension integration tests.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -13,7 +10,8 @@ use openvm_rv32im_transpiler::*;
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_bigint::Int256Extension;
-use utils::{ExecutionMode, F};
+
+use super::utils::{self, ExecutionMode, F};
 
 // ── Int256-specific helpers ─────────────────────────────────────────────────
 

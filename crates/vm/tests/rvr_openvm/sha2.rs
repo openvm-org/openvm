@@ -4,9 +4,6 @@
 //! transpiler extension, compiles with rvr using the sha2 rvr extension,
 //! executes, and compares against the OpenVM interpreter.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -19,7 +16,8 @@ use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_sha2::Sha2Extension;
 use sha2::{Digest, Sha256, Sha512};
-use utils::{ExecutionMode, F};
+
+use super::utils::{self, ExecutionMode, F};
 
 // ── SHA2-specific helpers ─────────────────────────────────────────────────
 

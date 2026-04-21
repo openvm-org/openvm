@@ -1,8 +1,6 @@
-#[path = "utils.rs"]
-mod utils;
-
 use eyre::Result;
-use utils::ExecutionMode::Pure;
+
+use super::utils::{self, ExecutionMode::Pure};
 
 const RVTEST: &str = utils::RVTEST;
 

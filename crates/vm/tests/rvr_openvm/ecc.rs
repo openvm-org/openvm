@@ -5,9 +5,6 @@
 //! using both the algebra and ECC rvr extensions, executes, and compares against
 //! the OpenVM interpreter.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -23,7 +20,8 @@ use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_algebra::AlgebraExtension;
 use rvr_openvm_ext_ecc::EccExtension;
-use utils::{ExecutionMode, F};
+
+use super::utils::{self, ExecutionMode, F};
 
 /// Curve IDs.
 const CURVE_K256: u32 = 0;

@@ -3,9 +3,6 @@
 //! Tests pairing guest programs (fp12_mul, pairing_check) against the
 //! OpenVM interpreter using the RVR execution pipeline.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -37,7 +34,8 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand08::SeedableRng;
 use rvr_openvm_ext_algebra::AlgebraExtension;
 use rvr_openvm_ext_pairing::PairingExtension;
-use utils::{ExecutionMode, F};
+
+use super::utils::{self, ExecutionMode, F};
 
 // ── Config ──────────────────────────────────────────────────────────────
 

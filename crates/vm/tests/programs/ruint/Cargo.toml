@@ -5,7 +5,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { path = "../../../../../toolchain/openvm" }
+openvm = { path = "../../../../toolchain/openvm" }
 ruint = { git = "https://github.com/openvm-org/uint.git", branch = "v1.14.0-openvm", default-features = false, features = [
     "num-traits",
 ] }
