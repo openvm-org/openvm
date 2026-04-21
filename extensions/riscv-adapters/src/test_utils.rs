@@ -144,7 +144,7 @@ pub fn generate_rv64_is_type_immediate(
         [
             imm as u8,
             (imm >> 8) as u8,
-            (imm >> 16) as u8,
+            sign_byte,
             sign_byte,
             sign_byte,
             sign_byte,

@@ -417,16 +417,15 @@ impl<
 
         // Read memory values
         from_fn(|i| {
-            let rs_ptr = record.rs_vals[i];
             debug_assert!(
-                (rs_ptr as u64) + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
+                (record.rs_vals[i] as u64) + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
                     < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
                 tracing_read(
                     memory,
                     RV64_MEMORY_AS,
-                    rs_ptr + (j * READ_SIZE) as u32,
+                    record.rs_vals[i] + (j * READ_SIZE) as u32,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
             })
@@ -447,10 +446,10 @@ impl<
         >,
     ) {
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV64_MEMORY_AS);
-        let rd_ptr = record.rd_val;
 
         debug_assert!(
-            (rd_ptr as usize) + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits)
+            (record.rd_val as u64) + ((WRITE_SIZE * BLOCKS_PER_WRITE - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
 
         #[allow(clippy::needless_range_loop)]
@@ -458,7 +457,7 @@ impl<
             tracing_write(
                 memory,
                 RV64_MEMORY_AS,
-                rd_ptr + (i * WRITE_SIZE) as u32,
+                record.rd_val + (i * WRITE_SIZE) as u32,
                 data[i],
                 &mut record.writes_aux[i].prev_timestamp,
                 &mut record.writes_aux[i].prev_data,
@@ -518,21 +517,19 @@ impl<
         debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
         let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
         const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        let rs_ptrs = record.rs_vals;
-        let rd_ptr = record.rd_val;
         if NUM_READS > 1 {
             self.bitwise_lookup_chip.request_range(
-                (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
-                (rs_ptrs[1] >> MSL_SHIFT) << limb_shift_bits,
+                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
+                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits,
             );
             self.bitwise_lookup_chip.request_range(
-                (rd_ptr >> MSL_SHIFT) << limb_shift_bits,
-                (rd_ptr >> MSL_SHIFT) << limb_shift_bits,
+                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
+                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
             );
         } else {
             self.bitwise_lookup_chip.request_range(
-                (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
-                (rd_ptr >> MSL_SHIFT) << limb_shift_bits,
+                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
+                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
             );
         }
 

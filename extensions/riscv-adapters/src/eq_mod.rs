@@ -354,15 +354,15 @@ where
 
         // Read memory values
         from_fn(|i| {
-            let rs_ptr = record.rs_val[i];
             debug_assert!(
-                (rs_ptr as usize) + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits)
+                (record.rs_val[i] as u64) + ((TOTAL_READ_SIZE - 1) as u64)
+                    < (1u64 << self.pointer_max_bits)
             );
             from_fn::<_, BLOCKS_PER_READ, _>(|j| {
                 tracing_read::<BLOCK_SIZE>(
                     memory,
                     RV64_MEMORY_AS,
-                    rs_ptr + (j * BLOCK_SIZE) as u32,
+                    record.rs_val[i] + (j * BLOCK_SIZE) as u32,
                     &mut record.heap_read_aux[i][j].prev_timestamp,
                 )
             })
@@ -427,11 +427,10 @@ impl<
         debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
         let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
         const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        let rs_ptrs = record.rs_val;
         self.bitwise_lookup_chip.request_range(
-            (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
+            (record.rs_val[0] >> MSL_SHIFT) << limb_shift_bits,
             if NUM_READS > 1 {
-                (rs_ptrs[1] >> MSL_SHIFT) << limb_shift_bits
+                (record.rs_val[1] >> MSL_SHIFT) << limb_shift_bits
             } else {
                 0
             },
@@ -469,7 +468,7 @@ impl<
                 mem_helper.fill(record.prev_timestamp, timestamp_mm(), col.as_mut());
             });
 
-        cols.rs_val = record.rs_val.map(|v| v.to_le_bytes().map(F::from_u8));
+        cols.rs_val = record.rs_val.map(|val| val.to_le_bytes().map(F::from_u8));
         cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));
 
         cols.from_state.timestamp = F::from_u32(record.timestamp);
