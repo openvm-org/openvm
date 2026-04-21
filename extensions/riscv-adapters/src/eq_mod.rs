@@ -26,23 +26,20 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
     tracing_read, tracing_write, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-/// Number of low limbs of an RV64 register used as a 32-bit pointer.
-const POINTER_LIMBS: usize = 4;
-
 #[inline(always)]
 fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
-    u32::from_le_bytes(bytes[..POINTER_LIMBS].try_into().unwrap())
+    u32::from_le_bytes(bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
 }
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
@@ -52,7 +49,7 @@ fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 /// * Writes are to 64-bit register rd (8 bytes).
 /// * Registers are 8 bytes (RV64). Only the low 4 bytes encode a pointer; the high 4 bytes are
-///   constrained to zero.
+///   hardcoded to zero in the memory bus interaction and not materialized in the trace.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct Rv64IsEqualModAdapterCols<
@@ -64,7 +61,7 @@ pub struct Rv64IsEqualModAdapterCols<
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
-    pub rs_val: [[T; RV64_REGISTER_NUM_LIMBS]; NUM_READS],
+    pub rs_val: [[T; RV64_WORD_NUM_LIMBS]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub heap_read_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 
@@ -137,44 +134,41 @@ impl<
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs
+        // Read register values for rs. We only materialize the low 4 bytes (the pointer); the
+        // upper 4 bytes of the 8-byte register value are hardcoded to zero in the memory bus
+        // interaction, which enforces that the stored register is < 2^32 without any extra
+        // explicit assertion.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
+            let full_val: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = from_fn(|i| {
+                if i < RV64_WORD_NUM_LIMBS {
+                    val[i].into()
+                } else {
+                    AB::Expr::ZERO
+                }
+            });
             self.memory_bridge
-                .read(MemoryAddress::new(d, ptr), val, timestamp_pp(), aux)
+                .read(MemoryAddress::new(d, ptr), full_val, timestamp_pp(), aux)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Assert upper 4 bytes of each rs value are zero (pointers fit in 32 bits).
-        for val in cols.rs_val.iter() {
-            for limb in &val[POINTER_LIMBS..] {
-                builder
-                    .when(ctx.instruction.is_valid.clone())
-                    .assert_zero(*limb);
-            }
-        }
-
-        // Compose the low 4 bytes of each register value into a single field element used as the
-        // heap base address. High 4 bytes are asserted zero above.
+        // Compose the 4 materialized bytes of each register value into a single field element
+        // used as the heap base address.
         let rs_val_f = cols.rs_val.map(|decomp| {
-            decomp
-                .iter()
-                .take(POINTER_LIMBS)
-                .rev()
-                .fold(AB::Expr::ZERO, |acc, &limb| {
-                    acc * AB::Expr::from_usize(1 << RV64_CELL_BITS) + limb
-                })
+            decomp.iter().rev().fold(AB::Expr::ZERO, |acc, &limb| {
+                acc * AB::Expr::from_usize(1 << RV64_CELL_BITS) + limb
+            })
         });
 
         let need_range_check: [_; 2] = from_fn(|i| {
             if i < NUM_READS {
-                cols.rs_val[i][POINTER_LIMBS - 1].into()
+                cols.rs_val[i][RV64_WORD_NUM_LIMBS - 1].into()
             } else {
                 AB::Expr::ZERO
             }
         });
 
         let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * POINTER_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
         self.bus
             .send_range(
@@ -299,7 +293,7 @@ impl<
         assert!(NUM_READS <= 2);
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
         assert!(
-            RV64_CELL_BITS * POINTER_LIMBS - pointer_max_bits < RV64_CELL_BITS,
+            RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - pointer_max_bits < RV64_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
         Self { pointer_max_bits }
@@ -428,9 +422,9 @@ impl<
             timestamp
         };
         // Do range checks before writing anything:
-        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * POINTER_LIMBS);
-        let limb_shift_bits = RV64_CELL_BITS * POINTER_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV64_CELL_BITS * (POINTER_LIMBS - 1);
+        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
+        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
         let rs_ptrs = record.rs_val.map(pointer_from_reg_bytes);
         self.bitwise_lookup_chip.request_range(
             (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
@@ -473,7 +467,9 @@ impl<
                 mem_helper.fill(record.prev_timestamp, timestamp_mm(), col.as_mut());
             });
 
-        cols.rs_val = record.rs_val.map(|val| val.map(F::from_u8));
+        cols.rs_val = record
+            .rs_val
+            .map(|val| from_fn(|i| F::from_u8(val[i])));
         cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));
 
         cols.from_state.timestamp = F::from_u32(record.timestamp);

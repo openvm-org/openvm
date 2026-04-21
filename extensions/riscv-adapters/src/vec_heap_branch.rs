@@ -24,21 +24,18 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{tracing_read, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-/// Number of low limbs of an RV64 register used as a 32-bit pointer.
-const POINTER_LIMBS: usize = 4;
-
 #[inline(always)]
 fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
-    u32::from_le_bytes(bytes[..POINTER_LIMBS].try_into().unwrap())
+    u32::from_le_bytes(bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
 }
 
 /// This adapter reads from NUM_READS <= 2 pointers (for branch operations).
@@ -48,7 +45,7 @@ fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
 /// * Registers are 8 bytes (RV64). Only the low 4 bytes encode a pointer; the high 4 bytes are
-///   constrained to zero.
+///   hardcoded to zero in the memory bus interaction and not materialized in the trace.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct Rv64VecHeapBranchAdapterCols<
@@ -60,7 +57,7 @@ pub struct Rv64VecHeapBranchAdapterCols<
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
-    pub rs_val: [[T; RV64_REGISTER_NUM_LIMBS]; NUM_READS],
+    pub rs_val: [[T; RV64_WORD_NUM_LIMBS]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
@@ -112,36 +109,38 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs
+        // Read register values for rs. We only materialize the low 4 bytes (the pointer); the
+        // upper 4 bytes of the 8-byte register value are hardcoded to zero in the memory bus
+        // interaction, which enforces that the stored register is < 2^32 without any extra
+        // explicit assertion.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
+            let full_val: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = from_fn(|i| {
+                if i < RV64_WORD_NUM_LIMBS {
+                    val[i].into()
+                } else {
+                    AB::Expr::ZERO
+                }
+            });
             self.memory_bridge
                 .read(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
-                    val,
+                    full_val,
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Assert upper 4 bytes of each register value are zero (pointers fit in 32 bits).
-        for val in cols.rs_val.iter() {
-            for limb in &val[POINTER_LIMBS..] {
-                builder
-                    .when(ctx.instruction.is_valid.clone())
-                    .assert_zero(*limb);
-            }
-        }
-
-        // Range-check byte 3 of each register value to constrain pointer < 2^address_bits.
+        // Range-check the most-significant materialized byte of each register value to constrain
+        // pointer < 2^address_bits.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
-            .map(|val| val[POINTER_LIMBS - 1])
+            .map(|val| val[RV64_WORD_NUM_LIMBS - 1])
             .collect();
 
         let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * POINTER_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
         for pair in need_range_check.chunks(2) {
             self.bus
@@ -152,11 +151,11 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the low 4 bytes of each register value into a single field element.
-        let compose_ptr = |v: [AB::Var; RV64_REGISTER_NUM_LIMBS]| -> AB::Expr {
+        // Compose the 4 materialized bytes of each register value into a single field element.
+        let compose_ptr = |v: [AB::Var; RV64_WORD_NUM_LIMBS]| -> AB::Expr {
             let mut acc = AB::Expr::ZERO;
             let mut mult = AB::Expr::ONE;
-            for limb in v.iter().take(POINTER_LIMBS) {
+            for limb in v.iter() {
                 acc += (*limb) * mult.clone();
                 mult *= AB::Expr::from_u32(1 << RV64_CELL_BITS);
             }
@@ -346,9 +345,9 @@ impl<
 
         // Range checks:
         // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * POINTER_LIMBS);
-        let limb_shift_bits = RV64_CELL_BITS * POINTER_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV64_CELL_BITS * (POINTER_LIMBS - 1);
+        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
+        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
         let rs_ptrs = record.rs_vals.map(pointer_from_reg_bytes);
         self.bitwise_lookup_chip.request_range(
             (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
@@ -396,7 +395,7 @@ impl<
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = val.map(F::from_u8);
+                *cols_val = from_fn(|i| F::from_u8(val[i]));
             });
         cols.rs_ptr
             .iter_mut()
