@@ -41,6 +41,11 @@ use openvm_stark_backend::{
 /// Number of low limbs of an RV64 register used as a 32-bit pointer.
 const POINTER_LIMBS: usize = 4;
 
+#[inline(always)]
+fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+    u32::from_le_bytes(bytes[..POINTER_LIMBS].try_into().unwrap())
+}
+
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
@@ -293,8 +298,10 @@ pub struct Rv64VecHeapAdapterRecord<
     pub rs_ptrs: [u32; NUM_READS],
     pub rd_ptr: u32,
 
-    pub rs_vals: [u64; NUM_READS],
-    pub rd_val: u64,
+    // Store full register images as bytes so this record only needs 4-byte alignment in the
+    // matrix-backed test arena.
+    pub rs_vals: [[u8; RV64_REGISTER_NUM_LIMBS]; NUM_READS],
+    pub rd_val: [u8; RV64_REGISTER_NUM_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
     pub rd_read_aux: MemoryReadAuxRecord,
@@ -386,33 +393,34 @@ impl<
         // Read register values
         record.rs_vals = from_fn(|i| {
             record.rs_ptrs[i] = if i == 0 { b } else { c }.as_canonical_u32();
-            u64::from_le_bytes(tracing_read(
+            tracing_read(
                 memory,
                 RV64_REGISTER_AS,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-            ))
+            )
         });
 
         record.rd_ptr = a.as_canonical_u32();
-        record.rd_val = u64::from_le_bytes(tracing_read(
+        record.rd_val = tracing_read(
             memory,
             RV64_REGISTER_AS,
             a.as_canonical_u32(),
             &mut record.rd_read_aux.prev_timestamp,
-        ));
+        );
 
         // Read memory values
         from_fn(|i| {
+            let rs_ptr = pointer_from_reg_bytes(record.rs_vals[i]);
             debug_assert!(
-                record.rs_vals[i] + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
+                (rs_ptr as u64) + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
                     < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
                 tracing_read(
                     memory,
                     RV64_MEMORY_AS,
-                    record.rs_vals[i] as u32 + (j * READ_SIZE) as u32,
+                    rs_ptr + (j * READ_SIZE) as u32,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
             })
@@ -433,10 +441,10 @@ impl<
         >,
     ) {
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV64_MEMORY_AS);
+        let rd_ptr = pointer_from_reg_bytes(record.rd_val);
 
         debug_assert!(
-            record.rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
-                < (1 << self.pointer_max_bits)
+            (rd_ptr as usize) + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits)
         );
 
         #[allow(clippy::needless_range_loop)]
@@ -444,7 +452,7 @@ impl<
             tracing_write(
                 memory,
                 RV64_MEMORY_AS,
-                record.rd_val as u32 + (i * WRITE_SIZE) as u32,
+                rd_ptr + (i * WRITE_SIZE) as u32,
                 data[i],
                 &mut record.writes_aux[i].prev_timestamp,
                 &mut record.writes_aux[i].prev_data,
@@ -504,19 +512,21 @@ impl<
         debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * POINTER_LIMBS);
         let limb_shift_bits = RV64_CELL_BITS * POINTER_LIMBS - self.pointer_max_bits;
         const MSL_SHIFT: usize = RV64_CELL_BITS * (POINTER_LIMBS - 1);
+        let rs_ptrs = record.rs_vals.map(pointer_from_reg_bytes);
+        let rd_ptr = pointer_from_reg_bytes(record.rd_val);
         if NUM_READS > 1 {
             self.bitwise_lookup_chip.request_range(
-                ((record.rs_vals[0] as u32) >> MSL_SHIFT) << limb_shift_bits,
-                ((record.rs_vals[1] as u32) >> MSL_SHIFT) << limb_shift_bits,
+                (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
+                (rs_ptrs[1] >> MSL_SHIFT) << limb_shift_bits,
             );
             self.bitwise_lookup_chip.request_range(
-                ((record.rd_val as u32) >> MSL_SHIFT) << limb_shift_bits,
-                ((record.rd_val as u32) >> MSL_SHIFT) << limb_shift_bits,
+                (rd_ptr >> MSL_SHIFT) << limb_shift_bits,
+                (rd_ptr >> MSL_SHIFT) << limb_shift_bits,
             );
         } else {
             self.bitwise_lookup_chip.request_range(
-                ((record.rs_vals[0] as u32) >> MSL_SHIFT) << limb_shift_bits,
-                ((record.rd_val as u32) >> MSL_SHIFT) << limb_shift_bits,
+                (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
+                (rd_ptr >> MSL_SHIFT) << limb_shift_bits,
             );
         }
 
@@ -568,13 +578,13 @@ impl<
                 mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });
 
-        cols.rd_val = record.rd_val.to_le_bytes().map(F::from_u8);
+        cols.rd_val = record.rd_val.map(F::from_u8);
         cols.rs_val
             .iter_mut()
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = val.to_le_bytes().map(F::from_u8);
+                *cols_val = val.map(F::from_u8);
             });
         cols.rd_ptr = F::from_u32(record.rd_ptr);
         cols.rs_ptr
