@@ -6,12 +6,12 @@ use openvm_circuit::{
     arch::{AdapterTraceExecutor, ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
     system::memory::online::TracingMemory,
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, FieldExpressionCoreRecordMut, FieldExpressionRecordLayout,
 };
-use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
+use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -93,9 +93,9 @@ fn compute_ec_double_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 /// Check if this is a SETUP opcode (not a regular EC operation)
 #[inline]
 fn is_setup_opcode(local_opcode: usize) -> bool {
-    let base_opcode = local_opcode % Rv32WeierstrassOpcode::COUNT;
-    base_opcode == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize
-        || base_opcode == Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize
+    let base_opcode = local_opcode % Rv64WeierstrassOpcode::COUNT;
+    base_opcode == Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize
+        || base_opcode == Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize
 }
 
 /// Slow-path fallback for EC operations (used for SETUP opcodes and unknown field types).
@@ -124,10 +124,10 @@ where
         'buf,
         FieldExpressionRecordLayout<
             F,
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
         (
-            <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -140,7 +140,7 @@ where
         let (mut adapter_record, mut core_record) =
             state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
@@ -202,10 +202,10 @@ where
         'buf,
         FieldExpressionRecordLayout<
             F,
-            Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
         (
-            <Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -218,7 +218,7 @@ where
         let (mut adapter_record, mut core_record) =
             state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
