@@ -26,7 +26,7 @@ pub struct XorinInstructionCols<T> {
     pub input_ptr: T,
     pub input_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub len: T,
-    pub len_limbs: [T; RV64_WORD_NUM_LIMBS],
+    pub len_limb: T,
     pub start_timestamp: T,
 }
 

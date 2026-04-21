@@ -155,7 +155,10 @@ impl XorinVmAir {
         };
         let buffer_ptr_data = expand_limbs(&instruction.buffer_ptr_limbs);
         let input_ptr_data = expand_limbs(&instruction.input_ptr_limbs);
-        let len_data = expand_limbs(&instruction.len_limbs);
+        let len_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
+            if i == 0 { instruction.len_limb.into() }
+            else { AB::Expr::ZERO }
+        });
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
@@ -180,8 +183,6 @@ impl XorinVmAir {
         let need_range_check = [
             instruction.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
             instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            instruction.len_limbs[RV64_WORD_NUM_LIMBS - 1],
-            instruction.len_limbs[RV64_WORD_NUM_LIMBS - 1],
         ];
 
         let limb_shift = AB::F::from_usize(
@@ -203,10 +204,7 @@ impl XorinVmAir {
             compose(&instruction.input_ptr_limbs[..], RV64_CELL_BITS),
         );
 
-        builder.assert_eq(
-            instruction.len,
-            compose(&instruction.len_limbs[..], RV64_CELL_BITS),
-        );
+        builder.assert_eq(instruction.len, instruction.len_limb);
 
         timestamp
     }

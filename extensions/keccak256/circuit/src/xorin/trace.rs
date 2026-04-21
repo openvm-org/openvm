@@ -233,7 +233,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.input_ptr = F::from_u32(record.input);
         trace_row.instruction.input_ptr_limbs = record.input.to_le_bytes().map(F::from_u8);
         trace_row.instruction.len = F::from_u32(record.len);
-        trace_row.instruction.len_limbs = record.len.to_le_bytes().map(F::from_u8);
+        trace_row.instruction.len_limb = F::from_u8(record.len as u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
 
         for i in 0..(record.len / 4) {
@@ -310,8 +310,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         let need_range_check = [
             msb_byte(record.buffer),
             msb_byte(record.input),
-            msb_byte(record.len),
-            msb_byte(record.len),
         ];
 
         let limb_shift = 1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
