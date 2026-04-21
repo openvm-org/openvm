@@ -9,20 +9,15 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_circuit::{
-    arch::{
-        execution_mode::{
-            metered::segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS, MeteredCostCtx, MeteredCtx, Segment,
-        },
-        rvr as rvr_openvm, Executor, ExecutorInventory, MeteredExecutor, Streams, SystemConfig,
-        VirtualMachine, VmExecutionConfig,
-    },
-    system::memory::CHUNK,
+use openvm_circuit::arch::{
+    execution_mode::{MeteredCostCtx, MeteredCtx, Segment},
+    rvr as rvr_openvm, Executor, ExecutorInventory, MeteredExecutor, Streams, SystemConfig,
+    VirtualMachine, VmExecutionConfig,
 };
 use openvm_instructions::{
     exe::VmExe,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-    LocalOpcode, SystemOpcode, VmOpcode,
+    LocalOpcode,
 };
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig, Rv32ImCpuBuilder};
@@ -133,110 +128,6 @@ pub fn rvr_extension_ctx<E>(
         .iter()
         .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
     RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
-}
-
-pub fn build_metered_cost_config(
-    exe: &VmExe<F>,
-    ctx: &RvrExtensionCtx,
-    widths: &[usize],
-    hint_buffer_opcode: Option<VmOpcode>,
-) -> rvr_openvm::MeteredCostConfig {
-    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-    let hint_store_chip_idx =
-        hint_buffer_opcode.and_then(|opcode| ctx.resolve_opcode_air_idx(opcode));
-    let pc_to_chip = exe
-        .program
-        .instructions_and_debug_infos
-        .iter()
-        .map(|slot| {
-            if let Some((inst, _)) = slot {
-                if inst.opcode == terminate_opcode {
-                    u32::MAX
-                } else {
-                    ctx.resolve_opcode_air_idx(inst.opcode).unwrap_or(u32::MAX)
-                }
-            } else {
-                u32::MAX
-            }
-        })
-        .collect();
-    rvr_openvm::MeteredCostConfig {
-        pc_to_chip,
-        pc_base: exe.program.pc_base,
-        widths: widths.to_vec(),
-        hint_store_chip_idx,
-    }
-}
-
-pub fn build_metered_config(
-    exe: &VmExe<F>,
-    ctx: &RvrExtensionCtx,
-    widths: &[usize],
-    interactions: &[usize],
-    constant_trace_heights: &[Option<usize>],
-    system_config: &SystemConfig,
-    hint_buffer_opcode: Option<VmOpcode>,
-) -> rvr_openvm::MeteredConfig {
-    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-    let hint_store_chip_idx =
-        hint_buffer_opcode.and_then(|opcode| ctx.resolve_opcode_air_idx(opcode));
-
-    let pc_to_chip = exe
-        .program
-        .instructions_and_debug_infos
-        .iter()
-        .map(|slot| {
-            if let Some((inst, _)) = slot {
-                if inst.opcode == terminate_opcode {
-                    u32::MAX
-                } else {
-                    ctx.resolve_opcode_air_idx(inst.opcode).unwrap_or(u32::MAX)
-                }
-            } else {
-                u32::MAX
-            }
-        })
-        .collect();
-
-    let initial_trace_heights = constant_trace_heights
-        .iter()
-        .map(|opt| opt.map(|height| height as u32).unwrap_or(0))
-        .collect();
-    let is_constant = constant_trace_heights
-        .iter()
-        .map(|opt| opt.is_some())
-        .collect();
-    let memory_dimensions = system_config.memory_config.memory_dimensions();
-
-    rvr_openvm::MeteredConfig {
-        pc_to_chip,
-        pc_base: exe.program.pc_base,
-        widths: widths.to_vec(),
-        interactions: interactions.to_vec(),
-        boundary_idx: system_config.memory_boundary_air_id(),
-        merkle_tree_idx: system_config.memory_merkle_air_id(),
-        initial_trace_heights,
-        is_constant,
-        segmentation_config: rvr_openvm::SegmentationConfig {
-            limits: rvr_openvm::SegmentationLimits {
-                max_trace_height: system_config.segmentation_config.limits.max_trace_height,
-                max_memory: system_config.segmentation_config.limits.max_memory,
-                max_interactions: system_config.segmentation_config.limits.max_interactions,
-            },
-            main_cell_weight: system_config.segmentation_config.main_cell_weight,
-            main_cell_secondary_weight: system_config
-                .segmentation_config
-                .main_cell_secondary_weight,
-            interaction_cell_weight: system_config.segmentation_config.interaction_cell_weight,
-            base_field_size: system_config.segmentation_config.base_field_size,
-        },
-        segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-        address_height: memory_dimensions.address_height as u32,
-        addr_space_height: memory_dimensions.addr_space_height as u32,
-        chunk_bits: CHUNK.ilog2(),
-        num_addr_spaces: system_config.memory_config.addr_spaces.len(),
-        hint_store_chip_idx,
-    }
 }
 
 // ── Generic VM test harness ─────────────────────────────────────────────────
@@ -381,6 +272,7 @@ where
 
     fn compare_metered_cost(&self, label: &str, exe: &VmExe<F>, input: Vec<Vec<F>>) -> Result<()> {
         let ctx: MeteredCostCtx = self.vm.build_metered_cost_ctx();
+        let system_config: &SystemConfig = self.config.as_ref();
 
         // OpenVM reference
         let instance = self
@@ -391,10 +283,15 @@ where
 
         // rvr execution
         let inventory = self.inventory()?;
-        let ext_ctx = rvr_extension_ctx(&inventory, &self.air_idx);
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
-        let metered_cost_config =
-            build_metered_cost_config(exe, &ext_ctx, &ctx.widths, hint_buffer_opcode);
+        let metered_cost_config = rvr_openvm::build_metered_cost_config(
+            exe,
+            &inventory,
+            &self.air_idx,
+            &ctx.widths,
+            system_config,
+            hint_buffer_opcode,
+        );
         let chips = metered_cost_config.chip_mapping();
         let compiled = if self.extensions.is_empty() {
             rvr_openvm::compile_metered_cost(exe, &chips)?
@@ -452,11 +349,11 @@ where
 
         // rvr execution
         let inventory = self.inventory()?;
-        let ext_ctx = rvr_extension_ctx(&inventory, &self.air_idx);
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
-        let trace_config = build_metered_config(
+        let trace_config = rvr_openvm::build_metered_config(
             exe,
-            &ext_ctx,
+            &inventory,
+            &self.air_idx,
             &widths,
             &interactions,
             &constant_trace_heights,

@@ -1,5 +1,4 @@
 //! OpenVM-owned rvr integration layer.
-#![allow(dead_code)]
 
 pub mod compile;
 pub mod debug;

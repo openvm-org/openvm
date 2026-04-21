@@ -350,10 +350,16 @@ impl DeferralTestHarness {
         let deferral = Self::make_deferral_data(&circuit_inputs);
         let ext = self.build_ext();
         let inventory = self.inventory()?;
-        let ext_ctx = utils::rvr_extension_ctx(&inventory, &self.air_idx);
+        let system_config: &SystemConfig = self.config.as_ref();
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
-        let metered_cost_config =
-            utils::build_metered_cost_config(exe, &ext_ctx, &ctx.widths, hint_buffer_opcode);
+        let metered_cost_config = rvr_openvm::build_metered_cost_config(
+            exe,
+            &inventory,
+            &self.air_idx,
+            &ctx.widths,
+            system_config,
+            hint_buffer_opcode,
+        );
         let chips = metered_cost_config.chip_mapping();
         let mut extensions = ExtensionRegistry::new();
         extensions.register(ext);
@@ -418,11 +424,11 @@ impl DeferralTestHarness {
         let deferral = Self::make_deferral_data(&circuit_inputs);
         let ext = self.build_ext();
         let inventory = self.inventory()?;
-        let ext_ctx = utils::rvr_extension_ctx(&inventory, &self.air_idx);
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
-        let trace_config = utils::build_metered_config(
+        let trace_config = rvr_openvm::build_metered_config(
             exe,
-            &ext_ctx,
+            &inventory,
+            &self.air_idx,
             &widths,
             &interactions,
             &constant_trace_heights,
