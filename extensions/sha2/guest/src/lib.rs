@@ -32,11 +32,11 @@ pub enum Sha2BaseFunct7 {
 #[inline(always)]
 #[no_mangle]
 pub unsafe extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *mut u8) {
-    // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 4
+    // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 8
     // bytes.
 
     // The minimum alignment required for the buffers
-    const MIN_ALIGN: usize = 4;
+    const MIN_ALIGN: usize = 8;
     unsafe {
         let state_is_aligned = state as usize % MIN_ALIGN == 0;
         let input_is_aligned = input as usize % MIN_ALIGN == 0;
@@ -91,11 +91,11 @@ pub unsafe extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, ou
 #[inline(always)]
 #[no_mangle]
 pub unsafe extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, output: *mut u8) {
-    // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 4
+    // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 8
     // bytes.
 
     // The minimum alignment required for the buffers
-    const MIN_ALIGN: usize = 4;
+    const MIN_ALIGN: usize = 8;
     unsafe {
         let state_is_aligned = state as usize % MIN_ALIGN == 0;
         let input_is_aligned = input as usize % MIN_ALIGN == 0;
