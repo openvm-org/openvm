@@ -27,8 +27,8 @@ cfg_if::cfg_if! {
         pub use hybrid::*;
         pub use {
             AlgebraHybridProverExt as AlgebraProverExt,
-            Rv32ModularHybridBuilder as Rv64ModularBuilder,
-            Rv32ModularWithFp2HybridBuilder as Rv64ModularWithFp2Builder,
+            Rv64ModularHybridBuilder as Rv64ModularBuilder,
+            Rv64ModularWithFp2HybridBuilder as Rv64ModularWithFp2Builder,
         };
     } else {
         pub use self::{

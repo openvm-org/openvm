@@ -588,8 +588,8 @@ mod muldiv_tests {
         // The write of result r is done in the chip.
         let ptr_as = RV64_REGISTER_AS as usize;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 12;
-        let addr_ptr3 = 24;
+        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
 
         let data_as = RV64_MEMORY_AS as usize;
         let address1 = gen_pointer(rng, BLOCK_SIZE) as u32;
