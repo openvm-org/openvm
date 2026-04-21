@@ -40,6 +40,11 @@ use openvm_stark_backend::{
 /// Number of low limbs of an RV64 register used as a 32-bit pointer.
 const POINTER_LIMBS: usize = 4;
 
+#[inline(always)]
+fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+    u32::from_le_bytes(bytes[..POINTER_LIMBS].try_into().unwrap())
+}
+
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
@@ -252,7 +257,9 @@ pub struct Rv64IsEqualModAdapterRecord<
     pub timestamp: u32,
 
     pub rs_ptr: [u32; NUM_READS],
-    pub rs_val: [u64; NUM_READS],
+    // Store full register images as bytes so this record only needs 4-byte alignment in the
+    // matrix-backed test arena.
+    pub rs_val: [[u8; RV64_REGISTER_NUM_LIMBS]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
     pub heap_read_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
 
@@ -341,24 +348,25 @@ where
         record.rs_val = from_fn(|i| {
             record.rs_ptr[i] = if i == 0 { b } else { c }.as_canonical_u32();
 
-            u64::from_le_bytes(tracing_read(
+            tracing_read(
                 memory,
                 RV64_REGISTER_AS,
                 record.rs_ptr[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-            ))
+            )
         });
 
         // Read memory values
         from_fn(|i| {
+            let rs_ptr = pointer_from_reg_bytes(record.rs_val[i]);
             debug_assert!(
-                (record.rs_val[i] as usize) + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits)
+                (rs_ptr as usize) + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits)
             );
             from_fn::<_, BLOCKS_PER_READ, _>(|j| {
                 tracing_read::<BLOCK_SIZE>(
                     memory,
                     RV64_MEMORY_AS,
-                    record.rs_val[i] as u32 + (j * BLOCK_SIZE) as u32,
+                    rs_ptr + (j * BLOCK_SIZE) as u32,
                     &mut record.heap_read_aux[i][j].prev_timestamp,
                 )
             })
@@ -423,10 +431,11 @@ impl<
         debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * POINTER_LIMBS);
         let limb_shift_bits = RV64_CELL_BITS * POINTER_LIMBS - self.pointer_max_bits;
         const MSL_SHIFT: usize = RV64_CELL_BITS * (POINTER_LIMBS - 1);
+        let rs_ptrs = record.rs_val.map(pointer_from_reg_bytes);
         self.bitwise_lookup_chip.request_range(
-            ((record.rs_val[0] as u32) >> MSL_SHIFT) << limb_shift_bits,
+            (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
             if NUM_READS > 1 {
-                ((record.rs_val[1] as u32) >> MSL_SHIFT) << limb_shift_bits
+                (rs_ptrs[1] >> MSL_SHIFT) << limb_shift_bits
             } else {
                 0
             },
@@ -464,7 +473,7 @@ impl<
                 mem_helper.fill(record.prev_timestamp, timestamp_mm(), col.as_mut());
             });
 
-        cols.rs_val = record.rs_val.map(|val| val.to_le_bytes().map(F::from_u8));
+        cols.rs_val = record.rs_val.map(|val| val.map(F::from_u8));
         cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));
 
         cols.from_state.timestamp = F::from_u32(record.timestamp);
