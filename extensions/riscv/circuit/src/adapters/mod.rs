@@ -289,6 +289,21 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
     u64::from_le_bytes(memory_read(memory, RV64_REGISTER_AS, ptr))
 }
 
+/// Expand `RV64_WORD_NUM_LIMBS` (4) limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the
+/// upper limbs. Used for register bus reads where the register holds a 32-bit value in the low 4
+/// bytes.
+pub fn expand_rv64_limbs<V: Copy + Into<T>, T: PrimeCharacteristicRing>(
+    limbs: &[V; RV64_WORD_NUM_LIMBS],
+) -> [T; RV64_REGISTER_NUM_LIMBS] {
+    std::array::from_fn(|i| {
+        if i < RV64_WORD_NUM_LIMBS {
+            limbs[i].into()
+        } else {
+            T::ZERO
+        }
+    })
+}
+
 pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(
     data: [V; N],
 ) -> T {
