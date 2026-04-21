@@ -93,6 +93,28 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
     DeferralProver::new(verify_stark_prover, agg_config, hook_params)
 }
 
+/// Builds a deferral-enabled riscv32 SDK whose App VM inventory includes the
+/// deferral periphery chips (DeferralPoseidon2Chip, count chip, etc.).
+fn make_deferral_enabled_sdk(
+    fib_sdk: &Sdk,
+    app_params: SystemParams,
+    agg_params: AggregationSystemParams,
+) -> Result<Sdk> {
+    let deferral_prover = make_deferral_prover(fib_sdk, &agg_params);
+    let deferral_ext =
+        deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+
+    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
+    vm_config.deferral = Some(deferral_ext);
+    vm_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
+
+    Ok(Sdk::builder()
+        .app_config(AppConfig::new(vm_config, app_params))
+        .agg_params(agg_params)
+        .deferral_prover(deferral_prover)
+        .build()?)
+}
+
 /// Builds a deferral-enabled verify-stark SDK from a fibonacci SDK and proof.
 ///
 /// Returns the SDK, the verify-stark stdin, and the deferral input.
@@ -103,10 +125,6 @@ fn make_deferral_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
 ) -> Result<(Sdk, StdIn, DeferralInput)> {
-    let deferral_prover = make_deferral_prover(fib_sdk, &agg_params);
-    let deferral_ext =
-        deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
-
     let fib_vk = VmStarkVerifyingKey {
         mvk: fib_sdk.agg_vk().as_ref().clone(),
         baseline: fib_baseline,
@@ -121,16 +139,7 @@ fn make_deferral_sdk(
     let user_public_values = output_raw[64..].to_vec();
     let deferral_state = get_deferral_state(&fib_vk, from_ref(&fib_proof), 0)?;
 
-    let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
-    vs_config.deferral = Some(deferral_ext);
-    vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-
-    let vs_app_config = AppConfig::new(vs_config, app_params);
-    let vs_sdk = Sdk::builder()
-        .app_config(vs_app_config)
-        .agg_params(agg_params)
-        .deferral_prover(deferral_prover)
-        .build()?;
+    let vs_sdk = make_deferral_enabled_sdk(fib_sdk, app_params, agg_params)?;
 
     let mut vs_stdin = StdIn::default();
     vs_stdin.write(&app_exe_commit);
@@ -260,13 +269,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
 fn test_deferrals_enabled_without_usage() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
-    let deferral_prover = make_deferral_prover(&fib_sdk, &agg_params);
-
-    let sdk = Sdk::builder()
-        .app_config(AppConfig::riscv32(app_params))
-        .agg_params(agg_params.clone())
-        .deferral_prover(deferral_prover)
-        .build()?;
+    let sdk = make_deferral_enabled_sdk(&fib_sdk, app_params, agg_params)?;
 
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
