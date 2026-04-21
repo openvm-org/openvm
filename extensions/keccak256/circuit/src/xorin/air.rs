@@ -13,7 +13,8 @@ use openvm_circuit_primitives::{
     utils::{compose, not},
 };
 use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+    RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
@@ -142,14 +143,24 @@ impl XorinVmAir {
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
-        let buffer_ptr_limbs = instruction.buffer_ptr_limbs.map(Into::into);
-        let input_ptr_limbs = instruction.input_ptr_limbs.map(Into::into);
-        let len_limbs = instruction.len_limbs.map(Into::into);
+        // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
+        let expand_limbs = |limbs: &[AB::Var; RV64_WORD_NUM_LIMBS]| -> [AB::Expr; RV64_REGISTER_NUM_LIMBS] {
+            std::array::from_fn(|i| {
+                if i < RV64_WORD_NUM_LIMBS {
+                    limbs[i].into()
+                } else {
+                    AB::Expr::ZERO
+                }
+            })
+        };
+        let buffer_ptr_data = expand_limbs(&instruction.buffer_ptr_limbs);
+        let input_ptr_data = expand_limbs(&instruction.input_ptr_limbs);
+        let len_data = expand_limbs(&instruction.len_limbs);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
             [buffer_reg_ptr, input_reg_ptr, len_reg_ptr],
-            [buffer_ptr_limbs, input_ptr_limbs, len_limbs],
+            [buffer_ptr_data, input_ptr_data, len_data],
             register_aux
         ) {
             self.memory_bridge
@@ -162,17 +173,6 @@ impl XorinVmAir {
                 .eval(builder, is_enabled);
 
             timestamp += AB::Expr::ONE;
-        }
-
-        // Assert upper limbs of each pointer register are zero (RV64 pointer constraint)
-        for limb in &instruction.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS..] {
-            builder.when(is_enabled).assert_zero(*limb);
-        }
-        for limb in &instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS..] {
-            builder.when(is_enabled).assert_zero(*limb);
-        }
-        for limb in &instruction.len_limbs[RV64_WORD_NUM_LIMBS..] {
-            builder.when(is_enabled).assert_zero(*limb);
         }
 
         // SAFETY: this approach only works when self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)
@@ -195,23 +195,17 @@ impl XorinVmAir {
 
         builder.assert_eq(
             instruction.buffer_ptr,
-            compose(
-                &instruction.buffer_ptr_limbs[..RV64_WORD_NUM_LIMBS],
-                RV64_CELL_BITS,
-            ),
+            compose(&instruction.buffer_ptr_limbs[..], RV64_CELL_BITS),
         );
 
         builder.assert_eq(
             instruction.input_ptr,
-            compose(
-                &instruction.input_ptr_limbs[..RV64_WORD_NUM_LIMBS],
-                RV64_CELL_BITS,
-            ),
+            compose(&instruction.input_ptr_limbs[..], RV64_CELL_BITS),
         );
 
         builder.assert_eq(
             instruction.len,
-            compose(&instruction.len_limbs[..RV64_WORD_NUM_LIMBS], RV64_CELL_BITS),
+            compose(&instruction.len_limbs[..], RV64_CELL_BITS),
         );
 
         timestamp

@@ -1,6 +1,6 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS;
+use openvm_instructions::riscv::RV64_WORD_NUM_LIMBS;
 
 use crate::{KECCAK_MEMORY_BLOCK, KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
 
@@ -22,11 +22,11 @@ pub struct XorinInstructionCols<T> {
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
     pub buffer_ptr: T,
-    pub buffer_ptr_limbs: [T; RV64_REGISTER_NUM_LIMBS],
+    pub buffer_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub input_ptr: T,
-    pub input_ptr_limbs: [T; RV64_REGISTER_NUM_LIMBS],
+    pub input_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub len: T,
-    pub len_limbs: [T; RV64_REGISTER_NUM_LIMBS],
+    pub len_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub start_timestamp: T,
 }
 

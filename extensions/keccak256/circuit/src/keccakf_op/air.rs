@@ -10,12 +10,13 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
 use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+    RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
-    p3_air::{Air, AirBuilder, BaseAir},
+    p3_air::{Air, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
@@ -67,19 +68,22 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // ======== Read `rd` =========
         let rd_ptr = local.rd_ptr;
         let buffer_ptr_limbs = local.buffer_ptr_limbs;
+        // Build full 8-element data array with upper 4 limbs hardcoded to zero
+        let reg_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
+                buffer_ptr_limbs[i].into()
+            } else {
+                AB::Expr::ZERO
+            }
+        });
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
-                buffer_ptr_limbs,
+                reg_data,
                 timestamp_pp(),
                 &local.rd_aux,
             )
             .eval(builder, is_valid);
-
-        // Assert upper limbs of the register are zero (RV64 pointer constraint)
-        for limb in &buffer_ptr_limbs[RV64_WORD_NUM_LIMBS..] {
-            builder.when(is_valid).assert_zero(*limb);
-        }
 
         // Range check that buffer_ptr_limbs fits in [0, 2^ptr_max_bits) as u32
         {
@@ -93,8 +97,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 .eval(builder, is_valid);
         }
         // Now it is safe to cast buffer_ptr to F (compose from low limbs)
-        let buffer_ptr: AB::Expr =
-            compose(&buffer_ptr_limbs[..RV64_WORD_NUM_LIMBS], RV64_CELL_BITS);
+        let buffer_ptr: AB::Expr = compose(&buffer_ptr_limbs[..], RV64_CELL_BITS);
 
         // ======== Constrain that post-state consists of bytes =========
         // We know that the pre-state buffer consists of bytes due to the invariant of Address Space

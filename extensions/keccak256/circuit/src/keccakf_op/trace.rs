@@ -81,7 +81,6 @@ pub struct KeccakfRecord {
     pub timestamp: u32,
     pub rd_ptr: u32,
     pub buffer_ptr: u32,
-    pub rd_reg: [u8; 8],
     pub rd_aux: MemoryReadAuxRecord,
     pub buffer_word_aux: [MemoryReadAuxRecord; KECCAK_WIDTH_MEM_OPS],
     pub preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
@@ -138,13 +137,13 @@ where
         record.pc = *state.pc;
         record.timestamp = state.memory.timestamp();
         record.rd_ptr = rd_ptr;
-        record.rd_reg = tracing_read(
+        let rd_val: [u8; 8] = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             rd_ptr,
             &mut record.rd_aux.prev_timestamp,
         );
-        let buffer_ptr = u32::from_le_bytes(record.rd_reg[..4].try_into().unwrap());
+        let buffer_ptr = u32::from_le_bytes(rd_val[..4].try_into().unwrap());
         record.buffer_ptr = buffer_ptr;
 
         let guest_mem = state.memory.data();
@@ -216,7 +215,8 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_u32(record.timestamp);
                 local.rd_ptr = F::from_u32(record.rd_ptr);
-                local.buffer_ptr_limbs = record.rd_reg.map(F::from_u8);
+                let ptr_bytes = record.buffer_ptr.to_le_bytes();
+                local.buffer_ptr_limbs = ptr_bytes.map(F::from_u8);
 
                 for (dst, &byte) in local.preimage.iter_mut().zip(&record.preimage_buffer_bytes) {
                     *dst = F::from_u8(byte);
@@ -243,7 +243,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
 
                 let limb_shift =
                     1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits) as u32;
-                let scaled_limb = (record.rd_reg[RV64_WORD_NUM_LIMBS - 1] as u32) * limb_shift;
+                let scaled_limb = (ptr_bytes[RV64_WORD_NUM_LIMBS - 1] as u32) * limb_shift;
                 self.bitwise_lookup_chip
                     .request_range(scaled_limb, scaled_limb);
 

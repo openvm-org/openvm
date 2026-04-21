@@ -45,9 +45,6 @@ pub struct XorinVmRecordHeader {
     pub buffer: u32,
     pub input: u32,
     pub len: u32,
-    pub buffer_reg: [u8; 8],
-    pub input_reg: [u8; 8],
-    pub len_reg: [u8; 8],
     pub buffer_limbs: [u8; 136],
     pub input_limbs: [u8; 136],
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
@@ -127,32 +124,29 @@ where
         record.inner.rs1_ptr = b.as_canonical_u32();
         record.inner.rs2_ptr = c.as_canonical_u32();
 
-        record.inner.buffer_reg = tracing_read(
+        let buffer_val: [u8; 8] = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             record.inner.rd_ptr,
             &mut record.inner.register_aux_cols[0].prev_timestamp,
         );
-        record.inner.buffer =
-            u32::from_le_bytes(record.inner.buffer_reg[..4].try_into().unwrap());
+        record.inner.buffer = u32::from_le_bytes(buffer_val[..4].try_into().unwrap());
 
-        record.inner.input_reg = tracing_read(
+        let input_val: [u8; 8] = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             record.inner.rs1_ptr,
             &mut record.inner.register_aux_cols[1].prev_timestamp,
         );
-        record.inner.input =
-            u32::from_le_bytes(record.inner.input_reg[..4].try_into().unwrap());
+        record.inner.input = u32::from_le_bytes(input_val[..4].try_into().unwrap());
 
-        record.inner.len_reg = tracing_read(
+        let len_val: [u8; 8] = tracing_read(
             state.memory,
             RV64_REGISTER_AS,
             record.inner.rs2_ptr,
             &mut record.inner.register_aux_cols[2].prev_timestamp,
         );
-        record.inner.len =
-            u32::from_le_bytes(record.inner.len_reg[..4].try_into().unwrap());
+        record.inner.len = u32::from_le_bytes(len_val[..4].try_into().unwrap());
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
@@ -235,11 +229,11 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
         trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
-        trace_row.instruction.buffer_ptr_limbs = record.buffer_reg.map(F::from_u8);
+        trace_row.instruction.buffer_ptr_limbs = record.buffer.to_le_bytes().map(F::from_u8);
         trace_row.instruction.input_ptr = F::from_u32(record.input);
-        trace_row.instruction.input_ptr_limbs = record.input_reg.map(F::from_u8);
+        trace_row.instruction.input_ptr_limbs = record.input.to_le_bytes().map(F::from_u8);
         trace_row.instruction.len = F::from_u32(record.len);
-        trace_row.instruction.len_limbs = record.len_reg.map(F::from_u8);
+        trace_row.instruction.len_limbs = record.len.to_le_bytes().map(F::from_u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
 
         for i in 0..(record.len / 4) {
@@ -312,18 +306,19 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
+        let msb_byte = |val: u32| -> u32 { (val >> (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))) & 0xFF };
         let need_range_check = [
-            &record.buffer_reg[RV64_WORD_NUM_LIMBS - 1],
-            &record.input_reg[RV64_WORD_NUM_LIMBS - 1],
-            &record.len_reg[RV64_WORD_NUM_LIMBS - 1],
-            &record.len_reg[RV64_WORD_NUM_LIMBS - 1],
+            msb_byte(record.buffer),
+            msb_byte(record.input),
+            msb_byte(record.len),
+            msb_byte(record.len),
         ];
 
-        let limb_shift = 1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
+        let limb_shift = 1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
 
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_chip
-                .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
+                .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
         }
     }
 }
