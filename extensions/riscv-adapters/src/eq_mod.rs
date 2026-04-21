@@ -37,11 +37,6 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-#[inline(always)]
-fn pointer_from_reg_bytes(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
-    u32::from_le_bytes(bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
-}
-
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
@@ -251,9 +246,9 @@ pub struct Rv64IsEqualModAdapterRecord<
     pub timestamp: u32,
 
     pub rs_ptr: [u32; NUM_READS],
-    // Store full register images as bytes so this record only needs 4-byte alignment in the
-    // matrix-backed test arena.
-    pub rs_val: [[u8; RV64_REGISTER_NUM_LIMBS]; NUM_READS],
+    // Only the low 32 bits (pointer) of each register are recorded; upper bytes are constrained
+    // to zero via the memory bus interaction.
+    pub rs_val: [u32; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
     pub heap_read_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
 
@@ -338,21 +333,28 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
-        // Read register values
+        // Read register values. The register is 8 bytes, but only the low 4 (the pointer) are
+        // stored; the upper 4 bytes must be zero (enforced at proving time by the memory bus).
         record.rs_val = from_fn(|i| {
             record.rs_ptr[i] = if i == 0 { b } else { c }.as_canonical_u32();
 
-            tracing_read(
+            let bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
                 memory,
                 RV64_REGISTER_AS,
                 record.rs_ptr[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-            )
+            );
+            debug_assert_eq!(
+                bytes[RV64_WORD_NUM_LIMBS..],
+                [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+                "upper 4 bytes of rs register must be zero"
+            );
+            u32::from_le_bytes(bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
         });
 
         // Read memory values
         from_fn(|i| {
-            let rs_ptr = pointer_from_reg_bytes(record.rs_val[i]);
+            let rs_ptr = record.rs_val[i];
             debug_assert!(
                 (rs_ptr as usize) + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits)
             );
@@ -425,7 +427,7 @@ impl<
         debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
         let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
         const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        let rs_ptrs = record.rs_val.map(pointer_from_reg_bytes);
+        let rs_ptrs = record.rs_val;
         self.bitwise_lookup_chip.request_range(
             (rs_ptrs[0] >> MSL_SHIFT) << limb_shift_bits,
             if NUM_READS > 1 {
@@ -467,9 +469,7 @@ impl<
                 mem_helper.fill(record.prev_timestamp, timestamp_mm(), col.as_mut());
             });
 
-        cols.rs_val = record
-            .rs_val
-            .map(|val| from_fn(|i| F::from_u8(val[i])));
+        cols.rs_val = record.rs_val.map(|v| v.to_le_bytes().map(F::from_u8));
         cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));
 
         cols.from_state.timestamp = F::from_u32(record.timestamp);
