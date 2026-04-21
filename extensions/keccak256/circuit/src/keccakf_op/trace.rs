@@ -34,7 +34,7 @@ use openvm_stark_backend::{
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
 use crate::{
     keccakf_op::{columns::KeccakfOpCols, keccakf_postimage_bytes},
-    KECCAK_MEMORY_BLOCK, KECCAK_WIDTH_BYTES, KECCAK_WIDTH_MEM_OPS,
+    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_MEM_OPS,
 };
 
 #[derive(derive_new::new)]
@@ -155,15 +155,15 @@ where
         record.preimage_buffer_bytes.copy_from_slice(prestate);
         let poststate = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
         for (word_idx, (word, aux)) in poststate
-            .chunks_exact(KECCAK_MEMORY_BLOCK)
+            .chunks_exact(DEFAULT_BLOCK_SIZE)
             .zip(&mut record.buffer_word_aux)
             .enumerate()
         {
             // We don't need prev_data since we read it earlier
-            let (t_prev, _) = timed_write::<KECCAK_MEMORY_BLOCK>(
+            let (t_prev, _) = timed_write::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
                 RV64_MEMORY_AS,
-                buffer_ptr + (word_idx * KECCAK_MEMORY_BLOCK) as u32,
+                buffer_ptr + (word_idx * DEFAULT_BLOCK_SIZE) as u32,
                 word.try_into().unwrap(),
             );
             aux.prev_timestamp = t_prev;

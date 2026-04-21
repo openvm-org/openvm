@@ -21,7 +21,10 @@ use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{read_rv64_register, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::xorin::{columns::XorinVmCols, XorinVmExecutor, XorinVmFiller};
+use crate::{
+    xorin::{columns::XorinVmCols, XorinVmExecutor, XorinVmFiller},
+    KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS,
+};
 
 #[derive(Clone, Copy)]
 pub struct XorinVmMetadata {}
@@ -45,12 +48,13 @@ pub struct XorinVmRecordHeader {
     pub buffer: u32,
     pub input: u32,
     pub len: u32,
-    pub buffer_limbs: [u8; 136],
-    pub input_limbs: [u8; 136],
+    pub buffer_limbs: [u8; KECCAK_RATE_BYTES],
+    pub input_limbs: [u8; KECCAK_RATE_BYTES],
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
-    pub input_read_aux_cols: [MemoryReadAuxRecord; 17],
-    pub buffer_read_aux_cols: [MemoryReadAuxRecord; 17],
-    pub buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<8>; 17],
+    pub input_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
+    pub buffer_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
+    pub buffer_write_aux_cols:
+        [MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>; KECCAK_RATE_MEM_OPS],
 }
 
 pub struct XorinVmRecordMut<'a> {
@@ -103,11 +107,11 @@ where
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
         let len = read_rv64_register(guest_mem, c.as_canonical_u32()) as u32 as usize;
-        // Safety: length has to be multiple of 4
+        // Safety: length has to be a multiple of the memory block size.
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
-        debug_assert!(len.is_multiple_of(4));
-        let num_reads = len.div_ceil(8);
+        debug_assert!(len.is_multiple_of(DEFAULT_BLOCK_SIZE));
+        let num_reads = len.div_ceil(DEFAULT_BLOCK_SIZE);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because
         // XorinVmRecordLayout is a MultiRowLayout since get_num_rows() = 1, this will
@@ -154,47 +158,46 @@ where
 
         // read buffer in 8-byte blocks
         for idx in 0..num_reads {
-            let read = tracing_read::<8>(
+            let read = tracing_read::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
                 RV64_MEMORY_AS,
-                record.inner.buffer + (idx * 8) as u32,
+                record.inner.buffer + (idx * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.inner.buffer_read_aux_cols[idx].prev_timestamp,
             );
-            record.inner.buffer_limbs[8 * idx..8 * (idx + 1)].copy_from_slice(&read);
+            record.inner.buffer_limbs[DEFAULT_BLOCK_SIZE * idx..DEFAULT_BLOCK_SIZE * (idx + 1)]
+                .copy_from_slice(&read);
         }
 
         // read input in 8-byte blocks
         for idx in 0..num_reads {
-            let read = tracing_read::<8>(
+            let read = tracing_read::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
                 RV64_MEMORY_AS,
-                record.inner.input + (idx * 8) as u32,
+                record.inner.input + (idx * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.inner.input_read_aux_cols[idx].prev_timestamp,
             );
-            record.inner.input_limbs[8 * idx..8 * (idx + 1)].copy_from_slice(&read);
+            record.inner.input_limbs[DEFAULT_BLOCK_SIZE * idx..DEFAULT_BLOCK_SIZE * (idx + 1)]
+                .copy_from_slice(&read);
         }
 
-        let mut result = [0u8; 136];
+        let mut result = [0u8; KECCAK_RATE_BYTES];
 
         // execute xorin — only XOR the first `len` active bytes
-        // Padding bytes in boundary 8-byte blocks keep the original buffer value
         result[..len].copy_from_slice(&record.inner.buffer_limbs[..len]);
         for i in 0..len {
             result[i] ^= record.inner.input_limbs[i];
         }
-        // For the boundary block, fill remaining bytes with original buffer data
-        let bytes_covered = num_reads * 8;
-        result[len..bytes_covered]
-            .copy_from_slice(&record.inner.buffer_limbs[len..bytes_covered]);
+        let bytes_covered = num_reads * DEFAULT_BLOCK_SIZE;
+        result[len..bytes_covered].copy_from_slice(&record.inner.buffer_limbs[len..bytes_covered]);
 
         // write result in 8-byte blocks
         for idx in 0..num_reads {
-            let mut word: [u8; 8] = [0u8; 8];
-            word.copy_from_slice(&result[8 * idx..8 * (idx + 1)]);
+            let mut word = [0u8; DEFAULT_BLOCK_SIZE];
+            word.copy_from_slice(&result[DEFAULT_BLOCK_SIZE * idx..DEFAULT_BLOCK_SIZE * (idx + 1)]);
             tracing_write(
                 state.memory,
                 RV64_MEMORY_AS,
-                record.inner.buffer + (idx * 8) as u32,
+                record.inner.buffer + (idx * DEFAULT_BLOCK_SIZE) as u32,
                 word,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_timestamp,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_data,
@@ -236,16 +239,18 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.len_limb = F::from_u8(record.len as u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
 
-        for i in 0..(record.len / 4) {
+        for i in 0..(record.len as usize / DEFAULT_BLOCK_SIZE) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
         }
-        for i in (record.len / 4)..34 {
+        for i in
+            (record.len as usize / DEFAULT_BLOCK_SIZE)..(KECCAK_RATE_MEM_OPS)
+        {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
 
         let mut timestamp = record.timestamp;
         let record_len: usize = record.len as usize;
-        let num_reads: usize = record_len.div_ceil(8);
+        let num_reads: usize = record_len.div_ceil(DEFAULT_BLOCK_SIZE);
 
         for t in 0..3 {
             mem_helper.fill(
@@ -276,9 +281,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         }
 
         // Fill all bytes that are covered by active 8-byte memory blocks.
-        // For non-padding bytes, postimage = preimage XOR input.
-        // For padding bytes within an active block, postimage = preimage (identity).
-        let bytes_covered = num_reads * 8;
+        let bytes_covered = num_reads * DEFAULT_BLOCK_SIZE;
         for i in 0..record_len {
             trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
@@ -288,7 +291,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             let c_val = record.input_limbs[i] as u32;
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
         }
-        // Padding bytes within active blocks: postimage = preimage
         for i in record_len..bytes_covered {
             trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
@@ -306,11 +308,9 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        let msb_byte = |val: u32| -> u32 { (val >> (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))) & 0xFF };
-        let need_range_check = [
-            msb_byte(record.buffer),
-            msb_byte(record.input),
-        ];
+        let msb_byte =
+            |val: u32| -> u32 { (val >> (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))) & 0xFF };
+        let need_range_check = [msb_byte(record.buffer), msb_byte(record.input)];
 
         let limb_shift = 1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
 

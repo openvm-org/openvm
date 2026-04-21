@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
-use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_MEMORY_BLOCK, KECCAK_WIDTH_BYTES};
+use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_WIDTH_BYTES};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -157,7 +157,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let rd_ptr = pre_compute.a as u32;
     let buffer_ptr_reg: [u8; 8] = exec_state.vm_read(RV64_REGISTER_AS, rd_ptr);
     let buffer_ptr_u64 = u64::from_le_bytes(buffer_ptr_reg);
-    debug_assert_eq!(buffer_ptr_u64 >> 32, 0, "keccakf buffer pointer upper 4 bytes must be zero");
+    debug_assert_eq!(
+        buffer_ptr_u64 >> 32,
+        0,
+        "keccakf buffer pointer upper 4 bytes must be zero"
+    );
     let buffer_ptr = buffer_ptr_u64 as u32;
 
     let preimage: &[u8] =
@@ -167,10 +171,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     if IS_E1 {
         exec_state.vm_write(RV64_MEMORY_AS, buffer_ptr, &postimage);
     } else {
-        for (word_idx, word) in postimage.chunks_exact(KECCAK_MEMORY_BLOCK).enumerate() {
-            exec_state.vm_write::<u8, KECCAK_MEMORY_BLOCK>(
+        for (word_idx, word) in postimage.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
+            exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
                 RV64_MEMORY_AS,
-                buffer_ptr + (word_idx * KECCAK_MEMORY_BLOCK) as u32,
+                buffer_ptr + (word_idx * DEFAULT_BLOCK_SIZE) as u32,
                 word.try_into().unwrap(),
             );
         }

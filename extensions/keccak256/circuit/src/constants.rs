@@ -1,12 +1,9 @@
-// ==== VM-specific constants ====
-/// Number of bytes per keccak word for XOR chunking and padding logic.
-pub const KECCAK_WORD_SIZE: usize = 4;
-/// The number of 4-byte keccak words in the full keccakf state.
-pub const KECCAK_WIDTH_WORDS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
-/// Memory block size for memory bus interactions (must match DEFAULT_BLOCK_SIZE).
-pub const KECCAK_MEMORY_BLOCK: usize = 8;
+use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
+
 /// Number of memory operations for the full keccakf state (200 / 8 = 25).
-pub const KECCAK_WIDTH_MEM_OPS: usize = KECCAK_WIDTH_BYTES / KECCAK_MEMORY_BLOCK;
+pub const KECCAK_WIDTH_MEM_OPS: usize = KECCAK_WIDTH_BYTES / DEFAULT_BLOCK_SIZE;
+/// Number of memory operations for the keccak rate portion (136 / 8 = 17).
+pub const KECCAK_RATE_MEM_OPS: usize = KECCAK_RATE_BYTES / DEFAULT_BLOCK_SIZE;
 
 // ==== Do not change these constants! ====
 /// Total number of sponge bytes: number of rate bytes + number of capacity

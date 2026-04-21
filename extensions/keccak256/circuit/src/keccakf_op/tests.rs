@@ -1,5 +1,6 @@
 use std::{
     array::from_fn,
+    mem::size_of,
     sync::{Arc, Mutex},
 };
 
@@ -10,7 +11,7 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor, DEFAULT_BLOCK_SIZE,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -19,7 +20,11 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV64_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
@@ -34,7 +39,7 @@ use tiny_keccak::keccakf;
 use crate::{
     keccakf_op::{KeccakfExecutor, KeccakfOpAir, KeccakfOpChip},
     keccakf_perm::{KeccakfPermAir, KeccakfPermChip},
-    KECCAK_WIDTH_BYTES,
+    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S,
 };
 
 type F = BabyBear;
@@ -108,37 +113,57 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
     opcode: KeccakfOpcode,
 ) {
     const MAX_LEN: usize = KECCAK_WIDTH_BYTES;
+    const U64_NUM_BYTES: usize = size_of::<u64>();
     let rand_buffer = get_random_message(rng, MAX_LEN);
     let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rd = gen_pointer(rng, 8);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    tester.write(1, rd, (buffer_ptr as u64).to_le_bytes().map(F::from_u8));
+    tester.write(
+        RV64_REGISTER_AS as usize,
+        rd,
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
+    );
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
 
-    for i in 0..(MAX_LEN / 8) {
-        let buffer_chunk: [F; 8] = rand_buffer_arr_f[8 * i..8 * i + 8]
+    for i in 0..(MAX_LEN / DEFAULT_BLOCK_SIZE) {
+        let buffer_chunk: [F; DEFAULT_BLOCK_SIZE] = rand_buffer_arr_f
+            [DEFAULT_BLOCK_SIZE * i..DEFAULT_BLOCK_SIZE * (i + 1)]
             .try_into()
-            .expect("slice has length 8");
-        tester.write(2, buffer_ptr + 8 * i, buffer_chunk);
+            .expect("slice has correct length");
+        tester.write(
+            RV64_MEMORY_AS as usize,
+            buffer_ptr + DEFAULT_BLOCK_SIZE * i,
+            buffer_chunk,
+        );
     }
 
     tester.execute(
         executor,
         arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2]),
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [rd, 0, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
     );
 
     let mut output_buffer = [0u8; MAX_LEN];
 
-    for i in 0..(MAX_LEN / 8) {
-        let output_chunk: [F; 8] = tester.read(2, buffer_ptr + 8 * i);
+    for i in 0..(MAX_LEN / DEFAULT_BLOCK_SIZE) {
+        let output_chunk: [F; DEFAULT_BLOCK_SIZE] =
+            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + DEFAULT_BLOCK_SIZE * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
-        output_buffer[8 * i..8 * i + 8].copy_from_slice(&output_chunk);
+        output_buffer[DEFAULT_BLOCK_SIZE * i..DEFAULT_BLOCK_SIZE * (i + 1)]
+            .copy_from_slice(&output_chunk);
     }
-    let mut state: [u64; 25] =
-        from_fn(|i| u64::from_le_bytes(rand_buffer[8 * i..8 * i + 8].try_into().unwrap()));
+    let mut state: [u64; KECCAK_WIDTH_U64S] = from_fn(|i| {
+        u64::from_le_bytes(
+            rand_buffer[U64_NUM_BYTES * i..U64_NUM_BYTES * (i + 1)]
+                .try_into()
+                .unwrap(),
+        )
+    });
     keccakf(&mut state);
     let expected_out = state.iter().flat_map(|w| w.to_le_bytes()).collect_vec();
     assert_eq!(&output_buffer[..], &expected_out[..]);

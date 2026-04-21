@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor, DEFAULT_BLOCK_SIZE,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -12,13 +12,20 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV64_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use crate::xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller};
+use crate::{
+    xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
+    KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS,
+};
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
@@ -82,14 +89,14 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     opcode: XorinOpcode,
     buffer_length: Option<usize>,
 ) {
-    const MAX_LEN: usize = 136;
+    const MAX_LEN: usize = KECCAK_RATE_BYTES;
 
     let buffer_length = match buffer_length {
         Some(length) => length,
         None => MAX_LEN,
     };
 
-    assert!(buffer_length.is_multiple_of(4));
+    assert!(buffer_length.is_multiple_of(DEFAULT_BLOCK_SIZE));
 
     let rand_buffer = get_random_message(rng, MAX_LEN);
     let mut rand_buffer_arr = [0u8; MAX_LEN];
@@ -100,43 +107,72 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rand_input_arr.copy_from_slice(&rand_input);
 
     use openvm_circuit::arch::testing::memory::gen_pointer;
-    let rd = gen_pointer(rng, 8);
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    // Align buffer/input pointers to 8-byte blocks for memory bus compatibility
-    let num_blocks = buffer_length.div_ceil(8);
-    let aligned_len = num_blocks * 8;
+    // Align buffer/input pointers to DEFAULT_BLOCK_SIZE-byte blocks for memory bus compatibility
+    let num_blocks = buffer_length.div_ceil(DEFAULT_BLOCK_SIZE);
+    let aligned_len = num_blocks * DEFAULT_BLOCK_SIZE;
     let buffer_ptr = gen_pointer(rng, aligned_len);
     let input_ptr = gen_pointer(rng, aligned_len);
 
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
     let rand_input_arr_f = rand_input_arr.map(F::from_u8);
 
-    // Write memory in 8-byte blocks; for the last partial block, pad with zeros
+    // Write memory in DEFAULT_BLOCK_SIZE-byte blocks; for the last partial block, pad with zeros
     for i in 0..num_blocks {
-        let start = 8 * i;
-        let end = std::cmp::min(start + 8, MAX_LEN);
-        let mut buffer_chunk = [F::ZERO; 8];
+        let start = DEFAULT_BLOCK_SIZE * i;
+        let end = std::cmp::min(start + DEFAULT_BLOCK_SIZE, MAX_LEN);
+        let mut buffer_chunk = [F::ZERO; DEFAULT_BLOCK_SIZE];
         for (j, &v) in rand_buffer_arr_f[start..end].iter().enumerate() {
             buffer_chunk[j] = v;
         }
-        tester.write(2, buffer_ptr + 8 * i, buffer_chunk);
+        tester.write(
+            RV64_MEMORY_AS as usize,
+            buffer_ptr + DEFAULT_BLOCK_SIZE * i,
+            buffer_chunk,
+        );
 
-        let mut input_chunk = [F::ZERO; 8];
+        let mut input_chunk = [F::ZERO; DEFAULT_BLOCK_SIZE];
         for (j, &v) in rand_input_arr_f[start..end].iter().enumerate() {
             input_chunk[j] = v;
         }
-        tester.write(2, input_ptr + 8 * i, input_chunk);
+        tester.write(
+            RV64_MEMORY_AS as usize,
+            input_ptr + DEFAULT_BLOCK_SIZE * i,
+            input_chunk,
+        );
     }
 
-    tester.write(1, rd, (buffer_ptr as u64).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs1, (input_ptr as u64).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs2, (buffer_length as u64).to_le_bytes().map(F::from_u8));
+    tester.write(
+        RV64_REGISTER_AS as usize,
+        rd,
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
+    );
+    tester.write(
+        RV64_REGISTER_AS as usize,
+        rs1,
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
+    );
+    tester.write(
+        RV64_REGISTER_AS as usize,
+        rs2,
+        (buffer_length as u64).to_le_bytes().map(F::from_u8),
+    );
     tester.execute(
         executor,
         arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                rd,
+                rs1,
+                rs2,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        ),
     );
 
     let mut expected_output = [0u8; MAX_LEN];
@@ -147,9 +183,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut output_buffer = [F::from_u8(0); MAX_LEN];
 
     for i in 0..num_blocks {
-        let output_chunk: [F; 8] = tester.read(2, buffer_ptr + 8 * i);
-        let start = 8 * i;
-        let end = std::cmp::min(start + 8, MAX_LEN);
+        let output_chunk: [F; DEFAULT_BLOCK_SIZE] =
+            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + DEFAULT_BLOCK_SIZE * i);
+        let start = DEFAULT_BLOCK_SIZE * i;
+        let end = std::cmp::min(start + DEFAULT_BLOCK_SIZE, MAX_LEN);
         output_buffer[start..end].copy_from_slice(&output_chunk[..end - start]);
     }
 
@@ -167,7 +204,8 @@ fn xorin_chip_positive_tests() {
         let mut tester = VmChipTestBuilder::default();
         let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-        let buffer_length = Some(rng.random_range(1..=34) * 4);
+        let buffer_length =
+            Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * DEFAULT_BLOCK_SIZE);
 
         set_and_execute(
             &mut tester,
@@ -200,7 +238,8 @@ fn run_xorin_chip_negative_tests(
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-    let buffer_length = Some(rng.random_range(1..=34) * 4_usize);
+    let buffer_length =
+        Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * DEFAULT_BLOCK_SIZE);
 
     set_and_execute(
         &mut tester,

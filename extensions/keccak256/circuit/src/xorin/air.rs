@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -13,8 +13,7 @@ use openvm_circuit_primitives::{
     utils::{compose, not},
 };
 use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-    RV64_WORD_NUM_LIMBS,
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
@@ -26,8 +25,9 @@ use openvm_stark_backend::{
 };
 
 use crate::{
+    expand_rv64_limbs,
     xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS},
-    KECCAK_MEMORY_BLOCK, KECCAK_RATE_BYTES, KECCAK_WORD_SIZE,
+    KECCAK_RATE_MEM_OPS,
 };
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -102,29 +102,26 @@ impl XorinVmAir {
 
         let mut timestamp_change = AB::Expr::from_u32(3);
         let mut not_padding_sum = AB::Expr::ZERO;
+        let is_padding_bytes = local.sponge.is_padding_bytes;
 
-        for is_padding in local.sponge.is_padding_bytes {
-            not_padding_sum += not(is_padding);
+        // Combined loop: assert each is_padding_bytes[i] is boolean, check monotonicity
+        // (is_padding_bytes is of the form 0...0111...1), and accumulate counts.
+        for (i, &is_padding) in is_padding_bytes.iter().enumerate() {
             builder.assert_bool(is_padding);
+            not_padding_sum += not(is_padding);
+            if i > 0 {
+                builder
+                    .when(is_enabled)
+                    .assert_bool(is_padding - is_padding_bytes[i - 1]);
+            }
+            // Each 8-byte memory block has 3 ops (buffer read + input read + buffer write).
+            timestamp_change += AB::Expr::from_u32(3) * not(is_padding);
         }
 
-        // Each 8-byte memory block has 3 ops (buffer read + input read + buffer write).
-        // A block is active when is_padding_bytes[2*i] == 0 (padding is contiguous from end).
-        for i in 0..(KECCAK_RATE_BYTES / KECCAK_MEMORY_BLOCK) {
-            timestamp_change +=
-                AB::Expr::from_u32(3) * not(local.sponge.is_padding_bytes[2 * i]);
-        }
-
-        not_padding_sum *= AB::Expr::from_u32(KECCAK_WORD_SIZE as u32);
+        not_padding_sum *= AB::Expr::from_usize(DEFAULT_BLOCK_SIZE);
         builder
             .when(is_enabled)
             .assert_eq(not_padding_sum, instruction.len);
-        // check that is_padding_bytes is of the form 0...0111...1
-        for i in 0..33 {
-            builder.when(is_enabled).assert_bool(
-                local.sponge.is_padding_bytes[i + 1] - local.sponge.is_padding_bytes[i],
-            );
-        }
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -144,26 +141,22 @@ impl XorinVmAir {
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
         // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let expand_limbs = |limbs: &[AB::Var; RV64_WORD_NUM_LIMBS]| -> [AB::Expr; RV64_REGISTER_NUM_LIMBS] {
-            std::array::from_fn(|i| {
-                if i < RV64_WORD_NUM_LIMBS {
-                    limbs[i].into()
-                } else {
-                    AB::Expr::ZERO
-                }
-            })
-        };
-        let buffer_ptr_data = expand_limbs(&instruction.buffer_ptr_limbs);
-        let input_ptr_data = expand_limbs(&instruction.input_ptr_limbs);
-        let len_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i == 0 { instruction.len_limb.into() }
-            else { AB::Expr::ZERO }
+        let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
+            expand_rv64_limbs(&instruction.buffer_ptr_limbs);
+        let input_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
+            expand_rv64_limbs(&instruction.input_ptr_limbs);
+        let len_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
+            if i == 0 {
+                instruction.len_limb.into()
+            } else {
+                AB::Expr::ZERO
+            }
         });
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
             [buffer_reg_ptr, input_reg_ptr, len_reg_ptr],
-            [buffer_ptr_data, input_ptr_data, len_data],
+            [buffer_ptr_limbs, input_ptr_limbs, len_limbs],
             register_aux
         ) {
             self.memory_bridge
@@ -178,16 +171,16 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
-        // SAFETY: this approach only works when self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)
-        // because we are only range checking the MSB of the lower address bytes
+        // SAFETY: this approach only works when self.ptr_max_bits >= RV64_CELL_BITS *
+        // (RV64_WORD_NUM_LIMBS - 1) because we are only range checking the MSB of the lower
+        // address bytes
         let need_range_check = [
             instruction.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
             instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
         ];
 
-        let limb_shift = AB::F::from_usize(
-            1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits));
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
@@ -216,10 +209,10 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_read_timestamp: AB::Expr,
-        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_BYTES
-             / KECCAK_MEMORY_BLOCK],
-        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_BYTES
-             / KECCAK_MEMORY_BLOCK],
+        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>;
+             KECCAK_RATE_MEM_OPS],
+        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>;
+             KECCAK_RATE_MEM_OPS],
     ) -> AB::Expr {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
@@ -230,15 +223,13 @@ impl XorinVmAir {
             local
                 .sponge
                 .preimage_buffer_bytes
-                .chunks_exact(KECCAK_MEMORY_BLOCK),
+                .chunks_exact(DEFAULT_BLOCK_SIZE),
             buffer_bytes_read_aux_cols
         )
         .enumerate()
         {
-            let ptr =
-                local.instruction.buffer_ptr + AB::F::from_usize(i * KECCAK_MEMORY_BLOCK);
-            // Block is active when its first 4-byte word is not padding
-            let is_padding = local.sponge.is_padding_bytes[2 * i];
+            let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * DEFAULT_BLOCK_SIZE);
+            let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
@@ -265,14 +256,13 @@ impl XorinVmAir {
         // Constrain read of input_bytes in 8-byte blocks
         // Timestamp increases by at most (136/8) = 17
         for (i, (input, mem_aux)) in izip!(
-            local.sponge.input_bytes.chunks_exact(KECCAK_MEMORY_BLOCK),
+            local.sponge.input_bytes.chunks_exact(DEFAULT_BLOCK_SIZE),
             input_bytes_read_aux_cols
         )
         .enumerate()
         {
-            let ptr =
-                local.instruction.input_ptr + AB::F::from_usize(i * KECCAK_MEMORY_BLOCK);
-            let is_padding = local.sponge.is_padding_bytes[2 * i];
+            let ptr = local.instruction.input_ptr + AB::F::from_usize(i * DEFAULT_BLOCK_SIZE);
+            let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
@@ -312,9 +302,9 @@ impl XorinVmAir {
         let is_enabled = local.instruction.is_enabled;
 
         for (x_chunks, y_chunks, x_xor_y_chunks, is_padding) in izip!(
-            buffer_bytes.chunks_exact(KECCAK_WORD_SIZE),
-            input_bytes.chunks_exact(KECCAK_WORD_SIZE),
-            result_bytes.chunks_exact(KECCAK_WORD_SIZE),
+            buffer_bytes.chunks_exact(DEFAULT_BLOCK_SIZE),
+            input_bytes.chunks_exact(DEFAULT_BLOCK_SIZE),
+            result_bytes.chunks_exact(DEFAULT_BLOCK_SIZE),
             padding_bytes
         ) {
             let should_send = is_enabled * not(is_padding);
@@ -322,21 +312,6 @@ impl XorinVmAir {
                 self.bitwise_lookup_bus
                     .send_xor(*x, *y, *x_xor_y)
                     .eval(builder, should_send.clone());
-            }
-        }
-
-        // Constrain that padding bytes in postimage equal preimage.
-        // This is needed because 8-byte memory writes at block boundaries include
-        // padding bytes that must remain unchanged.
-        for (preimage_chunk, postimage_chunk, &is_padding) in izip!(
-            buffer_bytes.chunks_exact(KECCAK_WORD_SIZE),
-            result_bytes.chunks_exact(KECCAK_WORD_SIZE),
-            &padding_bytes
-        ) {
-            for (pre, post) in izip!(preimage_chunk, postimage_chunk) {
-                builder
-                    .when(is_enabled * is_padding)
-                    .assert_eq(*pre, *post);
             }
         }
     }
@@ -347,8 +322,8 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: &[MemoryWriteAuxCols<AB::Var, KECCAK_MEMORY_BLOCK>; KECCAK_RATE_BYTES
-             / KECCAK_MEMORY_BLOCK],
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, DEFAULT_BLOCK_SIZE>;
+             KECCAK_RATE_MEM_OPS],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
@@ -358,15 +333,14 @@ impl XorinVmAir {
             local
                 .sponge
                 .postimage_buffer_bytes
-                .chunks_exact(KECCAK_MEMORY_BLOCK),
+                .chunks_exact(DEFAULT_BLOCK_SIZE),
             mem_aux
         )
         .enumerate()
         {
-            let is_padding = local.sponge.is_padding_bytes[2 * i];
+            let is_padding = local.sponge.is_padding_bytes[i];
             let should_write = is_enabled * not(is_padding);
-            let ptr =
-                local.instruction.buffer_ptr + AB::F::from_usize(i * KECCAK_MEMORY_BLOCK);
+            let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * DEFAULT_BLOCK_SIZE);
 
             self.memory_bridge
                 .write(

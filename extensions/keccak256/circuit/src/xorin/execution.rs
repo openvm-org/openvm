@@ -17,7 +17,6 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
-use crate::KECCAK_MEMORY_BLOCK;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -163,50 +162,63 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let buffer_u64 = u64::from_le_bytes(buffer);
     let input_u64 = u64::from_le_bytes(input);
     let length_u64 = u64::from_le_bytes(length);
-    debug_assert_eq!(buffer_u64 >> 32, 0, "xorin buffer pointer upper 4 bytes must be zero");
-    debug_assert_eq!(input_u64 >> 32, 0, "xorin input pointer upper 4 bytes must be zero");
-    debug_assert_eq!(length_u64 >> 32, 0, "xorin length upper 4 bytes must be zero");
+    debug_assert_eq!(
+        buffer_u64 >> 32,
+        0,
+        "xorin buffer pointer upper 4 bytes must be zero"
+    );
+    debug_assert_eq!(
+        input_u64 >> 32,
+        0,
+        "xorin input pointer upper 4 bytes must be zero"
+    );
+    debug_assert_eq!(
+        length_u64 >> 32,
+        0,
+        "xorin length upper 4 bytes must be zero"
+    );
     let buffer_u32 = buffer_u64 as u32;
     let input_u32 = input_u64 as u32;
     let length_u32 = length_u64 as u32;
+    debug_assert!(
+        (length_u32 as usize).is_multiple_of(DEFAULT_BLOCK_SIZE),
+        "xorin length must be {}-byte aligned",
+        DEFAULT_BLOCK_SIZE
+    );
 
     // SAFETY: RV64_MEMORY_AS is memory address space of type u8
-    let num_reads = (length_u32 as usize).div_ceil(KECCAK_MEMORY_BLOCK);
+    let num_reads = (length_u32 as usize).div_ceil(DEFAULT_BLOCK_SIZE);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_MEMORY_BLOCK>(
+            exec_state.vm_read::<u8, DEFAULT_BLOCK_SIZE>(
                 RV64_MEMORY_AS,
-                buffer_u32 + (i * KECCAK_MEMORY_BLOCK) as u32,
+                buffer_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
             )
         })
         .collect();
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_MEMORY_BLOCK>(
+            exec_state.vm_read::<u8, DEFAULT_BLOCK_SIZE>(
                 RV64_MEMORY_AS,
-                input_u32 + (i * KECCAK_MEMORY_BLOCK) as u32,
+                input_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
             )
         })
         .collect();
 
     let mut output_bytes = buffer_bytes;
     // Only XOR the active bytes (first length_u32 bytes).
-    // Padding bytes in boundary 8-byte blocks remain unchanged.
     for i in 0..(length_u32 as usize) {
         output_bytes[i] ^= input_bytes[i];
     }
 
     // Write XOR result back to the buffer memory in 8-byte blocks.
-    // Note: this means output_bytes length is a multiple of KECCAK_MEMORY_BLOCK
-    for (i, chunk) in output_bytes
-        .chunks_exact(KECCAK_MEMORY_BLOCK)
-        .enumerate()
-    {
-        let chunk: [u8; KECCAK_MEMORY_BLOCK] = chunk.try_into().unwrap();
-        exec_state.vm_write::<u8, KECCAK_MEMORY_BLOCK>(
+    // Note: this means output_bytes length is a multiple of DEFAULT_BLOCK_SIZE
+    for (i, chunk) in output_bytes.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
+        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
+        exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
             RV64_MEMORY_AS,
-            buffer_u32 + (i * KECCAK_MEMORY_BLOCK) as u32,
+            buffer_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
             &chunk,
         );
     }

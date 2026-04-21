@@ -18,7 +18,8 @@ pub struct KeccakfOpCols<T> {
     /// The `rd` register holds the value of `buffer_ptr`.
     pub rd_ptr: T,
     /// `buffer_ptr <- [rd_ptr:8]_1`.
-    /// Limbs of the pointer to address space 2 `buffer`.
+    /// Low 4 bytes of the 8-byte `rd` register, interpreted as the pointer to address space 2
+    /// `buffer`.
     pub buffer_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     /// The preimage state, to be permuted in the `keccakf` operation.
     pub preimage: [T; KECCAK_WIDTH_BYTES],
