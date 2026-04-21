@@ -235,7 +235,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             local.instruction.dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
             local.instruction.state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
             local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1], /* needs_range_check must have even length */
         ];
         for pair in needs_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus

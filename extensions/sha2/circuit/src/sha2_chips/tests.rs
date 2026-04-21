@@ -17,7 +17,11 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV64_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::{
@@ -128,13 +132,13 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
     message: Option<&[u8]>,
     prev_state: Option<&[u8]>,
 ) {
-    let rd = gen_pointer(rng, 8);
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let dst_ptr = gen_pointer(rng, 8);
-    let state_ptr = gen_pointer(rng, 8);
-    let input_ptr = gen_pointer(rng, 8);
+    let dst_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let input_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     tester.write(1, rd, (dst_ptr as u64).to_le_bytes().map(F::from_u8));
     tester.write(1, rs1, (state_ptr as u64).to_le_bytes().map(F::from_u8));
     tester.write(1, rs2, (input_ptr as u64).to_le_bytes().map(F::from_u8));
@@ -233,13 +237,13 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let rd = gen_pointer(rng, 8);
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    let state_ptr = gen_pointer(rng, 8);
+    let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let dst_ptr = state_ptr;
-    let input_ptr = gen_pointer(rng, 8);
+    let input_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     tester.write(1, rd, (dst_ptr as u64).to_le_bytes().map(F::from_u8));
     tester.write(1, rs1, (state_ptr as u64).to_le_bytes().map(F::from_u8));
     tester.write(1, rs2, (input_ptr as u64).to_le_bytes().map(F::from_u8));
