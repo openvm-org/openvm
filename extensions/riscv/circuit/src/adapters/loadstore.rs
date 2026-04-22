@@ -84,9 +84,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadStoreAdapt
 pub struct Rv64LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
-    /// Low 4 bytes of rs1. rs1 is a pointer-valued register, so the upper 4 bytes
-    /// are known to be zero and are not materialized as columns; they are hardcoded
-    /// to zero in the memory bus interaction.
     pub rs1_data: [T; RV64_WORD_NUM_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
@@ -162,9 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_rs2_ptr);
 
-        // read rs1. rs1 is pointer-valued, so the upper 4 bytes of the 8-byte RV64 register
-        // are known to be zero and we hardcode them in the memory bus interaction rather than
-        // materializing them as constrained-to-zero columns.
+        // read rs1
         let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 local_cols.rs1_data[i].into()
@@ -568,7 +563,6 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
             adapter_row.rs1_aux_cols.as_mut(),
         );
 
-        // Only the low 4 bytes of rs1 are materialized; upper 4 bytes are known to be zero.
         adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
 
