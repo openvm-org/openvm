@@ -37,14 +37,14 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
+use crate::helpers::{compose_ptr, pad_reg_val, tracing_read_reg_ptr};
+
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
 /// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap,
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 /// * Writes are to 64-bit register rd (8 bytes).
-/// * Registers are 8 bytes (RV64). Only the low 4 bytes encode a pointer; the high 4 bytes are
-///   hardcoded to zero in the memory bus interaction and not materialized in the trace.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct Rv64IsEqualModAdapterCols<
@@ -129,30 +129,21 @@ impl<
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs. We only materialize the low 4 bytes (the pointer); the
-        // upper 4 bytes of the 8-byte register value are hardcoded to zero in the memory bus
-        // interaction, which enforces that the stored register is < 2^32 without any extra
-        // explicit assertion.
+        // Read register values for rs.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
-            let full_val: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = from_fn(|i| {
-                if i < RV64_WORD_NUM_LIMBS {
-                    val[i].into()
-                } else {
-                    AB::Expr::ZERO
-                }
-            });
             self.memory_bridge
-                .read(MemoryAddress::new(d, ptr), full_val, timestamp_pp(), aux)
+                .read(
+                    MemoryAddress::new(d, ptr),
+                    pad_reg_val::<AB>(val),
+                    timestamp_pp(),
+                    aux,
+                )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
         // Compose the 4 materialized bytes of each register value into a single field element
         // used as the heap base address.
-        let rs_val_f = cols.rs_val.map(|decomp| {
-            decomp.iter().rev().fold(AB::Expr::ZERO, |acc, &limb| {
-                acc * AB::Expr::from_usize(1 << RV64_CELL_BITS) + limb
-            })
-        });
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose_ptr);
 
         let need_range_check: [_; 2] = from_fn(|i| {
             if i < NUM_READS {
@@ -246,8 +237,6 @@ pub struct Rv64IsEqualModAdapterRecord<
     pub timestamp: u32,
 
     pub rs_ptr: [u32; NUM_READS],
-    // Only the low 32 bits (pointer) of each register are recorded; upper bytes are constrained
-    // to zero via the memory bus interaction.
     pub rs_val: [u32; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
     pub heap_read_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
@@ -333,23 +322,14 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
-        // Read register values. The register is 8 bytes, but only the low 4 (the pointer) are
-        // stored; the upper 4 bytes must be zero (enforced at proving time by the memory bus).
+        // Read register values.
         record.rs_val = from_fn(|i| {
             record.rs_ptr[i] = if i == 0 { b } else { c }.as_canonical_u32();
-
-            let bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
+            tracing_read_reg_ptr(
                 memory,
-                RV64_REGISTER_AS,
                 record.rs_ptr[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-            );
-            debug_assert_eq!(
-                bytes[RV64_WORD_NUM_LIMBS..],
-                [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-                "upper 4 bytes of rs register must be zero"
-            );
-            u32::from_le_bytes(bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
+            )
         });
 
         // Read memory values

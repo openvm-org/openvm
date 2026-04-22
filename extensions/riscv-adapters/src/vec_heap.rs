@@ -29,14 +29,14 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
-use openvm_riscv_circuit::adapters::{
-    tracing_read, tracing_write, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-};
+use openvm_riscv_circuit::adapters::{tracing_read, tracing_write, RV64_CELL_BITS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
+
+use crate::helpers::{compose_ptr, pad_reg_val, tracing_read_reg_ptr};
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -45,8 +45,6 @@ use openvm_stark_backend::{
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 /// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
 ///   heap, starting from the address in `rd`.
-/// * Registers are 8 bytes (RV64). Only the low 4 bytes encode a pointer; the high 4 bytes are
-///   hardcoded to zero in the memory bus interaction and not materialized in the trace.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct Rv64VecHeapAdapterCols<
@@ -150,35 +148,27 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs, rd. We only materialize the low 4 bytes (the pointer);
-        // the upper 4 bytes of the 8-byte register value are hardcoded to zero in the memory bus
-        // interaction, which enforces that the stored register is < 2^32 without any extra
-        // explicit assertion.
+        // Read register values for rs, rd
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux).chain(once((
             cols.rd_ptr,
             cols.rd_val,
             &cols.rd_read_aux,
         ))) {
-            let full_val: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = from_fn(|i| {
-                if i < RV64_WORD_NUM_LIMBS {
-                    val[i].into()
-                } else {
-                    AB::Expr::ZERO
-                }
-            });
             self.memory_bridge
                 .read(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
-                    full_val,
+                    pad_reg_val::<AB>(val),
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Range-check the most-significant materialized byte (index 3) to constrain the pointer
-        // < 2^address_bits. Combined with the zero padding on bytes 4..8 in the memory bus
-        // interaction, this ensures the full 64-bit register value fits in address_bits.
+        // We constrain the highest limb of each materialized pointer (limb 3, i.e. the most
+        // significant of the low 4 bytes) to be less than 2^(addr_bits - RV64_CELL_BITS * 3).
+        // Combined with the zero padding on bytes 4..8 in the memory bus interaction above and
+        // the memory argument, this ensures that every heap address accessed below is less than
+        // 2^addr_bits without any extra explicit assertion.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
@@ -186,9 +176,14 @@ impl<
             .map(|val| val[RV64_WORD_NUM_LIMBS - 1])
             .collect();
 
+        // Range checks constrain to RV64_CELL_BITS bits, so we need to shift the limbs to
+        // constrain the correct amount of bits
         let limb_shift =
             AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
+        // Note: since limbs are read from memory we already know that limb[i] < 2^RV64_CELL_BITS
+        //       thus range checking limb[i] * shift < 2^RV64_CELL_BITS, gives us that
+        //       limb[i] < 2^(addr_bits - (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)))
         for pair in need_range_check.chunks_exact(2) {
             self.bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
@@ -197,15 +192,6 @@ impl<
 
         // Compose the 4 materialized bytes of each register value into a single field element
         // used as a memory address.
-        let compose_ptr = |v: [AB::Var; RV64_WORD_NUM_LIMBS]| -> AB::Expr {
-            let mut acc = AB::Expr::ZERO;
-            let mut mult = AB::Expr::ONE;
-            for limb in v.iter() {
-                acc += (*limb) * mult.clone();
-                mult *= AB::Expr::from_u32(1 << RV64_CELL_BITS);
-            }
-            acc
-        };
         let rd_val_f: AB::Expr = compose_ptr(cols.rd_val);
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose_ptr);
 
@@ -291,8 +277,6 @@ pub struct Rv64VecHeapAdapterRecord<
     pub rs_ptrs: [u32; NUM_READS],
     pub rd_ptr: u32,
 
-    // Only the low 32 bits (pointer) of each register are recorded; upper bytes are constrained
-    // to zero via the memory bus interaction.
     pub rs_vals: [u32; NUM_READS],
     pub rd_val: u32,
 
@@ -383,37 +367,22 @@ impl<
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
-        // Read register values. Each register is 8 bytes, but only the low 4 (the pointer) are
-        // stored; the upper 4 bytes must be zero (enforced at proving time by the memory bus).
+        // Read register values
         record.rs_vals = from_fn(|i| {
             record.rs_ptrs[i] = if i == 0 { b } else { c }.as_canonical_u32();
-            let bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
+            tracing_read_reg_ptr(
                 memory,
-                RV64_REGISTER_AS,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-            );
-            debug_assert_eq!(
-                bytes[RV64_WORD_NUM_LIMBS..],
-                [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-                "upper 4 bytes of rs register must be zero"
-            );
-            u32::from_le_bytes(bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
+            )
         });
 
         record.rd_ptr = a.as_canonical_u32();
-        let rd_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
+        record.rd_val = tracing_read_reg_ptr(
             memory,
-            RV64_REGISTER_AS,
-            a.as_canonical_u32(),
+            record.rd_ptr,
             &mut record.rd_read_aux.prev_timestamp,
         );
-        debug_assert_eq!(
-            rd_bytes[RV64_WORD_NUM_LIMBS..],
-            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-            "upper 4 bytes of rd register must be zero"
-        );
-        record.rd_val = u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
         // Read memory values
         from_fn(|i| {
