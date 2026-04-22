@@ -1,6 +1,6 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
-use openvm_algebra_circuit::Rv32ModularHybridBuilder;
+use openvm_algebra_circuit::Rv64ModularHybridBuilder;
 use openvm_circuit::{
     arch::{DEFAULT_BLOCK_SIZE, *},
     system::{
@@ -20,11 +20,11 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
+use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv32WeierstrassConfig, WeierstrassAir,
+    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
     WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_48,
 };
@@ -50,7 +50,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
             self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
@@ -71,11 +71,11 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
             .get_record_seeker::<EccRecord<NUM_READS, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
                 FieldExpressionMetadata<
                     F,
-                    Rv32VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+                    Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
                 >,
             >>();
         let adapter_width =
-            Rv32VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
+            Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
@@ -171,21 +171,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
     }
 }
 
-/// This builder will do tracegen for the RV32IM extensions on GPU but the modular and ecc
+/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and ecc
 /// extensions on CPU.
 #[derive(Clone)]
-pub struct Rv32WeierstrassHybridBuilder;
+pub struct Rv64WeierstrassHybridBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
-    type VmConfig = Rv32WeierstrassConfig;
+impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
+    type VmConfig = Rv64WeierstrassConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Rv32WeierstrassConfig,
+        config: &Rv64WeierstrassConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -193,7 +193,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv32ModularHybridBuilder,
+            &Rv64ModularHybridBuilder,
             &config.modular,
             circuit,
             device_ctx,
