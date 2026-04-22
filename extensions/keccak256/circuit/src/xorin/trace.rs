@@ -183,8 +183,8 @@ where
 
         // execute xorin
         result[..len].copy_from_slice(&record.inner.buffer_limbs[..len]);
-        for i in 0..len {
-            result[i] ^= record.inner.input_limbs[i];
+        for (i, byte) in result.iter_mut().enumerate().take(len) {
+            *byte ^= record.inner.input_limbs[i];
         }
         let bytes_covered = num_reads * DEFAULT_BLOCK_SIZE;
         result[len..bytes_covered].copy_from_slice(&record.inner.buffer_limbs[len..bytes_covered]);
@@ -239,10 +239,10 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
 
         for i in 0..(record.len as usize / DEFAULT_BLOCK_SIZE) {
-            trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
+            trace_row.sponge.is_padding_bytes[i] = F::ZERO;
         }
         for i in (record.len as usize / DEFAULT_BLOCK_SIZE)..(KECCAK_RATE_MEM_OPS) {
-            trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
+            trace_row.sponge.is_padding_bytes[i] = F::ONE;
         }
 
         let mut timestamp = record.timestamp;

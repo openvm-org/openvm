@@ -18,7 +18,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use cuda::*;
-        pub use cuda::Rv32PairingGpuBuilder as Rv64PairingBuilder;
+        pub use cuda::Rv64PairingGpuBuilder as Rv64PairingBuilder;
     } else {
         pub use config::Rv64PairingCpuBuilder as Rv64PairingBuilder;
     }
