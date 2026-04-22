@@ -310,7 +310,7 @@ pub struct Rv64LoadStoreAdapterRecord {
     pub from_timestamp: u32,
 
     pub rs1_ptr: u32,
-    pub rs1_val: u64,
+    pub rs1_val: u32,
     pub rs1_aux_record: MemoryReadAuxRecord,
 
     pub rd_rs2_ptr: u32,
@@ -382,18 +382,19 @@ where
         );
 
         record.rs1_ptr = b.as_canonical_u32();
-        record.rs1_val = u64::from_le_bytes(tracing_read(
+        let rs1_u64 = u64::from_le_bytes(tracing_read(
             memory,
             RV64_REGISTER_AS,
             record.rs1_ptr,
             &mut record.rs1_aux_record.prev_timestamp,
         ));
         assert_eq!(
-            record.rs1_val >> 32,
+            rs1_u64 >> 32,
             0,
             "rs1 upper 4 bytes must be zero for load/store adapter"
         );
-        let rs1_val = record.rs1_val as u32;
+        record.rs1_val = rs1_u64 as u32;
+        let rs1_val = record.rs1_val;
 
         record.imm = c.as_canonical_u32() as u16;
         record.imm_sign = g.is_one();
@@ -480,7 +481,7 @@ where
             record.write_prev_timestamp = match local_opcode {
                 STORED | STOREW | STOREH | STOREB => {
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
-                    let ptr = (record.rs1_val as u32).wrapping_add(imm_extended)
+                    let ptr = record.rs1_val.wrapping_add(imm_extended)
                         & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
 
                     if record.mem_as == DEFERRAL_AS as u8 {
@@ -536,7 +537,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         }
 
         adapter_row.mem_as = F::from_u8(record.mem_as);
-        let ptr = (record.rs1_val as u32)
+        let ptr = record
+            .rs1_val
             .wrapping_add(record.imm as u32 + record.imm_sign as u32 * 0xffff0000);
 
         let ptr_limbs = [ptr & 0xffff, ptr >> 16];
@@ -567,7 +569,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         );
 
         // Only the low 4 bytes of rs1 are materialized; upper 4 bytes are known to be zero.
-        adapter_row.rs1_data = (record.rs1_val as u32).to_le_bytes().map(F::from_u8);
+        adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
 
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
