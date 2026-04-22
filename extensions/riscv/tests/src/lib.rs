@@ -290,17 +290,10 @@ mod tests {
         }
     }
 
-    // TODO(rv64-std): re-enable when guest is updated to no_std
-    #[ignore]
     #[test]
     fn test_hashmap() -> Result<()> {
         let config = test_rv64im_config();
-        let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
-            "hashmap",
-            ["std"],
-            &config,
-        )?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "hashmap", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
