@@ -22,7 +22,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
@@ -99,11 +99,11 @@ impl WeierstrassExtension {
 )]
 pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeExecutor<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>),
-    EcDoubleRv32_32(EcDoubleExecutor<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>),
+    EcAddNeRv64_32(EcAddNeExecutor<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>),
+    EcDoubleRv64_32(EcDoubleExecutor<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeExecutor<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>),
-    EcDoubleRv32_48(EcDoubleExecutor<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>),
+    EcAddNeRv64_48(EcAddNeExecutor<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>),
+    EcDoubleRv64_48(EcDoubleExecutor<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
@@ -118,7 +118,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
-                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
+                Rv64WeierstrassOpcode::CLASS_OFFSET + i * Rv64WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {
@@ -135,9 +135,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    WeierstrassExtensionExecutor::EcAddNeRv64_32(addne),
+                    ((Rv64WeierstrassOpcode::EC_ADD_NE as usize)
+                        ..=(Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -150,9 +150,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    WeierstrassExtensionExecutor::EcDoubleRv64_32(double),
+                    ((Rv64WeierstrassOpcode::EC_DOUBLE as usize)
+                        ..=(Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
@@ -169,9 +169,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_48(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    WeierstrassExtensionExecutor::EcAddNeRv64_48(addne),
+                    ((Rv64WeierstrassOpcode::EC_ADD_NE as usize)
+                        ..=(Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -184,9 +184,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    WeierstrassExtensionExecutor::EcDoubleRv64_48(double),
+                    ((Rv64WeierstrassOpcode::EC_DOUBLE as usize)
+                        ..=(Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
@@ -224,7 +224,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
         };
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
-                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
+                Rv64WeierstrassOpcode::CLASS_OFFSET + i * Rv64WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {

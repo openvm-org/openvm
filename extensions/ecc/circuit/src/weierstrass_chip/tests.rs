@@ -16,10 +16,10 @@ use openvm_circuit_primitives::{
         SharedBitwiseOperationLookupChip,
     },
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -118,12 +118,12 @@ mod ec_addne_tests {
     ) -> (
         EcAddneHarness<BLOCKS, BLOCK_SIZE>,
         (
-            BitwiseOperationLookupAir<RV32_CELL_BITS>,
-            SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+            BitwiseOperationLookupAir<RV64_CELL_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
         ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -179,7 +179,7 @@ mod ec_addne_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -241,7 +241,7 @@ mod ec_addne_tests {
                 BigUint::one(),
                 BigUint::one(),
                 BigUint::one(),
-                Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
             )
         } else if let Some((x1, y1)) = p1 {
             let (x2, y2) = p2.unwrap();
@@ -250,36 +250,36 @@ mod ec_addne_tests {
             let x2 = x2 % modulus;
             let y2 = y2 % modulus;
             if rng.random_bool(0.5) {
-                (x1, y1, x2, y2, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+                (x1, y1, x2, y2, Rv64WeierstrassOpcode::EC_ADD_NE as usize)
             } else {
-                (x2, y2, x1, y1, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+                (x2, y2, x1, y1, Rv64WeierstrassOpcode::EC_ADD_NE as usize)
             }
         } else {
             panic!("Generating random inputs generically is harder because the input points need to be on the curve.");
         };
 
-        let ptr_as = RV32_REGISTER_AS as usize;
-        let data_as = RV32_MEMORY_AS as usize;
+        let ptr_as = RV64_REGISTER_AS as usize;
+        let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-        let rs2_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-        let p1_base_addr = gen_pointer(rng, BLOCK_SIZE) as u32;
-        let p2_base_addr = gen_pointer(rng, BLOCK_SIZE) as u32;
-        let result_base_addr = gen_pointer(rng, BLOCK_SIZE) as u32;
+        let p1_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
+        let p2_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
+        let result_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
 
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+        tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
             p1_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+        tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs2_ptr,
             p2_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+        tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
             result_base_addr.to_le_bytes().map(F::from_u8),
@@ -311,7 +311,7 @@ mod ec_addne_tests {
 
             tester.write::<BLOCK_SIZE>(
                 data_as,
-                (p1_base_addr + NUM_LIMBS as u32) as usize + i,
+                (p1_base_addr + NUM_LIMBS as u64) as usize + i,
                 y1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
             );
 
@@ -323,7 +323,7 @@ mod ec_addne_tests {
 
             tester.write::<BLOCK_SIZE>(
                 data_as,
-                (p2_base_addr + NUM_LIMBS as u32) as usize + i,
+                (p2_base_addr + NUM_LIMBS as u64) as usize + i,
                 y2_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
             );
         }
@@ -402,7 +402,7 @@ mod ec_addne_tests {
     #[test]
     fn test_ec_addne_32limb() {
         run_ec_addne_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
     }
@@ -410,7 +410,7 @@ mod ec_addne_tests {
     #[test]
     fn test_ec_addne_48limb() {
         run_ec_addne_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
     }
@@ -491,7 +491,7 @@ mod ec_addne_tests {
     #[test]
     fn test_weierstrass_addne_cuda_2x32() {
         run_cuda_ec_addne::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
     }
@@ -500,7 +500,7 @@ mod ec_addne_tests {
     #[test]
     fn test_weierstrass_addne_cuda_6x16() {
         run_cuda_ec_addne::<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
     }
@@ -523,7 +523,7 @@ mod ec_addne_tests {
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
         );
 
         let (p1_x, p1_y) = SampleEcPoints[0].clone();
@@ -565,12 +565,12 @@ mod ec_double_tests {
     ) -> (
         EcDoubleHarness<BLOCKS, BLOCK_SIZE>,
         (
-            BitwiseOperationLookupAir<RV32_CELL_BITS>,
-            SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+            BitwiseOperationLookupAir<RV64_CELL_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
         ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
         let air = get_ec_double_air(
@@ -624,7 +624,7 @@ mod ec_double_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -693,35 +693,35 @@ mod ec_double_tests {
             (
                 modulus.clone(),
                 a_biguint.clone(),
-                Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+                Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
             )
         } else if let Some(x) = x {
             let y = y.unwrap();
             let x = x % modulus;
             let y = y % modulus;
-            (x, y, Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+            (x, y, Rv64WeierstrassOpcode::EC_DOUBLE as usize)
         } else {
             let x = generate_random_biguint(modulus);
             let y = generate_random_biguint(modulus);
 
-            (x, y, Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+            (x, y, Rv64WeierstrassOpcode::EC_DOUBLE as usize)
         };
 
-        let ptr_as = RV32_REGISTER_AS as usize;
-        let data_as = RV32_MEMORY_AS as usize;
+        let ptr_as = RV64_REGISTER_AS as usize;
+        let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-        let p1_base_addr = gen_pointer(rng, BLOCK_SIZE) as u32;
-        let result_base_addr = gen_pointer(rng, BLOCK_SIZE) as u32;
+        let p1_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
+        let result_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
 
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+        tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
             p1_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+        tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
             result_base_addr.to_le_bytes().map(F::from_u8),
@@ -745,7 +745,7 @@ mod ec_double_tests {
 
             tester.write::<BLOCK_SIZE>(
                 data_as,
-                (p1_base_addr + NUM_LIMBS as u32) as usize + i,
+                (p1_base_addr + NUM_LIMBS as u64) as usize + i,
                 y1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
             );
         }
@@ -857,7 +857,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_32limb() {
         run_ec_double_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
             BigUint::zero(),
@@ -870,7 +870,7 @@ mod ec_double_tests {
         let a = BigUint::from_bytes_le(&coeff_a);
 
         run_ec_double_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
             a,
@@ -880,7 +880,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_48limb() {
         run_ec_double_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
             BigUint::zero(),
@@ -1001,7 +1001,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_cuda_2x32() {
         run_ec_double_cuda_test::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
             BigUint::zero(),
@@ -1015,7 +1015,7 @@ mod ec_double_tests {
         let a = BigUint::from_bytes_le(&coeff_a);
 
         run_ec_double_cuda_test::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
             a,
@@ -1026,7 +1026,7 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_cuda_6x16() {
         run_ec_double_cuda_test::<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
             BigUint::zero(),
@@ -1051,7 +1051,7 @@ mod ec_double_tests {
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             BigUint::zero(),
         );
 
@@ -1083,7 +1083,7 @@ mod ec_double_tests {
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            Rv64WeierstrassOpcode::CLASS_OFFSET,
             a.clone(),
         );
 
