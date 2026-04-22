@@ -1,10 +1,74 @@
 //! Extension registry for plugging in new opcode families.
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
+
+/// Data needed by extension crates to resolve opcode/chip metadata when
+/// registering rvr extension handlers.
+#[derive(Clone, Debug, Default)]
+pub struct RvrExtensionCtx {
+    /// `opcode -> executor_idx` mapping.
+    pub opcode_to_executor_idx: HashMap<VmOpcode, usize>,
+    /// `executor_idx -> air_idx` mapping.
+    pub executor_idx_to_air_idx: Vec<usize>,
+}
+
+impl RvrExtensionCtx {
+    pub fn new(
+        opcode_to_executor_idx: impl IntoIterator<Item = (VmOpcode, usize)>,
+        executor_idx_to_air_idx: Vec<usize>,
+    ) -> Self {
+        Self {
+            opcode_to_executor_idx: opcode_to_executor_idx.into_iter().collect(),
+            executor_idx_to_air_idx,
+        }
+    }
+
+    pub fn resolve_opcode_executor_idx(&self, opcode: VmOpcode) -> Option<usize> {
+        self.opcode_to_executor_idx.get(&opcode).copied()
+    }
+
+    pub fn resolve_opcode_air_idx(&self, opcode: VmOpcode) -> Option<u32> {
+        let executor_idx = self.resolve_opcode_executor_idx(opcode)?;
+        self.executor_idx_to_air_idx
+            .get(executor_idx)
+            .map(|air_idx| *air_idx as u32)
+    }
+
+    pub fn require_opcode_air_idx(&self, opcode: VmOpcode) -> Result<u32, ExtensionError> {
+        let executor_idx = self
+            .resolve_opcode_executor_idx(opcode)
+            .ok_or(ExtensionError::UnknownOpcode(opcode))?;
+        let air_idx = self.executor_idx_to_air_idx.get(executor_idx).ok_or(
+            ExtensionError::ExecutorIndexOutOfBounds {
+                opcode,
+                executor_idx,
+            },
+        )?;
+        Ok(*air_idx as u32)
+    }
+}
+
+/// Errors raised when resolving extension metadata from a `RvrExtensionCtx`.
+#[derive(Debug, thiserror::Error)]
+pub enum ExtensionError {
+    #[error("opcode {0:?} not found in rvr extension context mappings")]
+    UnknownOpcode(VmOpcode),
+    #[error(
+        "executor index {executor_idx} for opcode {opcode:?} is out of bounds in \
+         executor_idx_to_air_idx"
+    )]
+    ExecutorIndexOutOfBounds {
+        opcode: VmOpcode,
+        executor_idx: usize,
+    },
+}
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
 /// and knows how to lift them to IR (with self-describing codegen via `ExtInstr::emit_c`).
@@ -48,6 +112,20 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
     /// paths for submodule headers). Passed to the Makefile as EXT_CFLAGS.
     fn extra_cflags(&self) -> Vec<String> {
         vec![]
+    }
+}
+
+/// Trait implemented by OpenVM extension owner types to contribute their rvr
+/// lifting/codegen extensions during config assembly.
+pub trait VmRvrExtension<F: PrimeField32> {
+    fn extend_rvr(&self, _registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {}
+}
+
+impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+        if let Some(ext) = self {
+            ext.extend_rvr(registry, ctx);
+        }
     }
 }
 

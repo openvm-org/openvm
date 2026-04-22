@@ -3,14 +3,14 @@
 //! Supports the basic OpenVM ISA:
 //! - RV32IM base instructions
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
-//! - Phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd,
-//!   Rv32HintInput, Rv32PrintStr, Rv32HintRandom
+//! - Phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd, Rv32HintInput, Rv32PrintStr,
+//!   Rv32HintRandom
 //! - IO instructions: HINT_STOREW, HINT_BUFFER
 //! - STOREW address space dispatch: memory (e=2), reveal (e=3)
 
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SystemOpcode,
+};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,

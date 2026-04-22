@@ -11,7 +11,6 @@ repository.workspace = true
 rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
-openvm-circuit.workspace = true
 openvm-instructions.workspace = true
 openvm-sha2-transpiler.workspace = true
 openvm-stark-backend.workspace = true

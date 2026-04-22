@@ -2,10 +2,11 @@
 // `rvr_keccak_f1600(uint64_t state[25])`. Backend selected via cargo features
 // (see Cargo.toml).
 
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn main() {
     let ctx = BuildCtx::from_env();

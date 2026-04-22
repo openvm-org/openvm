@@ -6,20 +6,21 @@
 //! Pre-computed deferral results are produced by [`precompute`] and stored in
 //! `OpenVmIoState.deferral` before execution.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use openvm_circuit::arch::{ExecutorInventory, VmField};
+use openvm_circuit::arch::VmField;
 use openvm_deferral_circuit::{
     generate_deferral_results, poseidon2::deferral_poseidon2_chip, RawDeferralResult,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, resolve_opcode_air_idx, RvrExtension};
+use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx};
 
 // ── IR Nodes ──────────────────────────────────────────────────────────────────
 
@@ -133,32 +134,23 @@ impl DeferralRvrExtension {
     }
 
     /// Create with chip indices resolved from the VM config.
-    pub fn new<F: VmField, E>(
-        inventory: &ExecutorInventory<E>,
-        executor_idx_to_air_idx: &[usize],
+    pub fn new<F: VmField>(
+        ctx: &RvrExtensionCtx,
         staticlib_path: PathBuf,
-    ) -> Self {
-        let call_chip_idx = resolve_opcode_air_idx(
-            DeferralOpcode::CALL.global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
-        let output_chip_idx = resolve_opcode_air_idx(
-            DeferralOpcode::OUTPUT.global_opcode(),
-            inventory,
-            executor_idx_to_air_idx,
-        );
+    ) -> Result<Self, ExtensionError> {
+        let call_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::CALL.global_opcode())?;
+        let output_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::OUTPUT.global_opcode())?;
         // Poseidon2 periphery chip: in extend_circuit, the hasher is added
         // right before the CALL chip. Due to reverse ordering of AIR indices,
         // poseidon2_air_idx = call_air_idx + 1.
         let poseidon2_chip_idx = call_chip_idx + 1;
 
-        Self {
+        Ok(Self {
             call_chip_idx,
             output_chip_idx,
             poseidon2_chip_idx,
             staticlib_path,
-        }
+        })
     }
 }
 
