@@ -53,8 +53,7 @@ pub struct XorinVmRecordHeader {
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
     pub input_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
     pub buffer_read_aux_cols: [MemoryReadAuxRecord; KECCAK_RATE_MEM_OPS],
-    pub buffer_write_aux_cols:
-        [MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>; KECCAK_RATE_MEM_OPS],
+    pub buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>; KECCAK_RATE_MEM_OPS],
 }
 
 pub struct XorinVmRecordMut<'a> {
@@ -156,7 +155,7 @@ where
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
         debug_assert!(record.inner.len < (1 << self.pointer_max_bits));
 
-        // read buffer in 8-byte blocks
+        // read buffer
         for idx in 0..num_reads {
             let read = tracing_read::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
@@ -168,7 +167,7 @@ where
                 .copy_from_slice(&read);
         }
 
-        // read input in 8-byte blocks
+        // read input
         for idx in 0..num_reads {
             let read = tracing_read::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
@@ -182,7 +181,7 @@ where
 
         let mut result = [0u8; KECCAK_RATE_BYTES];
 
-        // execute xorin — only XOR the first `len` active bytes
+        // execute xorin
         result[..len].copy_from_slice(&record.inner.buffer_limbs[..len]);
         for i in 0..len {
             result[i] ^= record.inner.input_limbs[i];
@@ -190,7 +189,7 @@ where
         let bytes_covered = num_reads * DEFAULT_BLOCK_SIZE;
         result[len..bytes_covered].copy_from_slice(&record.inner.buffer_limbs[len..bytes_covered]);
 
-        // write result in 8-byte blocks
+        // write result
         for idx in 0..num_reads {
             let mut word = [0u8; DEFAULT_BLOCK_SIZE];
             word.copy_from_slice(&result[DEFAULT_BLOCK_SIZE * idx..DEFAULT_BLOCK_SIZE * (idx + 1)]);
@@ -242,9 +241,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         for i in 0..(record.len as usize / DEFAULT_BLOCK_SIZE) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
         }
-        for i in
-            (record.len as usize / DEFAULT_BLOCK_SIZE)..(KECCAK_RATE_MEM_OPS)
-        {
+        for i in (record.len as usize / DEFAULT_BLOCK_SIZE)..(KECCAK_RATE_MEM_OPS) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
 

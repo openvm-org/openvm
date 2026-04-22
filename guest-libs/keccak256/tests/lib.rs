@@ -6,11 +6,11 @@ mod tests {
     use hex::FromHex;
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
+    #[cfg(feature = "cuda")]
+    use openvm_keccak256_circuit::Keccak256Rv32GpuBuilder as TestBuilder;
     use openvm_keccak256_circuit::Keccak256Rv64Config;
     #[cfg(not(feature = "cuda"))]
     use openvm_keccak256_circuit::Keccak256Rv64CpuBuilder as TestBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_keccak256_circuit::Keccak256Rv32GpuBuilder as TestBuilder;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,

@@ -13,6 +13,7 @@ use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
@@ -21,10 +22,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::{
-    expand_rv64_limbs,
-    keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS},
-};
+use crate::keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfOpAir {
@@ -68,7 +66,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         let rd_ptr = local.rd_ptr;
         // Build full 8-element data array with upper 4 limbs hardcoded to zero
         let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_rv64_limbs(&local.buffer_ptr_limbs);
+            expand_to_rv64_register(&local.buffer_ptr_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
@@ -88,7 +86,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 .send_range(msb * limb_shift, msb * limb_shift)
                 .eval(builder, is_valid);
         }
-        // Now it is safe to cast buffer_ptr to F (compose from low limbs)
+        // Now it is safe to cast buffer_ptr to F
         let buffer_ptr: AB::Expr = compose(&local.buffer_ptr_limbs[..], RV64_CELL_BITS);
 
         // ======== Constrain that post-state consists of bytes =========

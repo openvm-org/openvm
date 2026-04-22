@@ -16,6 +16,7 @@ use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -25,7 +26,6 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    expand_rv64_limbs,
     xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS},
     KECCAK_RATE_MEM_OPS,
 };
@@ -104,8 +104,7 @@ impl XorinVmAir {
         let mut not_padding_sum = AB::Expr::ZERO;
         let is_padding_bytes = local.sponge.is_padding_bytes;
 
-        // Combined loop: assert each is_padding_bytes[i] is boolean, check monotonicity
-        // (is_padding_bytes is of the form 0...0111...1), and accumulate counts.
+        // Check that is_padding_bytes is of the form 0...01...1
         for (i, &is_padding) in is_padding_bytes.iter().enumerate() {
             builder.assert_bool(is_padding);
             not_padding_sum += not(is_padding);
@@ -142,16 +141,11 @@ impl XorinVmAir {
 
         // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
         let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_rv64_limbs(&instruction.buffer_ptr_limbs);
+            expand_to_rv64_register(&instruction.buffer_ptr_limbs);
         let input_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_rv64_limbs(&instruction.input_ptr_limbs);
-        let len_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i == 0 {
-                instruction.len_limb.into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+            expand_to_rv64_register(&instruction.input_ptr_limbs);
+        let len_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
+            expand_to_rv64_register(&[instruction.len_limb]);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
@@ -209,15 +203,13 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_read_timestamp: AB::Expr,
-        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>;
-             KECCAK_RATE_MEM_OPS],
-        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>;
-             KECCAK_RATE_MEM_OPS],
+        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
+        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
     ) -> AB::Expr {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
 
-        // Constrain read of buffer bytes in 8-byte blocks
+        // Constrain read of buffer bytes
         // Timestamp increases by <= (136/8) = 17
         for (i, (input, mem_aux)) in izip!(
             local
@@ -253,7 +245,7 @@ impl XorinVmAir {
             timestamp += not(is_padding);
         }
 
-        // Constrain read of input_bytes in 8-byte blocks
+        // Constrain read of input_bytes
         // Timestamp increases by at most (136/8) = 17
         for (i, (input, mem_aux)) in izip!(
             local.sponge.input_bytes.chunks_exact(DEFAULT_BLOCK_SIZE),
@@ -322,13 +314,12 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: &[MemoryWriteAuxCols<AB::Var, DEFAULT_BLOCK_SIZE>;
-             KECCAK_RATE_MEM_OPS],
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, DEFAULT_BLOCK_SIZE>; KECCAK_RATE_MEM_OPS],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
 
-        // Constrain write of buffer bytes in 8-byte blocks
+        // Constrain write of buffer bytes
         for (i, (output, mem_aux)) in izip!(
             local
                 .sponge

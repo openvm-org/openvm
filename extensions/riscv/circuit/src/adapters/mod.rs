@@ -289,19 +289,22 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
     u64::from_le_bytes(memory_read(memory, RV64_REGISTER_AS, ptr))
 }
 
-/// Expand `RV64_WORD_NUM_LIMBS` (4) limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the
-/// upper limbs. Used for register bus reads where the register holds a 32-bit value in the low 4
-/// bytes.
-pub fn expand_rv64_limbs<V: Copy + Into<T>, T: PrimeCharacteristicRing>(
-    limbs: &[V; RV64_WORD_NUM_LIMBS],
+/// Convert an 8-byte RV64 register value to a u32 pointer, asserting (in debug) that the upper 4
+/// bytes are zero.
+#[inline(always)]
+pub fn rv64_register_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+    let val = u64::from_le_bytes(bytes);
+    debug_assert_eq!(val >> 32, 0, "upper 4 bytes of RV64 register must be zero");
+    val as u32
+}
+
+/// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
+/// register bus reads where the register holds a value in fewer than 8 bytes.
+pub fn expand_to_rv64_register<V: Copy + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
+    limbs: &[V; N],
 ) -> [T; RV64_REGISTER_NUM_LIMBS] {
-    std::array::from_fn(|i| {
-        if i < RV64_WORD_NUM_LIMBS {
-            limbs[i].into()
-        } else {
-            T::ZERO
-        }
-    })
+    const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
+    std::array::from_fn(|i| if i < N { limbs[i].into() } else { T::ZERO })
 }
 
 pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(

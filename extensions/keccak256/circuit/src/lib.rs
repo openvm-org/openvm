@@ -21,5 +21,3 @@ mod constants;
 mod extension;
 pub use constants::*;
 pub use extension::*;
-// Re-export for use by keccakf_op and xorin AIRs.
-pub use openvm_riscv_circuit::adapters::expand_rv64_limbs;
