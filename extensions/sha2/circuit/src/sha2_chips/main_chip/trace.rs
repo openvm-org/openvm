@@ -155,10 +155,9 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
 
-        // Extend each 32-bit pointer to the full 8-byte RV64 register; upper 4 bytes are zero.
-        let dst_ptr_limbs = (vm_record.dst_ptr as u64).to_le_bytes();
-        let state_ptr_limbs = (vm_record.state_ptr as u64).to_le_bytes();
-        let input_ptr_limbs = (vm_record.input_ptr as u64).to_le_bytes();
+        let dst_ptr_limbs = vm_record.dst_ptr.to_le_bytes();
+        let state_ptr_limbs = vm_record.state_ptr.to_le_bytes();
+        let input_ptr_limbs = vm_record.input_ptr.to_le_bytes();
         set_arrayview_from_u8_slice(&mut cols.instruction.dst_ptr_limbs, dst_ptr_limbs);
         set_arrayview_from_u8_slice(&mut cols.instruction.state_ptr_limbs, state_ptr_limbs);
         set_arrayview_from_u8_slice(&mut cols.instruction.input_ptr_limbs, input_ptr_limbs);
