@@ -278,7 +278,8 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
 
-# Point halo2-base / halo2-ecc at the local GPU fork of halo2-axiom so we can
-# iterate on the CUDA prover without publishing. Tracking INT-6841.
+# Point halo2-base / halo2-ecc at the GPU fork of halo2-axiom (halo2-gpu)
+# so the CUDA prover path is exercised. Pinned by rev for reproducibility;
+# bump when halo2-gpu advances. Tracking INT-6841.
 [patch.crates-io]
-halo2-axiom = { path = "/home/grigorii/dev/halo2/halo2-gpu/halo2_proofs" }
+halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", rev = "22d2b9f33b8d690e9eb891423191d56fe177496c" }
