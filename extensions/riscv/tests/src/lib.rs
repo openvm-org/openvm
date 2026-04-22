@@ -33,9 +33,9 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32im_config() -> Rv64ImConfig {
+    fn test_rv64im_config() -> Rv64ImConfig {
         Rv64ImConfig {
-            rv32i: Rv32IConfig {
+            rv64i: Rv64IConfig {
                 system: test_system_config(),
                 ..Default::default()
             },
@@ -44,8 +44,8 @@ mod tests {
     }
 
     #[test_case("fibonacci", 1)]
-    fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = Rv32IConfig::default();
+    fn test_rv64i(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = Rv64IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
             elf,
@@ -55,13 +55,13 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
         change_rv32m_insn_to_nop(&mut exe);
-        air_test_with_min_segments(Rv32IBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64IBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test]
     fn test_suspend() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -98,8 +98,8 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+    fn test_rv64im(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -108,14 +108,16 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
+    // TODO(rv64-std): re-enable when guest is updated to no_std
+    #[ignore]
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+    fn test_rv64im_std(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             example_name,
@@ -129,13 +131,13 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -145,7 +147,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
         Ok(())
     }
 
@@ -155,7 +157,7 @@ mod tests {
     #[test]
     #[ignore = "slow test: processes >1MB of data"]
     fn test_hint_buffer_chunking() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_large_buffer", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -176,13 +178,13 @@ mod tests {
             .collect();
 
         let input = vec![data];
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
         Ok(())
     }
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -207,13 +209,13 @@ mod tests {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_u8)
             .collect();
-        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![input], 1);
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![input], 1);
         Ok(())
     }
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -253,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -262,13 +264,13 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 
     #[test]
     fn test_heap_overflow() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -288,9 +290,11 @@ mod tests {
         }
     }
 
+    // TODO(rv64-std): re-enable when guest is updated to no_std
+    #[ignore]
     #[test]
     fn test_hashmap() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "hashmap",
@@ -304,13 +308,13 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 
     #[test]
     fn test_tiny_mem_test() -> Result<()> {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "tiny-mem-test",
@@ -324,7 +328,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
         Ok(())
     }
 
@@ -332,7 +336,7 @@ mod tests {
     #[should_panic]
     #[cfg(not(feature = "aot"))] // AOT skips this test since it is not a trusted program
     fn test_load_x0() {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
@@ -352,7 +356,7 @@ mod tests {
     #[test_case("getrandom_v02", vec!["getrandom-v02", "getrandom-unsupported"])]
     #[test_case("getrandom_v02", vec!["getrandom-v02/custom"])]
     fn test_getrandom_unsupported(program: &str, features: Vec<&str>) {
-        let config = test_rv32im_config();
+        let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             program,
@@ -368,7 +372,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
-        air_test(Rv32ImBuilder, config, exe);
+        air_test(Rv64ImBuilder, config, exe);
     }
 
     // For testing programs that should only execute RV32I:

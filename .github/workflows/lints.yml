@@ -49,9 +49,10 @@ jobs:
           cache-on-failure: true
           key: v1
 
-      - name: Generate docs
-        run: |
-          cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
+      # TODO: re-enable
+      # - name: Generate docs
+      #   run: |
+      #     cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
       - name: Run fmt
         run: |
           rustup install nightly

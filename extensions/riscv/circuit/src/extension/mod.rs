@@ -20,6 +20,7 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
@@ -27,7 +28,6 @@ use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
     ShiftOpcode, ShiftWOpcode,
 };
-use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -73,7 +73,12 @@ impl Default for Rv64M {
 }
 
 fn default_range_tuple_checker_sizes() -> [u32; 2] {
-    [1 << 8, 8 * (1 << 8)]
+    [
+        // range for a single limb
+        1 << RV64_CELL_BITS,
+        // carry bound across a column of an N-limb × N-limb multiplication
+        2 * RV64_REGISTER_NUM_LIMBS as u32 * (1 << RV64_CELL_BITS),
+    ]
 }
 
 // ============ Executor and Periphery Enums for Extension ============
@@ -864,12 +869,9 @@ mod phantom {
             };
             streams.hint_stream.clear();
             let hint_len = hint.len() as u64;
-            streams.hint_stream.extend(
-                hint_len
-                    .to_le_bytes()
-                    .iter()
-                    .map(|b| F::from_u8(*b)),
-            );
+            streams
+                .hint_stream
+                .extend(hint_len.to_le_bytes().iter().map(|b| F::from_u8(*b)));
             // Pad the hint payload to full dwords so RV64 `HINT_BUFFER` reads can consume it.
             let capacity = hint.len().div_ceil(HINT_DWORD_BYTES) * HINT_DWORD_BYTES;
             hint.resize(capacity, F::ZERO);
@@ -897,7 +899,7 @@ mod phantom {
             let len = read_rv64_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_u8(rng.gen::<u8>()))
+                std::iter::repeat_with(|| F::from_u8(rng.random::<u8>()))
                     .take(len * HINT_DWORD_BYTES),
             );
             Ok(())
@@ -925,5 +927,4 @@ mod phantom {
             Ok(())
         }
     }
-
 }

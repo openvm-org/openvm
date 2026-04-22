@@ -8,7 +8,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_WORD_NUM_LIMBS};
 use openvm_sha2_air::set_arrayview_from_u8_slice;
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -155,19 +155,20 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
 
-        let dst_ptr_limbs = vm_record.dst_ptr.to_le_bytes();
-        let state_ptr_limbs = vm_record.state_ptr.to_le_bytes();
-        let input_ptr_limbs = vm_record.input_ptr.to_le_bytes();
+        // Extend each 32-bit pointer to the full 8-byte RV64 register; upper 4 bytes are zero.
+        let dst_ptr_limbs = (vm_record.dst_ptr as u64).to_le_bytes();
+        let state_ptr_limbs = (vm_record.state_ptr as u64).to_le_bytes();
+        let input_ptr_limbs = (vm_record.input_ptr as u64).to_le_bytes();
         set_arrayview_from_u8_slice(&mut cols.instruction.dst_ptr_limbs, dst_ptr_limbs);
         set_arrayview_from_u8_slice(&mut cols.instruction.state_ptr_limbs, state_ptr_limbs);
         set_arrayview_from_u8_slice(&mut cols.instruction.input_ptr_limbs, input_ptr_limbs);
         let needs_range_check = [
-            dst_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            state_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
+            dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
+            input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
         ];
-        let shift: u32 = 1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits);
+        let shift: u32 = 1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.pointer_max_bits);
         for pair in needs_range_check.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32 * shift, pair[1] as u32 * shift);

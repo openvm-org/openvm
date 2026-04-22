@@ -41,7 +41,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
-        BranchEqualCoreAir, BranchEqualFiller, Rv64BranchEqualAir, Rv64BranchEqualExecutor,
+    BranchEqualCoreAir, BranchEqualFiller, Rv64BranchEqualAir, Rv64BranchEqualExecutor,
 };
 
 type F = BabyBear;
@@ -99,20 +99,20 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
     imm: Option<i32>,
 ) {
-    let a = a.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let b = b.unwrap_or(if rng.gen_bool(0.5) {
+    let a = a.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let b = b.unwrap_or(if rng.random_bool(0.5) {
         a
     } else {
-        array::from_fn(|_| rng.gen_range(0..=u8::MAX))
+        array::from_fn(|_| rng.random_range(0..=u8::MAX))
     });
 
-    let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
+    let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, 8);
     let rs2 = gen_pointer(rng, 8);
     tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
     tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
-    let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
+    let initial_pc = rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(
         executor,
         arena,
@@ -180,7 +180,7 @@ fn run_negative_branch_eq_test(
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_cmp_result: Option<bool>,
     prank_diff_inv_marker: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    interaction_error: bool,
+    _interaction_error: bool,
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();

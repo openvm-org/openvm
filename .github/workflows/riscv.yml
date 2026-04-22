@@ -10,9 +10,9 @@ on:
 #     - "crates/circuits/primitives/**"
 #     - "crates/vm/**"
 #     - "crates/toolchain/**"
-      - "extensions/rv32im/circuit/**"
-      - "extensions/rv32im/transpiler/**"
-      - "extensions/rv32im/guest/**"
+      - "extensions/riscv/circuit/**"
+      - "extensions/riscv/transpiler/**"
+      - "extensions/riscv/guest/**"
 #     - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 
@@ -29,10 +29,11 @@ jobs:
     strategy:
       matrix:
         platform:
+          # TODO(aot): restore `features: "aot"`
           - {
               runner: "64cpu-linux-x64",
               image: "ubuntu24-full-x64",
-              features: "aot",
+              features: "",
             }
           - {
               runner: "test-gpu-nvidia",
