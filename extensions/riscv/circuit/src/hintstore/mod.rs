@@ -163,8 +163,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .when_first_row()
             .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
-        // read mem_ptr. `mem_ptr` is a u32 memory address, so the upper 4 bytes of the
-        // 8-byte RV64 register are hardcoded to zero in the bus interaction.
+        // read mem_ptr
         let mem_ptr_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 local_cols.mem_ptr_limbs[i].into()
@@ -181,8 +180,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // read num_words. `num_words` is bounded by 2^10, so the upper 6 bytes of the
-        // 8-byte RV64 register are hardcoded to zero in the bus interaction.
+        // read num_words
         let num_words_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
             if i < REM_WORDS_NUM_LIMBS {
                 local_cols.rem_words_limbs[i].into()
@@ -658,16 +656,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         }
 
                         mem_ptr -= RV64_REGISTER_NUM_LIMBS as u32;
-                        // Only materialize the low 4 bytes of the RV64 register; the upper 4
-                        // are known to be zero and are not stored as columns.
                         cols.mem_ptr_limbs = mem_ptr.to_le_bytes().map(F::from_u8);
                         cols.mem_ptr_ptr = F::from_u32(record.inner.mem_ptr_ptr);
 
                         cols.from_state.timestamp = F::from_u32(timestamp);
                         cols.from_state.pc = F::from_u32(record.inner.from_pc);
 
-                        // Only materialize the low 2 bytes; `rem_words < 2^10` so the upper
-                        // 6 bytes are known to be zero and are not stored as columns.
                         cols.rem_words_limbs = ((num_words - idx as u32) as u16)
                             .to_le_bytes()
                             .map(F::from_u8);

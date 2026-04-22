@@ -45,8 +45,6 @@ pub struct Sha2InstructionCols<T> {
     pub state_reg_ptr: T,
     /// Pointer to address space 1 `input` register
     pub input_reg_ptr: T,
-    // Register values: only the low 4 bytes of each 8-byte RV64 register are materialized.
-    // The upper 4 bytes are hardcoded to zero in the memory bus interaction.
     /// Low 4 bytes of \[dst_reg_ptr:8\]_1
     pub dst_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     /// Low 4 bytes of \[state_reg_ptr:8\]_1

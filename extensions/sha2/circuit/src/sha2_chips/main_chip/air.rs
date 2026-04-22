@@ -191,9 +191,6 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        // Each pointer register is read as a full 8-byte RV64 register, but this chip only
-        // supports 32-bit-addressable memory. Rather than materialize the upper 4 bytes as
-        // constrained-to-zero columns, we hardcode them to zero in the memory bus interaction.
         for (&ptr, val, aux) in izip!(
             [
                 local.instruction.dst_reg_ptr,

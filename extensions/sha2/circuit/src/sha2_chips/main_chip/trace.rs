@@ -155,8 +155,6 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
 
-        // The upper 4 bytes of each pointer register are known to be zero and are not
-        // materialized as columns; only the low 4 bytes are stored.
         let dst_ptr_limbs = vm_record.dst_ptr.to_le_bytes();
         let state_ptr_limbs = vm_record.state_ptr.to_le_bytes();
         let input_ptr_limbs = vm_record.input_ptr.to_le_bytes();
