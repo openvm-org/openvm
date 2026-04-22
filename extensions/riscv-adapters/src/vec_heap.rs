@@ -27,16 +27,16 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
-use openvm_riscv_circuit::adapters::{
-    abstract_compose, tracing_read, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_riscv_circuit::adapters::{tracing_read, tracing_write, RV64_CELL_BITS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
+
+use crate::helpers::{compose_ptr, pad_reg_val, tracing_read_reg_ptr};
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -47,7 +47,7 @@ use openvm_stark_backend::{
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
-pub struct Rv32VecHeapAdapterCols<
+pub struct Rv64VecHeapAdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -60,8 +60,8 @@ pub struct Rv32VecHeapAdapterCols<
     pub rs_ptr: [T; NUM_READS],
     pub rd_ptr: T,
 
-    pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
-    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rs_val: [[T; RV64_WORD_NUM_LIMBS]; NUM_READS],
+    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T>,
@@ -72,7 +72,7 @@ pub struct Rv32VecHeapAdapterCols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32VecHeapAdapterAir<
+pub struct Rv64VecHeapAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -94,10 +94,10 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > BaseAir<F>
-    for Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     fn width(&self) -> usize {
-        Rv32VecHeapAdapterCols::<
+        Rv64VecHeapAdapterCols::<
             F,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -116,7 +116,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > VmAdapterAir<AB>
-    for Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     type Interface = VecHeapAdapterInterface<
         AB::Expr,
@@ -133,7 +133,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv32VecHeapAdapterCols<
+        let cols: &Rv64VecHeapAdapterCols<
             _,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -156,45 +156,46 @@ impl<
         ))) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), ptr),
-                    val,
+                    MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
+                    pad_reg_val::<AB>(val),
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits -
-        // (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))). This ensures that no overflow
-        // occurs when computing memory pointers. Since the number of cells accessed with each
-        // address will be small enough, and combined with the memory argument, it ensures
-        // that all the cells accessed in the memory are less than 2^addr_bits.
+        // We constrain the highest limb of each materialized pointer (limb 3, i.e. the most
+        // significant of the low 4 bytes) to be less than 2^(addr_bits - RV64_CELL_BITS * 3).
+        // Combined with the zero padding on bytes 4..8 in the memory bus interaction above and
+        // the memory argument, this ensures that every heap address accessed below is less than
+        // 2^addr_bits without any extra explicit assertion.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
             .chain(std::iter::repeat_n(&cols.rd_val, 2))
-            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
+            .map(|val| val[RV64_WORD_NUM_LIMBS - 1])
             .collect();
 
-        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
-        // the correct amount of bits
+        // Range checks constrain to RV64_CELL_BITS bits, so we need to shift the limbs to
+        // constrain the correct amount of bits
         let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
-        // Note: since limbs are read from memory we already know that limb[i] < 2^RV32_CELL_BITS
-        //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
-        //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
+        // Note: since limbs are read from memory we already know that limb[i] < 2^RV64_CELL_BITS
+        //       thus range checking limb[i] * shift < 2^RV64_CELL_BITS, gives us that
+        //       limb[i] < 2^(addr_bits - (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)))
         for pair in need_range_check.chunks_exact(2) {
             self.bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the u32 register value into single field element, with `abstract_compose`
-        let rd_val_f: AB::Expr = abstract_compose(cols.rd_val);
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
+        // Compose the 4 materialized bytes of each register value into a single field element
+        // used as a memory address.
+        let rd_val_f: AB::Expr = compose_ptr(cols.rd_val);
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose_ptr);
 
-        let e = AB::F::from_u32(RV32_MEMORY_AS);
+        let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -237,7 +238,7 @@ impl<
                         .get(1)
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -248,7 +249,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32VecHeapAdapterCols<
+        let cols: &Rv64VecHeapAdapterCols<
             _,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -263,7 +264,7 @@ impl<
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32VecHeapAdapterRecord<
+pub struct Rv64VecHeapAdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -287,7 +288,7 @@ pub struct Rv32VecHeapAdapterRecord<
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct Rv32VecHeapAdapterExecutor<
+pub struct Rv64VecHeapAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -298,7 +299,7 @@ pub struct Rv32VecHeapAdapterExecutor<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32VecHeapAdapterFiller<
+pub struct Rv64VecHeapAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -306,7 +307,7 @@ pub struct Rv32VecHeapAdapterFiller<
     const WRITE_SIZE: usize,
 > {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
 }
 
 impl<
@@ -317,7 +318,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterTraceExecutor<F>
-    for Rv32VecHeapAdapterExecutor<
+    for Rv64VecHeapAdapterExecutor<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -325,7 +326,7 @@ impl<
         WRITE_SIZE,
     >
 {
-    const WIDTH: usize = Rv32VecHeapAdapterCols::<
+    const WIDTH: usize = Rv64VecHeapAdapterCols::<
         F,
         NUM_READS,
         BLOCKS_PER_READ,
@@ -335,7 +336,7 @@ impl<
     >::width();
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
-    type RecordMut<'a> = &'a mut Rv32VecHeapAdapterRecord<
+    type RecordMut<'a> = &'a mut Rv64VecHeapAdapterRecord<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -353,7 +354,7 @@ impl<
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv32VecHeapAdapterRecord<
+        record: &mut &mut Rv64VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
@@ -363,38 +364,36 @@ impl<
     ) -> Self::ReadData {
         let &Instruction { a, b, c, d, e, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
         // Read register values
         record.rs_vals = from_fn(|i| {
             record.rs_ptrs[i] = if i == 0 { b } else { c }.as_canonical_u32();
-            u32::from_le_bytes(tracing_read(
+            tracing_read_reg_ptr(
                 memory,
-                RV32_REGISTER_AS,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-            ))
+            )
         });
 
         record.rd_ptr = a.as_canonical_u32();
-        record.rd_val = u32::from_le_bytes(tracing_read(
+        record.rd_val = tracing_read_reg_ptr(
             memory,
-            RV32_REGISTER_AS,
-            a.as_canonical_u32(),
+            record.rd_ptr,
             &mut record.rd_read_aux.prev_timestamp,
-        ));
+        );
 
         // Read memory values
         from_fn(|i| {
             debug_assert!(
-                (record.rs_vals[i] + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
-                    < (1 << self.pointer_max_bits) as u32
+                (record.rs_vals[i] as u64) + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
+                    < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
                 tracing_read(
                     memory,
-                    RV32_MEMORY_AS,
+                    RV64_MEMORY_AS,
                     record.rs_vals[i] + (j * READ_SIZE) as u32,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
@@ -407,7 +406,7 @@ impl<
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
-        record: &mut &mut Rv32VecHeapAdapterRecord<
+        record: &mut &mut Rv64VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
@@ -415,18 +414,18 @@ impl<
             WRITE_SIZE,
         >,
     ) {
-        debug_assert_eq!(instruction.e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(instruction.e.as_canonical_u32(), RV64_MEMORY_AS);
 
         debug_assert!(
-            record.rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
-                < (1 << self.pointer_max_bits)
+            (record.rd_val as u64) + ((WRITE_SIZE * BLOCKS_PER_WRITE - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..BLOCKS_PER_WRITE {
             tracing_write(
                 memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 record.rd_val + (i * WRITE_SIZE) as u32,
                 data[i],
                 &mut record.writes_aux[i].prev_timestamp,
@@ -444,7 +443,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv32VecHeapAdapterFiller<
+    for Rv64VecHeapAdapterFiller<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -452,7 +451,7 @@ impl<
         WRITE_SIZE,
     >
 {
-    const WIDTH: usize = Rv32VecHeapAdapterCols::<
+    const WIDTH: usize = Rv64VecHeapAdapterCols::<
         F,
         NUM_READS,
         BLOCKS_PER_READ,
@@ -465,7 +464,7 @@ impl<
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv32VecHeapAdapterRecord<
+        let record: &Rv64VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
@@ -473,7 +472,7 @@ impl<
             WRITE_SIZE,
         > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv32VecHeapAdapterCols<
+        let cols: &mut Rv64VecHeapAdapterCols<
             F,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -484,9 +483,9 @@ impl<
 
         // Range checks:
         // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
+        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
         if NUM_READS > 1 {
             self.bitwise_lookup_chip.request_range(
                 (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,

@@ -24,8 +24,8 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
+use openvm_riscv_adapters::{
+    Rv64IsEqualModAdapterAir, Rv64IsEqualModAdapterExecutor, Rv64IsEqualModAdapterFiller,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use rand::RngCore;
@@ -74,15 +74,15 @@ impl ModularExtension {
 )]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    ModularAddSubRv32_32(ModularExecutor<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // ModularAddSub
-    ModularMulDivRv32_32(ModularExecutor<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // ModularMulDiv
-    ModularIsEqualRv32_32(
+    ModularAddSubRv64_32(ModularExecutor<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // ModularAddSub
+    ModularMulDivRv64_32(ModularExecutor<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // ModularMulDiv
+    ModularIsEqualRv64_32(
         VmModularIsEqualExecutor<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>,
     ), /* ModularIsEqual */
     // 48 limbs prime
-    ModularAddSubRv32_48(ModularExecutor<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // ModularAddSub
-    ModularMulDivRv32_48(ModularExecutor<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // ModularMulDiv
-    ModularIsEqualRv32_48(
+    ModularAddSubRv64_48(ModularExecutor<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // ModularAddSub
+    ModularMulDivRv64_48(ModularExecutor<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // ModularMulDiv
+    ModularIsEqualRv64_48(
         VmModularIsEqualExecutor<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>,
     ), /* ModularIsEqual */
 }
@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv32_32(addsub),
+                    ModularExtensionExecutor::ModularAddSubRv64_32(addsub),
                     ((Rv32ModularArithmeticOpcode::ADD as usize)
                         ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -131,7 +131,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularMulDivRv32_32(muldiv),
+                    ModularExtensionExecutor::ModularMulDivRv64_32(muldiv),
                     ((Rv32ModularArithmeticOpcode::MUL as usize)
                         ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -146,13 +146,13 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualExecutor::new(
-                    Rv32IsEqualModAdapterExecutor::new(pointer_max_bits),
+                    Rv64IsEqualModAdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularIsEqualRv32_32(is_eq),
+                    ModularExtensionExecutor::ModularIsEqualRv64_32(is_eq),
                     ((Rv32ModularArithmeticOpcode::IS_EQ as usize)
                         ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -171,7 +171,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv32_48(addsub),
+                    ModularExtensionExecutor::ModularAddSubRv64_48(addsub),
                     ((Rv32ModularArithmeticOpcode::ADD as usize)
                         ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -185,7 +185,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularMulDivRv32_48(muldiv),
+                    ModularExtensionExecutor::ModularMulDivRv64_48(muldiv),
                     ((Rv32ModularArithmeticOpcode::MUL as usize)
                         ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -200,13 +200,13 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualExecutor::new(
-                    Rv32IsEqualModAdapterExecutor::new(pointer_max_bits),
+                    Rv64IsEqualModAdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
 
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularIsEqualRv32_48(is_eq),
+                    ModularExtensionExecutor::ModularIsEqualRv64_48(is_eq),
                     ((Rv32ModularArithmeticOpcode::IS_EQ as usize)
                         ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -293,7 +293,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 
                 let is_eq =
                     ModularIsEqualAir::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
-                        Rv32IsEqualModAdapterAir::new(
+                        Rv64IsEqualModAdapterAir::new(
                             exec_bridge,
                             memory_bridge,
                             bitwise_lu,
@@ -333,7 +333,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 
                 let is_eq =
                     ModularIsEqualAir::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>::new(
-                        Rv32IsEqualModAdapterAir::new(
+                        Rv64IsEqualModAdapterAir::new(
                             exec_bridge,
                             memory_bridge,
                             bitwise_lu,
@@ -435,7 +435,7 @@ where
                     NUM_LIMBS_32,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -487,7 +487,7 @@ where
                     NUM_LIMBS_48,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -516,7 +516,7 @@ pub(crate) mod phantom {
         arch::{PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
-    use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
+    use openvm_instructions::{riscv::RV64_MEMORY_AS, PhantomDiscriminant};
     use openvm_riscv_circuit::adapters::read_rv64_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
@@ -565,14 +565,12 @@ pub(crate) mod phantom {
                 bail!("Modulus too large")
             };
 
-            let rs1: u32 = read_rv64_register(memory, a)
-                .try_into()
-                .expect("rs1 register value exceeds u32 range");
+            let rs1 = read_rv64_register(memory, a) as u32;
             // SAFETY:
             // - MEMORY_AS consists of `u8`s
             // - MEMORY_AS is in bounds
             let x_limbs: Vec<u8> =
-                unsafe { memory.memory.get_slice((RV32_MEMORY_AS, rs1), num_limbs) }.to_vec();
+                unsafe { memory.memory.get_slice((RV64_MEMORY_AS, rs1), num_limbs) }.to_vec();
             let x = BigUint::from_bytes_le(&x_limbs);
 
             let (success, sqrt) = match mod_sqrt(&x, modulus, &self.non_qrs[mod_idx]) {

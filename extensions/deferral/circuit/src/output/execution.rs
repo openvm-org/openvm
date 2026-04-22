@@ -10,7 +10,7 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -52,8 +52,8 @@ impl DeferralOutputExecutor {
         } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::OUTPUT as usize
-            || d.as_canonical_u32() != RV32_REGISTER_AS
-            || e.as_canonical_u32() != RV32_MEMORY_AS
+            || d.as_canonical_u32() != RV64_REGISTER_AS
+            || e.as_canonical_u32() != RV64_MEMORY_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -154,10 +154,23 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralOutputPrecompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let output_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rs_ptr));
+    // TODO: use rv64_register_to_u32 helper
+    let output_ptr_val =
+        u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
+    debug_assert!(
+        output_ptr_val <= u32::MAX as u64,
+        "upper 4 bytes of register must be zero for pointer"
+    );
+    let output_ptr = output_ptr_val as u32;
+    let input_ptr_val =
+        u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rs_ptr));
+    debug_assert!(
+        input_ptr_val <= u32::MAX as u64,
+        "upper 4 bytes of register must be zero for pointer"
+    );
+    let input_ptr = input_ptr_val as u32;
     let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_read(RV32_MEMORY_AS, input_ptr + (i * DEFAULT_BLOCK_SIZE) as u32)
+        exec_state.vm_read(RV64_MEMORY_AS, input_ptr + (i * DEFAULT_BLOCK_SIZE) as u32)
     });
     let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
@@ -178,7 +191,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
             exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 row_output_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 &memory_op_chunk(output_chunk, chunk_idx),
             );
