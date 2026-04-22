@@ -149,6 +149,7 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
+            // TODO: use read_rv64_register_as_u32 helper
             let rs1 = read_rv64_register(memory, a) as u32;
             let rs2 = read_rv64_register(memory, b) as u32;
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
