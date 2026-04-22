@@ -45,7 +45,7 @@ use super::{
 use crate::{
     adapters::{
         Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor,
-        Rv64LoadStoreAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        Rv64LoadStoreAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
 };
@@ -359,7 +359,7 @@ fn positive_stored_native_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct LoadStorePrankValues {
-    rs1_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     read_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prev_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     write_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
@@ -485,21 +485,6 @@ fn negative_wrong_opcode_tests() {
         Some(0),
         LoadStorePrankValues {
             flags: Some(selector_point_for_opcode_shift(LOADWU, 0)),
-            ..Default::default()
-        },
-        false,
-    );
-}
-
-#[test]
-fn negative_invalid_rs1_tests() {
-    run_negative_loadstore_test(
-        LOADD,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            rs1_data: Some([0, 0, 0, 0, 1, 0, 0, 0]),
             ..Default::default()
         },
         false,
