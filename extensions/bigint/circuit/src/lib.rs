@@ -8,19 +8,19 @@ use openvm_circuit::{
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
+use openvm_riscv_adapters::{
+    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
+    Rv64VecHeapBranchAdapterAir, Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
+    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatBranchAdapterAir,
+    VecToFlatBranchAdapterExecutor,
+};
 use openvm_riscv_circuit::{
-    adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
+    adapters::{INT256_NUM_LIMBS, RV64_CELL_BITS},
     BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir, BranchEqualExecutor,
     BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller,
     LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
     MultiplicationExecutor, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor,
     Rv64M, Rv64MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
-};
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
-    Rv32VecHeapBranchAdapterAir, Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
-    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatBranchAdapterAir,
-    VecToFlatBranchAdapterExecutor,
 };
 use serde::{Deserialize, Serialize};
 
@@ -45,17 +45,23 @@ mod tests;
 
 /// Number of blocks for INT256 operations (INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE)
 pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE;
+/// Number of u64 limbs in a 256-bit integer.
+pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u64>();
+/// Number of u32 limbs in a 256-bit integer.
+pub const INT256_NUM_U32_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u32>();
+/// Number of source operand reads (rs1, rs2) for binary 256-bit instructions.
+pub(crate) const NUM_READS: usize = 2;
 
 /// Type alias for the ALU adapter AIR wrapper
 type AluAdapterAir = VecToFlatAluAdapterAir<
-    Rv32VecHeapAdapterAir<
-        2,
+    Rv64VecHeapAdapterAir<
+        NUM_READS,
         INT256_NUM_BLOCKS,
         INT256_NUM_BLOCKS,
         DEFAULT_BLOCK_SIZE,
         DEFAULT_BLOCK_SIZE,
     >,
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -65,14 +71,14 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
 
 /// Type alias for the ALU adapter executor wrapper
 type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
-    Rv32VecHeapAdapterExecutor<
-        2,
+    Rv64VecHeapAdapterExecutor<
+        NUM_READS,
         INT256_NUM_BLOCKS,
         INT256_NUM_BLOCKS,
         DEFAULT_BLOCK_SIZE,
         DEFAULT_BLOCK_SIZE,
     >,
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -82,8 +88,8 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
 
 /// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv32VecHeapBranchAdapterAir<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
-    2,
+    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
     INT256_NUM_LIMBS,
@@ -91,138 +97,138 @@ type BranchAdapterAir = VecToFlatBranchAdapterAir<
 
 /// Type alias for the Branch adapter executor wrapper
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
-    Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
-    2,
+    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
     INT256_NUM_LIMBS,
 >;
 
 /// BaseAlu256
-pub type Rv32BaseAlu256Air =
-    VmAirWrapper<AluAdapterAir, BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type Rv64BaseAlu256Air =
+    VmAirWrapper<AluAdapterAir, BaseAluCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32BaseAlu256Executor(
-    BaseAluExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+pub struct Rv64BaseAlu256Executor(
+    BaseAluExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
 );
-pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
+pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
     F,
     BaseAluFiller<
-        Rv32VecHeapAdapterFiller<
-            2,
+        Rv64VecHeapAdapterFiller<
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
             DEFAULT_BLOCK_SIZE,
         >,
         INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
+        RV64_CELL_BITS,
     >,
 >;
 
 /// LessThan256
-pub type Rv32LessThan256Air =
-    VmAirWrapper<AluAdapterAir, LessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type Rv64LessThan256Air =
+    VmAirWrapper<AluAdapterAir, LessThanCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32LessThan256Executor(
-    LessThanExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+pub struct Rv64LessThan256Executor(
+    LessThanExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
 );
-pub type Rv32LessThan256Chip<F> = VmChipWrapper<
+pub type Rv64LessThan256Chip<F> = VmChipWrapper<
     F,
     LessThanFiller<
-        Rv32VecHeapAdapterFiller<
-            2,
+        Rv64VecHeapAdapterFiller<
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
             DEFAULT_BLOCK_SIZE,
         >,
         INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
+        RV64_CELL_BITS,
     >,
 >;
 
 /// Multiplication256
-pub type Rv32Multiplication256Air =
-    VmAirWrapper<AluAdapterAir, MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type Rv64Multiplication256Air =
+    VmAirWrapper<AluAdapterAir, MultiplicationCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32Multiplication256Executor(
-    MultiplicationExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+pub struct Rv64Multiplication256Executor(
+    MultiplicationExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
 );
-pub type Rv32Multiplication256Chip<F> = VmChipWrapper<
+pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
     F,
     MultiplicationFiller<
-        Rv32VecHeapAdapterFiller<
-            2,
+        Rv64VecHeapAdapterFiller<
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
             DEFAULT_BLOCK_SIZE,
         >,
         INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
+        RV64_CELL_BITS,
     >,
 >;
 
 /// Shift256
-pub type Rv32Shift256Air =
-    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type Rv64Shift256Air =
+    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32Shift256Executor(
-    ShiftExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+pub struct Rv64Shift256Executor(
+    ShiftExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
 );
-pub type Rv32Shift256Chip<F> = VmChipWrapper<
+pub type Rv64Shift256Chip<F> = VmChipWrapper<
     F,
     ShiftFiller<
-        Rv32VecHeapAdapterFiller<
-            2,
+        Rv64VecHeapAdapterFiller<
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
             DEFAULT_BLOCK_SIZE,
         >,
         INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
+        RV64_CELL_BITS,
     >,
 >;
 
 /// BranchEqual256
-pub type Rv32BranchEqual256Air =
+pub type Rv64BranchEqual256Air =
     VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_LIMBS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS>);
-pub type Rv32BranchEqual256Chip<F> = VmChipWrapper<
+pub struct Rv64BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS>);
+pub type Rv64BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<
-        Rv32VecHeapBranchAdapterFiller<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
         INT256_NUM_LIMBS,
     >,
 >;
 
 /// BranchLessThan256
-pub type Rv32BranchLessThan256Air =
-    VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type Rv64BranchLessThan256Air =
+    VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32BranchLessThan256Executor(
-    BranchLessThanExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+pub struct Rv64BranchLessThan256Executor(
+    BranchLessThanExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
 );
-pub type Rv32BranchLessThan256Chip<F> = VmChipWrapper<
+pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<
-        Rv32VecHeapBranchAdapterFiller<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
         INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
+        RV64_CELL_BITS,
     >,
 >;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Int256Rv32Config {
+pub struct Int256Rv64Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv64I,
+    pub rv64i: Rv64I,
     #[extension]
-    pub rv32m: Rv64M,
+    pub rv64m: Rv64M,
     #[extension]
     pub io: Rv64Io,
     #[extension]
@@ -230,14 +236,14 @@ pub struct Int256Rv32Config {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Int256Rv32Config {}
+impl InitFileGenerator for Int256Rv64Config {}
 
-impl Default for Int256Rv32Config {
+impl Default for Int256Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            rv32i: Rv64I,
-            rv32m: Rv64M::default(),
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
             io: Rv64Io,
             bigint: Int256::default(),
         }

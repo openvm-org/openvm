@@ -1,12 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_bigint_transpiler::Rv32BranchEqual256Opcode;
+use openvm_bigint_transpiler::Rv64BranchEqual256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_circuit::BranchEqualExecutor;
@@ -15,10 +15,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256},
-    BranchAdapterExecutor, Rv32BranchEqual256Executor, INT256_NUM_LIMBS,
+    BranchAdapterExecutor, Rv64BranchEqual256Executor, INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
 };
 
-impl Rv32BranchEqual256Executor {
+impl Rv64BranchEqual256Executor {
     pub fn new(adapter_step: BranchAdapterExecutor, offset: usize, pc_step: u32) -> Self {
         Self(BranchEqualExecutor::new(adapter_step, offset, pc_step))
     }
@@ -41,7 +41,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv32BranchEqual256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchEqual256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchEqPreCompute>()
     }
@@ -80,7 +80,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv32BranchEqual256Executor {
 #[cfg(feature = "aot")]
 impl<F: PrimeField32> AotExecutor<F> for Rv32BranchEqual256Executor {}
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32BranchEqual256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchEqual256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqPreCompute>>()
     }
@@ -129,10 +129,20 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
-    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rs1_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+    let rs2_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = read_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rs1_ptr) as u32,
+    );
+    let rs2 = read_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rs2_ptr) as u32,
+    );
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
         pc = (pc as isize + pre_compute.imm) as u32;
@@ -168,7 +178,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, exec_state);
 }
 
-impl Rv32BranchEqual256Executor {
+impl Rv64BranchEqual256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -191,7 +201,7 @@ impl Rv32BranchEqual256Executor {
             c as isize
         };
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchEqPreCompute {
@@ -200,16 +210,16 @@ impl Rv32BranchEqual256Executor {
             b: b.as_canonical_u32() as u8,
         };
         let local_opcode = BranchEqualOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32BranchEqual256Opcode::CLASS_OFFSET),
+            opcode.local_opcode_idx(Rv64BranchEqual256Opcode::CLASS_OFFSET),
         );
         Ok(local_opcode)
     }
 }
 
 fn u256_eq(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
-    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
-    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
-    for i in 0..4 {
+    let rs1_u64 = bytes_to_u64_array(rs1);
+    let rs2_u64 = bytes_to_u64_array(rs2);
+    for i in 0..INT256_NUM_U64_LIMBS {
         if rs1_u64[i] != rs2_u64[i] {
             return false;
         }
