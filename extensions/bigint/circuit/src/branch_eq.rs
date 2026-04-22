@@ -9,7 +9,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::BranchEqualExecutor;
+use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, BranchEqualExecutor};
 use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -136,12 +136,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     let rs1 = read_int256(
         exec_state,
         RV64_MEMORY_AS,
-        u64::from_le_bytes(rs1_ptr) as u32,
+        rv64_bytes_to_u32(rs1_ptr),
     );
     let rs2 = read_int256(
         exec_state,
         RV64_MEMORY_AS,
-        u64::from_le_bytes(rs2_ptr) as u32,
+        rv64_bytes_to_u32(rs2_ptr),
     );
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {

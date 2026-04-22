@@ -12,7 +12,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::BaseAluExecutor;
+use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, BaseAluExecutor};
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -145,18 +145,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     let rs1 = read_int256(
         exec_state,
         RV64_MEMORY_AS,
-        u64::from_le_bytes(rs1_ptr) as u32,
+        rv64_bytes_to_u32(rs1_ptr),
     );
     let rs2 = read_int256(
         exec_state,
         RV64_MEMORY_AS,
-        u64::from_le_bytes(rs2_ptr) as u32,
+        rv64_bytes_to_u32(rs2_ptr),
     );
     let rd = <OP as AluOp>::compute(rs1, rs2);
     write_int256(
         exec_state,
         RV64_MEMORY_AS,
-        u64::from_le_bytes(rd_ptr) as u32,
+        rv64_bytes_to_u32(rd_ptr),
         &rd,
     );
     let pc = exec_state.pc();
