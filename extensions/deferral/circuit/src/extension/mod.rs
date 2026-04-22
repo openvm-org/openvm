@@ -43,11 +43,11 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
-        pub use self::cuda::Rv32DeferralGpuBuilder as Rv32DeferralBuilder;
+        pub use self::cuda::Rv32DeferralGpuBuilder as Rv64DeferralBuilder;
 
     } else {
         pub use self::DeferralCpuProverExt as DeferralProverExt;
-        pub use self::Rv32DeferralCpuBuilder as Rv32DeferralBuilder;
+        pub use self::Rv64DeferralCpuBuilder as Rv64DeferralBuilder;
     }
 }
 
@@ -218,16 +218,16 @@ where
     }
 }
 
-// =================================== VM Rv32 Config and Builder =================================
+// =================================== VM Rv64 Config and Builder =================================
 
 #[derive(Clone, VmConfig, Serialize, Deserialize)]
-pub struct Rv32DeferralConfig {
+pub struct Rv64DeferralConfig {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv64I,
+    pub rv64i: Rv64I,
     #[extension]
-    pub rv32m: Rv64M,
+    pub rv64m: Rv64M,
     #[extension]
     pub io: Rv64Io,
     #[serde(skip)]
@@ -235,19 +235,19 @@ pub struct Rv32DeferralConfig {
     pub deferral: DeferralExtension,
 }
 
-impl InitFileGenerator for Rv32DeferralConfig {}
+impl InitFileGenerator for Rv64DeferralConfig {}
 
 #[derive(Clone)]
-pub struct Rv32DeferralCpuBuilder;
+pub struct Rv64DeferralCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv32DeferralCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv64DeferralCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Rv32DeferralConfig;
+    type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
@@ -267,8 +267,8 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &DeferralCpuProverExt,
