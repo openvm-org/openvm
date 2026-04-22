@@ -366,22 +366,22 @@ mod tests {
         common::get_device,
         stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
-    use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
+    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
     #[test]
     fn test_empty_touched_memory_uses_full_chunk_values() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS] {
+        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
         let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV32_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write::<u8, DIGEST_WIDTH>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV64_MEMORY_AS, 0, [9, 10, 11, 12]);
         }
 
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
@@ -440,15 +440,15 @@ mod tests {
     #[test]
     fn test_touched_memory_updates_memory_address_space() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS] {
+        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
         let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV32_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write::<u8, DIGEST_WIDTH>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV64_MEMORY_AS, 0, [9, 10, 11, 12]);
         }
 
         let mut final_memory = memory.clone();
@@ -456,12 +456,12 @@ mod tests {
         let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
             final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 0,
                 touched_bytes,
             );
             final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 crate::arch::DEFAULT_BLOCK_SIZE as u32,
                 touched_bytes_late,
             );
@@ -499,14 +499,14 @@ mod tests {
 
         let touched_memory = vec![
             (
-                (RV32_MEMORY_AS, 0),
+                (RV64_MEMORY_AS, 0),
                 TimestampedValues {
                     timestamp: 1,
                     values: touched_bytes.map(F::from_u8),
                 },
             ),
             (
-                (RV32_MEMORY_AS, crate::arch::DEFAULT_BLOCK_SIZE as u32),
+                (RV64_MEMORY_AS, crate::arch::DEFAULT_BLOCK_SIZE as u32),
                 TimestampedValues {
                     timestamp: 3,
                     values: touched_bytes_late.map(F::from_u8),

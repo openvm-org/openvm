@@ -32,8 +32,6 @@ use crate::{
 /// Blocks are on the same row only for Merkle tree hashing (CHUNK bytes at a time).
 /// Memory bus interactions use per-block timestamps.
 ///
-/// # Current state (rv64 branch)
-///
 /// `DEFAULT_BLOCK_SIZE == CHUNK == 8`, so `BLOCKS_PER_CHUNK == 1`. As a result, many of the
 /// patterns below — arrays of length `BLOCKS_PER_CHUNK`, loops over `0..BLOCKS_PER_CHUNK`,
 /// rechunking logic that groups 1 block per chunk, etc. — currently degenerate to trivial
@@ -59,9 +57,6 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
     /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block within the chunk has its own timestamp.
     /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
     /// at t=0 final).
-    ///
-    /// Currently a length-1 array (see `BLOCKS_PER_CHUNK`). Kept as an array so the column layout
-    /// does not need to change when `BLOCKS_PER_CHUNK` goes back to 2 (u16 cell transition).
     pub timestamps: [T; BLOCKS_PER_CHUNK],
 }
 
@@ -103,7 +98,6 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
         // Constrain that an "initial" row has all timestamp zero.
         // Since `direction` is constrained to be in {-1, 0, 1}, we can select `direction == 1`
         // with the constraint below.
-        // Loop runs once today (BLOCKS_PER_CHUNK == 1); will run twice after the u16 cell switch.
         let mut when_initial =
             builder.when(local.expand_direction * (local.expand_direction + AB::F::ONE));
         for i in 0..BLOCKS_PER_CHUNK {
@@ -132,8 +126,6 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
         );
 
         let chunk_size_f = AB::F::from_usize(CHUNK);
-        // Loop runs once today (BLOCKS_PER_CHUNK == 1) — the single bus message covers the full
-        // CHUNK. After the u16 cell switch it will run twice (one bus message per sub-block).
         for block_idx in 0..BLOCKS_PER_CHUNK {
             let offset = AB::F::from_usize(block_idx * DEFAULT_BLOCK_SIZE);
             // Split the 1xCHUNK leaf into DEFAULT_BLOCK_SIZE-sized bus messages.
@@ -169,7 +161,6 @@ pub struct FinalTouchedLabel<F, const CHUNK: usize> {
     init_hash: [F; CHUNK],
     final_hash: [F; CHUNK],
     /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block has its own timestamp.
-    /// Currently a length-1 array (see `BLOCKS_PER_CHUNK`).
     final_timestamps: [u32; BLOCKS_PER_CHUNK],
 }
 
@@ -178,7 +169,6 @@ type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
 pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
 /// Regroups DEFAULT_BLOCK_SIZE-sized touched blocks into CHUNK-sized chunks.
-///
 /// Currently unused — kept for when the u16 cell switch restores `DEFAULT_BLOCK_SIZE < CHUNK`.
 pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
     final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
@@ -231,10 +221,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity, with a single timestamp per entry.
     /// This function rechunks into CHUNK-sized groups with per-block timestamps. Untouched blocks
     /// within a touched chunk get values from initial_memory and timestamp 0.
-    ///
-    /// On the rv64 branch `DEFAULT_BLOCK_SIZE == CHUNK`, so the rechunking is trivial (one block
-    /// per chunk, `timestamps` array has length 1). The multi-block logic is retained for the
-    /// upcoming u16 cell switch — see `BLOCKS_PER_CHUNK`.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,

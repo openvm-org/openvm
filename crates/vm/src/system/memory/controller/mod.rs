@@ -181,11 +181,6 @@ impl<F: VmField> MemoryController<F> {
         let hasher = self.hasher_chip.as_ref().unwrap();
         boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
-        // DEFAULT_BLOCK_SIZE == CHUNK on the rv64 branch, so each touched block is already a
-        // full chunk and no rechunking is needed. If the u16 cell switch ever lowers
-        // DEFAULT_BLOCK_SIZE below CHUNK, this needs to go back to assembling multiple blocks
-        // per chunk (via `group_touched_memory_by_chunk` and reading initial_memory for the
-        // untouched sub-blocks).
         let final_memory_values: Equipartition<F, CHUNK> = final_memory
             .iter()
             .map(|&((addr_space, ptr), ts_values)| ((addr_space, ptr), ts_values.values))
