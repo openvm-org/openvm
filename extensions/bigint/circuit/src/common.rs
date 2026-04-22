@@ -4,9 +4,11 @@ use openvm_circuit::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_BLOCKS, INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{
+    INT256_NUM_BLOCKS, INT256_NUM_LIMBS, INT256_NUM_U32_LIMBS, INT256_NUM_U64_LIMBS, RV64_CELL_BITS,
+};
 
-/// Read a 256-bit integer as 8 separate 4-byte block reads.
+/// Read a 256-bit integer as 4 separate 8-byte block reads.
 #[inline(always)]
 pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -22,7 +24,7 @@ pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     result
 }
 
-/// Write a 256-bit integer as 8 separate 4-byte block writes.
+/// Write a 256-bit integer as 4 separate 8-byte block writes.
 #[inline(always)]
 pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -40,34 +42,34 @@ pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
 }
 
 #[inline(always)]
-pub fn bytes_to_u64_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u64; 4] {
+pub fn bytes_to_u64_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u64; INT256_NUM_U64_LIMBS] {
     // SAFETY: [u8; 32] to [u64; 4] transmute is safe - same size and compatible alignment
     unsafe { std::mem::transmute(bytes) }
 }
 
 #[inline(always)]
-pub fn u64_array_to_bytes(u64_array: [u64; 4]) -> [u8; INT256_NUM_LIMBS] {
+pub fn u64_array_to_bytes(u64_array: [u64; INT256_NUM_U64_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
     // SAFETY: [u64; 4] to [u8; 32] transmute is safe - same size and compatible alignment
     unsafe { std::mem::transmute(u64_array) }
 }
 
 #[inline(always)]
-pub fn bytes_to_u32_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u32; 8] {
+pub fn bytes_to_u32_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u32; INT256_NUM_U32_LIMBS] {
     // SAFETY: [u8; 32] to [u32; 8] transmute is safe - same size and compatible alignment
     unsafe { std::mem::transmute(bytes) }
 }
 
 #[inline(always)]
-pub fn u32_array_to_bytes(u32_array: [u32; 8]) -> [u8; INT256_NUM_LIMBS] {
+pub fn u32_array_to_bytes(u32_array: [u32; INT256_NUM_U32_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
     // SAFETY: [u32; 8] to [u8; 32] transmute is safe - same size and compatible alignment
     unsafe { std::mem::transmute(u32_array) }
 }
 
 #[inline(always)]
 pub(crate) fn u256_lt(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
-    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
-    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
-    for i in (0..4).rev() {
+    let rs1_u64 = bytes_to_u64_array(rs1);
+    let rs2_u64 = bytes_to_u64_array(rs2);
+    for i in (0..INT256_NUM_U64_LIMBS).rev() {
         if rs1_u64[i] != rs2_u64[i] {
             return rs1_u64[i] < rs2_u64[i];
         }
@@ -78,11 +80,11 @@ pub(crate) fn u256_lt(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) 
 #[inline(always)]
 pub(crate) fn i256_lt(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
     // true for negative. false for positive
-    let rs1_sign = rs1[INT256_NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1) == 1;
-    let rs2_sign = rs2[INT256_NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1) == 1;
-    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
-    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
-    for i in (0..4).rev() {
+    let rs1_sign = rs1[INT256_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1) == 1;
+    let rs2_sign = rs2[INT256_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1) == 1;
+    let rs1_u64 = bytes_to_u64_array(rs1);
+    let rs2_u64 = bytes_to_u64_array(rs2);
+    for i in (0..INT256_NUM_U64_LIMBS).rev() {
         if rs1_u64[i] != rs2_u64[i] {
             return (rs1_u64[i] < rs2_u64[i]) ^ rs1_sign ^ rs2_sign;
         }
@@ -100,7 +102,7 @@ mod tests {
             bytes_to_u32_array, bytes_to_u64_array, i256_lt, u256_lt, u32_array_to_bytes,
             u64_array_to_bytes,
         },
-        INT256_NUM_LIMBS,
+        INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
     };
 
     #[test]
@@ -146,8 +148,8 @@ mod tests {
     fn test_u256_lt() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u64; 4] = rng.random();
-            let limbs_b: [u64; 4] = rng.random();
+            let limbs_a: [u64; INT256_NUM_U64_LIMBS] = rng.random();
+            let limbs_b: [u64; INT256_NUM_U64_LIMBS] = rng.random();
             let a = U256::from_limbs(limbs_a);
             let b = U256::from_limbs(limbs_b);
             let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);
@@ -159,8 +161,8 @@ mod tests {
     fn test_i256_lt() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u64; 4] = rng.random();
-            let limbs_b: [u64; 4] = rng.random();
+            let limbs_a: [u64; INT256_NUM_U64_LIMBS] = rng.random();
+            let limbs_b: [u64; INT256_NUM_U64_LIMBS] = rng.random();
             let a = I256::from_limbs(limbs_a);
             let b = I256::from_limbs(limbs_b);
             let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);
