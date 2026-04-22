@@ -2,9 +2,7 @@
 //!
 //! Layout must match the generated C `RvState` struct exactly.
 
-use crate::suspender::SuspenderState;
-use crate::tracer::TracerState;
-use crate::xlen::Xlen;
+use crate::{suspender::SuspenderState, tracer::TracerState, xlen::Xlen};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
