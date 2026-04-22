@@ -8,9 +8,13 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -332,10 +336,7 @@ impl AsMut<SystemConfig> for SystemConfig {
 impl InitFileGenerator for SystemConfig {}
 
 #[cfg(feature = "rvr")]
-impl<F: openvm_stark_backend::p3_field::PrimeField32> ::rvr_openvm_lift::VmRvrExtension<F>
-    for SystemConfig
-{
-}
+impl<F: PrimeField32> VmRvrExtension<F> for SystemConfig {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
 pub struct AddressSpaceHostConfig {
