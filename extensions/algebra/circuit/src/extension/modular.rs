@@ -568,7 +568,9 @@ pub(crate) mod phantom {
                 bail!("Modulus too large")
             };
 
-            let rs1 = read_rv64_register(memory, a) as u32;
+            let rs1: u32 = read_rv64_register(memory, a)
+                .try_into()
+                .expect("rs1 register value exceeds u32 range");
             // SAFETY:
             // - MEMORY_AS consists of `u8`s
             // - MEMORY_AS is in bounds
