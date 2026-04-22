@@ -7,7 +7,7 @@ mod guest_tests {
         utils::{air_test, test_system_config},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, SECP256K1_CONFIG,
+        CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_riscv_transpiler::{
@@ -23,15 +23,15 @@ mod guest_tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv64weierstrass_config(curves: Vec<CurveConfig>) -> Rv64WeierstrassConfig {
+        let mut config = Rv64WeierstrassConfig::new(curves);
         *config.as_mut() = test_system_config();
         config
     }
 
     #[test]
     fn test_add() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "add", &config)?;
         let openvm_exe = VmExe::from_elf(
@@ -43,13 +43,13 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_mul() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "mul", &config)?;
         let openvm_exe = VmExe::from_elf(
@@ -61,13 +61,13 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_linear_combination() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "linear_combination",
@@ -82,7 +82,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -96,8 +96,8 @@ mod guest_tests {
             derive::VmConfig,
         };
         use openvm_ecc_circuit::{
-            CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig,
-            Rv32WeierstrassConfigExecutor,
+            CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig,
+            Rv64WeierstrassConfigExecutor,
         };
         use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
         use serde::{Deserialize, Serialize};
@@ -123,7 +123,7 @@ mod guest_tests {
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
             #[config(generics = true)]
-            pub weierstrass: Rv32WeierstrassConfig,
+            pub weierstrass: Rv64WeierstrassConfig,
             #[extension]
             pub sha2: Sha2,
         }
@@ -131,7 +131,7 @@ mod guest_tests {
         impl EcdsaConfig {
             pub fn new(curves: Vec<CurveConfig>) -> Self {
                 Self {
-                    weierstrass: Rv32WeierstrassConfig::new(curves),
+                    weierstrass: Rv64WeierstrassConfig::new(curves),
                     sha2: Default::default(),
                 }
             }
@@ -172,7 +172,7 @@ mod guest_tests {
                 ChipInventoryError,
             > {
                 let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-                    &Rv32WeierstrassBuilder,
+                    &Rv64WeierstrassBuilder,
                     &config.weierstrass,
                     circuit,
                     device_ctx,
@@ -209,7 +209,7 @@ mod guest_tests {
             > {
                 let mut chip_complex =
                     VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
-                        &Rv32WeierstrassBuilder,
+                        &Rv64WeierstrassBuilder,
                         &config.weierstrass,
                         circuit,
                         device_ctx,
@@ -247,7 +247,7 @@ mod guest_tests {
 
     #[test]
     fn test_scalar_sqrt() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "scalar_sqrt",
@@ -262,7 +262,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 }
