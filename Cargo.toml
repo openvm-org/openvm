@@ -277,3 +277,8 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
+
+# Point halo2-base / halo2-ecc at the local GPU fork of halo2-axiom so we can
+# iterate on the CUDA prover without publishing. Tracking INT-6841.
+[patch.crates-io]
+halo2-axiom = { path = "/home/grigorii/dev/halo2/halo2-gpu/halo2_proofs" }
