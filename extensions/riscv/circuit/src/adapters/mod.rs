@@ -289,6 +289,13 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
     u64::from_le_bytes(memory_read(memory, RV64_REGISTER_AS, ptr))
 }
 
+/// Read an RV64 register and return its value as u32, asserting (in debug) that the upper
+/// 32 bits are zero.
+#[inline(always)]
+pub fn read_rv64_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
+    rv64_u64_to_u32(read_rv64_register(memory, ptr))
+}
+
 /// Convert a u64 value to u32, asserting (in debug) that the upper 32 bits are zero.
 #[inline(always)]
 pub fn rv64_u64_to_u32(val: u64) -> u32 {
