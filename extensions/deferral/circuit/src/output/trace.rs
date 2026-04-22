@@ -25,7 +25,10 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{
+        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+        RV64_WORD_NUM_LIMBS,
+    },
 };
 use openvm_riscv_circuit::adapters::{
     memory_read, read_rv64_register, tracing_read, tracing_write,
@@ -69,8 +72,8 @@ pub struct DeferralOutputRecordHeader {
     pub num_rows: u32,
 
     // Heap pointers and auxiliary records
-    pub rd_val: [u8; RV32_REGISTER_NUM_LIMBS],
-    pub rs_val: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub rd_val: u32,
+    pub rs_val: u32,
     pub rd_aux: MemoryReadAuxRecord,
     pub rs_aux: MemoryReadAuxRecord,
 
@@ -148,7 +151,7 @@ pub struct DeferralOutputExecutor;
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     address_bits: usize,
 }
 
@@ -167,8 +170,8 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let Instruction { a, b, c, d, e, .. } = instruction;
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
         let rd_ptr = a.as_canonical_u32();
         let rs_ptr = b.as_canonical_u32();
@@ -181,7 +184,7 @@ where
         let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
             memory_read(
                 state.memory.data(),
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 read_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
             )
         });
@@ -206,25 +209,30 @@ where
         record.header.deferral_idx = deferral_idx;
         record.header.num_rows = num_rows as u32;
 
-        record.header.rd_val = tracing_read(
+        let rd_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             rd_ptr,
             &mut record.header.rd_aux.prev_timestamp,
         );
-        record.header.rs_val = tracing_read(
+        debug_assert_eq!(rd_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
+        record.header.rd_val = u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+
+        let rs_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             state.memory,
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             rs_ptr,
             &mut record.header.rs_aux.prev_timestamp,
         );
+        debug_assert_eq!(rs_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
+        record.header.rs_val = u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
-        let input_ptr = u32::from_le_bytes(record.header.rs_val);
-        let output_ptr = u32::from_le_bytes(record.header.rd_val);
+        let input_ptr = record.header.rs_val;
+        let output_ptr = record.header.rd_val;
         for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
             tracing_read::<DEFAULT_BLOCK_SIZE>(
                 state.memory,
-                RV32_MEMORY_AS,
+                RV64_MEMORY_AS,
                 input_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.header.output_commit_and_len_aux[chunk_idx].prev_timestamp,
             );
@@ -240,7 +248,7 @@ where
                 let aux_idx = row_idx * DIGEST_MEMORY_OPS + chunk_idx;
                 tracing_write(
                     state.memory,
-                    RV32_MEMORY_AS,
+                    RV64_MEMORY_AS,
                     row_output_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                     memory_op_chunk(output_chunk, chunk_idx),
                     &mut record.write_aux[aux_idx].prev_timestamp,
@@ -330,20 +338,20 @@ where
                 cols.rs_ptr = F::from_u32(header.rs_ptr);
                 cols.deferral_idx = F::from_u32(header.deferral_idx);
 
-                cols.rd_val = header.rd_val.map(F::from_u8);
-                cols.rs_val = header.rs_val.map(F::from_u8);
+                cols.rd_val = header.rd_val.to_le_bytes().map(F::from_u8);
+                cols.rs_val = header.rs_val.to_le_bytes().map(F::from_u8);
 
                 if row_idx == 0 {
-                    debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+                    debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
                     let limb_shift_bits =
-                        RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits;
+                        RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
 
                     self.bitwise_lookup_chip.request_range(
-                        (header.rd_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-                        (header.rs_val[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                        (header.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                        (header.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
                     );
                     self.bitwise_lookup_chip.request_range(
-                        (output_len_bytes[RV32_REGISTER_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                        (output_len_bytes[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
                         0,
                     );
 
