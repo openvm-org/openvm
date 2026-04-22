@@ -12,16 +12,14 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,

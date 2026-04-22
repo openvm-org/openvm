@@ -289,7 +289,10 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             a.as_canonical_u32(),
             &mut record.rd_aux.prev_timestamp,
         );
-        debug_assert_eq!(rd_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
+        debug_assert_eq!(
+            rd_bytes[RV64_WORD_NUM_LIMBS..],
+            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
+        );
         record.rd_val = u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
         let rs_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
@@ -298,7 +301,10 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             b.as_canonical_u32(),
             &mut record.rs_aux.prev_timestamp,
         );
-        debug_assert_eq!(rs_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
+        debug_assert_eq!(
+            rs_bytes[RV64_WORD_NUM_LIMBS..],
+            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
+        );
         record.rs_val = u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
         let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
