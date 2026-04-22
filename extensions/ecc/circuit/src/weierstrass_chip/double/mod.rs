@@ -14,14 +14,14 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
+use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldVariable,
 };
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+use openvm_riscv_adapters::{
+    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
 };
 
 use super::{
@@ -69,7 +69,7 @@ pub fn ec_double_ne_expr(
 #[derive(Clone)]
 pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub(crate) inner: FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >,
     pub(crate) cached_curve_type: Option<CurveType>,
 }
@@ -77,7 +77,7 @@ pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     pub fn new(
         inner: FieldExpressionExecutor<
-            Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
     ) -> Self {
         let cached_curve_type = inner
@@ -94,7 +94,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOC
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     type Target = FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >;
 
     fn deref(&self) -> &Self::Target {
@@ -118,8 +118,8 @@ fn gen_base_expr(
     let expr = ec_double_ne_expr(config, range_checker_bus, a_biguint);
 
     let local_opcode_idx = vec![
-        Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-        Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        Rv64WeierstrassOpcode::EC_DOUBLE as usize,
+        Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     ];
 
     (expr, local_opcode_idx)
@@ -138,7 +138,7 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassAir::new(
-        Rv32VecHeapAdapterAir::new(
+        Rv64VecHeapAdapterAir::new(
             exec_bridge,
             mem_bridge,
             bitwise_lookup_bus,
@@ -157,7 +157,7 @@ pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcDoubleExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -170,14 +170,14 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pointer_max_bits: usize,
     a_biguint: BigUint,
 ) -> WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             local_opcode_idx,
             vec![],
