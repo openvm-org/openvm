@@ -279,8 +279,8 @@ impl MemoryInventoryGPU {
                 let base = i * record_words;
                 let mut values = [0u32; DIGEST_WIDTH];
                 values.copy_from_slice(
-                    &out_records[base + 2 + BLOCKS_PER_CHUNK
-                        ..base + 2 + BLOCKS_PER_CHUNK + DIGEST_WIDTH],
+                    &out_records
+                        [base + 2 + BLOCKS_PER_CHUNK..base + 2 + BLOCKS_PER_CHUNK + DIGEST_WIDTH],
                 );
                 let timestamp = out_records[base + 2..base + 2 + BLOCKS_PER_CHUNK]
                     .iter()
