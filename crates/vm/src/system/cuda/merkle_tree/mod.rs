@@ -453,7 +453,7 @@ mod tests {
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
             let max_cells = 1 << 16;
-            addr_spaces[RV64_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
+            addr_spaces[RV64_REGISTER_AS as usize].num_cells = 32 * size_of::<u64>();
             addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
             MemoryConfig::new(2, addr_spaces, max_cells.ilog2() as usize, 29, 17)
