@@ -12,11 +12,14 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{
+        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
+    },
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
@@ -141,7 +144,7 @@ where
                 .eval(builder, cols.is_valid);
         }
 
-        // Range check the bytes that we write to RV32 heap memory.
+        // Range check the bytes that we write to heap memory.
         for bytes in cols.writes.output_commit.chunks_exact(2) {
             self.bitwise_bus
                 .send_range(bytes[0], bytes[1])
@@ -227,8 +230,8 @@ pub struct DeferralCallAdapterCols<T> {
     pub rs_ptr: T,
 
     // Heap pointers and aux columns
-    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
+    pub rs_val: [T; RV64_WORD_NUM_LIMBS],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
@@ -275,16 +278,20 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Operands a and b are RV32 register pointers. Their values are read first
+        // Operands a and b are register pointers. Their values are read first
         // to get heap pointers for output write and input commit read respectively.
-        let d = AB::Expr::from_u32(RV32_REGISTER_AS);
-        let e = AB::Expr::from_u32(RV32_MEMORY_AS);
+        let d = AB::Expr::from_u32(RV64_REGISTER_AS);
+        let e = AB::Expr::from_u32(RV64_MEMORY_AS);
+
+        // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
+        let rd_full = expand_to_rv64_register(&cols.rd_val);
+        let rs_full = expand_to_rv64_register(&cols.rs_val);
 
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), cols.rd_ptr),
-                cols.rd_val,
+                rd_full,
                 timestamp_pp(),
                 &cols.rd_aux,
             )
@@ -293,7 +300,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), cols.rs_ptr),
-                cols.rs_val,
+                rs_full,
                 timestamp_pp(),
                 &cols.rs_aux,
             )
@@ -303,14 +310,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // access is in [0, 2^address_bits). The memory merkle argument ensures
         // that each read/write pointer is less than 2^addr_bits, and this range
         // check ensures the accesses don't wrap around P.
-        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
         let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
         self.bitwise_bus
             .send_range(
-                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
-                cols.rs_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                cols.rd_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
+                cols.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
@@ -342,7 +349,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // Constrain output_len to be under 2^address_bits also.
         self.bitwise_bus
             .send_range(
-                output_len[RV32_REGISTER_NUM_LIMBS - 1].clone() * limb_shift,
+                output_len[F_NUM_BYTES - 1].clone() * limb_shift,
                 AB::Expr::ZERO,
             )
             .eval(builder, ctx.instruction.is_valid.clone());

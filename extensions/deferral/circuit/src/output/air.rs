@@ -13,10 +13,13 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{
+        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
+    },
     LocalOpcode,
 };
 use openvm_stark_backend::{
@@ -56,8 +59,8 @@ pub struct DeferralOutputCols<T> {
     pub deferral_idx: T,
 
     // Heap pointers + auxiliary read columns
-    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
+    pub rs_val: [T; RV64_WORD_NUM_LIMBS],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
@@ -234,33 +237,37 @@ where
         // canonical. Note that constraining the starting output pointer is sufficient
         // to constrain the entire write is in range - even if output_ptr + output_len
         // wraps, there will be several written values in the middle that do not.
-        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
+        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
         let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
         self.bitwise_bus
             .send_range(
-                local.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
-                local.rs_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                local.rd_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
+                local.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, local.is_first);
 
         // We also constrain output_len to be under 2^address_bits.
         self.bitwise_bus
             .send_range(
-                local.output_len[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                local.output_len[F_NUM_BYTES - 1] * limb_shift,
                 AB::Expr::ZERO,
             )
             .eval(builder, local.is_first);
 
         // Constrain the heap pointer memory reads.
-        let d = AB::Expr::from_u32(RV32_REGISTER_AS);
-        let e = AB::Expr::from_u32(RV32_MEMORY_AS);
+        let d = AB::Expr::from_u32(RV64_REGISTER_AS);
+        let e = AB::Expr::from_u32(RV64_MEMORY_AS);
+
+        // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
+        let rd_full = expand_to_rv64_register(&local.rd_val);
+        let rs_full = expand_to_rv64_register(&local.rs_val);
 
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), local.rd_ptr),
-                local.rd_val,
+                rd_full,
                 local.from_state.timestamp,
                 &local.rd_aux,
             )
@@ -269,7 +276,7 @@ where
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), local.rs_ptr),
-                local.rs_val,
+                rs_full,
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
             )
