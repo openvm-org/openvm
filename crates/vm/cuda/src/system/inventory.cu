@@ -1,10 +1,3 @@
-// GPU memory inventory merge kernel.
-//
-// Currently unused at runtime as DEFAULT_BLOCK_SIZE == DIGEST_WIDTH == 8.
-// Each touched block is already a full chunk and the Rust side (system/cuda/memory.rs) uses a
-// no-merge fast path. This kernel is kept because the planned switch of AS 1 / AS 2 to u16 cells
-// will bring DEFAULT_BLOCK_SIZE back to 4, at which point the 2-way merge implemented here will
-// be needed again.
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
 #include <cub/device/device_scan.cuh>

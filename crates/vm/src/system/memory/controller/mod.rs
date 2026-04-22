@@ -19,13 +19,13 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::AddressMap;
 use crate::{
-    arch::{MemoryConfig, VmField},
+    arch::{MemoryConfig, VmField, DEFAULT_BLOCK_SIZE},
     system::{
         memory::{
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            persistent::PersistentBoundaryChip,
+            persistent::{group_touched_memory_by_chunk, PersistentBoundaryChip},
         },
         poseidon2::Poseidon2PeripheryChip,
         TouchedMemory,
@@ -181,10 +181,24 @@ impl<F: VmField> MemoryController<F> {
         let hasher = self.hasher_chip.as_ref().unwrap();
         boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
-        let final_memory_values: Equipartition<F, CHUNK> = final_memory
-            .iter()
-            .map(|&((addr_space, ptr), ts_values)| ((addr_space, ptr), ts_values.values))
-            .collect();
+        // Rechunk DEFAULT_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
+        // Note: Equipartition key is (addr_space, ptr) where ptr is the starting pointer
+        let final_memory_values: Equipartition<F, CHUNK> =
+            group_touched_memory_by_chunk(&final_memory)
+                .into_iter()
+                .map(|((addr_space, chunk_label), blocks)| {
+                    let chunk_ptr = chunk_label * CHUNK as u32;
+                    let mut values = std::array::from_fn(|i| unsafe {
+                        initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
+                    });
+                    for (block_idx, _, block_values) in blocks {
+                        for (i, val) in block_values.into_iter().enumerate() {
+                            values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
+                        }
+                    }
+                    ((addr_space, chunk_ptr), values)
+                })
+                .collect();
         merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
 
         vec![
