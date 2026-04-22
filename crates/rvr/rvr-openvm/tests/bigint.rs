@@ -3,8 +3,7 @@
 #[path = "utils.rs"]
 mod utils;
 
-use std::path::PathBuf;
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
 use openvm_bigint_circuit::{Int256Rv32Config, Int256Rv32CpuBuilder};
@@ -68,8 +67,8 @@ fn build_matrix_power_exe() -> Result<VmExe<F>> {
 }
 
 fn make_int256_ext(harness: &utils::VmTestHarness<Int256Rv32CpuBuilder>) -> Int256Extension {
-    let inventory = harness.inventory().unwrap();
-    Int256Extension::new(&inventory, harness.air_idx(), build_int256_staticlib())
+    let ctx = harness.rvr_extension_ctx().unwrap();
+    Int256Extension::new(&ctx, build_int256_staticlib()).unwrap()
 }
 
 fn run_matrix_power(label: &str, mode: ExecutionMode) -> Result<()> {

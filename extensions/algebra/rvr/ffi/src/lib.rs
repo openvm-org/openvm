@@ -6,8 +6,7 @@
 //!   - `UnknownPrimeField`    — unknown prime field, carries modulus
 //!   - `UnknownComplexField`  — unknown complex field, carries modulus
 
-use std::ffi::c_void;
-use std::marker::PhantomData;
+use std::{ffi::c_void, marker::PhantomData};
 
 use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::{BigInt, BigUint};

@@ -13,7 +13,6 @@ rvr-openvm-lift.workspace = true
 
 openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true
-openvm-circuit.workspace = true
 openvm-instructions.workspace = true
 openvm-stark-backend.workspace = true
 
