@@ -122,7 +122,7 @@ pub(crate) mod phantom {
     };
     use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
     use openvm_instructions::{
-        riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
     use openvm_pairing_guest::{
@@ -149,12 +149,9 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1: u32 = read_rv64_register(memory, a)
-                .try_into()
-                .expect("rs1 register value exceeds u32 range");
-            let rs2: u32 = read_rv64_register(memory, b)
-                .try_into()
-                .expect("rs2 register value exceeds u32 range");
+            // TODO: use read_rv64_register_as_u32 helper
+            let rs1 = read_rv64_register(memory, a) as u32;
+            let rs2 = read_rv64_register(memory, b) as u32;
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
@@ -166,20 +163,20 @@ pub(crate) mod phantom {
         rs2: u32,
         c_upper: u16,
     ) -> eyre::Result<()> {
-        let p_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs1));
+        let p_ptr = u32::from_le_bytes(memory_read(memory, RV64_MEMORY_AS, rs1));
         // len in bytes
         let p_len = u32::from_le_bytes(memory_read(
             memory,
-            RV32_MEMORY_AS,
-            rs1 + RV32_REGISTER_NUM_LIMBS as u32,
+            RV64_MEMORY_AS,
+            rs1 + RV64_REGISTER_NUM_LIMBS as u32,
         ));
 
-        let q_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs2));
+        let q_ptr = u32::from_le_bytes(memory_read(memory, RV64_MEMORY_AS, rs2));
         // len in bytes
         let q_len = u32::from_le_bytes(memory_read(
             memory,
-            RV32_MEMORY_AS,
-            rs2 + RV32_REGISTER_NUM_LIMBS as u32,
+            RV64_MEMORY_AS,
+            rs2 + RV64_REGISTER_NUM_LIMBS as u32,
         ));
 
         match PairingCurve::from_repr(c_upper as usize) {
@@ -282,12 +279,12 @@ pub(crate) mod phantom {
         Fp::Repr: From<[u8; N]>,
     {
         // SAFETY:
-        // - RV32_MEMORY_AS consists of `u8`s
-        // - RV32_MEMORY_AS is in bounds
+        // - RV64_MEMORY_AS consists of `u8`s
+        // - RV64_MEMORY_AS is in bounds
         let repr: &[u8; N] = unsafe {
             memory
                 .memory
-                .get_slice::<u8>((RV32_MEMORY_AS, ptr), N)
+                .get_slice::<u8>((RV64_MEMORY_AS, ptr), N)
                 .try_into()
                 .unwrap()
         };
