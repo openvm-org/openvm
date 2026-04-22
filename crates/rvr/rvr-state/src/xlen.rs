@@ -3,8 +3,10 @@
 //! OpenVM only uses RV32, so we keep just the trait + RV32 marker that
 //! the `RvState` layout needs.
 
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 
 /// Marker type for 32-bit register width.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

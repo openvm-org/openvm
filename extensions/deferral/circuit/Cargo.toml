@@ -20,6 +20,7 @@ openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
@@ -52,6 +53,7 @@ test-log = { workspace = true }
 default = ["parallel", "jemalloc"]
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot"]
+rvr = ["dep:rvr-openvm-lift", "openvm-rv32im-circuit/rvr"]
 jemalloc = ["openvm-circuit/jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]

@@ -10,8 +10,8 @@ mod suspender;
 mod tracer;
 mod xlen;
 
-pub use memory::{GUARD_SIZE, GuardedMemory, MemoryError};
-pub use state::{ExecutionStatus, NUM_CSRS, NUM_REGS_I, Rv32State, RvState};
+pub use memory::{GuardedMemory, MemoryError, GUARD_SIZE};
+pub use state::{ExecutionStatus, Rv32State, RvState, NUM_CSRS, NUM_REGS_I};
 pub use suspender::{InstretSuspender, SuspenderState};
 pub use tracer::TracerState;
 pub use xlen::{Rv32, Xlen};
