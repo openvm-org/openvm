@@ -4,7 +4,7 @@
 #include "primitives/trace_access.h"
 
 inline constexpr size_t PERSISTENT_CHUNK = 8;
-inline constexpr size_t BLOCKS_PER_CHUNK = 2;
+inline constexpr size_t BLOCKS_PER_CHUNK = 1;
 // TODO better address space handling
 inline constexpr uint32_t DEFERRAL_AS = 4;
 

@@ -1,3 +1,14 @@
+// GPU memory inventory merge kernel.
+//
+// Currently unused at runtime on the rv64 branch: with DEFAULT_BLOCK_SIZE == DIGEST_WIDTH == 8,
+// each touched block is already a full chunk and the Rust side (system/cuda/memory.rs) uses a
+// no-merge fast path. This kernel is kept because the planned switch of AS 1 / AS 2 to u16 cells
+// will bring DEFAULT_BLOCK_SIZE back to 4, at which point the 2-way merge implemented here will
+// be needed again.
+//
+// If DEFAULT_BLOCK_SIZE ever ends up smaller than 4 (i.e., BLOCKS_PER_CHUNK > 2), this kernel
+// needs to be generalized or rewritten — it currently handles at most 2 input records per output
+// chunk.
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
 #include <cub/device/device_scan.cuh>
@@ -17,13 +28,15 @@ template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
     uint32_t values[CHUNK];      // Montgomery-encoded Fp values (Fp::asRaw())
 };
 
-inline constexpr uint32_t IN_BLOCK_SIZE = 4;
+inline constexpr uint32_t IN_BLOCK_SIZE = 8;
 inline constexpr uint32_t OUT_BLOCK_SIZE = 8;
 // TODO better address space handling
 inline constexpr uint32_t DEFERRAL_AS = 4;
 
+inline constexpr uint32_t BLOCKS_PER_CHUNK = OUT_BLOCK_SIZE / IN_BLOCK_SIZE;
+
 using InRec = MemoryInventoryRecord<IN_BLOCK_SIZE, 1>;
-using OutRec = MemoryInventoryRecord<OUT_BLOCK_SIZE, 2>;
+using OutRec = MemoryInventoryRecord<OUT_BLOCK_SIZE, BLOCKS_PER_CHUNK>;
 
 __device__ inline bool same_output_block(
     InRec const *in,
@@ -97,8 +110,9 @@ __global__ void cukernel_build_candidates(
     rec.address_space = in[row_idx].address_space;
     uint32_t chunk_ptr = (in[row_idx].ptr / OUT_BLOCK_SIZE) * OUT_BLOCK_SIZE;
     rec.ptr = chunk_ptr;
-    rec.timestamps[0] = 0;
-    rec.timestamps[1] = 0;
+    for (uint32_t i = 0; i < BLOCKS_PER_CHUNK; ++i) {
+        rec.timestamps[i] = 0;
+    }
 
     // Fill all values with Montgomery-encoded initial memory
     read_initial_chunk(rec.values, initial_mem, rec.address_space, chunk_ptr);

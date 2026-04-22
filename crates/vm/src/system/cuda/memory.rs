@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET},
-    system::{memory::AddressMap, TouchedMemory},
+    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
+    system::{
+        memory::{persistent::BLOCKS_PER_CHUNK, AddressMap},
+        TouchedMemory,
+    },
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{prelude::F, GpuBackend};
@@ -112,7 +115,7 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
         let partition = touched_memory;
-        let merkle_proof_ctx = if partition.is_empty() {
+        if partition.is_empty() {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -152,25 +155,13 @@ impl MemoryInventoryGPU {
                     MERKLE_TOUCHED_BLOCK_WIDTH,
                 )
             };
-            let d_merkle_touched_memory = merkle_words.to_device_on(&self.device_ctx).unwrap();
-
-            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
-            #[cfg(feature = "metrics")]
-            {
-                self.unpadded_merkle_height = unpadded_merkle_height;
-            }
+            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
             self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
-            mem.tracing_info("merkle update");
-            self.merkle_tree.finalize();
-            self.merkle_tree.update_with_touched_blocks(
-                unpadded_merkle_height,
-                &d_merkle_touched_memory,
-                true,
-            )
-        } else {
-            // Convert MemoryInventoryRecord<4, 1> to MemoryInventoryRecord<8, 2>
-            let in_records: Vec<MemoryInventoryRecord<4, 1>> = partition
+        } else if BLOCKS_PER_CHUNK == 1 {
+            // DEFAULT_BLOCK_SIZE == DIGEST_WIDTH: each touched block is already a
+            // full chunk, so no merge is needed.
+            let mut records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
                 .iter()
                 .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
                     address_space: addr_space,
@@ -179,81 +170,26 @@ impl MemoryInventoryGPU {
                     values: ts_values.values.map(Self::field_to_raw_u32),
                 })
                 .collect();
-            let in_num_records = in_records.len();
-            let out_words = in_num_records
-                * (std::mem::size_of::<MemoryInventoryRecord<8, 2>>() / std::mem::size_of::<u32>());
-            let d_in_records = in_records
+            records.sort_unstable_by_key(|r| (r.address_space, r.ptr));
+            let num_records = records.len();
+
+            let d_records = records
                 .to_device_on(&self.device_ctx)
                 .unwrap()
                 .as_buffer::<u32>();
-            let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
-            let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
-            let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
-            let d_flags = DeviceBuffer::<u32>::with_capacity_on(in_num_records, &self.device_ctx);
-            let d_positions =
-                DeviceBuffer::<u32>::with_capacity_on(in_num_records, &self.device_ctx);
-            let d_initial_mem = self
-                .boundary
-                .initial_leaves
-                .to_device_on(&self.device_ctx)
-                .unwrap();
-            let mut temp_bytes = 0usize;
-            unsafe {
-                inventory::merge_records_get_temp_bytes(
-                    &d_flags,
-                    in_num_records,
-                    &mut temp_bytes,
-                    self.device_ctx.stream.as_raw(),
-                )
-                .expect("merge_records_get_temp_bytes failed");
-            }
-            let d_temp_storage = if temp_bytes == 0 {
-                DeviceBuffer::<u8>::new()
-            } else {
-                DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.device_ctx)
-            };
-            unsafe {
-                inventory::merge_records(
-                    &d_in_records,
-                    in_num_records,
-                    &d_initial_mem,
-                    &d_tmp_records,
-                    &d_out_records,
-                    &d_flags,
-                    &d_positions,
-                    &d_temp_storage,
-                    temp_bytes,
-                    &d_out_num_records,
-                    self.device_ctx.stream.as_raw(),
-                )
-                .expect("merge_records failed");
-            }
 
-            // Send records to boundary chip
-            let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
             self.boundary
-                .finalize_records_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
+                .finalize_records_device::<DIGEST_WIDTH>(d_records, num_records);
 
-            // Send records to memory merkle tree
-            let out_records = self
-                .boundary
-                .records()
-                .to_host_on(&self.device_ctx)
-                .unwrap();
-            let record_words = 4 + DIGEST_WIDTH;
-            let mut merkle_records = Vec::with_capacity(out_num_records);
-            for i in 0..out_num_records {
-                let base = i * record_words;
-                let mut values = [0u32; DIGEST_WIDTH];
-                values.copy_from_slice(&out_records[base + 4..base + 4 + DIGEST_WIDTH]);
-                let record = MemoryMerkleRecord {
-                    address_space: out_records[base],
-                    ptr: out_records[base + 1],
-                    timestamp: out_records[base + 2].max(out_records[base + 3]),
-                    values,
-                };
-                merkle_records.push(record);
-            }
+            let merkle_records: Vec<MemoryMerkleRecord> = records
+                .iter()
+                .map(|r| MemoryMerkleRecord {
+                    address_space: r.address_space,
+                    ptr: r.ptr,
+                    timestamp: r.timestamps[0],
+                    values: r.values,
+                })
+                .collect();
             let merkle_words: &[u32] = unsafe {
                 std::slice::from_raw_parts(
                     merkle_records.as_ptr() as *const u32,
@@ -261,23 +197,31 @@ impl MemoryInventoryGPU {
                 )
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
+        } else {
+            // Currently only BLOCKS_PER_CHUNK == 1 is supported on GPU. The merge-kernel
+            // path needed for BLOCKS_PER_CHUNK == 2 is kept as dead code in
+            // `populate_records_via_merge` below (see that function for rationale).
+            panic!(
+                "GPU memory inventory only supports BLOCKS_PER_CHUNK == 1, got {}",
+                BLOCKS_PER_CHUNK,
+            );
+        }
 
-            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
-            #[cfg(feature = "metrics")]
-            {
-                self.unpadded_merkle_height = unpadded_merkle_height;
-            }
+        let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
+        #[cfg(feature = "metrics")]
+        {
+            self.unpadded_merkle_height = unpadded_merkle_height;
+        }
 
-            mem.tracing_info("merkle update");
-            self.merkle_tree.finalize();
-            self.merkle_tree.update_with_touched_blocks(
-                unpadded_merkle_height,
-                self.merkle_records
-                    .as_ref()
-                    .expect("missing merkle records"),
-                false,
-            )
-        };
+        mem.tracing_info("merkle update");
+        self.merkle_tree.finalize();
+        let merkle_proof_ctx = self.merkle_tree.update_with_touched_blocks(
+            unpadded_merkle_height,
+            self.merkle_records
+                .as_ref()
+                .expect("missing merkle records"),
+            partition.is_empty(),
+        );
         mem.tracing_info("boundary tracegen");
         let ret = vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx];
         mem.tracing_info("dropping merkle tree");
@@ -285,6 +229,115 @@ impl MemoryInventoryGPU {
         self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret
+    }
+
+    /// Populates `self.boundary` records and `self.merkle_records` via the GPU merge kernel,
+    /// combining pairs of adjacent DEFAULT_BLOCK_SIZE-sized blocks into DIGEST_WIDTH-sized chunks.
+    ///
+    /// # Dead code notice
+    ///
+    /// This path is currently unreachable because `DEFAULT_BLOCK_SIZE == DIGEST_WIDTH == 8` on the
+    /// rv64 branch, which makes `BLOCKS_PER_CHUNK == 1` and routes all work through the no-merge
+    /// path in `generate_proving_ctxs`. It is kept (along with `inventory.cu` and the
+    /// `cuda_abi::inventory` FFI bindings) because the plan is to switch AS 1 and AS 2 to use u16
+    /// cells, at which point one 64-bit word will span 4 cells and `DEFAULT_BLOCK_SIZE` will go
+    /// back to 4. That will make `BLOCKS_PER_CHUNK == 2` again and this path will be needed.
+    ///
+    /// If `BLOCKS_PER_CHUNK` changes to anything other than 1 or 2, the merge kernel (which
+    /// hardcodes a 2-way merge) will need to be generalized or rewritten.
+    #[allow(dead_code)]
+    fn populate_records_via_merge(&mut self, partition: &TouchedMemory<F>) {
+        let in_records: Vec<MemoryInventoryRecord<DEFAULT_BLOCK_SIZE, 1>> = partition
+            .iter()
+            .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
+                address_space: addr_space,
+                ptr,
+                timestamps: [ts_values.timestamp],
+                values: ts_values.values.map(Self::field_to_raw_u32),
+            })
+            .collect();
+        let in_num_records = in_records.len();
+        let out_words = in_num_records
+            * (std::mem::size_of::<MemoryInventoryRecord<DIGEST_WIDTH, 2>>()
+                / std::mem::size_of::<u32>());
+        let d_in_records = in_records
+            .to_device_on(&self.device_ctx)
+            .unwrap()
+            .as_buffer::<u32>();
+        let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
+        let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
+        let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
+        let d_flags = DeviceBuffer::<u32>::with_capacity_on(in_num_records, &self.device_ctx);
+        let d_positions = DeviceBuffer::<u32>::with_capacity_on(in_num_records, &self.device_ctx);
+        let d_initial_mem = self
+            .boundary
+            .initial_leaves
+            .to_device_on(&self.device_ctx)
+            .unwrap();
+        let mut temp_bytes = 0usize;
+        unsafe {
+            inventory::merge_records_get_temp_bytes(
+                &d_flags,
+                in_num_records,
+                &mut temp_bytes,
+                self.device_ctx.stream.as_raw(),
+            )
+            .expect("merge_records_get_temp_bytes failed");
+        }
+        let d_temp_storage = if temp_bytes == 0 {
+            DeviceBuffer::<u8>::new()
+        } else {
+            DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.device_ctx)
+        };
+        unsafe {
+            inventory::merge_records(
+                &d_in_records,
+                in_num_records,
+                &d_initial_mem,
+                &d_tmp_records,
+                &d_out_records,
+                &d_flags,
+                &d_positions,
+                &d_temp_storage,
+                temp_bytes,
+                &d_out_num_records,
+                self.device_ctx.stream.as_raw(),
+            )
+            .expect("merge_records failed");
+        }
+
+        // Send records to boundary chip
+        let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
+        self.boundary
+            .finalize_records_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
+
+        // Send records to memory merkle tree
+        let out_records = self
+            .boundary
+            .records()
+            .to_host_on(&self.device_ctx)
+            .unwrap();
+        let record_words = 2 + 2 + DIGEST_WIDTH;
+        let mut merkle_records = Vec::with_capacity(out_num_records);
+        for i in 0..out_num_records {
+            let base = i * record_words;
+            let mut values = [0u32; DIGEST_WIDTH];
+            values.copy_from_slice(&out_records[base + 4..base + 4 + DIGEST_WIDTH]);
+            let record = MemoryMerkleRecord {
+                address_space: out_records[base],
+                ptr: out_records[base + 1],
+                timestamp: out_records[base + 2].max(out_records[base + 3]),
+                values,
+            };
+            merkle_records.push(record);
+        }
+        let merkle_words: &[u32] = unsafe {
+            std::slice::from_raw_parts(
+                merkle_records.as_ptr() as *const u32,
+                merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
+            )
+        };
+        self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
     }
 }
 
@@ -399,8 +452,8 @@ mod tests {
         }
 
         let mut final_memory = memory.clone();
-        let touched_bytes = [101u8, 102, 103, 104];
-        let touched_bytes_late = [111u8, 112, 113, 114];
+        let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
+        let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
             final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
                 RV32_MEMORY_AS,

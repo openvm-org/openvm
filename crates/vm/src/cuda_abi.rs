@@ -187,6 +187,13 @@ pub mod poseidon2 {
     }
 }
 
+/// FFI bindings for the GPU memory inventory merge kernel (see `inventory.cu`).
+///
+/// These are currently unused at runtime on the rv64 branch because
+/// `DEFAULT_BLOCK_SIZE == DIGEST_WIDTH` makes the merge a no-op (see
+/// `system::cuda::memory::MemoryInventoryGPU::populate_records_via_merge` for the full
+/// rationale). They are kept because the planned switch of AS 1 / AS 2 to u16 cells will
+/// restore `DEFAULT_BLOCK_SIZE = 4` and re-enable the merge path.
 pub mod inventory {
     use super::*;
 
