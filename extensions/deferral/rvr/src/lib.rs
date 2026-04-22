@@ -20,7 +20,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx};
 
 // ── IR Nodes ──────────────────────────────────────────────────────────────────
 
@@ -134,20 +134,23 @@ impl DeferralRvrExtension {
     }
 
     /// Create with chip indices resolved from the VM config.
-    pub fn new<F: VmField>(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Self {
-        let call_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::CALL.global_opcode());
-        let output_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::OUTPUT.global_opcode());
+    pub fn new<F: VmField>(
+        ctx: &RvrExtensionCtx,
+        staticlib_path: PathBuf,
+    ) -> Result<Self, ExtensionError> {
+        let call_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::CALL.global_opcode())?;
+        let output_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::OUTPUT.global_opcode())?;
         // Poseidon2 periphery chip: in extend_circuit, the hasher is added
         // right before the CALL chip. Due to reverse ordering of AIR indices,
         // poseidon2_air_idx = call_air_idx + 1.
         let poseidon2_chip_idx = call_chip_idx + 1;
 
-        Self {
+        Ok(Self {
             call_chip_idx,
             output_chip_idx,
             poseidon2_chip_idx,
             staticlib_path,
-        }
+        })
     }
 }
 

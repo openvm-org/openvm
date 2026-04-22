@@ -68,7 +68,7 @@ fn build_matrix_power_exe() -> Result<VmExe<F>> {
 
 fn make_int256_ext(harness: &utils::VmTestHarness<Int256Rv32CpuBuilder>) -> Int256Extension {
     let ctx = harness.rvr_extension_ctx().unwrap();
-    Int256Extension::new(&ctx, build_int256_staticlib())
+    Int256Extension::new(&ctx, build_int256_staticlib()).unwrap()
 }
 
 fn run_matrix_power(label: &str, mode: ExecutionMode) -> Result<()> {

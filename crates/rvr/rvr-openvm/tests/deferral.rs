@@ -271,7 +271,7 @@ impl DeferralTestHarness {
     fn build_ext(&self) -> DeferralRvrExtension {
         let inventory = self.inventory().unwrap();
         let ctx = utils::rvr_extension_ctx(&inventory, &self.air_idx);
-        DeferralRvrExtension::new::<F>(&ctx, build_deferral_staticlib())
+        DeferralRvrExtension::new::<F>(&ctx, build_deferral_staticlib()).unwrap()
     }
 
     fn build_ext_pure() -> DeferralRvrExtension {

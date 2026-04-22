@@ -20,5 +20,7 @@ pub use convert::{
     convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
     ConvertError,
 };
-pub use extension::{ExtensionRegistry, RvrExtension, RvrExtensionCtx, VmRvrExtension};
+pub use extension::{
+    ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx, VmRvrExtension,
+};
 pub use helpers::decode_reg;

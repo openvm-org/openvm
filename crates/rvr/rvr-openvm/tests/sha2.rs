@@ -118,7 +118,7 @@ fn build_sha2_exe() -> Result<VmExe<F>> {
 
 fn make_sha2_ext(harness: &utils::VmTestHarness<Sha2Rv32CpuBuilder>) -> Sha2Extension {
     let ctx = harness.rvr_extension_ctx().unwrap();
-    Sha2Extension::new(&ctx, build_sha2_staticlib())
+    Sha2Extension::new(&ctx, build_sha2_staticlib()).unwrap()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────

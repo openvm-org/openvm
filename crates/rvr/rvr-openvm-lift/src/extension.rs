@@ -41,11 +41,17 @@ impl RvrExtensionCtx {
             .map(|air_idx| *air_idx as u32)
     }
 
-    pub fn require_opcode_air_idx(&self, opcode: VmOpcode) -> u32 {
-        self.resolve_opcode_air_idx(opcode).unwrap_or_else(|| {
-            panic!("opcode {opcode:?} not found in rvr extension context mappings")
-        })
+    pub fn require_opcode_air_idx(&self, opcode: VmOpcode) -> Result<u32, ExtensionError> {
+        self.resolve_opcode_air_idx(opcode)
+            .ok_or(ExtensionError::UnknownOpcode(opcode))
     }
+}
+
+/// Errors raised when resolving extension metadata from a `RvrExtensionCtx`.
+#[derive(Debug, thiserror::Error)]
+pub enum ExtensionError {
+    #[error("opcode {0:?} not found in rvr extension context mappings")]
+    UnknownOpcode(VmOpcode),
 }
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
