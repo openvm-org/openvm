@@ -6,15 +6,17 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{GuardedMemory, InstretSuspender, Rv32State, RvState, NUM_REGS_I};
 
-use crate::metered::MeteredTracer;
-use crate::metered_cost::MeteredCostMeter;
-use crate::metered_cost::PureTracer;
+use crate::{
+    metered::MeteredTracer,
+    metered_cost::{MeteredCostMeter, PureTracer},
+};
 
 /// Type alias for RV32 state with PureTracer and instret-based suspension.
 pub type PureState = RvState<rvr_state::Rv32, PureTracer, InstretSuspender, NUM_REGS_I>;
 
 /// Type alias for RV32 state with MeteredCostMeter and instret-based suspension.
-pub type MeteredCostState = RvState<rvr_state::Rv32, MeteredCostMeter, InstretSuspender, NUM_REGS_I>;
+pub type MeteredCostState =
+    RvState<rvr_state::Rv32, MeteredCostMeter, InstretSuspender, NUM_REGS_I>;
 
 /// Type alias for RV32 state with MeteredTracer and instret-based suspension.
 pub type MeteredState = RvState<rvr_state::Rv32, MeteredTracer, InstretSuspender, NUM_REGS_I>;

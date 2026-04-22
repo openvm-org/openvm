@@ -1,23 +1,28 @@
 //! IR -> CProject -> make -> .so pipeline.
 
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
-use std::{collections::BTreeSet, ffi::OsStr};
+use std::{
+    collections::BTreeSet,
+    ffi::OsStr,
+    fs::{self, File},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{Duration, Instant},
+};
 
 use openvm_circuit::arch::execution_mode::metered::segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::Serialize;
-use sha2::{Digest, Sha256};
-
-use crate::debug::GuestDebugMap;
-use crate::emit::{CProject, TracerMode};
-use crate::toolchain;
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
     ExtensionRegistry,
+};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+
+use crate::{
+    debug::GuestDebugMap,
+    emit::{CProject, TracerMode},
+    toolchain,
 };
 
 /// A compiled rvr shared library ready for execution.
@@ -692,18 +697,20 @@ fn find_shared_lib(dir: &std::path::Path) -> Result<PathBuf, CompileError> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use openvm_instructions::{exe::VmExe, instruction::Instruction};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rvr_openvm_ir::LiftedInstr;
+    use rvr_openvm_lift::{ExtensionRegistry, RvrExtension};
     use sha2::{Digest, Sha256};
     use tempfile::TempDir;
 
     use super::{native_cache_key, CompileError, TracerMode};
     use crate::ChipMapping;
-    use rvr_openvm_lift::{ExtensionRegistry, RvrExtension};
 
     struct MockExtension {
         header_content: String,

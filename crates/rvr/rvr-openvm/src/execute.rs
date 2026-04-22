@@ -1,31 +1,32 @@
 //! Load .so, bridge state, call rv_execute.
 
-use std::collections::VecDeque;
-use std::ffi::c_void;
+use std::{collections::VecDeque, ffi::c_void};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{rngs::StdRng, SeedableRng};
 use rvr_state::GuardedMemory;
 
-use crate::compile::RvrCompiled;
-use crate::io::{
-    convert_input_stream, host_deferral_call_lookup, host_deferral_output_lookup, host_hint_buffer,
-    host_hint_input, host_hint_random, host_hint_storew, host_hint_stream_set, host_print_str,
-    host_reveal, DeferralData, OpenVmHostCallbacks, OpenVmIoState,
-};
-use crate::metered::{
-    metered_periodic_check, MeteredConfig, MeteredTracer, MeteredTracerData, RvrMeteredResult,
-    SegmentationState, NO_LAST_PAGE,
-};
-use crate::metered_cost::{
-    prepare_metered_cost, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-    PureTracerData,
-};
-use crate::state::{
-    init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost,
-    MeteredCostState, MeteredState, PureState,
+use crate::{
+    compile::RvrCompiled,
+    io::{
+        convert_input_stream, host_deferral_call_lookup, host_deferral_output_lookup,
+        host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
+        host_hint_stream_set, host_print_str, host_reveal, DeferralData, OpenVmHostCallbacks,
+        OpenVmIoState,
+    },
+    metered::{
+        metered_periodic_check, MeteredConfig, MeteredTracer, MeteredTracerData, RvrMeteredResult,
+        SegmentationState, NO_LAST_PAGE,
+    },
+    metered_cost::{
+        prepare_metered_cost, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
+        PureTracerData,
+    },
+    state::{
+        init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost,
+        MeteredCostState, MeteredState, PureState,
+    },
 };
 
 /// Result of executing via rvr.
@@ -116,10 +117,10 @@ pub fn build_callbacks(io_state: &mut OpenVmIoState) -> OpenVmHostCallbacks {
 
 /// # Safety
 ///
-/// - `compiled` must contain a valid rvr-compiled shared library with the
-///   expected ABI (`register_openvm_callbacks` and `rv_execute` symbols).
-/// - `state_ptr` must point to a valid, mutable RV32 state struct whose
-///   tracer variant matches the one compiled into the shared library.
+/// - `compiled` must contain a valid rvr-compiled shared library with the expected ABI
+///   (`register_openvm_callbacks` and `rv_execute` symbols).
+/// - `state_ptr` must point to a valid, mutable RV32 state struct whose tracer variant matches the
+///   one compiled into the shared library.
 pub unsafe fn register_and_execute(
     compiled: &RvrCompiled,
     callbacks: &OpenVmHostCallbacks,
