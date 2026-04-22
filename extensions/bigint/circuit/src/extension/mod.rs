@@ -33,6 +33,8 @@ use openvm_rv32_adapters::{
 };
 use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 
 use crate::{AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, *};
@@ -71,6 +73,9 @@ impl Default for Int256 {
 fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Int256 {}
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(

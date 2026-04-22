@@ -19,6 +19,7 @@ openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 strum.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
@@ -45,6 +46,7 @@ parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot", "openvm-circuit-derive/aot"]
+rvr = ["dep:rvr-openvm-lift"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
