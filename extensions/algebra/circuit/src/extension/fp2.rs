@@ -81,11 +81,11 @@ impl Fp2Extension {
 )]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
-    Fp2AddSubRv32_32(Fp2Executor<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // Fp2AddSub
-    Fp2MulDivRv32_32(Fp2Executor<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // Fp2MulDiv
+    Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // Fp2AddSub
+    Fp2MulDivRv64_32(Fp2Executor<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>), // Fp2MulDiv
     // 48 limbs prime
-    Fp2AddSubRv32_48(Fp2Executor<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // Fp2AddSub
-    Fp2MulDivRv32_48(Fp2Executor<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // Fp2MulDiv
+    Fp2AddSubRv64_48(Fp2Executor<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // Fp2AddSub
+    Fp2MulDivRv64_48(Fp2Executor<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>), // Fp2MulDiv
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 );
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub),
+                    Fp2ExtensionExecutor::Fp2AddSubRv64_32(addsub),
                     ((Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
@@ -130,7 +130,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 );
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv),
+                    Fp2ExtensionExecutor::Fp2MulDivRv64_32(muldiv),
                     ((Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
@@ -148,7 +148,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 );
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub),
+                    Fp2ExtensionExecutor::Fp2AddSubRv64_48(addsub),
                     ((Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 );
 
                 inventory.add_executor(
-                    Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv),
+                    Fp2ExtensionExecutor::Fp2MulDivRv64_48(muldiv),
                     ((Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;

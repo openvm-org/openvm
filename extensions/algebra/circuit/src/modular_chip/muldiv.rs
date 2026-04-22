@@ -9,13 +9,13 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldVariable, SymbolicExpr,
 };
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+use openvm_riscv_adapters::{
+    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
 };
 
 use super::{ModularAir, ModularChip, ModularExecutor};
@@ -91,7 +91,7 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> ModularAir<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
     ModularAir::new(
-        Rv32VecHeapAdapterAir::new(
+        Rv64VecHeapAdapterAir::new(
             exec_bridge,
             mem_bridge,
             bitwise_lookup_bus,
@@ -110,7 +110,7 @@ pub fn get_modular_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -123,13 +123,13 @@ pub fn get_modular_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pointer_max_bits: usize,
 ) -> ModularChip<F, BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             local_opcode_idx,
             opcode_flag_idx,
