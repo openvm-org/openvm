@@ -2,18 +2,18 @@ use std::{borrow::Borrow, iter};
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
 use openvm_instructions::riscv::{
-    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::abstract_compose;
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
@@ -22,10 +22,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::{
-    keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS},
-    KECCAK_WORD_SIZE,
-};
+use crate::keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfOpAir {
@@ -67,33 +64,30 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         };
         // ======== Read `rd` =========
         let rd_ptr = local.rd_ptr;
-        let buffer_ptr_limbs = local.buffer_ptr_limbs;
+        // Build full 8-element data array with upper 4 limbs hardcoded to zero
+        let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
+            expand_to_rv64_register(&local.buffer_ptr_limbs);
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), rd_ptr),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
                 buffer_ptr_limbs,
                 timestamp_pp(),
                 &local.rd_aux,
             )
             .eval(builder, is_valid);
+
         // Range check that buffer_ptr_limbs fits in [0, 2^ptr_max_bits) as u32
         {
-            assert!(self.ptr_max_bits >= RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1));
-            let limb_shift = AB::F::from_usize(
-                1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
-            );
-            let need_range_check = [
-                buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-                buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            ];
-            for pair in need_range_check.chunks_exact(2) {
-                self.bitwise_lookup_bus
-                    .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-                    .eval(builder, is_valid);
-            }
+            assert!(self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1));
+            let limb_shift =
+                AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits));
+            let msb = local.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1];
+            self.bitwise_lookup_bus
+                .send_range(msb * limb_shift, msb * limb_shift)
+                .eval(builder, is_valid);
         }
         // Now it is safe to cast buffer_ptr to F
-        let buffer_ptr: AB::Expr = abstract_compose(local.buffer_ptr_limbs);
+        let buffer_ptr: AB::Expr = compose(&local.buffer_ptr_limbs[..], RV64_CELL_BITS);
 
         // ======== Constrain that post-state consists of bytes =========
         // We know that the pre-state buffer consists of bytes due to the invariant of Address Space
@@ -109,8 +103,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // ======== Constrain new writes of `buffer` to memory =========
         // NOTE: we use the _next_ row's `buffer` as the pre-state
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
-            local.preimage.chunks_exact(KECCAK_WORD_SIZE),
-            local.postimage.chunks_exact(KECCAK_WORD_SIZE),
+            local.preimage.chunks_exact(DEFAULT_BLOCK_SIZE),
+            local.postimage.chunks_exact(DEFAULT_BLOCK_SIZE),
             local.buffer_word_aux
         )
         .enumerate()
@@ -125,17 +119,17 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             //   a previous valid write at `ptr`. Assuming the invariant that all previous memory
             //   accesses are valid and timestamp always moves forward, the new write to `ptr` must
             //   be valid as well.
-            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * KECCAK_WORD_SIZE);
-            let prev_data: &[_; KECCAK_WORD_SIZE] = prev_word.try_into().unwrap();
+            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * DEFAULT_BLOCK_SIZE);
+            let prev_data: &[_; DEFAULT_BLOCK_SIZE] = prev_word.try_into().unwrap();
             // post_word consists of bytes due to range checks above
-            let data: &[_; KECCAK_WORD_SIZE] = post_word.try_into().unwrap();
+            let data: &[_; DEFAULT_BLOCK_SIZE] = post_word.try_into().unwrap();
             let write_aux = MemoryWriteAuxCols {
                 base: base_aux,
                 prev_data: *prev_data,
             };
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::F::from_u32(RV32_MEMORY_AS), ptr),
+                    MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), ptr),
                     *data,
                     timestamp_pp(),
                     &write_aux,
@@ -151,8 +145,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                     rd_ptr.into(),
                     AB::Expr::ZERO,
                     AB::Expr::ZERO,
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
-                    AB::Expr::from_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
+                    AB::Expr::from_u32(RV64_MEMORY_AS),
                 ],
                 ExecutionState::new(local.pc, local.timestamp),
                 AB::F::from_usize(timestamp_delta),
