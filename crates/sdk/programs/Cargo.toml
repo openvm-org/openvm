@@ -12,6 +12,9 @@ openvm-verify-stark-guest = { path = "../../../guest-libs/verify-stark/guest", d
 [features]
 default = []
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
+
 [profile.release]
 panic = "abort"
 lto = "thin"
