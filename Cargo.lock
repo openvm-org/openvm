@@ -1743,16 +1743,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bincode"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
-dependencies = [
- "serde",
- "unty",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2230,7 +2220,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35584c5fcba8059780748866387fb97c5a203bcfc563fc3d0790af406727a117"
 dependencies = [
  "anyhow",
- "bincode 1.3.3",
+ "bincode",
  "colored",
  "glob",
  "libc",
@@ -5894,7 +5884,6 @@ version = "2.0.0-beta.2"
 dependencies = [
  "abi_stable",
  "backtrace",
- "bincode 2.0.1",
  "bytesize",
  "cfg-if",
  "dashmap",
@@ -5934,7 +5923,6 @@ dependencies = [
  "rvr-state",
  "serde",
  "serde-big-array",
- "sha2 0.10.9",
  "static_assertions",
  "tempfile",
  "test-case",
@@ -9012,7 +9000,6 @@ dependencies = [
  "openvm-stark-backend",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
- "sha2 0.10.9",
 ]
 
 [[package]]
@@ -9828,7 +9815,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89cc442a507abb490f3c2f5e2a0be2626b1d9d9ea2137fb240c6ddf5a8377e24"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "ethereum-types",
  "getset",
  "halo2-base",
@@ -11095,12 +11082,6 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
-
-[[package]]
-name = "unty"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
 
 [[package]]
 name = "url"

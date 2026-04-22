@@ -85,24 +85,25 @@ fn test_debug_info_line_directives_and_dwarf() -> Result<()> {
         "synthetic debug map should not be empty"
     );
 
-    let cache_dir = tmp.path().join("debug_test_cache");
     let registry = ExtensionRegistry::new();
     let opts = CompileOptions {
         base_name: Some("debug_test"),
         tracer_mode: TracerMode::Pure,
         extensions: &registry,
         chips: None,
-        cache_dir: Some(&cache_dir),
         guest_debug_map: Some(&debug_map),
         native_debug_info: true,
     };
 
-    let _compiled = rvr_openvm::compile_with_options(&exe, &opts)?;
+    let compiled = rvr_openvm::compile_with_options(&exe, &opts)?;
+    let artifact_dir = compiled
+        .artifact_dir()
+        .context("compile_with_options should return an artifact directory")?;
 
     let mut found_line_directive = false;
     let mut found_comment = false;
     let fake_source_str = fake_source.to_str().unwrap();
-    for entry in fs::read_dir(&cache_dir)? {
+    for entry in fs::read_dir(artifact_dir)? {
         let path = entry?.path();
         if path.extension().and_then(|ext| ext.to_str()) == Some("c") {
             let content = fs::read_to_string(&path)?;
@@ -121,14 +122,14 @@ fn test_debug_info_line_directives_and_dwarf() -> Result<()> {
     );
     assert!(found_comment, "expected source comments in generated C");
 
-    let built_lib = find_paths_with_extension(&cache_dir, shared_lib_extension())?;
+    let built_lib = find_paths_with_extension(artifact_dir, shared_lib_extension())?;
     assert!(
         !built_lib.is_empty(),
-        "expected compiled shared library in cache dir"
+        "expected compiled shared library in artifact dir"
     );
 
     if let Some(dwarfdump) = llvm_dwarfdump_path() {
-        let object_files = find_paths_with_extension(&cache_dir, "o")?;
+        let object_files = find_paths_with_extension(artifact_dir, "o")?;
         assert!(
             !object_files.is_empty(),
             "expected generated object files for DWARF inspection"

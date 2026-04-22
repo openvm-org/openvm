@@ -9,11 +9,10 @@ pub mod metered_cost;
 pub mod state;
 
 pub use compile::{
-    compile, compile_cached, compile_metered, compile_metered_cached, compile_metered_cost,
-    compile_metered_cost_with_extensions, compile_metered_cost_with_limit,
-    compile_metered_with_extensions, compile_with_extensions, compile_with_limit,
-    compile_with_options, load_compiled_from_path, native_cache_key, native_cache_stamp,
-    ChipMapping, CompileError, CompileOptions, RvrCompiled,
+    compile, compile_metered, compile_metered_cost, compile_metered_cost_with_extensions,
+    compile_metered_cost_with_limit, compile_metered_with_extensions, compile_with_extensions,
+    compile_with_limit, compile_with_options, load_compiled_from_path, ChipMapping, CompileError,
+    CompileOptions, RvrCompiled,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{

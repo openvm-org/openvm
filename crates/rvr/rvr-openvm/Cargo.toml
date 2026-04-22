@@ -13,5 +13,3 @@ rvr-openvm-lift.workspace = true
 
 openvm-instructions.workspace = true
 openvm-stark-backend.workspace = true
-
-sha2.workspace = true
