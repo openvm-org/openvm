@@ -3,7 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32im/adapters/rdwrite.cuh"
+#include "riscv/adapters/rdwrite.cuh"
 
 using namespace riscv;
 using namespace program;

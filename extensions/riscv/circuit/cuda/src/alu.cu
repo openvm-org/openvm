@@ -2,8 +2,8 @@
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
 #include "primitives/trace_access.h"
-#include "rv32im/adapters/alu.cuh"
-#include "rv32im/cores/alu.cuh"
+#include "riscv/adapters/alu.cuh"
+#include "riscv/cores/alu.cuh"
 
 using namespace riscv;
 

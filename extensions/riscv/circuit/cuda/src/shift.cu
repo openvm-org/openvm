@@ -3,8 +3,8 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32im/adapters/alu.cuh"
-#include "rv32im/cores/shift.cuh"
+#include "riscv/adapters/alu.cuh"
+#include "riscv/cores/shift.cuh"
 
 using namespace riscv;
 using namespace program;

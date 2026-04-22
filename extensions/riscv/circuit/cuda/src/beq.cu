@@ -3,8 +3,8 @@
 #include "primitives/constants.h" // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32im/adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
-#include "rv32im/cores/beq.cuh"
+#include "riscv/adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
+#include "riscv/cores/beq.cuh"
 
 using namespace riscv;
 

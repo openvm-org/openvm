@@ -4,7 +4,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
-#include "rv32im/adapters/mul.cuh"
+#include "riscv/adapters/mul.cuh"
 
 using namespace riscv;
 
