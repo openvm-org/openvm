@@ -13,6 +13,7 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher"] }
 getrandom = { version = "0.3", optional = true }
 getrandom-v02 = { version = "0.2", package = "getrandom", optional = true }
 
