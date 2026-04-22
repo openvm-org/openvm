@@ -11,3 +11,6 @@ license.workspace = true
 
 [dependencies]
 openvm-deferral-guest = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

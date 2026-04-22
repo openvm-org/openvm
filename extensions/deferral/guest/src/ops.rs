@@ -5,7 +5,7 @@ use crate::{
 };
 
 /// Macro to generate CALL opcode
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[macro_export]
 macro_rules! deferral_call {
     ($output_key_ptr:expr, $input_commit_ptr:expr, $deferral_idx:expr) => {{
@@ -20,7 +20,7 @@ macro_rules! deferral_call {
 }
 
 /// Macro to generate OUTPUT opcode
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[macro_export]
 macro_rules! deferral_output {
     ($output_ptr:expr, $output_key_ptr:expr, $deferral_idx:expr) => {{
@@ -43,10 +43,10 @@ pub fn deferred_compute_raw<const DEFERRAL_IDX: u16>(
 ) {
     const { assert!(DEFERRAL_IDX < MAX_DEF_CIRCUITS) };
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     deferral_call!(output_key_ptr, input_commit_ptr, DEFERRAL_IDX);
 
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_intrinsics))]
     unimplemented!("Deferral framework is only available with zkvm")
 }
 
@@ -59,10 +59,10 @@ pub fn get_deferred_output_raw<const DEFERRAL_IDX: u16>(
 ) {
     const { assert!(DEFERRAL_IDX < MAX_DEF_CIRCUITS) };
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     deferral_output!(output_ptr, output_key_ptr, DEFERRAL_IDX);
 
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_intrinsics))]
     unimplemented!("Deferral framework is only available with zkvm")
 }
 
@@ -70,16 +70,16 @@ pub fn get_deferred_output_raw<const DEFERRAL_IDX: u16>(
 #[inline(always)]
 #[allow(unused_variables)]
 pub fn deferred_compute<const DEFERRAL_IDX: u16>(input_commit: &Commit) -> OutputKey {
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     let ret = {
         let mut output_key = OutputKey::new([0u8; COMMIT_NUM_BYTES], 0);
         deferred_compute_raw::<DEFERRAL_IDX>(output_key.as_mut_ptr(), input_commit.as_ptr());
         output_key
     };
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     return ret;
 
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_intrinsics))]
     unimplemented!("Deferral framework is only available with zkvm")
 }
 
@@ -89,9 +89,9 @@ pub fn deferred_compute<const DEFERRAL_IDX: u16>(input_commit: &Commit) -> Outpu
 pub fn get_deferred_output<const DEFERRAL_IDX: u16>(output: &mut [u8], output_key: &OutputKey) {
     assert_eq!(output.len(), output_key.output_len as usize);
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     get_deferred_output_raw::<DEFERRAL_IDX>(output.as_mut_ptr(), output_key.as_ptr());
 
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_intrinsics))]
     unimplemented!("Deferral framework is only available with zkvm")
 }
