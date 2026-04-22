@@ -4,7 +4,7 @@
 
 use std::{
     collections::VecDeque,
-    env, fs,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -61,11 +61,13 @@ pub enum ExecutionMode {
 
 // ── Path helpers ────────────────────────────────────────────────────────────
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+// `rvr-openvm-test-utils` lives at `<workspace>/crates/rvr/rvr-openvm-test-utils/`,
+// three levels below the workspace root.
+pub fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-fn openvm_root() -> PathBuf {
+pub fn openvm_root() -> PathBuf {
     workspace_root()
 }
 

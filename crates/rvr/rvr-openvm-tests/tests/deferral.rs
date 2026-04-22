@@ -54,8 +54,7 @@ use openvm_verify_stark_host::vk::VmStarkVerifyingKey;
 use rvr_openvm::DeferralData;
 use rvr_openvm_ext_deferral::{DeferralCircuitInputs, DeferralRvrExtension};
 use rvr_openvm_lift::ExtensionRegistry;
-
-use super::utils;
+use rvr_openvm_test_utils::{self as utils, workspace_root};
 
 type F = BabyBear;
 type Engine = TestStarkEngine;
@@ -180,8 +179,7 @@ fn make_multiple_streams() -> Streams<F> {
 }
 
 fn deferral_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../openvm/extensions/deferral/tests/programs")
+    workspace_root().join("extensions/deferral/tests/programs")
 }
 
 fn transpile_with_deferral(
@@ -199,8 +197,7 @@ fn transpile_with_deferral(
 }
 
 fn build_deferral_staticlib() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let deferral_ffi_crate = manifest_dir.join("../extensions/deferral/ffi");
+    let deferral_ffi_crate = workspace_root().join("extensions/deferral/rvr/ffi");
 
     let output = Command::new("cargo")
         .args(["build", "--release"])
@@ -215,8 +212,7 @@ fn build_deferral_staticlib() -> PathBuf {
         );
     }
 
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_deferral_ffi.a");
+    let lib_path = workspace_root().join("target/release/librvr_openvm_ext_deferral_ffi.a");
     assert!(
         lib_path.exists(),
         "Deferral FFI staticlib not found at {}",

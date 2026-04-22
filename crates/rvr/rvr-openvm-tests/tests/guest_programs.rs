@@ -1,7 +1,6 @@
 use eyre::Result;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-
-use super::utils::{self, ExecutionMode::Pure, F};
+use rvr_openvm_test_utils::{self as utils, ExecutionMode::Pure, F};
 
 #[test]
 fn test_guest_fibonacci() -> Result<()> {

@@ -18,14 +18,7 @@ use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm::{CompileOptions, GuestDebugMap, TracerMode};
 use rvr_openvm_ir::SourceLoc;
 use rvr_openvm_lift::ExtensionRegistry;
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn openvm_root() -> PathBuf {
-    workspace_root().join("openvm")
-}
+use rvr_openvm_test_utils::workspace_root;
 
 fn transpile(elf: Elf) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(
@@ -62,7 +55,7 @@ fn shared_lib_extension() -> &'static str {
 
 #[test]
 fn test_debug_info_line_directives_and_dwarf() -> Result<()> {
-    let elf_path = openvm_root().join("crates/toolchain/tests/tests/data/rv32im-fib-from-as");
+    let elf_path = workspace_root().join("crates/toolchain/tests/tests/data/rv32im-fib-from-as");
     let data = fs::read(&elf_path)?;
     let exe = transpile(Elf::decode(&data, MEM_SIZE as u32)?)?;
 

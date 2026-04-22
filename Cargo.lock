@@ -5904,18 +5904,11 @@ dependencies = [
  "enum_dispatch",
  "eyre",
  "getset",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
  "itertools 0.14.0",
  "libc",
  "libloading 0.8.9",
  "memmap2",
  "metrics",
- "num-bigint 0.4.6",
- "openvm",
- "openvm-algebra-circuit",
- "openvm-algebra-transpiler",
- "openvm-bigint-circuit",
- "openvm-bigint-transpiler",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -5924,44 +5917,18 @@ dependencies = [
  "openvm-cuda-backend",
  "openvm-cuda-builder",
  "openvm-cuda-common",
- "openvm-deferral-circuit",
- "openvm-deferral-transpiler",
- "openvm-ecc-circuit",
- "openvm-ecc-guest",
- "openvm-ecc-transpiler",
  "openvm-instructions",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
- "openvm-pairing-circuit",
- "openvm-pairing-guest",
- "openvm-pairing-transpiler",
  "openvm-platform",
  "openvm-poseidon2-air",
- "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sdk",
- "openvm-sha2-circuit",
- "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "openvm-verify-stark-circuit",
- "openvm-verify-stark-host",
  "p3-baby-bear",
  "p3-field",
- "rand 0.8.5",
  "rand 0.9.2",
  "rustc-hash 2.1.1",
  "rvr-openvm",
- "rvr-openvm-ext-algebra",
- "rvr-openvm-ext-bigint",
- "rvr-openvm-ext-deferral",
- "rvr-openvm-ext-ecc",
  "rvr-openvm-ext-ffi-common",
- "rvr-openvm-ext-keccak",
- "rvr-openvm-ext-pairing",
- "rvr-openvm-ext-sha2",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
  "rvr-state",
@@ -5973,7 +5940,6 @@ dependencies = [
  "test-case",
  "test-log",
  "thiserror 1.0.69",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -9053,14 +9019,20 @@ dependencies = [
 name = "rvr-openvm-ext-algebra"
 version = "2.0.0-beta.2"
 dependencies = [
+ "eyre",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
+ "openvm-ecc-circuit",
  "openvm-instructions",
+ "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
  "rand 0.9.2",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-openvm-test-utils",
  "strum 0.26.3",
 ]
 
@@ -9122,12 +9094,20 @@ dependencies = [
 name = "rvr-openvm-ext-ecc"
 version = "2.0.0-beta.2"
 dependencies = [
+ "eyre",
+ "num-bigint 0.4.6",
+ "openvm-algebra-transpiler",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-instructions",
+ "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "rvr-openvm-ext-algebra",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-openvm-test-utils",
  "strum 0.26.3",
 ]
 
@@ -9153,11 +9133,18 @@ version = "2.0.0-beta.2"
 name = "rvr-openvm-ext-keccak"
 version = "2.0.0-beta.2"
 dependencies = [
+ "eyre",
  "openvm-instructions",
+ "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
+ "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-openvm-test-utils",
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -9171,11 +9158,26 @@ dependencies = [
 name = "rvr-openvm-ext-pairing"
 version = "2.0.0-beta.2"
 dependencies = [
+ "eyre",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "num-bigint 0.4.6",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
  "openvm-instructions",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
  "openvm-pairing-transpiler",
+ "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "rand 0.8.5",
+ "rvr-openvm-ext-algebra",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-openvm-test-utils",
 ]
 
 [[package]]
@@ -9193,11 +9195,18 @@ dependencies = [
 name = "rvr-openvm-ext-sha2"
 version = "2.0.0-beta.2"
 dependencies = [
+ "eyre",
  "openvm-instructions",
+ "openvm-rv32im-transpiler",
+ "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-openvm-test-utils",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -9225,6 +9234,54 @@ dependencies = [
  "openvm-stark-backend",
  "rvr-openvm-ir",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rvr-openvm-test-utils"
+version = "2.0.0-beta.2"
+dependencies = [
+ "eyre",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "rvr-openvm",
+ "rvr-openvm-lift",
+ "rvr-state",
+]
+
+[[package]]
+name = "rvr-openvm-tests"
+version = "2.0.0-beta.2"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-circuit",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "openvm-verify-stark-circuit",
+ "openvm-verify-stark-host",
+ "rvr-openvm",
+ "rvr-openvm-ext-deferral",
+ "rvr-openvm-ir",
+ "rvr-openvm-lift",
+ "rvr-openvm-test-utils",
+ "serde",
+ "tempfile",
 ]
 
 [[package]]

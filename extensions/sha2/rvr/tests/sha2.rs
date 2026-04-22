@@ -15,9 +15,8 @@ use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_sha2::Sha2Extension;
+use rvr_openvm_test_utils::{self as utils, workspace_root, ExecutionMode, F};
 use sha2::{Digest, Sha256, Sha512};
-
-use super::utils::{self, ExecutionMode, F};
 
 // ── SHA2-specific helpers ─────────────────────────────────────────────────
 
@@ -63,7 +62,7 @@ fn build_sha512_input_stream() -> Vec<Vec<F>> {
 }
 
 fn sha2_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../openvm/guest-libs/sha2/tests/programs")
+    workspace_root().join("guest-libs/sha2/tests/programs")
 }
 
 fn transpile_with_sha2(elf: Elf) -> Result<VmExe<F>> {
@@ -78,8 +77,7 @@ fn transpile_with_sha2(elf: Elf) -> Result<VmExe<F>> {
 }
 
 fn build_sha2_staticlib() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let sha2_ffi_crate = manifest_dir.join("../extensions/sha2/ffi");
+    let sha2_ffi_crate = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffi");
 
     let output = Command::new("cargo")
         .args(["build", "--release"])
@@ -94,8 +92,7 @@ fn build_sha2_staticlib() -> PathBuf {
         );
     }
 
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_sha2_ffi.a");
+    let lib_path = workspace_root().join("target/release/librvr_openvm_ext_sha2_ffi.a");
     assert!(
         lib_path.exists(),
         "SHA2 FFI staticlib not found at {}",

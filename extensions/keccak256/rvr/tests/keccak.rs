@@ -15,8 +15,7 @@ use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_keccak::KeccakExtension;
-
-use super::utils::{self, ExecutionMode, F};
+use rvr_openvm_test_utils::{self as utils, workspace_root, ExecutionMode, F};
 
 // ── Keccak-specific helpers ─────────────────────────────────────────────────
 
@@ -54,8 +53,7 @@ fn build_keccak_input_stream() -> VecDeque<Vec<F>> {
 }
 
 fn keccak_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../openvm/guest-libs/keccak256/tests/programs")
+    workspace_root().join("guest-libs/keccak256/tests/programs")
 }
 
 fn transpile_with_keccak(elf: Elf) -> Result<VmExe<F>> {
@@ -71,8 +69,7 @@ fn transpile_with_keccak(elf: Elf) -> Result<VmExe<F>> {
 
 /// Build the keccak extension staticlib and return its path.
 fn build_keccak_staticlib() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let keccak_ffi_crate = manifest_dir.join("../extensions/keccak/ffi");
+    let keccak_ffi_crate = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffi");
 
     let output = Command::new("cargo")
         .args(["build", "--release"])
@@ -87,8 +84,7 @@ fn build_keccak_staticlib() -> PathBuf {
         );
     }
 
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_keccak_ffi.a");
+    let lib_path = workspace_root().join("target/release/librvr_openvm_ext_keccak_ffi.a");
     assert!(
         lib_path.exists(),
         "Keccak FFI staticlib not found at {}",
