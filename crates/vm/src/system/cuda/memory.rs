@@ -159,7 +159,11 @@ impl MemoryInventoryGPU {
 
             self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
         } else if BLOCKS_PER_CHUNK == 1 {
-            // Each touched block is already a full chunk, so no merge is needed.
+            // TODO: remove this fast path once the u16 cell switch restores
+            // `DEFAULT_BLOCK_SIZE < DIGEST_WIDTH` (and thus `BLOCKS_PER_CHUNK > 1`). Until then,
+            // the merge kernel in `inventory.cu` hardcodes a 2-way merge (`<4,1> → <8,2>`), so
+            // with `BLOCKS_PER_CHUNK == 1` we have to bypass it: each touched block is already a
+            // full chunk, so no merge is needed.
             // `partition` is already sorted by (addr_space, ptr) — see `GuestMemory::finalize`
             // in system/memory/online.rs.
             let records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
@@ -421,6 +425,11 @@ mod tests {
         assert_eq!(expected_root, gpu_root);
     }
 
+    // TODO: pre-rv64 this test put two `DEFAULT_BLOCK_SIZE == 4` touched blocks at ptrs 0 and 4,
+    // which both fell in Merkle chunk 0 and exercised the 2-way merge path in `inventory.cu`. On
+    // rv64 `DEFAULT_BLOCK_SIZE == CHUNK == 8`, so two blocks cannot share a chunk and the test
+    // now covers only the "two independent full chunks" case. Restore merge-path coverage when
+    // the u16 cell switch brings `DEFAULT_BLOCK_SIZE` back to 4.
     #[test]
     fn test_touched_memory_updates_memory_address_space() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
