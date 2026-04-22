@@ -83,6 +83,7 @@ cuda = [
 ]
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot"]
+rvr = []
 
 [package.metadata.cargo-shear]
 ignored = [

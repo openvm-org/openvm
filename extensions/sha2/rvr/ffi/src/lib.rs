@@ -12,8 +12,7 @@ use rvr_openvm_ext_ffi_common::{
     rd_mem_words_traced, trace_chip_wrapper, u32s_as_u8s, u64s_as_u32s, u64s_as_u32s_mut,
     wr_mem_words_traced, WORD_SIZE,
 };
-use sha2::compress256;
-use sha2::compress512;
+use sha2::{compress256, compress512};
 
 // SHA-256 constants
 const SHA256_STATE_BYTES: usize = 32;

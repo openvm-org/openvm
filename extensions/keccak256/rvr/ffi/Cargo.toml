@@ -11,6 +11,7 @@ repository.workspace = true
 crate-type = ["staticlib"]
 
 [features]
+# TODO: delete the xkcp backend and keep only openssl.
 default = ["backend-openssl"]
 backend-openssl = []
 backend-xkcp = []

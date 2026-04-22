@@ -1,16 +1,20 @@
 //! C project generation: header, block files, dispatch, Makefile.
 
-use std::collections::{BTreeMap, HashSet};
-use std::fmt::Write;
-use std::path::{Path, PathBuf};
-use std::{fs, io};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::Write,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::*;
 use rvr_openvm_lift::ExtensionRegistry;
 
-use super::codegen::{emit_terminator, InstrCodegen, TermCtx};
-use super::context::EmitContext;
+use super::{
+    codegen::{emit_terminator, InstrCodegen, TermCtx},
+    context::EmitContext,
+};
 
 /// Compile-time tracer selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -514,13 +518,11 @@ impl CProject {
     ///
     /// Mode-dependent emission:
     ///   - Pure: nothing (chip tracking is a no-op).
-    ///   - Metered: `_trace_heights[idx] += count;` per distinct chip,
-    ///     against a local cached from `state->tracer->trace_heights` so
-    ///     each update is a single indexed store instead of a chained load
-    ///     through `state->` and `state->tracer->`.
-    ///   - MeteredCost: `state->tracer->cost += <constant>;` where the
-    ///     constant is `sum(width[chip] * count)` precomputed at emit time
-    ///     from `self.chip_widths`.
+    ///   - Metered: `_trace_heights[idx] += count;` per distinct chip, against a local cached from
+    ///     `state->tracer->trace_heights` so each update is a single indexed store instead of a
+    ///     chained load through `state->` and `state->tracer->`.
+    ///   - MeteredCost: `state->tracer->cost += <constant>;` where the constant is `sum(width[chip]
+    ///     * count)` precomputed at emit time from `self.chip_widths`.
     fn emit_per_block_chip_updates(&self, out: &mut String, block: &Block) {
         if matches!(self.tracer_mode, TracerMode::Pure) {
             return;

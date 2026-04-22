@@ -7,6 +7,10 @@
 #[cfg(all(feature = "tco", feature = "aot"))]
 compile_error!("Features \"tco\" and \"aot\" cannot be enabled at the same time");
 
+// Ensure features "rvr" and "aot" are mutually exclusive
+#[cfg(all(feature = "rvr", feature = "aot"))]
+compile_error!("Features \"rvr\" and \"aot\" cannot be enabled at the same time");
+
 // If "aot" feature is enabled but we're not on x86_64, throw a compile error
 #[cfg(all(feature = "aot", not(target_arch = "x86_64")))]
 compile_error!("Feature \"aot\" is only supported on x86_64 targets");

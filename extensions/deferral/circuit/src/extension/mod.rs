@@ -22,6 +22,8 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -64,6 +66,9 @@ pub struct DeferralExtension {
     pub fns: Vec<Arc<DeferralFn>>,
     pub def_circuit_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
 }
+
+#[cfg(feature = "rvr")]
+impl<F: VmField> VmRvrExtension<F> for DeferralExtension {}
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(

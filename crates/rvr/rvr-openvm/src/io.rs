@@ -8,13 +8,14 @@
 //! generated C code (via `trace_io_*` functions in tracer headers). These
 //! callbacks are pure IO logic.
 
-use std::collections::{HashMap, VecDeque};
-use std::ffi::c_void;
-use std::io::Write;
+use std::{
+    collections::{HashMap, VecDeque},
+    ffi::c_void,
+    io::Write,
+};
 
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::rngs::StdRng;
-use rand::Rng;
+use rand::{rngs::StdRng, Rng};
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 
 // ── Deferral lookup data ───────────────────────────────────────────────────

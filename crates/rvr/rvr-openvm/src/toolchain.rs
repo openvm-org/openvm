@@ -1,5 +1,4 @@
-use std::path::Path;
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 /// Default clang command used across the workspace.
 pub const DEFAULT_CLANG_COMMAND: &str = "clang-22";

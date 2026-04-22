@@ -11,24 +11,22 @@
 
 mod utils;
 
-use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::process::Command;
-use std::slice::from_ref;
-use std::sync::Arc;
+use std::{collections::VecDeque, path::PathBuf, process::Command, slice::from_ref, sync::Arc};
 
 use eyre::Result;
-use openvm_circuit::arch::{
-    deferral::{DeferralResult, DeferralState},
-    execution_mode::{MeteredCostCtx, MeteredCtx},
-    Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
+use openvm_circuit::{
+    arch::{
+        deferral::{DeferralResult, DeferralState},
+        execution_mode::{MeteredCostCtx, MeteredCtx},
+        Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
+    },
+    utils::TestStarkEngine,
 };
 use openvm_deferral_circuit::{
     DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
-use openvm_instructions::exe::VmExe;
-use openvm_instructions::{LocalOpcode, DEFERRAL_AS};
+use openvm_instructions::{exe::VmExe, LocalOpcode, DEFERRAL_AS};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
 use openvm_rv32im_transpiler::*;
@@ -36,15 +34,19 @@ use openvm_sdk::{
     config::{AggregationSystemParams, DEFAULT_APP_L_SKIP},
     Sdk, StdIn,
 };
-use openvm_stark_backend::codec::Encode;
-use openvm_stark_backend::keygen::types::MultiStarkProvingKey;
-use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig};
-use openvm_stark_sdk::config::app_params_with_100_bits_security;
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine, DIGEST_SIZE,
+use openvm_stark_backend::{
+    codec::Encode,
+    keygen::types::MultiStarkProvingKey,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    StarkEngine, StarkProtocolConfig,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::{
+        app_params_with_100_bits_security,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE},
+    },
+    p3_baby_bear::BabyBear,
+};
 use openvm_toolchain_tests::build_example_program_at_path;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use openvm_verify_stark_circuit::extension::{
@@ -56,7 +58,7 @@ use rvr_openvm_ext_deferral::{DeferralCircuitInputs, DeferralRvrExtension};
 use rvr_openvm_lift::ExtensionRegistry;
 
 type F = BabyBear;
-type Engine = BabyBearPoseidon2CpuEngine;
+type Engine = TestStarkEngine;
 
 // ── Constants matching the guest programs ──────────────────────────────────────
 
@@ -268,7 +270,8 @@ impl DeferralTestHarness {
 
     fn build_ext(&self) -> DeferralRvrExtension {
         let inventory = self.inventory().unwrap();
-        DeferralRvrExtension::new::<F, _>(&inventory, &self.air_idx, build_deferral_staticlib())
+        let ctx = utils::rvr_extension_ctx(&inventory, &self.air_idx);
+        DeferralRvrExtension::new::<F>(&ctx, build_deferral_staticlib()).unwrap()
     }
 
     fn build_ext_pure() -> DeferralRvrExtension {

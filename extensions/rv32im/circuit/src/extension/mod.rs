@@ -28,6 +28,8 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -74,6 +76,15 @@ impl Default for Rv32M {
 fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 8 * (1 << 8)]
 }
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Rv32I {}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Rv32Io {}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Rv32M {}
 
 // ============ Executor and Periphery Enums for Extension ============
 
