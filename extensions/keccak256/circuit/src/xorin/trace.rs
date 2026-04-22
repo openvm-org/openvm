@@ -18,7 +18,7 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_riscv_circuit::adapters::{read_rv64_register, tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{read_rv64_register_as_u32, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
@@ -105,7 +105,7 @@ where
 
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
-        let len = read_rv64_register(guest_mem, c.as_canonical_u32()) as u32 as usize;
+        let len = read_rv64_register_as_u32(guest_mem, c.as_canonical_u32()) as usize;
         // Safety: length has to be a multiple of the memory block size.
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
