@@ -2,7 +2,7 @@ use std::array::from_fn;
 
 use itertools::Itertools;
 use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
@@ -64,7 +64,7 @@ pub fn f_commit_to_bytes<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u8; C
 pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
     assert_eq!(register.len(), F_NUM_BYTES);
     register.iter().enumerate().fold(F::ZERO, |acc, (i, limb)| {
-        acc + (limb.clone().into() * F::from_usize(1 << (i * RV32_CELL_BITS)))
+        acc + (limb.clone().into() * F::from_usize(1 << (i * RV64_CELL_BITS)))
     })
 }
 
