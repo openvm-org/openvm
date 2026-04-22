@@ -171,11 +171,19 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // TODO: use rv64_register_to_u32 helper
-    let output_ptr_val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
-    debug_assert!(output_ptr_val <= u32::MAX as u64, "upper 4 bytes of register must be zero for pointer");
+    let output_ptr_val =
+        u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
+    debug_assert!(
+        output_ptr_val <= u32::MAX as u64,
+        "upper 4 bytes of register must be zero for pointer"
+    );
     let output_ptr = output_ptr_val as u32;
-    let input_ptr_val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rs_ptr));
-    debug_assert!(input_ptr_val <= u32::MAX as u64, "upper 4 bytes of register must be zero for pointer");
+    let input_ptr_val =
+        u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rs_ptr));
+    debug_assert!(
+        input_ptr_val <= u32::MAX as u64,
+        "upper 4 bytes of register must be zero for pointer"
+    );
     let input_ptr = input_ptr_val as u32;
 
     let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
