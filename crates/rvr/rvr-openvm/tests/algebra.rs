@@ -73,21 +73,12 @@ fn build_algebra_staticlib() -> PathBuf {
     lib_path
 }
 
-fn make_modular_ext(
-    harness: &utils::VmTestHarness<Rv32ModularCpuBuilder>,
-    moduli: Vec<BigUint>,
-) -> AlgebraExtension {
-    let ctx = harness.rvr_extension_ctx().unwrap();
-    AlgebraExtension::new(moduli, vec![], &ctx, build_algebra_staticlib())
+fn make_modular_ext(moduli: Vec<BigUint>) -> AlgebraExtension {
+    AlgebraExtension::new(build_algebra_staticlib(), moduli, vec![])
 }
 
-fn make_modular_with_fp2_ext(
-    harness: &utils::VmTestHarness<Rv32ModularWithFp2CpuBuilder>,
-    moduli: Vec<BigUint>,
-    fp2_moduli: Vec<BigUint>,
-) -> AlgebraExtension {
-    let ctx = harness.rvr_extension_ctx().unwrap();
-    AlgebraExtension::new(moduli, fp2_moduli, &ctx, build_algebra_staticlib())
+fn make_modular_with_fp2_ext(moduli: Vec<BigUint>, fp2_moduli: Vec<BigUint>) -> AlgebraExtension {
+    AlgebraExtension::new(build_algebra_staticlib(), moduli, fp2_moduli)
 }
 
 // ── Modular: little.rs ───────────────────────────────────────────────────────
@@ -108,7 +99,7 @@ fn test_modular_little() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_little_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare("modular_little", &exe, vec![], ExecutionMode::Pure)
 }
@@ -119,7 +110,7 @@ fn test_modular_little_metered_cost() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_little_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare(
         "modular_little_metered_cost",
@@ -135,7 +126,7 @@ fn test_modular_little_metered() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_little_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare(
         "modular_little_metered",
@@ -171,7 +162,7 @@ fn test_moduli_setup() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_moduli_setup_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare("moduli_setup", &exe, vec![], ExecutionMode::Pure)
 }
@@ -182,7 +173,7 @@ fn test_moduli_setup_metered_cost() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_moduli_setup_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare(
         "moduli_setup_metered_cost",
@@ -198,7 +189,7 @@ fn test_moduli_setup_metered() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_moduli_setup_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare("moduli_setup_metered", &exe, vec![], ExecutionMode::Metered)
 }
@@ -235,7 +226,7 @@ fn test_complex_two_moduli() -> Result<()> {
     let (config, moduli, fp2_moduli) = complex_two_moduli_config();
     let exe = build_complex_two_moduli_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularWithFp2CpuBuilder)?;
-    let ext = make_modular_with_fp2_ext(&harness, moduli, fp2_moduli);
+    let ext = make_modular_with_fp2_ext(moduli, fp2_moduli);
     harness.register(ext);
     harness.compare("complex_two_moduli", &exe, vec![], ExecutionMode::Pure)
 }
@@ -245,7 +236,7 @@ fn test_complex_two_moduli_metered_cost() -> Result<()> {
     let (config, moduli, fp2_moduli) = complex_two_moduli_config();
     let exe = build_complex_two_moduli_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularWithFp2CpuBuilder)?;
-    let ext = make_modular_with_fp2_ext(&harness, moduli, fp2_moduli);
+    let ext = make_modular_with_fp2_ext(moduli, fp2_moduli);
     harness.register(ext);
     harness.compare(
         "complex_two_moduli_metered_cost",
@@ -260,7 +251,7 @@ fn test_complex_two_moduli_metered() -> Result<()> {
     let (config, moduli, fp2_moduli) = complex_two_moduli_config();
     let exe = build_complex_two_moduli_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularWithFp2CpuBuilder)?;
-    let ext = make_modular_with_fp2_ext(&harness, moduli, fp2_moduli);
+    let ext = make_modular_with_fp2_ext(moduli, fp2_moduli);
     harness.register(ext);
     harness.compare(
         "complex_two_moduli_metered",
@@ -288,7 +279,7 @@ fn test_sqrt() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_sqrt_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare("sqrt", &exe, vec![], ExecutionMode::Pure)
 }
@@ -299,7 +290,7 @@ fn test_sqrt_metered_cost() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_sqrt_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare(
         "sqrt_metered_cost",
@@ -315,7 +306,7 @@ fn test_sqrt_metered() -> Result<()> {
     let config = Rv32ModularConfig::new(moduli.clone());
     let exe = build_sqrt_exe(&config)?;
     let mut harness = utils::VmTestHarness::new(config, Rv32ModularCpuBuilder)?;
-    let ext = make_modular_ext(&harness, moduli);
+    let ext = make_modular_ext(moduli);
     harness.register(ext);
     harness.compare("sqrt_metered", &exe, vec![], ExecutionMode::Metered)
 }

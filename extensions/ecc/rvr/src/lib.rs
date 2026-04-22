@@ -14,7 +14,7 @@ use openvm_ecc_transpiler::Rv32WeierstrassOpcode::{
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
 #[derive(Debug, Clone, Copy)]
@@ -171,28 +171,19 @@ impl EccExtension {
     }
 
     /// Create for pure execution (chip indices are unused).
-    pub fn new_pure(curves: Vec<u32>, staticlib_path: PathBuf) -> Self {
+    pub fn new_pure(staticlib_path: PathBuf, curves: Vec<u32>) -> Self {
         Self::from_curve_ids(curves, staticlib_path)
     }
 
-    pub fn new_pure_from_configs(curves: Vec<CurveConfig>, staticlib_path: PathBuf) -> Self {
+    pub fn new_pure_from_configs(staticlib_path: PathBuf, curves: Vec<CurveConfig>) -> Self {
         Self::from_curve_configs(curves, staticlib_path)
     }
 
-    /// Create with resolved chip indices from the VM config.
-    pub fn new(curves_info: Vec<u32>, _ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Self {
-        // ECC currently uses the pure fast path, so inventory/chip mapping are
-        // intentionally unused here.
+    pub fn new(staticlib_path: PathBuf, curves_info: Vec<u32>) -> Self {
         Self::from_curve_ids(curves_info, staticlib_path)
     }
 
-    pub fn new_from_configs(
-        curves: Vec<CurveConfig>,
-        _ctx: &RvrExtensionCtx,
-        staticlib_path: PathBuf,
-    ) -> Self {
-        // ECC currently uses the pure fast path, so inventory/chip mapping are
-        // intentionally unused here.
+    pub fn new_from_configs(staticlib_path: PathBuf, curves: Vec<CurveConfig>) -> Self {
         Self::from_curve_configs(curves, staticlib_path)
     }
 }

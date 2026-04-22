@@ -138,12 +138,8 @@ fn build_pairing_staticlib() -> PathBuf {
     lib_path
 }
 
-fn make_algebra_ext(
-    harness: &utils::VmTestHarness<Rv32PairingCpuBuilder>,
-    moduli: Vec<num_bigint::BigUint>,
-) -> AlgebraExtension {
-    let ctx = harness.rvr_extension_ctx().unwrap();
-    AlgebraExtension::new(moduli.clone(), moduli, &ctx, build_algebra_staticlib())
+fn make_algebra_ext(moduli: Vec<num_bigint::BigUint>) -> AlgebraExtension {
+    AlgebraExtension::new(build_algebra_staticlib(), moduli.clone(), moduli)
 }
 
 fn make_pairing_ext() -> PairingExtension {
@@ -185,7 +181,7 @@ fn run_fp12_mul(label: &str, mode: ExecutionMode) -> Result<()> {
     let config = get_testing_config();
 
     let mut harness = utils::VmTestHarness::new(config, Rv32PairingCpuBuilder)?;
-    harness.register(make_algebra_ext(&harness, vec![BN254_MODULUS.clone()]));
+    harness.register(make_algebra_ext(vec![BN254_MODULUS.clone()]));
     harness.register(make_pairing_ext());
     harness.compare(label, &exe, input, mode)
 }
@@ -264,7 +260,7 @@ fn run_pairing_check(label: &str, mode: ExecutionMode) -> Result<()> {
     let config = get_testing_config();
 
     let mut harness = utils::VmTestHarness::new(config, Rv32PairingCpuBuilder)?;
-    harness.register(make_algebra_ext(&harness, vec![BN254_MODULUS.clone()]));
+    harness.register(make_algebra_ext(vec![BN254_MODULUS.clone()]));
     harness.register(make_pairing_ext());
     harness.compare(label, &exe, input, mode)
 }
@@ -274,7 +270,7 @@ fn run_bls12_381_fp12_mul(label: &str, mode: ExecutionMode) -> Result<()> {
     let input = build_bls12_381_fp12_mul_input();
     let mut harness =
         utils::VmTestHarness::new(get_bls12_381_testing_config(), Rv32PairingCpuBuilder)?;
-    harness.register(make_algebra_ext(&harness, vec![BLS12_381_MODULUS.clone()]));
+    harness.register(make_algebra_ext(vec![BLS12_381_MODULUS.clone()]));
     harness.register(make_pairing_ext());
     harness.compare(label, &exe, input, mode)
 }
@@ -284,7 +280,7 @@ fn run_bls12_381_pairing_check(label: &str, mode: ExecutionMode) -> Result<()> {
     let input = build_bls12_381_pairing_check_input();
     let mut harness =
         utils::VmTestHarness::new(get_bls12_381_testing_config(), Rv32PairingCpuBuilder)?;
-    harness.register(make_algebra_ext(&harness, vec![BLS12_381_MODULUS.clone()]));
+    harness.register(make_algebra_ext(vec![BLS12_381_MODULUS.clone()]));
     harness.register(make_pairing_ext());
     harness.compare(label, &exe, input, mode)
 }

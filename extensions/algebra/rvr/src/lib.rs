@@ -14,7 +14,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
 // ── Modular arithmetic operations ────────────────────────────────────────────
@@ -475,9 +475,9 @@ fn secp256k1_dir() -> PathBuf {
 
 impl AlgebraExtension {
     pub fn new_pure(
+        staticlib_path: PathBuf,
         moduli: Vec<BigUint>,
         fp2_moduli: Vec<BigUint>,
-        staticlib_path: PathBuf,
     ) -> Self {
         // Use the same deterministic seed as OpenVM for non-QR computation.
         let mut rng = StdRng::from_seed([0u8; 32]);
@@ -498,15 +498,8 @@ impl AlgebraExtension {
         }
     }
 
-    pub fn new(
-        moduli: Vec<BigUint>,
-        fp2_moduli: Vec<BigUint>,
-        _ctx: &RvrExtensionCtx,
-        staticlib_path: PathBuf,
-    ) -> Self {
-        // Algebra currently uses the pure fast path for both metered and non-metered
-        // lifting, so chip mappings are intentionally unused here.
-        Self::new_pure(moduli, fp2_moduli, staticlib_path)
+    pub fn new(staticlib_path: PathBuf, moduli: Vec<BigUint>, fp2_moduli: Vec<BigUint>) -> Self {
+        Self::new_pure(staticlib_path, moduli, fp2_moduli)
     }
 }
 
