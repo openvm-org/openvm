@@ -204,28 +204,21 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ],
             &local.mem.register_aux,
         ) {
+            let data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
+                if i < RV64_WORD_NUM_LIMBS {
+                    (*val.get(i).unwrap()).into()
+                } else {
+                    AB::Expr::ZERO
+                }
+            });
             self.memory_bridge
                 .read::<_, _, RV64_REGISTER_NUM_LIMBS>(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
-                    val.to_vec().try_into().unwrap_or_else(|_| panic!()), // can't unwrap because AB::Var doesn't impl Debug
+                    data,
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, *local.instruction.is_enabled);
-        }
-
-        // The three pointers are read as full RV64 registers, but this chip only supports
-        // 32-bit-addressable memory, so the unused upper half of each register must be zero.
-        for i in RV64_WORD_NUM_LIMBS..RV64_REGISTER_NUM_LIMBS {
-            builder
-                .when(*local.instruction.is_enabled)
-                .assert_zero(local.instruction.dst_ptr_limbs[i]);
-            builder
-                .when(*local.instruction.is_enabled)
-                .assert_zero(local.instruction.state_ptr_limbs[i]);
-            builder
-                .when(*local.instruction.is_enabled)
-                .assert_zero(local.instruction.input_ptr_limbs[i]);
         }
 
         // range check the high byte of each 32-bit effective pointer
