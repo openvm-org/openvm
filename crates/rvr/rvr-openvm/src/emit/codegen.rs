@@ -100,11 +100,10 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             let chip = ctx.hint_store_chip_idx;
             // OpenVM's HINT_BUFFER executor adds `num_words` rows to its chip
             // in one shot. We split that into two pieces:
-            //   - The block-entry chip accounting in `project.rs` already
-            //     credited +1 to this PC's chip (the static per-instruction
-            //     contribution, like every other opcode).
-            //   - Here we add the remaining +(n - 1) at runtime, since `n` is
-            //     a register value not known at codegen time.
+            //   - The block-entry chip accounting in `project.rs` already credited +1 to this PC's
+            //     chip (the static per-instruction contribution, like every other opcode).
+            //   - Here we add the remaining +(n - 1) at runtime, since `n` is a register value not
+            //     known at codegen time.
             // The `n > 1` guard skips the call when the static +1 is already
             // the whole answer (HINT_STOREW-shaped hints).
             if chip != u32::MAX {

@@ -10,12 +10,9 @@ use std::path::{Path, PathBuf};
 use num_bigint::BigUint;
 use openvm_algebra_circuit::find_non_qr;
 use openvm_algebra_transpiler::{Fp2Opcode, ModularPhantom, Rv32ModularArithmeticOpcode};
-use openvm_circuit::arch::ExecutorInventory;
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
@@ -478,9 +475,9 @@ fn secp256k1_dir() -> PathBuf {
 
 impl AlgebraExtension {
     pub fn new_pure(
+        staticlib_path: PathBuf,
         moduli: Vec<BigUint>,
         fp2_moduli: Vec<BigUint>,
-        staticlib_path: PathBuf,
     ) -> Self {
         // Use the same deterministic seed as OpenVM for non-QR computation.
         let mut rng = StdRng::from_seed([0u8; 32]);
@@ -501,16 +498,8 @@ impl AlgebraExtension {
         }
     }
 
-    pub fn new<E>(
-        moduli: Vec<BigUint>,
-        fp2_moduli: Vec<BigUint>,
-        _inventory: &ExecutorInventory<E>,
-        _executor_idx_to_air_idx: &[usize],
-        staticlib_path: PathBuf,
-    ) -> Self {
-        // Algebra currently uses the pure fast path for both metered and non-metered
-        // lifting, so inventory/chip mapping are intentionally unused here.
-        Self::new_pure(moduli, fp2_moduli, staticlib_path)
+    pub fn new(staticlib_path: PathBuf, moduli: Vec<BigUint>, fp2_moduli: Vec<BigUint>) -> Self {
+        Self::new_pure(staticlib_path, moduli, fp2_moduli)
     }
 }
 
