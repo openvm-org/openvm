@@ -26,6 +26,8 @@ use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -88,6 +90,9 @@ impl WeierstrassExtension {
         format!("openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}")
     }
 }
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {}
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(

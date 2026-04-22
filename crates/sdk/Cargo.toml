@@ -72,6 +72,10 @@ metrics = [
     "openvm-continuations/metrics",
     "openvm-sdk-config/metrics",
 ]
+rvr = [
+    "openvm-circuit/rvr",
+    "openvm-sdk-config/rvr",
+]
 aot = ["openvm-circuit/aot", "openvm-sdk-config/aot"]
 tco = ["openvm-circuit/tco", "openvm-sdk-config/tco"]
 unprotected = ["openvm-circuit/unprotected"]

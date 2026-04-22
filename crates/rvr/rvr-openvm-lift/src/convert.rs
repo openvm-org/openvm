@@ -6,8 +6,7 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{LiftedInstr, SourceLoc};
 
-use crate::extension::ExtensionRegistry;
-use crate::opcode::lift_instruction;
+use crate::{extension::ExtensionRegistry, opcode::lift_instruction};
 
 /// Error during VmExe to IR conversion.
 #[derive(Debug, thiserror::Error)]
