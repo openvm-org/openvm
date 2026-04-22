@@ -234,8 +234,8 @@ pub struct DeferralCallAdapterRecord<F> {
     pub rs_ptr: F,
 
     // Heap pointers and auxiliary records
-    pub rd_val: [u8; RV64_REGISTER_NUM_LIMBS],
-    pub rs_val: [u8; RV64_REGISTER_NUM_LIMBS],
+    pub rd_val: u32,
+    pub rs_val: u32,
     pub rd_aux: MemoryReadAuxRecord,
     pub rs_aux: MemoryReadAuxRecord,
 
@@ -283,24 +283,29 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         record.rd_ptr = a;
         record.rs_ptr = b;
 
-        record.rd_val = tracing_read(
+        let rd_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             memory,
             d.as_canonical_u32(),
             a.as_canonical_u32(),
             &mut record.rd_aux.prev_timestamp,
         );
-        record.rs_val = tracing_read(
+        debug_assert_eq!(rd_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
+        record.rd_val = u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+
+        let rs_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             memory,
             d.as_canonical_u32(),
             b.as_canonical_u32(),
             &mut record.rs_aux.prev_timestamp,
         );
+        debug_assert_eq!(rs_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
+        record.rs_val = u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
         let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
             tracing_read(
                 memory,
                 e.as_canonical_u32(),
-                u32::from_le_bytes(record.rs_val[..RV64_WORD_NUM_LIMBS].try_into().unwrap()) + (i * DEFAULT_BLOCK_SIZE) as u32,
+                record.rs_val + (i * DEFAULT_BLOCK_SIZE) as u32,
                 &mut record.input_commit_aux[i].prev_timestamp,
             )
         });
@@ -345,7 +350,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
     ) {
         let &Instruction { c, e, .. } = instruction;
         debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
-
         let output_len_full = from_fn(|i| {
             if i < F_NUM_BYTES {
                 data.output_len[i]
@@ -359,7 +363,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             tracing_write(
                 memory,
                 e.as_canonical_u32(),
-                u32::from_le_bytes(record.rd_val[..RV64_WORD_NUM_LIMBS].try_into().unwrap()) + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
+                record.rd_val + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
                 memory_op_chunk(&output_commit_and_len, chunk_idx),
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_data,
@@ -411,8 +415,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
 
         self.bitwise_lookup_chip.request_range(
-            (record.rd_val[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-            (record.rs_val[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            (record.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+            (record.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
         );
 
         // Timestamps in AIR are assigned in strict sequence starting from
@@ -489,8 +493,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             timestamp_mm(),
             adapter_row.rd_aux.as_mut(),
         );
-        adapter_row.rs_val = std::array::from_fn(|i| F::from_u8(record.rs_val[i]));
-        adapter_row.rd_val = std::array::from_fn(|i| F::from_u8(record.rd_val[i]));
+        adapter_row.rs_val = record.rs_val.to_le_bytes().map(F::from_u8);
+        adapter_row.rd_val = record.rd_val.to_le_bytes().map(F::from_u8);
 
         adapter_row.rs_ptr = record.rs_ptr;
         adapter_row.rd_ptr = record.rd_ptr;
