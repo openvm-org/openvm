@@ -18,7 +18,6 @@ openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
-openvm-rv32-adapters = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 rvr-openvm-ext-ecc = { workspace = true, optional = true }
@@ -43,11 +42,10 @@ halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true }
 
 [dev-dependencies]
-openvm-pairing-guest = { path = "../../pairing/guest", default-features = false, features = ["halo2curves"] }
+openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-mod-circuit-builder = { path = "../../../crates/circuits/mod-builder", default-features = false, features = ["test-utils"] }
-openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
-openvm-rv32-adapters = { path = "../../rv32-adapters", default-features = false, features = ["test-utils"] }
+openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
 
 [features]
