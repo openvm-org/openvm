@@ -1,7 +1,7 @@
-//! GPU builder where the [Rv32ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
+//! GPU builder where the [Rv64ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
 //! either cuda tracegen or hybrid CPU tracegen depending on what [openvm_algebra_circuit] and
 //! [openvm_ecc_circuit] crates export.
-use openvm_algebra_circuit::{AlgebraProverExt, Rv32ModularBuilder};
+use openvm_algebra_circuit::{AlgebraProverExt, Rv64ModularBuilder};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
@@ -13,21 +13,21 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_ecc_circuit::EccProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
-use crate::{PairingProverExt, Rv32PairingConfig};
+use crate::{PairingProverExt, Rv64PairingConfig};
 
 #[derive(Clone)]
-pub struct Rv32PairingGpuBuilder;
+pub struct Rv64PairingGpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Rv32PairingGpuBuilder {
-    type VmConfig = Rv32PairingConfig;
+impl VmBuilder<E> for Rv64PairingGpuBuilder {
+    type VmConfig = Rv64PairingConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Rv32PairingConfig,
+        config: &Rv64PairingConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -40,7 +40,7 @@ impl VmBuilder<E> for Rv32PairingGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv32ModularBuilder,
+            &Rv64ModularBuilder,
             &config.modular,
             circuit,
             device_ctx,
