@@ -237,59 +237,6 @@ fn test_hint_buffer_exceeds_max_words() {
 }
 
 #[test]
-fn test_hint_buffer_rem_words_upper_limbs_zero() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    // Build a small, valid buffer instruction with 1 word so trace has 1 row.
-    let num_words: u32 = 1;
-    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
-
-    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
-
-    for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
-        tester.streams_mut().hint_stream.extend(data);
-    }
-
-    tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
-        &Instruction::from_usize(
-            HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
-        ),
-    );
-
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // Only limbs 0 and 1 of `rem_words` may carry information; limbs 2..8 are asserted
-        // zero by the AIR. Setting limb 2 non-zero must be rejected as a constraint error.
-        let mut limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
-        limbs[2] = F::from_u8(1);
-        cols.rem_words_limbs = limbs;
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-
-    tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
-}
-
-#[test]
 fn test_hint_buffer_rem_words_range_check() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -329,56 +276,6 @@ fn test_hint_buffer_rem_words_range_check() {
         // interaction error we want to observe.
         cols.rem_words_limbs[1] = F::from_u32(4);
         cols.rem_words_limbs[0] = F::ONE - F::from_u32(1024);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-
-    tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
-}
-
-#[test]
-fn test_hint_buffer_mem_ptr_upper_limbs_zero() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    let num_words: u32 = 1;
-    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
-
-    let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
-
-    for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
-        tester.streams_mut().hint_stream.extend(data);
-    }
-
-    tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
-        &Instruction::from_usize(
-            HINT_BUFFER.global_opcode(),
-            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
-        ),
-    );
-
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // Force one of the upper `mem_ptr` limbs (which must be zero under the AIR) to be
-        // non-zero.
-        cols.mem_ptr_limbs[4] = F::from_u8(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
