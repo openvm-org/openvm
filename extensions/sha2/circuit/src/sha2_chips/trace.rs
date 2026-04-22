@@ -267,9 +267,21 @@ where
             record.inner.input_reg_ptr,
             &mut record.inner.register_reads_aux[2].prev_timestamp,
         ));
-        debug_assert_eq!(dst_reg >> 32, 0, "sha2 dst pointer upper 4 bytes must be zero");
-        debug_assert_eq!(state_reg >> 32, 0, "sha2 state pointer upper 4 bytes must be zero");
-        debug_assert_eq!(input_reg >> 32, 0, "sha2 input pointer upper 4 bytes must be zero");
+        debug_assert_eq!(
+            dst_reg >> 32,
+            0,
+            "sha2 dst pointer upper 4 bytes must be zero"
+        );
+        debug_assert_eq!(
+            state_reg >> 32,
+            0,
+            "sha2 state pointer upper 4 bytes must be zero"
+        );
+        debug_assert_eq!(
+            input_reg >> 32,
+            0,
+            "sha2 input pointer upper 4 bytes must be zero"
+        );
         record.inner.dst_ptr = dst_reg as u32;
         record.inner.state_ptr = state_reg as u32;
         record.inner.input_ptr = input_reg as u32;

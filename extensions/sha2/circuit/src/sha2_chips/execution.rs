@@ -117,9 +117,21 @@ unsafe fn execute_e12_impl<
     let dst_u64 = u64::from_le_bytes(dst);
     let state_u64 = u64::from_le_bytes(state);
     let input_u64 = u64::from_le_bytes(input);
-    debug_assert_eq!(dst_u64 >> 32, 0, "sha2 dst pointer upper 4 bytes must be zero");
-    debug_assert_eq!(state_u64 >> 32, 0, "sha2 state pointer upper 4 bytes must be zero");
-    debug_assert_eq!(input_u64 >> 32, 0, "sha2 input pointer upper 4 bytes must be zero");
+    debug_assert_eq!(
+        dst_u64 >> 32,
+        0,
+        "sha2 dst pointer upper 4 bytes must be zero"
+    );
+    debug_assert_eq!(
+        state_u64 >> 32,
+        0,
+        "sha2 state pointer upper 4 bytes must be zero"
+    );
+    debug_assert_eq!(
+        input_u64 >> 32,
+        0,
+        "sha2 input pointer upper 4 bytes must be zero"
+    );
     let dst_u32 = dst_u64 as u32;
     let state_u32 = state_u64 as u32;
     let input_u32 = input_u64 as u32;
