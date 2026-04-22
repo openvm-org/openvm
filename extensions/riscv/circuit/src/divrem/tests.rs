@@ -37,7 +37,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32MultAdapterRecord, DivRemCoreRecord, Rv32DivRemChipGpu},
+    crate::{adapters::Rv64MultAdapterRecord, DivRemCoreRecord, Rv64DivRemChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -764,14 +764,14 @@ fn run_mul_unsigned_sanity_test() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
+    GpuTestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_tuple_chip =
@@ -784,7 +784,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32DivRemChipGpu::new(
+    let gpu_chip = Rv64DivRemChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
@@ -831,8 +831,8 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
     );
 
     type Record<'a> = (
-        &'a mut Rv32MultAdapterRecord,
-        &'a mut DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+        &'a mut Rv64MultAdapterRecord,
+        &'a mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
     );
 
     harness
@@ -840,7 +840,7 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
         );
 
     tester

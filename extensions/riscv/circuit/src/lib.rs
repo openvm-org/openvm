@@ -62,7 +62,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+        use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         pub(crate) mod cuda_abi;
         pub use self::{
@@ -240,6 +240,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         &self,
         config: &Rv64IConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
+        device_ctx: &EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -253,6 +254,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
             &SystemGpuBuilder,
             &config.system,
             circuit,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
@@ -283,6 +285,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
+        device_ctx: &EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -294,8 +297,9 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &Rv64IGpuBuilder,
-            &config.rv32i,
+            &config.rv64i,
             circuit,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(

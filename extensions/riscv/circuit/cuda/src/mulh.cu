@@ -7,8 +7,8 @@
 
 using namespace riscv;
 
-constexpr uint32_t NUM_LIMBS = RV32_REGISTER_NUM_LIMBS;
-constexpr uint32_t LIMB_BITS = RV32_CELL_BITS;
+constexpr uint32_t NUM_LIMBS = RV64_REGISTER_NUM_LIMBS;
+constexpr uint32_t LIMB_BITS = RV64_CELL_BITS;
 
 template <typename T> struct MulHCoreCols {
     T a[NUM_LIMBS];
@@ -143,12 +143,12 @@ struct MulHCore {
 };
 
 template <typename T> struct MulHCols {
-    Rv32MultAdapterCols<T> adapter;
+    Rv64MultAdapterCols<T> adapter;
     MulHCoreCols<T> core;
 };
 
 struct MulHRecord {
-    Rv32MultAdapterRecord adapter;
+    Rv64MultAdapterRecord adapter;
     MulHCoreRecord core;
 };
 
@@ -170,7 +170,7 @@ __global__ void mulh_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32MultAdapter adapter(
+        Rv64MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);

@@ -26,7 +26,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32RdWriteAdapterRecord, Rv32AuipcChipGpu, Rv32AuipcCoreRecord},
+    crate::{adapters::Rv64RdWriteAdapterRecord, Rv64AuipcChipGpu, Rv64AuipcCoreRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness,
@@ -39,7 +39,7 @@ use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64A
 use crate::{
     adapters::{
         Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
+        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     Rv64AuipcAir, Rv64AuipcFiller,
 };
@@ -380,12 +380,12 @@ fn run_auipc_sanity_test() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv32AuipcExecutor, Rv32AuipcAir, Rv32AuipcChipGpu, Rv32AuipcChip<F>>;
+    GpuTestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64AuipcChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -395,7 +395,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32AuipcChipGpu::new(
+    let gpu_chip = Rv64AuipcChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -416,7 +416,7 @@ fn test_cuda_rand_auipc_tracegen() {
 
     for _ in 0..num_ops {
         let imm = rng.random_range(0..(1 << IMM_BITS)) as usize;
-        let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
+        let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
         let initial_pc = rng.random_range(0..(1 << PC_BITS));
 
         tester.execute_with_pc(
@@ -428,15 +428,15 @@ fn test_cuda_rand_auipc_tracegen() {
     }
 
     type Record<'a> = (
-        &'a mut Rv32RdWriteAdapterRecord,
-        &'a mut Rv32AuipcCoreRecord,
+        &'a mut Rv64RdWriteAdapterRecord,
+        &'a mut Rv64AuipcCoreRecord,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64RdWriteAdapterExecutor>::new(),
         );
 
     tester

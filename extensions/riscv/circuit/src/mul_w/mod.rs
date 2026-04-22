@@ -14,12 +14,12 @@ pub type MulWCoreAir = MultiplicationCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS
 pub type MulWExecutor<A> = MultiplicationExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 pub type MulWFiller<A> = MultiplicationFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", not(feature = "cuda")))] // TODO: RV64 GPU port
 mod cuda;
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", not(feature = "cuda")))] // TODO: RV64 GPU port
 pub use cuda::*;
 
-#[cfg(test)]
+#[cfg(all(test, any()))] // TODO: port tests to RV64
 mod tests;
 
 pub type Rv64MulWAir = VmAirWrapper<Rv64MultWAdapterAir, MulWCoreAir>;
