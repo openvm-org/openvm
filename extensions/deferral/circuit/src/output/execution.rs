@@ -154,6 +154,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralOutputPrecompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
+    // TODO: use rv64_register_to_u32 helper
     let output_ptr_val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
     debug_assert!(output_ptr_val <= u32::MAX as u64, "upper 4 bytes of register must be zero for pointer");
     let output_ptr = output_ptr_val as u32;
