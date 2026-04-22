@@ -29,6 +29,8 @@ use openvm_rv32_adapters::{
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use rand::RngCore;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -63,6 +65,9 @@ impl ModularExtension {
         format!("openvm_algebra_guest::moduli_macros::moduli_init! {{ {supported_moduli} }}",)
     }
 }
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {}
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
