@@ -16,12 +16,6 @@ use rvr_openvm_lift::{
 };
 
 use super::debug::GuestDebugMap;
-use crate::{
-    arch::execution_mode::metered::{
-        ctx::DEFAULT_PAGE_BITS, segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
-    },
-    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, CHUNK},
-};
 
 /// A compiled rvr shared library ready for execution.
 pub struct RvrCompiled {
@@ -210,15 +204,6 @@ pub fn compile_metered_with_extensions<F: PrimeField32>(
     )
 }
 
-fn openvm_compile_constants() -> (u32, u32, u32, u32) {
-    (
-        DEFAULT_SEGMENT_CHECK_INSNS as u32,
-        DEFAULT_PAGE_BITS as u32,
-        CHUNK.ilog2(),
-        PUBLIC_VALUES_AS,
-    )
-}
-
 pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
     let lib = unsafe {
         libloading::Library::new(lib_path)
@@ -241,25 +226,14 @@ fn compile_impl<F: PrimeField32>(
             .and_then(|debug_map| debug_map.get(pc).cloned())
     })?;
 
-    let (segment_check_insns, page_bits, chunk_bits, public_values_as) = openvm_compile_constants();
     let valid_pcs: std::collections::HashSet<u32> = ir.iter().map(|li| li.pc()).collect();
     let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets, segment_check_insns);
+    let blocks = build_blocks(&ir, &extra_targets);
 
     let temp_dir = tempfile::tempdir()?;
     let output_dir = temp_dir.path();
 
-    let memory_bits = openvm_platform::memory::MEM_BITS as u8;
-    let mut project = CProject::new(
-        output_dir,
-        &base_name,
-        opts.tracer_mode,
-        memory_bits,
-        page_bits,
-        chunk_bits,
-        segment_check_insns,
-        public_values_as,
-    );
+    let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
 
     if let Some(chips) = opts.chips {
         project.pc_to_chip = Some(chips.pc_to_chip.clone());

@@ -1,6 +1,7 @@
 //! C code generation for IR instructions and terminators.
 
 use openvm_instructions::riscv::RV32_MEMORY_AS;
+use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::*;
 
 use super::context::EmitContext;
@@ -125,7 +126,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         } => {
             let src = ctx.read_reg(*src_reg);
             let ptr = ctx.read_reg(*ptr_reg);
-            ctx.trace_mem_access(&ptr, ctx.public_values_as);
+            ctx.trace_mem_access(&ptr, AS_PUBLIC_VALUES);
             let off_s = hex_u32(*offset);
             ctx.extern_call("openvm_reveal", &[&src, &ptr, &off_s]);
         }

@@ -12,16 +12,15 @@ use crate::{
     arch::{
         execution_mode::metered::{
             ctx::DEFAULT_PAGE_BITS,
-            segment_ctx::{SegmentationConfig, DEFAULT_SEGMENT_CHECK_INSNS},
+            segment_ctx::{
+                SegmentationConfig, DEFAULT_INTERACTION_CONSTANT_OVERHEAD,
+                DEFAULT_SEGMENT_CHECK_INSNS,
+            },
         },
         ExecutorInventory, SystemConfig,
     },
     system::memory::{merkle::public_values::PUBLIC_VALUES_AS, CHUNK as MERKLE_CHUNK},
 };
-
-/// Constant overhead for interaction memory (matches OpenVM's
-/// DEFAULT_INTERACTION_CONSTANT_OVERHEAD).
-const INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
 
 const NO_CHIP: u32 = u32::MAX;
 
@@ -484,7 +483,7 @@ impl SegmentationState {
             as f64
             * interaction_weight)
             .ceil() as usize
-            + INTERACTION_CONSTANT_OVERHEAD;
+            + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
         let total_memory = main_memory + std::cmp::max(main_secondary_memory, interaction_memory);
 
         if total_memory > config.limits.max_memory {

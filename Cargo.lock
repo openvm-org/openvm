@@ -8998,6 +8998,7 @@ version = "2.0.0-beta.2"
 dependencies = [
  "openvm-instructions",
  "openvm-stark-backend",
+ "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
@@ -9219,6 +9220,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "thiserror 1.0.69",
 ]

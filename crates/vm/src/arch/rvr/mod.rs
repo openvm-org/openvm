@@ -1,5 +1,6 @@
 //! OpenVM-owned rvr integration layer.
 
+mod abi_consts;
 pub mod compile;
 pub mod debug;
 pub mod execute;

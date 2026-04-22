@@ -44,7 +44,7 @@ const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 1.5;
 const DEFAULT_INTERACTION_CELL_WEIGHT: f64 = (2 * D_EF) as f64 * 1.04;
 /// Constant overhead for interaction memory: sqrt-decomposed eq buffers, M matrix,
 /// and misc small buffers. Bounded by ~2 MB assuming fewer than 2^32 leaves.
-const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
+pub const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
 
 /// Returns `ceil(cell_count * base_field_size * weight)`.
 fn ceil_weighted_bytes(cell_count: usize, base_field_size: usize, weight: f64) -> usize {

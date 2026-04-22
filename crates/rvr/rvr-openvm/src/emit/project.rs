@@ -59,7 +59,6 @@ pub struct CProject {
     output_dir: PathBuf,
     name: String,
     pub tracer_mode: TracerMode,
-    pub memory_bits: u8,
     pub hot_regs: HashSet<u8>,
     /// Maximum blocks per partition file.
     pub blocks_per_partition: usize,
@@ -76,28 +75,10 @@ pub struct CProject {
     pub chip_widths: Option<Vec<u64>>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
-    /// Tracer page size in log2(bytes per page).
-    pub page_bits: u32,
-    /// Merkle chunk size in log2(bytes per chunk).
-    pub chunk_bits: u32,
-    /// Instructions per periodic segmentation check.
-    pub segment_check_insns: u32,
-    /// Address space id for public values.
-    pub public_values_as: u32,
 }
 
 impl CProject {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        output_dir: &Path,
-        name: &str,
-        tracer_mode: TracerMode,
-        memory_bits: u8,
-        page_bits: u32,
-        chunk_bits: u32,
-        segment_check_insns: u32,
-        public_values_as: u32,
-    ) -> Self {
+    pub fn new(output_dir: &Path, name: &str, tracer_mode: TracerMode) -> Self {
         // Hot registers in priority order (matching original rvr's REG_PRIORITY).
         // Limited by platform's preserve_none register capacity minus 1 (state ptr).
         let hot_regs = Self::default_hot_regs();
@@ -106,7 +87,6 @@ impl CProject {
             output_dir: output_dir.to_path_buf(),
             name: name.to_string(),
             tracer_mode,
-            memory_bits,
             hot_regs,
             blocks_per_partition: 512,
             enable_lto: true,
@@ -115,10 +95,6 @@ impl CProject {
             hint_store_chip_idx: u32::MAX,
             chip_widths: None,
             native_debug_info: false,
-            page_bits,
-            chunk_bits,
-            segment_check_insns,
-            public_values_as,
         }
     }
 
@@ -244,13 +220,7 @@ impl CProject {
     // ── Generated constants header ──────────────────────────────────────
 
     fn write_constants(&self, text_start: u32) -> io::Result<()> {
-        let h = crate::constants::constants_header(
-            text_start,
-            self.memory_bits,
-            self.chunk_bits,
-            self.page_bits,
-            self.segment_check_insns,
-        );
+        let h = crate::constants::constants_header(text_start);
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }
@@ -478,11 +448,7 @@ impl CProject {
         .unwrap();
 
         // Body instructions (each in its own scope to avoid variable collisions).
-        let mut ctx = EmitContext::new(
-            self.hot_regs.clone(),
-            self.hint_store_chip_idx,
-            self.public_values_as,
-        );
+        let mut ctx = EmitContext::new(self.hot_regs.clone(), self.hint_store_chip_idx);
 
         // In metered mode, instret is tracked via check_counter, not per-block.
         if self.tracer_mode != TracerMode::Metered {

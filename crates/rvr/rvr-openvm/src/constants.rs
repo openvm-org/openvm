@@ -4,6 +4,8 @@
 //! both the C tracer struct layout and the Rust-side `SegmentationState`
 //! buffer allocations — they must match byte-for-byte.
 
+use rvr_openvm_ext_ffi_common::{CHUNK, DEFAULT_PAGE_BITS, DEFAULT_SEGMENT_CHECK_INSNS, MEM_BITS};
+
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
 /// **No bounds checks in C — capacity must be sufficient.**
@@ -26,14 +28,9 @@ pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Generate the `openvm_constants.h` content with compile-time constants
 /// for the C tracer headers.
-pub fn constants_header(
-    _text_start: u32,
-    memory_bits: u8,
-    chunk_bits: u32,
-    page_bits: u32,
-    segment_check_insns: u32,
-) -> String {
-    let memory_mask = (1u64 << memory_bits) - 1;
+pub fn constants_header(_text_start: u32) -> String {
+    let memory_mask = (1u64 << MEM_BITS) - 1;
+    let chunk_bits = CHUNK.ilog2();
 
     format!(
         "\
@@ -42,11 +39,11 @@ pub fn constants_header(
 
 static constexpr uint32_t MEMORY_MASK = 0x{memory_mask:x}u;
 static constexpr uint32_t TRACER_CHUNK_BITS = {chunk_bits};
-static constexpr uint32_t TRACER_PAGE_BITS = {page_bits};
+static constexpr uint32_t TRACER_PAGE_BITS = {DEFAULT_PAGE_BITS};
 static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
-static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {segment_check_insns};
+static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {DEFAULT_SEGMENT_CHECK_INSNS};
 "
     )
 }
