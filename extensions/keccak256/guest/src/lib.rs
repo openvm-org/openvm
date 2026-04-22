@@ -12,7 +12,7 @@ pub const XORIN_FUNCT7: u8 = 1;
 pub const KECCAK_WIDTH_BYTES: usize = 200;
 pub const KECCAK_RATE: usize = 136;
 pub const KECCAK_OUTPUT_SIZE: usize = 32;
-pub const MIN_ALIGN: usize = 4;
+pub const MIN_ALIGN: usize = 8;
 
 /// XOR `len` bytes from `input` into `buffer` using the native XORIN instruction.
 ///
