@@ -43,8 +43,7 @@ use crate::helpers::tracing_read_reg_ptr;
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap,
-///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap.
 /// * Writes are to 64-bit register rd (8 bytes).
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
