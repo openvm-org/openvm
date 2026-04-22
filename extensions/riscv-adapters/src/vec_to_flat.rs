@@ -1,6 +1,6 @@
 //! Adapter wrappers that convert between Vec/Block-based interfaces and Flat/Basic interfaces.
 //!
-//! These wrappers allow using `Rv32VecHeapAdapter*` types with cores that expect flat
+//! These wrappers allow using `Rv64VecHeapAdapter*` types with cores that expect flat
 //! `BasicAdapterInterface` data formats.
 
 use openvm_circuit::{
@@ -24,10 +24,10 @@ use openvm_stark_backend::{
 /// Wrapper that converts a `VecHeapAdapterInterface` (block-based) to `BasicAdapterInterface`
 /// (flat).
 ///
-/// This allows using `Rv32VecHeapAdapterAir` with cores that expect flat read/write data.
+/// This allows using `Rv64VecHeapAdapterAir` with cores that expect flat read/write data.
 ///
 /// # Type Parameters
-/// - `A`: The inner adapter AIR (e.g., `Rv32VecHeapAdapterAir`)
+/// - `A`: The inner adapter AIR (e.g., `Rv64VecHeapAdapterAir`)
 /// - `NUM_READS`: Number of read operands
 /// - `BLOCKS_PER_READ`: Number of blocks per read operand
 /// - `BLOCKS_PER_WRITE`: Number of blocks per write operand
@@ -305,11 +305,11 @@ where
 /// Wrapper that converts a `VecHeapBranchAdapterInterface` (block-based) to `BasicAdapterInterface`
 /// (flat).
 ///
-/// This allows using `Rv32VecHeapBranchAdapterAir` with cores that expect flat read data.
+/// This allows using `Rv64VecHeapBranchAdapterAir` with cores that expect flat read data.
 /// Branch operations have no writes.
 ///
 /// # Type Parameters
-/// - `A`: The inner adapter AIR (e.g., `Rv32VecHeapBranchAdapterAir`)
+/// - `A`: The inner adapter AIR (e.g., `Rv64VecHeapBranchAdapterAir`)
 /// - `NUM_READS`: Number of read operands
 /// - `BLOCKS_PER_READ`: Number of blocks per read operand
 /// - `BLOCK_SIZE`: Size of each block

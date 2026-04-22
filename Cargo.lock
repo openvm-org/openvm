@@ -5671,7 +5671,6 @@ dependencies = [
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-riscv-circuit",
- "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -5835,7 +5834,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-riscv-circuit",
  "openvm-riscv-transpiler",
- "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -6203,7 +6201,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
- "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -6606,6 +6603,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-riscv-adapters"
+version = "2.0.0-beta.2"
+dependencies = [
+ "derive-new 0.6.0",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-riscv-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand 0.9.2",
+]
+
+[[package]]
 name = "openvm-riscv-circuit"
 version = "2.0.0-beta.2"
 dependencies = [
@@ -6674,22 +6687,6 @@ dependencies = [
  "serde",
  "strum 0.26.3",
  "tracing",
-]
-
-[[package]]
-name = "openvm-rv32-adapters"
-version = "2.0.0-beta.2"
-dependencies = [
- "derive-new 0.6.0",
- "itertools 0.14.0",
- "openvm-circuit",
- "openvm-circuit-primitives",
- "openvm-circuit-primitives-derive",
- "openvm-instructions",
- "openvm-riscv-circuit",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "rand 0.9.2",
 ]
 
 [[package]]
