@@ -13,15 +13,13 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},

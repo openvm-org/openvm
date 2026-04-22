@@ -215,8 +215,12 @@ where
             rd_ptr,
             &mut record.header.rd_aux.prev_timestamp,
         );
-        debug_assert_eq!(rd_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
-        record.header.rd_val = u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+        debug_assert_eq!(
+            rd_bytes[RV64_WORD_NUM_LIMBS..],
+            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
+        );
+        record.header.rd_val =
+            u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
         let rs_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             state.memory,
@@ -224,8 +228,12 @@ where
             rs_ptr,
             &mut record.header.rs_aux.prev_timestamp,
         );
-        debug_assert_eq!(rs_bytes[RV64_WORD_NUM_LIMBS..], [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]);
-        record.header.rs_val = u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+        debug_assert_eq!(
+            rs_bytes[RV64_WORD_NUM_LIMBS..],
+            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
+        );
+        record.header.rs_val =
+            u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
 
         let input_ptr = record.header.rs_val;
         let output_ptr = record.header.rd_val;
@@ -343,12 +351,13 @@ where
 
                 if row_idx == 0 {
                     debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-                    let limb_shift_bits =
-                        RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
+                    let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
 
                     self.bitwise_lookup_chip.request_range(
-                        (header.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-                        (header.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
+                        (header.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)
+                            << limb_shift_bits,
+                        (header.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)
+                            << limb_shift_bits,
                     );
                     self.bitwise_lookup_chip.request_range(
                         (output_len_bytes[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
