@@ -45,17 +45,23 @@ mod tests;
 
 /// Number of blocks for INT256 operations (INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE)
 pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE;
+/// Number of u64 limbs in a 256-bit integer.
+pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u64>();
+/// Number of u32 limbs in a 256-bit integer.
+pub const INT256_NUM_U32_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u32>();
+/// Number of source operand reads (rs1, rs2) for binary 256-bit instructions.
+pub(crate) const NUM_READS: usize = 2;
 
 /// Type alias for the ALU adapter AIR wrapper
 type AluAdapterAir = VecToFlatAluAdapterAir<
     Rv64VecHeapAdapterAir<
-        2,
+        NUM_READS,
         INT256_NUM_BLOCKS,
         INT256_NUM_BLOCKS,
         DEFAULT_BLOCK_SIZE,
         DEFAULT_BLOCK_SIZE,
     >,
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -66,13 +72,13 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
 /// Type alias for the ALU adapter executor wrapper
 type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
     Rv64VecHeapAdapterExecutor<
-        2,
+        NUM_READS,
         INT256_NUM_BLOCKS,
         INT256_NUM_BLOCKS,
         DEFAULT_BLOCK_SIZE,
         DEFAULT_BLOCK_SIZE,
     >,
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -82,8 +88,8 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
 
 /// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv64VecHeapBranchAdapterAir<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
-    2,
+    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
     INT256_NUM_LIMBS,
@@ -91,8 +97,8 @@ type BranchAdapterAir = VecToFlatBranchAdapterAir<
 
 /// Type alias for the Branch adapter executor wrapper
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
-    Rv64VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
-    2,
+    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
     INT256_NUM_LIMBS,
@@ -109,7 +115,7 @@ pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
     F,
     BaseAluFiller<
         Rv64VecHeapAdapterFiller<
-            2,
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
@@ -131,7 +137,7 @@ pub type Rv64LessThan256Chip<F> = VmChipWrapper<
     F,
     LessThanFiller<
         Rv64VecHeapAdapterFiller<
-            2,
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
@@ -153,7 +159,7 @@ pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
     F,
     MultiplicationFiller<
         Rv64VecHeapAdapterFiller<
-            2,
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
@@ -175,7 +181,7 @@ pub type Rv64Shift256Chip<F> = VmChipWrapper<
     F,
     ShiftFiller<
         Rv64VecHeapAdapterFiller<
-            2,
+            NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
             DEFAULT_BLOCK_SIZE,
@@ -194,7 +200,7 @@ pub struct Rv64BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor,
 pub type Rv64BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<
-        Rv64VecHeapBranchAdapterFiller<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
         INT256_NUM_LIMBS,
     >,
 >;
@@ -209,7 +215,7 @@ pub struct Rv64BranchLessThan256Executor(
 pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<
-        Rv64VecHeapBranchAdapterFiller<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
         INT256_NUM_LIMBS,
         RV64_CELL_BITS,
     >,

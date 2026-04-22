@@ -6,7 +6,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_circuit::MultiplicationExecutor;
@@ -15,7 +15,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u32_array, read_int256, u32_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64Multiplication256Executor, INT256_NUM_LIMBS,
+    AluAdapterExecutor, Rv64Multiplication256Executor, INT256_NUM_LIMBS, INT256_NUM_U32_LIMBS,
 };
 
 impl Rv64Multiplication256Executor {
@@ -119,13 +119,29 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MultPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rs1_ptr) as u32);
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rs2_ptr) as u32);
+    let rs1_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rs1_ptr) as u32,
+    );
+    let rs2 = read_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rs2_ptr) as u32,
+    );
     let rd = u256_mul(rs1, rs2);
-    write_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rd_ptr) as u32, &rd);
+    write_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rd_ptr) as u32,
+        &rd,
+    );
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -195,15 +211,15 @@ pub(crate) fn u256_mul(
     rs1: [u8; INT256_NUM_LIMBS],
     rs2: [u8; INT256_NUM_LIMBS],
 ) -> [u8; INT256_NUM_LIMBS] {
-    let rs1_u32: [u32; 8] = bytes_to_u32_array(rs1);
-    let rs2_u32: [u32; 8] = bytes_to_u32_array(rs2);
-    let mut rd = [0u32; 8];
-    for i in 0..8 {
+    let rs1_u32 = bytes_to_u32_array(rs1);
+    let rs2_u32 = bytes_to_u32_array(rs2);
+    let mut rd = [0u32; INT256_NUM_U32_LIMBS];
+    for i in 0..INT256_NUM_U32_LIMBS {
         let mut carry = 0u64;
-        for j in 0..(8 - i) {
+        for j in 0..(INT256_NUM_U32_LIMBS - i) {
             let res = rs1_u32[i] as u64 * rs2_u32[j] as u64 + rd[i + j] as u64 + carry;
             rd[i + j] = res as u32;
-            carry = res >> 32;
+            carry = res >> u32::BITS;
         }
     }
     u32_array_to_bytes(rd)
@@ -214,14 +230,16 @@ mod tests {
     use alloy_primitives::U256;
     use rand::{prelude::StdRng, Rng, SeedableRng};
 
-    use crate::{common::u64_array_to_bytes, mult::u256_mul, INT256_NUM_LIMBS};
+    use crate::{
+        common::u64_array_to_bytes, mult::u256_mul, INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
+    };
 
     #[test]
     fn test_u256_mul() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u64; 4] = rng.random();
-            let limbs_b: [u64; 4] = rng.random();
+            let limbs_a: [u64; INT256_NUM_U64_LIMBS] = rng.random();
+            let limbs_b: [u64; INT256_NUM_U64_LIMBS] = rng.random();
             let a = U256::from_limbs(limbs_a);
             let b = U256::from_limbs(limbs_b);
             let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);

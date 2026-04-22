@@ -9,7 +9,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_circuit::BranchLessThanExecutor;
@@ -134,10 +134,20 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
-    let rs1_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs2_ptr = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rs1_ptr) as u32);
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, u64::from_le_bytes(rs2_ptr) as u32);
+    let rs1_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+    let rs2_ptr =
+        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = read_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rs1_ptr) as u32,
+    );
+    let rs2 = read_int256(
+        exec_state,
+        RV64_MEMORY_AS,
+        u64::from_le_bytes(rs2_ptr) as u32,
+    );
     let cmp_result = OP::compute(rs1, rs2);
     if cmp_result {
         pc = (pc as isize + pre_compute.imm) as u32;

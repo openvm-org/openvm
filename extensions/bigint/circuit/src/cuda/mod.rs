@@ -11,27 +11,27 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord, Rv32VecHeapBranchAdapterCols,
-    Rv32VecHeapBranchAdapterRecord,
-};
 use openvm_riscv_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
     BaseAluCoreCols, BaseAluCoreRecord, BranchEqualCoreCols, BranchEqualCoreRecord,
     BranchLessThanCoreCols, BranchLessThanCoreRecord, LessThanCoreCols, LessThanCoreRecord,
     MultiplicationCoreCols, MultiplicationCoreRecord, ShiftCoreCols, ShiftCoreRecord,
 };
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord, Rv32VecHeapBranchAdapterCols,
+    Rv32VecHeapBranchAdapterRecord,
+};
 use openvm_stark_backend::prover::AirProvingContext;
 
 mod cuda_abi;
 
-use crate::INT256_NUM_BLOCKS;
+use crate::{INT256_NUM_BLOCKS, NUM_READS};
 
 //////////////////////////////////////////////////////////////////////////////////////
 /// ALU
 //////////////////////////////////////////////////////////////////////////////////////
 pub type BaseAlu256AdapterRecord = Rv32VecHeapAdapterRecord<
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -59,7 +59,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
         let trace_width = BaseAluCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
             + Rv32VecHeapAdapterCols::<
                 F,
-                2,
+                NUM_READS,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
                 DEFAULT_BLOCK_SIZE,
@@ -94,7 +94,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
 /// Branch Equal
 //////////////////////////////////////////////////////////////////////////////////////
 pub type BranchEqual256AdapterRecord =
-    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
+    Rv32VecHeapBranchAdapterRecord<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
 pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_LIMBS>;
 
 #[derive(new)]
@@ -146,7 +146,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
 /// Less Than
 //////////////////////////////////////////////////////////////////////////////////////
 pub type LessThan256AdapterRecord = Rv32VecHeapAdapterRecord<
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -174,7 +174,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
         let trace_width = LessThanCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
             + Rv32VecHeapAdapterCols::<
                 F,
-                2,
+                NUM_READS,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
                 DEFAULT_BLOCK_SIZE,
@@ -209,7 +209,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
 /// Branch Less Than
 //////////////////////////////////////////////////////////////////////////////////////
 pub type BranchLessThan256AdapterRecord =
-    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
+    Rv32VecHeapBranchAdapterRecord<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
 pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 
 #[derive(new)]
@@ -261,7 +261,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
 /// Shift
 //////////////////////////////////////////////////////////////////////////////////////
 pub type Shift256AdapterRecord = Rv32VecHeapAdapterRecord<
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -289,7 +289,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
         let trace_width = ShiftCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
             + Rv32VecHeapAdapterCols::<
                 F,
-                2,
+                NUM_READS,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
                 DEFAULT_BLOCK_SIZE,
@@ -324,7 +324,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
 /// Multiplication
 //////////////////////////////////////////////////////////////////////////////////////
 pub type Multiplication256AdapterRecord = Rv32VecHeapAdapterRecord<
-    2,
+    NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
     DEFAULT_BLOCK_SIZE,
@@ -354,7 +354,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
         let trace_width = MultiplicationCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
             + Rv32VecHeapAdapterCols::<
                 F,
-                2,
+                NUM_READS,
                 INT256_NUM_BLOCKS,
                 INT256_NUM_BLOCKS,
                 DEFAULT_BLOCK_SIZE,
