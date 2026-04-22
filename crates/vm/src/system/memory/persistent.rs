@@ -168,8 +168,6 @@ type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timest
 type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
 pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
-/// Regroups DEFAULT_BLOCK_SIZE-sized touched blocks into CHUNK-sized chunks.
-/// Currently unused — kept for when the u16 cell switch restores `DEFAULT_BLOCK_SIZE < CHUNK`.
 pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
     final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
 ) -> ChunkedTouchedMemory<F> {

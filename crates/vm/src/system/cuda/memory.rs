@@ -161,7 +161,9 @@ impl MemoryInventoryGPU {
         } else if BLOCKS_PER_CHUNK == 1 {
             // DEFAULT_BLOCK_SIZE == DIGEST_WIDTH: each touched block is already a
             // full chunk, so no merge is needed.
-            let mut records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
+            // `partition` is already sorted by (addr_space, ptr) — see `GuestMemory::finalize`
+            // in system/memory/online.rs.
+            let records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
                 .iter()
                 .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
                     address_space: addr_space,
@@ -170,8 +172,6 @@ impl MemoryInventoryGPU {
                     values: ts_values.values.map(Self::field_to_raw_u32),
                 })
                 .collect();
-            records.sort_unstable_by_key(|r| (r.address_space, r.ptr));
-            let num_records = records.len();
 
             let d_records = records
                 .to_device_on(&self.device_ctx)
@@ -179,7 +179,7 @@ impl MemoryInventoryGPU {
                 .as_buffer::<u32>();
 
             self.boundary
-                .finalize_records_device::<DIGEST_WIDTH>(d_records, num_records);
+                .finalize_records_device::<DIGEST_WIDTH>(d_records, records.len());
 
             let merkle_records: Vec<MemoryMerkleRecord> = records
                 .iter()
@@ -242,9 +242,6 @@ impl MemoryInventoryGPU {
     /// `cuda_abi::inventory` FFI bindings) because the plan is to switch AS 1 and AS 2 to use u16
     /// cells, at which point one 64-bit word will span 4 cells and `DEFAULT_BLOCK_SIZE` will go
     /// back to 4. That will make `BLOCKS_PER_CHUNK == 2` again and this path will be needed.
-    ///
-    /// If `BLOCKS_PER_CHUNK` changes to anything other than 1 or 2, the merge kernel (which
-    /// hardcodes a 2-way merge) will need to be generalized or rewritten.
     #[allow(dead_code)]
     fn populate_records_via_merge(&mut self, partition: &TouchedMemory<F>) {
         let in_records: Vec<MemoryInventoryRecord<DEFAULT_BLOCK_SIZE, 1>> = partition
