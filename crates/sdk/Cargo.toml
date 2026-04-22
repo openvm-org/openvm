@@ -87,6 +87,10 @@ aot = [
     "openvm-circuit/aot",
     "openvm-sdk-config/aot",
 ]
+rvr = [
+    "openvm-circuit/rvr",
+    "openvm-sdk-config/rvr",
+]
 tco = [
     "openvm-circuit/tco",
     "openvm-sdk-config/tco",

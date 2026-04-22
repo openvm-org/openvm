@@ -2,9 +2,11 @@
 
 #![allow(dead_code)]
 
-use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
-use std::{env, fs};
+use std::{
+    collections::VecDeque,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use eyre::Result;
 use openvm_circuit::arch::{
@@ -23,16 +25,17 @@ use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
     Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::keygen::types::MultiStarkProvingKey;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine,
+use openvm_stark_backend::{
+    keygen::types::MultiStarkProvingKey, p3_field::PrimeCharacteristicRing, StarkEngine,
+    StarkProtocolConfig,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine},
+    p3_baby_bear::BabyBear,
+};
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx};
 
 pub type F = BabyBear;
 type Engine = BabyBearPoseidon2CpuEngine;
@@ -113,6 +116,20 @@ pub fn read_program_input() -> Vec<F> {
         .collect()
 }
 
+// ── Shared helpers ─────────────────────────────────────────────────────────
+
+/// Build an `RvrExtensionCtx` from an executor inventory and AIR index mapping.
+pub fn rvr_extension_ctx<E>(
+    inventory: &ExecutorInventory<E>,
+    air_idx: &[usize],
+) -> RvrExtensionCtx {
+    let opcode_to_executor_idx = inventory
+        .instruction_lookup
+        .iter()
+        .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
+    RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
+}
+
 // ── Generic VM test harness ─────────────────────────────────────────────────
 
 /// Holds keygen results and an extension registry. Provides `compare` to run
@@ -154,6 +171,12 @@ where
     /// Executor-index → AIR-index mapping, for building extensions.
     pub fn air_idx(&self) -> &[usize] {
         &self.air_idx
+    }
+
+    /// Build rvr extension context from executor inventory + AIR mapping.
+    pub fn rvr_extension_ctx(&self) -> Result<RvrExtensionCtx> {
+        let inventory = self.inventory()?;
+        Ok(rvr_extension_ctx(&inventory, &self.air_idx))
     }
 
     /// Register an extension into the harness.
@@ -378,8 +401,8 @@ fn assert_full_guest_memory(
 /// segment boundaries will differ. We verify:
 /// 1. Total instret matches across all segments.
 /// 2. Each rvr segment is contiguous and non-empty.
-/// 3. Per-chip trace height totals match for instruction-driven chips
-///    (excluding boundary, merkle tree, and poseidon2 which are re-initialized at boundaries).
+/// 3. Per-chip trace height totals match for instruction-driven chips (excluding boundary, merkle
+///    tree, and poseidon2 which are re-initialized at boundaries).
 /// 4. No rvr segment exceeds the configured max_trace_height.
 pub fn assert_segments(
     label: &str,

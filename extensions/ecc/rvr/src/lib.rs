@@ -7,13 +7,11 @@
 
 use std::path::{Path, PathBuf};
 
-use openvm_circuit::arch::ExecutorInventory;
 use openvm_ecc_circuit::CurveConfig;
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
-use openvm_instructions::instruction::Instruction;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
@@ -173,34 +171,19 @@ impl EccExtension {
     }
 
     /// Create for pure execution (chip indices are unused).
-    pub fn new_pure(curves: Vec<u32>, staticlib_path: PathBuf) -> Self {
+    pub fn new_pure(staticlib_path: PathBuf, curves: Vec<u32>) -> Self {
         Self::from_curve_ids(curves, staticlib_path)
     }
 
-    pub fn new_pure_from_configs(curves: Vec<CurveConfig>, staticlib_path: PathBuf) -> Self {
+    pub fn new_pure_from_configs(staticlib_path: PathBuf, curves: Vec<CurveConfig>) -> Self {
         Self::from_curve_configs(curves, staticlib_path)
     }
 
-    /// Create with resolved chip indices from the VM config.
-    pub fn new<E>(
-        curves_info: Vec<u32>,
-        _inventory: &ExecutorInventory<E>,
-        _executor_idx_to_air_idx: &[usize],
-        staticlib_path: PathBuf,
-    ) -> Self {
-        // ECC currently uses the pure fast path, so inventory/chip mapping are
-        // intentionally unused here.
+    pub fn new(staticlib_path: PathBuf, curves_info: Vec<u32>) -> Self {
         Self::from_curve_ids(curves_info, staticlib_path)
     }
 
-    pub fn new_from_configs<E>(
-        curves: Vec<CurveConfig>,
-        _inventory: &ExecutorInventory<E>,
-        _executor_idx_to_air_idx: &[usize],
-        staticlib_path: PathBuf,
-    ) -> Self {
-        // ECC currently uses the pure fast path, so inventory/chip mapping are
-        // intentionally unused here.
+    pub fn new_from_configs(staticlib_path: PathBuf, curves: Vec<CurveConfig>) -> Self {
         Self::from_curve_configs(curves, staticlib_path)
     }
 }

@@ -7,6 +7,8 @@
 #[path = "utils.rs"]
 mod utils;
 
+use std::{collections::VecDeque, path::PathBuf, process::Command};
+
 use eyre::Result;
 use openvm_instructions::exe::VmExe;
 use openvm_keccak256_circuit::{Keccak256Rv32Config, Keccak256Rv32CpuBuilder};
@@ -16,9 +18,6 @@ use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_keccak::KeccakExtension;
-use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::process::Command;
 use utils::{ExecutionMode, F};
 
 // ── Keccak-specific helpers ─────────────────────────────────────────────────
@@ -111,8 +110,8 @@ fn build_keccak_exe() -> Result<VmExe<F>> {
 }
 
 fn make_keccak_ext(harness: &utils::VmTestHarness<Keccak256Rv32CpuBuilder>) -> KeccakExtension {
-    let inventory = harness.inventory().unwrap();
-    KeccakExtension::new(&inventory, harness.air_idx(), build_keccak_staticlib())
+    let ctx = harness.rvr_extension_ctx().unwrap();
+    KeccakExtension::new(&ctx, build_keccak_staticlib()).unwrap()
 }
 
 // ── Pure execution test ─────────────────────────────────────────────────────

@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::fmt::Write;
+use std::{collections::HashSet, fmt::Write};
 
 use super::codegen::hex_u32;
 

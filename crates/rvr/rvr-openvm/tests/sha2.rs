@@ -7,6 +7,8 @@
 #[path = "utils.rs"]
 mod utils;
 
+use std::{path::PathBuf, process::Command};
+
 use eyre::Result;
 use openvm_instructions::exe::VmExe;
 use openvm_rv32im_transpiler::*;
@@ -17,8 +19,6 @@ use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_sha2::Sha2Extension;
 use sha2::{Digest, Sha256, Sha512};
-use std::path::PathBuf;
-use std::process::Command;
 use utils::{ExecutionMode, F};
 
 // ── SHA2-specific helpers ─────────────────────────────────────────────────
@@ -117,8 +117,8 @@ fn build_sha2_exe() -> Result<VmExe<F>> {
 }
 
 fn make_sha2_ext(harness: &utils::VmTestHarness<Sha2Rv32CpuBuilder>) -> Sha2Extension {
-    let inventory = harness.inventory().unwrap();
-    Sha2Extension::new(&inventory, harness.air_idx(), build_sha2_staticlib())
+    let ctx = harness.rvr_extension_ctx().unwrap();
+    Sha2Extension::new(&ctx, build_sha2_staticlib()).unwrap()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────

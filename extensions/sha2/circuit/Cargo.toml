@@ -18,6 +18,7 @@ openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-sha2-transpiler = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-sha2-air = { workspace = true }
 
@@ -44,6 +45,7 @@ parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-rv32im-circuit/tco"]
 aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
+rvr = ["dep:rvr-openvm-lift", "openvm-rv32im-circuit/rvr"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

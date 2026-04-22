@@ -1,8 +1,10 @@
 //! End-to-end validation for source annotations and DWARF line info.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use eyre::{Context, ContextCompat, Result};
 use openvm_instructions::exe::VmExe;

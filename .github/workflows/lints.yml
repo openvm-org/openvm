@@ -38,9 +38,11 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: codespell-project/actions-codespell@v2
         with:
-          skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf
+          skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./crates/toolchain/tests/rv32im-test-vectors/riscv-tests,./crates/sdk/contracts/lib/forge-std,./extensions/algebra/rvr/ffi/secp256k1,./extensions/keccak256/rvr/ffi/xkcp,./extensions/keccak256/rvr/ffi/openssl
           ignore_words_file: .codespellignore
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.9
@@ -65,7 +67,7 @@ jobs:
           # cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils" -- -D warnings
           cargo clippy --all-targets --all --tests --features "bls12_381 bn254 default entrypoint export-intrinsics export-libm function-span getrandom-unsupported halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics panic-handler parallel perf-metrics rust-runtime std test-utils" -- -D warnings
           # cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
-          cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
+          cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc rvr-openvm-ext-keccak-ffi/backend-openssl" -- -D warnings
       - name: Run fmt, clippy for guest
         run: |
           # Find all directories named "programs" and include additional static paths
@@ -117,6 +119,8 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"

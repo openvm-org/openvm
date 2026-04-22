@@ -45,6 +45,9 @@ aot = [
     "openvm-bigint-circuit/aot",
     "openvm-ecc-circuit/aot",
 ]
+rvr = [
+    "openvm-circuit/rvr",
+]
 touchemall = [
     "cuda",
     "openvm-circuit/touchemall",

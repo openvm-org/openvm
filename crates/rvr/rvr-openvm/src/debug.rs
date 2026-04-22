@@ -4,11 +4,13 @@
 //! transpilation discards provenance) and threaded into the rvr-openvm
 //! compilation pipeline to emit `#line` directives in generated C code.
 
-use std::collections::HashMap;
-use std::io::Write;
-use std::path::Path;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    io::Write,
+    path::Path,
+    process::{Command, Stdio},
+    time::{Duration, Instant},
+};
 
 use rvr_openvm_ir::SourceLoc;
 use serde::{Deserialize, Serialize};
