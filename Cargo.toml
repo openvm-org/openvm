@@ -38,7 +38,7 @@ members = [
   "extensions/riscv/transpiler",
   "extensions/riscv/guest",
   "extensions/riscv/tests",
-  "extensions/rv32-adapters",
+  "extensions/riscv-adapters",
   "extensions/algebra/circuit",
   "extensions/algebra/transpiler",
   "extensions/algebra/guest",
@@ -122,7 +122,7 @@ default-members = [
   "crates/vm",
   "crates/vm/derive",
   "crates/static-verifier",
-  "extensions/rv32-adapters",
+  "extensions/riscv-adapters",
   "extensions/algebra/*",
   "extensions/bigint/*",
   "extensions/deferral/*",
@@ -222,7 +222,7 @@ cargo-openvm = { version = "2.1.0", path = "crates/cli", default-features = fals
 openvm-riscv-circuit = { version = "2.1.0", path = "extensions/riscv/circuit", default-features = false }
 openvm-riscv-transpiler = { version = "2.1.0", path = "extensions/riscv/transpiler", default-features = false }
 openvm-riscv-guest = { version = "2.1.0", path = "extensions/riscv/guest", default-features = false }
-openvm-rv32-adapters = { version = "2.1.0", path = "extensions/rv32-adapters", default-features = false }
+openvm-riscv-adapters = { version = "2.1.0", path = "extensions/riscv-adapters", default-features = false }
 openvm-keccak256-circuit = { version = "2.1.0", path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { version = "2.1.0", path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { version = "2.1.0", path = "extensions/keccak256/guest", default-features = false }

@@ -19,7 +19,7 @@ on:
       - "extensions/riscv/circuit/**"
       - "extensions/riscv/transpiler/**"
       - "extensions/riscv/guest/**"
-      - "extensions/rv32-adapters/**"
+      - "extensions/riscv-adapters/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"

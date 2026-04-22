@@ -13,7 +13,7 @@ on:
       - "crates/continuations/**"
       - "crates/verify/**"
       - "extensions/rv32im/**"
-      - "extensions/rv32-adapters/**"
+      - "extensions/riscv-adapters/**"
       - "extensions/deferral/**"
       - "extensions/keccak256/**"
       - "extensions/sha2/**"

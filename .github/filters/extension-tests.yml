@@ -19,7 +19,7 @@ cuda:
 riscv: &riscv
   - *shared
   - "extensions/riscv/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
 keccak256:
   - *riscv
   - "extensions/keccak256/**"
@@ -29,13 +29,13 @@ sha2:
 bigint:
   - *riscv
   - "extensions/bigint/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
 algebra: &algebra
   - *riscv
   - "extensions/algebra/**"
   - "extensions/ecc/**"
   - "extensions/pairing/guest/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
 ecc:
   - *algebra
   - "crates/sdk/**"
@@ -44,7 +44,7 @@ pairing:
   - *riscv
   - "extensions/algebra/**"
   - "extensions/ecc/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "extensions/pairing/**"
 deferral:
   - *riscv

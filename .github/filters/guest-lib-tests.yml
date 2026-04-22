@@ -5,7 +5,7 @@ shared: &shared
   - "crates/vm/**"
   - "crates/toolchain/**"
   - "extensions/riscv/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "Cargo.toml"
   - "Cargo.lock"
   - "rust-toolchain.toml"
@@ -31,14 +31,14 @@ keccak256:
 ff_derive:
   - *shared
   - "extensions/algebra/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "guest-libs/ff_derive/**"
 k256:
   - *shared
   - "extensions/sha2/**"
   - "extensions/algebra/**"
   - "extensions/ecc/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "guest-libs/k256/**"
   - "guest-libs/sha2/**"
 p256:
@@ -46,7 +46,7 @@ p256:
   - "extensions/sha2/**"
   - "extensions/algebra/**"
   - "extensions/ecc/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "guest-libs/p256/**"
   - "guest-libs/sha2/**"
 pairing:
@@ -54,7 +54,7 @@ pairing:
   - "extensions/algebra/**"
   - "extensions/ecc/**"
   - "extensions/pairing/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "guest-libs/pairing/**"
 verify-stark:
   - *shared
