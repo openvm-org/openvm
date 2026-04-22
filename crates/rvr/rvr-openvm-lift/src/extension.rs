@@ -42,8 +42,16 @@ impl RvrExtensionCtx {
     }
 
     pub fn require_opcode_air_idx(&self, opcode: VmOpcode) -> Result<u32, ExtensionError> {
-        self.resolve_opcode_air_idx(opcode)
-            .ok_or(ExtensionError::UnknownOpcode(opcode))
+        let executor_idx = self
+            .resolve_opcode_executor_idx(opcode)
+            .ok_or(ExtensionError::UnknownOpcode(opcode))?;
+        let air_idx = self.executor_idx_to_air_idx.get(executor_idx).ok_or(
+            ExtensionError::ExecutorIndexOutOfBounds {
+                opcode,
+                executor_idx,
+            },
+        )?;
+        Ok(*air_idx as u32)
     }
 }
 
@@ -52,6 +60,14 @@ impl RvrExtensionCtx {
 pub enum ExtensionError {
     #[error("opcode {0:?} not found in rvr extension context mappings")]
     UnknownOpcode(VmOpcode),
+    #[error(
+        "executor index {executor_idx} for opcode {opcode:?} is out of bounds in \
+         executor_idx_to_air_idx"
+    )]
+    ExecutorIndexOutOfBounds {
+        opcode: VmOpcode,
+        executor_idx: usize,
+    },
 }
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
