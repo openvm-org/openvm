@@ -22,10 +22,10 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32IsEqualModAdapterExecutor;
+use openvm_riscv_adapters::Rv64IsEqualModAdapterExecutor;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -454,7 +454,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
     VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        adapter: Rv64IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
         modulus_limbs: [u8; TOTAL_LIMBS],
     ) -> Self {
@@ -498,7 +498,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         let c = c.as_canonical_u32();
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
-        if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
+        if d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -698,16 +698,21 @@ unsafe fn execute_e12_impl<
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    // Read register values
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+    // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
+    let rs_vals = pre_compute.rs_addrs.map(|addr| {
+        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, addr as u32));
+        debug_assert!(
+            val <= u32::MAX as u64,
+            "upper 4 bytes of register must be zero for pointer"
+        );
+        val as u32
+    });
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
-            exec_state.vm_read::<_, LANE_SIZE>(RV32_MEMORY_AS, address + (i * LANE_SIZE) as u32)
+            exec_state.vm_read::<_, LANE_SIZE>(RV64_MEMORY_AS, address + (i * LANE_SIZE) as u32)
         })
         .concat()
         .try_into()
@@ -722,12 +727,12 @@ unsafe fn execute_e12_impl<
     let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
     debug_assert!(c_cmp, "{:?} >= {:?}", c, pre_compute.modulus_limbs);
 
-    // Compute result
-    let mut write_data = [0u8; RV32_REGISTER_NUM_LIMBS];
+    // Compute result (RV64: 8-byte result register)
+    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
     write_data[0] = (b == c) as u8;
 
     // Write result to register
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

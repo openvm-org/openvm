@@ -15,7 +15,7 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, FieldExpressionCoreRecordMut, FieldExpressionRecordLayout,
 };
-use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
+use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -175,10 +175,10 @@ where
         'buf,
         FieldExpressionRecordLayout<
             F,
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
         (
-            <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as openvm_circuit::arch::AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as openvm_circuit::arch::AdapterTraceExecutor<F>>::RecordMut<'buf>,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -193,7 +193,7 @@ where
         let (mut adapter_record, mut core_record) =
             state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
