@@ -3,10 +3,9 @@
 //! Provides a memory region with guard pages on each side to catch
 //! buffer overflows/underflows at the OS level.
 
-use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous, mprotect, munmap};
-use std::ffi::c_void;
-use std::num::NonZeroUsize;
-use std::ptr::NonNull;
+use std::{ffi::c_void, num::NonZeroUsize, ptr::NonNull};
+
+use nix::sys::mman::{mmap_anonymous, mprotect, munmap, MapFlags, ProtFlags};
 use thiserror::Error;
 
 /// Guard page size (16KB, must be >= page size and cover max load/store offset).
