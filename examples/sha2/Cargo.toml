@@ -19,5 +19,6 @@ std = ["openvm/std"]
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-sha2 = { path = "../../guest-libs/sha2" }
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

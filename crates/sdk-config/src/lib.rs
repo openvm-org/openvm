@@ -136,7 +136,7 @@ impl SdkVmConfig {
             .optimize()
     }
 
-    /// Configuration with RISC-V RV32IM and IO VM extensions loaded.
+    /// Configuration with RISC-V RV64IM and IO VM extensions loaded.
     ///
     /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
     ///
