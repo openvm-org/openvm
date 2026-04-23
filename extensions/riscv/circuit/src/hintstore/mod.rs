@@ -39,7 +39,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{read_rv64_register, tracing_read, tracing_write};
+use crate::adapters::{expand_to_rv64_register, read_rv64_register, tracing_read, tracing_write};
 
 mod execution;
 
@@ -164,13 +164,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
         // read mem_ptr
-        let mem_ptr_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                local_cols.mem_ptr_limbs[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let mem_ptr_data = expand_to_rv64_register(&local_cols.mem_ptr_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
