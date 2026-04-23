@@ -1,9 +1,16 @@
 // [!region imports]
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::format;
+
 use hex_literal::hex;
-#[cfg(target_os = "zkvm")]
-use openvm as _;
 use tiny_keccak::{Hasher, Keccak};
 // [!endregion imports]
+
+openvm::entry!(main);
 
 // [!region main]
 
@@ -160,9 +167,9 @@ pub fn main() {
         assert_eq!(output, expected);
     }
 
-    println!(
+    openvm::io::println(format!(
         "All {} keccak256 test cases passed!",
         KECCAK_TEST_CASES.len()
-    );
+    ));
 }
 // [!endregion main]

@@ -27,12 +27,12 @@ not on the machine doing the compilation (the "host machine"), although we will 
 The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
 `no_std` crates and write Rust as you normally would. Import the `openvm` library crate to use `openvm` intrinsic functions (for example `openvm::io::*`).
 
-The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `openvm::entry!` macro. You should still create a `main` function, and then add `openvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "zkvm"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
+The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `openvm::entry!` macro. You should still create a `main` function, and then add `openvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "none"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
 
 To support host machine execution, the top of your guest program should have:
 
 ```rust
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
@@ -75,10 +75,10 @@ printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 #### Local Builds
 
 By default, if you run `cargo build` or `cargo run` from the guest program root directory, it will
-build with target set to your **host** machine. If you want to directly build for `openvm` (more specifically a special RISC-V target), run `cargo openvm build` and it will output a RISC-V ELF file to `target/riscv32im-risc0-zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
+build with target set to your **host** machine. If you want to directly build for `openvm` (more specifically a RISC-V target), run `cargo openvm build` and it will output a RISC-V ELF file to `target/riscv64im-unknown-none-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
 
 ```bash
-rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/openvm-fibonacci-program
+rust-objdump -d target/riscv64im-unknown-none-elf/release/openvm-fibonacci-program
 ```
 
 ## Running a Benchmark Locally

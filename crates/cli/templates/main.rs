@@ -1,7 +1,12 @@
 // src/main.rs
-use openvm::io::{read, reveal_u32};
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-fn main() {
+use openvm::io::{read, reveal_u64};
+
+openvm::entry!(main);
+
+pub fn main() {
     let n: u64 = read();
     let mut a: u64 = 0;
     let mut b: u64 = 1;
@@ -10,6 +15,5 @@ fn main() {
         a = b;
         b = c;
     }
-    reveal_u32(a as u32, 0);
-    reveal_u32((a >> 32) as u32, 1);
+    reveal_u64(a, 0);
 }
