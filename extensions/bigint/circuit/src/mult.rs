@@ -125,23 +125,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr =
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        rv64_bytes_to_u32(rs1_ptr),
-    );
-    let rs2 = read_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        rv64_bytes_to_u32(rs2_ptr),
-    );
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
     let rd = u256_mul(rs1, rs2);
-    write_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        rv64_bytes_to_u32(rd_ptr),
-        &rd,
-    );
+    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

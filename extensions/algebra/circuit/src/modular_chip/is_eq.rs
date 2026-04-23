@@ -18,7 +18,6 @@ use openvm_circuit_primitives::{
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
     AlignedBytesBorrow, SubAir, TraceSubRowGenerator,
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -27,6 +26,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_adapters::Rv64IsEqualModAdapterExecutor;
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},

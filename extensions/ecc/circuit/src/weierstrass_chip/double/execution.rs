@@ -16,8 +16,8 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::EcDoubleExecutor;

@@ -138,16 +138,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
     let rs2_ptr =
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = read_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        rv64_bytes_to_u32(rs1_ptr),
-    );
-    let rs2 = read_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        rv64_bytes_to_u32(rs2_ptr),
-    );
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
     let cmp_result = OP::compute(rs1, rs2);
     if cmp_result {
         pc = (pc as isize + pre_compute.imm) as u32;

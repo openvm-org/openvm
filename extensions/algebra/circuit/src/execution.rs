@@ -406,8 +406,7 @@ unsafe fn execute_e12_impl<
         field_operation::<FIELD_TYPE, BLOCKS, BLOCK_SIZE, OP>(read_data)
     };
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     for (i, block) in output_data.into_iter().enumerate() {
@@ -444,8 +443,7 @@ unsafe fn execute_e12_generic_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
@@ -501,8 +499,7 @@ unsafe fn execute_e12_setup_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
