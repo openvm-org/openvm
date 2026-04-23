@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-ff-derive-test-programs"
 version = "0.0.0"

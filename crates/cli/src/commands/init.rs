@@ -7,7 +7,7 @@ use std::{
 use clap::Parser;
 use eyre::{Context, Result};
 use include_dir::{include_dir, Dir};
-use toml_edit::{DocumentMut, Item, Value};
+use toml_edit::{Array, DocumentMut, Item, Table, Value};
 
 static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
@@ -124,11 +124,10 @@ impl InitCmd {
         }
 
         // Add openvm dependency to Cargo.toml, then write template main.rs or lib.rs
+        add_openvm_dependency(&path, &[])?;
         if self.lib {
-            add_openvm_dependency(&path, &[])?;
             write_template_file("lib.rs", &path.join("src"))?;
         } else {
-            add_openvm_dependency(&path, &["std"])?;
             write_template_file("main.rs", &path.join("src"))?;
         }
 
@@ -162,6 +161,17 @@ fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
 
     openvm_table.insert("features", Value::Array(openvm_features));
     doc["dependencies"]["openvm"] = Item::Value(toml_edit::Value::InlineTable(openvm_table));
+
+    // Declare a `std` feature that forwards to `openvm/std` so the template
+    // `cfg(feature = "std")` gates resolve without warnings.
+    if !doc.contains_key("features") {
+        let mut features_table = Table::new();
+        let mut std_forward = Array::new();
+        std_forward.push(Value::from("openvm/std"));
+        features_table.insert("std", Item::Value(Value::Array(std_forward)));
+        doc["features"] = Item::Table(features_table);
+    }
+
     write(&cargo_toml_path, doc.to_string())
         .with_context(|| format!("failed to write {}", cargo_toml_path.display()))?;
     Ok(())
