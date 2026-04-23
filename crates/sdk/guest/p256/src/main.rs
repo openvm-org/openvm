@@ -1,8 +1,12 @@
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 extern crate alloc;
 
 use elliptic_curve::{ops::LinearCombination, CurveArithmetic, Field, Group, PrimeField};
 use openvm_p256::{NistP256, P256Point, P256Scalar as Scalar};
 
+openvm::entry!(main);
 openvm::init!();
 
 pub fn main() {

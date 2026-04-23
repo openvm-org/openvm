@@ -19,3 +19,6 @@ cargo_metadata.workspace = true
 [dev-dependencies]
 
 [features]
+
+[lints]
+workspace = true

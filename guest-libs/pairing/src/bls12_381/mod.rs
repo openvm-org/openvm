@@ -9,7 +9,7 @@ use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
 mod fp12;
 mod fp2;
 mod pairing;
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
 pub(crate) mod utils;
 
 pub use fp12::*;
@@ -18,7 +18,7 @@ use hex_literal::hex;
 use openvm_ecc_sw_macros::sw_declare;
 use openvm_pairing_guest::pairing::PairingIntrinsics;
 
-#[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(test, feature = "halo2curves", not(openvm_intrinsics)))]
 mod tests;
 
 moduli_declare! {

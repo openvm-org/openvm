@@ -1,4 +1,7 @@
 // [!region pre]
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use hex_literal::hex;
 // [!endregion pre]
 // [!region imports]
@@ -10,6 +13,8 @@ use openvm_pairing::{
     PairingCheck,
 };
 // [!endregion imports]
+
+openvm::entry!(main);
 
 // [!region init]
 openvm::init!();
