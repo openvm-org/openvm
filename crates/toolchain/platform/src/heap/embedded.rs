@@ -1,21 +1,10 @@
-use critical_section::RawRestoreState;
 use embedded_alloc::LlffHeap as Heap;
+
+// `embedded_alloc::LlffHeap` serializes allocator access via `critical_section`;
+// `crate::critical_section` registers the no-op impl for the single-threaded guest.
 
 #[global_allocator]
 pub static HEAP: Heap = Heap::empty();
-
-struct CriticalSection;
-critical_section::set_impl!(CriticalSection);
-
-unsafe impl critical_section::Impl for CriticalSection {
-    unsafe fn acquire() -> RawRestoreState {
-        // this is a no-op. we're in a single-threaded, non-preemptive context
-    }
-
-    unsafe fn release(_token: RawRestoreState) {
-        // this is a no-op. we're in a single-threaded, non-preemptive context
-    }
-}
 
 pub fn init() {
     extern "C" {

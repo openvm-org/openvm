@@ -4,16 +4,23 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
+resolver = "2"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    "std",
-] }
-alloy-primitives = "1.1.2"
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+alloy-primitives = { version = "1.1.2", default-features = false }
+
+# `bytes` (pulled transitively by `alloy-primitives`) uses atomic CAS via
+# `core::sync::atomic`. On guest targets lacking the A extension, activate
+# `bytes/extra-platforms` to route CAS through `portable-atomic`; the
+# `critical-section` backend is provided by `openvm-platform`.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none", not(target_feature = "a")))'.dependencies]
+bytes = { version = "1.11.1", default-features = false, features = ["extra-platforms"] }
 
 [features]
 default = []
+std = ["openvm/std", "alloy-primitives/std", "bytes/std"]
 
 [patch.crates-io]
 # alloy-primitives uses ruint:
@@ -25,3 +32,6 @@ openvm = { path = "../../crates/toolchain/openvm" }
 
 [profile.release]
 lto = "thin"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
