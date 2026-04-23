@@ -106,6 +106,8 @@ First, add the following header to `main.rs`:
 #![no_main]
 ```
 
+A crate with this header only builds for the openvm guest target; see below for the `cfg_attr`-gated variant (what `cargo openvm init` generates) that also builds under plain `cargo check` on the host.
+
 This tells Rust there is no handler for the `main` function. OpenVM provides a separate entrypoint for the `main` function, with panic handler, via the `openvm::entry!` macro.
 You should write a `main` function in the normal way, and add the following to `main.rs`:
 
