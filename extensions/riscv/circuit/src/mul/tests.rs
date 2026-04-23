@@ -286,7 +286,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
-    let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
+    let memory_dimensions = config.rv64i.system.memory_config.memory_dimensions();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor

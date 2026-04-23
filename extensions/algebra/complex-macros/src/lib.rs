@@ -107,12 +107,12 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// Implementation of AddAssign.
                 #[inline(always)]
                 fn add_assign_impl(&mut self, other: &Self) {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         self.c0 += &other.c0;
                         self.c1 += &other.c1;
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -128,12 +128,12 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// Implementation of SubAssign.
                 #[inline(always)]
                 fn sub_assign_impl(&mut self, other: &Self) {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         self.c0 -= &other.c0;
                         self.c1 -= &other.c1;
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -149,7 +149,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// Implementation of MulAssign.
                 #[inline(always)]
                 fn mul_assign_impl(&mut self, other: &Self) {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         let (c0, c1) = (&self.c0, &self.c1);
                         let (d0, d1) = (&other.c0, &other.c1);
@@ -158,7 +158,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                             c0.clone() * d1 + c1.clone() * d0,
                         );
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -174,7 +174,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// Implementation of DivAssignUnsafe.
                 #[inline(always)]
                 fn div_assign_unsafe_impl(&mut self, other: &Self) {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         let (c0, c1) = (&self.c0, &self.c1);
                         let (d0, d1) = (&other.c0, &other.c1);
@@ -184,7 +184,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                             denom * &(c1.clone() * d0 - c0.clone() * d1),
                         );
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -199,13 +199,13 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
 
                 /// Implementation of Add that doesn't cause zkvm to use an additional store.
                 fn add_refs_impl(&self, other: &Self) -> Self {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         let mut res = self.clone();
                         res.add_assign_impl(other);
                         res
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
@@ -223,13 +223,13 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// Implementation of Sub that doesn't cause zkvm to use an additional store.
                 #[inline(always)]
                 fn sub_refs_impl(&self, other: &Self) -> Self {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         let mut res = self.clone();
                         res.sub_assign_impl(other);
                         res
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
@@ -250,14 +250,14 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// It will only be written to at the end of the function.
                 #[inline(always)]
                 unsafe fn mul_refs_impl(&self, other: &Self, dst_ptr: *mut Self) {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         let mut res = self.clone();
                         res.mul_assign_impl(other);
                         let dst = unsafe { &mut *dst_ptr };
                         *dst = res;
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -273,13 +273,13 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 /// Implementation of DivUnsafe that doesn't cause zkvm to use an additional store.
                 #[inline(always)]
                 fn div_unsafe_refs_impl(&self, other: &Self) -> Self {
-                    #[cfg(not(target_os = "zkvm"))]
+                    #[cfg(not(openvm_intrinsics))]
                     {
                         let mut res = self.clone();
                         res.div_assign_unsafe_impl(other);
                         res
                     }
-                    #[cfg(target_os = "zkvm")]
+                    #[cfg(openvm_intrinsics)]
                     {
                         Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
@@ -643,7 +643,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #setup_extern_func() {
-                #[cfg(target_os = "zkvm")]
+                #[cfg(openvm_intrinsics)]
                 {
                     use super::openvm_intrinsics_meta_do_not_type_this_by_yourself::{two_modular_limbs_list, limb_list_borders};
                     let two_modulus_bytes = &two_modular_limbs_list.0[limb_list_borders[#mod_idx]..limb_list_borders[#mod_idx + 1]];
@@ -678,7 +678,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #[allow(non_snake_case)]
-        #[cfg(target_os = "zkvm")]
+        #[cfg(openvm_intrinsics)]
         mod openvm_intrinsics_ffi_complex {
             #(#externs)*
         }

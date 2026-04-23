@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-ff-derive-test-programs"
 version = "0.0.0"
@@ -29,3 +31,6 @@ std = ["serde/std", "openvm/std", "ff/std"]
 panic = "abort"
 lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
 # strip = "symbols"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
