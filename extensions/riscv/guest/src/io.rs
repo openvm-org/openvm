@@ -1,6 +1,9 @@
 #![allow(unused_imports)]
 use crate::{PhantomImm, MAX_HINT_BUFFER_DWORDS, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 
+/// Size in bytes of one hint stream word (`hint_store_u64` / one `hint_buffer_chunked` unit).
+pub const HINT_WORD_BYTES: usize = 8;
+
 /// Store the next 8 bytes from the hint stream to [[rd]_1]_2.
 #[macro_export]
 macro_rules! hint_store_u64 {

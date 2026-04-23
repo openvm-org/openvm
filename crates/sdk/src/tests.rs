@@ -47,7 +47,7 @@ fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
-    let sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
+    let sdk = Sdk::riscv64(app_params.clone(), agg_params.clone());
     (sdk, app_params, agg_params)
 }
 
@@ -434,7 +434,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 include_bytes!("../programs/examples/fibonacci.elf"),
                 MEM_SIZE as u32,
             )?;
-            let sdk = Sdk::riscv32(app_params, agg_params);
+            let sdk = Sdk::riscv64(app_params, agg_params);
             let app_exe = sdk.convert_to_exe(elf)?;
 
             // Compute trace heights for root prover with profiling params

@@ -1,9 +1,13 @@
 #![allow(clippy::needless_range_loop)]
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use core::array;
 
 use alloy_primitives::I256;
 use openvm as _;
+
+openvm::entry!(main);
 
 const N: usize = 16;
 type Matrix = [[I256; N]; N];
