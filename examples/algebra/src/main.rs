@@ -1,7 +1,12 @@
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 extern crate alloc;
 
 use openvm as _;
 use openvm_algebra_guest::{moduli_macros::*, IntMod};
+
+openvm::entry!(main);
 
 // This macro will create two structs, `Mod1` and `Mod2`,
 // one for arithmetic modulo 998244353, and the other for arithmetic modulo 1000000007.

@@ -35,8 +35,8 @@ impl AppConfig<SdkVmConfig> {
         Self::new(SdkVmConfig::standard(), params)
     }
 
-    pub fn riscv32(params: SystemParams) -> Self {
-        Self::new(SdkVmConfig::riscv32(), params)
+    pub fn riscv64(params: SystemParams) -> Self {
+        Self::new(SdkVmConfig::riscv64(), params)
     }
 }
 

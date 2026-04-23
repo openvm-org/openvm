@@ -34,3 +34,6 @@ aot = ["openvm-sdk/aot"]
 rvr = ["openvm-sdk/rvr", "openvm-sha2-circuit/rvr"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
+
+[lints]
+workspace = true

@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm_deferral_guest::{deferred_compute, get_deferred_output, Commit};

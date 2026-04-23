@@ -13,3 +13,10 @@ path = "src/main.rs"
 [[example]]
 name = "palindrome"
 path = "examples/palindrome.rs"
+
+[features]
+default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
