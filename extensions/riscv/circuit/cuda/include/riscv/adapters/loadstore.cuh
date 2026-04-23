@@ -6,6 +6,7 @@
 
 using namespace riscv;
 
+// TODO: remove Rv32LoadStoreAdapter* types once loadstore.cu is migrated to Rv64
 template <typename T> struct Rv32LoadStoreAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;
