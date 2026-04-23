@@ -30,7 +30,7 @@ rand = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 derive_more = { workspace = true, features = ["from"] }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dependencies]
 num-bigint.workspace = true
 
 [features]

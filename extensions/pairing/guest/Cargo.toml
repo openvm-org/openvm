@@ -25,13 +25,14 @@ blstrs = { workspace = true, optional = true }
 [dev-dependencies]
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+# Host-only deps — gated off the openvm guest target (`riscv64im-unknown-none-elf`).
+[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dependencies]
 num-bigint.workspace = true
 num-traits.workspace = true
 lazy_static.workspace = true
 openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 
-[target.'cfg(not(target_os = "zkvm"))'.dev-dependencies]
+[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dev-dependencies]
 subtle = "2.6.1"
 
 [features]

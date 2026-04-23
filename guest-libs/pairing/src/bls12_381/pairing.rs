@@ -15,11 +15,11 @@ use openvm_pairing_guest::{
         MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
     },
 };
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
 use openvm_pairing_guest::{
     halo2curves_shims::bls12_381::Bls12_381 as Halo2CurvesBls12_381, pairing::FinalExp,
 };
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 use {
     core::mem::MaybeUninit,
     openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
@@ -29,7 +29,7 @@ use {
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
 use crate::bls12_381::utils::{
     convert_bls12381_fp2_to_halo2_fq2, convert_bls12381_fp_to_halo2_fq,
     convert_bls12381_halo2_fq12_to_fp12,
@@ -246,7 +246,7 @@ impl PairingCheck for Bls12_381 {
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> (Self::Fp12, Self::Fp12) {
-        #[cfg(not(target_os = "zkvm"))]
+        #[cfg(not(openvm_intrinsics))]
         {
             #[cfg(not(feature = "halo2curves"))]
             panic!("`halo2curves` feature must be enabled to use pairing check hint on host");
@@ -278,7 +278,7 @@ impl PairingCheck for Bls12_381 {
                 (c, s)
             }
         }
-        #[cfg(target_os = "zkvm")]
+        #[cfg(openvm_intrinsics)]
         {
             let mut hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
             // We do not rely on the slice P's memory layout since rust does not guarantee it across

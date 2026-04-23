@@ -1,6 +1,6 @@
 // [!region imports]
-#![cfg_attr(all(target_os = "zkvm", not(feature = "std")), no_main)]
-#![cfg_attr(all(target_os = "zkvm", not(feature = "std")), no_std)]
+#![cfg_attr(all(target_os = "none", not(feature = "std")), no_main)]
+#![cfg_attr(all(target_os = "none", not(feature = "std")), no_std)]
 
 extern crate alloc;
 
@@ -13,9 +13,9 @@ openvm::entry!(main);
 
 // [!region main]
 fn println(s: String) {
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     openvm::io::println(s);
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_intrinsics))]
     println!("{}", s);
 }
 pub fn main() {

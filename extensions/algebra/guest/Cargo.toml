@@ -14,9 +14,17 @@ openvm-riscv-guest = { workspace = true }
 openvm-custom-insn = { workspace = true }
 serde-big-array.workspace = true
 strum_macros.workspace = true
-once_cell = { workspace = true, features = ["race", "alloc"] }
+# `portable-atomic` feature routes `once_cell::race` CAS through `portable-atomic`;
+# stock `riscv64im-unknown-none-elf` has `atomic-cas: false` so `core::sync::atomic` CAS doesn't compile.
+once_cell = { workspace = true, features = ["race", "alloc", "portable-atomic"] }
+portable-atomic = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+# SAFETY: `unsafe-assume-single-core` is sound because the openvm guest is
+# single-threaded; drop this feature if that ever changes.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+portable-atomic = { workspace = true, features = ["unsafe-assume-single-core"] }
+
+[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dependencies]
 num-bigint.workspace = true
 halo2curves-axiom = { workspace = true, optional = true }
 

@@ -1,5 +1,5 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
-#![cfg_attr(target_os = "zkvm", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(target_os = "none", no_std)]
 
 openvm::entry!(main);
 

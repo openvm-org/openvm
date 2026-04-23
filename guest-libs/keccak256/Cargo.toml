@@ -12,9 +12,16 @@ license.workspace = true
 [dependencies]
 openvm-keccak256-guest = { workspace = true }
 tiny-keccak = { workspace = true, optional = true }
+# `spin` is only used by the guest-side `zkvm_impl` module (dead on host).
+# `portable_atomic` feature routes its CAS through `portable-atomic` — see
+# `extensions/algebra/guest/Cargo.toml` for why CAS-less riscv targets need it.
+spin = { workspace = true, features = ["mutex", "spin_mutex", "portable_atomic"] }
+portable-atomic = { workspace = true }
 
-[target.'cfg(target_os = "zkvm")'.dependencies]
-spin = { workspace = true, features = ["mutex", "spin_mutex"] }
+# SAFETY: `unsafe-assume-single-core` is sound because the openvm guest is
+# single-threaded; drop this feature if that ever changes.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+portable-atomic = { workspace = true, features = ["unsafe-assume-single-core"] }
 
 [dev-dependencies]
 hex = { workspace = true }

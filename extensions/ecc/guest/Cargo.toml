@@ -17,11 +17,19 @@ openvm-custom-insn = { workspace = true }
 openvm-riscv-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
-once_cell = { workspace = true, features = ["race", "alloc"] }
+# `portable-atomic` feature routes `once_cell::race` CAS through `portable-atomic`;
+# stock `riscv64im-unknown-none-elf` has `atomic-cas: false` so `core::sync::atomic` CAS doesn't compile.
+once_cell = { workspace = true, features = ["race", "alloc", "portable-atomic"] }
+portable-atomic = { workspace = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
 group = "0.13.0"
+
+# SAFETY: `unsafe-assume-single-core` is sound because the openvm guest is
+# single-threaded; drop this feature if that ever changes.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+portable-atomic = { workspace = true, features = ["unsafe-assume-single-core"] }
 
 [features]
 default = []

@@ -1,6 +1,6 @@
 // [!region imports]
 use hex_literal::hex;
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 use openvm as _;
 use tiny_keccak::{Hasher, Keccak};
 // [!endregion imports]

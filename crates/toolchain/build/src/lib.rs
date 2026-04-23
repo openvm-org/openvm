@@ -285,30 +285,29 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 /// Returns a string that can be set as the value of CARGO_ENCODED_RUSTFLAGS when compiling guests
 pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
     [
-        // Append other rust flags
         rustc_flags,
         &[
-            // Replace atomic ops with nonatomic versions since the guest is single threaded.
+            // Lower atomic ops to non-atomic; the guest is single-threaded.
             "-C",
             "passes=lower-atomic",
-            // Specify where to start loading the program in
-            // memory.  The clang linker understands the same
-            // command line arguments as the GNU linker does; see
-            // https://ftp.gnu.org/old-gnu/Manuals/ld-2.9.1/html_mono/ld.html#SEC3
-            // for details.
+            // Program load address set by openvm's memory layout.
             "-C",
             &format!("link-arg=-Ttext=0x{:08X}", memory::TEXT_START),
-            // Apparently not having an entry point is only a linker warning(!), so
-            // error out in this case.
+            // Missing entry point is a linker *warning* by default — promote to error.
             "-C",
             "link-arg=--fatal-warnings",
+            // No unwinder in no_std guest.
             "-C",
             "panic=abort",
-            // https://docs.rs/getrandom/0.3.2/getrandom/index.html#opt-in-backends
+            // Opt into custom getrandom backend (https://docs.rs/getrandom/0.3.2/getrandom/#opt-in-backends).
             "--cfg",
             "getrandom_backend=\"custom\"",
+            // Mark this as an openvm guest build for `cfg(openvm_intrinsics)` gates.
             "--cfg",
             "openvm_intrinsics",
+            // Declare the cfg to rustc so guest crates don't need per-crate `unexpected_cfgs` lint
+            // opt-in.
+            "--check-cfg=cfg(openvm_intrinsics)",
         ],
     ]
     .concat()

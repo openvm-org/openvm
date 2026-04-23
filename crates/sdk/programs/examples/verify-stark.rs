@@ -1,5 +1,5 @@
-#![cfg_attr(openvm_intrinsics, no_main)]
-#![cfg_attr(openvm_intrinsics, no_std)]
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(target_os = "none", no_std)]
 
 extern crate alloc;
 

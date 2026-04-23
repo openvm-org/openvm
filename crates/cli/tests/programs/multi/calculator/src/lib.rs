@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "zkvm", no_std)]
+#![cfg_attr(target_os = "none", no_std)]
 
 /// Checks if a number is prime.
 pub fn is_prime(n: u32) -> bool {

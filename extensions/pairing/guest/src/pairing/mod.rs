@@ -81,7 +81,7 @@ impl core::fmt::Display for PairingCheckError {
     }
 }
 
-#[cfg(all(test, not(target_os = "zkvm")))]
+#[cfg(all(test, not(openvm_intrinsics)))]
 mod tests {
     use num_bigint::BigUint;
     use openvm_algebra_moduli_macros::{moduli_declare, moduli_init};

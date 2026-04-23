@@ -516,7 +516,10 @@ pub(crate) mod phantom {
         arch::{PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
-    use openvm_instructions::{riscv::RV64_MEMORY_AS, PhantomDiscriminant};
+    use openvm_instructions::{
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
+        PhantomDiscriminant,
+    };
     use openvm_riscv_circuit::adapters::read_rv64_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
@@ -588,7 +591,7 @@ pub(crate) mod phantom {
 
             let hint_bytes = once(F::from_bool(success))
                 .chain(repeat(F::ZERO))
-                .take(4)
+                .take(RV64_REGISTER_NUM_LIMBS)
                 .chain(
                     sqrt.to_bytes_le()
                         .into_iter()

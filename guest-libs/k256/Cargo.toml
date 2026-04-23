@@ -26,7 +26,7 @@ hex-literal = { workspace = true }
 ff = { workspace = true }
 signature = { version = "2", optional = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dependencies]
 num-bigint = { workspace = true }
 
 [dev-dependencies]
