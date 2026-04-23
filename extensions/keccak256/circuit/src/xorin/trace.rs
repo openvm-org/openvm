@@ -18,7 +18,9 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_riscv_circuit::adapters::{read_rv64_register_as_u32, tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{
+    read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read, tracing_write,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
@@ -133,7 +135,7 @@ where
             record.inner.rd_ptr,
             &mut record.inner.register_aux_cols[0].prev_timestamp,
         );
-        record.inner.buffer = u32::from_le_bytes(buffer_val[..4].try_into().unwrap());
+        record.inner.buffer = rv64_bytes_to_u32(buffer_val);
 
         let input_val: [u8; 8] = tracing_read(
             state.memory,
@@ -141,7 +143,7 @@ where
             record.inner.rs1_ptr,
             &mut record.inner.register_aux_cols[1].prev_timestamp,
         );
-        record.inner.input = u32::from_le_bytes(input_val[..4].try_into().unwrap());
+        record.inner.input = rv64_bytes_to_u32(input_val);
 
         let len_val: [u8; 8] = tracing_read(
             state.memory,
@@ -149,7 +151,7 @@ where
             record.inner.rs2_ptr,
             &mut record.inner.register_aux_cols[2].prev_timestamp,
         );
-        record.inner.len = u32::from_le_bytes(len_val[..4].try_into().unwrap());
+        record.inner.len = rv64_bytes_to_u32(len_val);
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
