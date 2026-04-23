@@ -121,12 +121,12 @@ To selectively enable the standard library, add the `std` feature to your `Cargo
 
 ```rust
 // main.rs
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-You still need the `openvm::entry!(main)` line.
-This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
+You still need the `openvm::entry!(main)` line; guard it with `#[cfg(target_os = "none")]` so it only fires on the guest target.
+This lets the same source build as a standard binary on the host (with `main()`) and as a `no_main` openvm guest, while `"std"` independently toggles the standard library.
 
 ## Using crates that depend on `getrandom`
 

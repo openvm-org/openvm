@@ -7,6 +7,8 @@
 //! instructions that the openvm transpiler can't handle.
 //!
 //! SAFETY: sound while the guest stays single-threaded; revisit if that changes.
+//! A second `set_impl!` in the linked binary fails at link time (duplicate
+//! `_critical_section_1_0_{acquire,release}` symbols), so collisions are loud.
 
 use critical_section::RawRestoreState;
 

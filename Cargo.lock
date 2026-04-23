@@ -5701,7 +5701,6 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
  "openvm-riscv-guest",
- "portable-atomic",
  "serde-big-array",
  "strum_macros 0.26.4",
 ]
@@ -6227,7 +6226,6 @@ dependencies = [
  "openvm-custom-insn",
  "openvm-ecc-sw-macros",
  "openvm-riscv-guest",
- "portable-atomic",
  "serde",
  "strum_macros 0.26.4",
 ]
@@ -6347,7 +6345,6 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
- "portable-atomic",
  "spin 0.10.0",
  "tiny-keccak",
 ]
@@ -6538,6 +6535,7 @@ dependencies = [
  "libm",
  "openvm-custom-insn",
  "openvm-riscv-guest",
+ "portable-atomic",
 ]
 
 [[package]]

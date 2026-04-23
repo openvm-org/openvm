@@ -2,6 +2,10 @@
 #![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::format;
+
 use hex_literal::hex;
 #[cfg(openvm_intrinsics)]
 use openvm as _;
@@ -166,10 +170,9 @@ pub fn main() {
         assert_eq!(output, expected);
     }
 
-    #[cfg(feature = "std")]
-    println!(
+    openvm::io::println(format!(
         "All {} keccak256 test cases passed!",
         KECCAK_TEST_CASES.len()
-    );
+    ));
 }
 // [!endregion main]

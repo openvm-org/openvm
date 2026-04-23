@@ -55,3 +55,4 @@ benchmarks/fixtures
 app.pk
 agg_prefix.pk
 app.vk
+*.vmexe

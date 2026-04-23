@@ -172,6 +172,25 @@ fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
         doc["features"] = Item::Table(features_table);
     }
 
+    // Declare `openvm_intrinsics` check-cfg so host-side `cargo check/clippy`
+    // doesn't warn on the cfg guards used by guest code paths.
+    if !doc.contains_key("lints") {
+        let mut lints_table = Table::new();
+        lints_table.set_implicit(true);
+        let mut rust_table = Table::new();
+        let mut unexpected_cfgs = toml_edit::InlineTable::new();
+        unexpected_cfgs.insert("level", Value::from("warn"));
+        let mut check_cfg = Array::new();
+        check_cfg.push(Value::from("cfg(openvm_intrinsics)"));
+        unexpected_cfgs.insert("check-cfg", Value::Array(check_cfg));
+        rust_table.insert(
+            "unexpected_cfgs",
+            Item::Value(Value::InlineTable(unexpected_cfgs)),
+        );
+        lints_table.insert("rust", Item::Table(rust_table));
+        doc["lints"] = Item::Table(lints_table);
+    }
+
     write(&cargo_toml_path, doc.to_string())
         .with_context(|| format!("failed to write {}", cargo_toml_path.display()))?;
     Ok(())

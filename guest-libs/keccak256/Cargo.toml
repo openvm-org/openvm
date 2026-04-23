@@ -13,12 +13,8 @@ license.workspace = true
 openvm-keccak256-guest = { workspace = true }
 tiny-keccak = { workspace = true, optional = true }
 
-# Guest-only. `spin::Mutex` is used by `zkvm_impl`; `portable_atomic` feature
-# routes CAS through `portable-atomic`, which in turn uses the `critical-section`
-# backend (no-op impl in `openvm-platform`).
 [target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
 spin = { workspace = true, features = ["mutex", "spin_mutex", "portable_atomic"] }
-portable-atomic = { workspace = true, features = ["critical-section"] }
 
 [dev-dependencies]
 hex = { workspace = true }

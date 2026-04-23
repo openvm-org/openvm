@@ -13,16 +13,19 @@ openvm-riscv-guest.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
-[target.'cfg(target_arch = "riscv64")'.dependencies]
-# Provides a no-op `critical-section` impl for the guest so `portable-atomic`'s
-# CAS polyfill (used by `once_cell`, `spin`, etc.) doesn't emit CSR interrupt
-# instructions the openvm transpiler can't handle. Always pulled in on the
-# riscv64 target; the impl itself is `cfg(openvm_intrinsics)`-gated.
-critical-section = { version = "1.1.2" }
+[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
 ], optional = true }
 libm = { version = "0.2", optional = true }
+
+# Stock `riscv64im-unknown-none-elf` has `atomic-cas: false`. `openvm-platform`
+# activates `portable-atomic/critical-section` so Cargo's feature unification
+# propagates the backend to every graph member that uses `portable-atomic`; the
+# no-op impl lives in `src/critical_section.rs`.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none", not(target_feature = "a")))'.dependencies]
+critical-section = { version = "1.1.2" }
+portable-atomic = { workspace = true, features = ["critical-section"] }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

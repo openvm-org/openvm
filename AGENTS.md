@@ -148,13 +148,26 @@ Naming convention: `FooExecutor`, `FooFiller`, `FooCoreAir` for a chip named `Fo
 Guest programs (run inside the VM) use `#![no_main]` / `#![no_std]` with `openvm::entry!(main)`:
 
 ```rust
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(target_os = "none")]
 openvm::entry!(main);
+
 pub fn main() { /* ... */ }
 ```
 
 Guest programs are compiled to RISC-V ELF, then transpiled to OpenVM instructions. They live in `programs/examples/` within test crates.
+
+### Cfg conventions
+
+Guest code gates on three independent axes — keep them separate:
+
+- `cfg(openvm_intrinsics)` — set by `cargo openvm build` rustflags; selects guest-specific codegen. Unset under host `cargo check`/`clippy`.
+- `cfg(not(feature = "std"))` — gates `#![no_std]`. The `std` feature forwards to `openvm/std`.
+- `cfg(target_os = "none")` — gates `#![no_main]` and `openvm::entry!(main)` registration.
+
+For host `cargo check`/`clippy`, guest crates need `[lints.rust] unexpected_cfgs = { check-cfg = ['cfg(openvm_intrinsics)'] }` in their `Cargo.toml` (or `[lints] workspace = true`). `cargo openvm init` adds this automatically.
 
 ### Integration Test Pattern
 

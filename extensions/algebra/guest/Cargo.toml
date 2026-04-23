@@ -17,13 +17,6 @@ strum_macros.workspace = true
 # `portable-atomic` feature routes `once_cell::race` CAS through `portable-atomic`;
 # stock `riscv64im-unknown-none-elf` has `atomic-cas: false` so `core::sync::atomic` CAS doesn't compile.
 once_cell = { workspace = true, features = ["race", "alloc", "portable-atomic"] }
-portable-atomic = { workspace = true }
-
-# `critical-section` backend lets `portable-atomic` use the no-op impl in
-# `openvm-platform` (see `crates/toolchain/platform/src/critical_section.rs`)
-# instead of emitting CSR interrupt-disable instructions.
-[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
-portable-atomic = { workspace = true, features = ["critical-section"] }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 num-bigint.workspace = true

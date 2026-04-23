@@ -1,7 +1,7 @@
 use embedded_alloc::LlffHeap as Heap;
 
-// The `critical_section::Impl` used here is registered unconditionally for
-// guest builds in `crate::critical_section` (no-op; single-threaded).
+// `embedded_alloc::LlffHeap` serializes allocator access via `critical_section`;
+// `crate::critical_section` registers the no-op impl for the single-threaded guest.
 
 #[global_allocator]
 pub static HEAP: Heap = Heap::empty();
