@@ -17,5 +17,5 @@ p3-field = { workspace = true }
 [features]
 default = []
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
+[lints]
+workspace = true

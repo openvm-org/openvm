@@ -294,7 +294,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &Rv64IGpuBuilder,
-            &config.rv32i,
+            &config.rv64i,
             circuit,
         )?;
         let inventory = &mut chip_complex.inventory;

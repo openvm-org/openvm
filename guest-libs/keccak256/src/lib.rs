@@ -1,19 +1,19 @@
 #![no_std]
 
-#[cfg(any(target_os = "zkvm", feature = "tiny_keccak"))]
+#[cfg(any(openvm_intrinsics, feature = "tiny_keccak"))]
 use openvm_keccak256_guest::KECCAK_OUTPUT_SIZE;
 
-#[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
+#[cfg(all(not(openvm_intrinsics), feature = "tiny_keccak"))]
 mod host_impl;
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 mod zkvm_impl;
 
-#[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
+#[cfg(all(not(openvm_intrinsics), feature = "tiny_keccak"))]
 pub use host_impl::{set_keccak256, Keccak256};
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 pub use zkvm_impl::{native_keccak256, set_keccak256, Keccak256};
 
-#[cfg(all(not(target_os = "zkvm"), feature = "tiny_keccak"))]
+#[cfg(all(not(openvm_intrinsics), feature = "tiny_keccak"))]
 impl tiny_keccak::Hasher for Keccak256 {
     #[inline(always)]
     fn update(&mut self, input: &[u8]) {
@@ -32,7 +32,7 @@ impl tiny_keccak::Hasher for Keccak256 {
 }
 
 /// Computes the keccak256 hash of the input.
-#[cfg(any(target_os = "zkvm", feature = "tiny_keccak"))]
+#[cfg(any(openvm_intrinsics, feature = "tiny_keccak"))]
 #[inline(always)]
 pub fn keccak256(input: &[u8]) -> [u8; KECCAK_OUTPUT_SIZE] {
     let mut output = [0u8; KECCAK_OUTPUT_SIZE];

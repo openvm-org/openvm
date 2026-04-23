@@ -1,3 +1,8 @@
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+openvm::entry!(main);
+
 use regex::Regex;
 
 const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";

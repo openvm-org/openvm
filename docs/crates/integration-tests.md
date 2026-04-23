@@ -19,7 +19,7 @@ The `examples` folder contains the test programs in `rust`.
 
 `fibonacci.rs` example:
 ```rust
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 openvm::entry!(main);

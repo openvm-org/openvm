@@ -8,8 +8,8 @@ fn main() -> eyre::Result<()> {
     let args = BenchmarkCli::parse();
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
-        .rv32i(Default::default())
-        .rv32m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .keccak(Default::default())
         .build()

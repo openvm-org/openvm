@@ -11,7 +11,7 @@ config_path="$temp_dir/openvm.toml"
 
 if [[ "${USE_LOCAL_OPENVM:-}" == "1" ]]; then
   local_openvm_path="$(cd ../toolchain/openvm && pwd)"
-  perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'", features = ["std"] }#' "$manifest_path"
+  perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'" }#' "$manifest_path"
 fi
 
 cargo openvm build \

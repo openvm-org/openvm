@@ -1,14 +1,14 @@
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 use hex_literal::hex;
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 use lazy_static::lazy_static;
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 use num_bigint::BigUint;
 
-#[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(test, feature = "halo2curves", not(openvm_intrinsics)))]
 pub mod tests;
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 lazy_static! {
     pub static ref BN254_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
         "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47"
@@ -34,10 +34,10 @@ pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
     0, 0, 1, 0, -1, 0, 1,
 ];
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 // Used in WeierstrassExtension config
 pub const BN254_ECC_STRUCT_NAME: &str = "Bn254G1Affine";
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 // Used in Fp2Extension config
 pub const BN254_COMPLEX_STRUCT_NAME: &str = "Bn254Fp2";

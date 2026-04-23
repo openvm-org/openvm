@@ -4,21 +4,24 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
+resolver = "2"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    "std",
-] }
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
 
-serde = { version = "1.0.216" }
-num-bigint = { version = "0.4.6", features = ["serde"] }
+serde = { version = "1.0.216", default-features = false, features = ["alloc", "derive"] }
+num-bigint = { version = "0.4.6", default-features = false, features = ["serde"] }
 
 [features]
 default = []
+std = ["openvm/std", "serde/std", "num-bigint/std"]
 
 # remove this if copying example outside of monorepo
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

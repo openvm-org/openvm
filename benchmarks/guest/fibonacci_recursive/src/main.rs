@@ -1,15 +1,20 @@
-use core::hint::black_box;
-use openvm::io::reveal_u32;
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-const N: u32 = 27;
+openvm::entry!(main);
+
+use core::hint::black_box;
+use openvm::io::reveal_u64;
+
+const N: u64 = 27;
 
 pub fn main() {
     let n = black_box(N);
     let result = fibonacci(n);
-    reveal_u32(result, 0);
+    reveal_u64(result, 0);
 }
 
-fn fibonacci(n: u32) -> u32 {
+fn fibonacci(n: u64) -> u64 {
     if n == 0 {
         0
     } else if n == 1 {
