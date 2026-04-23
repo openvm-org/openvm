@@ -26,7 +26,6 @@ struct ShiftWRecord {
 __global__ void shift_w_tracegen(
     Fp *trace,
     size_t height,
-    size_t width,
     DeviceBufferConstView<ShiftWRecord> records,
     uint32_t *range_ptr,
     uint32_t range_bins,
@@ -50,7 +49,7 @@ __global__ void shift_w_tracegen(
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWCols, core)), rec.core);
     } else {
-        row.fill_zero(0, width);
+        row.fill_zero(0, sizeof(ShiftWCols<uint8_t>));
     }
 }
 
@@ -74,7 +73,6 @@ extern "C" int _rv64_shift_w_tracegen(
     shift_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
-        width,
         d_records,
         d_range_checker,
         range_checker_num_bins,
