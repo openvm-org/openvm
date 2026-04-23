@@ -85,7 +85,7 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Additionally verify the STARK proof with the certified Swirl verifier extracted from its Lean formalization (requires a build with the 'certified-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
+            help = "Request verification with the certified Swirl verifier. This fails closed for RV64 because the current Lean formalization covers only the removed RV32 pipeline",
             help_heading = "OpenVM Options"
         )]
         certified: bool,

@@ -4,13 +4,12 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
+resolver = "2"
 members = []
 
 [dependencies]
 
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    "std",
-] }
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-pairing = { git = "https://github.com/openvm-org/openvm.git", features = [
@@ -21,6 +20,7 @@ hex-literal = { version = "0.4.1", default-features = false }
 
 [features]
 default = []
+std = ["openvm/std"]
 
 # remove this if copying example outside of monorepo
 [patch."https://github.com/openvm-org/openvm.git"]
@@ -28,3 +28,6 @@ openvm = { path = "../../crates/toolchain/openvm" }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
 openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
 openvm-pairing = { path = "../../guest-libs/pairing" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

@@ -4,8 +4,12 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-openvm = { workspace = true, features = ["std"] }
+openvm = { workspace = true }
 openvm-keccak256.workspace = true
 
 [features]
 default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

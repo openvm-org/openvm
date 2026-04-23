@@ -1,3 +1,8 @@
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+openvm::entry!(main);
+
 use core::result::Result;
 
 use base64::engine::{general_purpose, Engine};

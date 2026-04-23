@@ -225,13 +225,15 @@ where
         GenericSdk::new(AppConfig::standard(app_params), agg_params).unwrap()
     }
 
-    /// Creates SDK with a configuration with RISC-V RV32IM and IO VM extensions loaded.
+    /// Creates SDK with a configuration with RISC-V RV64IM and IO VM extensions loaded.
     ///
-    /// **Note**: To use this configuration, your `openvm.toml` must match
-    /// [`SdkVmConfig::riscv32`]. See the `openvm-sdk-config` crate documentation for the
-    /// corresponding TOML.
-    pub fn riscv32(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
-        GenericSdk::new(AppConfig::riscv32(app_params), agg_params).unwrap()
+    /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
+    ///
+    /// ```toml
+    #[doc = include_str!("../../sdk-config/src/openvm_riscv64.toml")]
+    /// ```
+    pub fn riscv64(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
+        GenericSdk::new(AppConfig::riscv64(app_params), agg_params).unwrap()
     }
 }
 
@@ -964,33 +966,21 @@ where
         Ok(())
     }
 
-    /// Verifies an aggregate STARK proof with the certified Swirl verifier extracted from its Lean
-    /// formalization (linked through FFI; see the [`certified_verifier`] module docs).
+    /// Returns an error because the certified Swirl verifier is not available for RV64.
     ///
-    /// The Lean formalization only covers the canonical riscv32 pipeline, so this fails if
-    /// `verified_baseline` — the [`VerificationBaseline`] the proof is verified against by
-    /// [`verify_proof`](Self::verify_proof) — does not have the canonical [`VmBaseline`]
-    /// (`app_exe_commit` is ignored). The expected baseline and the aggregation vk are both
-    /// derived from the canonical riscv32 [`CpuSdk`], making each call keygen-expensive. Use
-    /// alongside [`verify_proof`](Self::verify_proof), not instead of it.
+    /// The current Lean formalization covers only the removed canonical RV32 pipeline. Treating
+    /// its verifier as an RV64 verifier would be unsound. Use [`verify_proof`](Self::verify_proof)
+    /// for RV64 proofs until an RV64 formalization and extracted verifier are available.
     #[cfg(feature = "certified-verifier")]
     pub fn verify_proof_with_certified_verifier(
         verified_baseline: &VerificationBaseline,
         proof: &VmStarkProof,
     ) -> Result<(), SdkError> {
-        let sdk = CpuSdk::riscv32(
-            config::default_system_params(),
-            AggregationSystemParams::default(),
-        );
-        if VmBaseline::from(verified_baseline) != sdk.vm_baseline() {
-            return Err(SdkError::Other(eyre::eyre!(
-                "the proof's baseline does not match the canonical riscv32 pipeline: the Lean \
-                 formalization only covers proofs generated with the default RISC-V app VM config \
-                 and default app and aggregation parameters"
-            )));
-        }
-        certified_verifier::verify_stark_proof(&sdk.agg_vk(), &proof.inner)
-            .map_err(|e| SdkError::Other(eyre::eyre!(e)))
+        let _ = (verified_baseline, proof);
+        Err(SdkError::Other(eyre::eyre!(
+            "the certified verifier is unavailable for RV64: the current Lean formalization \
+             covers only the removed canonical RV32 pipeline"
+        )))
     }
 
     #[cfg(feature = "evm-verify")]

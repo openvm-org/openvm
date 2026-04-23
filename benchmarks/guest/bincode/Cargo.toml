@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-openvm = { workspace = true, features = ["std"] }
+openvm = { workspace = true }
 bincode = { version = "2.0.0-rc.3", default-features = false, features = [
     "derive",
     "alloc",
@@ -15,3 +15,7 @@ rand_pcg = "0.3.1"
 
 [features]
 default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
