@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! Keccak-256 extension integration tests.
 //!
 //! Builds a guest program that uses keccak256, transpiles it with the keccak

@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! Deferral extension integration tests.
 //!
 //! Builds guest programs that use deferral, transpiles them with the deferral

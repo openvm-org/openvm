@@ -21,7 +21,7 @@ rand.workspace = true
 strum.workspace = true
 
 [dev-dependencies]
-rvr-openvm-test-utils = { workspace = true, features = ["rvr"] }
+rvr-openvm-test-utils.workspace = true
 
 openvm-ecc-circuit.workspace = true
 openvm-instructions.workspace = true
@@ -31,3 +31,7 @@ openvm-transpiler.workspace = true
 
 eyre.workspace = true
 num-bigint.workspace = true
+
+[features]
+default = []
+rvr = ["rvr-openvm-test-utils/rvr"]
