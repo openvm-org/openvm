@@ -22,6 +22,19 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{
+        adapters::Rv64LoadStoreAdapterRecord, LoadSignExtendCoreRecord, Rv64LoadSignExtendChipGpu,
+    },
+    openvm_circuit::arch::{
+        testing::{
+            default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
@@ -539,4 +552,83 @@ fn accepted_shift_sets() {
     for shift in [0, 4] {
         let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, shift);
     }
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv64LoadSignExtendExecutor,
+    Rv64LoadSignExtendAir,
+    Rv64LoadSignExtendChipGpu,
+    Rv64LoadSignExtendChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let dummy_range_checker_chip = dummy_range_checker(default_var_range_checker_bus());
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_range_checker_chip,
+        tester.dummy_memory_helper(),
+        tester.address_bits(),
+    );
+    let gpu_chip = Rv64LoadSignExtendChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(LOADB, 100)]
+#[test_case(LOADH, 100)]
+#[test_case(LOADW, 100)]
+fn test_cuda_rand_load_sign_extend_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+
+    let mut harness = create_cuda_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv64LoadStoreAdapterRecord,
+        &'a mut LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    );
+
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
