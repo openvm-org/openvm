@@ -274,7 +274,6 @@ where
 
     fn compare_metered_cost(&self, label: &str, exe: &VmExe<F>, input: Vec<Vec<F>>) -> Result<()> {
         let ctx: MeteredCostCtx = self.vm.build_metered_cost_ctx();
-        let system_config: &SystemConfig = self.config.as_ref();
 
         // OpenVM reference
         let instance = self
@@ -291,7 +290,6 @@ where
             &inventory,
             &self.air_idx,
             &ctx.widths,
-            system_config,
             hint_buffer_opcode,
         );
         let chips = metered_cost_config.chip_mapping();

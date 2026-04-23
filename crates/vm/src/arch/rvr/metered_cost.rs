@@ -4,7 +4,7 @@ use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::TracerState;
 
-use crate::arch::{ExecutorInventory, SystemConfig};
+use crate::arch::ExecutorInventory;
 
 /// Configuration for mapping PCs and memory operations to metering costs.
 pub struct MeteredCostConfig {
@@ -37,7 +37,6 @@ pub fn build_metered_cost_config<F, E>(
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     widths: &[usize],
-    _system_config: &SystemConfig,
     hint_buffer_opcode: Option<VmOpcode>,
 ) -> MeteredCostConfig
 where

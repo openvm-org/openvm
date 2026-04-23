@@ -206,7 +206,7 @@ impl CProject {
         text_start: u32,
         extensions: &ExtensionRegistry<F>,
     ) -> io::Result<()> {
-        self.write_constants(text_start)?;
+        self.write_constants()?;
         self.write_support_files()?;
         self.write_extension_files(extensions)?;
         let ext_headers = extensions.c_headers();
@@ -219,8 +219,8 @@ impl CProject {
 
     // ── Generated constants header ──────────────────────────────────────
 
-    fn write_constants(&self, text_start: u32) -> io::Result<()> {
-        let h = crate::constants::constants_header(text_start);
+    fn write_constants(&self) -> io::Result<()> {
+        let h = crate::constants::constants_header();
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }

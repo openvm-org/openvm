@@ -346,14 +346,12 @@ impl DeferralTestHarness {
         let deferral = Self::make_deferral_data(&circuit_inputs);
         let ext = self.build_ext();
         let inventory = self.inventory()?;
-        let system_config: &SystemConfig = self.config.as_ref();
         let hint_buffer_opcode = Some(Rv32HintStoreOpcode::HINT_BUFFER.global_opcode());
         let metered_cost_config = rvr_openvm::build_metered_cost_config(
             exe,
             &inventory,
             &self.air_idx,
             &ctx.widths,
-            system_config,
             hint_buffer_opcode,
         );
         let chips = metered_cost_config.chip_mapping();
