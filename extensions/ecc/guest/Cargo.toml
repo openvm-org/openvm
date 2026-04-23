@@ -44,3 +44,6 @@ ignored = [
     "openvm-riscv-guest",
     "halo2curves-axiom",
 ]
+
+[lints]
+workspace = true

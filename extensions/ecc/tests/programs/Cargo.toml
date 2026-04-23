@@ -85,3 +85,6 @@ required-features = ["k256"]
 [[example]]
 name = "invalid_setup"
 required-features = ["k256", "p256"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

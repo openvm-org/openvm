@@ -6,3 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../toolchain/openvm" }
+
+[features]
+default = []
+std = ["openvm/std"]

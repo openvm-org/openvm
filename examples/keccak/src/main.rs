@@ -1,9 +1,15 @@
 // [!region imports]
+#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use hex_literal::hex;
 #[cfg(openvm_intrinsics)]
 use openvm as _;
 use tiny_keccak::{Hasher, Keccak};
 // [!endregion imports]
+
+#[cfg(not(feature = "std"))]
+openvm::entry!(main);
 
 // [!region main]
 
@@ -160,6 +166,7 @@ pub fn main() {
         assert_eq!(output, expected);
     }
 
+    #[cfg(feature = "std")]
     println!(
         "All {} keccak256 test cases passed!",
         KECCAK_TEST_CASES.len()

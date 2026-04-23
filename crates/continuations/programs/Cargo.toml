@@ -14,8 +14,8 @@ openvm-deferral-guest = { path = "../../../extensions/deferral/guest", default-f
 default = []
 std = ["openvm/std"]
 
-[lints]
-workspace = true
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
 
 [profile.release]
 panic = "abort"

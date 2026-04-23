@@ -13,3 +13,7 @@ path = "src/main.rs"
 [[example]]
 name = "palindrome"
 path = "examples/palindrome.rs"
+
+[features]
+default = []
+std = ["openvm/std"]

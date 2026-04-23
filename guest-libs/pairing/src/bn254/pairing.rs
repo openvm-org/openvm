@@ -317,8 +317,8 @@ impl PairingCheck for Bn254 {
             let mut hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
             // We do not rely on the slice P's memory layout since rust does not guarantee it across
             // compiler versions.
-            let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
-            let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
+            let p_fat_ptr = (P.as_ptr() as u64, P.len() as u64);
+            let q_fat_ptr = (Q.as_ptr() as u64, Q.len() as u64);
             unsafe {
                 custom_insn_r!(
                     opcode = OPCODE,
@@ -329,7 +329,7 @@ impl PairingCheck for Bn254 {
                     rs2 = In &q_fat_ptr
                 );
                 let ptr = hint.as_mut_ptr() as *mut u8;
-                hint_buffer_chunked(ptr, (32 * 12 * 2) / 4 as usize);
+                hint_buffer_chunked(ptr, (32 * 12 * 2) / openvm_riscv_guest::HINT_WORD_BYTES);
                 hint.assume_init()
             }
         }

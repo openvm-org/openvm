@@ -49,3 +49,6 @@ required-features = ["bls12_381"]
 [[example]]
 name = "bls_ec"
 required-features = ["bls12_381"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

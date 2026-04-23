@@ -14,3 +14,7 @@ openvm-deferral-guest = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+default = []
+std = []
