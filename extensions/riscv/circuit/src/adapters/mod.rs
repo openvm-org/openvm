@@ -312,11 +312,17 @@ pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
 
 /// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
 /// register bus reads where the register holds a value in fewer than 8 bytes.
-pub fn expand_to_rv64_register<V: Copy + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
+pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
     limbs: &[V; N],
 ) -> [T; RV64_REGISTER_NUM_LIMBS] {
     const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
-    std::array::from_fn(|i| if i < N { limbs[i].into() } else { T::ZERO })
+    std::array::from_fn(|i| {
+        if i < N {
+            limbs[i].clone().into()
+        } else {
+            T::ZERO
+        }
+    })
 }
 
 pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(

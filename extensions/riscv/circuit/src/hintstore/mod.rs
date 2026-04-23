@@ -175,13 +175,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, is_start.clone());
 
         // read num_words
-        let num_words_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < REM_WORDS_NUM_LIMBS {
-                local_cols.rem_words_limbs[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let num_words_data = expand_to_rv64_register(&local_cols.rem_words_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),

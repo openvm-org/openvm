@@ -151,13 +151,7 @@ where
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
         let rs1_data = expand_to_rv64_register(&rs1);
-        let rd_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                rd_data_low[i].clone()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let rd_data = expand_to_rv64_register(&rd_data_low);
 
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
