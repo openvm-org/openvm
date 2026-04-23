@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-deferral-test-programs"
 version = "0.0.0"
@@ -17,3 +19,6 @@ std = ["openvm/std"]
 [profile.release]
 panic = "abort"
 lto = "thin"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

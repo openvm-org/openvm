@@ -80,7 +80,7 @@ fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
 fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let (app_params, agg_params, _root_params) = get_params();
     let mut sdk_builder =
-        GenericSdkBuilder::new().app_config(AppConfig::riscv32(app_params.clone()));
+        GenericSdkBuilder::new().app_config(AppConfig::riscv64(app_params.clone()));
     sdk_builder = sdk_builder.agg_params(agg_params.clone());
     #[cfg(feature = "root-prover")]
     {
@@ -113,12 +113,12 @@ fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, Verificat
     Ok(fib_sdk.prove(fib_exe, stdin, &[])?)
 }
 
-/// Builds the standard riscv32 SDK VM config with the supplied deferral config enabled.
-fn riscv32_config_with_deferral(deferral: DeferralConfig) -> SdkVmConfig {
+/// Builds the standard riscv64 SDK VM config with the supplied deferral config enabled.
+fn riscv64_config_with_deferral(deferral: DeferralConfig) -> SdkVmConfig {
     SdkVmConfig::builder()
         .system(Default::default())
-        .rv32i(Default::default())
-        .rv32m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .deferral(deferral)
         .build()
@@ -212,7 +212,7 @@ fn make_verify_stark_sdk_with_count(
     let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
     let deferral_config = multi_deferral_circuit_prover.make_config(supported_deferrals);
 
-    let vm_config = riscv32_config_with_deferral(deferral_config);
+    let vm_config = riscv64_config_with_deferral(deferral_config);
 
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -227,7 +227,7 @@ fn make_recursive_verify_stark_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
 ) -> Result<Sdk> {
-    let vm_config = SdkVmConfig::riscv32();
+    let vm_config = SdkVmConfig::riscv64();
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
     let deferral_agg_prover = DeferralAggProver::verify_stark(
@@ -239,7 +239,7 @@ fn make_recursive_verify_stark_sdk(
     let deferral_config = deferral_agg_prover
         .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
-    let vm_config = riscv32_config_with_deferral(deferral_config);
+    let vm_config = riscv64_config_with_deferral(deferral_config);
 
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -617,7 +617,7 @@ fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     let hook_commits =
         DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
     let aware_sdk = Sdk::builder()
-        .app_config(AppConfig::riscv32(app_params))
+        .app_config(AppConfig::riscv64(app_params))
         .agg_params(agg_params)
         .agg_tree_config(AggregationTreeConfig {
             num_children_leaf: 1,
@@ -863,7 +863,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 include_bytes!("../programs/examples/fibonacci.elf"),
                 MEM_SIZE as u32,
             )?;
-            let sdk = Sdk::riscv32(app_params, agg_params);
+            let sdk = Sdk::riscv64(app_params, agg_params);
             let app_exe = sdk.convert_to_exe(elf)?;
 
             // Compute trace heights for root prover with profiling params
