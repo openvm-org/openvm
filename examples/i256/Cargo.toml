@@ -10,9 +10,12 @@ members = []
 [dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git" }
 alloy-primitives = { version = "1.1.2", default-features = false }
-# `bytes` is pulled in transitively by `alloy-primitives` and uses atomic CAS,
-# which stock `riscv64im-unknown-none-elf` lacks. `extra-platforms` routes CAS
-# through `portable-atomic`.
+
+# `bytes` (pulled transitively by `alloy-primitives`) uses atomic CAS via
+# `core::sync::atomic`. On guest targets lacking the A extension, activate
+# `bytes/extra-platforms` to route CAS through `portable-atomic`; the
+# `critical-section` backend is provided by `openvm-platform`.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none", not(target_feature = "a")))'.dependencies]
 bytes = { version = "1.11.1", default-features = false, features = ["extra-platforms"] }
 
 [features]
