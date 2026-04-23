@@ -14,17 +14,20 @@ openvm-riscv-guest.workspace = true
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
 [target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+# `critical-section` is always pulled in on the guest so `src/critical_section.rs`
+# can register the no-op impl; `embedded-alloc` (behind `heap-embedded-alloc`)
+# calls `critical_section::with(...)` internally, and needs the impl regardless
+# of whether hardware CAS is available.
+critical-section = { workspace = true }
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
 ], optional = true }
 libm = { version = "0.2", optional = true }
 
-# Stock `riscv64im-unknown-none-elf` has `atomic-cas: false`. `openvm-platform`
-# activates `portable-atomic/critical-section` so Cargo's feature unification
-# propagates the backend to every graph member that uses `portable-atomic`; the
-# no-op impl lives in `src/critical_section.rs`.
+# Activate `portable-atomic/critical-section` only when the A extension is
+# absent. Cargo feature unification then propagates the backend to every graph
+# member that uses `portable-atomic`.
 [target.'cfg(all(target_arch = "riscv64", target_os = "none", not(target_feature = "a")))'.dependencies]
-critical-section = { workspace = true }
 portable-atomic = { workspace = true, features = ["critical-section"] }
 
 [package.metadata.docs.rs]
