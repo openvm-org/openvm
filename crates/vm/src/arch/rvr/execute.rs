@@ -3,6 +3,7 @@
 use std::{collections::VecDeque, ffi::c_void};
 
 use openvm_instructions::exe::VmExe;
+use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_state::GuardedMemory;
@@ -215,7 +216,7 @@ pub fn execute<F: PrimeField32>(
     input_stream: VecDeque<Vec<F>>,
     deferral: DeferralData,
 ) -> Result<RvrExecutionResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(openvm_platform::memory::MEM_SIZE)?;
+    let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = PureTracerData;
     let mut state = init_rvr_state(exe, &mut memory);
     state.tracer = PureTracer(&mut tracer_data);
@@ -255,7 +256,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     metered_cost_config: MeteredCostConfig,
     deferral: DeferralData,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(openvm_platform::memory::MEM_SIZE)?;
+    let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = MeteredCostData::default();
     let mut state = init_rvr_state_with_metered_cost(exe, &mut memory);
     state.tracer = MeteredCostMeter(&mut tracer_data);
@@ -307,7 +308,7 @@ pub fn execute_with_limit<F: PrimeField32>(
     instruction_limit: u64,
     deferral: DeferralData,
 ) -> Result<RvrLimitedResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(openvm_platform::memory::MEM_SIZE)?;
+    let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = PureTracerData;
     let mut state = init_rvr_state(exe, &mut memory);
     state.tracer = PureTracer(&mut tracer_data);
@@ -359,7 +360,7 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
     instruction_limit: u64,
     deferral: DeferralData,
 ) -> Result<RvrMeteredCostLimitedResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(openvm_platform::memory::MEM_SIZE)?;
+    let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = MeteredCostData::default();
     let mut state = init_rvr_state_with_metered_cost(exe, &mut memory);
     state.tracer = MeteredCostMeter(&mut tracer_data);
@@ -418,7 +419,7 @@ pub fn execute_metered<F: PrimeField32>(
     trace_config: MeteredConfig,
     deferral: DeferralData,
 ) -> Result<RvrMeteredResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(openvm_platform::memory::MEM_SIZE)?;
+    let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = MeteredTracerData::default();
     let mut state = init_rvr_state_with_metered(exe, &mut memory);
     state.tracer = MeteredTracer(&mut tracer_data);
@@ -467,5 +468,5 @@ pub fn execute_metered<F: PrimeField32>(
         ));
     }
 
-    Ok(seg_state.into_result())
+    Ok(seg_state.into_result(state, memory, io_state.public_values))
 }

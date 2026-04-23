@@ -19,7 +19,7 @@ openvm-stark-backend.workspace = true
 strum.workspace = true
 
 [dev-dependencies]
-rvr-openvm-test-utils.workspace = true
+rvr-openvm-test-utils = { workspace = true, features = ["rvr"] }
 rvr-openvm-ext-algebra.workspace = true
 
 openvm-algebra-transpiler.workspace = true

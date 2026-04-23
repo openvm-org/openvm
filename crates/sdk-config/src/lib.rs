@@ -321,6 +321,14 @@ where
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
         self.to_inner().create_executors()
     }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_extensions(&self, air_idx: &[usize]) -> rvr_openvm_lift::ExtensionRegistry<F>
+    where
+        F: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        self.to_inner().create_rvr_extensions(air_idx)
+    }
 }
 
 impl<SC: StarkProtocolConfig> VmCircuitConfig<SC> for SdkVmConfig

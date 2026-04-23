@@ -16,7 +16,7 @@ openvm-sha2-transpiler.workspace = true
 openvm-stark-backend.workspace = true
 
 [dev-dependencies]
-rvr-openvm-test-utils.workspace = true
+rvr-openvm-test-utils = { workspace = true, features = ["rvr"] }
 
 openvm-rv32im-transpiler.workspace = true
 openvm-sha2-circuit.workspace = true

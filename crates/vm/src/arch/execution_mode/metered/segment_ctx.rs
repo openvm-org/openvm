@@ -207,6 +207,22 @@ impl SegmentationCtx {
         self.config.base_field_size = base_field_size;
     }
 
+    pub fn widths(&self) -> &[usize] {
+        &self.widths
+    }
+
+    pub fn interactions(&self) -> &[usize] {
+        &self.interactions
+    }
+
+    pub fn config(&self) -> &SegmentationConfig {
+        &self.config
+    }
+
+    pub fn segment_check_insns(&self) -> u64 {
+        self.segment_check_insns
+    }
+
     /// Calculate the maximum trace height and corresponding air name
     #[inline(always)]
     fn calculate_max_trace_height_with_name(&self, trace_heights: &[u32]) -> (u32, &str) {

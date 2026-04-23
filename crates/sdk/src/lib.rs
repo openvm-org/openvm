@@ -316,11 +316,24 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
-        let exe = self.convert_to_exe(app_exe)?;
-        let instance = self
-            .executor
-            .instance(&exe)
-            .map_err(VirtualMachineError::from)?;
+        // rvr's `instance` needs an executor-to-AIR index map, only available
+        // post-keygen; route through `app_prover` to get a `VirtualMachine`.
+        #[cfg(feature = "rvr")]
+        let instance = {
+            let app_prover = self.app_prover(app_exe)?;
+            let exe = app_prover.exe();
+            app_prover
+                .vm()
+                .interpreter(&exe)
+                .map_err(VirtualMachineError::from)?
+        };
+        #[cfg(not(feature = "rvr"))]
+        let instance = {
+            let exe = self.convert_to_exe(app_exe)?;
+            self.executor
+                .instance(&exe)
+                .map_err(VirtualMachineError::from)?
+        };
         let final_memory = instance
             .execute(inputs, None)
             .map_err(VirtualMachineError::from)?

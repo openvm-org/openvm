@@ -1,5 +1,6 @@
 //! Shared test helpers: compile with rvr, compare against OpenVM interpreter.
 
+#![cfg(feature = "rvr")]
 #![allow(dead_code)]
 
 use std::{
@@ -12,7 +13,7 @@ use eyre::Result;
 use openvm_circuit::arch::{
     execution_mode::{MeteredCostCtx, MeteredCtx, Segment},
     rvr as rvr_openvm, Executor, ExecutorInventory, MeteredExecutor, Streams, SystemConfig,
-    VirtualMachine, VmExecutionConfig,
+    VirtualMachine, VmBuilder, VmExecutionConfig, VmState,
 };
 use openvm_instructions::{
     exe::VmExe,
@@ -136,7 +137,7 @@ pub fn rvr_extension_ctx<E>(
 
 /// Holds keygen results and an extension registry. Provides `compare` to run
 /// rvr against the OpenVM interpreter for any `ExecutionMode`.
-pub struct VmTestHarness<VB: openvm_circuit::arch::VmBuilder<Engine>> {
+pub struct VmTestHarness<VB: VmBuilder<Engine>> {
     config: VB::VmConfig,
     vm: VirtualMachine<Engine, VB>,
     pk: MultiStarkProvingKey<BabyBearPoseidon2Config>,
@@ -146,7 +147,7 @@ pub struct VmTestHarness<VB: openvm_circuit::arch::VmBuilder<Engine>> {
 
 impl<VB> VmTestHarness<VB>
 where
-    VB: openvm_circuit::arch::VmBuilder<Engine>,
+    VB: VmBuilder<Engine>,
     VB::VmConfig: Clone,
     <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F>,
 {
@@ -236,7 +237,7 @@ where
         compare_full_memory: bool,
     ) -> Result<()> {
         // OpenVM reference
-        let interpreter = self.vm.executor().instance(exe)?;
+        let interpreter = self.vm.executor().instance(exe, &self.air_idx)?;
         let interp_state = interpreter.execute(self.make_streams(&input), None)?;
 
         // rvr execution
@@ -382,7 +383,7 @@ where
 
 fn assert_full_guest_memory(
     label: &str,
-    interp_state: &openvm_circuit::arch::VmState<F>,
+    interp_state: &VmState<F>,
     rvr_memory: &rvr_state::GuardedMemory,
 ) {
     for addr in 0..MEM_SIZE as u32 {

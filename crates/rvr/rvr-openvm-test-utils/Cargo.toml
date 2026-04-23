@@ -8,10 +8,11 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-circuit = { workspace = true, features = ["test-utils", "rvr"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-instructions.workspace = true
 openvm-platform.workspace = true
 openvm-rv32im-circuit.workspace = true
+openvm-sdk.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
@@ -23,3 +24,7 @@ rvr-openvm-lift.workspace = true
 rvr-state.workspace = true
 
 eyre.workspace = true
+
+[features]
+default = []
+rvr = ["openvm-sdk/rvr"]
