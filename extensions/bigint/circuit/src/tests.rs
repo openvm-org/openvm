@@ -626,7 +626,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -640,8 +640,8 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
     let gpu_chip = BaseAlu256ChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
         tester.address_bits(),
+        tester.timestamp_max_bits(),
     );
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
@@ -652,7 +652,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode.local_usize() + Rv32BaseAlu256Opcode::CLASS_OFFSET,
+            opcode.local_usize() + Rv64BaseAlu256Opcode::CLASS_OFFSET,
             None,
         );
     }
@@ -687,7 +687,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -701,8 +701,8 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
     let gpu_chip = LessThan256ChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
         tester.address_bits(),
+        tester.timestamp_max_bits(),
     );
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
@@ -713,7 +713,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode.local_usize() + Rv32LessThan256Opcode::CLASS_OFFSET,
+            opcode.local_usize() + Rv64LessThan256Opcode::CLASS_OFFSET,
             None,
         );
     }
@@ -750,7 +750,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         .with_bitwise_op_lookup(default_bitwise_lookup_bus())
         .with_range_tuple_checker(range_tuple_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
@@ -767,8 +767,8 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
-        tester.timestamp_max_bits(),
         tester.address_bits(),
+        tester.timestamp_max_bits(),
     );
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
@@ -779,7 +779,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode.local_usize() + Rv32Mul256Opcode::CLASS_OFFSET,
+            opcode.local_usize() + Rv64Mul256Opcode::CLASS_OFFSET,
             None,
         );
     }
@@ -816,7 +816,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
 
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -832,8 +832,8 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
     let gpu_chip = Shift256ChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
         tester.address_bits(),
+        tester.timestamp_max_bits(),
     );
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
@@ -844,7 +844,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode.local_usize() + Rv32Shift256Opcode::CLASS_OFFSET,
+            opcode.local_usize() + Rv64Shift256Opcode::CLASS_OFFSET,
             None,
         );
     }
@@ -876,7 +876,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(bitwise_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -890,8 +890,8 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
     let gpu_chip = BranchEqual256ChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
         tester.address_bits(),
+        tester.timestamp_max_bits(),
     );
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
@@ -902,7 +902,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode.local_usize() + Rv32BranchEqual256Opcode::CLASS_OFFSET,
+            opcode.local_usize() + Rv64BranchEqual256Opcode::CLASS_OFFSET,
             Some(beq_branch_fn),
         );
     }
@@ -919,7 +919,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv32VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
             >::new(),
         );
 
@@ -942,7 +942,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(bitwise_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -956,8 +956,8 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
     let gpu_chip = BranchLessThan256ChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
         tester.address_bits(),
+        tester.timestamp_max_bits(),
     );
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
@@ -968,7 +968,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode.local_usize() + Rv32BranchLessThan256Opcode::CLASS_OFFSET,
+            opcode.local_usize() + Rv64BranchLessThan256Opcode::CLASS_OFFSET,
             Some(blt_branch_fn),
         );
     }
@@ -985,7 +985,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv32VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
             >::new(),
         );
 

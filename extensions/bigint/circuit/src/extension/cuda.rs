@@ -52,7 +52,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
             }
         };
 
-        inventory.next_air::<Rv32BaseAlu256Air>()?;
+        inventory.next_air::<Rv64BaseAlu256Air>()?;
         let base_alu = BaseAlu256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -61,7 +61,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         );
         inventory.add_executor_chip(base_alu);
 
-        inventory.next_air::<Rv32LessThan256Air>()?;
+        inventory.next_air::<Rv64LessThan256Air>()?;
         let lt = LessThan256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -70,7 +70,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         );
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv32BranchEqual256Air>()?;
+        inventory.next_air::<Rv64BranchEqual256Air>()?;
         let beq = BranchEqual256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -79,7 +79,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         );
         inventory.add_executor_chip(beq);
 
-        inventory.next_air::<Rv32BranchLessThan256Air>()?;
+        inventory.next_air::<Rv64BranchLessThan256Air>()?;
         let blt = BranchLessThan256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -88,7 +88,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         );
         inventory.add_executor_chip(blt);
 
-        inventory.next_air::<Rv32Multiplication256Air>()?;
+        inventory.next_air::<Rv64Multiplication256Air>()?;
         let mult = Multiplication256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -98,7 +98,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         );
         inventory.add_executor_chip(mult);
 
-        inventory.next_air::<Rv32Shift256Air>()?;
+        inventory.next_air::<Rv64Shift256Air>()?;
         let shift = Shift256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
@@ -112,18 +112,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
 }
 
 #[derive(Clone)]
-pub struct Int256Rv32GpuBuilder;
+pub struct Int256Rv64GpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Int256Rv32GpuBuilder {
-    type VmConfig = Int256Rv32Config;
+impl VmBuilder<E> for Int256Rv64GpuBuilder {
+    type VmConfig = Int256Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Int256Rv32Config,
+        config: &Int256Rv64Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -142,8 +142,8 @@ impl VmBuilder<E> for Int256Rv32GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Int256GpuProverExt,
