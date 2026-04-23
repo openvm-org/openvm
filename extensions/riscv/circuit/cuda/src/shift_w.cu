@@ -23,7 +23,7 @@ struct ShiftWRecord {
     Rv64ShiftWCoreRecord core;
 };
 
-__global__ void shift_w_tracegen(
+__global__ void rv64_shift_w_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<ShiftWRecord> records,
@@ -70,7 +70,7 @@ extern "C" int _rv64_shift_w_tracegen(
     assert(width == sizeof(ShiftWCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    shift_w_tracegen<<<grid, block, 0, stream>>>(
+    rv64_shift_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

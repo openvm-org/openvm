@@ -23,7 +23,7 @@ struct Rv64MulWRecord {
     Rv64MulWCoreRecord core;
 };
 
-__global__ void mul_w_tracegen(
+__global__ void rv64_mul_w_tracegen(
     Fp *d_trace,
     size_t height,
     DeviceBufferConstView<Rv64MulWRecord> d_records,
@@ -76,7 +76,7 @@ extern "C" int _rv64_mul_w_tracegen(
     assert(width == sizeof(Rv64MulWCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
-    mul_w_tracegen<<<grid, block, 0, stream>>>(
+    rv64_mul_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

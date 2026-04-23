@@ -22,7 +22,7 @@ struct Rv64BaseAluWRecord {
     Rv64BaseAluWCoreRecord core;
 };
 
-__global__ void alu_w_tracegen(
+__global__ void rv64_alu_w_tracegen(
     Fp *d_trace,
     size_t height,
     DeviceBufferConstView<Rv64BaseAluWRecord> d_records,
@@ -67,7 +67,7 @@ extern "C" int _rv64_alu_w_tracegen(
     assert(height >= d_records.len());
     assert(width == sizeof(Rv64BaseAluWCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    alu_w_tracegen<<<grid, block, 0, stream>>>(
+    rv64_alu_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
