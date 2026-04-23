@@ -35,3 +35,6 @@ required-features = ["getrandom"]
 [[example]]
 name = "getrandom_v02"
 required-features = ["getrandom-v02"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

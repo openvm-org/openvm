@@ -17,3 +17,6 @@ std = ["openvm/std"]
 [profile.release]
 panic = "abort"
 lto = "thin"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
