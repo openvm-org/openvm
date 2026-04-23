@@ -23,5 +23,5 @@ default = []
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-keccak256-guest = { path = "../../extensions/keccak256/guest" }
 
-[lints]
-workspace = true
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
