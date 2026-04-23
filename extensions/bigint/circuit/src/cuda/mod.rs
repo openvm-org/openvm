@@ -116,7 +116,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = BranchEqualCoreCols::<F, INT256_NUM_LIMBS>::width()
-            + Rv64VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
+            + Rv64VecHeapBranchAdapterCols::<F, NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -231,7 +231,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = BranchLessThanCoreCols::<F, INT256_NUM_LIMBS, RV64_CELL_BITS>::width()
-            + Rv64VecHeapBranchAdapterCols::<F, 2, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
+            + Rv64VecHeapBranchAdapterCols::<F, NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
