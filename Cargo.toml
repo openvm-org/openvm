@@ -260,6 +260,8 @@ serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "1.0.0", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
 once_cell = { version = "1.20", default-features = false }
+portable-atomic = { version = "1", default-features = false }
+critical-section = { version = "1.1.2", default-features = false }
 spin = { version = "0.10.0", default-features = false }
 
 # cryptography, default-features = false for no_std
@@ -279,3 +281,10 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
+
+# Declares `openvm_intrinsics` so host-side builds (plain `cargo check/test/clippy`)
+# don't warn on the cfg. Guest builds declare the same cfg via
+# `--check-cfg=cfg(openvm_intrinsics)` in the guest-build rustflags. Crates opt
+# in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

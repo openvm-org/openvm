@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-riscv-test-programs"
 version = "0.0.0"
@@ -35,3 +37,6 @@ required-features = ["getrandom"]
 [[example]]
 name = "getrandom_v02"
 required-features = ["getrandom-v02"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
