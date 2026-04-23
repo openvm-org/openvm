@@ -13,8 +13,8 @@ license.workspace = true
 openvm-keccak256-guest = { workspace = true }
 tiny-keccak = { workspace = true, optional = true }
 
-[target.'cfg(target_os = "zkvm")'.dependencies]
-spin = { workspace = true, features = ["mutex", "spin_mutex"] }
+[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+spin = { workspace = true, features = ["mutex", "spin_mutex", "portable_atomic"] }
 
 [dev-dependencies]
 hex = { workspace = true }
@@ -36,3 +36,6 @@ aot = ["openvm-sdk/aot"]
 cuda = ["openvm-keccak256-circuit/cuda"]
 # Enable tiny_keccak::Hasher trait implementation
 tiny_keccak = ["dep:tiny-keccak"]
+
+[lints]
+workspace = true

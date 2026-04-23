@@ -14,10 +14,13 @@ This will generate an OpenVM-specific starter package. Notice `Cargo.toml` has t
 
 ```toml
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2", features = ["std"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2" }
+
+[features]
+std = ["openvm/std"]
 ```
 
-Note that `std` is not enabled by default, so explicitly enabling it is required.
+Note that `std` is not enabled by default.
 
 ## The fibonacci program
 
@@ -25,9 +28,14 @@ The `read` function takes input from the stdin (it also works with OpenVM runtim
 
 ```rust
 // src/main.rs
-use openvm::io::{read, reveal_u32};
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-fn main() {
+use openvm::io::{read, reveal_u64};
+
+openvm::entry!(main);
+
+pub fn main() {
     let n: u64 = read();
     let mut a: u64 = 0;
     let mut b: u64 = 1;
@@ -36,8 +44,7 @@ fn main() {
         a = b;
         b = c;
     }
-    reveal_u32(a as u32, 0);
-    reveal_u32((a >> 32) as u32, 1);
+    reveal_u64(a, 0);
 }
 ```
 
@@ -51,7 +58,7 @@ cargo openvm build
 
 This will output:
 
-- an RV32IM ELF containing [custom OpenVM instructions](/specs/reference/riscv-custom-code) at `./target/riscv32im-risc0-zkvm-elf/release/fibonacci`
+- an RV64IM ELF containing [custom OpenVM instructions](/specs/reference/riscv-custom-code) at `./target/riscv64im-unknown-none-elf/release/fibonacci`
 - an OpenVM executable binary at `${target-dir}/../openvm/release/fibonacci.vmexe` (by default `./openvm/release/fibonacci.vmexe`)
 
 ## Keygen

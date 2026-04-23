@@ -309,6 +309,9 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             "getrandom_backend=\"custom\"",
             "--cfg",
             "openvm_intrinsics",
+            // Declare `openvm_intrinsics` to rustc so guest crates (ours and users')
+            // don't need a per-crate `unexpected_cfgs` lint declaration.
+            "--check-cfg=cfg(openvm_intrinsics)",
         ],
     ]
     .concat()

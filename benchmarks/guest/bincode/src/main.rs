@@ -1,3 +1,8 @@
+#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+openvm::entry!(main);
+
 mod generate;
 mod types;
 

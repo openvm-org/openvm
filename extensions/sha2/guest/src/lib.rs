@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 use openvm_platform::alloc::AlignedBuf;
 
 /// This is custom-0 defined in RISC-V spec document
@@ -28,7 +28,7 @@ pub enum Sha2BaseFunct7 {
 ///   state as 8 32-bit words in little-endian order
 ///
 /// [`sha2-256`]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[inline(always)]
 #[no_mangle]
 pub unsafe extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *mut u8) {
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, ou
 ///   state as 8 64-bit words in little-endian order
 ///
 /// [`sha2-512`]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[inline(always)]
 #[no_mangle]
 pub unsafe extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, output: *mut u8) {
@@ -145,7 +145,7 @@ pub unsafe extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, ou
 /// - `input` must point to a buffer of at least 64 bytes
 /// - `output` must point to a buffer of at least 32 bytes. It will be filled with the new hash
 ///   state as 8 32-bit words in little-endian order
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[inline(always)]
 fn __native_sha256_compress(prev_state: *const u8, input: *const u8, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha256 as u8, rd = In output, rs1 = In prev_state, rs2 = In input);
@@ -162,7 +162,7 @@ fn __native_sha256_compress(prev_state: *const u8, input: *const u8, output: *mu
 /// - `input` must point to a buffer of at least 128 bytes
 /// - `output` must point to a buffer of at least 64 bytes. It will be filled with the new hash
 ///   state as 8 64-bit words in little-endian order
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[inline(always)]
 fn __native_sha512_compress(prev_state: *const u8, input: *const u8, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA2_FUNCT3, funct7 = Sha2BaseFunct7::Sha512 as u8, rd = In output, rs1 = In prev_state, rs2 = In input);

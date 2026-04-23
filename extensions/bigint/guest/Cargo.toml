@@ -16,3 +16,6 @@ default = []
 export-intrinsics = [
     "openvm-platform/rust-runtime",
 ] # export extern no_mangle functions for external linkage
+
+[lints]
+workspace = true
