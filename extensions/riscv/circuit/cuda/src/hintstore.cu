@@ -6,24 +6,27 @@
 
 using namespace riscv;
 using namespace program;
-using hintstore::MAX_HINT_BUFFER_WORDS;
-using hintstore::MAX_HINT_BUFFER_WORDS_BITS;
+using hintstore::MAX_HINT_BUFFER_DWORDS;
+using hintstore::MAX_HINT_BUFFER_DWORDS_BITS;
 
-template <typename T> struct Rv32HintStoreCols {
+constexpr size_t REM_WORDS_NUM_LIMBS = 2;
+
+template <typename T> struct Rv64HintStoreCols {
     // common
     T is_single;
     T is_buffer;
 
-    // should be 1 for single
-    T rem_words_limbs[RV32_REGISTER_NUM_LIMBS];
+    // Low bytes of the 8-byte RV64 register that holds `rem_words`; the upper 6 bytes are
+    // known to be zero and are hardcoded in the memory bus interaction.
+    T rem_words_limbs[REM_WORDS_NUM_LIMBS];
 
     ExecutionState<T> from_state;
     T mem_ptr_ptr;
-    T mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS];
+    T mem_ptr_limbs[RV64_WORD_NUM_LIMBS];
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
-    MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS> write_aux;
-    T data[RV32_REGISTER_NUM_LIMBS];
+    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> write_aux;
+    T data[RV64_REGISTER_NUM_LIMBS];
 
     // only buffer
     T is_buffer_start;
@@ -32,7 +35,7 @@ template <typename T> struct Rv32HintStoreCols {
 };
 
 // This is the part of the record that we keep only once per instruction
-struct Rv32HintStoreRecordHeader {
+struct Rv64HintStoreRecordHeader {
     uint32_t num_words;
 
     uint32_t from_pc;
@@ -48,17 +51,17 @@ struct Rv32HintStoreRecordHeader {
 };
 
 // This is the part of the record that we keep `num_words` times per instruction
-struct Rv32HintStoreVars {
-    MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> write_aux;
-    uint8_t data[RV32_REGISTER_NUM_LIMBS];
+struct Rv64HintStoreVars {
+    MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> write_aux;
+    uint8_t data[RV64_REGISTER_NUM_LIMBS];
 };
 
-struct Rv32HintStore {
+struct Rv64HintStore {
     size_t pointer_max_bits;
     BitwiseOperationLookup bitwise_lookup;
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32HintStore(
+    __device__ Rv64HintStore(
         BitwiseOperationLookup bitwise_lookup,
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
@@ -69,86 +72,91 @@ struct Rv32HintStore {
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv32HintStoreRecordHeader &record,
-        Rv32HintStoreVars &write,
+        Rv64HintStoreRecordHeader &record,
+        Rv64HintStoreVars &write,
         uint32_t local_idx
     ) {
         bool is_single = record.num_words_ptr == UINT32_MAX;
         uint32_t timestamp = record.timestamp + local_idx * 3;
         uint32_t rem_words = record.num_words - local_idx;
-        uint32_t mem_ptr = record.mem_ptr + local_idx * (uint32_t)RV32_REGISTER_NUM_LIMBS;
+        uint32_t mem_ptr = record.mem_ptr + local_idx * (uint32_t)RV64_REGISTER_NUM_LIMBS;
         auto rem_words_limbs = reinterpret_cast<uint8_t *>(&rem_words);
         auto mem_ptr_limbs = reinterpret_cast<uint8_t *>(&mem_ptr);
 
-        COL_WRITE_VALUE(row, Rv32HintStoreCols, is_single, is_single);
-        COL_WRITE_VALUE(row, Rv32HintStoreCols, is_buffer, !is_single);
-        COL_WRITE_ARRAY(row, Rv32HintStoreCols, rem_words_limbs, rem_words_limbs);
-        COL_WRITE_VALUE(row, Rv32HintStoreCols, from_state.pc, record.from_pc);
-        COL_WRITE_VALUE(row, Rv32HintStoreCols, from_state.timestamp, timestamp);
-        COL_WRITE_VALUE(row, Rv32HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
-        COL_WRITE_ARRAY(row, Rv32HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, is_single, is_single);
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer, !is_single);
+        COL_WRITE_ARRAY(row, Rv64HintStoreCols, rem_words_limbs, rem_words_limbs);
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, from_state.timestamp, timestamp);
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
+        COL_WRITE_ARRAY(row, Rv64HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
-// The overflow check for mem_ptr + num_words * 4 is not needed because
-// 4 * MAX_HINT_BUFFER_WORDS < 2^pointer_max_bits guarantees no overflow
+// The mem_ptr range check below scales `mem_ptr_limbs[3]` into an 8-bit lookup. For the
+// scaling factor to be in (1, 256] the bit width must straddle limb 3, i.e.
+// `pointer_max_bits ∈ (24, 32]`. Outside this window the scaling either overflows a byte
+// (forcing limb 3 to zero while limb 2 goes unchecked -- a soundness gap) or underflows.
 #ifdef CUDA_DEBUG
-            assert(MAX_HINT_BUFFER_WORDS_BITS + 2 < pointer_max_bits);
+            assert(pointer_max_bits > (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS);
+            assert(pointer_max_bits <= RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
 #endif
 
-            // Range check for mem_ptr (using pointer_max_bits)
-            uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
-            uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
+            // Range check for mem_ptr (using pointer_max_bits). `mem_ptr` is a 4-limb value;
+            // the range check packs the most-significant of those 4 limbs into a single byte.
+            uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS;
+            uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - pointer_max_bits;
 
-// Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
-// These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [8, 16)
+// Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS)
+// These constraints only work for MAX_HINT_BUFFER_DWORDS_BITS in [8, 16)
 #ifdef CUDA_DEBUG
-            assert(MAX_HINT_BUFFER_WORDS_BITS >= 8 && MAX_HINT_BUFFER_WORDS_BITS < 16);
+            assert(MAX_HINT_BUFFER_DWORDS_BITS >= 8 && MAX_HINT_BUFFER_DWORDS_BITS < 16);
 #endif
 
 #ifdef CUDA_DEBUG
-            assert(record.num_words <= MAX_HINT_BUFFER_WORDS);
+            assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
 #endif
             uint32_t rem_words_msl_lshift =
-                (RV32_REGISTER_NUM_LIMBS - 2) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS;
+                REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
             // Combined range check for mem_ptr and num_words
             bitwise_lookup.add_range(
                 (record.mem_ptr >> msl_rshift) << msl_lshift,
-                ((record.num_words >> 8) & 0xFF) << rem_words_msl_lshift
+                ((record.num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
+                    << rem_words_msl_lshift
             );
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),
+                row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)),
                 record.mem_ptr_aux_record.prev_timestamp,
                 timestamp
             );
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)));
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)));
         }
 
         if (local_idx == 0 && !is_single) {
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv32HintStoreCols, num_words_aux_cols)),
+                row.slice_from(COL_INDEX(Rv64HintStoreCols, num_words_aux_cols)),
                 record.num_words_read.prev_timestamp,
                 timestamp + 1
             );
-            COL_WRITE_VALUE(row, Rv32HintStoreCols, is_buffer_start, 1);
-            COL_WRITE_VALUE(row, Rv32HintStoreCols, num_words_ptr, record.num_words_ptr);
+            COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer_start, 1);
+            COL_WRITE_VALUE(row, Rv64HintStoreCols, num_words_ptr, record.num_words_ptr);
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv32HintStoreCols, num_words_aux_cols)));
-            COL_WRITE_VALUE(row, Rv32HintStoreCols, is_buffer_start, 0);
-            COL_WRITE_VALUE(row, Rv32HintStoreCols, num_words_ptr, 0);
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64HintStoreCols, num_words_aux_cols)));
+            COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer_start, 0);
+            COL_WRITE_VALUE(row, Rv64HintStoreCols, num_words_ptr, 0);
         }
 
-        COL_WRITE_ARRAY(row, Rv32HintStoreCols, write_aux.prev_data, write.write_aux.prev_data);
+        COL_WRITE_ARRAY(row, Rv64HintStoreCols, write_aux.prev_data, write.write_aux.prev_data);
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv32HintStoreCols, write_aux)),
+            row.slice_from(COL_INDEX(Rv64HintStoreCols, write_aux)),
             write.write_aux.prev_timestamp,
             timestamp + 2
         );
 
-        COL_WRITE_ARRAY(row, Rv32HintStoreCols, data, write.data);
+        COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, write.data);
 #pragma unroll
-        for (size_t i = 0; i < RV32_REGISTER_NUM_LIMBS; i += 2) {
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i += 2) {
             bitwise_lookup.add_range(write.data[i], write.data[i + 1]);
         }
     }
@@ -179,13 +187,13 @@ __global__ void hintstore_tracegen(
         auto record_offset = record_offsets[idx].record_offset;
         auto local_idx = record_offsets[idx].local_idx;
         auto record_header =
-            *reinterpret_cast<Rv32HintStoreRecordHeader *>(records + record_offset);
+            *reinterpret_cast<Rv64HintStoreRecordHeader *>(records + record_offset);
 
-        auto writes_start = records + record_offset + sizeof(Rv32HintStoreRecordHeader);
+        auto writes_start = records + record_offset + sizeof(Rv64HintStoreRecordHeader);
 
-        auto data_write = reinterpret_cast<Rv32HintStoreVars *>(writes_start)[local_idx];
+        auto data_write = reinterpret_cast<Rv64HintStoreVars *>(writes_start)[local_idx];
 
-        auto filler = Rv32HintStore(
+        auto filler = Rv64HintStore(
             BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits),
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
@@ -193,7 +201,7 @@ __global__ void hintstore_tracegen(
         );
         filler.fill_trace_row(row, record_header, data_write, local_idx);
     } else {
-        row.fill_zero(0, sizeof(Rv32HintStoreCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv64HintStoreCols<uint8_t>));
     }
 }
 
@@ -212,7 +220,7 @@ extern "C" int _hintstore_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv32HintStoreCols<uint8_t>));
+    assert(width == sizeof(Rv64HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
     hintstore_tracegen<<<grid, block, 0, stream>>>(
