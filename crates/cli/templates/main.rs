@@ -4,7 +4,6 @@
 
 use openvm::io::{read, reveal_u64};
 
-#[cfg(target_os = "none")]
 openvm::entry!(main);
 
 pub fn main() {

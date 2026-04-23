@@ -170,6 +170,12 @@ fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
         std_forward.push(Value::from("openvm/std"));
         features_table.insert("std", Item::Value(Value::Array(std_forward)));
         doc["features"] = Item::Table(features_table);
+    } else {
+        eprintln!(
+            "warning: [features] already present in {}; skipping `std = [\"openvm/std\"]` injection. \
+             Add it manually if you want `cfg(feature = \"std\")` gates in the template to resolve.",
+            cargo_toml_path.display()
+        );
     }
 
     // Declare `openvm_intrinsics` check-cfg so host-side `cargo check/clippy`
@@ -189,6 +195,12 @@ fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
         );
         lints_table.insert("rust", Item::Table(rust_table));
         doc["lints"] = Item::Table(lints_table);
+    } else {
+        eprintln!(
+            "warning: [lints] already present in {}; skipping `unexpected_cfgs` check-cfg for \
+             `openvm_intrinsics`. Add it manually to silence host-side lint warnings on guest cfg guards.",
+            cargo_toml_path.display()
+        );
     }
 
     write(&cargo_toml_path, doc.to_string())

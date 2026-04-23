@@ -125,7 +125,7 @@ To selectively enable the standard library, add the `std` feature to your `Cargo
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-You still need the `openvm::entry!(main)` line; guard it with `#[cfg(target_os = "none")]` so it only fires on the guest target.
+You still need the `openvm::entry!(main)` line.
 This lets the same source build as a standard binary on the host (with `main()`) and as a `no_main` openvm guest, while `"std"` independently toggles the standard library.
 
 ## Using crates that depend on `getrandom`

@@ -151,7 +151,6 @@ Guest programs (run inside the VM) use `#![no_main]` / `#![no_std]` with `openvm
 #![cfg_attr(target_os = "none", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(target_os = "none")]
 openvm::entry!(main);
 
 pub fn main() { /* ... */ }

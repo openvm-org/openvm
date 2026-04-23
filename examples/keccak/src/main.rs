@@ -12,7 +12,6 @@ use openvm as _;
 use tiny_keccak::{Hasher, Keccak};
 // [!endregion imports]
 
-#[cfg(target_os = "none")]
 openvm::entry!(main);
 
 // [!region main]

@@ -261,6 +261,7 @@ hex-literal = { version = "1.0.0", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
 once_cell = { version = "1.20", default-features = false }
 portable-atomic = { version = "1", default-features = false }
+critical-section = { version = "1.1.2", default-features = false }
 spin = { version = "0.10.0", default-features = false }
 
 # cryptography, default-features = false for no_std
