@@ -10,7 +10,7 @@ members = []
 tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak", features = ["keccak"] }
 hex-literal = "1.1.0"
 
-[target.'cfg(target_os = "zkvm")'.dependencies]
+[target.'cfg(target_os = "none")'.dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
@@ -22,3 +22,6 @@ default = []
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-keccak256-guest = { path = "../../extensions/keccak256/guest" }
+
+[lints]
+workspace = true

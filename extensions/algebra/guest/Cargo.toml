@@ -19,12 +19,13 @@ strum_macros.workspace = true
 once_cell = { workspace = true, features = ["race", "alloc", "portable-atomic"] }
 portable-atomic = { workspace = true }
 
-# SAFETY: `unsafe-assume-single-core` is sound because the openvm guest is
-# single-threaded; drop this feature if that ever changes.
+# `critical-section` backend lets `portable-atomic` use the no-op impl in
+# `openvm-platform` (see `crates/toolchain/platform/src/critical_section.rs`)
+# instead of emitting CSR interrupt-disable instructions.
 [target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
-portable-atomic = { workspace = true, features = ["unsafe-assume-single-core"] }
+portable-atomic = { workspace = true, features = ["critical-section"] }
 
-[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dependencies]
+[target.'cfg(not(target_os = "none"))'.dependencies]
 num-bigint.workspace = true
 halo2curves-axiom = { workspace = true, optional = true }
 
@@ -33,3 +34,6 @@ halo2curves-axiom = { workspace = true, optional = true }
 [features]
 default = []
 halo2curves = ["dep:halo2curves-axiom"]
+
+[lints]
+workspace = true

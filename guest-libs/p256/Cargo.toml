@@ -74,8 +74,11 @@ cuda = [
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot"]
 
-[target.'cfg(not(all(target_arch = "riscv64", target_os = "none")))'.dependencies]
+[target.'cfg(not(target_os = "none"))'.dependencies]
 num-bigint = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "serde", "num-bigint", "derive_more", "rand"]
+
+[lints]
+workspace = true

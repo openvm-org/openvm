@@ -14,7 +14,11 @@ openvm-riscv-guest.workspace = true
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-critical-section = { version = "1.1.2", optional = true }
+# Provides a no-op `critical-section` impl for the guest so `portable-atomic`'s
+# CAS polyfill (used by `once_cell`, `spin`, etc.) doesn't emit CSR interrupt
+# instructions the openvm transpiler can't handle. Always pulled in on the
+# riscv64 target; the impl itself is `cfg(openvm_intrinsics)`-gated.
+critical-section = { version = "1.1.2" }
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
 ], optional = true }
@@ -29,7 +33,6 @@ default = []
 entrypoint = []
 export-libm = ["dep:libm"]
 heap-embedded-alloc = [
-    "dep:critical-section",
     "dep:embedded-alloc",
     "rust-runtime",
 ]
@@ -38,5 +41,5 @@ panic-handler = []
 rust-runtime = ["export-libm"]
 std = []
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
+[lints]
+workspace = true
