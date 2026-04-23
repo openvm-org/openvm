@@ -12,7 +12,7 @@ mod test_line;
 #[cfg(test)]
 mod test_miller_loop;
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 #[allow(non_snake_case)]
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points_bls12_381(

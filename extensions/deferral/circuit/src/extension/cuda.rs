@@ -134,12 +134,12 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
             &Rv64ImGpuProverExt,
-            &config.rv32i,
+            &config.rv64i,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
             &Rv64ImGpuProverExt,
-            &config.rv32m,
+            &config.rv64m,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(

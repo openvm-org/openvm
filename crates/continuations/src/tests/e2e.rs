@@ -315,8 +315,8 @@ fn test_deferral_e2e() -> Result<()> {
 
     let config = Rv32DeferralConfig {
         system: system.clone(),
-        rv32i: Rv64I,
-        rv32m: Rv64M::default(),
+        rv64i: Rv64I,
+        rv64m: Rv64M::default(),
         io: Rv64Io,
         deferral: make_deferral_extension(transpiler_commits.clone()),
     };

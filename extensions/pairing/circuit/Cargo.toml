@@ -42,9 +42,6 @@ cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-openvm-pairing-guest = { workspace = true }
-
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
