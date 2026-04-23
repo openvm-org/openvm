@@ -46,7 +46,7 @@ template <size_t NUM_CELLS> struct LoadSignExtendCore {
         uint8_t shift = record.shift_amount;
         uint8_t shift_most_sig_bit = (shift >> 2) & 1;
         uint8_t inner_shift = shift & 3;
-        uint8_t rotate = shift_most_sig_bit * 4;
+        uint8_t rotate = shift_most_sig_bit * (NUM_CELLS / 2);
 
         uint8_t shifted_read_data[NUM_CELLS];
 #pragma unroll
@@ -58,16 +58,16 @@ template <size_t NUM_CELLS> struct LoadSignExtendCore {
         if (record.is_byte) {
             most_sig_limb = shifted_read_data[inner_shift];
         } else if (record.is_word) {
-            most_sig_limb = shifted_read_data[3];
+            most_sig_limb = shifted_read_data[NUM_CELLS / 2 - 1];
         } else {
             most_sig_limb = shifted_read_data[inner_shift + 1];
         }
 
-        uint8_t most_sig_bit = most_sig_limb & 0x80;
+        uint8_t most_sig_bit = most_sig_limb & (1u << (RV64_CELL_BITS - 1));
         bool is_word = record.is_word;
         bool is_half = !record.is_byte && !is_word;
 
-        range_checker.add_count(most_sig_limb - most_sig_bit, 7);
+        range_checker.add_count(most_sig_limb - most_sig_bit, RV64_CELL_BITS - 1);
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag0, record.is_byte && inner_shift == 0);
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag1, record.is_byte && inner_shift == 1);
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag2, record.is_byte && inner_shift == 2);

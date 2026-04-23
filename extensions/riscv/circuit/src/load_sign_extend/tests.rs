@@ -8,7 +8,11 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -165,7 +169,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         ),
     );
 
-    let write_data = run_write_data_sign_extend(opcode, read_data, shift_amount as usize);
+    let write_data = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+        opcode,
+        read_data,
+        shift_amount as usize,
+    );
     if a != 0 {
         assert_eq!(write_data.map(F::from_u8), tester.read::<8>(1, a));
     } else {
@@ -404,10 +412,14 @@ fn loadstore_negative_tests() {
 #[test]
 fn solve_loadh_extend_sign_sanity_test() {
     let read_data = [34, 159, 237, 151, 100, 200, 50, 25];
-    let write_data0 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 0);
-    let write_data2 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 2);
-    let write_data4 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 4);
-    let write_data6 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 6);
+    let write_data0 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 0);
+    let write_data2 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 2);
+    let write_data4 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 4);
+    let write_data6 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 6);
 
     assert_eq!(write_data0, [34, 159, 255, 255, 255, 255, 255, 255]);
     assert_eq!(write_data2, [237, 151, 255, 255, 255, 255, 255, 255]);
@@ -418,10 +430,14 @@ fn solve_loadh_extend_sign_sanity_test() {
 #[test]
 fn solve_loadh_extend_zero_sanity_test() {
     let read_data = [34, 121, 237, 97, 10, 20, 30, 40];
-    let write_data0 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 0);
-    let write_data2 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 2);
-    let write_data4 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 4);
-    let write_data6 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 6);
+    let write_data0 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 0);
+    let write_data2 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 2);
+    let write_data4 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 4);
+    let write_data6 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 6);
 
     assert_eq!(write_data0, [34, 121, 0, 0, 0, 0, 0, 0]);
     assert_eq!(write_data2, [237, 97, 0, 0, 0, 0, 0, 0]);
@@ -433,8 +449,9 @@ fn solve_loadh_extend_zero_sanity_test() {
 fn solve_loadb_extend_sign_sanity_test() {
     let read_data = [45, 82, 99, 127, 200, 150, 180, 210];
     for shift in 0..8 {
-        let write_data =
-            run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADB, read_data, shift);
+        let write_data = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+            LOADB, read_data, shift,
+        );
         let byte = read_data[shift];
         let expected = (byte as i8 as i64).to_le_bytes();
         assert_eq!(write_data, expected, "LOADB shift={shift}");
@@ -445,8 +462,9 @@ fn solve_loadb_extend_sign_sanity_test() {
 fn solve_loadb_extend_zero_sanity_test() {
     let read_data = [173, 210, 227, 255, 128, 250, 200, 190];
     for shift in 0..8 {
-        let write_data =
-            run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADB, read_data, shift);
+        let write_data = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+            LOADB, read_data, shift,
+        );
         let byte = read_data[shift];
         let expected = (byte as i8 as i64).to_le_bytes();
         assert_eq!(write_data, expected, "LOADB shift={shift}");
@@ -457,14 +475,16 @@ fn solve_loadb_extend_zero_sanity_test() {
 fn solve_loadw_extend_sign_sanity_test() {
     // shift=0: word = [0x01, 0x02, 0x03, 0x84] => 0x84030201 (negative)
     let read_data = [0x01, 0x02, 0x03, 0x84, 0xAA, 0xBB, 0xCC, 0xDD];
-    let write_data0 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, 0);
+    let write_data0 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADW, read_data, 0);
     assert_eq!(
         write_data0,
         [0x01, 0x02, 0x03, 0x84, 0xFF, 0xFF, 0xFF, 0xFF]
     );
 
     // shift=4: word = [0xAA, 0xBB, 0xCC, 0xDD] => 0xDDCCBBAA (negative)
-    let write_data4 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, 4);
+    let write_data4 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADW, read_data, 4);
     assert_eq!(
         write_data4,
         [0xAA, 0xBB, 0xCC, 0xDD, 0xFF, 0xFF, 0xFF, 0xFF]
@@ -475,7 +495,8 @@ fn solve_loadw_extend_sign_sanity_test() {
 fn solve_loadw_extend_zero_sanity_test() {
     // shift=0: word = [0x01, 0x02, 0x03, 0x04] => 0x04030201 (positive)
     let read_data = [0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0xDD];
-    let write_data0 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, 0);
+    let write_data0 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADW, read_data, 0);
     assert_eq!(
         write_data0,
         [0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]
@@ -483,7 +504,8 @@ fn solve_loadw_extend_zero_sanity_test() {
 
     // shift=4: word = [0xAA, 0xBB, 0xCC, 0x7D] => 0x7DCCBBAA (positive)
     let read_data2 = [0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0x7D];
-    let write_data4 = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data2, 4);
+    let write_data4 =
+        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADW, read_data2, 4);
     assert_eq!(
         write_data4,
         [0xAA, 0xBB, 0xCC, 0x7D, 0x00, 0x00, 0x00, 0x00]
@@ -494,42 +516,42 @@ fn solve_loadw_extend_zero_sanity_test() {
 #[should_panic(expected = "LOADW requires 4-byte aligned shift")]
 fn solve_loadw_rejects_shift_2() {
     let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, 2);
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADW, read_data, 2);
 }
 
 #[test]
 #[should_panic(expected = "LOADW requires 4-byte aligned shift")]
 fn solve_loadw_rejects_shift_6() {
     let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, 6);
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADW, read_data, 6);
 }
 
 #[test]
 #[should_panic(expected = "LOADH requires 2-byte aligned shift")]
 fn solve_loadh_rejects_shift_1() {
     let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 1);
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 1);
 }
 
 #[test]
 #[should_panic(expected = "LOADH requires 2-byte aligned shift")]
 fn solve_loadh_rejects_shift_3() {
     let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 3);
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 3);
 }
 
 #[test]
 #[should_panic(expected = "LOADH requires 2-byte aligned shift")]
 fn solve_loadh_rejects_shift_5() {
     let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 5);
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 5);
 }
 
 #[test]
 #[should_panic(expected = "LOADH requires 2-byte aligned shift")]
 fn solve_loadh_rejects_shift_7() {
     let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, 7);
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(LOADH, read_data, 7);
 }
 
 /// Assert the full set of accepted shifts per opcode:
@@ -540,17 +562,23 @@ fn accepted_shift_sets() {
 
     // LOADB accepts all shifts 0..7
     for shift in 0..8 {
-        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADB, read_data, shift);
+        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+            LOADB, read_data, shift,
+        );
     }
 
     // LOADH accepts even shifts {0, 2, 4, 6}
     for shift in [0, 2, 4, 6] {
-        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADH, read_data, shift);
+        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+            LOADH, read_data, shift,
+        );
     }
 
     // LOADW accepts only {0, 4}
     for shift in [0, 4] {
-        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS>(LOADW, read_data, shift);
+        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+            LOADW, read_data, shift,
+        );
     }
 }
 
