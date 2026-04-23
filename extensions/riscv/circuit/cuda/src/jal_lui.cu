@@ -29,13 +29,14 @@ struct Rv64JalLuiCore {
         for (int i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
             bw.add_range(record.rd_data[i], record.rd_data[i + 1]);
         }
-        bool is_sign_extend = (record.rd_data[3] >> (RV64_CELL_BITS - 1)) == 1;
+        bool is_sign_extend =
+            (record.rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) == 1;
         bw.add_range(
-            static_cast<uint32_t>(record.rd_data[3]) *
+            static_cast<uint32_t>(record.rd_data[RV64_WORD_NUM_LIMBS - 1]) *
                 (4u * static_cast<uint32_t>(record.is_jal) +
                  static_cast<uint32_t>(!record.is_jal)),
             static_cast<uint32_t>(
-                static_cast<int32_t>(record.rd_data[3]) * 2 -
+                static_cast<int32_t>(record.rd_data[RV64_WORD_NUM_LIMBS - 1]) * 2 -
                 (static_cast<int32_t>(is_sign_extend) << RV64_CELL_BITS)
             )
         );

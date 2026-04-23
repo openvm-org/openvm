@@ -8,7 +8,7 @@
 
 using namespace riscv;
 
-// Concrete type aliases for 32-bit
+// Concrete type aliases for 64-bit
 using Rv64MultiplicationCoreRecord = MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS>;
 using Rv64MultiplicationCore = MultiplicationCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T>

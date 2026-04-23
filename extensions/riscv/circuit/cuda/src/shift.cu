@@ -9,7 +9,7 @@
 using namespace riscv;
 using namespace program;
 
-// Concrete type aliases for 32-bit
+// Concrete type aliases for 64-bit
 using Rv64ShiftCoreRecord = ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS>;
 using Rv64ShiftCore = ShiftCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T> using Rv64ShiftCoreCols = ShiftCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
@@ -24,7 +24,7 @@ struct ShiftRecord {
     Rv64ShiftCoreRecord core;
 };
 
-__global__ void rv32_shift_tracegen(
+__global__ void rv64_shift_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -55,7 +55,7 @@ __global__ void rv32_shift_tracegen(
     }
 }
 
-extern "C" int _rv32_shift_tracegen(
+extern "C" int _rv64_shift_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
@@ -72,7 +72,7 @@ extern "C" int _rv32_shift_tracegen(
     assert(width == sizeof(ShiftCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv32_shift_tracegen<<<grid, block, 0, stream>>>(
+    rv64_shift_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

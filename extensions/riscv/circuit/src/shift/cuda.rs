@@ -13,7 +13,7 @@ use crate::{
     adapters::{
         Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    cuda_abi::shift_cuda::tracegen as rv32_shift_tracegen,
+    cuda_abi::shift_cuda::tracegen as rv64_shift_tracegen,
     ShiftCoreCols, ShiftCoreRecord,
 };
 
@@ -44,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftChipGpu {
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv32_shift_tracegen(
+            rv64_shift_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

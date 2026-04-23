@@ -9,7 +9,7 @@
 using namespace riscv;
 using namespace program;
 
-// Concrete type aliases for 32-bit
+// Concrete type aliases for 64-bit
 using Rv64LessThanCoreRecord = LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS>;
 using Rv64LessThanCore = LessThanCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T> using Rv64LessThanCoreCols = LessThanCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
@@ -24,7 +24,7 @@ struct LessThanRecord {
     Rv64LessThanCoreRecord core;
 };
 
-__global__ void rv32_less_than_tracegen(
+__global__ void rv64_less_than_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<LessThanRecord> records,
@@ -53,7 +53,7 @@ __global__ void rv32_less_than_tracegen(
     }
 }
 
-extern "C" int _rv32_less_than_tracegen(
+extern "C" int _rv64_less_than_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -71,7 +71,7 @@ extern "C" int _rv32_less_than_tracegen(
     assert(width == sizeof(LessThanCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
-    rv32_less_than_tracegen<<<grid, block, 0, stream>>>(
+    rv64_less_than_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

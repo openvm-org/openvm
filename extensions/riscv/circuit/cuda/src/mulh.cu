@@ -7,10 +7,7 @@
 
 using namespace riscv;
 
-constexpr uint32_t NUM_LIMBS = RV64_REGISTER_NUM_LIMBS;
-constexpr uint32_t LIMB_BITS = RV64_CELL_BITS;
-
-template <typename T> struct MulHCoreCols {
+template <typename T, size_t NUM_LIMBS> struct MulHCoreCols {
     T a[NUM_LIMBS];
     T b[NUM_LIMBS];
     T c[NUM_LIMBS];
@@ -22,7 +19,7 @@ template <typename T> struct MulHCoreCols {
     T opcode_mulhu_flag;
 };
 
-struct MulHCoreRecord {
+template <size_t NUM_LIMBS> struct MulHCoreRecord {
     uint8_t b[NUM_LIMBS];
     uint8_t c[NUM_LIMBS];
     uint8_t local_opcode;
@@ -31,6 +28,7 @@ struct MulHCoreRecord {
 // Opcode mapping: MULH=0, MULHSU=1, MULHU=2
 enum MulHOpcode { MULH = 0, MULHSU = 1, MULHU = 2 };
 
+template <size_t NUM_LIMBS>
 __device__ void run_mulh(
     MulHOpcode opcode,
     const uint32_t *x,
@@ -55,14 +53,14 @@ __device__ void run_mulh(
         for (int j = 0; j <= i; j++) {
             out_mul[i] += x[j] * y[i - j];
         }
-        out_carry[i] = out_mul[i] >> LIMB_BITS;
-        out_mul[i] %= (1u << LIMB_BITS);
+        out_carry[i] = out_mul[i] >> RV64_CELL_BITS;
+        out_mul[i] %= (1u << RV64_CELL_BITS);
     }
 
-    out_x_ext =
-        (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1)) * (opcode == MULHU ? 0 : ((1u << LIMB_BITS) - 1));
-    out_y_ext =
-        (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1)) * (opcode == MULH ? ((1u << LIMB_BITS) - 1) : 0);
+    out_x_ext = (x[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) *
+                (opcode == MULHU ? 0 : ((1u << RV64_CELL_BITS) - 1));
+    out_y_ext = (y[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) *
+                (opcode == MULH ? ((1u << RV64_CELL_BITS) - 1) : 0);
 
     uint32_t x_prefix = 0;
     uint32_t y_prefix = 0;
@@ -76,14 +74,16 @@ __device__ void run_mulh(
         for (int j = i + 1; j < NUM_LIMBS; j++) {
             out_mulh[i] += x[j] * y[NUM_LIMBS + i - j];
         }
-        out_carry[NUM_LIMBS + i] = out_mulh[i] >> LIMB_BITS;
-        out_mulh[i] %= (1u << LIMB_BITS);
+        out_carry[NUM_LIMBS + i] = out_mulh[i] >> RV64_CELL_BITS;
+        out_mulh[i] %= (1u << RV64_CELL_BITS);
     }
 }
 
-struct MulHCore {
+template <size_t NUM_LIMBS> struct MulHCore {
     RangeTupleChecker<2> range_tuple;
     BitwiseOperationLookup bitwise_lookup;
+
+    template <typename T> using Cols = MulHCoreCols<T, NUM_LIMBS>;
 
     __device__ MulHCore(
         uint32_t *range_tuple_ptr,
@@ -92,7 +92,7 @@ struct MulHCore {
     )
         : range_tuple(range_tuple_ptr, range_tuple_sizes), bitwise_lookup(bw) {}
 
-    __device__ void fill_trace_row(RowSlice row, MulHCoreRecord record) {
+    __device__ void fill_trace_row(RowSlice row, MulHCoreRecord<NUM_LIMBS> record) {
         MulHOpcode opcode = static_cast<MulHOpcode>(record.local_opcode);
 
         uint32_t b[NUM_LIMBS];
@@ -108,7 +108,7 @@ struct MulHCore {
         uint32_t carry[2 * NUM_LIMBS];
         uint32_t b_ext, c_ext;
 
-        run_mulh(opcode, b, c, a, a_mul, carry, b_ext, c_ext);
+        run_mulh<NUM_LIMBS>(opcode, b, c, a, a_mul, carry, b_ext, c_ext);
 
 #pragma unroll
         for (int i = 0; i < NUM_LIMBS; i++) {
@@ -121,8 +121,8 @@ struct MulHCore {
         }
 
         if (opcode != MULHU) {
-            uint32_t b_sign_mask = (b_ext == 0) ? 0 : (1u << (LIMB_BITS - 1));
-            uint32_t c_sign_mask = (c_ext == 0) ? 0 : (1u << (LIMB_BITS - 1));
+            uint32_t b_sign_mask = (b_ext == 0) ? 0 : (1u << (RV64_CELL_BITS - 1));
+            uint32_t c_sign_mask = (c_ext == 0) ? 0 : (1u << (RV64_CELL_BITS - 1));
 
             bitwise_lookup.add_range(
                 (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
@@ -130,26 +130,26 @@ struct MulHCore {
             );
         }
 
-        COL_WRITE_ARRAY(row, MulHCoreCols, a, a);
-        COL_WRITE_ARRAY(row, MulHCoreCols, b, b);
-        COL_WRITE_ARRAY(row, MulHCoreCols, c, c);
-        COL_WRITE_ARRAY(row, MulHCoreCols, a_mul, a_mul);
-        COL_WRITE_VALUE(row, MulHCoreCols, b_ext, b_ext);
-        COL_WRITE_VALUE(row, MulHCoreCols, c_ext, c_ext);
-        COL_WRITE_VALUE(row, MulHCoreCols, opcode_mulh_flag, opcode == MULH);
-        COL_WRITE_VALUE(row, MulHCoreCols, opcode_mulhsu_flag, opcode == MULHSU);
-        COL_WRITE_VALUE(row, MulHCoreCols, opcode_mulhu_flag, opcode == MULHU);
+        COL_WRITE_ARRAY(row, Cols, a, a);
+        COL_WRITE_ARRAY(row, Cols, b, b);
+        COL_WRITE_ARRAY(row, Cols, c, c);
+        COL_WRITE_ARRAY(row, Cols, a_mul, a_mul);
+        COL_WRITE_VALUE(row, Cols, b_ext, b_ext);
+        COL_WRITE_VALUE(row, Cols, c_ext, c_ext);
+        COL_WRITE_VALUE(row, Cols, opcode_mulh_flag, opcode == MULH);
+        COL_WRITE_VALUE(row, Cols, opcode_mulhsu_flag, opcode == MULHSU);
+        COL_WRITE_VALUE(row, Cols, opcode_mulhu_flag, opcode == MULHU);
     }
 };
 
 template <typename T> struct MulHCols {
     Rv64MultAdapterCols<T> adapter;
-    MulHCoreCols<T> core;
+    MulHCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
 };
 
 struct MulHRecord {
     Rv64MultAdapterRecord adapter;
-    MulHCoreRecord core;
+    MulHCoreRecord<RV64_REGISTER_NUM_LIMBS> core;
 };
 
 __global__ void mulh_tracegen(
@@ -175,7 +175,7 @@ __global__ void mulh_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        MulHCore core(
+        MulHCore<RV64_REGISTER_NUM_LIMBS> core(
             d_range_tuple_checker_ptr,
             (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y},
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)

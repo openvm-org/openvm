@@ -221,7 +221,7 @@ template <size_t NUM_LIMBS> struct DivRemCore {
     }
 };
 
-// Below is `rv32` specific code.
+// Below is `rv64` specific code.
 template <typename T> struct Rv64DivRemCols {
     Rv64MultAdapterCols<T> adapter;
     DivRemCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
@@ -232,7 +232,7 @@ struct Rv64DivRemRecord {
     DivRemCoreRecords<RV64_REGISTER_NUM_LIMBS> core;
 };
 
-__global__ void rv32_div_rem_tracegen(
+__global__ void rv64_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
     DeviceBufferConstView<Rv64DivRemRecord> d_records,
@@ -268,7 +268,7 @@ __global__ void rv32_div_rem_tracegen(
     }
 }
 
-extern "C" int _rv32_div_rem_tracegen(
+extern "C" int _rv64_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -287,7 +287,7 @@ extern "C" int _rv32_div_rem_tracegen(
     assert(width == sizeof(Rv64DivRemCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv32_div_rem_tracegen<<<grid, block, 0, stream>>>(
+    rv64_div_rem_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
