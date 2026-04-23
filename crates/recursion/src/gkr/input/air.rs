@@ -160,6 +160,13 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.input_layer_claim[1],
             local.alpha_logup,
         );
+        // q0_claim must be ONE when no interactions to prevent proof malleability
+        let ef_one = [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO];
+        assert_array_eq(
+            &mut builder.when(not::<AB::Expr>(has_interactions.clone())),
+            local.q0_claim,
+            ef_one,
+        );
 
         ///////////////////////////////////////////////////////////////////////
         // Module Interactions
