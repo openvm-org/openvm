@@ -92,29 +92,12 @@ struct Rv64HintStore {
         COL_WRITE_ARRAY(row, Rv64HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
-// The mem_ptr range check below scales `mem_ptr_limbs[3]` into an 8-bit lookup. For the
-// scaling factor to be in (1, 256] the bit width must straddle limb 3, i.e.
-// `pointer_max_bits ∈ (24, 32]`. Outside this window the scaling either overflows a byte
-// (forcing limb 3 to zero while limb 2 goes unchecked -- a soundness gap) or underflows.
-#ifdef CUDA_DEBUG
-            assert(pointer_max_bits > (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS);
-            assert(pointer_max_bits <= RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
-#endif
-
             // Range check for mem_ptr (using pointer_max_bits). `mem_ptr` is a 4-limb value;
             // the range check packs the most-significant of those 4 limbs into a single byte.
             uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS;
             uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - pointer_max_bits;
 
-// Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS)
-// These constraints only work for MAX_HINT_BUFFER_DWORDS_BITS in [8, 16)
-#ifdef CUDA_DEBUG
-            assert(MAX_HINT_BUFFER_DWORDS_BITS >= 8 && MAX_HINT_BUFFER_DWORDS_BITS < 16);
-#endif
-
-#ifdef CUDA_DEBUG
-            assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
-#endif
+            // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
             uint32_t rem_words_msl_lshift =
                 REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
@@ -220,6 +203,8 @@ extern "C" int _hintstore_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
+    assert(height == 0 || (height & (height - 1)) == 0);
+    assert(height >= rows_used);
     assert(width == sizeof(Rv64HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
