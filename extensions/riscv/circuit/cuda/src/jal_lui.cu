@@ -30,14 +30,14 @@ struct Rv64JalLuiCore {
             bw.add_range(record.rd_data[i], record.rd_data[i + 1]);
         }
         bool is_sign_extend = (record.rd_data[3] >> (RV64_CELL_BITS - 1)) == 1;
-        int32_t second_range_limb =
-            static_cast<int32_t>(record.rd_data[3]) * 2 -
-            (static_cast<int32_t>(is_sign_extend) << RV64_CELL_BITS);
         bw.add_range(
             static_cast<uint32_t>(record.rd_data[3]) *
                 (4u * static_cast<uint32_t>(record.is_jal) +
                  static_cast<uint32_t>(!record.is_jal)),
-            static_cast<uint32_t>(second_range_limb)
+            static_cast<uint32_t>(
+                static_cast<int32_t>(record.rd_data[3]) * 2 -
+                (static_cast<int32_t>(is_sign_extend) << RV64_CELL_BITS)
+            )
         );
 
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_sign_extend, is_sign_extend);

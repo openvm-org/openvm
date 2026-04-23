@@ -7,7 +7,7 @@
 
 using namespace riscv;
 
-// Concrete type aliases for RV64 8-limb registers
+// Concrete type aliases for RV64
 using Rv64BaseAluCoreRecord = BaseAluCoreRecord<RV64_REGISTER_NUM_LIMBS>;
 using Rv64BaseAluCore = BaseAluCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T> using Rv64BaseAluCoreCols = BaseAluCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
