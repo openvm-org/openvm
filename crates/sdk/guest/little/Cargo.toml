@@ -1,11 +1,13 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-sdk-little-test"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { path = "../../../toolchain/openvm", features = ["std"] }
+openvm = { path = "../../../toolchain/openvm" }
 openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
 openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
 openvm-pairing = { path = "../../../../guest-libs/pairing", features = [
@@ -14,3 +16,10 @@ openvm-pairing = { path = "../../../../guest-libs/pairing", features = [
 ] }
 openvm-k256 = { path = "../../../../guest-libs/k256", package = "k256" }
 openvm-p256 = { path = "../../../../guest-libs/p256", package = "p256" }
+
+[features]
+default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 [package]
 name = "openvm-ecc-test-programs"
 version = "0.0.0"
@@ -35,8 +36,8 @@ hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hex-literal = { version = "0.4.1", default-features = false }
 ecdsa-core = { version = "0.16.9", package = "ecdsa", default-features = false }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint = "0.4.6"
+[target.'cfg(not(target_os = "none"))'.dependencies]
+num-bigint = { version = "0.4.6", default-features = false }
 
 [features]
 default = []
@@ -84,3 +85,6 @@ required-features = ["k256"]
 [[example]]
 name = "invalid_setup"
 required-features = ["k256", "p256"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
