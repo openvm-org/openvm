@@ -3247,7 +3247,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4018,7 +4018,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom"
 version = "0.5.1"
-source = "git+ssh://git@github.com/axiom-crypto/halo2-gpu.git?rev=22d2b9f33b8d690e9eb891423191d56fe177496c#22d2b9f33b8d690e9eb891423191d56fe177496c"
+source = "git+ssh://git@github.com/axiom-crypto/halo2-gpu.git?branch=feat%2Fcuda-common-bn254#ce09b9df6620d096589198c09d5d48649ce12a11"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4040,7 +4040,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-integer",
  "once_cell",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2)",
  "openvm-cuda-common",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -4713,7 +4713,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5938,7 +5938,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-rv32-adapters",
@@ -6010,7 +6010,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-poseidon2-air",
@@ -6052,12 +6052,11 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
- "struct-reflection",
  "test-case",
  "tracing",
 ]
@@ -6076,7 +6075,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6097,7 +6096,7 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-deferral-circuit",
  "openvm-deferral-transpiler",
@@ -6123,7 +6122,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "cfg-if 1.0.4",
  "derive-new 0.7.0",
@@ -6148,13 +6147,13 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
  "glob",
  "itertools 0.14.0",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -6175,7 +6174,16 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#f36fefe5c4bf1e89163adaf6c77e52f155678b9f"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
+name = "openvm-cuda-builder"
+version = "2.0.0-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "cc",
  "glob",
@@ -6184,13 +6192,13 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "bytesize",
  "ctor",
  "lazy_static",
  "metrics",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -6220,7 +6228,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-deferral-transpiler",
  "openvm-instructions",
@@ -6467,7 +6475,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
@@ -6648,9 +6656,8 @@ version = "2.0.0-beta.2"
 dependencies = [
  "derivative",
  "lazy_static",
- "openvm-circuit-primitives",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -6685,7 +6692,7 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-poseidon2-air",
  "openvm-recursion-circuit-derive",
@@ -6743,7 +6750,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
@@ -6940,7 +6947,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-rv32im-circuit",
@@ -6976,7 +6983,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "cfg-if 1.0.4",
  "derivative",
@@ -7011,7 +7018,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#260062e9b1c346854b4ceca34771ab38164ea294"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu#0e0e298cf9131b4707adf37c67c0a4314ad5be06"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -7117,7 +7124,7 @@ dependencies = [
  "openvm-continuations",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-builder",
+ "openvm-cuda-builder 2.0.0-alpha (git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fhalo2-gpu)",
  "openvm-cuda-common",
  "openvm-deferral-circuit",
  "openvm-poseidon2-air",
@@ -7151,7 +7158,6 @@ dependencies = [
  "bitcode",
  "eyre",
  "openvm-circuit",
- "openvm-circuit-primitives",
  "openvm-recursion-circuit-derive",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -9020,7 +9026,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -9078,7 +9084,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -9089,9 +9095,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.13"
+version = "0.103.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
+checksum = "8279bb85272c9f10811ae6a6c547ff594d6a7f3c6c6b02ee9726d1d0dcfcdd06"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -9936,26 +9942,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "struct-reflection"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "701b671d1ad68e250e05718f95dae3014a17f4e69cbe51842531c30495ff3301"
-dependencies = [
- "struct-reflection-derive",
-]
-
-[[package]]
-name = "struct-reflection-derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ab74230a0592602e361bd63c645413fa8cbe4500d10274e849179e5c72548f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "strum"
 version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10223,7 +10209,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11321,7 +11307,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
