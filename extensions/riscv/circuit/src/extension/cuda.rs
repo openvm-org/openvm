@@ -45,8 +45,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(base_alu);
 
-<<<<<<< HEAD
-=======
         inventory.next_air::<Rv64BaseAluWAir>()?;
         let base_alu_w = Rv64BaseAluWChipGpu::new(
             range_checker.clone(),
@@ -55,7 +53,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(base_alu_w);
 
->>>>>>> origin/develop-v2.1.0-rv64
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChipGpu::new(
             range_checker.clone(),
@@ -72,8 +69,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(shift);
 
-<<<<<<< HEAD
-=======
         inventory.next_air::<Rv64ShiftWAir>()?;
         let shift_w = Rv64ShiftWChipGpu::new(
             range_checker.clone(),
@@ -82,7 +77,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(shift_w);
 
->>>>>>> origin/develop-v2.1.0-rv64
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip =
             Rv64LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
@@ -180,8 +174,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
         );
         inventory.add_executor_chip(mult);
 
-<<<<<<< HEAD
-=======
         inventory.next_air::<Rv64MulWAir>()?;
         let mul_w = Rv64MulWChipGpu::new(
             range_checker.clone(),
@@ -191,7 +183,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
         );
         inventory.add_executor_chip(mul_w);
 
->>>>>>> origin/develop-v2.1.0-rv64
         inventory.next_air::<Rv64MulHAir>()?;
         let mul_h = Rv64MulHChipGpu::new(
             range_checker.clone(),
