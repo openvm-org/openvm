@@ -14,7 +14,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_riscv_circuit::adapters::rv64_register_to_u32;
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
@@ -156,7 +156,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rd_ptr = pre_compute.a as u32;
-    let buffer_ptr = rv64_register_to_u32(exec_state.vm_read(RV64_REGISTER_AS, rd_ptr));
+    let buffer_ptr = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, rd_ptr));
 
     let preimage: &[u8] =
         exec_state.host_read_slice(RV64_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
