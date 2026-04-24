@@ -354,7 +354,7 @@ pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize, const LIMB_BITS
     read_data: [u8; NUM_CELLS],
     shift: usize,
 ) -> [u8; NUM_CELLS] {
-    debug_assert_eq!(NUM_CELLS, RV64_REGISTER_NUM_LIMBS);
+    const { assert!(NUM_CELLS == RV64_REGISTER_NUM_LIMBS) };
     let word_width = NUM_CELLS / 2;
     let half_width = NUM_CELLS / 4;
     match opcode {
