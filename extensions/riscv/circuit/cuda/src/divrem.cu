@@ -4,7 +4,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
-#include "rv32im/adapters/mul.cuh"
+#include "riscv/adapters/mul.cuh"
 
 using namespace riscv;
 
@@ -33,7 +33,7 @@ template <typename T, size_t NUM_LIMBS> struct DivRemCoreCols {
 
     // Auxiliary columns to constrain that 0 <= |r| < |c|. When sign_xor == 1 we have
     // r_prime = -r, and when sign_xor == 0 we have r_prime = r. Each r_inv[i] is the
-    // field inverse of r_prime[i] - 2^RV32_CELL_BITS, ensures each r_prime[i] is in range.
+    // field inverse of r_prime[i] - 2^RV64_CELL_BITS, ensures each r_prime[i] is in range.
     T r_prime[NUM_LIMBS];
     T r_inv[NUM_LIMBS];
     T lt_marker[NUM_LIMBS];
@@ -59,9 +59,9 @@ enum DivRemOpcode {
     REMU,
 };
 
-__device__ __forceinline__ uint32_t abs_u32(uint32_t x, bool is_neg) {
+__device__ __forceinline__ uint64_t abs_u64(uint64_t x, bool is_neg) {
     if (is_neg) {
-        return UINT32_MAX - x + 1;
+        return UINT64_MAX - x + 1;
     } else {
         return x;
     }
@@ -83,51 +83,51 @@ template <size_t NUM_LIMBS> struct DivRemCore {
         DivRemOpcode opcode = static_cast<DivRemOpcode>(record.local_opcode);
 
         bool is_signed = opcode == DIV || opcode == REM;
-        bool b_sign = is_signed && (record.b[3] >> 7);
-        bool c_sign = is_signed && (record.c[3] >> 7);
+        bool b_sign = is_signed && (record.b[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
+        bool c_sign = is_signed && (record.c[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
         bool q_sign = false;
         bool case_none = false;
-        uint32_t b_u32 = u32_from_bytes_le(record.b);
-        uint32_t c_u32 = u32_from_bytes_le(record.c);
-        uint32_t q_u32 = 0;
-        uint32_t r_u32 = 0;
+        uint64_t b_u64 = u64_from_bytes_le(record.b);
+        uint64_t c_u64 = u64_from_bytes_le(record.c);
+        uint64_t q_u64 = 0;
+        uint64_t r_u64 = 0;
 
-        if (c_u32 == 0) {
-            q_u32 = UINT32_MAX;
-            r_u32 = b_u32;
+        if (c_u64 == 0) {
+            q_u64 = UINT64_MAX;
+            r_u64 = b_u64;
             q_sign = is_signed;
-        } else if ((b_u32 == (1U << 31)) && (c_u32 == UINT32_MAX) && b_sign && c_sign) {
-            q_u32 = b_u32;
-            r_u32 = 0;
+        } else if ((b_u64 == (1ULL << 63)) && (c_u64 == UINT64_MAX) && b_sign && c_sign) {
+            q_u64 = b_u64;
+            r_u64 = 0;
             q_sign = false;
         } else {
-            uint32_t b_abs = abs_u32(b_u32, b_sign);
-            uint32_t c_abs = abs_u32(c_u32, c_sign);
-            q_u32 = abs_u32(b_abs / c_abs, b_sign != c_sign);
-            r_u32 = abs_u32(b_abs % c_abs, b_sign);
-            q_sign = is_signed && (q_u32 >> 31);
+            uint64_t b_abs = abs_u64(b_u64, b_sign);
+            uint64_t c_abs = abs_u64(c_u64, c_sign);
+            q_u64 = abs_u64(b_abs / c_abs, b_sign != c_sign);
+            r_u64 = abs_u64(b_abs % c_abs, b_sign);
+            q_sign = is_signed && (q_u64 >> 63);
             case_none = true;
         }
 
-        uint8_t *q = reinterpret_cast<uint8_t *>(&q_u32);
-        uint8_t *r = reinterpret_cast<uint8_t *>(&r_u32);
-        uint32_t r_prime_u32 = abs_u32(r_u32, b_sign ^ c_sign);
-        uint8_t *r_prime = reinterpret_cast<uint8_t *>(&r_prime_u32);
-        bool r_zero = (r_u32 == 0) && (c_u32 != 0);
+        uint8_t *q = reinterpret_cast<uint8_t *>(&q_u64);
+        uint8_t *r = reinterpret_cast<uint8_t *>(&r_u64);
+        uint64_t r_prime_u64 = abs_u64(r_u64, b_sign ^ c_sign);
+        uint8_t *r_prime = reinterpret_cast<uint8_t *>(&r_prime_u64);
+        bool r_zero = (r_u64 == 0) && (c_u64 != 0);
 
         COL_WRITE_ARRAY(row, Cols, b, record.b);
         COL_WRITE_ARRAY(row, Cols, c, record.c);
         COL_WRITE_ARRAY(row, Cols, q, q);
         COL_WRITE_ARRAY(row, Cols, r, r);
-        COL_WRITE_VALUE(row, Cols, zero_divisor, c_u32 == 0);
+        COL_WRITE_VALUE(row, Cols, zero_divisor, c_u64 == 0);
         COL_WRITE_VALUE(row, Cols, r_zero, r_zero);
         COL_WRITE_VALUE(row, Cols, b_sign, b_sign);
         COL_WRITE_VALUE(row, Cols, c_sign, c_sign);
         COL_WRITE_VALUE(row, Cols, q_sign, q_sign);
         COL_WRITE_VALUE(row, Cols, sign_xor, b_sign ^ c_sign);
 
-        uint32_t c_sum = 0;
-        uint32_t r_sum = 0;
+        uint64_t c_sum = 0;
+        uint64_t r_sum = 0;
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             c_sum += record.c[i];
@@ -195,14 +195,14 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             for (size_t j = 0; j <= i; j++) {
                 carry += (uint32_t)q[j] * (uint32_t)record.c[i - j];
             }
-            carry = carry >> RV32_CELL_BITS;
+            carry = carry >> RV64_CELL_BITS;
             range_tuple_checker.add_count((uint32_t[2]){(uint32_t)q[i], carry});
         }
-        bool r_sign = is_signed && (r[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1));
+        bool r_sign = is_signed && (r[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
 
-        uint32_t q_ext = (q_sign && is_signed) * ((1 << RV32_CELL_BITS) - 1);
-        uint32_t c_ext = (c_sign << RV32_CELL_BITS) - c_sign;
-        uint32_t r_ext = (r_sign << RV32_CELL_BITS) - r_sign;
+        uint32_t q_ext = (q_sign && is_signed) * ((1 << RV64_CELL_BITS) - 1);
+        uint32_t c_ext = (c_sign << RV64_CELL_BITS) - c_sign;
+        uint32_t r_ext = (r_sign << RV64_CELL_BITS) - r_sign;
 
         uint32_t c_pref = 0;
         uint32_t q_pref = 0;
@@ -215,27 +215,27 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             for (size_t j = i + 1; j < NUM_LIMBS; j++) {
                 carry += (uint32_t)record.c[j] * (uint32_t)q[NUM_LIMBS + i - j];
             }
-            carry = carry >> RV32_CELL_BITS;
+            carry = carry >> RV64_CELL_BITS;
             range_tuple_checker.add_count((uint32_t[2]){(uint32_t)r[i], carry});
         }
     }
 };
 
-// Below is `rv32` specific code.
-template <typename T> struct Rv32DivRemCols {
-    Rv32MultAdapterCols<T> adapter;
-    DivRemCoreCols<T, RV32_REGISTER_NUM_LIMBS> core;
+// Below is `rv64` specific code.
+template <typename T> struct Rv64DivRemCols {
+    Rv64MultAdapterCols<T> adapter;
+    DivRemCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
 };
 
-struct Rv32DivRemRecord {
-    Rv32MultAdapterRecord adapter;
-    DivRemCoreRecords<RV32_REGISTER_NUM_LIMBS> core;
+struct Rv64DivRemRecord {
+    Rv64MultAdapterRecord adapter;
+    DivRemCoreRecords<RV64_REGISTER_NUM_LIMBS> core;
 };
 
-__global__ void rv32_div_rem_tracegen(
+__global__ void rv64_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Rv32DivRemRecord> d_records,
+    DeviceBufferConstView<Rv64DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_bits,
     uint32_t *d_bitwise_lookup_ptr,
@@ -250,29 +250,29 @@ __global__ void rv32_div_rem_tracegen(
     if (idx < d_records.len()) {
         auto const &record = d_records[idx];
 
-        Rv32MultAdapter adapter(
+        Rv64MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bits), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        DivRemCore<RV32_REGISTER_NUM_LIMBS> core(
+        DivRemCore<RV64_REGISTER_NUM_LIMBS> core(
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_lookup_bits),
             RangeTupleChecker<2>(
                 d_range_tuple_checker_ptr,
                 (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y}
             )
         );
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv32DivRemCols, core)), record.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64DivRemCols, core)), record.core);
     } else {
-        row.fill_zero(0, sizeof(Rv32DivRemCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv64DivRemCols<uint8_t>));
     }
 }
 
-extern "C" int _rv32_div_rem_tracegen(
+extern "C" int _rv64_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv32DivRemRecord> d_records,
+    DeviceBufferConstView<Rv64DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -284,10 +284,10 @@ extern "C" int _rv32_div_rem_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
-    assert(width == sizeof(Rv32DivRemCols<uint8_t>));
+    assert(width == sizeof(Rv64DivRemCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv32_div_rem_tracegen<<<grid, block, 0, stream>>>(
+    rv64_div_rem_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
