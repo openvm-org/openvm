@@ -21,9 +21,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{
-    debug_assert_valid_pointer, rv64_bytes_to_u32, tracing_read, tracing_write,
-};
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -271,17 +269,17 @@ where
         record.inner.state_ptr = rv64_bytes_to_u32(state_reg);
         record.inner.input_ptr = rv64_bytes_to_u32(input_reg);
 
-        debug_assert_valid_pointer(
-            record.inner.dst_ptr as u64 + (C::STATE_BYTES - 1) as u64,
-            self.pointer_max_bits,
+        debug_assert!(
+            (record.inner.dst_ptr as u64 + (C::STATE_BYTES - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
-        debug_assert_valid_pointer(
-            record.inner.state_ptr as u64 + (C::STATE_BYTES - 1) as u64,
-            self.pointer_max_bits,
+        debug_assert!(
+            (record.inner.state_ptr as u64 + (C::STATE_BYTES - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
-        debug_assert_valid_pointer(
-            record.inner.input_ptr as u64 + (C::BLOCK_BYTES - 1) as u64,
-            self.pointer_max_bits,
+        debug_assert!(
+            (record.inner.input_ptr as u64 + (C::BLOCK_BYTES - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
 
         for idx in 0..C::BLOCK_READS {

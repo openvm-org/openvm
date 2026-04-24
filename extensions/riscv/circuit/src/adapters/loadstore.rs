@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    debug_assert_valid_pointer, expand_to_rv64_register, memory_read, memory_read_deferral,
-    rv64_bytes_to_u32, timed_write, timed_write_deferral, tracing_read, RV64_CELL_BITS,
+    expand_to_rv64_register, memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write,
+    timed_write_deferral, tracing_read, RV64_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -387,7 +387,7 @@ where
         let shift_amount = ptr_val & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
         let ptr_val = ptr_val - shift_amount;
 
-        debug_assert_valid_pointer(ptr_val as u64, self.pointer_max_bits);
+        debug_assert!((ptr_val as u64) < (1u64 << self.pointer_max_bits));
 
         // prev_data: We need to keep values of some cells to keep them unchanged when writing to
         // those cells

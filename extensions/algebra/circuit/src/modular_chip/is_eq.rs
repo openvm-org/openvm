@@ -26,7 +26,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_adapters::Rv64IsEqualModAdapterExecutor;
-use openvm_riscv_circuit::adapters::{debug_assert_valid_pointer, rv64_bytes_to_u32};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -706,10 +706,7 @@ unsafe fn execute_e12_impl<
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        debug_assert_valid_pointer(
-            address as u64 + (TOTAL_READ_SIZE - 1) as u64,
-            POINTER_MAX_BITS,
-        );
+        debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
             exec_state.vm_read::<_, LANE_SIZE>(RV64_MEMORY_AS, address + (i * LANE_SIZE) as u32)
         })

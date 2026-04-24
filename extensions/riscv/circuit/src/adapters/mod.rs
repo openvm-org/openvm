@@ -55,18 +55,6 @@ pub fn debug_assert_valid_pc_target(to_pc: u32) {
     );
 }
 
-#[inline(always)]
-pub fn debug_assert_valid_pointer(ptr: u64, pointer_max_bits: usize) {
-    debug_assert!(
-        pointer_max_bits < u64::BITS as usize,
-        "pointer_max_bits={pointer_max_bits} is too large for u64 pointer checks"
-    );
-    debug_assert!(
-        ptr < (1u64 << pointer_max_bits),
-        "pointer {ptr} must be less than 2^{pointer_max_bits}"
-    );
-}
-
 /// Convert the RISC-V register data (64 bits represented as 8 bytes, where each byte is represented
 /// as a field element) back into its value as u64.
 pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
@@ -251,7 +239,7 @@ pub fn tracing_read_reg_ptr(
 ) -> u32 {
     let bytes = tracing_read(memory, RV64_REGISTER_AS, ptr, prev_timestamp);
     let val = rv64_bytes_to_u32(bytes);
-    debug_assert_valid_pointer(val as u64, pointer_max_bits);
+    debug_assert!((val as u64) < (1u64 << pointer_max_bits));
     val
 }
 
