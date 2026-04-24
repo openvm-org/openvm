@@ -502,16 +502,16 @@ fn run_and_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv32BaseAluExecutor,
-    Rv32BaseAluAir,
-    Rv32BaseAluChipGpu,
-    Rv32BaseAluChip<F>,
+    Rv64BaseAluExecutor,
+    Rv64BaseAluAir,
+    Rv64BaseAluChipGpu,
+    Rv64BaseAluChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -521,7 +521,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32BaseAluChipGpu::new(
+    let gpu_chip = Rv64BaseAluChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -556,8 +556,8 @@ fn test_cuda_rand_alu_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv32BaseAluAdapterRecord,
-        &'a mut BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+        &'a mut Rv64BaseAluAdapterRecord,
+        &'a mut BaseAluCoreRecord<RV64_REGISTER_NUM_LIMBS>,
     );
 
     harness
@@ -565,7 +565,7 @@ fn test_cuda_rand_alu_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_CELL_BITS>>::new(),
         );
 
     tester

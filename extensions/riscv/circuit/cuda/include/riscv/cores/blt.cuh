@@ -67,8 +67,8 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
         if (diff_idx == NUM_LIMBS) {
             cmp_lt = false;
         } else if (signed_op && (diff_idx == NUM_LIMBS - 1)) {
-            bool a_sign = record.a[NUM_LIMBS - 1] >= (1u << (RV32_CELL_BITS - 1));
-            bool b_sign = record.b[NUM_LIMBS - 1] >= (1u << (RV32_CELL_BITS - 1));
+            bool a_sign = record.a[NUM_LIMBS - 1] >= (1u << (RV64_CELL_BITS - 1));
+            bool b_sign = record.b[NUM_LIMBS - 1] >= (1u << (RV64_CELL_BITS - 1));
 
             if (a_sign != b_sign) {
                 cmp_lt = a_sign;
@@ -81,23 +81,23 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
 
         bool cmp_result = ge_op ? !cmp_lt : cmp_lt;
 
-        bool a_sign = signed_op && (record.a[NUM_LIMBS - 1] >= (1u << (RV32_CELL_BITS - 1)));
-        bool b_sign = signed_op && (record.b[NUM_LIMBS - 1] >= (1u << (RV32_CELL_BITS - 1)));
+        bool a_sign = signed_op && (record.a[NUM_LIMBS - 1] >= (1u << (RV64_CELL_BITS - 1)));
+        bool b_sign = signed_op && (record.b[NUM_LIMBS - 1] >= (1u << (RV64_CELL_BITS - 1)));
 
-        uint32_t a_msb_f = a_sign ? (Fp::P - ((1u << RV32_CELL_BITS) - record.a[NUM_LIMBS - 1]))
+        uint32_t a_msb_f = a_sign ? (Fp::P - ((1u << RV64_CELL_BITS) - record.a[NUM_LIMBS - 1]))
                                   : uint32_t(record.a[NUM_LIMBS - 1]);
-        uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << RV32_CELL_BITS) - record.b[NUM_LIMBS - 1]))
+        uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << RV64_CELL_BITS) - record.b[NUM_LIMBS - 1]))
                                   : uint32_t(record.b[NUM_LIMBS - 1]);
 
         uint8_t a_msb_range =
-            a_sign ? uint8_t(record.a[NUM_LIMBS - 1] - (1u << (RV32_CELL_BITS - 1)))
+            a_sign ? uint8_t(record.a[NUM_LIMBS - 1] - (1u << (RV64_CELL_BITS - 1)))
                    : uint8_t(
-                         record.a[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (RV32_CELL_BITS - 1))
+                         record.a[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (RV64_CELL_BITS - 1))
                      );
         uint8_t b_msb_range =
-            b_sign ? uint8_t(record.b[NUM_LIMBS - 1] - (1u << (RV32_CELL_BITS - 1)))
+            b_sign ? uint8_t(record.b[NUM_LIMBS - 1] - (1u << (RV64_CELL_BITS - 1)))
                    : uint8_t(
-                         record.b[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (RV32_CELL_BITS - 1))
+                         record.b[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (RV64_CELL_BITS - 1))
                      );
 
         uint32_t diff_val = 0;
