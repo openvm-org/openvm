@@ -10,8 +10,6 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-#[cfg(feature = "cuda")]
-use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
 };
@@ -55,18 +53,6 @@ use crate::{
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
-#[cfg(feature = "cuda")]
-const CUDA_TEST_POINTER_BITS: usize = 17;
-#[cfg(feature = "cuda")]
-const CUDA_TEST_MEMORY_CELLS: usize = 1 << 10;
-#[cfg(feature = "cuda")]
-const BYTE_SHIFTS: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 1, 2, 3, 4, 5, 6, 7];
-#[cfg(feature = "cuda")]
-const HALF_SHIFTS: [u8; RV64_WORD_NUM_LIMBS] = [0, 2, 4, 6];
-#[cfg(feature = "cuda")]
-const WORD_SHIFTS: [u8; 2] = [0, 4];
-#[cfg(feature = "cuda")]
-const DWORD_SHIFTS: [u8; 1] = [0];
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64LoadStoreExecutor, Rv64LoadStoreAir, Rv64LoadStoreChip<F>>;
@@ -814,83 +800,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 }
 
 #[cfg(feature = "cuda")]
-fn create_cuda_tester() -> GpuChipTestBuilder {
-    let mut mem_config = MemoryConfig::default();
-    mem_config.pointer_max_bits = CUDA_TEST_POINTER_BITS;
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = CUDA_TEST_MEMORY_CELLS;
-    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = CUDA_TEST_MEMORY_CELLS;
-    GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus())
-}
-
-#[cfg(feature = "cuda")]
-fn valid_cuda_shifts(opcode: Rv64LoadStoreOpcode) -> &'static [u8] {
-    match opcode {
-        LOADD | STORED => &DWORD_SHIFTS,
-        LOADWU | STOREW => &WORD_SHIFTS,
-        LOADHU | STOREH => &HALF_SHIFTS,
-        LOADBU | STOREB => &BYTE_SHIFTS,
-        _ => unreachable!("loadstore CUDA tests should not handle sign-extension load opcodes"),
-    }
-}
-
-#[cfg(feature = "cuda")]
-fn set_and_execute_cuda<RA: Arena, E: PreflightExecutor<F, RA>>(
-    tester: &mut GpuChipTestBuilder,
-    executor: &mut E,
-    arena: &mut RA,
-    rng: &mut StdRng,
-    opcode: Rv64LoadStoreOpcode,
-    shift: u8,
-) {
-    let a = RV64_REGISTER_NUM_LIMBS;
-    let b = 2 * RV64_REGISTER_NUM_LIMBS;
-    let mem_as = RV64_MEMORY_AS as usize;
-    let mem_ptr_base = 8 * RV64_REGISTER_NUM_LIMBS;
-    let ptr_val = (mem_ptr_base + shift as usize) as u32;
-    let ptr = ptr_val.to_le_bytes();
-    let rs1 = [ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0];
-    let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
-
-    tester.write(1, b, rs1.map(F::from_u8));
-
-    let prev_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
-    let read_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
-
-    if is_load {
-        tester.write(1, a, prev_data);
-        tester.write(mem_as, mem_ptr_base, read_data);
-    } else {
-        tester.write(mem_as, mem_ptr_base, prev_data);
-        tester.write(1, a, read_data);
-    }
-
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [a, b, 0, 1, mem_as, 1, 0]),
-    );
-
-    let write_data = run_write_data(
-        opcode,
-        read_data.map(|x| x.as_canonical_u32() as u8),
-        prev_data.map(|x| x.as_canonical_u32()),
-        shift as usize,
-    )
-    .map(F::from_u32);
-
-    if is_load {
-        assert_eq!(write_data, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, a));
-    } else {
-        assert_eq!(
-            write_data,
-            tester.read::<RV64_REGISTER_NUM_LIMBS>(mem_as, mem_ptr_base)
-        );
-    }
-}
-
-#[cfg(feature = "cuda")]
 #[test_case(LOADD, 100)]
 #[test_case(LOADBU, 100)]
 #[test_case(LOADHU, 100)]
@@ -901,18 +810,26 @@ fn set_and_execute_cuda<RA: Arena, E: PreflightExecutor<F, RA>>(
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = create_cuda_tester();
-    let shifts = valid_cuda_shifts(opcode);
+    let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
+    }
+    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 
     let mut harness = create_cuda_harness(&tester);
-    for i in 0..num_ops {
-        set_and_execute_cuda(
+    for _ in 0..num_ops {
+        set_and_execute(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
             opcode,
-            shifts[i % shifts.len()],
+            None,
+            None,
+            None,
+            None,
         );
     }
 
