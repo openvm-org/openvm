@@ -29,8 +29,7 @@ struct Rv64JalLuiCore {
         for (int i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
             bw.add_range(record.rd_data[i], record.rd_data[i + 1]);
         }
-        bool is_sign_extend =
-            (record.rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) == 1;
+        bool is_sign_extend = record.rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1);
         // 1. rd[3] * (4 * is_jal + is_lui): for JAL this is `4 * rd[3]` and enforces
         //    `rd[3] < 64`; for LUI this is `rd[3]` which is already a byte (no-op).
         // 2. 2 * rd[3] - 2^RV64_CELL_BITS * is_sign_extend: forces
