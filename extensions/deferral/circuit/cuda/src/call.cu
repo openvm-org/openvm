@@ -110,9 +110,9 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
         bitwise_buffer.add_range(record.writes.output_len[i], record.writes.output_len[i + 1]);
     }
 
-    const uint32_t limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
+    const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
     bitwise_buffer.add_range(
-        static_cast<uint32_t>(record.writes.output_len[RV32_REGISTER_NUM_LIMBS - 1])
+        static_cast<uint32_t>(record.writes.output_len[RV64_WORD_NUM_LIMBS - 1])
             << limb_shift_bits,
         0
     );
@@ -167,8 +167,8 @@ template <typename T> struct DeferralCallAdapterRecord {
     T rd_ptr;
     T rs_ptr;
 
-    uint8_t rd_val[RV32_REGISTER_NUM_LIMBS];
-    uint8_t rs_val[RV32_REGISTER_NUM_LIMBS];
+    uint8_t rd_val[RV64_WORD_NUM_LIMBS];
+    uint8_t rs_val[RV64_WORD_NUM_LIMBS];
     MemoryReadAuxRecord rd_aux;
     MemoryReadAuxRecord rs_aux;
 
@@ -186,8 +186,8 @@ template <typename T> struct DeferralCallAdapterCols {
     T rd_ptr;
     T rs_ptr;
 
-    T rd_val[RV32_REGISTER_NUM_LIMBS];
-    T rs_val[RV32_REGISTER_NUM_LIMBS];
+    T rd_val[RV64_WORD_NUM_LIMBS];
+    T rs_val[RV64_WORD_NUM_LIMBS];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
@@ -207,10 +207,10 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     MemoryAuxColsFactory &mem_helper,
     const size_t address_bits
 ) {
-    const uint32_t limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
+    const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
     bitwise_buffer.add_range(
-        static_cast<uint32_t>(record.rd_val[RV32_REGISTER_NUM_LIMBS - 1]) << limb_shift_bits,
-        static_cast<uint32_t>(record.rs_val[RV32_REGISTER_NUM_LIMBS - 1]) << limb_shift_bits
+        static_cast<uint32_t>(record.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
+        static_cast<uint32_t>(record.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
     );
 
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.pc, record.from_pc);
