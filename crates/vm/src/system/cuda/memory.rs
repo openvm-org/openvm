@@ -282,11 +282,10 @@ impl MemoryInventoryGPU {
                     &out_records
                         [base + 2 + BLOCKS_PER_CHUNK..base + 2 + BLOCKS_PER_CHUNK + DIGEST_WIDTH],
                 );
-                let timestamp = out_records[base + 2..base + 2 + BLOCKS_PER_CHUNK]
+                let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_CHUNK]
                     .iter()
-                    .copied()
                     .max()
-                    .unwrap_or(0);
+                    .unwrap();
                 let record = MemoryMerkleRecord {
                     address_space: out_records[base],
                     ptr: out_records[base + 1],
