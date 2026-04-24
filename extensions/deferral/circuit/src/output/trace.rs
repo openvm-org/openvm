@@ -31,7 +31,7 @@ use openvm_instructions::{
     },
 };
 use openvm_riscv_circuit::adapters::{
-    memory_read, read_rv64_register, tracing_read, tracing_write,
+    memory_read, read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read, tracing_write,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -178,9 +178,7 @@ where
         let deferral_idx = c.as_canonical_u32();
 
         // Do a non-tracing read to get the output_len and compute num_rows
-        let read_ptr: u32 = read_rv64_register(state.memory.data(), rs_ptr)
-            .try_into()
-            .expect("read_ptr register value exceeds u32 range");
+        let read_ptr = read_rv64_register_as_u32(state.memory.data(), rs_ptr);
         let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
             memory_read(
                 state.memory.data(),
@@ -215,12 +213,7 @@ where
             rd_ptr,
             &mut record.header.rd_aux.prev_timestamp,
         );
-        debug_assert_eq!(
-            rd_bytes[RV64_WORD_NUM_LIMBS..],
-            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
-        );
-        record.header.rd_val =
-            u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+        record.header.rd_val = rv64_bytes_to_u32(rd_bytes);
 
         let rs_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             state.memory,
@@ -228,12 +221,7 @@ where
             rs_ptr,
             &mut record.header.rs_aux.prev_timestamp,
         );
-        debug_assert_eq!(
-            rs_bytes[RV64_WORD_NUM_LIMBS..],
-            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
-        );
-        record.header.rs_val =
-            u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+        record.header.rs_val = rv64_bytes_to_u32(rs_bytes);
 
         let input_ptr = record.header.rs_val;
         let output_ptr = record.header.rd_val;

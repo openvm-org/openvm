@@ -34,3 +34,6 @@ import_sha2 = ["dep:sha2"]
 aot = ["openvm-sdk/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
+
+[lints]
+workspace = true
