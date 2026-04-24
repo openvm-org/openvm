@@ -8,18 +8,18 @@
 using namespace riscv;
 
 template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ, size_t READ_SIZE>
-struct Rv32VecHeapBranchAdapterCols {
+struct Rv64VecHeapBranchAdapterCols {
     ExecutionState<T> from_state;
 
     T rs_ptr[NUM_READS];
-    T rs_val[NUM_READS][RV32_REGISTER_NUM_LIMBS];
+    T rs_val[NUM_READS][RV64_WORD_NUM_LIMBS];
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
 
     MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
-struct Rv32VecHeapBranchAdapterRecord {
+struct Rv64VecHeapBranchAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
@@ -31,15 +31,15 @@ struct Rv32VecHeapBranchAdapterRecord {
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ, size_t READ_SIZE>
-struct Rv32VecHeapBranchAdapter {
+struct Rv64VecHeapBranchAdapter {
     size_t pointer_max_bits;
     BitwiseOperationLookup bitwise_lookup;
     MemoryAuxColsFactory mem_helper;
 
-    static constexpr size_t RV32_REGISTER_TOTAL_BITS = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS;
-    static constexpr size_t MSL_SHIFT = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+    static constexpr size_t RV64_WORD_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
+    static constexpr size_t MSL_SHIFT = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
 
-    __device__ Rv32VecHeapBranchAdapter(
+    __device__ Rv64VecHeapBranchAdapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
         BitwiseOperationLookup bitwise_lookup,
@@ -49,13 +49,13 @@ struct Rv32VecHeapBranchAdapter {
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
-    using Cols = Rv32VecHeapBranchAdapterCols<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
+    using Cols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ> record
+        Rv64VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ> record
     ) {
-        const size_t limb_shift_bits = RV32_REGISTER_TOTAL_BITS - pointer_max_bits;
+        const size_t limb_shift_bits = RV64_WORD_TOTAL_BITS - pointer_max_bits;
 
         bitwise_lookup.add_range(
             (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
@@ -99,10 +99,10 @@ struct Rv32VecHeapBranchAdapter {
 
 // Type aliases for the simple case with BLOCKS_PER_READ=1
 template <typename T, size_t NUM_READS, size_t READ_SIZE>
-using Rv32HeapBranchAdapterCols = Rv32VecHeapBranchAdapterCols<T, NUM_READS, 1, READ_SIZE>;
+using Rv64HeapBranchAdapterCols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, 1, READ_SIZE>;
 
 template <size_t NUM_READS>
-using Rv32HeapBranchAdapterRecord = Rv32VecHeapBranchAdapterRecord<NUM_READS, 1>;
+using Rv64HeapBranchAdapterRecord = Rv64VecHeapBranchAdapterRecord<NUM_READS, 1>;
 
 template <size_t NUM_READS, size_t READ_SIZE>
-using Rv32HeapBranchAdapter = Rv32VecHeapBranchAdapter<NUM_READS, 1, READ_SIZE>;
+using Rv64HeapBranchAdapter = Rv64VecHeapBranchAdapter<NUM_READS, 1, READ_SIZE>;
