@@ -475,7 +475,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
     prev_data: [u32; NUM_CELLS],
     shift: usize,
 ) -> [u32; NUM_CELLS] {
-    debug_assert_eq!(NUM_CELLS, RV64_REGISTER_NUM_LIMBS);
+    const { assert!(NUM_CELLS == RV64_REGISTER_NUM_LIMBS) };
     let word_width = NUM_CELLS / 2;
     let half_width = NUM_CELLS / 4;
 
