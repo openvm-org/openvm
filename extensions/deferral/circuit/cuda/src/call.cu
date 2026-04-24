@@ -19,7 +19,7 @@ using namespace deferral;
 using namespace canonicity;
 using namespace lookup;
 
-template <typename T> using MemoryWriteAuxCols4 = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
+template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
 
 __device__ __forceinline__ Fp bytes4_to_fp(const uint8_t *bytes) {
     const uint32_t value =
@@ -222,7 +222,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
 
     uint32_t timestamp = record.from_timestamp;
     constexpr size_t read_aux_stride = sizeof(MemoryReadAuxCols<uint8_t>);
-    constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxCols4<uint8_t>);
+    constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
 
     mem_helper.fill(
         row.slice_from(COL_INDEX(DeferralCallAdapterCols, rd_aux)),
@@ -274,7 +274,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             COL_INDEX(DeferralCallAdapterCols, output_commit_and_len_aux) + i * write_aux_stride
         );
         COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxCols4, prev_data, record.output_commit_and_len_aux[i].prev_data
+            aux_row, MemoryWriteAuxColsDef, prev_data, record.output_commit_and_len_aux[i].prev_data
         );
         mem_helper.fill(aux_row, record.output_commit_and_len_aux[i].prev_timestamp, timestamp++);
     }
@@ -285,7 +285,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             COL_INDEX(DeferralCallAdapterCols, new_input_acc_aux) + i * write_aux_stride
         );
         COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxCols4, prev_data, record.new_input_acc_aux[i].prev_data
+            aux_row, MemoryWriteAuxColsDef, prev_data, record.new_input_acc_aux[i].prev_data
         );
         mem_helper.fill(aux_row, record.new_input_acc_aux[i].prev_timestamp, timestamp++);
     }
@@ -296,7 +296,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             COL_INDEX(DeferralCallAdapterCols, new_output_acc_aux) + i * write_aux_stride
         );
         COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxCols4, prev_data, record.new_output_acc_aux[i].prev_data
+            aux_row, MemoryWriteAuxColsDef, prev_data, record.new_output_acc_aux[i].prev_data
         );
         mem_helper.fill(aux_row, record.new_output_acc_aux[i].prev_timestamp, timestamp++);
     }
