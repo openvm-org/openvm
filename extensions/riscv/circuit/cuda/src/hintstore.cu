@@ -97,9 +97,9 @@ struct Rv64HintStore {
             uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS;
             uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - pointer_max_bits;
 
-            #ifdef CUDA_DEBUG
-                        assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
-            #endif
+#ifdef CUDA_DEBUG
+            assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
+#endif
 
             // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
             uint32_t rem_words_msl_lshift =
