@@ -14,12 +14,12 @@ pub type ShiftWCoreAir = ShiftCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 pub type ShiftWExecutor<A> = ShiftExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 pub type ShiftWFiller<A> = ShiftFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
-#[cfg(all(feature = "cuda"))]
+#[cfg(feature = "cuda")]
 mod cuda;
-#[cfg(all(feature = "cuda"))]
+#[cfg(feature = "cuda")]
 pub use cuda::*;
 
-#[cfg(all(test))]
+#[cfg(test)]
 mod tests;
 
 pub type Rv64ShiftWAir = VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftWCoreAir>;

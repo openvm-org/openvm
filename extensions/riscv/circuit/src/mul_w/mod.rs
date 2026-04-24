@@ -14,12 +14,12 @@ pub type MulWCoreAir = MultiplicationCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS
 pub type MulWExecutor<A> = MultiplicationExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 pub type MulWFiller<A> = MultiplicationFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
-#[cfg(all(feature = "cuda"))]
+#[cfg(feature = "cuda")]
 mod cuda;
-#[cfg(all(feature = "cuda"))]
+#[cfg(feature = "cuda")]
 pub use cuda::*;
 
-#[cfg(all(test))]
+#[cfg(test)]
 mod tests;
 
 pub type Rv64MulWAir = VmAirWrapper<Rv64MultWAdapterAir, MulWCoreAir>;
