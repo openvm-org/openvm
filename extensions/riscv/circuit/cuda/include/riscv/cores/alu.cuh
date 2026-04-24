@@ -17,8 +17,8 @@ __device__ __forceinline__ void run_add(
     for (size_t i = 0; i < NUM_LIMBS; i++) {
         uint32_t res = (i > 0) ? carry[i - 1] : 0;
         res += static_cast<uint32_t>(x[i]) + static_cast<uint32_t>(y[i]);
-        carry[i] = res >> RV32_CELL_BITS;
-        out[i] = static_cast<uint8_t>(res & ((1u << RV32_CELL_BITS) - 1));
+        carry[i] = res >> RV64_CELL_BITS;
+        out[i] = static_cast<uint8_t>(res & ((1u << RV64_CELL_BITS) - 1));
     }
 }
 
@@ -37,7 +37,7 @@ __device__ __forceinline__ void run_sub(
             carry[i] = 0;
         } else {
             uint32_t wrap =
-                (static_cast<uint32_t>(1u << RV32_CELL_BITS) + static_cast<uint32_t>(x[i]) - rhs);
+                (static_cast<uint32_t>(1u << RV64_CELL_BITS) + static_cast<uint32_t>(x[i]) - rhs);
             out[i] = static_cast<uint8_t>(wrap);
             carry[i] = 1;
         }

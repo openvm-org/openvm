@@ -32,7 +32,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::Rv32BranchAdapterRecord, BranchLessThanCoreRecord, Rv32BranchLessThanChipGpu,
+        adapters::Rv64BranchAdapterRecord, BranchLessThanCoreRecord, Rv64BranchLessThanChipGpu,
     },
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
@@ -643,16 +643,16 @@ fn run_cmp_eq_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv32BranchLessThanExecutor,
-    Rv32BranchLessThanAir,
-    Rv32BranchLessThanChipGpu,
-    Rv32BranchLessThanChip<F>,
+    Rv64BranchLessThanExecutor,
+    Rv64BranchLessThanAir,
+    Rv64BranchLessThanChipGpu,
+    Rv64BranchLessThanChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -662,7 +662,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32BranchLessThanChipGpu::new(
+    let gpu_chip = Rv64BranchLessThanChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -696,15 +696,15 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
     }
 
     type Record<'a> = (
-        &'a mut Rv32BranchAdapterRecord,
-        &'a mut BranchLessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+        &'a mut Rv64BranchAdapterRecord,
+        &'a mut BranchLessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new(),
         );
 
     tester

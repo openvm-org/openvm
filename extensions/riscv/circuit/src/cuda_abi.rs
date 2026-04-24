@@ -167,7 +167,7 @@ pub mod less_than_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv32_less_than_tracegen(
+        fn _rv64_less_than_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -191,7 +191,7 @@ pub mod less_than_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv32_less_than_tracegen(
+        CudaError::from_result(_rv64_less_than_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -256,7 +256,7 @@ pub mod divrem_cuda {
     use super::*;
 
     extern "C" {
-        pub fn _rv32_div_rem_tracegen(
+        pub fn _rv64_div_rem_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -286,7 +286,7 @@ pub mod divrem_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv32_div_rem_tracegen(
+        CudaError::from_result(_rv64_div_rem_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
@@ -307,7 +307,7 @@ pub mod shift_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv32_shift_tracegen(
+        fn _rv64_shift_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -331,7 +331,7 @@ pub mod shift_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv32_shift_tracegen(
+        CudaError::from_result(_rv64_shift_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
