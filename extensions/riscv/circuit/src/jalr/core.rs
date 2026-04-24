@@ -27,8 +27,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    RV64_WORD_NUM_LIMBS,
+    expand_to_rv64_register, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS,
+    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -150,20 +150,8 @@ where
         let to_pc = to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << 16);
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
-        let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                rs1[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
-        let rd_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                rd_data_low[i].clone()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let rs1_data = expand_to_rv64_register(&rs1);
+        let rd_data = expand_to_rv64_register(&rd_data_low);
 
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
