@@ -3,25 +3,25 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/mul.cuh"
+#include "riscv/adapters/mul_w.cuh"
 #include "riscv/cores/divrem.cuh"
 
 using namespace riscv;
 
-template <typename T> struct Rv64DivRemCols {
-    Rv64MultAdapterCols<T> adapter;
-    DivRemCoreCols<T, RV64_REGISTER_NUM_LIMBS> core;
+template <typename T> struct Rv64DivRemWCols {
+    Rv64MultWAdapterCols<T> adapter;
+    DivRemCoreCols<T, RV64_WORD_NUM_LIMBS> core;
 };
 
-struct Rv64DivRemRecord {
-    Rv64MultAdapterRecord adapter;
-    DivRemCoreRecords<RV64_REGISTER_NUM_LIMBS> core;
+struct Rv64DivRemWRecord {
+    Rv64MultWAdapterRecord adapter;
+    DivRemCoreRecords<RV64_WORD_NUM_LIMBS> core;
 };
 
-__global__ void rv64_div_rem_tracegen(
+__global__ void rv64_div_rem_w_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Rv64DivRemRecord> d_records,
+    DeviceBufferConstView<Rv64DivRemWRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_bits,
     uint32_t *d_bitwise_lookup_ptr,
@@ -36,29 +36,31 @@ __global__ void rv64_div_rem_tracegen(
     if (idx < d_records.len()) {
         auto const &record = d_records[idx];
 
-        Rv64MultAdapter adapter(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_bits), timestamp_max_bits
+        Rv64MultWAdapter adapter(
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_lookup_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        DivRemCore<RV64_REGISTER_NUM_LIMBS> core(
+        DivRemCore<RV64_WORD_NUM_LIMBS> core(
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_lookup_bits),
             RangeTupleChecker<2>(
                 d_range_tuple_checker_ptr,
                 (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y}
             )
         );
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64DivRemCols, core)), record.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64DivRemWCols, core)), record.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64DivRemCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv64DivRemWCols<uint8_t>));
     }
 }
 
-extern "C" int _rv64_div_rem_tracegen(
+extern "C" int _rv64_div_rem_w_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64DivRemRecord> d_records,
+    DeviceBufferConstView<Rv64DivRemWRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -70,10 +72,10 @@ extern "C" int _rv64_div_rem_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
-    assert(width == sizeof(Rv64DivRemCols<uint8_t>));
+    assert(width == sizeof(Rv64DivRemWCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv64_div_rem_tracegen<<<grid, block, 0, stream>>>(
+    rv64_div_rem_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

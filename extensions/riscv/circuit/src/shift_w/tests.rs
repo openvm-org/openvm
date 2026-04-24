@@ -30,7 +30,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32BaseAluAdapterRecord, Rv32ShiftChipGpu, ShiftCoreRecord},
+    crate::{adapters::Rv64BaseAluWAdapterRecord, Rv64ShiftWChipGpu, ShiftCoreRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -655,14 +655,14 @@ fn run_sraw_sanity_test() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv32ShiftExecutor, Rv32ShiftAir, Rv32ShiftChipGpu, Rv32ShiftChip<F>>;
+    GpuTestChipHarness<F, Rv64ShiftWExecutor, Rv64ShiftWAir, Rv64ShiftWChipGpu, Rv64ShiftWChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -674,7 +674,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32ShiftChipGpu::new(
+    let gpu_chip = Rv64ShiftWChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -684,10 +684,10 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(ShiftOpcode::SLL, 100)]
-#[test_case(ShiftOpcode::SRL, 100)]
-#[test_case(ShiftOpcode::SRA, 100)]
-fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
+#[test_case(ShiftWOpcode::SLLW, 100)]
+#[test_case(ShiftWOpcode::SRLW, 100)]
+#[test_case(ShiftWOpcode::SRAW, 100)]
+fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -708,15 +708,15 @@ fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv32BaseAluAdapterRecord,
-        &'a mut ShiftCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+        &'a mut Rv64BaseAluWAdapterRecord,
+        &'a mut ShiftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluWAdapterExecutor>::new(),
         );
 
     tester

@@ -648,3 +648,192 @@ pub mod mulh_cuda {
         ))
     }
 }
+
+pub mod alu_w_cuda {
+    use super::*;
+    extern "C" {
+        fn _rv64_alu_w_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_bins: usize,
+            d_bitwise_lookup: *mut u32,
+            bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        range_bins: usize,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        let width = d_trace.len() / height;
+        CudaError::from_result(_rv64_alu_w_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            width,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            range_bins,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            bitwise_num_bits,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod shift_w_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_shift_w_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            bitwise_num_bits: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_shift_w_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            bitwise_num_bits as u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod mul_w_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_mul_w_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range: *mut u32,
+            range_bins: usize,
+            d_bitwise_lookup: *mut u32,
+            bitwise_num_bits: usize,
+            d_range_tuple: *mut u32,
+            range_tuple_sizes: UInt2,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range: &DeviceBuffer<F>,
+        range_bins: usize,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        bitwise_num_bits: usize,
+        d_range_tuple: &DeviceBuffer<F>,
+        range_tuple_sizes: UInt2,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        let width = d_trace.len() / height;
+        CudaError::from_result(_rv64_mul_w_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            width,
+            d_records.view(),
+            d_range.as_mut_ptr() as *mut u32,
+            range_bins,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            bitwise_num_bits,
+            d_range_tuple.as_ptr() as *mut u32,
+            range_tuple_sizes,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod divrem_w_cuda {
+    use super::*;
+
+    extern "C" {
+        pub fn _rv64_div_rem_w_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            bitwise_num_bits: u32,
+            d_range_tuple_checker: *mut u32,
+            range_tuple_checker_sizes: UInt2,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        bitwise_num_bits: u32,
+        d_range_tuple_checker: &DeviceBuffer<F>,
+        range_tuple_checker_sizes: UInt2,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_div_rem_w_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            width,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            bitwise_num_bits,
+            d_range_tuple_checker.as_mut_ptr() as *mut u32,
+            range_tuple_checker_sizes,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}

@@ -38,11 +38,11 @@ mod shift_w;
 
 pub use auipc::*;
 pub use base_alu::*;
-pub use base_alu_w::{Rv64BaseAluWAir, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
+pub use base_alu_w::*;
 pub use branch_eq::*;
 pub use branch_lt::*;
 pub use divrem::*;
-pub use divrem_w::{Rv64DivRemWAir, Rv64DivRemWChip, Rv64DivRemWExecutor};
+pub use divrem_w::*;
 pub use hintstore::*;
 pub use jal_lui::*;
 pub use jalr::*;
@@ -50,10 +50,10 @@ pub use less_than::*;
 pub use load_sign_extend::*;
 pub use loadstore::*;
 pub use mul::*;
-pub use mul_w::{Rv64MulWAir, Rv64MulWChip, Rv64MulWExecutor};
+pub use mul_w::*;
 pub use mulh::*;
 pub use shift::*;
-pub use shift_w::{Rv64ShiftWAir, Rv64ShiftWChip, Rv64ShiftWExecutor};
+pub use shift_w::*;
 
 mod extension;
 pub use extension::*;
