@@ -45,68 +45,42 @@ enum Rv64LoadStoreOpcode {
     STOREB,
 };
 
+// Lookup table mapping (opcode, shift) -> InstructionCase index for the Encoder.
+// Indexed as INSTRUCTION_CASE[opcode][shift]. Invalid entries are 0xFF.
+// clang-format off
+__device__ constexpr uint8_t INSTRUCTION_CASE[8][8] = {
+    // LOADD:  shift=0
+    {  0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF },
+    // LOADBU: shift=0..7
+    {  7,    8,    9,   10,   11,   12,   13,   14 },
+    // LOADHU: shift=0,2,4,6
+    {  3, 0xFF,    4, 0xFF,    5, 0xFF,    6, 0xFF },
+    // LOADWU: shift=0,4
+    {  1, 0xFF, 0xFF, 0xFF,    2, 0xFF, 0xFF, 0xFF },
+    // STORED: shift=0
+    { 15, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF },
+    // STOREW: shift=0,4
+    { 16, 0xFF, 0xFF, 0xFF,   17, 0xFF, 0xFF, 0xFF },
+    // STOREH: shift=0,2,4,6
+    { 18, 0xFF,   19, 0xFF,   20, 0xFF,   21, 0xFF },
+    // STOREB: shift=0..7
+    { 22,   23,   24,   25,   26,   27,   28,   29 },
+};
+// clang-format on
+
 __device__ __forceinline__ uint32_t instruction_case_from_opcode_shift(
     Rv64LoadStoreOpcode opcode,
     uint8_t shift
 ) {
-    switch (opcode) {
-    case LOADD:
-        assert(shift == 0);
-        return 0;
-    case LOADWU:
-        switch (shift) {
-        case 0:
-            return 1;
-        case 4:
-            return 2;
-        }
-        break;
-    case LOADHU:
-        switch (shift) {
-        case 0:
-            return 3;
-        case 2:
-            return 4;
-        case 4:
-            return 5;
-        case 6:
-            return 6;
-        }
-        break;
-    case LOADBU:
-        assert(shift < RV64_REGISTER_NUM_LIMBS);
-        return 7 + shift;
-    case STORED:
-        assert(shift == 0);
-        return 15;
-    case STOREW:
-        switch (shift) {
-        case 0:
-            return 16;
-        case 4:
-            return 17;
-        }
-        break;
-    case STOREH:
-        switch (shift) {
-        case 0:
-            return 18;
-        case 2:
-            return 19;
-        case 4:
-            return 20;
-        case 6:
-            return 21;
-        }
-        break;
-    case STOREB:
-        assert(shift < RV64_REGISTER_NUM_LIMBS);
-        return 22 + shift;
-    }
-
-    assert(false);
-    return 0;
+    uint8_t idx = INSTRUCTION_CASE[opcode][shift];
+    assert(idx != 0xFF);
+    return idx;
 }
+
+__device__ constexpr uint32_t LOADSTORE_WIDTH[] = {
+    // LOADD, LOADBU, LOADHU, LOADWU, STORED, STOREW, STOREH, STOREB
+    8, 1, 2, 4, 8, 4, 2, 1,
+};
 
 template <size_t NUM_CELLS>
 __device__ __forceinline__ void run_write_data(
@@ -116,62 +90,20 @@ __device__ __forceinline__ void run_write_data(
     const uint32_t (&prev_data)[NUM_CELLS],
     uint8_t shift
 ) {
-    constexpr size_t WORD_WIDTH = NUM_CELLS / 2;
-    constexpr size_t HALF_WIDTH = NUM_CELLS / 4;
+    bool is_store = opcode >= STORED;
+    uint32_t width = LOADSTORE_WIDTH[opcode];
 
-    switch (opcode) {
-    case LOADD:
-    case STORED:
+    if (is_store) {
 #pragma unroll
         for (size_t i = 0; i < NUM_CELLS; i++) {
-            write_data[i] = read_data[i];
+            bool in_range = (i >= shift) && (i < shift + width);
+            write_data[i] = in_range ? read_data[i - shift] : prev_data[i];
         }
-        break;
-    case LOADWU:
+    } else {
 #pragma unroll
         for (size_t i = 0; i < NUM_CELLS; i++) {
-            write_data[i] = i < WORD_WIDTH ? read_data[i + shift] : 0;
+            write_data[i] = (i < width) ? read_data[i + shift] : 0u;
         }
-        break;
-    case LOADHU:
-#pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            write_data[i] = i < HALF_WIDTH ? read_data[i + shift] : 0;
-        }
-        break;
-    case LOADBU:
-#pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            write_data[i] = i == 0 ? read_data[shift] : 0;
-        }
-        break;
-    case STOREW:
-#pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            if (i >= shift && i < shift + WORD_WIDTH) {
-                write_data[i] = read_data[i - shift];
-            } else {
-                write_data[i] = prev_data[i];
-            }
-        }
-        break;
-    case STOREH:
-#pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            if (i >= shift && i < shift + HALF_WIDTH) {
-                write_data[i] = read_data[i - shift];
-            } else {
-                write_data[i] = prev_data[i];
-            }
-        }
-        break;
-    case STOREB:
-#pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            write_data[i] = prev_data[i];
-        }
-        write_data[shift] = read_data[0];
-        break;
     }
 }
 
