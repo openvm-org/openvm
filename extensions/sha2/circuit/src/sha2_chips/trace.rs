@@ -18,10 +18,10 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{tracing_read, tracing_read_reg_ptr, tracing_write};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -247,27 +247,24 @@ where
         record.inner.state_reg_ptr = b.as_canonical_u32();
         record.inner.input_reg_ptr = c.as_canonical_u32();
 
-        let dst_reg = tracing_read::<RV64_REGISTER_NUM_LIMBS>(
+        record.inner.dst_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             record.inner.dst_reg_ptr,
             &mut record.inner.register_reads_aux[0].prev_timestamp,
+            self.pointer_max_bits,
         );
-        let state_reg = tracing_read::<RV64_REGISTER_NUM_LIMBS>(
+        record.inner.state_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             record.inner.state_reg_ptr,
             &mut record.inner.register_reads_aux[1].prev_timestamp,
+            self.pointer_max_bits,
         );
-        let input_reg = tracing_read::<RV64_REGISTER_NUM_LIMBS>(
+        record.inner.input_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             record.inner.input_reg_ptr,
             &mut record.inner.register_reads_aux[2].prev_timestamp,
+            self.pointer_max_bits,
         );
-        record.inner.dst_ptr = rv64_bytes_to_u32(dst_reg);
-        record.inner.state_ptr = rv64_bytes_to_u32(state_reg);
-        record.inner.input_ptr = rv64_bytes_to_u32(input_reg);
 
         debug_assert!(
             (record.inner.dst_ptr as u64 + (C::STATE_BYTES - 1) as u64)
