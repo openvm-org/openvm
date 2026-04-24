@@ -340,19 +340,6 @@ where
     }
 }
 
-#[cfg(feature = "rvr")]
-impl SdkVmConfig {
-    pub fn create_rvr_extensions<F>(
-        &self,
-        air_idx: &[usize],
-    ) -> rvr_openvm_lift::ExtensionRegistry<F>
-    where
-        F: VmField,
-    {
-        self.to_inner().create_rvr_extensions(air_idx)
-    }
-}
-
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 type SC = BabyBearPoseidon2Config;
 impl<E> VmBuilder<E> for SdkVmCpuBuilder
