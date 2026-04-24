@@ -1,5 +1,5 @@
 use abi_stable::std_types::RVec;
-use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS};
 
 use crate::{
     arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
@@ -145,9 +145,9 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     #[inline(always)]
     pub(crate) fn add_register_merkle_heights(&mut self) {
         self.update_boundary_merkle_heights(
-            RV32_REGISTER_AS,
+            RV64_REGISTER_AS,
             0,
-            (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+            (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32,
         );
     }
 
