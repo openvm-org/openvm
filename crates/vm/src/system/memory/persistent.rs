@@ -27,8 +27,8 @@ use crate::{
     },
 };
 
-/// Number of DEFAULT_BLOCK_SIZE blocks per CHUNK (e.g., 2 for 8/4).
-/// Blocks are on the same row only for Merkle tree hashing (8 bytes at a time).
+/// Number of DEFAULT_BLOCK_SIZE blocks per CHUNK (e.g., 1 when DEFAULT_BLOCK_SIZE == CHUNK).
+/// Blocks are on the same row only for Merkle tree hashing (CHUNK bytes at a time).
 /// Memory bus interactions use per-block timestamps.
 pub const BLOCKS_PER_CHUNK: usize = CHUNK / DEFAULT_BLOCK_SIZE;
 
@@ -207,10 +207,9 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     /// Finalize the boundary chip with per-block timestamped memory.
     ///
-    /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity (4 bytes per entry, single timestamp
-    /// each). This function rechunks into CHUNK-sized (8 bytes) groups with per-block
-    /// timestamps. Untouched blocks within a touched chunk get values from initial_memory and
-    /// timestamp 0.
+    /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity, with a single timestamp per entry.
+    /// This function rechunks into CHUNK-sized groups with per-block timestamps. Untouched
+    /// blocks within a touched chunk get values from initial_memory and timestamp 0.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,
