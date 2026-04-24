@@ -12,6 +12,7 @@ use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BranchEqualExecutor;
+use crate::adapters::debug_assert_valid_pc_target;
 #[cfg(feature = "aot")]
 use crate::common::{update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W};
 
@@ -235,6 +236,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     let rs2 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
     if (rs1 == rs2) ^ IS_NE {
         pc = (pc as isize + pre_compute.imm) as u32;
+        debug_assert_valid_pc_target(pc);
     } else {
         pc = pc.wrapping_add(DEFAULT_PC_STEP);
     }

@@ -8,6 +8,7 @@ use openvm_circuit::{
     },
 };
 use openvm_instructions::{
+    program::MAX_ALLOWED_PC,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
 };
@@ -45,6 +46,26 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
+
+#[inline(always)]
+pub fn debug_assert_valid_pc_target(to_pc: u32) {
+    debug_assert!(
+        to_pc <= MAX_ALLOWED_PC,
+        "PC target 0x{to_pc:08x} exceeds maximum PC 0x{MAX_ALLOWED_PC:08x}"
+    );
+}
+
+#[inline(always)]
+pub fn debug_assert_valid_pointer(ptr: u64, pointer_max_bits: usize) {
+    debug_assert!(
+        pointer_max_bits < u64::BITS as usize,
+        "pointer_max_bits={pointer_max_bits} is too large for u64 pointer checks"
+    );
+    debug_assert!(
+        ptr < (1u64 << pointer_max_bits),
+        "pointer {ptr} must be less than 2^{pointer_max_bits}"
+    );
+}
 
 /// Convert the RISC-V register data (64 bits represented as 8 bytes, where each byte is represented
 /// as a field element) back into its value as u64.
@@ -216,6 +237,22 @@ pub fn tracing_read<const N: usize>(
     let (t_prev, data) = timed_read(memory, address_space, ptr);
     *prev_timestamp = t_prev;
     data
+}
+
+/// Reads an RV64 register, records the memory access, and returns the low 32 bits. Debug-asserts
+/// the returned value fits in `pointer_max_bits` (which, for `pointer_max_bits <= 32`, also
+/// implies the upper 32 bits are zero).
+#[inline(always)]
+pub fn tracing_read_reg_ptr(
+    memory: &mut TracingMemory,
+    ptr: u32,
+    prev_timestamp: &mut u32,
+    pointer_max_bits: usize,
+) -> u32 {
+    let bytes = tracing_read(memory, RV64_REGISTER_AS, ptr, prev_timestamp);
+    let val = rv64_bytes_to_u32(bytes);
+    debug_assert_valid_pointer(val as u64, pointer_max_bits);
+    val
 }
 
 #[inline(always)]

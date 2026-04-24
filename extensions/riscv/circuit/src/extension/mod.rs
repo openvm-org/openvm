@@ -842,9 +842,7 @@ mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::StdRng, Rng};
 
-    use crate::adapters::{
-        memory_read, read_rv64_register, read_rv64_register_as_u32, RV64_REGISTER_NUM_LIMBS,
-    };
+    use crate::adapters::{memory_read, read_rv64_register_as_u32, RV64_REGISTER_NUM_LIMBS};
 
     const HINT_DWORD_BYTES: usize = RV64_REGISTER_NUM_LIMBS;
 
@@ -898,12 +896,11 @@ mod phantom {
                 eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
             });
 
-            let len = read_rv64_register(memory, a) as usize;
+            let byte_len = read_rv64_register_as_u32(memory, a) as usize * HINT_DWORD_BYTES;
             streams.hint_stream.clear();
-            streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_u8(rng.random::<u8>()))
-                    .take(len * HINT_DWORD_BYTES),
-            );
+            streams
+                .hint_stream
+                .extend(std::iter::repeat_with(|| F::from_u8(rng.random::<u8>())).take(byte_len));
             Ok(())
         }
     }

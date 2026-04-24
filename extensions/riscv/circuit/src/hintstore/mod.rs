@@ -39,7 +39,10 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{expand_to_rv64_register, read_rv64_register, tracing_read, tracing_write};
+use crate::adapters::{
+    expand_to_rv64_register, read_rv64_register_as_u32, tracing_read, tracing_read_reg_ptr,
+    tracing_write,
+};
 
 mod execution;
 
@@ -429,13 +432,7 @@ where
         let num_words = if local_opcode == HINT_STORED {
             1
         } else {
-            let num_words_u64 = read_rv64_register(state.memory.data(), a);
-            assert_eq!(
-                num_words_u64 >> 32,
-                0,
-                "num_words upper 4 bytes must be zero"
-            );
-            num_words_u64 as u32
+            read_rv64_register_as_u32(state.memory.data(), a)
         };
 
         // Bounds check: num_words must not exceed MAX_HINT_BUFFER_DWORDS
@@ -455,20 +452,13 @@ where
         record.inner.timestamp = state.memory.timestamp;
         record.inner.mem_ptr_ptr = b;
 
-        let mem_ptr_u64 = u64::from_le_bytes(tracing_read(
+        record.inner.mem_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             b,
             &mut record.inner.mem_ptr_aux_record.prev_timestamp,
-        ));
-        assert_eq!(
-            mem_ptr_u64 >> 32,
-            0,
-            "mem_ptr upper 4 bytes must be zero for hintstore"
+            self.pointer_max_bits,
         );
-        record.inner.mem_ptr = mem_ptr_u64 as u32;
 
-        debug_assert!(record.inner.mem_ptr <= (1 << self.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 

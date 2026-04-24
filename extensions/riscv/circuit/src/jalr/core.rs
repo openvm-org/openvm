@@ -27,8 +27,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_register, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS,
-    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    debug_assert_valid_pc_target, expand_to_rv64_register, rv64_bytes_to_u32,
+    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -251,8 +252,7 @@ where
         let rs1_data = self
             .adapter
             .read(state.memory, instruction, &mut adapter_record);
-        core_record.rs1_val =
-            u32::from_le_bytes([rs1_data[0], rs1_data[1], rs1_data[2], rs1_data[3]]);
+        core_record.rs1_val = rv64_bytes_to_u32(rs1_data);
 
         core_record.imm = c.as_canonical_u32() as u16;
         core_record.imm_sign = g.is_one();
@@ -333,7 +333,7 @@ pub(super) fn run_jalr(
     imm_sign: bool,
 ) -> (u32, [u8; RV64_REGISTER_NUM_LIMBS]) {
     let to_pc = rs1.wrapping_add(imm as u32 + (imm_sign as u32 * 0xffff0000));
-    assert!(to_pc < (1 << PC_BITS));
+    debug_assert_valid_pc_target(to_pc);
 
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());

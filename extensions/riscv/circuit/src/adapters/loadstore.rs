@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    expand_to_rv64_register, memory_read, memory_read_deferral, timed_write, timed_write_deferral,
-    tracing_read, RV64_CELL_BITS,
+    debug_assert_valid_pointer, expand_to_rv64_register, memory_read, memory_read_deferral,
+    rv64_bytes_to_u32, timed_write, timed_write_deferral, tracing_read, RV64_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -371,18 +371,12 @@ where
         );
 
         record.rs1_ptr = b.as_canonical_u32();
-        let rs1_u64 = u64::from_le_bytes(tracing_read(
+        record.rs1_val = rv64_bytes_to_u32(tracing_read(
             memory,
             RV64_REGISTER_AS,
             record.rs1_ptr,
             &mut record.rs1_aux_record.prev_timestamp,
         ));
-        assert_eq!(
-            rs1_u64 >> 32,
-            0,
-            "rs1 upper 4 bytes must be zero for load/store adapter"
-        );
-        record.rs1_val = rs1_u64 as u32;
         let rs1_val = record.rs1_val;
 
         record.imm = c.as_canonical_u32() as u16;
@@ -393,12 +387,7 @@ where
         let shift_amount = ptr_val & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
         let ptr_val = ptr_val - shift_amount;
 
-        assert!(
-            ptr_val < (1 << self.pointer_max_bits),
-            "ptr_val: {ptr_val} = rs1_val: {} + imm_extended: {imm_extended} >= 2 ** {}",
-            rs1_val,
-            self.pointer_max_bits
-        );
+        debug_assert_valid_pointer(ptr_val as u64, self.pointer_max_bits);
 
         // prev_data: We need to keep values of some cells to keep them unchanged when writing to
         // those cells

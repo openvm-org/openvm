@@ -29,16 +29,14 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, expand_to_rv64_register, tracing_read, tracing_write, RV64_CELL_BITS,
-    RV64_REGISTER_NUM_LIMBS,
+    abstract_compose, debug_assert_valid_pointer, expand_to_rv64_register, tracing_read,
+    tracing_read_reg_ptr, tracing_write, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
-
-use crate::helpers::tracing_read_reg_ptr;
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -329,14 +327,15 @@ where
                 memory,
                 record.rs_ptr[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
+                self.pointer_max_bits,
             )
         });
 
         // Read memory values
         from_fn(|i| {
-            debug_assert!(
-                (record.rs_val[i] as u64) + ((TOTAL_READ_SIZE - 1) as u64)
-                    < (1u64 << self.pointer_max_bits)
+            debug_assert_valid_pointer(
+                (record.rs_val[i] as u64) + ((TOTAL_READ_SIZE - 1) as u64),
+                self.pointer_max_bits,
             );
             from_fn::<_, BLOCKS_PER_READ, _>(|j| {
                 tracing_read::<BLOCK_SIZE>(
