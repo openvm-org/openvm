@@ -17,6 +17,7 @@ openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-riscv-adapters = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }

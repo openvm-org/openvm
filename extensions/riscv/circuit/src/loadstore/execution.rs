@@ -19,6 +19,7 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LoadStoreExecutor;
+use crate::adapters::rv64_bytes_to_u32;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -214,11 +215,7 @@ unsafe fn execute_e12_impl<
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
-    debug_assert!(
-        rs1_bytes[4..].iter().all(|&x| x == 0),
-        "loadstore pointers are expected to live in the low 32 bits of rs1"
-    );
-    let rs1_val = u32::from_le_bytes(rs1_bytes[..4].try_into().unwrap());
+    let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r64{c,g}(b):2]_e)
     debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
