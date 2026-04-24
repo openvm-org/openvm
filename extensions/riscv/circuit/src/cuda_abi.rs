@@ -435,7 +435,7 @@ pub mod load_sign_extend_cuda {
     use super::*;
 
     extern "C" {
-        pub fn _rv32_load_sign_extend_tracegen(
+        pub fn _rv64_load_sign_extend_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -458,7 +458,7 @@ pub mod load_sign_extend_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv32_load_sign_extend_tracegen(
+        CudaError::from_result(_rv64_load_sign_extend_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
