@@ -95,14 +95,21 @@ impl DeviceMemoryTester {
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
         const { assert!(N == DEFAULT_BLOCK_SIZE) };
         let t = self.memory.timestamp();
-        let (t_prev, data_prev) = unsafe {
-            self.memory.write::<u8, N>(
-                addr_space as u32,
-                ptr as u32,
-                data.map(|x| x.as_canonical_u32() as u8),
-            )
+        let (t_prev, data_prev) = if addr_space as u32 == DEFERRAL_AS {
+            unsafe {
+                self.memory
+                    .write::<F, N>(addr_space as u32, ptr as u32, data)
+            }
+        } else {
+            let (t_prev, data_prev) = unsafe {
+                self.memory.write::<u8, N>(
+                    addr_space as u32,
+                    ptr as u32,
+                    data.map(|x| x.as_canonical_u32() as u8),
+                )
+            };
+            (t_prev, data_prev.map(F::from_u8))
         };
-        let data_prev = data_prev.map(F::from_u8);
         self.chip
             .receive(addr_space as u32, ptr as u32, &data_prev, t_prev);
         self.chip.send(addr_space as u32, ptr as u32, &data, t);
