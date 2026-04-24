@@ -14,7 +14,7 @@ pub use cuda::*;
 #[cfg(feature = "aot")]
 mod aot;
 
-#[cfg(all(test, any()))] // TODO: port tests to RV64
+#[cfg(test)]
 mod tests;
 
 pub type Rv64LoadSignExtendAir = VmAirWrapper<
