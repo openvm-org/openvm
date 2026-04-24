@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    memory_read, memory_read_deferral, timed_write, timed_write_deferral, tracing_read,
-    RV64_CELL_BITS,
+    expand_to_rv64_register, memory_read, memory_read_deferral, timed_write, timed_write_deferral,
+    tracing_read, RV64_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -160,13 +160,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .assert_zero(local_cols.rd_rs2_ptr);
 
         // read rs1
-        let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                local_cols.rs1_data[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),

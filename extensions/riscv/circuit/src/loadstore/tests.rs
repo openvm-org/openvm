@@ -44,8 +44,9 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor,
-        Rv64LoadStoreAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        rv64_bytes_to_u32, Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols,
+        Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller, RV64_CELL_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
 };
@@ -128,7 +129,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let ptr = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
-    let rs1_low = u32::from_le_bytes(rs1[..4].try_into().unwrap());
+    let rs1_low = rv64_bytes_to_u32(rs1);
     let ptr_val = imm_ext.wrapping_add(rs1_low);
     let shift_amount = (ptr_val as usize) & (RV64_REGISTER_NUM_LIMBS - 1);
 
