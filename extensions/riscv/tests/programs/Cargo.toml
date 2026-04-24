@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-riscv-test-programs"
 version = "0.0.0"
@@ -13,6 +15,7 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher"] }
 getrandom = { version = "0.3", optional = true }
 getrandom-v02 = { version = "0.2", package = "getrandom", optional = true }
 
@@ -34,3 +37,6 @@ required-features = ["getrandom"]
 [[example]]
 name = "getrandom_v02"
 required-features = ["getrandom-v02"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

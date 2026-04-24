@@ -13,12 +13,22 @@ openvm-riscv-guest.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
-[target.'cfg(target_arch = "riscv64")'.dependencies]
-critical-section = { version = "1.1.2", optional = true }
+[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+# `critical-section` is always pulled in on the guest so `src/critical_section.rs`
+# can register the no-op impl; `embedded-alloc` (behind `heap-embedded-alloc`)
+# calls `critical_section::with(...)` internally, and needs the impl regardless
+# of whether hardware CAS is available.
+critical-section = { workspace = true }
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
 ], optional = true }
 libm = { version = "0.2", optional = true }
+
+# Activate `portable-atomic/critical-section` only when the A extension is
+# absent. Cargo feature unification then propagates the backend to every graph
+# member that uses `portable-atomic`.
+[target.'cfg(all(target_arch = "riscv64", target_os = "none", not(target_feature = "a")))'.dependencies]
+portable-atomic = { workspace = true, features = ["critical-section"] }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
@@ -29,7 +39,6 @@ default = []
 entrypoint = []
 export-libm = ["dep:libm"]
 heap-embedded-alloc = [
-    "dep:critical-section",
     "dep:embedded-alloc",
     "rust-runtime",
 ]
@@ -38,5 +47,5 @@ panic-handler = []
 rust-runtime = ["export-libm"]
 std = []
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
+[lints]
+workspace = true

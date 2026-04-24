@@ -13,6 +13,7 @@ use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ut
 use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
+use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -204,13 +205,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ],
             &local.mem.register_aux,
         ) {
-            let data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-                if i < RV64_WORD_NUM_LIMBS {
-                    (*val.get(i).unwrap()).into()
-                } else {
-                    AB::Expr::ZERO
-                }
-            });
+            let val_arr: [AB::Var; RV64_WORD_NUM_LIMBS] =
+                std::array::from_fn(|i| *val.get(i).unwrap());
+            let data = expand_to_rv64_register(&val_arr);
             self.memory_bridge
                 .read::<_, _, RV64_REGISTER_NUM_LIMBS>(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
