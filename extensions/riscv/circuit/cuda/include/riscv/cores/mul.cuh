@@ -32,8 +32,8 @@ __forceinline__ __device__ void run_mul(
         for (size_t j = 0; j <= i; j++) {
             res += static_cast<uint32_t>(x[j]) * static_cast<uint32_t>(y[i - j]);
         }
-        carry[i] = res >> RV32_CELL_BITS;
-        out_a[i] = static_cast<uint8_t>(res & ((1u << RV32_CELL_BITS) - 1));
+        carry[i] = res >> RV64_CELL_BITS;
+        out_a[i] = static_cast<uint8_t>(res & ((1u << RV64_CELL_BITS) - 1));
     }
 }
 
