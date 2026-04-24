@@ -1,0 +1,4833 @@
+{
+  "stacking-1": {
+    "default_scene": {
+      "note": "OpeningClaimsAir iterates over AIRs in sort order. Each row receives (col_claim, rot_claim) on TranscriptBus (observed earlier) and sends the claim on ColumnClaimsBus back to the BatchConstraint module. A final sample row produces lambda.",
+      "airs": [
+        {
+          "name": "OpeningClaimsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "col_idx",
+                "col_claim",
+                "rot_claim"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sort_idx",
+                "col_idx",
+                "col_claim",
+                "rot_claim"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "sort_idx",
+                "col_idx"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "ColumnClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "col_idx",
+                "claim",
+                "is_rot"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "OpeningClaimsAir",
+            "col": "col_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe col_claim"
+        },
+        {
+          "from": {
+            "air": "OpeningClaimsAir",
+            "col": "col_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "ColumnClaimsBus",
+            "field": "claim",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "forward to BC"
+        }
+      ]
+    },
+    "scenes": {
+      "need-rot-gating": {
+        "note": "rot_claim is only observed on rows where AirShapeBus reports need_rot=1. Other rows still send a zero tuple on ColumnClaimsBus with is_rot=1 but no transcript consumption.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sort_idx",
+                  "rot_claim"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "sort_idx",
+                  "rot_claim"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "AirShapeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "property_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "sort_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "AirShapeBus",
+              "field": "sort_idx",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "property_idx=2 (need_rot)"
+          },
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "rot_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "gated observe"
+          }
+        ]
+      },
+      "sample-lambda": {
+        "note": "After all claims are observed, OpeningClaimsAir samples the batching challenge lambda on TranscriptBus. lambda is then raised to powers row-by-row for the RLC.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "lambda_pow"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": -1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "lambda_pow",
+              "row": -1
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": -1
+            },
+            "kind": "receive",
+            "label": "sample lambda"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"default\">OpeningClaimsAir iterates over num_airs_present AIRs, observing (col_claim, rot_claim) on TranscriptBus</span>; <span class=\"ref\" data-scene=\"need-rot-gating\">rot_claim is gated by need_rot looked up from AirShapeBus</span>. Column claims are forwarded on ColumnClaimsBus, and lifted heights come from LiftedHeightsBus. After the iteration, the AIR <span class=\"ref\" data-scene=\"sample-lambda\">samples lambda on TranscriptBus</span> at a VK-fixed tidx.",
+    "soundness_html": "All observations are pinned on the transcript at precomputed indices. <span class=\"ref\" data-scene=\"need-rot-gating\">need_rot gating from AirShapeBus (VK data from ProofShape) ensures rot_claim is zero when the AIR doesn&#39;t need rotation</span>. <span class=\"ref\" data-scene=\"sample-lambda\">lambda is a transcript sample at a fixed tidx</span>, so the batching challenge cannot be chosen to cancel cheating."
+  },
+  "stacking-2": {
+    "default_scene": {
+      "note": "Each OpeningClaimsAir row accumulates s_0 += lambda_pow * (col_claim + lambda * rot_claim). On the final row, s_0 is the full RLC and is sent on SumcheckClaimsBus (module_idx=0) to UnivariateRoundAir.",
+      "airs": [
+        {
+          "name": "OpeningClaimsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "lambda_pow",
+                "col_claim",
+                "rot_claim",
+                "s_0"
+              ],
+              "kind": "prev"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "lambda_pow",
+                "col_claim",
+                "rot_claim",
+                "s_0"
+              ],
+              "kind": "next"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "s_0"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "SumcheckClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "module_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "OpeningClaimsAir",
+            "col": "s_0",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimsBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "module_idx=0"
+        }
+      ]
+    },
+    "scenes": {
+      "rlc-recurrence": {
+        "note": "Row-to-row recurrence: s_0[i+1] = s_0[i] + lambda_pow[i] * (col_claim + lambda * rot_claim). Algebraic constraint binds the RLC to observed claims.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "s_0",
+                  "lambda_pow",
+                  "col_claim",
+                  "rot_claim"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "s_0",
+                  "lambda_pow",
+                  "col_claim",
+                  "rot_claim"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "claim-coefficients": {
+        "note": "In parallel with s_0, OpeningClaimsAir packs per-stacked-column coefficients (lambda_pow * eq_bits * (eq_in + lambda * k_rot_in)) and sends them on ClaimCoefficientsBus to StackingClaimsAir.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "commit_idx",
+                  "stacked_col_idx",
+                  "stacking_claim_coefficient",
+                  "is_last_for_claim"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "commit_idx",
+                  "stacked_col_idx",
+                  "stacking_claim_coefficient"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ClaimCoefficientsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "commit_idx",
+                  "stacked_col_idx",
+                  "coefficient"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "commit_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "ClaimCoefficientsBus",
+              "field": "commit_idx",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "stacking_claim_coefficient",
+              "row": 0
+            },
+            "to": {
+              "bus": "ClaimCoefficientsBus",
+              "field": "coefficient",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "packed coefficient"
+          }
+        ]
+      }
+    },
+    "constraints_html": "OpeningClaimsAir computes <span class=\"ref\" data-scene=\"rlc-recurrence\">s_0 = RLC(t_claims, lambda)</span> as the linear combination of observed (col_claim, rot_claim) with lambda^{2i} powers. It sends s_0 on SumcheckClaimsBus (module_idx 0) to start the sumcheck chain, and <span class=\"ref\" data-scene=\"claim-coefficients\">batched claim coefficients on ClaimCoefficientsBus for StackingClaimsAir</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"rlc-recurrence\">The formula is algebraically constrained within OpeningClaimsAir</span>. Lambda powers are computed via PowerChecker (LT). <span class=\"ref\" data-scene=\"default\">SumcheckClaimsBus threads s_0 through the sumcheck chain to the finalizer</span>."
+  },
+  "stacking-3": {
+    "default_scene": {
+      "note": "UnivariateRoundAir ingests 2|D|-1 univariate coefficients from the transcript, receives s_0 on SumcheckClaimsBus, checks the sum-over-D identity, and evaluates s_0(u_0) via Horner.",
+      "airs": [
+        {
+          "name": "UnivariateRoundAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "coeff_idx",
+                "coeff",
+                "coeff_is_d",
+                "s_0_sum_over_d"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "coeff_idx",
+                "coeff",
+                "u_0_pow",
+                "poly_rand_eval"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "u_0",
+                "poly_rand_eval"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": -1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "module_idx",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "module_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "UnivariateRoundAir",
+            "col": "coeff",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe coeff"
+        },
+        {
+          "from": {
+            "air": "UnivariateRoundAir",
+            "col": "poly_rand_eval",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimsBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "send",
+          "label": "module_idx=1"
+        }
+      ]
+    },
+    "scenes": {
+      "sum-over-d": {
+        "note": "The sum-over-D check |D| * (a_0 + a_{|D|}) == s_0 uses coeff_is_d to selectively accumulate the coefficient positions indexed 0..|D|.",
+        "airs": [
+          {
+            "name": "UnivariateRoundAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "coeff_idx",
+                  "coeff",
+                  "coeff_is_d",
+                  "s_0_sum_over_d"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "coeff_idx",
+                  "coeff",
+                  "coeff_is_d",
+                  "s_0_sum_over_d"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "module_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateRoundAir",
+              "col": "s_0_sum_over_d",
+              "row": 1
+            },
+            "to": {
+              "bus": "SumcheckClaimsBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "equals s_0"
+          }
+        ]
+      },
+      "sample-u0": {
+        "note": "After coefficient ingestion, u_0 is sampled on TranscriptBus. Horner evaluation builds poly_rand_eval = s_0(u_0) using powers of u_0 and the observed coefficients.",
+        "airs": [
+          {
+            "name": "UnivariateRoundAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "u_0",
+                  "u_0_pow",
+                  "poly_rand_eval"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "u_0",
+                  "u_0_pow",
+                  "poly_rand_eval"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateRoundAir",
+              "col": "u_0",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "sample u_0"
+          }
+        ]
+      }
+    },
+    "constraints_html": "UnivariateRoundAir has coeff_idx from 0 to 2(2^l_skip)-1 (VK-fixed). It observes coefficients on TranscriptBus, <span class=\"ref\" data-scene=\"default\">receives s_0 via SumcheckClaimsBus (module_idx 0)</span>, <span class=\"ref\" data-scene=\"sum-over-d\">checks the sum-over-D identity |D| * (a_0 + a_{|D|}) == s_0</span>, <span class=\"ref\" data-scene=\"sample-u0\">samples u_0 and evaluates via Horner</span>, and sends the next claim on SumcheckClaimsBus (module_idx 1).",
+    "soundness_html": "Coefficient count is VK-fixed. <span class=\"ref\" data-scene=\"sum-over-d\">The sum-over-D identity is the univariate sumcheck check for the multiplicative subgroup D of order |D| = 2^l_skip</span>. <span class=\"ref\" data-scene=\"sample-u0\">u_0 is transcript-pinned</span>."
+  },
+  "stacking-4": {
+    "default_scene": {
+      "note": "Each SumcheckRoundsAir row is one quadratic sumcheck round. The prover supplies (s_eval_at_1, s_eval_at_2); s_eval_at_0 is derived from the incoming claim; u_round is sampled; s_eval_at_u is the quadratic interpolation.",
+      "airs": [
+        {
+          "name": "SumcheckRoundsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "round",
+                "s_eval_at_0",
+                "s_eval_at_1",
+                "s_eval_at_2",
+                "u_round",
+                "s_eval_at_u"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "round",
+                "s_eval_at_0",
+                "s_eval_at_1",
+                "s_eval_at_2",
+                "u_round"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "module_idx",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "module_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "SumcheckRoundsAir",
+            "col": "s_eval_at_1",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe s_j(1)"
+        },
+        {
+          "from": {
+            "air": "SumcheckRoundsAir",
+            "col": "s_eval_at_u",
+            "row": 0
+          },
+          "to": {
+            "bus": "SumcheckClaimsBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "send",
+          "label": "next claim"
+        }
+      ]
+    },
+    "scenes": {
+      "transition": {
+        "note": "Adjacent sumcheck rounds chain claims: round j's s_eval_at_u becomes round j+1's claim via SumcheckClaimsBus (module_idx 1->2).",
+        "airs": [
+          {
+            "name": "SumcheckRoundsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round",
+                  "s_eval_at_u",
+                  "u_round"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "round",
+                  "s_eval_at_0",
+                  "u_round"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "module_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SumcheckRoundsAir",
+              "col": "s_eval_at_u",
+              "row": 0
+            },
+            "to": {
+              "bus": "SumcheckClaimsBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "round j output"
+          },
+          {
+            "from": {
+              "air": "SumcheckRoundsAir",
+              "col": "s_eval_at_0",
+              "row": 1
+            },
+            "to": {
+              "bus": "SumcheckClaimsBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "round j+1 input"
+          }
+        ]
+      },
+      "whir-opening-point": {
+        "note": "Each round sends its sampled challenge u_j on WhirOpeningPointBus at idx = round + l_skip - 1, contributing to WHIR's u_cube.",
+        "airs": [
+          {
+            "name": "SumcheckRoundsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round",
+                  "u_round"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "round",
+                  "u_round"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirOpeningPointBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "idx",
+                  "value"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SumcheckRoundsAir",
+              "col": "round",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirOpeningPointBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "round+l_skip-1"
+          },
+          {
+            "from": {
+              "air": "SumcheckRoundsAir",
+              "col": "u_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirOpeningPointBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send"
+          }
+        ]
+      },
+      "constraint-randomness": {
+        "note": "When has_r is set, SumcheckRoundsAir receives the BC sumcheck randomness r on ConstraintSumcheckRandomnessBus and uses it in the rot_cube kernel.",
+        "airs": [
+          {
+            "name": "SumcheckRoundsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round",
+                  "r_round",
+                  "rot_cube_minus_prod"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ConstraintSumcheckRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SumcheckRoundsAir",
+              "col": "r_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "ConstraintSumcheckRandomnessBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "r_{round}"
+          }
+        ]
+      }
+    },
+    "constraints_html": "SumcheckRoundsAir has round index from 1 to n_stack (VK-fixed). Each round: <span class=\"ref\" data-scene=\"transition\">receive claim on SumcheckClaimsBus, observe (s_j(1), s_j(2)) on TranscriptBus, sample u_j, interpolate at u_j, send next claim</span>. Also <span class=\"ref\" data-scene=\"constraint-randomness\">receives the BC sumcheck randomness r via ConstraintSumcheckRandomnessBus</span> and <span class=\"ref\" data-scene=\"whir-opening-point\">sends each u_j on WhirOpeningPointBus (idx = round + l_skip - 1) for WHIR&#39;s u_cube</span>.",
+    "soundness_html": "Round count is VK-fixed. <span class=\"ref\" data-scene=\"default\">Quadratic interpolation at u_j is algebraically constrained</span>. <span class=\"ref\" data-scene=\"transition\">The claim chain via SumcheckClaimsBus (module_idx 1 -&gt; 2) forces the correct sequencing</span>."
+  },
+  "stacking-5": {
+    "default_scene": {
+      "note": "EqBaseAir iteratively squares u and r, accumulating eq_0(u,r) and eq_0(u, r*omega). Each row advances one power-of-two step; the final row sends the kernel product on EqBaseBus.",
+      "airs": [
+        {
+          "name": "EqBaseAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "row_idx",
+                "u_pow",
+                "r_pow",
+                "prod_u_r"
+              ],
+              "kind": "prev"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "row_idx",
+                "u_pow",
+                "r_pow",
+                "prod_u_r"
+              ],
+              "kind": "next"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "prod_u_r",
+                "prod_u_r_omega",
+                "prod_u_1",
+                "prod_r_omega_1"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "EqBaseBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "eq_u_r",
+                "eq_u_r_omega",
+                "eq_u_r_prod"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "EqBaseAir",
+            "col": "prod_u_1",
+            "row": -1
+          },
+          "to": {
+            "bus": "EqBaseBus",
+            "field": "eq_u_r_prod",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "to SumcheckRoundsAir"
+        },
+        {
+          "from": {
+            "air": "EqBaseAir",
+            "col": "prod_r_omega_1",
+            "row": -1
+          },
+          "to": {
+            "bus": "EqBaseBus",
+            "field": "eq_u_r_prod",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "to SumcheckRoundsAir"
+        }
+      ]
+    },
+    "scenes": {
+      "squaring": {
+        "note": "Iterative squaring: u_pow[i+1] = u_pow[i]^2, r_pow[i+1] = r_pow[i]^2. The running product accumulates (u^{2^i} + r^{2^i}) factors.",
+        "airs": [
+          {
+            "name": "EqBaseAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "u_pow",
+                  "r_pow",
+                  "r_omega_pow",
+                  "prod_u_r"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "u_pow",
+                  "r_pow",
+                  "r_omega_pow",
+                  "prod_u_r"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "u-cube-prefix": {
+        "note": "EqBaseAir also sends u^{2^i} at idx=i on WhirOpeningPointBus for i = 0..l_skip-1, building the prefix of WHIR's u_cube opening point.",
+        "airs": [
+          {
+            "name": "EqBaseAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "row_idx",
+                  "u_pow"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "row_idx",
+                  "u_pow"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirOpeningPointBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "idx",
+                  "value"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqBaseAir",
+              "col": "row_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirOpeningPointBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "EqBaseAir",
+              "col": "u_pow",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirOpeningPointBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "u^{2^i}"
+          }
+        ]
+      },
+      "eq-neg-handoff": {
+        "note": "EqBaseAir ships (u_0, r_0^2) on EqNegBaseRandBus to EqNegAir (in BatchConstraint) and receives the negative-dimension kernel result back on EqNegResultBus.",
+        "airs": [
+          {
+            "name": "EqBaseAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "u_pow",
+                  "r_pow",
+                  "in_prod"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqNegBaseRandBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "u",
+                  "r_squared"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqBaseAir",
+              "col": "u_pow",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNegBaseRandBus",
+              "field": "u",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "EqBaseAir",
+              "col": "r_pow",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNegBaseRandBus",
+              "field": "r_squared",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "r_0^2"
+          }
+        ]
+      }
+    },
+    "constraints_html": "EqBaseAir evaluates <span class=\"ref\" data-scene=\"squaring\">eq_prism(l, u[..=n_lift], r[..=n_lift]) and rot_kernel_prism using stacking randomness u and BC randomness r</span>. It <span class=\"ref\" data-scene=\"u-cube-prefix\">sends u^{2^i} for i = 0..l_skip-1 on WhirOpeningPointBus</span> (building u_cube&#39;s prefix). It also <span class=\"ref\" data-scene=\"eq-neg-handoff\">sends eq-neg base randomness (u_0, r_0^2) on EqNegBaseRandBus and receives eq_neg results on EqNegResultBus</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"squaring\">The eq_prism/rot_kernel_prism formulas are algebraically constrained</span>. u and r are transcript-pinned. <span class=\"ref\" data-scene=\"eq-neg-handoff\">Shared eq-neg computation with BC via EqNegBaseRandBus/EqNegResultBus avoids duplication; EqNegAir enforces correctness on BC side</span>."
+  },
+  "stacking-6": {
+    "default_scene": {
+      "note": "EqBitsAir is a binary tree: each row derives its eval from its parent via eval = sub_eval * (1 + 2*b_lsb*u - b_lsb - u). Leaf rows publish (b_value, num_bits, eval) on EqBitsLookupBus.",
+      "airs": [
+        {
+          "name": "EqBitsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sub_b_value",
+                "num_bits",
+                "sub_eval"
+              ],
+              "kind": "prev"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "b_lsb",
+                "u_val",
+                "sub_eval",
+                "external_mult"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "EqBitsLookupBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "b_value",
+                "num_bits",
+                "eval"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "EqBitsAir",
+            "col": "sub_eval",
+            "row": 1
+          },
+          "to": {
+            "bus": "EqBitsLookupBus",
+            "field": "eval",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "leaf multiplicity"
+        },
+        {
+          "from": {
+            "air": "EqBitsAir",
+            "col": "u_val",
+            "row": 1
+          },
+          "to": {
+            "bus": "EqBitsLookupBus",
+            "field": "eval",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "leaf multiplicity"
+        },
+        {
+          "from": {
+            "air": "EqBitsAir",
+            "col": "b_lsb",
+            "row": 1
+          },
+          "to": {
+            "bus": "EqBitsLookupBus",
+            "field": "eval",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "leaf multiplicity"
+        }
+      ]
+    },
+    "scenes": {
+      "internal-bus": {
+        "note": "Internal EqBitsInternalBus carries (b_value, num_bits, eval, child_lsb) from child to parent, gluing the binary tree together.",
+        "airs": [
+          {
+            "name": "EqBitsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sub_b_value",
+                  "num_bits",
+                  "sub_eval",
+                  "internal_child_flag"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "b_lsb",
+                  "sub_eval",
+                  "u_val"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqBitsInternalBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "b_value",
+                  "num_bits",
+                  "eval",
+                  "child_lsb"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqBitsAir",
+              "col": "sub_eval",
+              "row": 1
+            },
+            "to": {
+              "bus": "EqBitsInternalBus",
+              "field": "eval",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "child -> parent"
+          },
+          {
+            "from": {
+              "air": "EqBitsAir",
+              "col": "u_val",
+              "row": 1
+            },
+            "to": {
+              "bus": "EqBitsInternalBus",
+              "field": "eval",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "child -> parent"
+          },
+          {
+            "from": {
+              "air": "EqBitsAir",
+              "col": "b_lsb",
+              "row": 1
+            },
+            "to": {
+              "bus": "EqBitsInternalBus",
+              "field": "eval",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "child -> parent"
+          },
+          {
+            "from": {
+              "air": "EqBitsAir",
+              "col": "sub_eval",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqBitsInternalBus",
+              "field": "eval",
+              "row": 0
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "u-lookup": {
+        "note": "Each bit level looks up u_{n_stack - num_bits + 1} from EqRandValuesLookupBus.",
+        "airs": [
+          {
+            "name": "EqBitsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "num_bits",
+                  "u_val"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqRandValuesLookupBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "u"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqBitsAir",
+              "col": "num_bits",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqRandValuesLookupBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "EqBitsAir",
+              "col": "u_val",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqRandValuesLookupBus",
+              "field": "u",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "u_i"
+          }
+        ]
+      }
+    },
+    "constraints_html": "EqBitsAir <span class=\"ref\" data-scene=\"default\">bit-decomposes each stacking row index b (stacking_index_mult-based range-check), computes eq_mle as product of per-bit factors, and provides lookups for StackingClaimsAir</span>. <span class=\"ref\" data-scene=\"u-lookup\">Each level reads its u coordinate from EqRandValuesLookupBus</span> and <span class=\"ref\" data-scene=\"internal-bus\">glues children to parents via EqBitsInternalBus</span>.",
+    "soundness_html": "Bit decomposition is range-checked (ensuring log_lifted_height &lt;= l_skip + n_stack). <span class=\"ref\" data-scene=\"default\">Multilinear eq product is algebraically constrained</span> by the per-row recurrence eval = sub_eval * (1 + 2*b_lsb*u - b_lsb - u)."
+  },
+  "stacking-7": {
+    "default_scene": {
+      "note": "StackingClaimsAir accumulates final_s_eval += stacking_claim * claim_coefficient. On the last valid row, it enforces final_s_eval equals the sumcheck output claim received on SumcheckClaimsBus (module_idx=2).",
+      "airs": [
+        {
+          "name": "StackingClaimsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "stacking_claim",
+                "claim_coefficient",
+                "final_s_eval"
+              ],
+              "kind": "prev"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "stacking_claim",
+                "claim_coefficient",
+                "final_s_eval",
+                "is_last",
+                "is_valid"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "SumcheckClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "module_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ClaimCoefficientsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "commit_idx",
+                "stacked_col_idx",
+                "coefficient"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "claim_coefficient",
+            "row": 0
+          },
+          "to": {
+            "bus": "ClaimCoefficientsBus",
+            "field": "coefficient",
+            "row": 0
+          },
+          "kind": "receive"
+        },
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "final_s_eval",
+            "row": 1
+          },
+          "to": {
+            "bus": "SumcheckClaimsBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "module_idx=2 check"
+        }
+      ]
+    },
+    "scenes": {
+      "observe-openings": {
+        "note": "Each row observes one stacking_opening on TranscriptBus. The AIR iterates until global_col_idx reaches w_stack-1 on the last valid row (VK-fixed).",
+        "airs": [
+          {
+            "name": "StackingClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "commit_idx",
+                  "stacked_col_idx",
+                  "stacking_claim"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "commit_idx",
+                  "stacked_col_idx",
+                  "stacking_claim"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "is_last",
+                  "is_valid"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "StackingClaimsAir",
+              "col": "stacking_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "observe"
+          }
+        ]
+      },
+      "stack": {
+        "note": "Stacking reduction: two independent inputs (per-column coefficients from OpeningClaimsAir and observed stacking_openings from the transcript) feed into StackingClaimsAir's single accumulator final_s_eval = sum_j q_coeffs[j] * stacking_openings[j].",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "stacked_col_idx",
+                  "stacking_claim_coefficient"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "StackingClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "stacked_col_idx",
+                  "claim_coefficient",
+                  "stacking_claim",
+                  "final_s_eval"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ClaimCoefficientsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "stacked_col_idx",
+                  "coefficient"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "stacking_claim_coefficient",
+              "row": 0
+            },
+            "to": {
+              "bus": "ClaimCoefficientsBus",
+              "field": "coefficient",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "StackingClaimsAir",
+              "col": "claim_coefficient",
+              "row": 0
+            },
+            "to": {
+              "bus": "ClaimCoefficientsBus",
+              "field": "coefficient",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "paired"
+          }
+        ]
+      }
+    },
+    "constraints_html": "StackingClaimsAir has global_col_idx reaching exactly w_stack - 1 on the last valid row (VK-fixed). It <span class=\"ref\" data-scene=\"observe-openings\">observes stacking_openings on TranscriptBus</span>, <span class=\"ref\" data-scene=\"default\">receives the final sumcheck claim on SumcheckClaimsBus (module_idx 2)</span>, and <span class=\"ref\" data-scene=\"stack\">receives q_coeffs from ClaimCoefficientsBus</span>. It checks the inner product.",
+    "soundness_html": "w_stack boundary forces correct stacked width. <span class=\"ref\" data-scene=\"default\">SumcheckClaimsBus pairing forces the claim matches the sumcheck output</span>. <span class=\"ref\" data-scene=\"stack\">The inner-product check ties stacking_openings to the sumcheck claim</span>."
+  },
+  "stacking-8": {
+    "default_scene": {
+      "note": "StackingClaimsAir observes mu_pow_witness on TranscriptBus and looks up ExpBitsLenBus with num_bits=mu_pow_bits. The resulting hashed sample must have the required low zero bits.",
+      "airs": [
+        {
+          "name": "StackingClaimsAir",
+          "rows": [
+            {
+              "row": -1,
+              "cols": [
+                "mu"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpBitsLenAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_first",
+                "base",
+                "bit_src",
+                "num_bits",
+                "result"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "base",
+                "bit_src",
+                "num_bits",
+                "result"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "mu",
+            "row": -1
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe mu_pow_witness"
+        },
+        {
+          "from": {
+            "air": "ExpBitsLenAir",
+            "col": "result",
+            "row": 0
+          },
+          "to": {
+            "bus": "ExpBitsLenBus",
+            "field": "result",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "mu_pow_bits check"
+        }
+      ]
+    },
+    "scenes": {
+      "lookup": {
+        "note": "ExpBitsLenBus is a shared lookup table: any AIR requesting base^(bit_src & mask) gets a verified result. Here StackingClaimsAir asks for the difficulty witness mapping.",
+        "airs": [
+          {
+            "name": "StackingClaimsAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ExpBitsLenAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpBitsLenBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "StackingClaimsAir",
+              "col": "mu",
+              "row": -1
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "bit_src",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "consumer"
+          },
+          {
+            "from": {
+              "air": "ExpBitsLenAir",
+              "col": "result",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "result",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "provider"
+          }
+        ]
+      }
+    },
+    "constraints_html": "StackingClaimsAir observes mu_pow_witness and samples mu_pow_sample on TranscriptBus. <span class=\"ref\" data-scene=\"lookup\">The ExpBitsLenBus lookup checks mu_pow_bits low zero bits</span> on the sampled value.",
+    "soundness_html": "Standard PoW mechanism: <span class=\"ref\" data-scene=\"lookup\">ExpBitsLenAir table correctness enforces the difficulty check</span>; the Poseidon2 sponge pins the sample. Together these prevent cheap re-sampling."
+  },
+  "stacking-9": {
+    "default_scene": {
+      "note": "StackingClaimsAir samples mu on TranscriptBus and forwards it on WhirMuBus to InitialOpenedValuesAir so WHIR can batch stacking commitments.",
+      "airs": [
+        {
+          "name": "StackingClaimsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "mu"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "WhirMuBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "mu"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "mu",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample"
+        },
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "mu",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirMuBus",
+            "field": "mu",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "to WHIR"
+        }
+      ]
+    },
+    "scenes": {
+      "flow": {
+        "note": "Same-cell constraint: mu is read once and sent both on TranscriptBus (as the sample) and on WhirMuBus (for InitialOpenedValuesAir).",
+        "airs": [
+          {
+            "name": "StackingClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "InitialOpenedValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "codeword_value_acc"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirMuBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "StackingClaimsAir",
+              "col": "mu",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirMuBus",
+              "field": "mu",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "InitialOpenedValuesAir",
+              "col": "codeword_value_acc",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirMuBus",
+              "field": "mu",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "uses mu"
+          }
+        ]
+      }
+    },
+    "constraints_html": "StackingClaimsAir <span class=\"ref\" data-scene=\"default\">samples mu on TranscriptBus and sends it on WhirMuBus to InitialOpenedValuesAir</span>.",
+    "soundness_html": "mu is transcript-pinned; <span class=\"ref\" data-scene=\"flow\">WhirMuBus routes it to the WHIR module as a per-proof permutation with exactly one message</span>, so both sender and receiver must agree on the value."
+  },
+  "stacking-10": {
+    "default_scene": {
+      "note": "StackingClaimsAir computes whir_claim as a running mu-weighted RLC of stacking_claim values and sends (tidx_whir, whir_claim) on WhirModuleBus. Simultaneously StackingIndicesBus exposes the (commit_idx, stacked_col_idx) table.",
+      "airs": [
+        {
+          "name": "StackingClaimsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "commit_idx",
+                "stacked_col_idx",
+                "whir_claim"
+              ],
+              "kind": "prev"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "commit_idx",
+                "stacked_col_idx",
+                "whir_claim",
+                "is_last",
+                "is_valid"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirModuleBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "StackingIndicesBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "commit_idx",
+                "col_idx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "whir_claim",
+            "row": 1
+          },
+          "to": {
+            "bus": "WhirModuleBus",
+            "field": "claim",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "final RLC"
+        },
+        {
+          "from": {
+            "air": "StackingClaimsAir",
+            "col": "commit_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "StackingIndicesBus",
+            "field": "commit_idx",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "provide"
+        }
+      ]
+    },
+    "scenes": {
+      "u-cube-assembly": {
+        "note": "WhirOpeningPointBus is a permutation bus: EqBaseAir supplies idx=0..l_skip-1 (prefix), SumcheckRoundsAir supplies idx=l_skip..l_skip+n_stack-1 (suffix). WHIR consumers must receive exactly l_skip + n_stack entries.",
+        "airs": [
+          {
+            "name": "EqBaseAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "row_idx",
+                  "u_pow"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "SumcheckRoundsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round",
+                  "u_round"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirOpeningPointBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqBaseAir",
+              "col": "u_pow",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirOpeningPointBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "prefix"
+          },
+          {
+            "from": {
+              "air": "SumcheckRoundsAir",
+              "col": "u_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirOpeningPointBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "send",
+            "label": "suffix"
+          }
+        ]
+      },
+      "flow": {
+        "note": "Stacking -> WHIR handoff: WhirModuleBus carries the batched opening claim; WhirMuBus carries mu; WhirOpeningPointBus carries u_cube; StackingIndicesBus carries the column table.",
+        "airs": [
+          {
+            "name": "StackingClaimsAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "whir_claim",
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirModuleBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "WhirMuBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "StackingClaimsAir",
+              "col": "whir_claim",
+              "row": -1
+            },
+            "to": {
+              "bus": "WhirModuleBus",
+              "field": "claim",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "StackingClaimsAir",
+              "col": "mu",
+              "row": -1
+            },
+            "to": {
+              "bus": "WhirMuBus",
+              "field": "mu",
+              "row": 0
+            },
+            "kind": "send"
+          }
+        ]
+      }
+    },
+    "constraints_html": "StackingClaimsAir computes whir_claim = RLC(stacking_openings, mu) and <span class=\"ref\" data-scene=\"flow\">sends (tidx_whir, whir_claim) on WhirModuleBus, plus stacking indices on StackingIndicesBus</span>. <span class=\"ref\" data-scene=\"u-cube-assembly\">EqBaseAir sends u_cube[0..l_skip-1] = u_0^{2^i} on WhirOpeningPointBus; SumcheckRoundsAir sends u_cube[l_skip..l_skip+n_stack-1] = u_j</span>. Total l_skip + n_stack u_cube entries.",
+    "soundness_html": "whir_claim is an algebraic function of sponge-pinned values. <span class=\"ref\" data-scene=\"u-cube-assembly\">WhirOpeningPointBus is a permutation bus; WHIR receivers (SumcheckAir, FinalPolyMleEvalAir) forcibly consume exactly l_skip + n_stack entries</span> (G4)."
+  },
+  "whir-1": {
+    "default_scene": {
+      "note": "Each SumcheckAir row is one sub-round of an inner WHIR sumcheck. Observe (ev1, ev2) on TranscriptBus, run PoW via ExpBitsLenBus, sample alpha, interpolate, produce post_claim.",
+      "airs": [
+        {
+          "name": "SumcheckAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "subidx",
+                "ev1",
+                "ev2",
+                "alpha",
+                "pre_claim",
+                "post_group_claim"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "whir_round",
+                "subidx",
+                "pre_claim"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "WhirSumcheckBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "sumcheck_idx",
+                "pre_claim",
+                "post_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "SumcheckAir",
+            "col": "pre_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirSumcheckBus",
+            "field": "pre_claim",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "from WhirRoundAir"
+        },
+        {
+          "from": {
+            "air": "SumcheckAir",
+            "col": "ev1",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe ev1"
+        }
+      ]
+    },
+    "scenes": {
+      "transition": {
+        "note": "Adjacent sub-round rows chain their claims: row i's post_claim becomes row i+1's pre_claim within the same WHIR round.",
+        "airs": [
+          {
+            "name": "SumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "subidx",
+                  "post_group_claim",
+                  "alpha"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "subidx",
+                  "pre_claim"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "alpha-publish": {
+        "note": "SumcheckAir provides alpha on WhirAlphaBus (lookup table, keyed by sumcheck_idx). WhirFoldingAir and FinalPolyQueryEvalAir are the consumers.",
+        "airs": [
+          {
+            "name": "SumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "whir_round",
+                  "subidx",
+                  "alpha",
+                  "alpha_lookup_count"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirAlphaBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SumcheckAir",
+              "col": "whir_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirAlphaBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "provide"
+          },
+          {
+            "from": {
+              "air": "SumcheckAir",
+              "col": "subidx",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirAlphaBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "provide"
+          },
+          {
+            "from": {
+              "air": "SumcheckAir",
+              "col": "alpha",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirAlphaBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "lookup"
+          }
+        ]
+      },
+      "pow-check": {
+        "note": "Folding PoW: when folding_pow_bits > 0, SumcheckAir checks the observed witness via ExpBitsLenBus lookup.",
+        "airs": [
+          {
+            "name": "SumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "alpha"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ExpBitsLenAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpBitsLenBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SumcheckAir",
+              "col": "alpha",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "bit_src",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "folding PoW"
+          }
+        ]
+      },
+      "eq-partial": {
+        "note": "eq_partial = product_j mobius_eq_1(u[j], alpha_j) accumulates across all sub-rounds. Its final value is sent on WhirEqAlphaUBus to FinalPolyMleEvalAir.",
+        "airs": [
+          {
+            "name": "SumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "eq_partial",
+                  "u",
+                  "alpha"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "eq_partial"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "eq_partial"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirEqAlphaUBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SumcheckAir",
+              "col": "eq_partial",
+              "row": -1
+            },
+            "to": {
+              "bus": "WhirEqAlphaUBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "final product"
+          }
+        ]
+      }
+    },
+    "constraints_html": "SumcheckAir has trace height k_whir * num_whir_rounds per proof. Each row: <span class=\"ref\" data-scene=\"default\">receive claim via WhirSumcheckBus, observe (ev1, ev2) on TranscriptBus, sample alpha, interpolate quadratically</span>. <span class=\"ref\" data-scene=\"pow-check\">Folding PoW is verified via ExpBitsLenBus</span>. <span class=\"ref\" data-scene=\"alpha-publish\">Alphas are sent on WhirAlphaBus to WhirFoldingAir and FinalPolyQueryEvalAir</span>. <span class=\"ref\" data-scene=\"eq-partial\">eq_partial accumulates mobius_eq_1(u, alpha) across sub-rounds</span>.",
+    "soundness_html": "Trace height is VK-fixed. <span class=\"ref\" data-scene=\"transition\">Sumcheck interpolation is algebraically constrained</span>. <span class=\"ref\" data-scene=\"pow-check\">PoW checks (LT via ExpBitsLenAir) prevent cheap biasing</span>. <span class=\"ref\" data-scene=\"alpha-publish\">Alphas are transcript-pinned (T)</span>."
+  },
+  "whir-2": {
+    "default_scene": {
+      "note": "WhirRoundAir observes codeword_commit[i] on TranscriptBus (gated by is_not_final_round) and provides it on CommitmentsBus with major_idx = round+1, minor_idx = 0.",
+      "airs": [
+        {
+          "name": "WhirRoundAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "commit"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "whir_round",
+                "commit"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "CommitmentsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "major_idx",
+                "minor_idx",
+                "commitment"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "WhirRoundAir",
+            "col": "commit",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe"
+        },
+        {
+          "from": {
+            "air": "WhirRoundAir",
+            "col": "commit",
+            "row": 0
+          },
+          "to": {
+            "bus": "CommitmentsBus",
+            "field": "commitment",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "major=round+1"
+        }
+      ]
+    },
+    "scenes": {
+      "same-cell": {
+        "note": "Critical soundness invariant: the same commitment cell is both observed on TranscriptBus and registered on CommitmentsBus, so the transcript-pinned value equals the Merkle root used for query verification.",
+        "airs": [
+          {
+            "name": "WhirRoundAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "whir_round",
+                  "commit"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "CommitmentsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "commitment"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "commit",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "commit",
+              "row": 0
+            },
+            "to": {
+              "bus": "CommitmentsBus",
+              "field": "commitment",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "same cell"
+          }
+        ]
+      }
+    },
+    "constraints_html": "WhirRoundAir <span class=\"ref\" data-scene=\"default\">observes codeword_commit[i] on TranscriptBus (gated by is_not_final_round) and sends it on CommitmentsBus with (major_idx = round+1, minor_idx = 0)</span> for Merkle root authentication.",
+    "soundness_html": "Commitment observation is transcript-pinned. <span class=\"ref\" data-scene=\"same-cell\">Because CommitmentsBus reads the same cell, any tampering with the commitment fails Merkle verification during query phase</span>."
+  },
+  "whir-3": {
+    "default_scene": {
+      "note": "WhirRoundAir samples the OOD point z0 and observes the OOD evaluation y0 on TranscriptBus. Both are D_EF extension elements, gated by is_not_final_round.",
+      "airs": [
+        {
+          "name": "WhirRoundAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "z0"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "WhirRoundAir",
+            "col": "z0",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample z0"
+        }
+      ]
+    },
+    "scenes": {
+      "sample-observe": {
+        "note": "z0 is sampled (is_sample=1); y0 is observed (is_sample=0) at the next tidx.",
+        "airs": [
+          {
+            "name": "WhirRoundAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "z0",
+                  "whir_round"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "z0",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "is_sample",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "is_sample=1"
+          },
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "z0",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "observe y0"
+          }
+        ]
+      }
+    },
+    "constraints_html": "WhirRoundAir <span class=\"ref\" data-scene=\"default\">samples z0 on TranscriptBus</span> and <span class=\"ref\" data-scene=\"sample-observe\">observes ood_value on TranscriptBus (gated by is_not_final_round)</span>.",
+    "soundness_html": "z0 and ood_value are transcript-pinned. <span class=\"ref\" data-scene=\"sample-observe\">They are later used in the final claim accumulation (whir-9 gamma update)</span>."
+  },
+  "whir-4": {
+    "default_scene": {
+      "note": "FinalPolyMleEvalAir reads 2^log_final_poly_len final-polynomial coefficients from TranscriptBus and publishes them on WhirFinalPolyBus as a lookup table keyed by coefficient index.",
+      "airs": [
+        {
+          "name": "FinalPolyMleEvalAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "layer",
+                "node_idx",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "layer",
+                "node_idx",
+                "value"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "WhirFinalPolyBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "coeff"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "FinalPolyMleEvalAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe coeff"
+        },
+        {
+          "from": {
+            "air": "FinalPolyMleEvalAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirFinalPolyBus",
+            "field": "coeff",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "publish"
+        }
+      ]
+    },
+    "scenes": {
+      "mle-tree-base": {
+        "note": "The 2^log_final_poly_len leaf coefficients form the base of a binary MLE evaluation tree. Higher layers fold them with opening-point coordinates u[t..].",
+        "airs": [
+          {
+            "name": "FinalPolyMleEvalAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "layer",
+                  "node_idx",
+                  "left_value",
+                  "right_value",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "layer",
+                  "node_idx",
+                  "value"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "is_root",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "FinalPolyFoldingBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "depth",
+                  "node_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FinalPolyMleEvalAir",
+              "col": "value",
+              "row": 1
+            },
+            "to": {
+              "bus": "FinalPolyFoldingBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "child -> parent"
+          }
+        ]
+      }
+    },
+    "constraints_html": "FinalPolyMleEvalAir observes final_poly coefficients on TranscriptBus at the last round. The total count is 2^log_final_poly_len (forced by <span class=\"ref\" data-scene=\"mle-tree-base\">the binary tree structure with 2^(log_final_poly_len+1)-1 nodes</span>). <span class=\"ref\" data-scene=\"default\">Coefficients are provided to FinalPolyQueryEvalAir via WhirFinalPolyBus</span>.",
+    "soundness_html": "Coefficient count is VK-fixed. <span class=\"ref\" data-scene=\"default\">Observations are pinned on transcript</span>. <span class=\"ref\" data-scene=\"mle-tree-base\">Binary tree structure enforces proper MLE evaluation at u[t..]</span>."
+  },
+  "whir-5": {
+    "default_scene": {
+      "note": "Per WHIR round, WhirRoundAir observes a query-phase PoW witness on TranscriptBus and verifies it via an ExpBitsLenBus lookup that checks the low query_phase_pow_bits zero bits.",
+      "airs": [
+        {
+          "name": "WhirRoundAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpBitsLenAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "base",
+                "bit_src",
+                "num_bits",
+                "result"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "base",
+                "bit_src",
+                "num_bits",
+                "result"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "WhirRoundAir",
+            "col": "tidx",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "tidx",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe pow witness"
+        },
+        {
+          "from": {
+            "air": "ExpBitsLenAir",
+            "col": "result",
+            "row": 0
+          },
+          "to": {
+            "bus": "ExpBitsLenBus",
+            "field": "result",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "difficulty"
+        }
+      ]
+    },
+    "scenes": {
+      "lookup": {
+        "note": "Every WHIR round consumes one ExpBitsLenBus entry for the query-phase PoW. ExpBitsLenAir is the provider; the lookup count is num_whir_rounds per proof.",
+        "airs": [
+          {
+            "name": "WhirRoundAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "whir_round"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ExpBitsLenAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpBitsLenBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "whir_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "num_bits",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "consumer"
+          },
+          {
+            "from": {
+              "air": "ExpBitsLenAir",
+              "col": "result",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "result",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "provider"
+          }
+        ]
+      }
+    },
+    "constraints_html": "WhirRoundAir <span class=\"ref\" data-scene=\"default\">observes query_phase_pow_witness on TranscriptBus per round (trace height = num_whir_rounds)</span> and <span class=\"ref\" data-scene=\"lookup\">verifies via ExpBitsLenBus</span>.",
+    "soundness_html": "Standard PoW mechanism via <span class=\"ref\" data-scene=\"lookup\">ExpBitsLenAir (LT)</span> and Poseidon2 sponge (T)."
+  },
+  "whir-6": {
+    "default_scene": {
+      "note": "WhirQueryAir samples num_queries query indices per WHIR round, derives zi_root = omega^(sample & mask) via ExpBitsLenBus, computes zi = zi_root^{2^k}, and dispatches per-query verification on VerifyQueryBus.",
+      "airs": [
+        {
+          "name": "WhirQueryAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "query_idx",
+                "sample",
+                "zi_root",
+                "zi"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "whir_round",
+                "query_idx",
+                "sample",
+                "zi_root"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "VerifyQueryBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "whir_round",
+                "query_idx",
+                "merkle_idx_bit_src",
+                "zi_root",
+                "zi",
+                "yi"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "WhirQueryAir",
+            "col": "sample",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample"
+        },
+        {
+          "from": {
+            "air": "WhirQueryAir",
+            "col": "zi",
+            "row": 0
+          },
+          "to": {
+            "bus": "VerifyQueryBus",
+            "field": "zi",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "dispatch"
+        }
+      ]
+    },
+    "scenes": {
+      "exponentiation": {
+        "note": "zi_root = omega^(sample & mask) is computed by ExpBitsLenBus lookup: (base=omega, bit_src=sample, num_bits=log_domain_size, result=zi_root).",
+        "airs": [
+          {
+            "name": "WhirQueryAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sample",
+                  "omega",
+                  "zi_root"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpBitsLenBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirQueryAir",
+              "col": "omega",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "base",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "WhirQueryAir",
+              "col": "sample",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "bit_src",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "WhirQueryAir",
+              "col": "zi_root",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "result",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "= omega^sample"
+          }
+        ]
+      },
+      "dispatch": {
+        "note": "Per-round dispatch: WhirRoundAir -> WhirQueryAir via VerifyQueriesBus (one message per round); per-query dispatch: WhirQueryAir -> Initial/NonInitialOpenedValuesAir via VerifyQueryBus (num_queries messages per round).",
+        "airs": [
+          {
+            "name": "WhirQueryAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "whir_round",
+                  "query_idx",
+                  "yi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "VerifyQueriesBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "whir_round",
+                  "num_queries",
+                  "pre_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "VerifyQueryBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "whir_round",
+                  "query_idx",
+                  "zi",
+                  "yi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirQueryAir",
+              "col": "whir_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "VerifyQueriesBus",
+              "field": "whir_round",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "from WhirRoundAir"
+          },
+          {
+            "from": {
+              "air": "WhirQueryAir",
+              "col": "query_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "VerifyQueryBus",
+              "field": "query_idx",
+              "row": 0
+            },
+            "kind": "send"
+          }
+        ]
+      }
+    },
+    "constraints_html": "WhirQueryAir samples query indices from TranscriptBus. <span class=\"ref\" data-scene=\"dispatch\">It receives per-round dispatch from WhirRoundAir via VerifyQueriesBus and dispatches per-query Merkle verification to Initial/NonInitialOpenedValuesAir via VerifyQueryBus</span>. <span class=\"ref\" data-scene=\"exponentiation\">The sampled index is used to derive zi_root = omega^index via ExpBitsLenBus lookup</span>.",
+    "soundness_html": "Query indices are transcript-pinned. <span class=\"ref\" data-scene=\"exponentiation\">ExpBitsLenBus provides omega^index via correct exponentiation (LT)</span>. Per-round query count num_queries[i] is VK-fixed."
+  },
+  "whir-7": {
+    "default_scene": {
+      "note": "InitialOpenedValuesAir iterates a 5-level nested loop (proof, query, coset, commit, chunk). Each row hashes 8 opened field values via Poseidon2PermuteBus and ships the leaf hash on MerkleVerifyBus; concurrently it accumulates mu-weighted codeword values and sends them on WhirFoldingBus.",
+      "airs": [
+        {
+          "name": "InitialOpenedValuesAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "query_idx",
+                "coset_idx",
+                "commit_idx",
+                "col_chunk_idx",
+                "pre_state",
+                "post_state",
+                "codeword_value_acc"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "query_idx",
+                "coset_idx",
+                "commit_idx",
+                "col_chunk_idx",
+                "pre_state",
+                "post_state",
+                "codeword_value_acc"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "MerkleVerifyBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "total_depth",
+                "height",
+                "is_leaf",
+                "value",
+                "commit_major",
+                "commit_minor"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "WhirFoldingBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "whir_round",
+                "query_idx",
+                "height",
+                "twiddle",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "InitialOpenedValuesAir",
+            "col": "post_state",
+            "row": 0
+          },
+          "to": {
+            "bus": "MerkleVerifyBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "leaf hash"
+        },
+        {
+          "from": {
+            "air": "InitialOpenedValuesAir",
+            "col": "codeword_value_acc",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirFoldingBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "codeword_val"
+        }
+      ]
+    },
+    "scenes": {
+      "poseidon-hash": {
+        "note": "Each row issues a Poseidon2PermuteBus lookup: (input = row values + state) -> (output). The output's first 8 elements become the leaf hash sent on MerkleVerifyBus.",
+        "airs": [
+          {
+            "name": "InitialOpenedValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "pre_state",
+                  "post_state",
+                  "col_chunk_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "Poseidon2PermuteBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "input",
+                  "output"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InitialOpenedValuesAir",
+              "col": "pre_state",
+              "row": 0
+            },
+            "to": {
+              "bus": "Poseidon2PermuteBus",
+              "field": "input",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "hash row"
+          }
+        ]
+      },
+      "mu-batching": {
+        "note": "Within one query, the mu_batched_value accumulator iterates commit_idx outermost: mu_batched_value += mu^c * opened_value. mu comes from WhirMuBus (single per-proof message).",
+        "airs": [
+          {
+            "name": "InitialOpenedValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "commit_idx",
+                  "col_chunk_idx",
+                  "codeword_value_acc",
+                  "pre_state",
+                  "post_state"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "commit_idx",
+                  "col_chunk_idx",
+                  "codeword_value_acc",
+                  "pre_state",
+                  "post_state"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirMuBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InitialOpenedValuesAir",
+              "col": "codeword_value_acc",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirMuBus",
+              "field": "mu",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "mu from Stacking"
+          }
+        ]
+      },
+      "merkle-dispatch": {
+        "note": "MerkleVerifyBus carries the leaf hash with total_depth = initial_log_domain_size + 1. MerkleVerifyAir receives it and walks up to the root authenticated against CommitmentsBus (major_idx=0).",
+        "airs": [
+          {
+            "name": "InitialOpenedValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "query_idx",
+                  "coset_idx",
+                  "commit_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "MerkleVerifyAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_combining_leaves",
+                  "total_depth",
+                  "merkle_idx_bit_src",
+                  "left",
+                  "compression_output"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "MerkleVerifyBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "total_depth",
+                  "is_leaf",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InitialOpenedValuesAir",
+              "col": "query_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "MerkleVerifyBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "leaf"
+          },
+          {
+            "from": {
+              "air": "MerkleVerifyAir",
+              "col": "left",
+              "row": 0
+            },
+            "to": {
+              "bus": "MerkleVerifyBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          }
+        ]
+      }
+    },
+    "constraints_html": "InitialOpenedValuesAir uses a 5-level NestedForLoopSubAir (proof -&gt; query -&gt; coset -&gt; commit -&gt; chunk) enforcing contiguous rows and proper counter transitions. <span class=\"ref\" data-scene=\"poseidon-hash\">Leaf hashes are computed via Poseidon2PermuteBus and sent on MerkleVerifyBus with total_depth = initial_log_domain_size + 1</span>. <span class=\"ref\" data-scene=\"mu-batching\">It combines opened values with mu powers (from WhirMuBus) into codeword_vals, sent on WhirFoldingBus to WhirFoldingAir</span>.",
+    "soundness_html": "Nested loop enforces correct query/commit/coset counts. <span class=\"ref\" data-scene=\"merkle-dispatch\">Leaf binding via MerkleVerifyBus (T - merkle correctness) ensures opened rows are those committed to</span>. <span class=\"ref\" data-scene=\"mu-batching\">Mu-weighting ties initial codeword to the stacking commitments and mu (from Stacking)</span>."
+  },
+  "whir-8": {
+    "default_scene": {
+      "note": "NonInitialOpenedValuesAir iterates 4-level (proof, whir_round, query, coset). Each row compresses the opened value via Poseidon2CompressBus, emits a leaf on MerkleVerifyBus (depth decreases per round), and ships the value on WhirFoldingBus for folding.",
+      "airs": [
+        {
+          "name": "NonInitialOpenedValuesAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "query_idx",
+                "coset_idx",
+                "value",
+                "value_hash"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "whir_round",
+                "query_idx",
+                "coset_idx",
+                "value"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "MerkleVerifyBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "total_depth",
+                "is_leaf",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "WhirFoldingBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "whir_round",
+                "query_idx",
+                "twiddle",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "NonInitialOpenedValuesAir",
+            "col": "value_hash",
+            "row": 0
+          },
+          "to": {
+            "bus": "MerkleVerifyBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "leaf"
+        },
+        {
+          "from": {
+            "air": "NonInitialOpenedValuesAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirFoldingBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "fold input"
+        }
+      ]
+    },
+    "scenes": {
+      "compress-lookup": {
+        "note": "Non-initial rounds use Poseidon2 compression (not full permutation): two 8-digest halves combine into one 8-digest output.",
+        "airs": [
+          {
+            "name": "NonInitialOpenedValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "value",
+                  "value_hash"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "Poseidon2CompressBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "input",
+                  "output"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "NonInitialOpenedValuesAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "Poseidon2CompressBus",
+              "field": "input",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "NonInitialOpenedValuesAir",
+              "col": "value_hash",
+              "row": 0
+            },
+            "to": {
+              "bus": "Poseidon2CompressBus",
+              "field": "output",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "hash"
+          }
+        ]
+      },
+      "depth-decrease": {
+        "note": "Each WHIR round halves the domain, so total_depth = initial_log_domain_size + 1 - whir_round strictly decreases. Matches the reference verifier's domain halving.",
+        "airs": [
+          {
+            "name": "NonInitialOpenedValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "whir_round"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "whir_round"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "MerkleVerifyBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "total_depth"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "total_depth"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "NonInitialOpenedValuesAir",
+              "col": "whir_round",
+              "row": 0
+            },
+            "to": {
+              "bus": "MerkleVerifyBus",
+              "field": "total_depth",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "NonInitialOpenedValuesAir",
+              "col": "whir_round",
+              "row": 1
+            },
+            "to": {
+              "bus": "MerkleVerifyBus",
+              "field": "total_depth",
+              "row": 1
+            },
+            "kind": "send",
+            "label": "smaller"
+          }
+        ]
+      }
+    },
+    "constraints_html": "NonInitialOpenedValuesAir uses a 4-level NestedForLoopSubAir (proof -&gt; round -&gt; query -&gt; coset), with coset_idx reaching 2^k-1 when transitioning between queries. <span class=\"ref\" data-scene=\"compress-lookup\">Opened values are hashed via Poseidon2CompressBus and sent on MerkleVerifyBus</span> with <span class=\"ref\" data-scene=\"depth-decrease\">total_depth = initial_log_domain_size + 1 - whir_round (decreasing per round)</span>. Values are sent on WhirFoldingBus.",
+    "soundness_html": "Nested loop enforces query/round/coset counts. MerkleVerifyBus binds to codeword commitments registered on CommitmentsBus by WhirRoundAir (whir-2). <span class=\"ref\" data-scene=\"depth-decrease\">Decreasing depth per round matches the reference verifier&#39;s domain halving</span>."
+  },
+  "whir-9": {
+    "default_scene": {
+      "note": "WhirFoldingAir is the binary folding tree: each row receives left and right children on WhirFoldingBus, looks up alpha on WhirAlphaBus, computes value = left + (alpha - x)(left - right)/(2x), and sends value as parent. k levels reduce 2^k coset values to one yi per query.",
+      "airs": [
+        {
+          "name": "WhirFoldingAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "height",
+                "coset_idx",
+                "twiddle",
+                "left_value",
+                "right_value",
+                "alpha",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "height",
+                "coset_idx",
+                "value"
+              ],
+              "kind": "next"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "is_root",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirFoldingBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "height",
+                "coset_idx",
+                "twiddle",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "height",
+                "coset_idx",
+                "twiddle",
+                "value"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "WhirAlphaBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "WhirFoldingAir",
+            "col": "left_value",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirFoldingBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "left child"
+        },
+        {
+          "from": {
+            "air": "WhirFoldingAir",
+            "col": "alpha",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirAlphaBus",
+            "field": "challenge",
+            "row": 0
+          },
+          "kind": "lookup"
+        }
+      ]
+    },
+    "scenes": {
+      "fold": {
+        "note": "Pre-fold (prev row): two children at height h. Post-fold (next row): one parent at height h+1. Value = left + (alpha - x)(left - right)/(2x), x = twiddle * coset_shift.",
+        "airs": [
+          {
+            "name": "WhirFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "height",
+                  "coset_idx",
+                  "left_value",
+                  "right_value",
+                  "value"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "height",
+                  "coset_idx",
+                  "left_value",
+                  "value"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirFoldingBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "height",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirFoldingAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirFoldingBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "parent at h+1"
+          },
+          {
+            "from": {
+              "air": "WhirFoldingAir",
+              "col": "left_value",
+              "row": 1
+            },
+            "to": {
+              "bus": "WhirFoldingBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "consumed by higher level"
+          }
+        ]
+      },
+      "root-handoff": {
+        "note": "At is_root=1 the final yi = value feeds (via WhirFoldingAir's send on WhirFoldingBus at root flag) into WhirQueryAir's claim accumulator.",
+        "airs": [
+          {
+            "name": "WhirFoldingAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "is_root",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirFoldingBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "y_final",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirFoldingAir",
+              "col": "value",
+              "row": -1
+            },
+            "to": {
+              "bus": "WhirFoldingBus",
+              "field": "y_final",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "yi (root)"
+          }
+        ]
+      }
+    },
+    "constraints_html": "WhirFoldingAir <span class=\"ref\" data-scene=\"default\">receives opened values on WhirFoldingBus and alphas on WhirAlphaBus (from SumcheckAir)</span>. <span class=\"ref\" data-scene=\"fold\">It performs k_whir levels of binary folding: at each level, combines pairs (h(X), h(-X)) using the folding formula</span>, producing <span class=\"ref\" data-scene=\"root-handoff\">a single yi after k steps</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"fold\">Folding is algebraically constrained</span>. alphas are transcript-pinned (from whir-1). The fold formula is the standard WHIR binary fold that produces yi consistent with the sumcheck claim at alpha."
+  },
+  "whir-10": {
+    "default_scene": {
+      "note": "Per WHIR round, WhirRoundAir samples gamma on TranscriptBus, publishes it on WhirGammaBus, and uses gamma_pow to accumulate y0 and per-query yi contributions into the next-round claim.",
+      "airs": [
+        {
+          "name": "WhirRoundAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "whir_round",
+                "gamma",
+                "claim",
+                "next_claim"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "whir_round",
+                "gamma",
+                "claim"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "WhirGammaBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "WhirRoundAir",
+            "col": "gamma",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample"
+        },
+        {
+          "from": {
+            "air": "WhirRoundAir",
+            "col": "gamma",
+            "row": 0
+          },
+          "to": {
+            "bus": "WhirGammaBus",
+            "field": "challenge",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "to FinalPolyQueryEval"
+        }
+      ]
+    },
+    "scenes": {
+      "transition": {
+        "note": "Round-to-round claim update: claim_{i+1} = next_claim_i, linked by VerifyQueriesBus pre/post semantics inside WhirRoundAir.",
+        "airs": [
+          {
+            "name": "WhirRoundAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "whir_round",
+                  "claim",
+                  "next_claim",
+                  "gamma"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "whir_round",
+                  "claim"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirGammaBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "gamma",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirGammaBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "per round"
+          }
+        ]
+      }
+    },
+    "constraints_html": "WhirRoundAir <span class=\"ref\" data-scene=\"default\">samples gamma on TranscriptBus per round and sends it on WhirGammaBus to FinalPolyQueryEvalAir</span>. <span class=\"ref\" data-scene=\"transition\">It performs the running claim update via VerifyQueriesBus, combining y0 and yi[q] per-query values into the claim accumulator</span>.",
+    "soundness_html": "gamma is transcript-pinned per round. The per-round accumulation formula is algebraically constrained."
+  },
+  "whir-11": {
+    "default_scene": {
+      "note": "FinalPolyMleEvalAir produces suffix = eval_mle(final_poly, u[t..]) via a binary tree. Multiplied by eq_partial received on WhirEqAlphaUBus, that gives prefix*suffix. Meanwhile FinalPolyQueryEvalAir assembles per-query gamma-weighted evaluations. WhirRoundAir checks acc == claim.",
+      "airs": [
+        {
+          "name": "FinalPolyMleEvalAir",
+          "rows": [
+            {
+              "row": -1,
+              "cols": [
+                "is_root",
+                "value",
+                "eq_alpha_u"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "FinalPolyQueryEvalAir",
+          "rows": [
+            {
+              "row": -1,
+              "cols": [
+                "final_value_acc",
+                "gamma",
+                "query_pow"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirEqAlphaUBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "FinalPolyMleEvalBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "num_whir_rounds",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "FinalPolyMleEvalAir",
+            "col": "eq_alpha_u",
+            "row": -1
+          },
+          "to": {
+            "bus": "WhirEqAlphaUBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "from SumcheckAir"
+        },
+        {
+          "from": {
+            "air": "FinalPolyMleEvalAir",
+            "col": "value",
+            "row": -1
+          },
+          "to": {
+            "bus": "FinalPolyMleEvalBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "prefix*suffix"
+        }
+      ]
+    },
+    "scenes": {
+      "mle-vs-query": {
+        "note": "Two parallel accumulators feed the final check: FinalPolyMleEvalAir's prefix*suffix (via MLE tree) and FinalPolyQueryEvalAir's gamma-weighted query evaluations. Both are consumed by WhirRoundAir.",
+        "airs": [
+          {
+            "name": "FinalPolyMleEvalAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "value",
+                  "eq_alpha_u"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "FinalPolyQueryEvalAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "final_value_acc"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "FinalPolyMleEvalBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "FinalPolyQueryEvalBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "last_whir_round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FinalPolyMleEvalAir",
+              "col": "value",
+              "row": -1
+            },
+            "to": {
+              "bus": "FinalPolyMleEvalBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "FinalPolyQueryEvalAir",
+              "col": "final_value_acc",
+              "row": -1
+            },
+            "to": {
+              "bus": "FinalPolyQueryEvalBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send"
+          }
+        ]
+      },
+      "query-eval": {
+        "note": "FinalPolyQueryEvalAir has two phases per (round, query): phase=0 accumulates gamma_pow * prod eq_1(alpha_i, query_pow^{2^i}); phase=1 runs Horner evaluation of the final poly at query_pow.",
+        "airs": [
+          {
+            "name": "FinalPolyQueryEvalAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "phase_idx",
+                  "eval_idx",
+                  "alpha",
+                  "query_pow",
+                  "gamma_eq_acc"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "phase_idx",
+                  "eval_idx",
+                  "horner_acc",
+                  "final_poly_coeff"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "WhirAlphaBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "WhirFinalPolyBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "coeff"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FinalPolyQueryEvalAir",
+              "col": "alpha",
+              "row": 0
+            },
+            "to": {
+              "bus": "WhirAlphaBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "FinalPolyQueryEvalAir",
+              "col": "final_poly_coeff",
+              "row": 1
+            },
+            "to": {
+              "bus": "WhirFinalPolyBus",
+              "field": "coeff",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "Horner phase"
+          }
+        ]
+      },
+      "final-check": {
+        "note": "WhirRoundAir closes the loop: acc = prefix*suffix + sum_round gamma-weighted(y0 term + sum_q query evaluations). If acc != claim, a bus imbalance or algebraic constraint fails.",
+        "airs": [
+          {
+            "name": "WhirRoundAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "whir_round",
+                  "claim",
+                  "next_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "FinalPolyMleEvalBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "FinalPolyQueryEvalBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "claim",
+              "row": -1
+            },
+            "to": {
+              "bus": "FinalPolyMleEvalBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "expect prefix*suffix"
+          },
+          {
+            "from": {
+              "air": "WhirRoundAir",
+              "col": "next_claim",
+              "row": -1
+            },
+            "to": {
+              "bus": "FinalPolyQueryEvalBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "expect query acc"
+          }
+        ]
+      }
+    },
+    "constraints_html": "FinalPolyMleEvalAir computes suffix = eval_mle(final_poly, u[t..]) via binary tree over 2^log_final_poly_len leaves (FinalPolyFoldingBus). <span class=\"ref\" data-scene=\"default\">SumcheckAir provides eq_partial on WhirEqAlphaUBus, which FinalPolyMleEvalAir combines as prefix * suffix</span>. <span class=\"ref\" data-scene=\"query-eval\">FinalPolyQueryEvalAir computes per-query Horner evaluations using alphas (WhirAlphaBus) and gammas (WhirGammaBus)</span>. <span class=\"ref\" data-scene=\"final-check\">WhirRoundAir receives FinalPolyMleEvalBus and FinalPolyQueryEvalBus results and checks the final claim equality</span>.",
+    "soundness_html": "All components of acc are algebraically computed from transcript-pinned values (u, alphas, gammas) and observed values (final_poly, opened values, y0). <span class=\"ref\" data-scene=\"final-check\">The final check ties sumcheck output claim to the MLE+query accumulator; any discrepancy between the folding sumcheck and the polynomial opening fails the bus/AIR constraints</span>. This completes the M-WHIR extraction argument: verify(vk_child, Extract(W)) accepts."
+  }
+}

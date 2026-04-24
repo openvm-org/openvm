@@ -1,0 +1,1518 @@
+{
+  "buses": [
+    {
+      "name": "TranscriptBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Implements the Fiat-Shamir transcript as a bus: TranscriptAir replays every observe/sample event and all other AIRs receive the values they consume.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index (contiguous from 0 within a proof)" },
+        { "field": "value", "type": "F", "description": "Observed or sampled field element" },
+        { "field": "is_sample", "type": "F", "description": "Boolean: 1 if sample, 0 if observe" }
+      ],
+      "producers": [
+        { "air": "TranscriptAir", "direction": "S", "note": "sole sender; replays the full transcript log" }
+      ],
+      "consumers": [
+        { "air": "FractionsFolderAir", "direction": "R", "note": "observe/sample" },
+        { "air": "UnivariateSumcheckAir", "direction": "R", "note": "observe/sample" },
+        { "air": "MultilinearSumcheckAir", "direction": "R", "note": "observe/sample" },
+        { "air": "InteractionsFoldingAir", "direction": "R", "note": "sample" },
+        { "air": "ConstraintsFoldingAir", "direction": "R", "note": "sample" },
+        { "air": "ProofShapeAir", "direction": "R", "note": "observations for preamble" },
+        { "air": "PublicValuesAir", "direction": "R", "note": "public values observation" },
+        { "air": "GkrInputAir", "direction": "R", "note": "observe/sample" },
+        { "air": "GkrLayerAir", "direction": "R", "note": "observe/sample" },
+        { "air": "GkrLayerSumcheckAir", "direction": "R", "note": "observe/sample" },
+        { "air": "GkrXiSamplerAir", "direction": "R", "note": "sample" },
+        { "air": "OpeningClaimsAir", "direction": "R", "note": "sample" },
+        { "air": "UnivariateRoundAir", "direction": "R", "note": "sample" },
+        { "air": "SumcheckRoundsAir", "direction": "R", "note": "sample" },
+        { "air": "StackingClaimsAir", "direction": "R", "note": "sample" },
+        { "air": "WhirRoundAir", "direction": "R", "note": "observe/sample" },
+        { "air": "SumcheckAir", "direction": "R", "note": "WHIR module; observe/sample" },
+        { "air": "WhirQueryAir", "direction": "R", "note": "sample" },
+        { "air": "FinalPolyMleEvalAir", "direction": "R", "note": "observe" }
+      ],
+      "invariants": "Multiset equality: every (tidx, value, is_sample) sent by TranscriptAir is received exactly once across all consumer AIRs within each proof."
+    },
+    {
+      "name": "GkrModuleBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Handoff from the ProofShape module to the GKR module carrying the GKR/LogUp hypercube parameters.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index at handoff" },
+        { "field": "n_logup", "type": "F", "description": "LogUp hypercube dimension" },
+        { "field": "n_max", "type": "F", "description": "Maximum hypercube dimension across all AIRs" },
+        { "field": "is_n_max_greater", "type": "F", "description": "Boolean: 1 if n_max > n_logup, else 0" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "sole sender" }
+      ],
+      "consumers": [
+        { "air": "GkrInputAir", "direction": "R", "note": "sole receiver" }
+      ],
+      "invariants": "Exactly one message per proof; multiset equality between sender and receiver."
+    },
+    {
+      "name": "BatchConstraintModuleBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Handoff from the GKR module to the BatchConstraint module carrying the GKR input-layer numerator and denominator claims.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index at handoff" },
+        { "field": "gkr_input_layer_claim", "type": "[[F; D_EF]; 2]", "description": "Numerator and denominator input-layer claims" }
+      ],
+      "producers": [
+        { "air": "GkrInputAir", "direction": "S", "note": "sole sender" }
+      ],
+      "consumers": [
+        { "air": "FractionsFolderAir", "direction": "R", "note": "sole receiver" }
+      ],
+      "invariants": "Exactly one message per proof; gkr_input_layer_claim[0] is numerator, [1] is denominator."
+    },
+    {
+      "name": "StackingModuleBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Handoff from the BatchConstraint sumcheck to the Stacking module; signals sumcheck completion and carries the transcript index.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index after the batch constraint sumcheck" }
+      ],
+      "producers": [
+        { "air": "UnivariateSumcheckAir", "direction": "S", "note": "sends on completion" },
+        { "air": "MultilinearSumcheckAir", "direction": "S", "note": "sends on completion" }
+      ],
+      "consumers": [
+        { "air": "OpeningClaimsAir", "direction": "R", "note": "begins the stacking module" },
+        { "air": "MultilinearSumcheckAir", "direction": "R", "note": "chains across sumcheck stages" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "WhirModuleBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Handoff from the Stacking module to the WHIR module carrying the batched opening claim after mu-folding.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index after mu-batching randomness is sampled" },
+        { "field": "claim", "type": "[F; 4]", "description": "Batched opening claim (extension field element)" }
+      ],
+      "producers": [
+        { "air": "StackingClaimsAir", "direction": "S", "note": "sole sender" }
+      ],
+      "consumers": [
+        { "air": "WhirRoundAir", "direction": "R", "note": "sole receiver" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "WhirMuBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the mu batching challenge from the Stacking module to the WHIR module for combining stacking claims.",
+      "message_format": [
+        { "field": "mu", "type": "[F; D_EF]", "description": "Extension field mu batching challenge" }
+      ],
+      "producers": [
+        { "air": "StackingClaimsAir", "direction": "S", "note": "sole sender" }
+      ],
+      "consumers": [
+        { "air": "InitialOpenedValuesAir", "direction": "R", "note": "sole receiver" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "MerkleVerifyBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries Merkle authentication path nodes: MerkleVerifyAir receives child hashes and sends parent hashes at every level.",
+      "message_format": [
+        { "field": "merkle_idx_bit_src", "type": "F", "description": "Merkle index used for bit-source shifting" },
+        { "field": "current_idx_bit_src", "type": "F", "description": "merkle_idx_bit_src right-shifted past the leaf tree depth" },
+        { "field": "total_depth", "type": "F", "description": "Full depth of the Merkle tree including the leaf-hashing part" },
+        { "field": "height", "type": "F", "description": "Level within the Merkle tree" },
+        { "field": "is_leaf", "type": "F", "description": "Boolean: 1 for leaf-combining rows, 0 for authentication path" },
+        { "field": "leaf_sub_idx", "type": "F", "description": "Sub-index within the leaf tree" },
+        { "field": "value", "type": "[F; DIGEST_SIZE]", "description": "Hash digest at this node" },
+        { "field": "commit_major", "type": "F", "description": "Major commitment index" },
+        { "field": "commit_minor", "type": "F", "description": "Minor commitment index" }
+      ],
+      "producers": [
+        { "air": "MerkleVerifyAir", "direction": "S", "note": "sends parent hashes at each level" },
+        { "air": "InitialOpenedValuesAir", "direction": "S", "note": "sends leaf hashes of initial opened rows" },
+        { "air": "NonInitialOpenedValuesAir", "direction": "S", "note": "sends leaf hashes for codeword rows" }
+      ],
+      "consumers": [
+        { "air": "MerkleVerifyAir", "direction": "R", "note": "receives child hashes at each parent step" }
+      ],
+      "invariants": "Multiset equality across all Merkle authentication path messages; single-row constraints only; root hash verified against CommitmentsBus."
+    },
+    {
+      "name": "Poseidon2PermuteBus",
+      "kind": "lookup",
+      "per_proof": false,
+      "purpose": "Global lookup table of Poseidon2 permutation evaluations (input, permute(input)).",
+      "message_format": [
+        { "field": "input", "type": "[F; 16]", "description": "Full 16-element Poseidon2 input state" },
+        { "field": "output", "type": "[F; 16]", "description": "Poseidon2_permute(input)" }
+      ],
+      "producers": [
+        { "air": "Poseidon2Air", "direction": "P", "note": "provides the permutation table" }
+      ],
+      "consumers": [
+        { "air": "TranscriptAir", "direction": "L", "note": "sponge operations" },
+        { "air": "InitialOpenedValuesAir", "direction": "L", "note": "leaf hashing of initial opened rows" }
+      ],
+      "invariants": "Every looked-up pair satisfies output = Poseidon2_permute(input); table size equals total permutation calls across all proofs."
+    },
+    {
+      "name": "Poseidon2CompressBus",
+      "kind": "lookup",
+      "per_proof": false,
+      "purpose": "Global lookup table of Poseidon2 compression evaluations, used for Merkle tree hashing.",
+      "message_format": [
+        { "field": "input", "type": "[F; 16]", "description": "Concatenated pair of 8-element digests" },
+        { "field": "output", "type": "[F; 8]", "description": "First 8 elements of Poseidon2_permute(input)" }
+      ],
+      "producers": [
+        { "air": "Poseidon2Air", "direction": "P", "note": "provides the compression table" }
+      ],
+      "consumers": [
+        { "air": "MerkleVerifyAir", "direction": "L", "note": "authentication path compression" },
+        { "air": "NonInitialOpenedValuesAir", "direction": "L", "note": "codeword leaf hashing" }
+      ],
+      "invariants": "Every looked-up pair satisfies output = Poseidon2_permute(input)[0..8]."
+    },
+    {
+      "name": "AirShapeBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of per-AIR shape properties (AirId, NumInteractions, NeedRot) for each AIR present in the child proof.",
+      "message_format": [
+        { "field": "sort_idx", "type": "F", "description": "Per-proof AIR sort index" },
+        { "field": "property_idx", "type": "F", "description": "Property selector in {0=AirId, 1=NumInteractions, 2=NeedRot}" },
+        { "field": "value", "type": "F", "description": "Property value" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "provides all shape properties" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "L", "note": "" },
+        { "air": "InteractionsFoldingAir", "direction": "L", "note": "" },
+        { "air": "ConstraintsFoldingAir", "direction": "L", "note": "" },
+        { "air": "OpeningClaimsAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "sort_idx values are contiguous within a proof; property_idx in {0,1,2}."
+    },
+    {
+      "name": "HyperdimBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of per-AIR hypercube dimensions, encoded as |n| with a sign bit to support negative dimensions.",
+      "message_format": [
+        { "field": "sort_idx", "type": "F", "description": "Per-proof AIR sort index" },
+        { "field": "n_abs", "type": "F", "description": "|log_height - l_skip|" },
+        { "field": "n_sign_bit", "type": "F", "description": "Boolean: 1 if n < 0 (log_height < l_skip), else 0" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "L", "note": "" },
+        { "air": "ExpressionClaimAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "n_sign_bit is boolean; n_abs = |log_height - l_skip|."
+    },
+    {
+      "name": "LiftedHeightsBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of lifted trace heights per column partition, where lifted_height = max(trace_height, 2^l_skip).",
+      "message_format": [
+        { "field": "sort_idx", "type": "F", "description": "Per-proof AIR sort index" },
+        { "field": "part_idx", "type": "F", "description": "Column partition index" },
+        { "field": "commit_idx", "type": "F", "description": "Commitment index for the partition" },
+        { "field": "hypercube_dim", "type": "F", "description": "Hypercube dimension for this partition" },
+        { "field": "lifted_height", "type": "F", "description": "max(trace_height, 2^l_skip)" },
+        { "field": "log_lifted_height", "type": "F", "description": "log2 of lifted_height" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "OpeningClaimsAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "lifted_height = 2^log_lifted_height; log_lifted_height = max(log_height, l_skip)."
+    },
+    {
+      "name": "CommitmentsBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of Merkle root commitments for both stacking commitments and each WHIR round commitment.",
+      "message_format": [
+        { "field": "major_idx", "type": "F", "description": "Major commitment index: 0 for stacking, round+1 for WHIR" },
+        { "field": "minor_idx", "type": "F", "description": "Minor index: stacking matrix index or 0 for WHIR" },
+        { "field": "commitment", "type": "[F; 8]", "description": "Poseidon2 digest root" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "provides stacking commitments" },
+        { "air": "WhirRoundAir", "direction": "P", "note": "provides WHIR round commitments" }
+      ],
+      "consumers": [
+        { "air": "MerkleVerifyAir", "direction": "L", "note": "verifies authentication paths lead to correct root" }
+      ],
+      "invariants": "commitment is a valid Poseidon2 digest; (major_idx, minor_idx) uniquely identifies a commitment."
+    },
+    {
+      "name": "PublicValuesBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the child proof's public values from PublicValuesAir to the constraint evaluator.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "Child AIR index the public value belongs to" },
+        { "field": "pv_idx", "type": "F", "description": "Index within the AIR's public values vector" },
+        { "field": "value", "type": "F", "description": "Public value field element" }
+      ],
+      "producers": [
+        { "air": "PublicValuesAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "R", "note": "uses public values during constraint evaluation" }
+      ],
+      "invariants": "Multiset equality; in continuations mode a message may be sent more than once so long as receives match."
+    },
+    {
+      "name": "StackingIndicesBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table mapping stacked columns to their (commit_idx, col_idx).",
+      "message_format": [
+        { "field": "commit_idx", "type": "F", "description": "Commitment index" },
+        { "field": "col_idx", "type": "F", "description": "Column index within the commit" }
+      ],
+      "producers": [
+        { "air": "StackingClaimsAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "InitialOpenedValuesAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "Each (commit_idx, col_idx) pair appears exactly once per proof in the table."
+    },
+    {
+      "name": "ColumnClaimsBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries per-column opening claims from the stacking module to the symbolic expression evaluator.",
+      "message_format": [
+        { "field": "sort_idx", "type": "F", "description": "AIR sort index" },
+        { "field": "part_idx", "type": "F", "description": "Column partition index" },
+        { "field": "col_idx", "type": "F", "description": "Column index within the partition" },
+        { "field": "claim", "type": "[F; D_EF]", "description": "Claimed column evaluation at the opening point" },
+        { "field": "is_rot", "type": "F", "description": "Boolean: 1 if a rotated column evaluation" }
+      ],
+      "producers": [
+        { "air": "OpeningClaimsAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Multiset equality; is_rot is boolean; claim is an extension field element."
+    },
+    {
+      "name": "XiRandomnessBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Distributes xi extension-field challenges used in the GKR protocol.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Challenge index (distinct within a proof)" },
+        { "field": "xi", "type": "[F; D_EF]", "description": "Extension field random challenge" }
+      ],
+      "producers": [
+        { "air": "GkrLayerAir", "direction": "S", "note": "" },
+        { "air": "GkrLayerSumcheckAir", "direction": "S", "note": "" },
+        { "air": "GkrXiSamplerAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "EqNsAir", "direction": "R", "note": "" },
+        { "air": "EqSharpUniAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Each idx appears exactly once as a send; xi is sampled from the transcript."
+    },
+    {
+      "name": "ConstraintSumcheckRandomnessBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the batch constraint sumcheck round challenges r_0..r_{n_max}.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Sumcheck round index (0..=n_max)" },
+        { "field": "challenge", "type": "[F; D_EF]", "description": "Round challenge" }
+      ],
+      "producers": [
+        { "air": "UnivariateSumcheckAir", "direction": "S", "note": "sends r_0 (first round)" },
+        { "air": "MultilinearSumcheckAir", "direction": "S", "note": "sends r_1..r_{n_max}" }
+      ],
+      "consumers": [
+        { "air": "SumcheckRoundsAir", "direction": "R", "note": "" },
+        { "air": "EqBaseAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "idx ranges 0..n_max; each round challenge is sampled from the transcript."
+    },
+    {
+      "name": "WhirOpeningPointBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries opening points from the stacking sumcheck and eq_base AIRs to the WHIR MLE evaluation tree.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Opening point index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Opening point coordinate" }
+      ],
+      "producers": [
+        { "air": "SumcheckRoundsAir", "direction": "S", "note": "" },
+        { "air": "EqBaseAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SumcheckAir", "direction": "R", "note": "WHIR module" },
+        { "air": "FinalPolyMleEvalAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Each idx appears exactly once as a send and once as a receive."
+    },
+    {
+      "name": "WhirOpeningPointLookupBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Internal lookup version of opening points, used within the MLE evaluation tree layers of FinalPolyMleEvalAir.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Opening point dimension index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Opening point value (stacking/WHIR sumcheck challenge at that round)" }
+      ],
+      "producers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "P", "note": "add_key_with_lookups at first node of each layer" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "L", "note": "lookup_key at remaining nodes of each layer" }
+      ],
+      "invariants": "Each idx in 0..num_total_sumcheck_rounds appears exactly once."
+    },
+    {
+      "name": "EqNegBaseRandBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the base randomness (u_0, r_0^2) from stacking's EqBaseAir to the batch constraint EqNegAir.",
+      "message_format": [
+        { "field": "u", "type": "[F; D_EF]", "description": "Sampled u_0 value" },
+        { "field": "r_squared", "type": "[F; D_EF]", "description": "r_0^2 in the extension field" }
+      ],
+      "producers": [
+        { "air": "EqBaseAir", "direction": "S", "note": "stacking module" }
+      ],
+      "consumers": [
+        { "air": "EqNegAir", "direction": "R", "note": "batch constraint module" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "ExpBitsLenBus",
+      "kind": "lookup",
+      "per_proof": false,
+      "purpose": "Global lookup table for partial exponentiation: result = base^(bit_src & ((1 << num_bits) - 1)).",
+      "message_format": [
+        { "field": "base", "type": "F", "description": "Base of exponentiation" },
+        { "field": "bit_src", "type": "F", "description": "Bit source for exponent bits" },
+        { "field": "num_bits", "type": "F", "description": "Number of low bits of bit_src to use" },
+        { "field": "result", "type": "F", "description": "base^(bit_src & ((1<<num_bits)-1))" }
+      ],
+      "producers": [
+        { "air": "ExpBitsLenAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "GkrInputAir", "direction": "L", "note": "" },
+        { "air": "StackingClaimsAir", "direction": "L", "note": "" },
+        { "air": "WhirRoundAir", "direction": "L", "note": "" },
+        { "air": "SumcheckAir", "direction": "L", "note": "WHIR module" },
+        { "air": "WhirQueryAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "result = base^(bit_src & ((1 << num_bits) - 1)); num_bits is a small positive integer."
+    },
+    {
+      "name": "RightShiftBus",
+      "kind": "lookup",
+      "per_proof": false,
+      "purpose": "Global lookup table for right-shifting: result = input >> shift_bits. Secondary table provided by ExpBitsLenAir.",
+      "message_format": [
+        { "field": "input", "type": "F", "description": "Value to shift" },
+        { "field": "shift_bits", "type": "F", "description": "Number of bits to right-shift" },
+        { "field": "result", "type": "F", "description": "floor(input / 2^shift_bits)" }
+      ],
+      "producers": [
+        { "air": "ExpBitsLenAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "MerkleVerifyAir", "direction": "L", "note": "derives current_idx_bit_src = merkle_idx_bit_src >> (total_depth - k)" }
+      ],
+      "invariants": "result = floor(input / 2^shift_bits)."
+    },
+    {
+      "name": "RangeCheckerBus",
+      "kind": "lookup",
+      "per_proof": false,
+      "purpose": "Global 8-bit range-check lookup table: verifies value fits within max_bits (always 8).",
+      "message_format": [
+        { "field": "value", "type": "F", "description": "Value to range-check" },
+        { "field": "max_bits", "type": "F", "description": "Bit-width (always NUM_BITS = 8)" }
+      ],
+      "producers": [
+        { "air": "RangeCheckerAir", "direction": "P", "note": "provides the 256-row table of values 0..255" },
+        { "air": "PowerCheckerAir", "direction": "P", "note": "also provides entries" }
+      ],
+      "consumers": [
+        { "air": "ProofShapeAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "Every entry satisfies 0 <= value <= 255; max_bits = 8."
+    },
+    {
+      "name": "PowerCheckerBus",
+      "kind": "lookup",
+      "per_proof": false,
+      "purpose": "Global lookup table of powers of two: exp = 2^log.",
+      "message_format": [
+        { "field": "log", "type": "F", "description": "Exponent" },
+        { "field": "exp", "type": "F", "description": "2^log" }
+      ],
+      "producers": [
+        { "air": "PowerCheckerAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ProofShapeAir", "direction": "L", "note": "" },
+        { "air": "ExpressionClaimAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "exp = 2^log for every entry; log in 0..POW_CHECKER_HEIGHT."
+    },
+    {
+      "name": "SelUniBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of univariate selector polynomial evaluations, used at sumcheck points in the batch constraint module.",
+      "message_format": [
+        { "field": "n", "type": "F", "description": "Hypercube dimension" },
+        { "field": "is_first", "type": "F", "description": "Boolean: selector variant (first/last row)" },
+        { "field": "value", "type": "[F; D_EF]", "description": "sel_uni(n, is_first, r, omega)" }
+      ],
+      "producers": [
+        { "air": "EqNegAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "is_first is boolean; value is an extension field element."
+    },
+    {
+      "name": "SelHypercubeBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of hypercube selector polynomial evaluations over the prefix of sumcheck randomness.",
+      "message_format": [
+        { "field": "n", "type": "F", "description": "Hypercube dimension (non-negative)" },
+        { "field": "is_first", "type": "F", "description": "Boolean: selector variant" },
+        { "field": "value", "type": "[F; D_EF]", "description": "sel_hypercube(n, is_first, r_prefix)" }
+      ],
+      "producers": [
+        { "air": "EqNsAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "is_first is boolean; value = product(r_i) or product(1 - r_i) depending on is_first."
+    },
+    {
+      "name": "EqNegResultBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries negative-dimension equality polynomial results (eq_n and rotation kernel k_rot_n) for AIRs with log_height < l_skip.",
+      "message_format": [
+        { "field": "n", "type": "F", "description": "Negative hypercube dimension (encoded as n = -neg_hypercube)" },
+        { "field": "eq", "type": "[F; D_EF]", "description": "2^{l_skip+n} * eq_n(u_0, r_0)" },
+        { "field": "k_rot", "type": "[F; D_EF]", "description": "2^{l_skip+n} * k_rot_n(u_0, r_0)" }
+      ],
+      "producers": [
+        { "air": "EqNegAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "EqBaseAir", "direction": "R", "note": "stacking module" }
+      ],
+      "invariants": "One message per distinct negative hypercube dimension; multiset equality."
+    },
+    {
+      "name": "ExpressionClaimNMaxBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the maximum hypercube dimension n_max from proof shape to expression claim computation.",
+      "message_format": [
+        { "field": "n_max", "type": "F", "description": "Maximum hypercube dimension across all AIRs" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ExpressionClaimAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "FractionFolderInputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the count of present AIRs from proof shape to the fractions folder.",
+      "message_format": [
+        { "field": "num_present_airs", "type": "F", "description": "Number of AIRs present in the proof" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "FractionsFolderAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "NLiftBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the lift amount n_lift = max(0, l_skip - log_height) per AIR, used for zero-padding short traces.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "AIR index" },
+        { "field": "n_lift", "type": "F", "description": "max(0, l_skip - log_height)" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ConstraintsFoldingAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per AIR in the proof."
+    },
+    {
+      "name": "AirPresenceBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of per-AIR presence flags, used by SymbolicExpressionAir to decide which AIRs to evaluate.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "AIR index" },
+        { "field": "is_present", "type": "F", "description": "Boolean: 1 if the AIR is present in the proof" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "is_present is boolean; one entry per possible AIR index."
+    },
+    {
+      "name": "Eq3bShapeBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Passes shape parameters (n_lift, n_logup, num_interactions) per present AIR to Eq3bAir.",
+      "message_format": [
+        { "field": "sort_idx", "type": "F", "description": "AIR sort index" },
+        { "field": "n_lift", "type": "F", "description": "Lift amount" },
+        { "field": "n_logup", "type": "F", "description": "LogUp hypercube dimension" },
+        { "field": "num_interactions", "type": "F", "description": "Number of interactions for the AIR" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "Eq3bAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "One entry per present AIR."
+    },
+    {
+      "name": "EqNsNLogupMaxBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Passes the global LogUp dimension n_logup and the maximum hypercube dimension n_max to EqNsAir.",
+      "message_format": [
+        { "field": "n_logup", "type": "F", "description": "Global LogUp hypercube dimension" },
+        { "field": "n_max", "type": "F", "description": "Maximum hypercube dimension" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "EqNsAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "Single entry per proof."
+    },
+    {
+      "name": "ConstraintsFoldingInputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the transcript index of the lambda challenge to ConstraintsFoldingAir.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index where lambda was sampled" }
+      ],
+      "producers": [
+        { "air": "GkrInputAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ConstraintsFoldingAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "InteractionsFoldingInputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the transcript index of the beta challenge to InteractionsFoldingAir.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index where beta was sampled" }
+      ],
+      "producers": [
+        { "air": "GkrInputAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "InteractionsFoldingAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "FinalTranscriptStateBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the final Poseidon2 sponge state from the transcript to the continuations circuit (continuations only).",
+      "message_format": [
+        { "field": "state", "type": "[F; POSEIDON2_WIDTH]", "description": "Final Poseidon2 sponge state" }
+      ],
+      "producers": [
+        { "air": "TranscriptAir", "direction": "S", "note": "continuations only" }
+      ],
+      "consumers": [
+        { "air": "Continuations circuit", "direction": "R", "note": "enclosing verifier AIR" }
+      ],
+      "invariants": "Exactly one message per proof on the last transcript row; active only when continuations enabled."
+    },
+    {
+      "name": "PreHashBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the child VK pre-hash for incorporation into the inner verifier's public values (continuations only).",
+      "message_format": [
+        { "field": "vk_pre_hash", "type": "[F; DIGEST_SIZE]", "description": "Child VK pre-hash digest" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "continuations only" }
+      ],
+      "consumers": [
+        { "air": "Continuations circuit", "direction": "R", "note": "enclosing verifier AIR" }
+      ],
+      "invariants": "Exactly one message per proof; active only when continuations enabled."
+    },
+    {
+      "name": "ProofShapePermutationBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Internal sequencing bus within ProofShapeAir enforcing ordering of shape entries by sequential index.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Row index" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "self-send/receive" }
+      ],
+      "consumers": [
+        { "air": "ProofShapeAir", "direction": "R", "note": "self-send/receive" }
+      ],
+      "invariants": "Exactly one message per proof; send/receive balance ensures exactly one summary row per proof."
+    },
+    {
+      "name": "StartingTidxBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Internal ProofShapeAir bus passing starting transcript indices between phases of proof shape computation.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "AIR index" },
+        { "field": "tidx", "type": "F", "description": "Starting transcript index for that AIR" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "internal" }
+      ],
+      "consumers": [
+        { "air": "ProofShapeAir", "direction": "R", "note": "internal" }
+      ],
+      "invariants": "One message per AIR; multiset equality within ProofShapeAir."
+    },
+    {
+      "name": "NumPublicValuesBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the number of public values per AIR along with the transcript index at which PV observation begins.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "AIR index" },
+        { "field": "tidx", "type": "F", "description": "Transcript index at which PV observation begins" },
+        { "field": "num_pvs", "type": "F", "description": "Number of public values for the AIR" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "PublicValuesAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per AIR."
+    },
+    {
+      "name": "GkrXiSamplerBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Coordinates xi challenge sampling between GKR layer processing and the xi sampler AIR.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Challenge index" },
+        { "field": "tidx", "type": "F", "description": "Transcript index at sampling" }
+      ],
+      "producers": [
+        { "air": "GkrInputAir", "direction": "S", "note": "" },
+        { "air": "GkrXiSamplerAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "GkrXiSamplerAir", "direction": "R", "note": "" },
+        { "air": "GkrInputAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per xi challenge; multiset equality."
+    },
+    {
+      "name": "GkrLayerInputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the initial GKR layer-0 claim from GkrInputAir to GkrLayerAir.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "q0_claim", "type": "[F; D_EF]", "description": "Initial GKR claim at layer 0" }
+      ],
+      "producers": [
+        { "air": "GkrInputAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "GkrLayerAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "GkrLayerOutputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Returns the final GKR input-layer claims (numerator/denominator) from GkrLayerAir back to GkrInputAir.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "layer_idx_end", "type": "F", "description": "Total number of GKR layers processed" },
+        { "field": "input_layer_claim", "type": "[[F; D_EF]; 2]", "description": "Numerator and denominator input-layer claims" }
+      ],
+      "producers": [
+        { "air": "GkrLayerAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "GkrInputAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "GkrSumcheckInputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Sends the combined claim for a GKR layer to GkrLayerSumcheckAir for sumcheck verification.",
+      "message_format": [
+        { "field": "layer_idx", "type": "F", "description": "GKR layer index" },
+        { "field": "is_last_layer", "type": "F", "description": "Boolean: 1 if this is the final GKR layer" },
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "claim", "type": "[F; D_EF]", "description": "Combined claim to verify" }
+      ],
+      "producers": [
+        { "air": "GkrLayerAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "GkrLayerSumcheckAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per GKR layer; is_last_layer is boolean."
+    },
+    {
+      "name": "GkrSumcheckOutputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Returns the sumcheck result (reduced claim and eq(r, r')) from GkrLayerSumcheckAir back to GkrLayerAir.",
+      "message_format": [
+        { "field": "layer_idx", "type": "F", "description": "GKR layer index" },
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "claim_out", "type": "[F; D_EF]", "description": "Reduced claim after sumcheck" },
+        { "field": "eq_at_r_prime", "type": "[F; D_EF]", "description": "eq(r, r') at sumcheck output point" }
+      ],
+      "producers": [
+        { "air": "GkrLayerSumcheckAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "GkrLayerAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per GKR layer."
+    },
+    {
+      "name": "GkrSumcheckChallengeBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes challenges between consecutive sumcheck sub-rounds within the same GKR layer (GkrLayerSumcheckAir internal).",
+      "message_format": [
+        { "field": "layer_idx", "type": "F", "description": "GKR layer index" },
+        { "field": "sumcheck_round", "type": "F", "description": "Sumcheck round within the layer" },
+        { "field": "challenge", "type": "[F; D_EF]", "description": "Sumcheck round challenge" }
+      ],
+      "producers": [
+        { "air": "GkrLayerSumcheckAir", "direction": "S", "note": "from one round to the next" }
+      ],
+      "consumers": [
+        { "air": "GkrLayerSumcheckAir", "direction": "R", "note": "at the start of the next round" }
+      ],
+      "invariants": "One message per sumcheck round per GKR layer; multiset equality."
+    },
+    {
+      "name": "BatchConstraintConductorBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Central distribution lookup in the batch constraint module for sumcheck challenges (R), GKR xi challenges, and mu batching.",
+      "message_format": [
+        { "field": "msg_type", "type": "F", "description": "0=R (sumcheck r_i), 1=Xi, 2=Mu" },
+        { "field": "idx", "type": "F", "description": "Index within the message type" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Challenge/value" }
+      ],
+      "producers": [
+        { "air": "FractionsFolderAir", "direction": "P", "note": "" },
+        { "air": "UnivariateSumcheckAir", "direction": "P", "note": "" },
+        { "air": "MultilinearSumcheckAir", "direction": "P", "note": "" },
+        { "air": "EqNsAir", "direction": "P", "note": "" },
+        { "air": "EqSharpUniAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "EqNsAir", "direction": "L", "note": "" },
+        { "air": "Eq3bAir", "direction": "L", "note": "" },
+        { "air": "EqSharpUniAir", "direction": "L", "note": "" },
+        { "air": "EqSharpUniReceiverAir", "direction": "L", "note": "" },
+        { "air": "EqUniAir", "direction": "L", "note": "" },
+        { "air": "ExpressionClaimAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "msg_type in {0,1,2}; table entries published by providers are queried by batch constraint sub-AIRs."
+    },
+    {
+      "name": "SumcheckClaimBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Chains sumcheck claims between rounds in the batch constraint sumcheck (univariate and multilinear).",
+      "message_format": [
+        { "field": "round", "type": "F", "description": "Sumcheck round index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Claim value at this round" }
+      ],
+      "producers": [
+        { "air": "UnivariateSumcheckAir", "direction": "S", "note": "" },
+        { "air": "MultilinearSumcheckAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "UnivariateSumcheckAir", "direction": "R", "note": "next-round receive" },
+        { "air": "MultilinearSumcheckAir", "direction": "R", "note": "next-round receive" },
+        { "air": "ExpressionClaimAir", "direction": "R", "note": "consumes final claim" }
+      ],
+      "invariants": "One message per sumcheck round."
+    },
+    {
+      "name": "SymbolicExpressionBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of symbolic expression DAG node evaluations, enabling sharing of intermediate node values.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "Child AIR index" },
+        { "field": "node_idx", "type": "F", "description": "DAG node index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Evaluated value at the node" }
+      ],
+      "producers": [
+        { "air": "SymbolicExpressionAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "SymbolicExpressionAir", "direction": "L", "note": "self-lookups for DAG node sharing" }
+      ],
+      "invariants": "node_idx identifies a node in the DAG; each lookup finds a provided entry."
+    },
+    {
+      "name": "ExpressionClaimBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries evaluated constraint and interaction expression claims to ExpressionClaimAir.",
+      "message_format": [
+        { "field": "is_interaction", "type": "F", "description": "Boolean: 1 if interaction expression, 0 if constraint" },
+        { "field": "idx", "type": "F", "description": "Expression index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Evaluated expression value" }
+      ],
+      "producers": [
+        { "air": "InteractionsFoldingAir", "direction": "S", "note": "" },
+        { "air": "ConstraintsFoldingAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ExpressionClaimAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "is_interaction is boolean; one message per constraint/interaction per AIR."
+    },
+    {
+      "name": "InteractionsFoldingBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries folded interaction field values (message elements and multiplicities) from SymbolicExpressionAir to InteractionsFoldingAir.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "AIR index" },
+        { "field": "interaction_idx", "type": "F", "description": "Interaction index within the AIR" },
+        { "field": "is_mult", "type": "F", "description": "Boolean: 1 if multiplicity, 0 if message field" },
+        { "field": "idx_in_message", "type": "F", "description": "Index within the interaction's message vector" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Folded value" }
+      ],
+      "producers": [
+        { "air": "SymbolicExpressionAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "InteractionsFoldingAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "is_mult is boolean; one message per field element per interaction per AIR."
+    },
+    {
+      "name": "ConstraintsFoldingBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries folded constraint values from SymbolicExpressionAir to ConstraintsFoldingAir.",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "AIR index" },
+        { "field": "constraint_idx", "type": "F", "description": "Constraint index within the AIR" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Evaluated constraint value" }
+      ],
+      "producers": [
+        { "air": "SymbolicExpressionAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ConstraintsFoldingAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per constraint per AIR."
+    },
+    {
+      "name": "Eq3bBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the partial 'eq_3b' equality polynomial evaluation for each interaction, used in the GKR-to-constraint-sumcheck reduction.",
+      "message_format": [
+        { "field": "sort_idx", "type": "F", "description": "AIR sort index" },
+        { "field": "interaction_idx", "type": "F", "description": "Interaction index" },
+        { "field": "eq_3b", "type": "[F; D_EF]", "description": "Partial eq polynomial product" }
+      ],
+      "producers": [
+        { "air": "Eq3bAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "InteractionsFoldingAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per interaction per AIR; eq_3b is an extension field value."
+    },
+    {
+      "name": "EqSharpUniBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries partial products of the 'sharp univariate' equality polynomial, accumulated via butterfly expansion.",
+      "message_format": [
+        { "field": "xi_idx", "type": "F", "description": "Xi challenge index" },
+        { "field": "iter_idx", "type": "F", "description": "Butterfly iteration index" },
+        { "field": "product", "type": "[F; D_EF]", "description": "Partial product value" }
+      ],
+      "producers": [
+        { "air": "EqSharpUniAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "EqSharpUniReceiverAir", "direction": "R", "note": "" },
+        { "air": "EqSharpUniAir", "direction": "R", "note": "self-receives in later iterations" }
+      ],
+      "invariants": "One message per (xi_idx, iter_idx) pair."
+    },
+    {
+      "name": "EqZeroNBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the base-case (n=0) equality polynomial value for the regular and sharp variants.",
+      "message_format": [
+        { "field": "is_sharp", "type": "F", "description": "Boolean: 1 for sharp variant, 0 for regular" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Base-case eq polynomial value" }
+      ],
+      "producers": [
+        { "air": "EqUniAir", "direction": "S", "note": "regular variant" },
+        { "air": "EqSharpUniReceiverAir", "direction": "S", "note": "sharp variant" }
+      ],
+      "consumers": [
+        { "air": "EqNsAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "is_sharp is boolean; one message per variant."
+    },
+    {
+      "name": "EqNOuterBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of equality polynomial values eq_n(xi, r) indexed by dimension n and variant.",
+      "message_format": [
+        { "field": "is_sharp", "type": "F", "description": "Boolean: 1 for sharp variant, 0 for regular" },
+        { "field": "n", "type": "F", "description": "Hypercube dimension" },
+        { "field": "value", "type": "[F; D_EF]", "description": "eq_n(xi, r)" }
+      ],
+      "producers": [
+        { "air": "EqNsAir", "direction": "P", "note": "" }
+      ],
+      "consumers": [
+        { "air": "ExpressionClaimAir", "direction": "L", "note": "" },
+        { "air": "ConstraintsFoldingAir", "direction": "L", "note": "" }
+      ],
+      "invariants": "is_sharp is boolean; table has one entry per (is_sharp, n)."
+    },
+    {
+      "name": "EqNegInternalBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Internal recursive bus within EqNegAir carrying intermediate values between recursive steps of eq_n for n < 0.",
+      "message_format": [
+        { "field": "neg_n", "type": "F", "description": "Negated hypercube dimension |n|" },
+        { "field": "u", "type": "[F; D_EF]", "description": "Sampled u_0" },
+        { "field": "r", "type": "[F; D_EF]", "description": "r_0^{2^{1 - n}}" },
+        { "field": "r_omega", "type": "[F; D_EF]", "description": "(r_0 * omega)^{2^{1 - n}}" }
+      ],
+      "producers": [
+        { "air": "EqNegAir", "direction": "S", "note": "from one step" }
+      ],
+      "consumers": [
+        { "air": "EqNegAir", "direction": "R", "note": "at the next step" }
+      ],
+      "invariants": "One message per recursive step."
+    },
+    {
+      "name": "UnivariateSumcheckInputBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Passes the transcript index to UnivariateSumcheckAir, signaling where the univariate sumcheck round begins.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index at univariate sumcheck start" }
+      ],
+      "producers": [
+        { "air": "FractionsFolderAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "UnivariateSumcheckAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "StackingModuleTidxBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Internal transcript-index handoff within the Stacking module between its sub-AIRs.",
+      "message_format": [
+        { "field": "module_idx", "type": "F", "description": "Sub-module index (0=OpeningClaims, 1=UnivariateRound, 2=SumcheckRounds)" },
+        { "field": "tidx", "type": "F", "description": "Transcript index at the sub-module boundary" }
+      ],
+      "producers": [
+        { "air": "OpeningClaimsAir", "direction": "S", "note": "" },
+        { "air": "UnivariateRoundAir", "direction": "S", "note": "" },
+        { "air": "SumcheckRoundsAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "StackingClaimsAir", "direction": "R", "note": "" },
+        { "air": "UnivariateRoundAir", "direction": "R", "note": "" },
+        { "air": "SumcheckRoundsAir", "direction": "R", "note": "" },
+        { "air": "OpeningClaimsAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per sub-module transition; multiset equality across stacking sub-AIRs."
+    },
+    {
+      "name": "ClaimCoefficientsBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries per-column batching coefficients for combining column claims within each stacking commitment.",
+      "message_format": [
+        { "field": "commit_idx", "type": "F", "description": "Stacking commitment index" },
+        { "field": "stacked_col_idx", "type": "F", "description": "Stacked column index" },
+        { "field": "coefficient", "type": "[F; D_EF]", "description": "Batching coefficient" }
+      ],
+      "producers": [
+        { "air": "OpeningClaimsAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "StackingClaimsAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per stacked column."
+    },
+    {
+      "name": "SumcheckClaimsBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries sumcheck claims between stacking sub-modules (stacking-internal).",
+      "message_format": [
+        { "field": "module_idx", "type": "F", "description": "Stacking sub-module index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Sumcheck claim value" }
+      ],
+      "producers": [
+        { "air": "SumcheckRoundsAir", "direction": "S", "note": "" },
+        { "air": "UnivariateRoundAir", "direction": "S", "note": "" },
+        { "air": "OpeningClaimsAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SumcheckRoundsAir", "direction": "R", "note": "" },
+        { "air": "UnivariateRoundAir", "direction": "R", "note": "" },
+        { "air": "StackingClaimsAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof per module_idx boundary."
+    },
+    {
+      "name": "EqRandValuesLookupBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of the random values u_i used in the stacking equality polynomial eq(u, .).",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Dimension index i" },
+        { "field": "u", "type": "[F; D_EF]", "description": "u_i coordinate" }
+      ],
+      "producers": [
+        { "air": "SumcheckRoundsAir", "direction": "P", "note": "add_key_with_lookups" },
+        { "air": "UnivariateRoundAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "EqBitsAir", "direction": "L", "note": "lookup_key" },
+        { "air": "EqBaseAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "One entry per index i."
+    },
+    {
+      "name": "EqBaseBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the base-case equality polynomial evaluations (eq, eq_shifted, product form) from EqBaseAir.",
+      "message_format": [
+        { "field": "eq_u_r", "type": "[F; D_EF]", "description": "eq_0(u, r)" },
+        { "field": "eq_u_r_omega", "type": "[F; D_EF]", "description": "eq_0(u, r*omega)" },
+        { "field": "eq_u_r_prod", "type": "[F; D_EF]", "description": "eq_0(u, 1) * eq_0(r, omega^{-1})" }
+      ],
+      "producers": [
+        { "air": "EqBaseAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SumcheckRoundsAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "EqBitsInternalBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Internal recursive bus within EqBitsAir passing partial eq evaluations between levels of a binary computation tree.",
+      "message_format": [
+        { "field": "b_value", "type": "F", "description": "Most significant num_bits bits of the row index (excluding LSB)" },
+        { "field": "num_bits", "type": "F", "description": "n_stack - n_j - 1" },
+        { "field": "eval", "type": "[F; D_EF]", "description": "eq_{num_bits}(u_{> n_j}, b_j)" },
+        { "field": "child_lsb", "type": "F", "description": "LSB of the receiving row's b_value" }
+      ],
+      "producers": [
+        { "air": "EqBitsAir", "direction": "S", "note": "from child node" }
+      ],
+      "consumers": [
+        { "air": "EqBitsAir", "direction": "R", "note": "at parent node" }
+      ],
+      "invariants": "One message per internal tree node; multiset equality."
+    },
+    {
+      "name": "EqKernelLookupBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of equality kernel values (eq_in, k_rot_in) indexed by dimension n.",
+      "message_format": [
+        { "field": "n", "type": "F", "description": "Hypercube dimension" },
+        { "field": "eq_in", "type": "[F; D_EF]", "description": "Input eq value at dimension n" },
+        { "field": "k_rot_in", "type": "[F; D_EF]", "description": "Input rotation kernel at dimension n" }
+      ],
+      "producers": [
+        { "air": "SumcheckRoundsAir", "direction": "P", "note": "add_key_with_lookups" },
+        { "air": "EqBaseAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "OpeningClaimsAir", "direction": "L", "note": "lookup_key" },
+        { "air": "UnivariateRoundAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "One entry per dimension n."
+    },
+    {
+      "name": "EqBitsLookupBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of partial equality polynomial evaluations indexed by bit pattern, for stacking sumcheck AIRs.",
+      "message_format": [
+        { "field": "b_value", "type": "F", "description": "Most significant num_bits bits of the row index" },
+        { "field": "num_bits", "type": "F", "description": "n_stack - n_j" },
+        { "field": "eval", "type": "[F; D_EF]", "description": "eq_{num_bits}(u_{> n_j}, b_j)" }
+      ],
+      "producers": [
+        { "air": "EqBitsAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "OpeningClaimsAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "One entry per (b_value, num_bits) combination."
+    },
+    {
+      "name": "WhirSumcheckBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries pre/post sumcheck claims for each WHIR round between WhirRoundAir and SumcheckAir (WHIR).",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "sumcheck_idx", "type": "F", "description": "WHIR round index owning this sumcheck" },
+        { "field": "pre_claim", "type": "[F; D_EF]", "description": "Claim entering the sumcheck" },
+        { "field": "post_claim", "type": "[F; D_EF]", "description": "Reduced claim after sumcheck" }
+      ],
+      "producers": [
+        { "air": "WhirRoundAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "SumcheckAir", "direction": "R", "note": "WHIR module" }
+      ],
+      "invariants": "One message per WHIR sumcheck round."
+    },
+    {
+      "name": "WhirAlphaBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of WHIR alpha folding challenges, one per round.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "WHIR round index" },
+        { "field": "challenge", "type": "[F; D_EF]", "description": "Alpha folding challenge" }
+      ],
+      "producers": [
+        { "air": "SumcheckAir", "direction": "P", "note": "WHIR module; add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyQueryEvalAir", "direction": "L", "note": "lookup_key" },
+        { "air": "WhirFoldingAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "One entry per WHIR round."
+    },
+    {
+      "name": "WhirEqAlphaUBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the product eq(alpha, u) from WHIR sumcheck logic to the final polynomial evaluation.",
+      "message_format": [
+        { "field": "value", "type": "[F; D_EF]", "description": "eq(alpha, u) product value" }
+      ],
+      "producers": [
+        { "air": "SumcheckAir", "direction": "S", "note": "WHIR module" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "VerifyQueriesBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Coordinates the query verification phase of each WHIR round, carrying gamma, omega, and pre/post claims.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "whir_round", "type": "F", "description": "WHIR round index" },
+        { "field": "num_queries", "type": "F", "description": "Number of queries to verify in this round" },
+        { "field": "omega", "type": "F", "description": "Domain generator for this WHIR round" },
+        { "field": "gamma", "type": "[F; D_EF]", "description": "Folding challenge for query verification" },
+        { "field": "pre_claim", "type": "[F; D_EF]", "description": "Claim before query verification" },
+        { "field": "post_claim", "type": "[F; D_EF]", "description": "Claim after query verification" }
+      ],
+      "producers": [
+        { "air": "WhirRoundAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "WhirQueryAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per WHIR round that has queries."
+    },
+    {
+      "name": "VerifyQueryBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries individual per-query verification data (Merkle path opening and claimed evaluation).",
+      "message_format": [
+        { "field": "whir_round", "type": "F", "description": "WHIR round index" },
+        { "field": "query_idx", "type": "F", "description": "Query index within the round" },
+        { "field": "merkle_idx_bit_src", "type": "F", "description": "Merkle index bit source for this query" },
+        { "field": "zi_root", "type": "F", "description": "Evaluation domain root point" },
+        { "field": "zi", "type": "F", "description": "Evaluation domain point" },
+        { "field": "yi", "type": "[F; D_EF]", "description": "Claimed polynomial evaluation at zi" }
+      ],
+      "producers": [
+        { "air": "WhirQueryAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "InitialOpenedValuesAir", "direction": "R", "note": "" },
+        { "air": "NonInitialOpenedValuesAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per query per WHIR round."
+    },
+    {
+      "name": "WhirQueryBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries accumulated query evaluation results from WHIR query verification to the final polynomial evaluator.",
+      "message_format": [
+        { "field": "whir_round", "type": "F", "description": "WHIR round index" },
+        { "field": "query_idx", "type": "F", "description": "Query index" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Accumulated query evaluation" }
+      ],
+      "producers": [
+        { "air": "WhirQueryAir", "direction": "S", "note": "" },
+        { "air": "WhirRoundAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyQueryEvalAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per query per WHIR round."
+    },
+    {
+      "name": "WhirGammaBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries gamma challenges (one per WHIR round) used to batch multiple query results.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "WHIR round index" },
+        { "field": "challenge", "type": "[F; D_EF]", "description": "Gamma query batching challenge" }
+      ],
+      "producers": [
+        { "air": "WhirRoundAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyQueryEvalAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per WHIR round."
+    },
+    {
+      "name": "WhirFoldingBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries intermediate FRI-like folding state during WHIR: coset geometry, twiddle factors, and accumulated polynomial values.",
+      "message_format": [
+        { "field": "whir_round", "type": "F", "description": "WHIR round index" },
+        { "field": "query_idx", "type": "F", "description": "Query index" },
+        { "field": "height", "type": "F", "description": "Folding tree height" },
+        { "field": "coset_shift", "type": "F", "description": "Coset shift factor" },
+        { "field": "coset_idx", "type": "F", "description": "Coset index" },
+        { "field": "coset_size", "type": "F", "description": "Coset size at this folding level" },
+        { "field": "twiddle", "type": "F", "description": "Twiddle factor for this folding step" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Accumulated polynomial evaluation" },
+        { "field": "z_final", "type": "F", "description": "Final evaluation point" },
+        { "field": "y_final", "type": "[F; D_EF]", "description": "Final evaluation value" }
+      ],
+      "producers": [
+        { "air": "InitialOpenedValuesAir", "direction": "S", "note": "sends leaf values" },
+        { "air": "NonInitialOpenedValuesAir", "direction": "S", "note": "sends leaf values" },
+        { "air": "WhirFoldingAir", "direction": "S", "note": "sends parent values in the folding tree" }
+      ],
+      "consumers": [
+        { "air": "WhirFoldingAir", "direction": "R", "note": "receives child values at each parent node" }
+      ],
+      "invariants": "One message per folding step per query per WHIR round."
+    },
+    {
+      "name": "FinalPolyMleEvalBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the MLE evaluation of the WHIR final polynomial at the opening point.",
+      "message_format": [
+        { "field": "tidx", "type": "F", "description": "Transcript index" },
+        { "field": "num_whir_rounds", "type": "F", "description": "Total number of WHIR rounds" },
+        { "field": "value", "type": "[F; D_EF]", "description": "MLE evaluation of the final polynomial" }
+      ],
+      "producers": [
+        { "air": "WhirRoundAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "Exactly one message per proof."
+    },
+    {
+      "name": "FinalPolyFoldingBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Internal bus carrying values between layers of the final polynomial's binary MLE evaluation tree in FinalPolyMleEvalAir.",
+      "message_format": [
+        { "field": "proof_idx", "type": "F", "description": "Explicit per-proof index in the message struct (in addition to the bus-level prefix)" },
+        { "field": "depth", "type": "F", "description": "Tree depth (0 = root)" },
+        { "field": "node_idx", "type": "F", "description": "Node position within its layer" },
+        { "field": "num_nodes_in_layer", "type": "F", "description": "Total nodes at this depth" },
+        { "field": "tidx_final_poly_start", "type": "F", "description": "Transcript index at which final-poly coefficients start" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Partial MLE product at this node" }
+      ],
+      "producers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "S", "note": "from child to parent" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "R", "note": "at parent" }
+      ],
+      "invariants": "One message per node in the MLE evaluation tree."
+    },
+    {
+      "name": "FinalPolyQueryEvalBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries the final polynomial's direct evaluation at query points in the last WHIR round.",
+      "message_format": [
+        { "field": "last_whir_round", "type": "F", "description": "Index of the final WHIR round" },
+        { "field": "value", "type": "[F; D_EF]", "description": "Polynomial evaluation at the queried point" }
+      ],
+      "producers": [
+        { "air": "WhirRoundAir", "direction": "S", "note": "" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyQueryEvalAir", "direction": "R", "note": "" }
+      ],
+      "invariants": "One message per query in the final WHIR round."
+    },
+    {
+      "name": "WhirFinalPolyBus",
+      "kind": "lookup",
+      "per_proof": true,
+      "purpose": "Lookup table of the WHIR final polynomial's coefficients after all folding rounds.",
+      "message_format": [
+        { "field": "idx", "type": "F", "description": "Coefficient index" },
+        { "field": "coeff", "type": "[F; D_EF]", "description": "Extension field coefficient" }
+      ],
+      "producers": [
+        { "air": "FinalPolyMleEvalAir", "direction": "P", "note": "add_key_with_lookups" }
+      ],
+      "consumers": [
+        { "air": "FinalPolyQueryEvalAir", "direction": "L", "note": "lookup_key" }
+      ],
+      "invariants": "One entry per coefficient index."
+    },
+    {
+      "name": "CachedCommitBus",
+      "kind": "permutation",
+      "per_proof": true,
+      "purpose": "Carries cached trace commitments from ProofShapeAir to enclosing continuations-circuit verifier AIRs for verification against the VK (continuations only).",
+      "message_format": [
+        { "field": "air_idx", "type": "F", "description": "Child AIR index" },
+        { "field": "cached_idx", "type": "F", "description": "Cached partition index within the AIR" },
+        { "field": "global_cached_idx", "type": "F", "description": "Global cached-partition index" },
+        { "field": "cached_commit", "type": "[F; DIGEST_SIZE]", "description": "Poseidon2 digest of the cached trace" }
+      ],
+      "producers": [
+        { "air": "ProofShapeAir", "direction": "S", "note": "sends when the AIR has cached traces" }
+      ],
+      "consumers": [
+        { "air": "Inner verifier AIR", "direction": "R", "note": "continuations/inner/verifier/air.rs" },
+        { "air": "Root verifier AIR", "direction": "R", "note": "continuations/root/verifier/air.rs" },
+        { "air": "Inner VM PVs AIR", "direction": "R", "note": "continuations/inner/vm_pvs/air.rs" },
+        { "air": "Inner deferral PVs AIR", "direction": "R", "note": "continuations/inner/def_pvs/air.rs" },
+        { "air": "Deferral hook verifier AIR", "direction": "R", "note": "continuations/deferral/hook/verifier/air.rs" },
+        { "air": "Deferral inner input AIR", "direction": "R", "note": "continuations/deferral/inner/input/air.rs" },
+        { "air": "Deferral inner verifier AIR", "direction": "R", "note": "continuations/deferral/inner/verifier/air.rs" }
+      ],
+      "invariants": "Active only when continuations_enabled = true; cached_commit is a Poseidon2 digest; one message per cached partition per present AIR with cached traces."
+    }
+  ]
+}

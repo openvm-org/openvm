@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenVM Recursion Sub-Circuit Guide</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="site-title">
+        OpenVM Recursion Sub-Circuit<span class="sub">Interactive Guide</span>
+      </div>
+      <nav class="main-nav" id="main-nav">
+        <button data-section="overview" class="active">Overview</button>
+        <button data-section="proof">Proof Walkthrough</button>
+        <button data-section="airs">AIR Browser</button>
+        <button data-section="buses">Bus Browser</button>
+        <button data-section="concerns">Correctness Concerns</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Overview -->
+    <section id="section-overview" class="section active">
+      <div class="hero">
+        <h1>The Recursion Sub-Circuit</h1>
+        <p class="lede">
+          The recursion sub-circuit verifies a SWIRL proof <em>inside</em> a SWIRL circuit.
+          Instantiated with a child verifying key <code>vk_child</code>, its 39 AIRs
+          constrain every phase of the reference verifier:
+          preamble, GKR, batch constraint evaluation, stacking reduction, and WHIR.
+          This guide lays out the full correspondence &mdash; AIR by AIR, bus by bus &mdash;
+          and walks through the proof that any satisfying witness encodes a valid child proof.
+        </p>
+      </div>
+
+      <div class="overview-grid">
+        <div class="ov-card"><h4>AIRs</h4><div class="val" id="stat-airs">&mdash;</div><div class="desc">across 7 modules</div></div>
+        <div class="ov-card"><h4>Buses</h4><div class="val" id="stat-buses">&mdash;</div><div class="desc">permutation + lookup channels</div></div>
+        <div class="ov-card"><h4>Proof Steps</h4><div class="val" id="stat-steps">&mdash;</div><div class="desc">discharging <code>verify()</code></div></div>
+        <div class="ov-card"><h4>Primary Field</h4><div class="val" style="font-size:1.1rem">BabyBear</div><div class="desc">Plonky3, 31-bit prime; EF degree 4</div></div>
+      </div>
+
+      <h2>Architecture</h2>
+      <p>The circuit mirrors the reference verifier's sequential phases. Each module owns
+        a contiguous range of transcript indices and hands off to the next via a
+        <em>module bus</em>. The Transcript module and Primitive Lookup Tables are shared
+        across every phase.</p>
+
+      <div class="arch">
+        <div class="arch-lane">
+          <div class="arch-node m-proof-shape"      data-module="proof-shape"><div class="name">ProofShape</div><div class="count">3 AIRs &mdash; Preamble</div></div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-node m-gkr"              data-module="gkr"><div class="name">GKR</div><div class="count">4 AIRs &mdash; Fractional sumcheck</div></div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-node m-batch-constraint" data-module="batch-constraint"><div class="name">BatchConstraint</div><div class="count">13 AIRs &mdash; Sumcheck + DAG eval</div></div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-node m-stacking"         data-module="stacking"><div class="name">Stacking</div><div class="count">6 AIRs &mdash; Reduction</div></div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-node m-whir"             data-module="whir"><div class="name">WHIR</div><div class="count">8 AIRs &mdash; Polynomial commitment</div></div>
+        </div>
+        <div class="arch-shared">
+          <div class="arch-node m-transcript"  data-module="transcript"  style="flex: 0 0 260px"><div class="name">Transcript</div><div class="count">3 AIRs &mdash; Fiat-Shamir sponge, shared by all</div></div>
+          <div class="arch-node m-primitives" data-module="primitives" style="flex: 0 0 260px"><div class="name">Primitive Lookup Tables</div><div class="count">2 AIRs &mdash; PowerChecker, ExpBitsLen</div></div>
+          <div style="flex: 1; color: var(--fg-muted); padding: 14px; font-size: 0.92em;">
+            Shared infrastructure. RangeCheckerAir (under ProofShape) is also a global
+            lookup provider. See the Bus Browser for detailed connectivity.
+          </div>
+        </div>
+      </div>
+
+      <h2>The Main Claim</h2>
+      <div id="claim-box"></div>
+
+      <h2>Correspondence Decomposition</h2>
+      <div id="decomp-box"></div>
+    </section>
+
+    <!-- Proof walkthrough -->
+    <section id="section-proof" class="section">
+      <h1 style="margin: 0 0 6px;">Proof Walkthrough</h1>
+      <p class="muted" style="margin: 0 0 14px; max-width: 860px;">
+        Each phase is a single page showing the Rust <code>Air::eval</code> implementations in source order, with prose explanations between code chunks. <strong>Hover</strong> a code chunk to highlight the cells and draw the bus connections it discharges; <strong>click</strong> to pin; click again (or elsewhere) to unpin.
+      </p>
+      <div class="phase-tabs" id="phase-tabs" role="tablist"></div>
+      <div class="chapter-layout">
+        <div class="chapter-content" id="chapter-content"></div>
+        <aside class="proof-viz-panel" id="proof-viz"></aside>
+      </div>
+    </section>
+
+    <!-- AIR browser -->
+    <section id="section-airs" class="section">
+      <h1>AIR Browser</h1>
+      <p class="muted">Every AIR in the recursion circuit. Each card visualizes the AIR as a trace table with labeled columns. Buses are listed beneath each AIR with their direction (S=send, R=receive, P=provide, L=lookup).</p>
+      <div class="air-filter" id="air-filter"></div>
+      <div class="airs-grid" id="airs-grid"></div>
+    </section>
+
+    <!-- Bus browser -->
+    <section id="section-buses" class="section">
+      <h1>Bus Browser</h1>
+      <p class="muted">
+        Every bus in the circuit &mdash; permutation buses (multiset-equality between senders and receivers)
+        and lookup buses (existence checks on tables). Each card shows the message format and both sides.
+      </p>
+      <div class="buses-grid" id="buses-grid"></div>
+    </section>
+
+    <!-- Correctness concerns -->
+    <section id="section-concerns" class="section">
+      <h1>Correctness Concerns</h1>
+      <p class="muted" style="max-width:780px;">
+        The recursion circuit's soundness rests on several non-obvious invariants.
+        This section walks through the main concerns (transcript ordering, LogUp soundness,
+        bus completeness, boundary conditions, challenge independence) and how the circuit
+        addresses each.
+      </p>
+      <div id="concerns-list"></div>
+    </section>
+  </main>
+
+  <div id="tooltip"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

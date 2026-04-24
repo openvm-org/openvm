@@ -1,0 +1,938 @@
+{
+  "preamble-1": {
+    "default_scene": {
+      "note": "Row 0 of ProofShapeAir publishes the child VK pre-hash on TranscriptBus (is_sample=0). When continuations are on, the same pre-hash digest is also sent on PreHashBus.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_first",
+                "proof_idx",
+                "idx_flags"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "PreHashBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "vk_pre_hash"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "is_first",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "observe vk_pre_hash"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "idx_flags",
+            "row": 0
+          },
+          "to": {
+            "bus": "PreHashBus",
+            "field": "vk_pre_hash",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "publish pre-hash"
+        }
+      ]
+    },
+    "scenes": {
+      "transcript-absorb": {
+        "note": "The absorb step: ProofShapeAir's first row is a TranscriptBus receive with is_sample=0 (observe). TranscriptAir is the sole sender of this bus.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "proof_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_first",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "tidx=0 observe"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "proof_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "prehash-publish": {
+        "note": "Continuations-only path: the same pre-hash digest is simultaneously sent on PreHashBus so the enclosing circuit can expose it as a public value.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx_flags",
+                  "log_height"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "PreHashBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "vk_pre_hash"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "PreHashBus",
+              "field": "vk_pre_hash",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "public value"
+          }
+        ]
+      },
+      "transition": {
+        "note": "Adjacent preamble rows: row 0 publishes the pre-hash, row 1 absorbs the next digest element. Transcript index advances monotonically.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "proof_idx"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "is_first",
+                  "proof_idx"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_first",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "row 0"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_first",
+              "row": 1
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "row 1"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"transcript-absorb\">ProofShapeAir observes the VK pre-hash (DIGEST_SIZE elements) on its first row via TranscriptBus with is_sample=0</span>. When continuations are enabled, the pre-hash is also <span class=\"ref\" data-scene=\"prehash-publish\">sent on PreHashBus so the enclosing circuit can expose it as a public value</span>.",
+    "soundness_html": "The pre-hash is a prover-supplied value absorbed into the Fiat-Shamir sponge, so it pins all downstream challenges via the Poseidon2 sponge chain. The subcircuit cannot constrain the pre-hash to equal hash(vk_child) directly (that would bake hash(vk_child) into the circuit's own VK, breaking self-verification); instead, the <span class=\"ref\" data-scene=\"prehash-publish\">enclosing circuit must verify pre-hash == hash(vk_child)</span>. This is the first assumption of the main claim."
+  },
+  "preamble-2": {
+    "default_scene": {
+      "note": "ProofShapeAir observes common_main_commit on TranscriptBus and simultaneously provides it on CommitmentsBus (lookup) so MerkleVerifyAir can authenticate Merkle roots during WHIR query verification.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_first",
+                "proof_idx",
+                "idx_flags"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "CommitmentsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "major_idx",
+                "minor_idx",
+                "commitment"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "major_idx",
+                "minor_idx",
+                "commitment"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "is_first",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "receive",
+          "label": "observe common_main_commit"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "proof_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "CommitmentsBus",
+            "field": "commitment",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "same cell provides Merkle root"
+        }
+      ]
+    },
+    "scenes": {
+      "transcript-observe": {
+        "note": "common_main_commit (DIGEST_SIZE elements) is absorbed into TranscriptBus following the pre-hash.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "idx_flags"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_first",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "observe"
+          }
+        ]
+      },
+      "commitments-provide": {
+        "note": "The same trace cell that is absorbed into TranscriptBus is also provided on CommitmentsBus with major_idx=0 (stacking) and minor_idx=commit_index. MerkleVerifyAir looks this entry up later during WHIR queries.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "proof_idx",
+                  "idx_flags"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "CommitmentsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "major_idx",
+                  "minor_idx",
+                  "commitment"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "proof_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "CommitmentsBus",
+              "field": "major_idx",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "major_idx=0"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "CommitmentsBus",
+              "field": "commitment",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "root"
+          }
+        ]
+      },
+      "same-cell": {
+        "note": "Critical soundness invariant: both sends read the same trace cell, so the transcript-observed value is forced to equal the Merkle root looked up later.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "proof_idx",
+                  "idx_flags"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 1,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "CommitmentsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "commitment"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_first",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_first",
+              "row": 0
+            },
+            "to": {
+              "bus": "CommitmentsBus",
+              "field": "commitment",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "same cell"
+          }
+        ]
+      }
+    },
+    "constraints_html": "ProofShapeAir <span class=\"ref\" data-scene=\"transcript-observe\">observes common_main_commit (DIGEST_SIZE elements) on TranscriptBus</span>, and simultaneously <span class=\"ref\" data-scene=\"commitments-provide\">sends it on CommitmentsBus with (major_idx=0, minor_idx=commit_index)</span> so MerkleVerifyAir can authenticate Merkle roots against it during WHIR query verification.",
+    "soundness_html": "Because the <span class=\"ref\" data-scene=\"same-cell\">same cell is used for both the TranscriptBus observation and the CommitmentsBus send</span>, the extracted common_main_commit equals both the transcript-observed value and the Merkle root used for query verification. Any discrepancy would cause a bus imbalance on either TranscriptBus or CommitmentsBus."
+  },
+  "preamble-3": {
+    "default_scene": {
+      "note": "Each ProofShapeAir row corresponds to one child AIR. The is_present column (bool) is conditionally observed on TranscriptBus and published on AirPresenceBus for every AIR, consumed by SymbolicExpressionAir downstream.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "idx_flags",
+                "is_present",
+                "log_height"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "idx_flags",
+                "is_present",
+                "log_height"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": 2,
+              "cols": [
+                "idx_flags",
+                "is_present",
+                "log_height"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "idx_flags",
+                "is_present",
+                "log_height"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "AirPresenceBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "air_idx",
+                "is_present"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "air_idx",
+                "is_present"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "is_present",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe (non-VK-required)"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "is_present",
+            "row": 0
+          },
+          "to": {
+            "bus": "AirPresenceBus",
+            "field": "is_present",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "broadcast"
+        }
+      ]
+    },
+    "scenes": {
+      "boolean-constraint": {
+        "note": "PS1a: is_present is constrained to be boolean (0 or 1) on every row.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_present"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "is_present"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 2,
+                "cols": [
+                  "is_present"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "is_present"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "AirPresenceBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "is_present"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "air_idx",
+                  "is_present"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "connections": []
+      },
+      "presence-broadcast": {
+        "note": "AirPresenceBus carries (air_idx, is_present) for every AIR row (present or absent). SymbolicExpressionAir looks up this table to decide which AIRs to evaluate in batch-constraint mode.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx_flags",
+                  "is_present"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "idx_flags",
+                  "is_present"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "AirPresenceBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "is_present"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "air_idx",
+                  "is_present"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "AirPresenceBus",
+              "field": "air_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_present",
+              "row": 0
+            },
+            "to": {
+              "bus": "AirPresenceBus",
+              "field": "is_present",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "row 0"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_present",
+              "row": 1
+            },
+            "to": {
+              "bus": "AirPresenceBus",
+              "field": "is_present",
+              "row": 1
+            },
+            "kind": "lookup",
+            "label": "row 1"
+          }
+        ]
+      },
+      "transition": {
+        "note": "Per-AIR iteration: consecutive rows advance air_idx and may toggle is_present. The starting_tidx is precomputed so the transcript observations land at the correct indices.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx_flags",
+                  "is_present",
+                  "log_height"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "idx_flags",
+                  "is_present",
+                  "log_height"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_present",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "row 0"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_present",
+              "row": 1
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "row 1"
+          }
+        ]
+      }
+    },
+    "constraints_html": "For each AIR row, ProofShapeAir conditionally <span class=\"ref\" data-scene=\"transition\">observes is_present on TranscriptBus (only when the AIR is not VK-required)</span>. PS1b enforces that VK-required AIRs have is_present = 1. <span class=\"ref\" data-scene=\"presence-broadcast\">AirPresenceBus broadcasts (air_idx, is_present) to downstream modules for every AIR</span> (present or absent).",
+    "soundness_html": "<span class=\"ref\" data-scene=\"boolean-constraint\">PS1a constrains is_present to be boolean</span>; PS1b forces VK-required AIRs to have is_present = 1. The <span class=\"ref\" data-scene=\"transition\">per-AIR flag is pinned on the transcript at the correct tidx</span> (precomputed in air_idx order via the preflight starting_tidx). Together these guarantee the presence bits in Extract(W) match the presence bits in the reference verifier's proof."
+  }
+}

@@ -1,0 +1,426 @@
+{
+  "id": "preamble",
+  "name": "Phase 1: Preamble",
+  "summary": "<p>The reference verifier's preamble absorbs VK-level metadata (pre-hash, common main commit, per-AIR presence, preprocessed/cached commitments, public values) into the Fiat-Shamir transcript, validates proof-shape bounds, and derives the sort order plus aggregate quantities (<code>n_logup</code>, <code>n_max</code>, <code>num_present_airs</code>, total-interactions bound) that downstream phases consume.</p><p>In the circuit this work is discharged by two AIRs. <code>ProofShapeAir</code> has one row per child AIR indexed by <code>sorted_idx</code>, plus a summary (<code>is_last</code>) row that aggregates per-proof quantities and emits the module-handoff messages. <code>PublicValuesAir</code> has one row per public value, receives the count from <code>ProofShapeAir</code> through <code>NumPublicValuesBus</code>, and forwards each observation to the constraint evaluator. Together they replay every transcript observation in the reference verifier's preamble block and broadcast the derived metadata on <code>AirShapeBus</code>, <code>AirPresenceBus</code>, <code>CommitmentsBus</code>, <code>HyperdimBus</code>, <code>LiftedHeightsBus</code>, and the per-proof module buses.</p>",
+  "blocks": [
+    {
+      "type": "prose",
+      "html": "<p>Two AIRs carry this phase. We start with <code>ProofShapeAir</code>, which is the heavier of the two: it enforces the row-per-AIR structure, replays every transcript observation from the reference verifier's preamble, runs the trace-height bound on its summary row, and emits the handoff messages that downstream modules consume. <code>PublicValuesAir</code> follows, handling the per-public-value transcript observations and the forward to the constraint evaluator.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "proof-shape.ProofShapeAir",
+      "heading": "ProofShapeAir",
+      "html": "<p><code>ProofShapeAir</code> walks once through the child proof's AIRs in sort order. Each row selects one entry from the VK metadata table via a one-hot <code>idx_flags</code> encoder, conditionally observes transcript values at precomputed <code>tidx</code> positions, and emits the per-AIR data messages. The final <code>is_last</code> row is a summary row that closes out per-proof aggregates (<code>n_logup</code>, <code>n_max</code>, the total-interactions bound) and emits the module-handoff messages.</p>",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols struct (fixed part)",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "41-97",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct ProofShapeCols<F, const NUM_LIMBS: usize> {\n    pub proof_idx: F,\n    pub is_valid: F,\n    pub is_first: F,\n    pub is_last: F,\n\n    pub sorted_idx: F,\n    /// Represents log2 trace height when `is_present`.\n    ///\n    /// Has a special use on summary row (when `is_last`).\n    pub log_height: F,\n    /// When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`.\n    pub n_sign_bit: F,\n\n    // First possible tidx and non-main cidx of the current AIR\n    pub starting_tidx: F,\n    pub starting_cidx: F,\n\n    // Columns that may be read from the transcript. Note that cached_commits is also read\n    // from the transcript.\n    pub is_present: F,\n\n    /// Will be constrained to be `2^log_height` when `is_present`.\n    ///\n    /// Has a special use on summary row (when `is_last`).\n    pub height: F,\n\n    // Number of present AIRs so far\n    pub num_present: F,\n\n    // The total number of interactions over all traces needs to fit in a single field element,\n    // so we assume that it only requires INTERACTIONS_LIMBS (4) limbs to store.\n    //\n    // To constrain the correctness of n_logup, we ensure that `total_interactions_limbs` has\n    // _exactly_ `CELLS_LIMBS * LIMB_BITS - (l_skip + n_logup)` leading zeroes. We do this by\n    // a) recording the most significant non-zero limb i and b) making sure\n    // total_interaction_limbs[i] * 2^{the number of remaining leading zeroes} is within [0,\n    // 256).\n    //\n    // To constrain that the total number of interactions over all traces is less than the\n    // max interactions set in the vk, we record the most significant limb at which the max\n    // limb decomposition and total_interactions_limbs differ. The difference between those\n    // two limbs is then range checked to be within [1, 256).\n    pub lifted_height_limbs: [F; NUM_LIMBS],\n    pub num_interactions_limbs: [F; NUM_LIMBS],\n    pub total_interactions_limbs: [F; NUM_LIMBS],\n\n    /// The maximum hypercube dimension across all present AIR traces, or zero.\n    /// Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.\n    pub n_max: F,\n    pub is_n_max_greater: F,\n    pub n_logup: F,\n\n    pub num_air_id_lookups: F,\n}",
+      "explain": "<p>These are the fixed columns. <code>proof_idx</code> is the per-proof bus key, <code>is_valid</code> marks AIR rows (versus padding), and <code>is_first</code>/<code>is_last</code> bound the per-proof window. Note the dual use pattern: on regular rows <code>log_height</code> is the AIR's log trace height and <code>height</code> is <code>2^log_height</code>, but on the summary row (<code>is_last</code>) the same cells are reused as scratch for the <code>n_logup</code> check (see the summary-row block below, which aliases <code>height</code> as <code>limb_to_range_check</code> and <code>log_height</code> as <code>msb_limb_zero_bits_exp</code>). <code>starting_tidx</code> and <code>starting_cidx</code> are per-row running indices into the transcript and commitments list; they're threaded forward via internal permutation buses so transcript observations land at the correct absolute positions.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Variable-length columns (idx_flags, cached_commits)",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "99-108",
+      "code": "// Variable-length columns are stored at the end\npub struct ProofShapeVarCols<'a, F> {\n    pub idx_flags: &'a [F],                     // [F; IDX_FLAGS]\n    pub cached_commits: &'a [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]\n}\n\npub struct ProofShapeVarColsMut<'a, F> {\n    pub idx_flags: &'a mut [F],                     // [F; IDX_FLAGS]\n    pub cached_commits: &'a mut [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]\n}",
+      "explain": "<p>After the fixed columns the trace holds two variable-length blocks whose widths depend on the child VK. <code>idx_flags</code> is the encoder that picks which AIR this row represents (one-hot plus encoder slack); <code>cached_commits</code> is a <code>DIGEST_SIZE</code>-wide entry per cached commitment slot (up to <code>max_cached</code>). These are the columns that hold the actual hash digests observed on <code>TranscriptBus</code> and registered on <code>CommitmentsBus</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Borrow the row and run the idx encoder",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "199-219",
+      "code": "    fn eval(&self, builder: &mut AB) {\n        let main = builder.main();\n\n        let (local, next) = (\n            main.row_slice(0).expect(\"window should have two elements\"),\n            main.row_slice(1).expect(\"window should have two elements\"),\n        );\n        let const_width = ProofShapeCols::<AB::Var, NUM_LIMBS>::width();\n\n        let localv = borrow_var_cols::<AB::Var>(\n            &local[const_width..],\n            self.idx_encoder.width(),\n            self.max_cached,\n        );\n        let local: &ProofShapeCols<AB::Var, NUM_LIMBS> = (*local)[..const_width].borrow();\n        let next: &ProofShapeCols<AB::Var, NUM_LIMBS> = (*next)[..const_width].borrow();\n\n        self.idx_encoder.eval(builder, localv.idx_flags);\n        builder\n            .when(local.is_valid)\n            .assert_one(self.idx_encoder.is_valid::<AB>(localv.idx_flags));",
+      "explain": "<p>Setup. The AIR reads a two-row window (<code>local</code>, <code>next</code>) because many constraints are transitions. The idx encoder (a shared primitive) validates that <code>idx_flags</code> is a well-formed one-hot selection; when the row is valid we additionally require the selection is in range. This is what lets later code write <code>self.idx_encoder.get_flag_expr::&lt;AB&gt;(i, localv.idx_flags)</code> and trust it as the indicator that this row represents child AIR <code>i</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-proof nested loop and proof_idx continuity",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "221-244",
+      "code": "        NestedForLoopSubAir::<1> {}.eval(\n            builder,\n            (\n                NestedForLoopIoCols {\n                    is_enabled: local.is_valid + local.is_last,\n                    counter: [local.proof_idx.into()],\n                    is_first: [local.is_first.into()],\n                },\n                NestedForLoopIoCols {\n                    is_enabled: next.is_valid + next.is_last,\n                    counter: [next.proof_idx.into()],\n                    is_first: [next.is_first.into()],\n                },\n            ),\n        );\n        builder\n            .when(and(local.is_valid, not(local.is_last)))\n            .assert_eq(local.proof_idx, next.proof_idx);\n\n        builder.assert_bool(local.is_present);\n        builder.when(local.is_present).assert_one(local.is_valid);\n        builder\n            .when(local.is_valid)\n            .assert_eq(local.n_logup, next.n_logup);",
+      "explain": "<p>The nested-for-loop subair packages the window of (AIR rows + one summary row) per proof into a loop counter <code>proof_idx</code>, with <code>is_first</code> marking the first AIR row of the proof. Inside a proof, <code>proof_idx</code> does not change. <code>is_present</code> is asserted boolean (discharges the <code>PS1a</code> obligation for presence flags in <code>preamble-3</code>) and implies <code>is_valid</code>. <code>n_logup</code> is held constant across all rows of a proof so every per-row send carries the same value the summary row computes.</p>",
+      "scene": "preamble-3"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "num_present counter",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "246-252",
+      "code": "        builder\n            .when(local.is_first)\n            .assert_eq(local.is_present, local.num_present);\n        builder.when(local.is_valid).assert_eq(\n            local.num_present + next.is_present * next.is_valid,\n            next.num_present,\n        );",
+      "explain": "<p><code>num_present</code> accumulates the count of present AIRs as the loop advances. The first row seeds it with <code>is_present</code>, and each transition adds <code>next.is_present</code> when <code>next</code> is still an AIR row. By the summary row this equals the total number of present AIRs, which is later sent on <code>FractionFolderInputBus</code> (block <code>preamble-10</code>).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "VK field selection setup",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "254-284",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // VK FIELD SELECTION\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        let mut num_interactions_per_row = [AB::Expr::ZERO; NUM_LIMBS];\n\n        // Select values for TranscriptBus\n        let mut is_required = AB::Expr::ZERO;\n        let mut is_min_cached = AB::Expr::ZERO;\n        let mut has_preprocessed = AB::Expr::ZERO;\n        let mut cached_present = vec![AB::Expr::ZERO; self.max_cached];\n\n        // Select AIR idx + other values for AirShapeBus\n        let mut air_idx = AB::Expr::ZERO;\n        let mut num_interactions = AB::Expr::ZERO;\n        let mut need_rot = AB::Expr::ZERO;\n\n        // Select values for LiftedHeightsBus\n        let mut main_common_width = AB::Expr::ZERO;\n        let mut preprocessed_stacked_width = AB::Expr::ZERO;\n        let mut cached_widths = vec![AB::Expr::ZERO; self.max_cached];\n\n        // Select values for CommitmentsBus\n        let mut preprocessed_commit = [AB::Expr::ZERO; DIGEST_SIZE];\n\n        // Select values for NumPublicValuesBus\n        let mut num_pvs = AB::Expr::ZERO;\n        let mut has_pvs = AB::Expr::ZERO;\n\n        // Select values for CachedCommitBus\n        let mut current_air_found = AB::Expr::ZERO;\n        let mut global_cached_start_idx = AB::Expr::ZERO;",
+      "explain": "<p>The AIR does not embed the child VK as an array lookup; instead, for every row it folds the VK metadata into a set of per-row expressions by summing over <code>i</code> with the one-hot selector <code>is_current_air</code>. These zeroed accumulators will be populated in the loop below and then used on the same row as either transcript values (<code>preprocessed_commit</code>, <code>num_pvs</code>) or as parameters to bus sends (<code>air_idx</code>, <code>num_interactions</code>, <code>need_rot</code>, widths).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "VK selection loop: width / pvs / interactions",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "286-311",
+      "code": "        for (i, air_data) in self.per_air.iter().enumerate() {\n            // We keep a running tally of how many transcript reads there should be up to any\n            // given point, and use that to constrain initial_tidx\n            let is_current_air = self.idx_encoder.get_flag_expr::<AB>(i, localv.idx_flags);\n            let mut when_current = builder.when(is_current_air.clone());\n\n            air_idx += is_current_air.clone() * AB::F::from_usize(i);\n            need_rot += is_current_air.clone() * AB::F::from_bool(air_data.need_rot);\n            main_common_width += is_current_air.clone() * AB::F::from_usize(air_data.main_width);\n\n            if air_data.num_public_values != 0 {\n                has_pvs += is_current_air.clone();\n            }\n            num_pvs += is_current_air.clone() * AB::F::from_usize(air_data.num_public_values);\n\n            // Select number of interactions for use later in the AIR and constrain that the\n            // num_interactions_per_row limb decomposition is correct.\n            num_interactions +=\n                is_current_air.clone() * AB::F::from_usize(air_data.num_interactions);\n\n            for (i, &limb) in decompose_f::<AB::F, NUM_LIMBS, LIMB_BITS>(air_data.num_interactions)\n                .iter()\n                .enumerate()\n            {\n                num_interactions_per_row[i] += is_current_air.clone() * limb;\n            }",
+      "explain": "<p>For each candidate AIR index <code>i</code>, the expression <code>is_current_air</code> is 1 iff this row represents AIR <code>i</code>. Multiplying VK constants by this indicator and summing across <code>i</code> effectively indexes into the VK: after the loop, <code>air_idx</code> holds <code>i</code>, <code>num_interactions</code> holds the child's interaction count for that AIR, <code>num_pvs</code> holds its public-value count, <code>main_common_width</code> holds its main width, and <code>num_interactions_per_row</code> holds the per-limb decomposition that the carry check below uses to multiply by <code>lifted_height</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "VK selection loop: required / preprocessed / cached",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "313-347",
+      "code": "            if air_data.is_required {\n                is_required += is_current_air.clone();\n                when_current.assert_one(local.is_present);\n            }\n\n            if i == self.min_cached_idx {\n                is_min_cached += is_current_air.clone();\n            }\n\n            if let Some(preprocessed) = &air_data.preprocessed_data {\n                when_current.assert_eq(\n                    local.log_height,\n                    AB::Expr::from_usize(\n                        self.l_skip.wrapping_add_signed(preprocessed.hypercube_dim),\n                    ),\n                );\n                has_preprocessed += is_current_air.clone();\n\n                preprocessed_stacked_width += is_current_air.clone()\n                    * AB::F::from_usize(air_data.preprocessed_width.unwrap());\n                (0..DIGEST_SIZE).for_each(|didx| {\n                    preprocessed_commit[didx] += is_current_air.clone()\n                        * AB::F::from_u32(preprocessed.commit[didx].as_canonical_u32());\n                });\n            }\n\n            current_air_found += is_current_air.clone();\n            let global_cached_idx_increment = not::<AB::Expr>(current_air_found.clone());\n\n            for (cached_idx, width) in air_data.cached_widths.iter().enumerate() {\n                cached_present[cached_idx] += is_current_air.clone();\n                cached_widths[cached_idx] += is_current_air.clone() * AB::Expr::from_usize(*width);\n                global_cached_start_idx += global_cached_idx_increment.clone();\n            }\n        }",
+      "explain": "<p>The rest of the VK selection loop. <code>is_required</code> discharges the <code>PS1b</code> obligation for <code>preamble-3</code>: if the child VK marks an AIR as required, the one-hot branch asserts <code>is_present = 1</code> on that row, so required AIRs cannot be omitted. For AIRs with preprocessed data we pin <code>log_height</code> to the VK-fixed value (preprocessed traces have a fixed hypercube dim) and fold the preprocessed commit digest into <code>preprocessed_commit</code>. <code>cached_present[cached_idx]</code> ends up as 1 for AIRs that actually have that cached slot, which later gates the per-slot transcript observations and commitments-bus sends.</p>",
+      "scene": "preamble-3"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sort permutation and absent-AIR zeroing",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "349-380",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // PERMUTATION AND SORTING\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        builder.when(local.is_first).assert_zero(local.sorted_idx);\n        builder\n            .when(next.sorted_idx)\n            .assert_eq(local.sorted_idx, next.sorted_idx - AB::F::ONE);\n\n        self.permutation_bus.send(\n            builder,\n            local.proof_idx,\n            ProofShapePermutationMessage {\n                idx: local.sorted_idx,\n            },\n            local.is_valid,\n        );\n\n        self.permutation_bus.receive(\n            builder,\n            local.proof_idx,\n            ProofShapePermutationMessage {\n                idx: air_idx.clone(),\n            },\n            local.is_valid,\n        );\n\n        builder\n            .when(and(not(local.is_present), local.is_valid))\n            .assert_zero(local.height);\n        builder\n            .when(and(not(local.is_present), local.is_valid))\n            .assert_zero(local.log_height);",
+      "explain": "<p>Two-way send/receive on <code>ProofShapePermutationBus</code> (scoped per <code>proof_idx</code>) establishes that the mapping <code>sorted_idx -&gt; air_idx</code> is a bijection on <code>[0, num_airs)</code>. The first AIR row has <code>sorted_idx = 0</code>, and as long as the next row's <code>sorted_idx</code> is non-zero the constraint <code>sorted_idx + 1 = next.sorted_idx</code> increments by exactly one. Absent AIRs are forced to have <code>height = 0</code> and <code>log_height = 0</code>, which (combined with the non-increasing ordering below) pushes them to the end of the row range.</p>",
+      "scene": "preamble-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Non-increasing log_height",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "382-390",
+      "code": "        // Range check difference using ExponentBus to ensure local.log_height >= next.log_height\n        self.range_bus.lookup_key(\n            builder,\n            RangeCheckerBusMessage {\n                value: local.log_height - next.log_height,\n                max_bits: AB::Expr::from_usize(5),\n            },\n            and(local.is_valid, not(next.is_last)),\n        );",
+      "explain": "<p>The sort's primary key. Range-checking <code>local.log_height - next.log_height</code> into <code>[0, 32)</code> forces <code>local.log_height &gt;= next.log_height</code>, i.e. non-increasing heights across consecutive AIR rows. Combined with the zero-height constraint on absent AIRs above, absent rows must sort after every present row. This is exactly the <code>preamble-9</code> sort condition the reference verifier computes as <code>Sort by (is_none, Reverse(log_height), air_id)</code>.</p>",
+      "scene": "preamble-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "First-row starting_tidx and per-row handoff",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "392-412",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // TRANSCRIPT OBSERVATIONS\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        let is_first_idx = self.idx_encoder.get_flag_expr::<AB>(0, localv.idx_flags);\n        builder\n            .when(is_first_idx.clone())\n            .assert_eq(local.starting_tidx, AB::Expr::from_usize(2 * DIGEST_SIZE));\n\n        self.starting_tidx_bus.receive(\n            builder,\n            local.proof_idx,\n            StartingTidxMessage {\n                air_idx: air_idx.clone() * local.is_valid\n                    + AB::Expr::from_usize(self.per_air.len()) * local.is_last,\n                tidx: local.starting_tidx.into(),\n            },\n            or(\n                local.is_last,\n                and(local.is_valid, not::<AB::Expr>(is_first_idx)),\n            ),\n        );",
+      "explain": "<p>The row for <code>air_idx == 0</code> (the first AIR in the <i>per_air</i> order, not in sort order) must start at <code>tidx = 2 * DIGEST_SIZE</code> &mdash; that's immediately after the pre-hash (DIGEST_SIZE) and <code>common_main_commit</code> (DIGEST_SIZE) which live at the start of the transcript. The <code>starting_tidx_bus</code> receive/send pair threads the running <code>tidx</code> cursor from row to row keyed by <code>air_idx</code>, so transcript observations emitted later in this row land at absolute positions that chain correctly.</p>",
+      "scene": "preamble-1"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Observe is_present (when not required)",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "414-425",
+      "code": "        let mut tidx = local.starting_tidx.into();\n        self.transcript_bus.receive(\n            builder,\n            local.proof_idx,\n            TranscriptBusMessage {\n                tidx: tidx.clone(),\n                value: local.is_present.into(),\n                is_sample: AB::Expr::ZERO,\n            },\n            not::<AB::Expr>(is_required.clone()) * local.is_valid,\n        );\n        tidx += not::<AB::Expr>(is_required) * local.is_valid;",
+      "explain": "<p>First transcript observation per AIR: when the AIR is not VK-required, the prover-supplied <code>is_present</code> flag is absorbed on <code>TranscriptBus</code> with <code>is_sample = 0</code>. Required AIRs skip this observation (their <code>is_present</code> is fixed to 1 by the earlier constraint). The running <code>tidx</code> cursor is conditionally incremented by the same predicate so the next observation lines up correctly.</p>",
+      "scene": "preamble-3"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Observe preprocessed_commit or log_height",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "427-451",
+      "code": "        for (didx, commit_val) in preprocessed_commit.iter().enumerate() {\n            self.transcript_bus.receive(\n                builder,\n                local.proof_idx,\n                TranscriptBusMessage {\n                    tidx: tidx.clone() + AB::Expr::from_usize(didx),\n                    value: commit_val.clone(),\n                    is_sample: AB::Expr::ZERO,\n                },\n                has_preprocessed.clone() * local.is_present,\n            );\n        }\n        tidx += has_preprocessed.clone() * AB::Expr::from_usize(DIGEST_SIZE) * local.is_present;\n\n        self.transcript_bus.receive(\n            builder,\n            local.proof_idx,\n            TranscriptBusMessage {\n                tidx: tidx.clone(),\n                value: local.log_height.into(),\n                is_sample: AB::Expr::ZERO,\n            },\n            not::<AB::Expr>(has_preprocessed.clone()) * local.is_present,\n        );\n        tidx += not::<AB::Expr>(has_preprocessed.clone()) * local.is_present;",
+      "explain": "<p>Mutually exclusive observations per AIR: AIRs that <i>have</i> preprocessed data contribute <code>DIGEST_SIZE</code> transcript slots for the VK-fixed <code>preprocessed_commit</code>; AIRs that don't contribute one slot for the prover-supplied <code>log_height</code>. Both are gated on <code>is_present</code>. This is the split that <code>preamble-4</code> describes: either the digest or the height scalar goes in, never both. The <code>tidx</code> cursor advances by exactly the right count in each branch.</p>",
+      "scene": "preamble-4"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Observe cached_commits and reserve PV slots",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "453-480",
+      "code": "        (0..self.max_cached).for_each(|i| {\n            for didx in 0..DIGEST_SIZE {\n                self.transcript_bus.receive(\n                    builder,\n                    local.proof_idx,\n                    TranscriptBusMessage {\n                        tidx: tidx.clone(),\n                        value: localv.cached_commits[i][didx].into(),\n                        is_sample: AB::Expr::ZERO,\n                    },\n                    cached_present[i].clone() * local.is_present,\n                );\n                tidx += cached_present[i].clone() * local.is_present;\n            }\n        });\n\n        let num_pvs_tidx = tidx.clone();\n        tidx += num_pvs.clone() * local.is_present;\n\n        self.starting_tidx_bus.send(\n            builder,\n            local.proof_idx,\n            StartingTidxMessage {\n                air_idx: air_idx.clone() + AB::F::ONE,\n                tidx: tidx.clone(),\n            },\n            local.is_valid,\n        );",
+      "explain": "<p>For each cached-commit slot that this AIR actually uses (<code>cached_present[i] == 1</code>), all <code>DIGEST_SIZE</code> digest elements are absorbed on <code>TranscriptBus</code>. The cached digests live in the variable columns <code>localv.cached_commits[i]</code>. After that we record <code>num_pvs_tidx</code> (the first transcript index for this AIR's public values) before reserving <code>num_pvs</code> slots for <code>PublicValuesAir</code> to fill in, and finally send <code>(air_idx + 1, tidx)</code> on <code>starting_tidx_bus</code> so the next row's handoff matches.</p>",
+      "scene": "preamble-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Pre-hash observation on the summary row",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "482-504",
+      "code": "        for didx in 0..DIGEST_SIZE {\n            self.transcript_bus.receive(\n                builder,\n                local.proof_idx,\n                TranscriptBusMessage {\n                    tidx: AB::Expr::from_usize(didx),\n                    value: localv.cached_commits[self.max_cached - 1][didx].into(),\n                    is_sample: AB::Expr::ZERO,\n                },\n                local.is_last,\n            );\n\n            self.transcript_bus.receive(\n                builder,\n                local.proof_idx,\n                TranscriptBusMessage {\n                    tidx: AB::Expr::from_usize(didx + DIGEST_SIZE),\n                    value: localv.cached_commits[self.max_cached - 1][didx].into(),\n                    is_sample: AB::Expr::ZERO,\n                },\n                is_min_cached.clone() * local.is_valid,\n            );\n        }",
+      "explain": "<p>These are the two preamble observations that live outside the per-AIR loop. The summary row (<code>is_last</code>) observes the VK pre-hash at <code>tidx = 0..DIGEST_SIZE</code>, sourced from the last cached-commit slot of the summary row (trace generation writes the pre-hash there). The row with <code>is_min_cached</code> (the smallest-indexed AIR that owns a cached commit) observes <code>common_main_commit</code> at <code>tidx = DIGEST_SIZE..2*DIGEST_SIZE</code>, sharing the same cell. This is what makes the transcript start with <code>[vk_pre_hash, common_main_commit]</code>.</p>",
+      "scene": "preamble-1"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "AirShapeBus: air_id, num_interactions, need_rot",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "506-554",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // AIR SHAPE LOOKUP\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        self.air_shape_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            AirShapeBusMessage {\n                sort_idx: local.sorted_idx.into(),\n                property_idx: AirShapeProperty::AirId.to_field(),\n                value: air_idx.clone(),\n            },\n            local.is_present * (local.num_air_id_lookups + AB::Expr::TWO),\n        );\n\n        self.air_presence_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            AirPresenceBusMessage {\n                air_idx: air_idx.clone(),\n                is_present: local.is_present.into(),\n            },\n            local.is_valid * local.num_air_id_lookups,\n        );\n\n        self.air_shape_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            AirShapeBusMessage {\n                sort_idx: local.sorted_idx.into(),\n                property_idx: AirShapeProperty::NumInteractions.to_field(),\n                value: num_interactions.clone(),\n            },\n            local.is_present,\n        );\n\n        let total_width = main_common_width.clone()\n            + preprocessed_stacked_width.clone()\n            + cached_widths.iter().cloned().sum::<AB::Expr>();\n\n        self.air_shape_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            AirShapeBusMessage {\n                sort_idx: local.sorted_idx.into(),\n                property_idx: AirShapeProperty::NeedRot.to_field(),\n                value: need_rot.clone(),\n            },\n            local.is_present * total_width,\n        );",
+      "explain": "<p>Three entries are published on <code>AirShapeBus</code> per present row, keyed by <code>sorted_idx</code> plus a <code>property_idx</code> tag: the underlying <code>air_id</code>, the child AIR's <code>num_interactions</code>, and the <code>need_rot</code> flag. <code>AirPresenceBus</code> separately carries <code>(air_idx, is_present)</code> for every row (present or absent) so downstream modules can look up presence by raw <code>air_idx</code>. The multiplicities are chosen so the number of downstream lookups balances exactly &mdash; e.g. the <code>NeedRot</code> row is looked up once per column of width, and <code>num_air_id_lookups</code> is a prover-supplied count used by the symbolic-expression AIR.</p>",
+      "scene": "preamble-10"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "HyperdimBus: signed n",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "556-585",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // HYPERDIM (SIGNED N) LOOKUP\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        let l_skip = AB::F::from_usize(self.l_skip);\n        let n = local.log_height.into() - l_skip;\n        builder.when(local.is_valid).assert_bool(local.n_sign_bit);\n        let n_abs = select(local.n_sign_bit, -n.clone(), n.clone());\n        // We range check `n_abs` is in `[0, 32)`.\n        // We constrain `n = n_sign_bit ? -n_abs : n_abs` and `n := log_height - l_skip`.\n        // This implies `log_height - l_skip` is in `(-32, 32)` and `n_abs` is its absolute value.\n        // We further use PowerCheckerBus below to range check that `log_height` is in `[0, 32)`.\n        self.range_bus.lookup_key(\n            builder,\n            RangeCheckerBusMessage {\n                value: n_abs.clone(),\n                max_bits: AB::Expr::from_usize(5),\n            },\n            local.is_present,\n        );\n\n        self.hyperdim_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            HyperdimBusMessage {\n                sort_idx: local.sorted_idx.into(),\n                n_abs: n_abs.clone(),\n                n_sign_bit: local.n_sign_bit.into(),\n            },\n            local.is_present * (local.num_air_id_lookups + AB::F::ONE),\n        );",
+      "explain": "<p>Each AIR's hypercube dimension is <code>n = log_height - l_skip</code>, which can be negative for very small traces. We decompose it into <code>(n_abs, n_sign_bit)</code> where <code>n_sign_bit</code> is boolean, range-check <code>n_abs</code> into <code>[0, 32)</code>, and broadcast <code>(n_abs, n_sign_bit)</code> on <code>HyperdimBus</code> keyed by <code>sorted_idx</code>. This is the signed hypercube dimension that GKR / stacking need per trace.</p>",
+      "scene": "preamble-7"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Lifted height: main stacking column",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "587-620",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // LIFTED HEIGHTS LOOKUP + STACKING COMMITMENTS\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        // Note that log_lifted_height = max(log_height, l_skip) is constrained to be\n        // at most n_stack + l_skip in the stacking module by EqBitsAir.\n        let lifted_height = select(\n            local.n_sign_bit,\n            AB::F::from_usize(1 << self.l_skip),\n            local.height,\n        );\n        let log_lifted_height = not(local.n_sign_bit) * n_abs.clone() + l_skip;\n\n        self.pow_bus.lookup_key(\n            builder,\n            PowerCheckerBusMessage {\n                log: local.log_height.into(),\n                exp: local.height.into(),\n            },\n            local.is_present,\n        );\n\n        self.lifted_heights_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            LiftedHeightsBusMessage {\n                sort_idx: local.sorted_idx.into(),\n                part_idx: AB::Expr::ZERO,\n                commit_idx: AB::Expr::ZERO,\n                hypercube_dim: n.clone(),\n                lifted_height: lifted_height.clone(),\n                log_lifted_height: log_lifted_height.clone(),\n            },\n            local.is_present * main_common_width,\n        );",
+      "explain": "<p><code>lifted_height = max(height, 2^l_skip)</code> is the ceiling-to-skip-bound version of the trace height used by the stacking module. The <code>PowerCheckerBus</code> lookup does double duty: it range-checks <code>log_height</code> into <code>[0, 32)</code> and simultaneously pins <code>height = 2^log_height</code> via the <code>PowerCheckerAir</code> primitive table. The first <code>LiftedHeightsBus</code> entry (<code>part_idx = 0</code>, <code>commit_idx = 0</code>) covers the main common-trace stacked commitment, multiplied by <code>main_common_width</code> so stacking sees one lookup per column.</p>",
+      "scene": "preamble-7"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Lifted height: preprocessed commit entry",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "622-651",
+      "code": "        builder\n            .when(and(local.is_first, local.is_valid))\n            .assert_one(local.starting_cidx);\n        let mut cidx_offset = AB::Expr::ZERO;\n\n        self.lifted_heights_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            LiftedHeightsBusMessage {\n                sort_idx: local.sorted_idx.into(),\n                part_idx: cidx_offset.clone() + AB::F::ONE,\n                commit_idx: cidx_offset.clone() + local.starting_cidx,\n                hypercube_dim: n.clone(),\n                lifted_height: lifted_height.clone(),\n                log_lifted_height: log_lifted_height.clone(),\n            },\n            local.is_present * preprocessed_stacked_width,\n        );\n\n        self.commitments_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            CommitmentsBusMessage {\n                major_idx: AB::Expr::ZERO,\n                minor_idx: cidx_offset.clone() + local.starting_cidx,\n                commitment: preprocessed_commit,\n            },\n            has_preprocessed.clone() * local.is_present * AB::Expr::from_usize(self.commit_mult),\n        );\n        cidx_offset += has_preprocessed.clone();",
+      "explain": "<p>For AIRs with preprocessed data, a separate <code>LiftedHeightsBus</code> entry covers the preprocessed-trace part (gated on <code>preprocessed_stacked_width</code>), and <code>CommitmentsBus</code> registers <code>preprocessed_commit</code> at <code>(major_idx=0, minor_idx=starting_cidx + cidx_offset)</code>. The <code>commit_mult</code> multiplicity lines up with how many times <code>MerkleVerifyAir</code> looks this root up during WHIR. <code>starting_cidx</code> is the running commitment index threaded across rows; the first AIR row starts at 1 (slot 0 being reserved for the common-main commit).</p>",
+      "scene": "preamble-4"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-cached-slot lifted heights and commitments",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "653-696",
+      "code": "        (0..self.max_cached).for_each(|cached_idx| {\n            self.lifted_heights_bus.add_key_with_lookups(\n                builder,\n                local.proof_idx,\n                LiftedHeightsBusMessage {\n                    sort_idx: local.sorted_idx.into(),\n                    part_idx: cidx_offset.clone() + AB::F::ONE,\n                    commit_idx: cidx_offset.clone() + local.starting_cidx,\n                    hypercube_dim: n.clone(),\n                    lifted_height: lifted_height.clone(),\n                    log_lifted_height: log_lifted_height.clone(),\n                },\n                local.is_present * cached_widths[cached_idx].clone(),\n            );\n\n            self.commitments_bus.add_key_with_lookups(\n                builder,\n                local.proof_idx,\n                CommitmentsBusMessage {\n                    major_idx: AB::Expr::ZERO,\n                    minor_idx: cidx_offset.clone() + local.starting_cidx,\n                    commitment: localv.cached_commits[cached_idx].map(Into::into),\n                },\n                cached_present[cached_idx].clone()\n                    * local.is_present\n                    * AB::Expr::from_usize(self.commit_mult),\n            );\n            cidx_offset += cached_present[cached_idx].clone();\n\n            let cached_idx_expr = AB::Expr::from_usize(cached_idx);\n            self.cached_commit_bus.send(\n                builder,\n                local.proof_idx,\n                CachedCommitBusMessage {\n                    air_idx: air_idx.clone(),\n                    cached_idx: cached_idx_expr.clone(),\n                    global_cached_idx: global_cached_start_idx.clone() + cached_idx_expr,\n                    cached_commit: localv.cached_commits[cached_idx].map(Into::into),\n                },\n                cached_present[cached_idx].clone()\n                    * local.is_present\n                    * AB::Expr::from_bool(self.continuations_enabled),\n            );\n        });",
+      "explain": "<p>For each cached-commit slot the AIR registers both a <code>LiftedHeightsBus</code> entry (stacked as its own part) and a <code>CommitmentsBus</code> entry with the digest from <code>localv.cached_commits[cached_idx]</code>. The crucial invariant is that the <i>same</i> <code>cached_commits</code> cell feeds both the earlier <code>TranscriptBus</code> observation (preamble block) and this <code>CommitmentsBus</code> send &mdash; so the digest the Fiat-Shamir sponge absorbs is bound to be the digest that <code>MerkleVerifyAir</code> later authenticates against. When continuations are enabled, <code>CachedCommitBus</code> additionally forwards the digest out to the enclosing circuit.</p>",
+      "scene": "preamble-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Chain starting_cidx and common-main stacking root",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "698-711",
+      "code": "        builder\n            .when(and(local.is_valid, not(next.is_last)))\n            .assert_eq(local.starting_cidx + cidx_offset, next.starting_cidx);\n\n        self.commitments_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            CommitmentsBusMessage {\n                major_idx: AB::Expr::ZERO,\n                minor_idx: AB::Expr::ZERO,\n                commitment: localv.cached_commits[self.max_cached - 1].map(Into::into),\n            },\n            is_min_cached.clone() * local.is_valid * AB::Expr::from_usize(self.commit_mult),\n        );",
+      "explain": "<p>The transition constraint threads <code>starting_cidx</code> forward: the next row's starting commit index equals this row's starting index plus the commits this row consumed (<code>cidx_offset</code>). Separately, the row carrying <code>is_min_cached</code> publishes <code>common_main_commit</code> on <code>CommitmentsBus</code> at <code>minor_idx = 0</code>, reusing the last cached-commit slot as its storage cell &mdash; the same cell that was observed on <code>TranscriptBus</code> in the summary-row block above.</p>",
+      "scene": "preamble-2"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "PreHashBus publication (continuations)",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "713-722",
+      "code": "        if self.continuations_enabled {\n            self.pre_hash_bus.send(\n                builder,\n                local.proof_idx,\n                PreHashMessage {\n                    vk_pre_hash: localv.cached_commits[self.max_cached - 1],\n                },\n                local.is_last,\n            );\n        }",
+      "explain": "<p>When continuations are on, the summary row also sends the VK pre-hash out on <code>PreHashBus</code>. The source cell is again the last cached-commit slot (<code>cached_commits[max_cached - 1]</code>), the same cell that supplies the pre-hash observation at <code>tidx = 0..DIGEST_SIZE</code>. Because a single cell drives both outputs, whatever the enclosing circuit verifies about the pre-hash public value must also be what was absorbed into the transcript.</p>",
+      "scene": "preamble-1"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "NumPublicValuesBus handoff",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "724-736",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // NUM PUBLIC VALUES\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        self.num_pvs_bus.send(\n            builder,\n            local.proof_idx,\n            NumPublicValuesMessage {\n                air_idx: air_idx.clone(),\n                tidx: num_pvs_tidx,\n                num_pvs,\n            },\n            local.is_present * has_pvs,\n        );",
+      "explain": "<p>For each present AIR with a non-zero public-value count, <code>ProofShapeAir</code> sends <code>(air_idx, tidx = num_pvs_tidx, num_pvs)</code> on <code>NumPublicValuesBus</code>. <code>num_pvs_tidx</code> was captured earlier (right before the public-value slots were reserved in the transcript), and <code>num_pvs</code> is the VK-fixed count folded in by the selection loop. <code>PublicValuesAir</code> will receive this message and unroll it into one row per public value, each at the correct <code>tidx</code>.</p>",
+      "scene": "preamble-6"
+    },
+    {
+      "type": "prose",
+      "html": "<p>The remaining blocks handle the per-proof summary row (<code>is_last</code>): validating the lifted-height limb decomposition, the incremental total-interactions accumulator, the <code>n_logup</code> leading-zero check, the <code>n_max</code> aggregation, and the final module handoffs on <code>GkrModuleBus</code>, <code>ExpressionClaimNMaxBus</code>, <code>NLiftBus</code>, <code>Eq3bShapeBus</code>, <code>EqNsNLogupMaxBus</code>, <code>FractionFolderInputBus</code>, and the strict total-interactions bound.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Lifted-height limb decomposition",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "738-761",
+      "code": "        ///////////////////////////////////////////////////////////////////////////////////////////\n        // INTERACTIONS + GKR MESSAGE\n        ///////////////////////////////////////////////////////////////////////////////////////////\n        // Constrain that height decomposition is correct. Note we constrained the width\n        // decomposition to be correct above.\n        builder.when(local.is_valid).assert_eq(\n            fold(\n                local.lifted_height_limbs.iter().enumerate(),\n                AB::Expr::ZERO,\n                |acc, (i, limb)| acc + (AB::Expr::from_u32(1 << (i * LIMB_BITS)) * *limb),\n            ),\n            lifted_height,\n        );\n\n        for i in 0..NUM_LIMBS {\n            self.range_bus.lookup_key(\n                builder,\n                RangeCheckerBusMessage {\n                    value: local.lifted_height_limbs[i].into(),\n                    max_bits: AB::Expr::from_usize(LIMB_BITS),\n                },\n                local.is_valid,\n            );\n        }",
+      "explain": "<p>The scalar <code>lifted_height</code> is decomposed into <code>NUM_LIMBS</code> limbs of <code>LIMB_BITS</code> each, with the weighted sum constrained to equal <code>lifted_height</code> and each limb range-checked into <code>[0, 2^LIMB_BITS)</code>. This is the foundation for both the limb-wise multiplication (<code>num_interactions = lifted_height * num_interactions_per_row</code>) in the next block and the final total-interactions bound.</p>",
+      "scene": "preamble-8"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "num_interactions = lifted_height * num_interactions_per_row",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "763-797",
+      "code": "        // Constrain that num_interactions = height * num_interactions_per_row\n        let mut carry = vec![AB::Expr::ZERO; NUM_LIMBS * 2];\n        let carry_divide = AB::F::from_u32(1 << LIMB_BITS).inverse();\n\n        for (i, &height_limb) in local.lifted_height_limbs.iter().enumerate() {\n            for (j, interactions_limb) in num_interactions_per_row.iter().enumerate() {\n                carry[i + j] += height_limb * interactions_limb.clone();\n            }\n        }\n\n        for i in 0..2 * NUM_LIMBS {\n            if i != 0 {\n                let prev = carry[i - 1].clone();\n                carry[i] += prev;\n            }\n            carry[i] = AB::Expr::from(carry_divide)\n                * (carry[i].clone()\n                    - if i < NUM_LIMBS {\n                        local.num_interactions_limbs[i].into()\n                    } else {\n                        AB::Expr::ZERO\n                    });\n            if i < NUM_LIMBS - 1 {\n                self.range_bus.lookup_key(\n                    builder,\n                    RangeCheckerBusMessage {\n                        value: carry[i].clone(),\n                        max_bits: AB::Expr::from_usize(LIMB_BITS),\n                    },\n                    local.is_valid,\n                );\n            } else {\n                builder.when(local.is_valid).assert_zero(carry[i].clone());\n            }\n        }",
+      "explain": "<p>Schoolbook multiplication in limbs: <code>num_interactions_limbs = lifted_height_limbs * num_interactions_per_row</code>. The algorithm forms partial products into a <code>2*NUM_LIMBS</code> carry accumulator, then for each limb subtracts the claimed output limb, divides by the base, and range-checks the resulting carry. The final carry is asserted zero, which forces the product to fit in <code>NUM_LIMBS</code> limbs (no overflow). This is how the AIR verifies the child's per-AIR <code>num_interactions</code> value equals <code>lifted_height * (VK-fixed interactions per row)</code>.</p>",
+      "scene": "preamble-8"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Running total_interactions accumulator",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "799-827",
+      "code": "        // Constrain total number of interactions is added correctly. For induction, we must also\n        // constrain that the initial total number of interactions is zero.\n        local.total_interactions_limbs.iter().for_each(|x| {\n            builder.when(local.is_first).assert_zero(*x);\n        });\n\n        for i in 0..NUM_LIMBS {\n            carry[i] = AB::Expr::from(carry_divide)\n                * (local.num_interactions_limbs[i].into() + local.total_interactions_limbs[i]\n                    - next.total_interactions_limbs[i]\n                    + if i > 0 {\n                        carry[i - 1].clone()\n                    } else {\n                        AB::Expr::ZERO\n                    });\n            if i < NUM_LIMBS - 1 {\n                builder.when(local.is_valid).assert_bool(carry[i].clone());\n            } else {\n                builder.when(local.is_valid).assert_zero(carry[i].clone());\n            }\n            self.range_bus.lookup_key(\n                builder,\n                RangeCheckerBusMessage {\n                    value: next.total_interactions_limbs[i].into(),\n                    max_bits: AB::Expr::from_usize(LIMB_BITS),\n                },\n                local.is_valid,\n            );\n        }",
+      "explain": "<p>Induction on the running sum: the first row sets <code>total_interactions_limbs = 0</code>, and each transition enforces <code>next.total_interactions_limbs = local.total_interactions_limbs + local.num_interactions_limbs</code> limb-by-limb with a boolean carry. After walking all AIR rows, the summary row's <code>local.total_interactions_limbs</code> equals the full sum <code>sum_i(num_interactions[i] * lifted_height[i])</code>.</p>",
+      "scene": "preamble-8"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Summary-row boundary constraints",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "829-846",
+      "code": "        // While the (N + 1)-th row (index N) is invalid, we use it to store the final number\n        // of total cells. We thus can always constrain local.total_cells + local.num_cells =\n        // next.total_cells when local is valid, and when we're on the summary row we can send\n        // the stacking main width message.\n        //\n        // Note that we must constrain that the is_last flag is set correctly, i.e. it must\n        // only be set on the row immediately after the N-th.\n        builder.assert_bool(local.is_last);\n        builder.when(local.is_last).assert_zero(local.is_valid);\n        builder.when(next.is_last).assert_one(local.is_valid);\n        builder\n            .when(local.sorted_idx - AB::F::from_usize(self.per_air.len() - 1))\n            .assert_zero(next.is_last);\n\n        builder.when(local.is_last).assert_one(or(\n            next.is_first,\n            not::<AB::Expr>(next.is_valid + next.is_last),\n        ));",
+      "explain": "<p>These constraints pin <code>is_last</code> to the correct row. It must be boolean; it cannot coexist with <code>is_valid</code>; the row before it must be valid; and <code>next.is_last</code> can only be set when <code>local.sorted_idx = per_air.len() - 1</code>, i.e. after the last AIR row. After the summary row we either start the next proof (<code>next.is_first</code>) or land in padding (<code>!next.is_valid &amp;&amp; !next.is_last</code>).</p>",
+      "scene": "preamble-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "n_logup: column aliasing on summary row",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "848-882",
+      "code": "        // Constrain that n_logup is correct, i.e. that there are CELLS_LIMBS * LIMB_BITS - n_logup\n        // leading zeroes in total_interactions_limbs. Because we only do this on the is_last row,\n        // we can reuse several of our columns to save space.\n        //\n        // We mark the most significant non-zero limb of local.total_interactions_limbs using the\n        // non_zero_marker column array defined below, and the remaining number of leading 0 bits\n        // needed within the limb using msb_limb_zero_bits_exp. Column limb_to_range_check is used\n        // to store the value of the most significant limb to range check.\n        //\n        // We constrain limb_to_range_check to be non-zero by asserting it has an inverse when the\n        // total number of interactions is non-zero. When the total number of interactions is zero,\n        // n_logup must also be 0.\n        let non_zero_marker = local.lifted_height_limbs;\n        let limb_to_range_check = local.height;\n        let limb_to_range_check_inv = local.n_sign_bit;\n        let limb_times_inv = limb_to_range_check * limb_to_range_check_inv;\n        let msb_limb_zero_bits_exp = local.log_height;\n        let n_logup = local.n_logup;\n\n        let mut prefix = AB::Expr::ZERO;\n        let mut expected_limb_to_range_check = AB::Expr::ZERO;\n        let mut msb_limb_zero_bits = AB::Expr::ZERO;\n\n        for i in (0..NUM_LIMBS).rev() {\n            prefix += non_zero_marker[i].into();\n            expected_limb_to_range_check += local.total_interactions_limbs[i] * non_zero_marker[i];\n            msb_limb_zero_bits += non_zero_marker[i] * AB::F::from_usize((i + 1) * LIMB_BITS);\n\n            builder.when(local.is_last).assert_bool(non_zero_marker[i]);\n\n            let mut when_non_zero_limb =\n                builder.when(local.total_interactions_limbs[i] * local.is_last);\n            when_non_zero_limb.assert_one(prefix.clone());\n            when_non_zero_limb.assert_one(limb_times_inv.clone());\n        }",
+      "explain": "<p>On the summary row, several regular columns are reinterpreted as scratch for the <code>n_logup</code> leading-zero check &mdash; <code>lifted_height_limbs</code> becomes a one-hot <code>non_zero_marker</code> over limb indices, <code>height</code> is the most-significant non-zero limb, <code>n_sign_bit</code> is its inverse witness, and <code>log_height</code> is <code>2^(leading zeros within that limb)</code>. The loop above enforces that the marker selects the highest non-zero limb (<code>prefix = 1</code> at and after that limb) and that <code>limb_times_inv = 1</code> whenever a non-zero limb exists.</p>",
+      "scene": "preamble-8"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "n_logup: close out the leading-zero count",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "884-921",
+      "code": "        let mut when_last = builder.when(local.is_last);\n\n        when_last.assert_bool(prefix.clone());\n        when_last\n            .when(not::<AB::Expr>(limb_times_inv.clone()))\n            .assert_zero(n_logup);\n        when_last.assert_eq(limb_to_range_check, expected_limb_to_range_check);\n        msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);\n\n        self.pow_bus.lookup_key(\n            builder,\n            PowerCheckerBusMessage {\n                log: msb_limb_zero_bits,\n                exp: msb_limb_zero_bits_exp.into(),\n            },\n            local.is_last,\n        );\n\n        // When limb_to_range_check is non-zero we range check x and x - 128 to be in [0, 256).\n        // This ensures x in [128, 256), which implies that n_logup is exact.\n        let shifted_msb_limb = limb_to_range_check * msb_limb_zero_bits_exp;\n        self.range_bus.lookup_key(\n            builder,\n            RangeCheckerBusMessage {\n                value: shifted_msb_limb.clone(),\n                max_bits: AB::Expr::from_usize(LIMB_BITS),\n            },\n            local.is_last,\n        );\n\n        self.range_bus.lookup_key(\n            builder,\n            RangeCheckerBusMessage {\n                value: shifted_msb_limb - AB::Expr::from_usize(1 << (LIMB_BITS - 1)),\n                max_bits: AB::Expr::from_usize(LIMB_BITS),\n            },\n            local.is_last * limb_times_inv,\n        );",
+      "explain": "<p>When the total is non-zero, we need the MSB limb, once shifted up by <code>2^(leading zeros)</code>, to sit in <code>[128, 256)</code> &mdash; exactly the range that forces <code>n_logup</code> to be the unique exponent such that <code>total_interactions &lt; 2^(n_logup + l_skip)</code>. The <code>PowerCheckerBus</code> lookup ties <code>msb_limb_zero_bits</code> (derived from the marker) to <code>msb_limb_zero_bits_exp</code> (<code>= 2^msb_limb_zero_bits</code>), and the pair of range checks on <code>shifted_msb_limb</code> and <code>shifted_msb_limb - 128</code> confirms the top bit is set. When the total is zero, <code>limb_times_inv = 0</code> and <code>n_logup</code> is forced to zero.</p>",
+      "scene": "preamble-8"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "n_max accumulation",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "923-944",
+      "code": "        // Constrain n_max on each row. Also constrain that local.is_n_max_greater is one when\n        // n_max is greater than n_logup, and zero otherwise.\n        builder\n            .when(local.is_first)\n            .assert_eq(local.n_max, not(local.n_sign_bit) * n_abs);\n        builder\n            .when(local.is_first)\n            .when(local.n_sign_bit)\n            .assert_zero(local.n_max);\n        builder\n            .when(local.is_valid)\n            .assert_eq(local.n_max, next.n_max);\n\n        builder.assert_bool(local.is_n_max_greater);\n        self.range_bus.lookup_key(\n            builder,\n            RangeCheckerBusMessage {\n                value: (local.n_max - n_logup) * (local.is_n_max_greater * AB::F::TWO - AB::F::ONE),\n                max_bits: AB::Expr::from_usize(5),\n            },\n            local.is_last,\n        );",
+      "explain": "<p><code>n_max</code> is held constant across all rows of the proof (transition constraint), and on the first AIR row it equals <code>max(0, n)</code> where <code>n = log_height - l_skip</code>. Because the sort is non-increasing on <code>log_height</code>, the first AIR row has the largest <code>log_height</code> and therefore the largest <code>n</code>, so its <code>max(0, n)</code> is the maximum across present AIRs &mdash; <code>n_max = max_i max(0, n_i)</code>. <code>is_n_max_greater</code> is boolean, and on the summary row the signed product <code>(n_max - n_logup) * (2*is_n_max_greater - 1)</code> is range-checked non-negative, i.e. <code>is_n_max_greater = 1 iff n_max &gt; n_logup</code>.</p>",
+      "scene": "preamble-10"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "GkrModuleBus handoff",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "946-966",
+      "code": "        self.gkr_module_bus.send(\n            builder,\n            local.proof_idx,\n            GkrModuleMessage {\n                tidx: local.starting_tidx.into(),\n                n_logup: n_logup.into(),\n                n_max: local.n_max.into(),\n                is_n_max_greater: local.is_n_max_greater.into(),\n            },\n            local.is_last,\n        );\n\n        self.eq_n_logup_n_max_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            EqNsNLogupMaxMessage {\n                n_logup,\n                n_max: local.n_max,\n            },\n            local.is_last,\n        );",
+      "explain": "<p>The kickoff message for phase 2a (GKR). The summary row's <code>starting_tidx</code> equals <code>tidx_end</code> &mdash; the running transcript cursor after every preamble observation. Combined with <code>(n_logup, n_max, is_n_max_greater)</code>, this is everything <code>GkrInputAir</code> needs to start sampling <code>alpha_logup</code> and running the fractional-sumcheck reduction. <code>EqNsNLogupMaxBus</code> simultaneously broadcasts <code>(n_logup, n_max)</code> to subsidiary equality-check AIRs that use this pair.</p>",
+      "scene": "preamble-10"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "ExpressionClaimNMaxBus and n_lift sends",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "968-1000",
+      "code": "        // Send n_max value to expression claim air\n        self.expression_claim_n_max_bus.send(\n            builder,\n            local.proof_idx,\n            ExpressionClaimNMaxMessage {\n                n_max: local.n_max.into(),\n            },\n            local.is_last,\n        );\n\n        // Send n_lift to constraint folding air\n        let n_lift = (local.log_height - AB::Expr::from_usize(self.l_skip))\n            * (AB::Expr::ONE - local.n_sign_bit);\n        self.n_lift_bus.send(\n            builder,\n            local.proof_idx,\n            NLiftMessage {\n                air_idx,\n                n_lift: n_lift.clone(),\n            },\n            local.is_present,\n        );\n        self.eq_3b_shape_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            Eq3bShapeMessage {\n                sort_idx: local.sorted_idx.into(),\n                n_lift,\n                n_logup: local.n_logup.into(),\n                num_interactions,\n            },\n            local.is_present,\n        );",
+      "explain": "<p><code>n_lift = max(0, log_height - l_skip)</code>, the non-negative component of <code>n</code>. Per present AIR it is sent on <code>NLiftBus</code> keyed by <code>air_idx</code> (BatchConstraint's constraint-folding AIR looks it up) and on <code>Eq3bShapeBus</code> keyed by <code>sorted_idx</code> alongside <code>n_logup</code> and <code>num_interactions</code>. Per-proof, <code>n_max</code> is separately sent on <code>ExpressionClaimNMaxBus</code> for the symbolic-expression AIR to bound its loop.</p>",
+      "scene": "preamble-10"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "FractionFolderInputBus: num_present_airs",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "1002-1010",
+      "code": "        // Send count of present airs to fraction folder air\n        self.fraction_folder_input_bus.send(\n            builder,\n            local.proof_idx,\n            FractionFolderInputMessage {\n                num_present_airs: local.num_present,\n            },\n            local.is_last,\n        );",
+      "explain": "<p>The fraction-folder AIR (part of BatchConstraint) needs to know how many AIRs actually contributed logup fractions to fold. On the summary row <code>num_present</code> equals the total count (since every AIR row added <code>next.is_present</code>), and this message hands it off.</p>",
+      "scene": "preamble-10"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Strict total-interactions bound",
+      "source_path": "crates/recursion/src/proof_shape/proof_shape/air.rs",
+      "source_lines": "1012-1049",
+      "code": "        // Summary-row trace-height bound:\n        //   total_interactions < max_interaction_count\n        // where `total_interactions` is already accumulated in `total_interactions_limbs`.\n        //\n        // `max_interaction_count` is decomposed into limbs. Trace generation sets `diff_marker`\n        // to the most-significant differing limb (one-hot). We range-check:\n        //   selected_delta - 1\n        // where\n        //   selected_delta =\n        //     sum_i(diff_marker[i] * (max_interactions[i] - total_interactions_limbs[i])).\n        // This forces `selected_delta` into [1, 2^LIMB_BITS), proving strict inequality.\n        let diff_marker = local.num_interactions_limbs;\n\n        let max_interactions =\n            decompose_f::<AB::Expr, NUM_LIMBS, LIMB_BITS>(self.max_interaction_count as usize);\n        let mut prefix = AB::Expr::ZERO;\n        let mut diff_val = AB::Expr::ZERO;\n\n        for i in (0..NUM_LIMBS).rev() {\n            let diff_i = max_interactions[i].clone() - local.total_interactions_limbs[i];\n            prefix += diff_marker[i];\n            diff_val += diff_marker[i] * diff_i.clone();\n\n            builder.when(local.is_last).assert_bool(diff_marker[i]);\n            builder\n                .when(diff_i * local.is_last)\n                .assert_one(prefix.clone());\n        }\n\n        builder.when(local.is_last).assert_one(prefix.clone());\n        self.range_bus.lookup_key(\n            builder,\n            RangeCheckerBusMessage {\n                value: diff_val - AB::Expr::ONE,\n                max_bits: AB::Expr::from_usize(LIMB_BITS),\n            },\n            local.is_last,\n        );",
+      "explain": "<p>The strict inequality <code>total_interactions &lt; max_interaction_count</code>. Summary-row <code>num_interactions_limbs</code> is reused as <code>diff_marker</code>, a one-hot selector pointing to the most-significant limb at which the two limb decompositions differ. The inner assertion that <code>prefix = 1</code> whenever there <i>is</i> a differing limb enforces that the marker picks the highest differing position. <code>diff_val</code> then holds <code>max_interactions[msb] - total_interactions_limbs[msb]</code>, and range-checking <code>diff_val - 1</code> into <code>[0, 2^LIMB_BITS)</code> proves <code>diff_val &gt;= 1</code>, i.e. strict positivity at the MSB, which is exactly <code>total &lt; max</code>. At circuit construction time, <code>max_interaction_count</code> is verified to imply every TraceHeightConstraint in the child VK, so this single bound discharges all of them.</p>",
+      "scene": "preamble-8"
+    },
+    {
+      "type": "prose",
+      "html": "<p>That closes out <code>ProofShapeAir</code>. Its sibling <code>PublicValuesAir</code> is much smaller: one row per public value, receiving the per-AIR count from <code>NumPublicValuesBus</code> and forwarding each observation to <code>PublicValuesBus</code> for the constraint evaluator. This is what makes the transcript slots reserved above (at <code>num_pvs_tidx</code>) line up with actual values.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "proof-shape.PublicValuesAir",
+      "heading": "PublicValuesAir",
+      "html": "<p><code>PublicValuesAir</code> unrolls each present AIR's public values. It has one row per (air_idx, pv_idx) pair, receives the total count per AIR from <code>ProofShapeAir</code> via <code>NumPublicValuesBus</code>, observes each value on <code>TranscriptBus</code>, and forwards <code>(air_idx, pv_idx, value)</code> on <code>PublicValuesBus</code> for <code>SymbolicExpressionAir</code> to use during constraint evaluation.</p>",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols struct",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs",
+      "source_lines": "17-31",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct PublicValuesCols<F> {\n    pub is_valid: F,\n\n    pub proof_idx: F,\n    pub air_idx: F,\n    pub pv_idx: F,\n\n    pub is_first_in_proof: F,\n    pub is_first_in_air: F,\n\n    pub tidx: F,\n    pub value: F,\n}",
+      "explain": "<p>Each row identifies one public value by <code>(proof_idx, air_idx, pv_idx)</code> and carries the transcript index <code>tidx</code> and the value. <code>is_first_in_proof</code> marks the first row per proof (for the nested loop), and <code>is_first_in_air</code> marks the first row per AIR within a proof (so the <code>NumPublicValuesBus</code> receive lands on exactly one row per AIR).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Nested loop and row-transition checks",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs",
+      "source_lines": "52-93",
+      "code": "    fn eval(&self, builder: &mut AB) {\n        let main = builder.main();\n\n        let (local, next) = (\n            main.row_slice(0).expect(\"window should have two elements\"),\n            main.row_slice(1).expect(\"window should have two elements\"),\n        );\n        let local: &PublicValuesCols<AB::Var> = (*local).borrow();\n        let next: &PublicValuesCols<AB::Var> = (*next).borrow();\n\n        NestedForLoopSubAir::<1> {}.eval(\n            builder,\n            (\n                NestedForLoopIoCols {\n                    is_enabled: local.is_valid,\n                    counter: [local.proof_idx],\n                    is_first: [local.is_first_in_proof],\n                }\n                .map_into(),\n                NestedForLoopIoCols {\n                    is_enabled: next.is_valid,\n                    counter: [next.proof_idx],\n                    is_first: [next.is_first_in_proof],\n                }\n                .map_into(),\n            ),\n        );\n        // Constrain is_first_for_air, send NumPublicValuesBus message when true\n        builder.assert_bool(local.is_first_in_air);\n        builder\n            .when(local.is_first_in_proof)\n            .assert_one(local.is_first_in_air);\n        builder\n            .when(local.is_first_in_air)\n            .assert_one(local.is_valid);\n        builder\n            .when(next.is_valid * (next.air_idx - local.air_idx))\n            .assert_one(next.is_first_in_air);\n        builder\n            .when(local.is_first_in_air)\n            .assert_zero(local.pv_idx);",
+      "explain": "<p>The nested-loop subair windows rows per proof. <code>is_first_in_air</code> is boolean; it's forced to 1 on the first row of each proof, and whenever the next row's <code>air_idx</code> changes (<code>next.air_idx - local.air_idx != 0</code>) the transition forces <code>next.is_first_in_air = 1</code>. Within an AIR run the first row has <code>pv_idx = 0</code>.</p>",
+      "scene": "preamble-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "NumPublicValuesBus receive",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs",
+      "source_lines": "94-104",
+      "code": "        let is_same_air = local.is_valid * next.is_valid * not(next.is_first_in_air);\n        self.num_pvs_bus.receive(\n            builder,\n            local.proof_idx,\n            NumPublicValuesMessage {\n                air_idx: local.air_idx.into(),\n                tidx: local.tidx - local.pv_idx,\n                num_pvs: local.pv_idx + AB::Expr::ONE,\n            },\n            local.is_valid - is_same_air.clone(),\n        );",
+      "explain": "<p>The trick here is that the message is received exactly once per AIR run, on its <i>last</i> row (the one where the next row does not continue the same AIR). <code>local.is_valid - is_same_air</code> is 1 only on that row. At that point <code>pv_idx + 1</code> equals the total <code>num_pvs</code> for this AIR, and <code>tidx - pv_idx</code> recovers the starting transcript index. This matches exactly what <code>ProofShapeAir</code> sent on <code>NumPublicValuesBus</code>: <code>(air_idx, num_pvs_tidx, num_pvs)</code>.</p>",
+      "scene": "preamble-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Same-AIR transition: increment pv_idx and tidx",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs",
+      "source_lines": "106-109",
+      "code": "        let mut when_same_air = builder.when(is_same_air);\n        when_same_air.assert_eq(local.air_idx, next.air_idx);\n        when_same_air.assert_eq(next.pv_idx, local.pv_idx + AB::Expr::ONE);\n        when_same_air.assert_eq(next.tidx, local.tidx + AB::Expr::ONE);",
+      "explain": "<p>When the next row continues the same AIR, <code>air_idx</code> is held constant, <code>pv_idx</code> increments by 1, and <code>tidx</code> increments by 1 &mdash; matching the linear layout of the child AIR's public values in the transcript. These together ensure all <code>num_pvs</code> values land at consecutive transcript indices starting from <code>num_pvs_tidx</code>.</p>",
+      "scene": "preamble-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "PublicValuesBus send",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs",
+      "source_lines": "111-132",
+      "code": "        self.public_values_bus.send(\n            builder,\n            local.proof_idx,\n            PublicValuesBusMessage {\n                air_idx: local.air_idx,\n                pv_idx: local.pv_idx,\n                value: local.value,\n            },\n            local.is_valid,\n        );\n        if self.continuations_enabled {\n            self.public_values_bus.send(\n                builder,\n                local.proof_idx,\n                PublicValuesBusMessage {\n                    air_idx: local.air_idx,\n                    pv_idx: local.pv_idx,\n                    value: local.value,\n                },\n                local.is_valid,\n            );\n        }",
+      "explain": "<p>Every valid row sends <code>(air_idx, pv_idx, value)</code> on <code>PublicValuesBus</code>. The downstream consumer is <code>SymbolicExpressionAir</code>, which looks up each public value at the correct <code>(air_idx, pv_idx)</code> during constraint evaluation. When continuations are enabled the message is sent twice, with the extra copy consumed by the enclosing continuations circuit that exposes public values.</p>",
+      "scene": "preamble-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "TranscriptBus observation of value",
+      "source_path": "crates/recursion/src/proof_shape/pvs/air.rs",
+      "source_lines": "134-144",
+      "code": "        // Receive transcript read of public values\n        self.transcript_bus.receive(\n            builder,\n            local.proof_idx,\n            TranscriptBusMessage {\n                tidx: local.tidx.into(),\n                value: local.value.into(),\n                is_sample: AB::Expr::ZERO,\n            },\n            local.is_valid,\n        );",
+      "explain": "<p>The value cell drives both the <code>PublicValuesBus</code> send above and this <code>TranscriptBus</code> receive on the same row, at transcript index <code>tidx</code> with <code>is_sample = 0</code> (observation). Because it's a single trace cell feeding both buses, the transcript-observed public values and the values used in constraint evaluation are guaranteed to be identical &mdash; exactly the invariant the reference verifier relies on when it observes the PVs before passing the same vector to <code>verify_zerocheck_and_logup</code>.</p>",
+      "scene": "preamble-6"
+    }
+  ]
+}

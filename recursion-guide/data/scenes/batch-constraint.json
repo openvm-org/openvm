@@ -1,0 +1,5481 @@
+{
+  "bc-1": {
+    "default_scene": {
+      "note": "InteractionsFoldingAir samples beta_logup from TranscriptBus at tidx_if (handed in from GkrInputAir) and broadcasts it on BatchConstraintConductorBus for downstream consumers.",
+      "airs": [
+        {
+          "name": "InteractionsFoldingAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "interaction_idx",
+                "beta"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "InteractionsFoldingInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "msg_type",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "beta",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample beta_logup"
+        },
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "beta",
+            "row": 0
+          },
+          "to": {
+            "bus": "BatchConstraintConductorBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "broadcast"
+        }
+      ]
+    },
+    "scenes": {
+      "input-handoff": {
+        "note": "GkrInputAir hands off tidx_if on InteractionsFoldingInputBus; InteractionsFoldingAir consumes it to know where to place its transcript sample.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sort_idx",
+                  "interaction_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "InteractionsFoldingInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "is_sample"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "sort_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "InteractionsFoldingInputBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "tidx_if from GKR"
+          },
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "sort_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "place at tidx_if"
+          }
+        ]
+      },
+      "transcript-sample": {
+        "note": "beta_logup is a TranscriptBus sample (is_sample=1). Interleaved within GKR's range but at a distinct tidx, so no collision with alpha_logup.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "beta"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "beta",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "is_sample=1"
+          }
+        ]
+      },
+      "broadcast": {
+        "note": "BatchConstraintConductorBus is the BC module's challenge-distribution bus. beta_logup is placed here for InteractionsFoldingAir's own folding rows in bc-13.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "beta"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "BatchConstraintConductorBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "msg_type",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "beta",
+              "row": 0
+            },
+            "to": {
+              "bus": "BatchConstraintConductorBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "beta"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"input-handoff\">InteractionsFoldingAir receives tidx_if from GkrInputAir via InteractionsFoldingInputBus</span>, <span class=\"ref\" data-scene=\"transcript-sample\">samples beta_logup on TranscriptBus at that position</span>, and <span class=\"ref\" data-scene=\"broadcast\">places it on BatchConstraintConductorBus for later consumption</span>.",
+    "soundness_html": "Although BC's beta sample is interleaved into GKR's transcript range, <span class=\"ref\" data-scene=\"transcript-sample\">TranscriptBus's per-tidx ownership ensures no collision</span>: GKR's alpha is at tidx_if &minus; D_EF, BC's beta is at tidx_if. The sponge state at tidx_if absorbs alpha (GKR's sample) first, so <span class=\"ref\" data-scene=\"broadcast\">beta is a deterministic function of everything before it</span>."
+  },
+  "bc-2": {
+    "default_scene": {
+      "note": "ConstraintsFoldingAir samples lambda on TranscriptBus at tidx_cf (handed in from GkrInputAir via ConstraintsFoldingInputBus) and publishes it on BatchConstraintConductorBus for downstream constraint folding.",
+      "airs": [
+        {
+          "name": "ConstraintsFoldingAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "proof_idx",
+                "sort_idx",
+                "lambda"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "ConstraintsFoldingInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "msg_type",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ConstraintsFoldingAir",
+            "col": "lambda",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample lambda"
+        },
+        {
+          "from": {
+            "air": "ConstraintsFoldingAir",
+            "col": "lambda",
+            "row": 0
+          },
+          "to": {
+            "bus": "BatchConstraintConductorBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "distribute"
+        }
+      ]
+    },
+    "scenes": {
+      "input-handoff": {
+        "note": "GkrInputAir passes tidx_cf (start of BC's contiguous region) to ConstraintsFoldingAir via ConstraintsFoldingInputBus.",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "proof_idx",
+                  "sort_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ConstraintsFoldingInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "proof_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "ConstraintsFoldingInputBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "tidx_cf"
+          }
+        ]
+      },
+      "transcript-sample": {
+        "note": "lambda is sampled at tidx_cf and pins all downstream constraint-folding randomness.",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "lambda"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "lambda",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "is_sample=1"
+          }
+        ]
+      },
+      "broadcast": {
+        "note": "lambda travels on BatchConstraintConductorBus to every consumer (per-row lambda values on ConstraintsFoldingAir are looked up from this bus).",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "lambda"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "lambda"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "BatchConstraintConductorBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "msg_type",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "lambda",
+              "row": 0
+            },
+            "to": {
+              "bus": "BatchConstraintConductorBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "lambda"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"input-handoff\">ConstraintsFoldingAir receives tidx_cf from GkrInputAir</span>, <span class=\"ref\" data-scene=\"transcript-sample\">samples lambda on TranscriptBus at tidx_cf</span>, and <span class=\"ref\" data-scene=\"broadcast\">distributes it via BatchConstraintConductorBus</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"transcript-sample\">lambda is a transcript sample pinned by the sponge</span>, and its tidx is a deterministic function of GKR's outputs. <span class=\"ref\" data-scene=\"broadcast\">BatchConstraintConductorBus is the distribution mechanism for challenges throughout the BC module</span>; each consumer receives lambda at a known tidx."
+  },
+  "bc-3": {
+    "default_scene": {
+      "note": "FractionsFolderAir iterates per present AIR with air_idx decrementing to 0, observing (sum_claim_p[i], sum_claim_q[i]) on TranscriptBus each row. The aggregate cur_p_sum/cur_q_sum are checked against gkr_input_layer_claim received on BatchConstraintModuleBus.",
+      "airs": [
+        {
+          "name": "FractionsFolderAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_first",
+                "air_idx",
+                "sum_claim_p",
+                "sum_claim_q",
+                "cur_p_sum",
+                "cur_q_sum"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "is_first",
+                "air_idx",
+                "sum_claim_p",
+                "sum_claim_q"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "is_first",
+                "air_idx",
+                "cur_p_sum",
+                "cur_q_sum"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "BatchConstraintModuleBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "gkr_input_layer_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "FractionFolderInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "num_present_airs"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "FractionsFolderAir",
+            "col": "sum_claim_p",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe num[i]"
+        },
+        {
+          "from": {
+            "air": "FractionsFolderAir",
+            "col": "sum_claim_q",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "receive",
+          "label": "observe denom[i]"
+        },
+        {
+          "from": {
+            "air": "FractionsFolderAir",
+            "col": "cur_q_sum",
+            "row": -1
+          },
+          "to": {
+            "bus": "BatchConstraintModuleBus",
+            "field": "gkr_input_layer_claim",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "cross-check GKR"
+        }
+      ]
+    },
+    "scenes": {
+      "row-count": {
+        "note": "FractionFolderInputBus hands in num_present_airs; air_idx decrements per row and must reach 0 on the last row, forcing exactly num_present_airs rows.",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "air_idx"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "air_idx"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "is_first",
+                  "air_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "FractionFolderInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "num_present_airs"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "air_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "FractionFolderInputBus",
+              "field": "num_present_airs",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "top = N_present"
+          }
+        ]
+      },
+      "observe": {
+        "note": "Each per-AIR row absorbs (sum_claim_p[i], sum_claim_q[i]) into the transcript as two consecutive value observations.",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "air_idx",
+                  "sum_claim_p",
+                  "sum_claim_q"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "sum_claim_p",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "numerator_term[i]"
+          },
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "sum_claim_q",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "denominator_term[i]"
+          }
+        ]
+      },
+      "gkr-consistency": {
+        "note": "On the last row the running sums (cur_p_sum, cur_q_sum) must equal [p_xi_claim, q_xi_claim &minus; alpha_logup] handed in on BatchConstraintModuleBus from GkrInputAir.",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "air_idx",
+                  "cur_p_sum",
+                  "cur_q_sum"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "BatchConstraintModuleBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "gkr_input_layer_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "cur_p_sum",
+              "row": -1
+            },
+            "to": {
+              "bus": "BatchConstraintModuleBus",
+              "field": "gkr_input_layer_claim",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "p_xi == 0"
+          },
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "cur_q_sum",
+              "row": -1
+            },
+            "to": {
+              "bus": "BatchConstraintModuleBus",
+              "field": "gkr_input_layer_claim",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "q_xi == alpha"
+          }
+        ]
+      },
+      "transition": {
+        "note": "Adjacent rows: air_idx decreases by 1 and running sums accumulate the just-observed (sum_claim_p, sum_claim_q) terms.",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "air_idx",
+                  "cur_p_sum",
+                  "cur_q_sum"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "air_idx",
+                  "cur_p_sum",
+                  "cur_q_sum"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      }
+    },
+    "constraints_html": "FractionsFolderAir receives num_present_airs from ProofShapeAir via FractionFolderInputBus and gkr_claim via BatchConstraintModuleBus. <span class=\"ref\" data-scene=\"row-count\">It decrements air_idx by 1 per row, reaching 0 on the last row (forcing exactly num_present_airs rows)</span>. For each row, it <span class=\"ref\" data-scene=\"observe\">observes (numerator_term[i], denominator_term[i]) on TranscriptBus</span> and, in aggregate, <span class=\"ref\" data-scene=\"gkr-consistency\">checks p_xi_claim = &Sigma; numerator_term[i] == 0 and q_xi_claim = &Sigma; denominator_term[i] == alpha_logup</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"row-count\">The row count is forced by the FractionFolderInputBus handoff</span> (matching ProofShapeAir's num_present_airs). The aggregate equality <span class=\"ref\" data-scene=\"gkr-consistency\">p_xi_claim == 0, q_xi_claim == alpha_logup is the defining LogUp/fractional-sumcheck identity at xi</span>. <span class=\"ref\" data-scene=\"observe\">Per-AIR observations are pinned on the transcript</span>."
+  },
+  "bc-4": {
+    "default_scene": {
+      "note": "After the per-AIR observations, FractionsFolderAir samples mu on TranscriptBus and Horner-accumulates sum_claim = &Sigma;_k &mu;^k * x_k across interleaved numerator/denominator terms (cur_hash). mu is placed on BatchConstraintConductorBus.",
+      "airs": [
+        {
+          "name": "FractionsFolderAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_first",
+                "mu",
+                "cur_hash"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "cur_hash"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "msg_type",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "round",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "FractionsFolderAir",
+            "col": "mu",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample mu"
+        },
+        {
+          "from": {
+            "air": "FractionsFolderAir",
+            "col": "mu",
+            "row": 0
+          },
+          "to": {
+            "bus": "BatchConstraintConductorBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "broadcast"
+        },
+        {
+          "from": {
+            "air": "FractionsFolderAir",
+            "col": "cur_hash",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "sum_claim (round 0)"
+        }
+      ]
+    },
+    "scenes": {
+      "mu-sample": {
+        "note": "mu is sampled on TranscriptBus at the tidx immediately after the last (sum_claim_p, sum_claim_q) observation in bc-3.",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_first",
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "mu",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "is_sample=1"
+          }
+        ]
+      },
+      "horner-claim": {
+        "note": "cur_hash is the Horner accumulator for &Sigma;_k &mu;^k x_k; the last row carries sum_claim, handed to the sumcheck pipeline on SumcheckClaimBus (round 0).",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "mu",
+                  "cur_hash"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "mu",
+                  "cur_hash"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "cur_hash"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "cur_hash",
+              "row": -1
+            },
+            "to": {
+              "bus": "SumcheckClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "round=0"
+          }
+        ]
+      },
+      "broadcast": {
+        "note": "BatchConstraintConductorBus distributes mu to ExpressionClaimAir (bc-14), which folds all per-AIR claims by identical mu powers.",
+        "airs": [
+          {
+            "name": "FractionsFolderAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "BatchConstraintConductorBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "msg_type",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "FractionsFolderAir",
+              "col": "mu",
+              "row": 0
+            },
+            "to": {
+              "bus": "BatchConstraintConductorBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "mu"
+          }
+        ]
+      }
+    },
+    "constraints_html": "FractionsFolderAir <span class=\"ref\" data-scene=\"mu-sample\">samples mu on TranscriptBus after the per-AIR observations</span>. It <span class=\"ref\" data-scene=\"horner-claim\">computes sum_claim = &Sigma;_k &mu;^k * x_k interleaving numerator and denominator terms</span>, and <span class=\"ref\" data-scene=\"broadcast\">broadcasts mu on BatchConstraintConductorBus</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"mu-sample\">mu is a transcript sample at a fixed tidx</span>. The sum is computed via algebraic constraints within the AIR; <span class=\"ref\" data-scene=\"horner-claim\">the resulting sum_claim is the input to the sumcheck pipeline</span>."
+  },
+  "bc-5": {
+    "default_scene": {
+      "note": "UnivariateSumcheckAir iterates coeff_idx from univariate_deg down to 0, observing each coefficient on TranscriptBus, accumulating sum_at_roots over the roots-of-unity domain, then sampling r and Horner-evaluating s_0(r) in value_at_r.",
+      "airs": [
+        {
+          "name": "UnivariateSumcheckAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "coeff_idx",
+                "coeff",
+                "sum_at_roots",
+                "value_at_r"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "coeff_idx",
+                "coeff",
+                "sum_at_roots",
+                "value_at_r"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "coeff_idx",
+                "r",
+                "sum_at_roots",
+                "value_at_r"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "SumcheckClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "round",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "round",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "UnivariateSumcheckAir",
+            "col": "coeff",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe a_k"
+        },
+        {
+          "from": {
+            "air": "UnivariateSumcheckAir",
+            "col": "sum_at_roots",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sum == sum_claim"
+        },
+        {
+          "from": {
+            "air": "UnivariateSumcheckAir",
+            "col": "value_at_r",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "send",
+          "label": "s_0(r_0) (round 1)"
+        },
+        {
+          "from": {
+            "air": "UnivariateSumcheckAir",
+            "col": "r",
+            "row": -1
+          },
+          "to": {
+            "bus": "ConstraintSumcheckRandomnessBus",
+            "field": "challenge",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "r_0"
+        }
+      ]
+    },
+    "scenes": {
+      "coeff-count": {
+        "note": "coeff_idx starts at univariate_deg = (max_constraint_degree + 1) * (2^l_skip &minus; 1) and decrements by 1 to 0, forcing exactly univariate_deg + 1 coefficient observations. The count is VK-fixed.",
+        "airs": [
+          {
+            "name": "UnivariateSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "coeff_idx"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "coeff_idx"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "coeff_idx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "transcript-observe": {
+        "note": "Each row observes one coefficient of the univariate polynomial s_0 on TranscriptBus.",
+        "airs": [
+          {
+            "name": "UnivariateSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "coeff_idx",
+                  "coeff"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "coeff_idx",
+                  "coeff"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateSumcheckAir",
+              "col": "coeff",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "UnivariateSumcheckAir",
+              "col": "coeff",
+              "row": 1
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "domain-check": {
+        "note": "eq_to_1 selects the roots-of-unity contributions so sum_at_roots accumulates |D| * (a_0 + a_{|D|}). On the last row sum_at_roots must match the sum_claim received on SumcheckClaimBus.",
+        "airs": [
+          {
+            "name": "UnivariateSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "omega_skip_power",
+                  "is_omega_skip_power_equal_to_one",
+                  "sum_at_roots"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "sum_at_roots"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateSumcheckAir",
+              "col": "sum_at_roots",
+              "row": -1
+            },
+            "to": {
+              "bus": "SumcheckClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "round 0 claim"
+          }
+        ]
+      },
+      "horner-at-r": {
+        "note": "After sampling r, value_at_r Horner-evaluates s_0(r_0). The last-row value is forwarded as the next sumcheck claim.",
+        "airs": [
+          {
+            "name": "UnivariateSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "coeff",
+                  "value_at_r"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "coeff",
+                  "value_at_r"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "r",
+                  "value_at_r"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimBus",
+            "rows": [
+              {
+                "row": 1,
+                "fields": [
+                  "round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateSumcheckAir",
+              "col": "value_at_r",
+              "row": -1
+            },
+            "to": {
+              "bus": "SumcheckClaimBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "send",
+            "label": "round 1 in-claim"
+          }
+        ]
+      },
+      "r-output": {
+        "note": "r_0 is simultaneously sampled on TranscriptBus and published on ConstraintSumcheckRandomnessBus (idx=0) so Stacking and the eq polynomial AIRs can consume it.",
+        "airs": [
+          {
+            "name": "UnivariateSumcheckAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "r"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ConstraintSumcheckRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateSumcheckAir",
+              "col": "r",
+              "row": -1
+            },
+            "to": {
+              "bus": "ConstraintSumcheckRandomnessBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "idx=0"
+          }
+        ]
+      }
+    },
+    "constraints_html": "UnivariateSumcheckAir has <span class=\"ref\" data-scene=\"coeff-count\">coeff_idx starting at univariate_deg = (max_constraint_degree + 1) * (2^l_skip &minus; 1), decrementing by 1 each row, reaching 0 on the last row (forcing univariate_deg + 1 coeffs)</span>. On the first row it receives sum_claim on SumcheckClaimBus; it <span class=\"ref\" data-scene=\"transcript-observe\">observes each coefficient on TranscriptBus</span>, <span class=\"ref\" data-scene=\"domain-check\">aggregates the domain sum check</span>, samples r, <span class=\"ref\" data-scene=\"horner-at-r\">evaluates via Horner</span>, and sends the claim forward on SumcheckClaimBus. <span class=\"ref\" data-scene=\"r-output\">r_0 is also sent on ConstraintSumcheckRandomnessBus</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"coeff-count\">The coeff count is VK-determined</span> (forces exactly univariate_deg + 1 coeffs, verify_proof_shape line 433). The <span class=\"ref\" data-scene=\"domain-check\">|D| * (a_0 + a_{|D|}) identity is the univariate sumcheck check</span> at the roots-of-unity domain. <span class=\"ref\" data-scene=\"horner-at-r\">Horner evaluation is algebraically enforced</span>. <span class=\"ref\" data-scene=\"r-output\">r_0 is transcript-pinned</span>."
+  },
+  "bc-6": {
+    "default_scene": {
+      "note": "MultilinearSumcheckAir iterates n_max rounds. Within each round, eval_idx goes 0..s_deg evaluating the round polynomial; the s(0)+s(1) check equates cur_sum to the incoming claim, and the Lagrange interpolation at r produces the next round's claim.",
+      "airs": [
+        {
+          "name": "MultilinearSumcheckAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "round_idx",
+                "eval_idx",
+                "eval",
+                "cur_sum"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "round_idx",
+                "eval_idx",
+                "eval",
+                "cur_sum"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "round_idx",
+                "eval_idx",
+                "r",
+                "cur_sum"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "SumcheckClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "round",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "round",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "MultilinearSumcheckAir",
+            "col": "eval",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe s(eval_idx)"
+        },
+        {
+          "from": {
+            "air": "MultilinearSumcheckAir",
+            "col": "cur_sum",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "send",
+          "label": "round j+1 in-claim"
+        },
+        {
+          "from": {
+            "air": "MultilinearSumcheckAir",
+            "col": "r",
+            "row": -1
+          },
+          "to": {
+            "bus": "ConstraintSumcheckRandomnessBus",
+            "field": "challenge",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "r_j"
+        }
+      ]
+    },
+    "scenes": {
+      "per-round-shape": {
+        "note": "Each round has s_deg + 1 rows; eval_idx increments from 0 and must reach s_deg on the last eval row (verify_proof_shape line 457).",
+        "airs": [
+          {
+            "name": "MultilinearSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round_idx",
+                  "eval_idx",
+                  "eval"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "round_idx",
+                  "eval_idx",
+                  "eval"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": 2,
+                "cols": [
+                  "round_idx",
+                  "eval_idx",
+                  "eval"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "observe": {
+        "note": "Each evaluation point is absorbed into TranscriptBus before interpolation.",
+        "airs": [
+          {
+            "name": "MultilinearSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round_idx",
+                  "eval_idx",
+                  "eval"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "MultilinearSumcheckAir",
+              "col": "eval",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "s_j(eval_idx)"
+          }
+        ]
+      },
+      "sum-check": {
+        "note": "s(0) + s(1) == claim pins the round polynomial to the running sumcheck claim received on SumcheckClaimBus.",
+        "airs": [
+          {
+            "name": "MultilinearSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "eval_idx",
+                  "eval",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "eval_idx",
+                  "eval",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "MultilinearSumcheckAir",
+              "col": "cur_sum",
+              "row": 0
+            },
+            "to": {
+              "bus": "SumcheckClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "s(0)+s(1)==claim"
+          }
+        ]
+      },
+      "interpolate": {
+        "note": "prefix/suffix/lagrange/denom_inv Lagrange-interpolate s_j at r_j; the last eval row publishes the next round's claim.",
+        "airs": [
+          {
+            "name": "MultilinearSumcheckAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "eval_idx",
+                  "prefix_product",
+                  "suffix_product",
+                  "lagrange_coeff",
+                  "denom_inv",
+                  "r",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimBus",
+            "rows": [
+              {
+                "row": 1,
+                "fields": [
+                  "round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ConstraintSumcheckRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "MultilinearSumcheckAir",
+              "col": "cur_sum",
+              "row": -1
+            },
+            "to": {
+              "bus": "SumcheckClaimBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "send",
+            "label": "next round"
+          },
+          {
+            "from": {
+              "air": "MultilinearSumcheckAir",
+              "col": "r",
+              "row": -1
+            },
+            "to": {
+              "bus": "ConstraintSumcheckRandomnessBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "idx=round_idx"
+          }
+        ]
+      }
+    },
+    "constraints_html": "Per round, <span class=\"ref\" data-scene=\"per-round-shape\">eval_idx starts at 0, increments by 1, and must reach s_deg = max_constraint_degree + 1 on the last eval</span> (verify_proof_shape line 457). Each round: receive claim on SumcheckClaimBus, <span class=\"ref\" data-scene=\"observe\">observe evals on TranscriptBus</span>, <span class=\"ref\" data-scene=\"sum-check\">verify s(0) + s(1) == claim</span>, sample r_j, <span class=\"ref\" data-scene=\"interpolate\">interpolate at r_j via Lagrange, send next claim</span>. n_max is forced by the ExpressionClaimNMaxBus &rarr; ExpressionClaimAir &rarr; SumcheckClaimBus chain.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"per-round-shape\">Round count is exactly n_max</span> (forced by chain ending at ExpressionClaimAir's final claim send, verify_proof_shape line 440). Per-round degree is VK-fixed. <span class=\"ref\" data-scene=\"sum-check\">The s(0)+s(1) identity is the multilinear sumcheck round check</span>. <span class=\"ref\" data-scene=\"interpolate\">Challenges r_j are transcript-pinned and sent on ConstraintSumcheckRandomnessBus to Stacking</span>."
+  },
+  "bc-7": {
+    "default_scene": {
+      "note": "Stacking's OpeningClaimsAir observes each (col_claim, rot_claim) on TranscriptBus and republishes them on ColumnClaimsBus so SymbolicExpressionAir can resolve DAG variables to the same opening values.",
+      "airs": [
+        {
+          "name": "OpeningClaimsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "part_idx",
+                "col_idx",
+                "col_claim",
+                "rot_claim"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sort_idx",
+                "part_idx",
+                "col_idx",
+                "col_claim",
+                "rot_claim"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "SymbolicExpressionAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "air_idx",
+                "node_or_interaction_idx",
+                "attrs",
+                "args"
+              ],
+              "kind": "primary",
+              "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ColumnClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "part_idx",
+                "col_idx",
+                "claim",
+                "is_rot"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "sort_idx",
+                "part_idx",
+                "col_idx",
+                "claim",
+                "is_rot"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "OpeningClaimsAir",
+            "col": "col_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe"
+        },
+        {
+          "from": {
+            "air": "OpeningClaimsAir",
+            "col": "col_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "ColumnClaimsBus",
+            "field": "claim",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "publish"
+        },
+        {
+          "from": {
+            "air": "SymbolicExpressionAir",
+            "col": "args",
+            "row": 0
+          },
+          "to": {
+            "bus": "ColumnClaimsBus",
+            "field": "claim",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "resolve variable",
+          "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+        }
+      ]
+    },
+    "scenes": {
+      "transcript-observe": {
+        "note": "Each column opening value is absorbed into TranscriptBus as a non-sample observation. rot_claim is observed only when need_rot=1 for that partition.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "col_idx",
+                  "col_claim",
+                  "rot_claim"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "col_idx",
+                  "col_claim",
+                  "rot_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "col_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "col_claim"
+          },
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "rot_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "rot_claim (need_rot)"
+          }
+        ]
+      },
+      "column-claims-publish": {
+        "note": "ColumnClaimsBus is a permutation bus keyed by (sort_idx, part_idx, col_idx, is_rot). OpeningClaimsAir sends; SymbolicExpressionAir and the folding AIRs receive.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sort_idx",
+                  "part_idx",
+                  "col_idx",
+                  "col_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "SymbolicExpressionAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "air_idx",
+                  "attrs",
+                  "args"
+                ],
+                "kind": "primary",
+                "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ColumnClaimsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "part_idx",
+                  "col_idx",
+                  "claim",
+                  "is_rot"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "col_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "ColumnClaimsBus",
+              "field": "claim",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "args",
+              "row": 0
+            },
+            "to": {
+              "bus": "ColumnClaimsBus",
+              "field": "claim",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "variable node",
+            "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+          }
+        ]
+      },
+      "same-cell": {
+        "note": "Critical invariant: the same col_claim cell is both TranscriptBus-observed and ColumnClaimsBus-sent, forcing the transcript value to equal the opening resolved during DAG evaluation.",
+        "airs": [
+          {
+            "name": "OpeningClaimsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "col_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ColumnClaimsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "col_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "OpeningClaimsAir",
+              "col": "col_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "ColumnClaimsBus",
+              "field": "claim",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "same cell"
+          }
+        ]
+      }
+    },
+    "constraints_html": "Note: in the circuit, column opening observations are performed by Stacking's OpeningClaimsAir (phase A of Stacking schedule), though the reference verifier performs them in verify_zerocheck_and_logup. <span class=\"ref\" data-scene=\"transcript-observe\">OpeningClaimsAir observes each (col_claim, rot_claim) on TranscriptBus</span> (rot_claim only when need_rot = 1) and <span class=\"ref\" data-scene=\"column-claims-publish\">sends them on ColumnClaimsBus</span>. SymbolicExpressionAir consumes these when resolving variables in the DAG.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"transcript-observe\">Observations are pinned on TranscriptBus</span>. <span class=\"ref\" data-scene=\"same-cell\">ColumnClaimsBus is a permutation bus, so the per-AIR per-partition values used in constraint evaluation equal the transcript-observed values</span>. The need_rot flag from AirShapeBus gates rot_claim, and when need_rot = 0, rot_claim is constrained to zero."
+  },
+  "bc-8": {
+    "default_scene": {
+      "note": "Eq3bAir iterates bit positions of each interaction's stacked b index, looking up xi coordinates on XiRandomnessBus and accumulating eq = &prod; eq(xi_n, b_n) in the eq column. The final per-interaction eq is published on Eq3bBus.",
+      "airs": [
+        {
+          "name": "Eq3bAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "interaction_idx",
+                "n",
+                "nth_bit",
+                "xi",
+                "eq"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sort_idx",
+                "interaction_idx",
+                "n",
+                "nth_bit",
+                "xi",
+                "eq"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "sort_idx",
+                "interaction_idx",
+                "eq"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "Eq3bShapeBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "n_lift",
+                "n_logup",
+                "num_interactions"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "XiRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "Eq3bBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "interaction_idx",
+                "eq_3b"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "Eq3bAir",
+            "col": "sort_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "Eq3bShapeBus",
+            "field": "sort_idx",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "(n_lift, n_logup, K)"
+        },
+        {
+          "from": {
+            "air": "Eq3bAir",
+            "col": "xi",
+            "row": 0
+          },
+          "to": {
+            "bus": "XiRandomnessBus",
+            "field": "xi",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "xi[l_skip+n]"
+        },
+        {
+          "from": {
+            "air": "Eq3bAir",
+            "col": "eq",
+            "row": -1
+          },
+          "to": {
+            "bus": "Eq3bBus",
+            "field": "eq_3b",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "per-interaction"
+        }
+      ]
+    },
+    "scenes": {
+      "shape-handoff": {
+        "note": "Eq3bShapeBus hands in (sort_idx, n_lift, n_logup, num_interactions) from ProofShapeAir so Eq3bAir knows how many bits and interactions to cover.",
+        "airs": [
+          {
+            "name": "Eq3bAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sort_idx",
+                  "n_lift",
+                  "n_logup",
+                  "interaction_idx",
+                  "has_no_interactions"
+                ],
+                "kind": "primary",
+                "_note": "was 'num_interactions', best-match to interaction_idx + has_no_interactions (derived in Eq3bAir eval as interaction_idx + not(has_no_interactions))"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "Eq3bShapeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "n_lift",
+                  "n_logup",
+                  "num_interactions"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "Eq3bAir",
+              "col": "sort_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bShapeBus",
+              "field": "sort_idx",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "Eq3bAir",
+              "col": "interaction_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bShapeBus",
+              "field": "num_interactions",
+              "row": 0
+            },
+            "kind": "receive",
+            "_note": "was 'num_interactions', best-match to interaction_idx + has_no_interactions (derived in Eq3bAir eval as interaction_idx + not(has_no_interactions))"
+          },
+          {
+            "from": {
+              "air": "Eq3bAir",
+              "col": "has_no_interactions",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bShapeBus",
+              "field": "num_interactions",
+              "row": 0
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "xi-lookup": {
+        "note": "For each bit position n in [n_lift, n_logup), Eq3bAir looks up xi[l_skip + n] on XiRandomnessBus (written by GKR).",
+        "airs": [
+          {
+            "name": "Eq3bAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "n",
+                  "xi"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "n",
+                  "xi"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "XiRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "Eq3bAir",
+              "col": "xi",
+              "row": 0
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "xi",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "xi[l_skip+n]"
+          }
+        ]
+      },
+      "eq-accumulate": {
+        "note": "The eq column runs the product eq(xi_n, b_n) bit by bit. idx reconstructs the stacked index from nth_bit for bus-balance with Eq3bShapeBus.",
+        "airs": [
+          {
+            "name": "Eq3bAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "n",
+                  "nth_bit",
+                  "xi",
+                  "eq",
+                  "idx"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "n",
+                  "nth_bit",
+                  "xi",
+                  "eq",
+                  "idx"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "publish": {
+        "note": "The final accumulated eq per interaction is published on Eq3bBus; InteractionsFoldingAir consumes it to weight interaction denominators (bc-13).",
+        "airs": [
+          {
+            "name": "Eq3bAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "sort_idx",
+                  "interaction_idx",
+                  "eq"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "Eq3bBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "interaction_idx",
+                  "eq_3b"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "Eq3bAir",
+              "col": "eq",
+              "row": -1
+            },
+            "to": {
+              "bus": "Eq3bBus",
+              "field": "eq_3b",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "eq_3b[i][k]"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"shape-handoff\">Eq3bAir receives (i, n_lift, n_logup, num_interactions) on Eq3bShapeBus</span> and <span class=\"ref\" data-scene=\"xi-lookup\">the relevant xi coordinates on XiRandomnessBus</span>. It <span class=\"ref\" data-scene=\"eq-accumulate\">computes eq_3b values for each interaction's stacked b index</span> and <span class=\"ref\" data-scene=\"publish\">sends them on Eq3bBus to InteractionsFoldingAir</span>.",
+    "soundness_html": "The b indices are derived from VK structure and interaction idx; <span class=\"ref\" data-scene=\"xi-lookup\">xi coords are transcript-pinned (via GKR, T)</span>. <span class=\"ref\" data-scene=\"eq-accumulate\">Eq3bAir's constraints enforce the multilinear eq polynomial evaluation algebraically</span>. Bus balancing forces the correct count."
+  },
+  "bc-9": {
+    "default_scene": {
+      "note": "EqNsAir multiplies a base univariate factor (eval_eq_uni from EqUniAir, or eval_eq_sharp_uni from EqSharpUniAir&rarr;EqSharpUniReceiverAir) with multilinear eq factors eq(xi[l_skip+n-1], r_n) per dimension, front-loading by an r_product suffix to broadcast eq_ns/eq_sharp_ns on EqNOuterBus.",
+      "airs": [
+        {
+          "name": "EqNsAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "n",
+                "xi_n",
+                "r_n",
+                "r_product",
+                "eq",
+                "eq_sharp"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "n",
+                "xi_n",
+                "r_n",
+                "r_product",
+                "eq",
+                "eq_sharp"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "EqUniAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "idx",
+                "x",
+                "y",
+                "res",
+                "is_first"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "idx",
+                "res"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "XiRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "EqNOuterBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_sharp",
+                "n",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "is_sharp",
+                "n",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "EqZeroNBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_sharp",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "EqNsAir",
+            "col": "xi_n",
+            "row": 0
+          },
+          "to": {
+            "bus": "XiRandomnessBus",
+            "field": "xi",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "xi[l_skip+n-1]"
+        },
+        {
+          "from": {
+            "air": "EqNsAir",
+            "col": "r_n",
+            "row": 0
+          },
+          "to": {
+            "bus": "ConstraintSumcheckRandomnessBus",
+            "field": "challenge",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "r_n"
+        },
+        {
+          "from": {
+            "air": "EqUniAir",
+            "col": "res",
+            "row": -1
+          },
+          "to": {
+            "bus": "EqZeroNBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "eq_uni(l_skip, xi0, r0)"
+        },
+        {
+          "from": {
+            "air": "EqNsAir",
+            "col": "eq",
+            "row": 0
+          },
+          "to": {
+            "bus": "EqNOuterBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "eq_ns[n]"
+        }
+      ]
+    },
+    "scenes": {
+      "base-eq-uni": {
+        "note": "EqUniAir squares xi[0] and r_0 repeatedly (x, y = xi_0^{2^idx}, r_0^{2^idx}) accumulating res = eval_eq_uni(l_skip, xi[0], r_0). The last row publishes the final value on EqZeroNBus to EqNsAir.",
+        "airs": [
+          {
+            "name": "EqUniAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx",
+                  "x",
+                  "y",
+                  "res",
+                  "is_first"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "idx",
+                  "x",
+                  "y",
+                  "res"
+                ],
+                "kind": "next"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "idx",
+                  "res"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqZeroNBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_sharp",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqUniAir",
+              "col": "res",
+              "row": -1
+            },
+            "to": {
+              "bus": "EqZeroNBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "is_sharp=0"
+          }
+        ]
+      },
+      "eq-sharp": {
+        "note": "EqSharpUniAir does the butterfly decomposition of eval_eq_sharp_uni over roots of unity; EqSharpUniReceiverAir Horner-sums the coefficient stream at r_0 to obtain the final sharp value, published on EqZeroNBus with is_sharp=1.",
+        "airs": [
+          {
+            "name": "EqSharpUniAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "xi_idx",
+                  "iter_idx",
+                  "root",
+                  "root_pow",
+                  "product_before"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "xi_idx",
+                  "iter_idx",
+                  "root",
+                  "root_pow",
+                  "product_before"
+                ],
+                "kind": "next"
+              }
+            ]
+          },
+          {
+            "name": "EqSharpUniReceiverAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx",
+                  "coeff",
+                  "r",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "idx",
+                  "cur_sum"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqSharpUniBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "xi_idx",
+                  "iter_idx",
+                  "product"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "EqZeroNBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_sharp",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqSharpUniAir",
+              "col": "product_before",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqSharpUniBus",
+              "field": "product",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "EqSharpUniReceiverAir",
+              "col": "coeff",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqSharpUniBus",
+              "field": "product",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "EqSharpUniReceiverAir",
+              "col": "cur_sum",
+              "row": -1
+            },
+            "to": {
+              "bus": "EqZeroNBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "is_sharp=1"
+          }
+        ]
+      },
+      "multiplicative-recursion": {
+        "note": "Each EqNsAir row multiplies eq and eq_sharp by eq(xi[l_skip+n-1], r_n) and absorbs a trailing r factor (r_product). Every intermediate eq_ns[n] is broadcast on EqNOuterBus so constraint folding and ExpressionClaimAir can pick the right dimension.",
+        "airs": [
+          {
+            "name": "EqNsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "n",
+                  "xi_n",
+                  "r_n",
+                  "r_product",
+                  "eq"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "n",
+                  "xi_n",
+                  "r_n",
+                  "r_product",
+                  "eq"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqNOuterBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_sharp",
+                  "n",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "is_sharp",
+                  "n",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqNsAir",
+              "col": "eq",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNOuterBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "eq_ns[n]"
+          },
+          {
+            "from": {
+              "air": "EqNsAir",
+              "col": "eq_sharp",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNOuterBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "send",
+            "label": "eq_sharp_ns[n]"
+          }
+        ]
+      },
+      "randomness-lookup": {
+        "note": "Per row, xi_n and r_n are looked up from the shared challenge buses so the multiplicative step uses the same values as sampled during GKR (xi) and sumcheck (r).",
+        "airs": [
+          {
+            "name": "EqNsAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "n",
+                  "xi_n",
+                  "r_n"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "XiRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ConstraintSumcheckRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqNsAir",
+              "col": "xi_n",
+              "row": 0
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "xi",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "EqNsAir",
+              "col": "r_n",
+              "row": 0
+            },
+            "to": {
+              "bus": "ConstraintSumcheckRandomnessBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "lookup"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"base-eq-uni\">EqUniAir computes eval_eq_uni(l_skip, xi[0], r_0) (base factor)</span>. <span class=\"ref\" data-scene=\"eq-sharp\">EqSharpUniAir + EqSharpUniReceiverAir compute eval_eq_sharp_uni with roots of unity (accumulator)</span>. <span class=\"ref\" data-scene=\"multiplicative-recursion\">EqNsAir multiplies these with eval_eq_mle([xi[l_skip+j-1]], [r_j]) for j = 1..i and a trailing r product (front-loading)</span>. Results are sent on EqNOuterBus to ConstraintsFoldingAir and ExpressionClaimAir; on SelHypercubeBus to SymbolicExpressionAir.",
+    "soundness_html": "All eq polynomial formulas are algebraically constrained. <span class=\"ref\" data-scene=\"randomness-lookup\">xi and r are transcript-pinned</span>. PowerCheckerBus provides roots-of-unity powers (LT). <span class=\"ref\" data-scene=\"multiplicative-recursion\">Front-loading the batch correction prod(r_j for j &gt; i) avoids redundant computation while preserving correctness</span>."
+  },
+  "bc-10": {
+    "default_scene": {
+      "note": "EqNegAir handles AIRs with n &lt; 0. For each negative section, it iteratively squares u, r, and r*omega (given on EqNegBaseRandBus by Stacking's EqBaseAir), accumulating eq kernels, and outputs both the eq result and sel_uni(n, r_0) values.",
+      "airs": [
+        {
+          "name": "EqNegAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "neg_hypercube",
+                "row_index",
+                "u_pow",
+                "r_pow",
+                "prod_u_r"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "neg_hypercube",
+                "row_index",
+                "u_pow",
+                "r_pow",
+                "prod_u_r"
+              ],
+              "kind": "next"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "neg_hypercube",
+                "row_index",
+                "prod_u_r",
+                "prod_u_r_omega"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "EqNegBaseRandBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "u",
+                "r_squared"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "EqNegResultBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "n",
+                "eq",
+                "k_rot"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "SelUniBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "n",
+                "is_first",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "EqNegAir",
+            "col": "u_pow",
+            "row": 0
+          },
+          "to": {
+            "bus": "EqNegBaseRandBus",
+            "field": "u",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "u_0"
+        },
+        {
+          "from": {
+            "air": "EqNegAir",
+            "col": "prod_u_r",
+            "row": -1
+          },
+          "to": {
+            "bus": "EqNegResultBus",
+            "field": "eq",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "eq_neg"
+        },
+        {
+          "from": {
+            "air": "EqNegAir",
+            "col": "prod_u_r_omega",
+            "row": -1
+          },
+          "to": {
+            "bus": "SelUniBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "sel_uni(n, r_0)"
+        }
+      ]
+    },
+    "scenes": {
+      "base-rand": {
+        "note": "Stacking's EqBaseAir provides u (= u[n_lift]) and r_squared (= r_0^2) on EqNegBaseRandBus; EqNegAir consumes them as seeds for the squaring ladder.",
+        "airs": [
+          {
+            "name": "EqNegAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "neg_hypercube",
+                  "u_pow",
+                  "r_pow"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqNegBaseRandBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "u",
+                  "r_squared"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqNegAir",
+              "col": "u_pow",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNegBaseRandBus",
+              "field": "u",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "EqNegAir",
+              "col": "r_pow",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNegBaseRandBus",
+              "field": "r_squared",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "r_0^2"
+          }
+        ]
+      },
+      "squaring-ladder": {
+        "note": "Each row squares u_pow, r_pow, r_omega_pow \u2014 prod_u_r and prod_u_r_omega accumulate the eq and k_rot kernels across the negative dimension's |n| squaring steps.",
+        "airs": [
+          {
+            "name": "EqNegAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "row_index",
+                  "u_pow",
+                  "r_pow",
+                  "r_omega_pow",
+                  "prod_u_r",
+                  "prod_u_r_omega"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "row_index",
+                  "u_pow",
+                  "r_pow",
+                  "r_omega_pow",
+                  "prod_u_r",
+                  "prod_u_r_omega"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "eq-result": {
+        "note": "The final prod_u_r and prod_u_r_omega per negative section are emitted on EqNegResultBus \u2014 Stacking's EqBaseAir consumes them as its eq-neg factor.",
+        "airs": [
+          {
+            "name": "EqNegAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "neg_hypercube",
+                  "prod_u_r",
+                  "prod_u_r_omega"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqNegResultBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n",
+                  "eq",
+                  "k_rot"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqNegAir",
+              "col": "prod_u_r",
+              "row": -1
+            },
+            "to": {
+              "bus": "EqNegResultBus",
+              "field": "eq",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "EqNegAir",
+              "col": "prod_u_r_omega",
+              "row": -1
+            },
+            "to": {
+              "bus": "EqNegResultBus",
+              "field": "k_rot",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "rot kernel"
+          }
+        ]
+      },
+      "sel-uni-publish": {
+        "note": "For each negative dimension, sel_uni(n, r_0) is sent on SelUniBus so SymbolicExpressionAir can look up the correct is_first/is_last selector when evaluating AIRs with log_height &lt; l_skip.",
+        "airs": [
+          {
+            "name": "EqNegAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "neg_hypercube",
+                  "prod_u_r_omega"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SelUniBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n",
+                  "is_first",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "EqNegAir",
+              "col": "neg_hypercube",
+              "row": 0
+            },
+            "to": {
+              "bus": "SelUniBus",
+              "field": "n",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "EqNegAir",
+              "col": "prod_u_r_omega",
+              "row": 0
+            },
+            "to": {
+              "bus": "SelUniBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "sel_uni"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"base-rand\">EqNegAir receives (u_0, r_0^2) on EqNegBaseRandBus from Stacking's EqBaseAir</span> and <span class=\"ref\" data-scene=\"squaring-ladder\">computes eq_neg evaluations for each negative-n dimension</span>. It <span class=\"ref\" data-scene=\"eq-result\">sends results on EqNegResultBus (to EqBaseAir)</span> and <span class=\"ref\" data-scene=\"sel-uni-publish\">sel_uni(n, r_0) values on SelUniBus (to SymbolicExpressionAir)</span>.",
+    "soundness_html": "Negative-dimension handling is the <span class=\"ref\" data-scene=\"squaring-ladder\">lift adjustment described in M-BC(c): use l = l_skip + n and r_0^{2^|n|}</span>. The <span class=\"ref\" data-scene=\"base-rand\">shared computation with Stacking (via EqNegBaseRandBus/EqNegResultBus)</span> eliminates duplication while a single AIR enforces the arithmetic."
+  },
+  "bc-11": {
+    "default_scene": {
+      "note": "SymbolicExpressionAir walks the cached DAG one node per row. kind encodes node type (const, variable, public-value, arithmetic op, etc.); args are looked up from earlier rows via SymbolicExpressionBus; variables resolve via ColumnClaimsBus and PublicValuesBus; is_first/is_last selectors come from SelHypercubeBus / SelUniBus.",
+      "airs": [
+        {
+          "name": "SymbolicExpressionAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "flags",
+                "air_idx",
+                "node_or_interaction_idx",
+                "attrs",
+                "args"
+              ],
+              "kind": "primary",
+              "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "flags",
+                "air_idx",
+                "node_or_interaction_idx",
+                "attrs",
+                "args"
+              ],
+              "kind": "secondary",
+              "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "flags",
+                "air_idx",
+                "node_or_interaction_idx",
+                "args"
+              ],
+              "kind": "secondary",
+              "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "SymbolicExpressionBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "air_idx",
+                "node_idx",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "air_idx",
+                "node_idx",
+                "value"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "ColumnClaimsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "part_idx",
+                "col_idx",
+                "claim",
+                "is_rot"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "SelHypercubeBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "n",
+                "is_first",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "SymbolicExpressionAir",
+            "col": "args",
+            "row": 0
+          },
+          "to": {
+            "bus": "SymbolicExpressionBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "publish node",
+          "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+        },
+        {
+          "from": {
+            "air": "SymbolicExpressionAir",
+            "col": "args",
+            "row": 0
+          },
+          "to": {
+            "bus": "SymbolicExpressionBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "lookup",
+          "label": "child values"
+        },
+        {
+          "from": {
+            "air": "SymbolicExpressionAir",
+            "col": "args",
+            "row": 0
+          },
+          "to": {
+            "bus": "ColumnClaimsBus",
+            "field": "claim",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "variable kind",
+          "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+        }
+      ]
+    },
+    "scenes": {
+      "dag-walk": {
+        "note": "One row per DAG node: each computes value from args (children), kind (op type), and attrs (e.g. column index). fanout counts parent references so the row is sent on SymbolicExpressionBus with multiplicity fanout.",
+        "airs": [
+          {
+            "name": "SymbolicExpressionAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "flags",
+                  "node_or_interaction_idx",
+                  "args",
+                  "fanout"
+                ],
+                "kind": "prev",
+                "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "flags",
+                  "node_or_interaction_idx",
+                  "args",
+                  "fanout"
+                ],
+                "kind": "next",
+                "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SymbolicExpressionBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "node_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "args",
+              "row": 0
+            },
+            "to": {
+              "bus": "SymbolicExpressionBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "fanout=1..k",
+            "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+          }
+        ]
+      },
+      "variable-resolve": {
+        "note": "When kind = variable, attrs holds (sort_idx, part_idx, col_idx, is_rot) and the value is looked up on ColumnClaimsBus \u2014 the same permutation bus populated by OpeningClaimsAir (bc-7).",
+        "airs": [
+          {
+            "name": "SymbolicExpressionAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "flags",
+                  "attrs",
+                  "args"
+                ],
+                "kind": "primary",
+                "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ColumnClaimsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "part_idx",
+                  "col_idx",
+                  "claim",
+                  "is_rot"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "attrs",
+              "row": 0
+            },
+            "to": {
+              "bus": "ColumnClaimsBus",
+              "field": "col_idx",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "col_idx"
+          },
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "args",
+              "row": 0
+            },
+            "to": {
+              "bus": "ColumnClaimsBus",
+              "field": "claim",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "claim",
+            "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+          }
+        ]
+      },
+      "public-value": {
+        "note": "When kind = public_value, attrs encodes (air_idx, pv_idx) and the value is looked up on PublicValuesBus (published in preamble-6).",
+        "airs": [
+          {
+            "name": "SymbolicExpressionAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "flags",
+                  "air_idx",
+                  "attrs",
+                  "args"
+                ],
+                "kind": "primary",
+                "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "PublicValuesBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "pv_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "attrs",
+              "row": 0
+            },
+            "to": {
+              "bus": "PublicValuesBus",
+              "field": "pv_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "args",
+              "row": 0
+            },
+            "to": {
+              "bus": "PublicValuesBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+          }
+        ]
+      },
+      "selectors": {
+        "note": "is_first_row / is_last_row / is_transition selectors are looked up on SelHypercubeBus (for n >= 0, provided by EqNsAir) or SelUniBus (for n &lt; 0, provided by EqNegAir).",
+        "airs": [
+          {
+            "name": "SymbolicExpressionAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "flags",
+                  "air_idx",
+                  "args"
+                ],
+                "kind": "primary",
+                "_note": "was 'kind', best-match to flags (NodeKind encoded via Encoder in the flags array, not a separate column); was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SelHypercubeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n",
+                  "is_first",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "SelUniBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n",
+                  "is_first",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "args",
+              "row": 0
+            },
+            "to": {
+              "bus": "SelHypercubeBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "n >= 0",
+            "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+          },
+          {
+            "from": {
+              "air": "SymbolicExpressionAir",
+              "col": "args",
+              "row": 0
+            },
+            "to": {
+              "bus": "SelUniBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "n < 0",
+            "_note": "was 'value', best-match to args (node value is computed per-row from args/attrs/flags; for variable/public-value nodes the value is taken from args[..D_EF], no dedicated value column)"
+          }
+        ]
+      }
+    },
+    "constraints_html": "SymbolicExpressionAir <span class=\"ref\" data-scene=\"dag-walk\">evaluates the DAG node-by-node (constants, arithmetic ops, variables from ColumnClaimsBus (offset 0 = value, offset 1 = rotated)</span>, <span class=\"ref\" data-scene=\"public-value\">public values from PublicValuesBus</span>). <span class=\"ref\" data-scene=\"selectors\">Selectors is_first_row/is_last_row/is_transition are computed using SelHypercubeBus (n >= 0, from EqNsAir) and SelUniBus (n &lt; 0, from EqNegAir)</span>. The cached trace encodes the DAG structure.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"dag-walk\">The DAG structure is committed via the SymbolicExpressionAir cached trace commitment</span>, observed in ProofShape's preamble (second assumption of the main claim: commitment encodes vk_child). <span class=\"ref\" data-scene=\"variable-resolve\">Variables resolve to transcript-observed column openings (bc-7)</span> and <span class=\"ref\" data-scene=\"public-value\">public values (preamble-6)</span>. <span class=\"ref\" data-scene=\"selectors\">Selectors are computed correctly by EqNsAir and EqNegAir</span>. Therefore the DAG evaluation equals the reference verifier's VerifierConstraintEvaluator output."
+  },
+  "bc-12": {
+    "default_scene": {
+      "note": "ConstraintsFoldingAir ingests per-constraint evaluations from SymbolicExpressionAir via ConstraintsFoldingBus, Horner-folds them with lambda powers into cur_sum, and multiplies the final per-AIR sum by eq_n = eq_ns[n_lift] (looked up via EqNOuterBus). The weighted claim is forwarded on ExpressionClaimBus.",
+      "airs": [
+        {
+          "name": "ConstraintsFoldingAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "constraint_idx",
+                "value",
+                "lambda",
+                "cur_sum"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sort_idx",
+                "constraint_idx",
+                "value",
+                "lambda",
+                "cur_sum"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "sort_idx",
+                "cur_sum",
+                "eq_n"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "ConstraintsFoldingBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "air_idx",
+                "constraint_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "EqNOuterBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_sharp",
+                "n",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "NLiftBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "air_idx",
+                "n_lift"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpressionClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_interaction",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ConstraintsFoldingAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "ConstraintsFoldingBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "constraint eval"
+        },
+        {
+          "from": {
+            "air": "ConstraintsFoldingAir",
+            "col": "eq_n",
+            "row": -1
+          },
+          "to": {
+            "bus": "EqNOuterBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "is_sharp=0, n=n_lift"
+        },
+        {
+          "from": {
+            "air": "ConstraintsFoldingAir",
+            "col": "cur_sum",
+            "row": -1
+          },
+          "to": {
+            "bus": "ExpressionClaimBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "is_interaction=0"
+        }
+      ]
+    },
+    "scenes": {
+      "receive-constraints": {
+        "note": "SymbolicExpressionAir evaluates constraint nodes and sends their (air_idx, constraint_idx, value) tuples on ConstraintsFoldingBus; ConstraintsFoldingAir consumes one per row.",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sort_idx",
+                  "constraint_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "sort_idx",
+                  "constraint_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ConstraintsFoldingBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "constraint_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "air_idx",
+                  "constraint_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "ConstraintsFoldingBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "value",
+              "row": 1
+            },
+            "to": {
+              "bus": "ConstraintsFoldingBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "lambda-fold": {
+        "note": "cur_sum accumulates &Sigma;_j &lambda;^j * value_j via a Horner step each row: new_sum = sum * lambda + value. lambda is looked up from BatchConstraintConductorBus.",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "value",
+                  "lambda",
+                  "cur_sum"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "value",
+                  "lambda",
+                  "cur_sum"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "eq-weight": {
+        "note": "On the last row of each AIR, cur_sum is multiplied by eq_n (= eq_ns[n_lift]), looked up from EqNOuterBus. The result is the per-AIR numerator_term.",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "sort_idx",
+                  "cur_sum",
+                  "eq_n"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqNOuterBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_sharp",
+                  "n",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "NLiftBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "n_lift"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "sort_idx",
+              "row": -1
+            },
+            "to": {
+              "bus": "NLiftBus",
+              "field": "air_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "eq_n",
+              "row": -1
+            },
+            "to": {
+              "bus": "EqNOuterBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "eq_ns[n_lift]"
+          }
+        ]
+      },
+      "publish": {
+        "note": "ExpressionClaimBus carries the weighted per-AIR claim to ExpressionClaimAir with is_interaction=0 (distinguishing it from the interaction-folding stream).",
+        "airs": [
+          {
+            "name": "ConstraintsFoldingAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "sort_idx",
+                  "cur_sum",
+                  "eq_n"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpressionClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_interaction",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ConstraintsFoldingAir",
+              "col": "cur_sum",
+              "row": -1
+            },
+            "to": {
+              "bus": "ExpressionClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "numerator_term[i]"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"receive-constraints\">ConstraintsFoldingAir receives per-constraint evaluations from SymbolicExpressionAir</span>, <span class=\"ref\" data-scene=\"lambda-fold\">folds with lambda powers (BatchConstraintConductorBus)</span>, <span class=\"ref\" data-scene=\"eq-weight\">weights by eq_ns (EqNOuterBus from EqNsAir) with n_lift (NLiftBus from ProofShapeAir)</span>, and <span class=\"ref\" data-scene=\"publish\">sends the resulting claim on ExpressionClaimBus to ExpressionClaimAir</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"lambda-fold\">Lambda-folding is algebraically constrained</span>. <span class=\"ref\" data-scene=\"eq-weight\">eq_ns correctly weights by the multilinear equality factor at r</span>. <span class=\"ref\" data-scene=\"publish\">Bus balancing ensures each AIR contributes exactly one numerator_term</span>."
+  },
+  "bc-13": {
+    "default_scene": {
+      "note": "InteractionsFoldingAir builds each interaction's (num, denom) from message components received on InteractionsFoldingBus, Horner-folds by beta, weights by eq_3b per interaction, and aggregates into (final_acc_num, final_acc_denom) to publish on ExpressionClaimBus with is_interaction=1.",
+      "airs": [
+        {
+          "name": "InteractionsFoldingAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "interaction_idx",
+                "value",
+                "beta",
+                "cur_sum"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sort_idx",
+                "interaction_idx",
+                "value",
+                "beta",
+                "cur_sum"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "sort_idx",
+                "final_acc_num",
+                "final_acc_denom"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "InteractionsFoldingBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "air_idx",
+                "interaction_idx",
+                "is_mult",
+                "idx_in_message",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "Eq3bBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "interaction_idx",
+                "eq_3b"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpressionClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_interaction",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "is_interaction",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "InteractionsFoldingBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "message component"
+        },
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "interaction_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "Eq3bBus",
+            "field": "eq_3b",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "eq_3b weight"
+        },
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "final_acc_denom",
+            "row": -1
+          },
+          "to": {
+            "bus": "ExpressionClaimBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "denominator_term[i]"
+        },
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "final_acc_num",
+            "row": -1
+          },
+          "to": {
+            "bus": "ExpressionClaimBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "send",
+          "label": "numerator_term[i]"
+        }
+      ]
+    },
+    "scenes": {
+      "message-receive": {
+        "note": "Each message component (count, msg_0, msg_1, ..., bus_idx) arrives on InteractionsFoldingBus; is_first_msg, is_second_msg, is_bus_idx row-markers route them into num vs denom buckets.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "interaction_idx",
+                  "is_first_in_message",
+                  "is_second_in_message",
+                  "is_bus_index",
+                  "idx_in_message",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "InteractionsFoldingBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "interaction_idx",
+                  "is_mult",
+                  "idx_in_message",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "InteractionsFoldingBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "interaction_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "InteractionsFoldingBus",
+              "field": "interaction_idx",
+              "row": 0
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "beta-fold": {
+        "note": "cur_sum = cur_sum * beta + value Horner-folds the message stream; the bus_idx row adds (bus_idx + 1) * beta^{msg_len} as the domain-separation offset.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "value",
+                  "beta",
+                  "cur_sum"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "value",
+                  "beta",
+                  "cur_sum"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "eq3b-weight": {
+        "note": "For each interaction, eq_3b[sort_idx][interaction_idx] is looked up from Eq3bBus and applied to both num and denom before aggregating.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sort_idx",
+                  "interaction_idx",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "Eq3bBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "interaction_idx",
+                  "eq_3b"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "sort_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bBus",
+              "field": "sort_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "interaction_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bBus",
+              "field": "interaction_idx",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "eq_3b"
+          }
+        ]
+      },
+      "publish": {
+        "note": "Last row of each AIR publishes (final_acc_num, final_acc_denom) on ExpressionClaimBus with is_interaction=1, one pair per present AIR.",
+        "airs": [
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "sort_idx",
+                  "final_acc_num",
+                  "final_acc_denom"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpressionClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_interaction",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "is_interaction",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "final_acc_num",
+              "row": -1
+            },
+            "to": {
+              "bus": "ExpressionClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "final_acc_denom",
+              "row": -1
+            },
+            "to": {
+              "bus": "ExpressionClaimBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "send"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"message-receive\">InteractionsFoldingAir receives interaction evaluations from SymbolicExpressionAir</span>, <span class=\"ref\" data-scene=\"beta-fold\">folds with beta_logup powers</span>, <span class=\"ref\" data-scene=\"eq3b-weight\">weights each interaction by eq_3b (from Eq3bBus)</span>, aggregates per-AIR totals, weights by eq_sharp_ns, and <span class=\"ref\" data-scene=\"publish\">sends denominator_term[i] on ExpressionClaimBus</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"beta-fold\">Beta-folding is algebraically constrained; the bus_index offset enforces per-interaction domain separation</span>. <span class=\"ref\" data-scene=\"eq3b-weight\">eq_3b selects the correct stacked b index within the logup dimension</span>; eq_sharp_ns applies the sharp univariate eq factor."
+  },
+  "bc-14": {
+    "default_scene": {
+      "note": "ExpressionClaimAir aggregates per-AIR numerator/denominator claims from ExpressionClaimBus, Horner-folds by mu (from BatchConstraintConductorBus), multiplies by normalization (eq_ns, hyperdim, pow) in multiplier, and hands the final cur_sum = evaluated_claim to the sumcheck pipeline on SumcheckClaimBus at round n_max.",
+      "airs": [
+        {
+          "name": "ExpressionClaimAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_first",
+                "group_idx",
+                "idx",
+                "value",
+                "multiplier",
+                "cur_sum"
+              ],
+              "kind": "primary",
+              "_note": "was 'is_interaction', best-match to group_idx (is_interaction = 1 - group_idx, not a stored column)"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "is_first",
+                "group_idx",
+                "idx",
+                "value",
+                "multiplier",
+                "cur_sum"
+              ],
+              "kind": "secondary",
+              "_note": "was 'is_interaction', best-match to group_idx (is_interaction = 1 - group_idx, not a stored column)"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "idx",
+                "cur_sum"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "ExpressionClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_interaction",
+                "idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "round",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ExpressionClaimNMaxBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "n_max"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "EqNOuterBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "is_sharp",
+                "n",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ExpressionClaimAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "ExpressionClaimBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "per-AIR claim"
+        },
+        {
+          "from": {
+            "air": "ExpressionClaimAir",
+            "col": "multiplier",
+            "row": 0
+          },
+          "to": {
+            "bus": "EqNOuterBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "eq_ns / eq_sharp_ns"
+        },
+        {
+          "from": {
+            "air": "ExpressionClaimAir",
+            "col": "cur_sum",
+            "row": -1
+          },
+          "to": {
+            "bus": "SumcheckClaimBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "round n_max"
+        }
+      ]
+    },
+    "scenes": {
+      "ingest-claims": {
+        "note": "Each row consumes one (is_interaction, idx, value) entry from ExpressionClaimBus produced by bc-12 / bc-13. The is_interaction bit routes into numerator vs denominator stream via idx_parity.",
+        "airs": [
+          {
+            "name": "ExpressionClaimAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "group_idx",
+                  "idx",
+                  "idx_parity",
+                  "value"
+                ],
+                "kind": "primary",
+                "_note": "was 'is_interaction', best-match to group_idx (is_interaction = 1 - group_idx, not a stored column)"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "group_idx",
+                  "idx",
+                  "idx_parity",
+                  "value"
+                ],
+                "kind": "primary",
+                "_note": "was 'is_interaction', best-match to group_idx (is_interaction = 1 - group_idx, not a stored column)"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpressionClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_interaction",
+                  "idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ExpressionClaimAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpressionClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          }
+        ]
+      },
+      "mu-fold": {
+        "note": "cur_sum Horner-folds all inputs with mu (from BatchConstraintConductorBus) &mdash; identical to the mu power used in FractionsFolderAir (bc-4).",
+        "airs": [
+          {
+            "name": "ExpressionClaimAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "value",
+                  "multiplier",
+                  "cur_sum"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "value",
+                  "multiplier",
+                  "cur_sum"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "EqNOuterBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "is_sharp",
+                  "n",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ExpressionClaimAir",
+              "col": "multiplier",
+              "row": 0
+            },
+            "to": {
+              "bus": "EqNOuterBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "weight"
+          }
+        ]
+      },
+      "final-claim": {
+        "note": "Last row sends cur_sum = evaluated_claim on SumcheckClaimBus at round = n_max. The multilinear sumcheck chain (bc-6) must terminate at this same value, making the identity cur_sum == evaluated_claim bus-balanced.",
+        "airs": [
+          {
+            "name": "ExpressionClaimAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "idx",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "SumcheckClaimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "round",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ExpressionClaimNMaxBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n_max"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ExpressionClaimAir",
+              "col": "idx",
+              "row": -1
+            },
+            "to": {
+              "bus": "ExpressionClaimNMaxBus",
+              "field": "n_max",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "round = n_max"
+          },
+          {
+            "from": {
+              "air": "ExpressionClaimAir",
+              "col": "cur_sum",
+              "row": -1
+            },
+            "to": {
+              "bus": "SumcheckClaimBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "== sumcheck out"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"ingest-claims\">ExpressionClaimAir receives per-AIR (numerator_term, denominator_term) claims on ExpressionClaimBus</span>, <span class=\"ref\" data-scene=\"mu-fold\">batches them with mu powers (from BatchConstraintConductorBus), applies norm_factor and eq_sharp_ns accounting</span>, and <span class=\"ref\" data-scene=\"final-claim\">sends the final evaluated_claim on SumcheckClaimBus at round n_max</span>. MultilinearSumcheckAir's chain ends at this final claim, so cur_sum (sumcheck output) == evaluated_claim.",
+    "soundness_html": "This is the defining batch-constraint identity: <span class=\"ref\" data-scene=\"final-claim\">the multilinear sumcheck chain terminates at ExpressionClaimAir's computed evaluated_claim</span>. Because SumcheckClaimBus is a permutation bus threading through all sumcheck rounds, if sum does not match, the bus is unbalanced. <span class=\"ref\" data-scene=\"final-claim\">ExpressionClaimNMaxBus forces n_max rounds</span>."
+  },
+  "bc-15": {
+    "default_scene": {
+      "note": "BC's outputs to Stacking: UnivariateSumcheckAir sends r_0 on ConstraintSumcheckRandomnessBus (idx=0), MultilinearSumcheckAir sends r_1..r_{n_max}. MultilinearSumcheckAir also sends tidx_stack on StackingModuleBus at the end of schedule (6).",
+      "airs": [
+        {
+          "name": "UnivariateSumcheckAir",
+          "rows": [
+            {
+              "row": -1,
+              "cols": [
+                "coeff_idx",
+                "r"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "MultilinearSumcheckAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "round_idx",
+                "eval_idx",
+                "r"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "round_idx",
+                "eval_idx",
+                "r",
+                "cur_sum"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": -1,
+              "fields": [
+                "idx",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "StackingModuleBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "UnivariateSumcheckAir",
+            "col": "r",
+            "row": -1
+          },
+          "to": {
+            "bus": "ConstraintSumcheckRandomnessBus",
+            "field": "challenge",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "r_0"
+        },
+        {
+          "from": {
+            "air": "MultilinearSumcheckAir",
+            "col": "r",
+            "row": -1
+          },
+          "to": {
+            "bus": "ConstraintSumcheckRandomnessBus",
+            "field": "challenge",
+            "row": -1
+          },
+          "kind": "send",
+          "label": "r_{n_max}"
+        },
+        {
+          "from": {
+            "air": "MultilinearSumcheckAir",
+            "col": "round_idx",
+            "row": -1
+          },
+          "to": {
+            "bus": "StackingModuleBus",
+            "field": "tidx",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "tidx_stack"
+        }
+      ]
+    },
+    "scenes": {
+      "randomness-vector": {
+        "note": "n_max + 1 r values are broadcast on ConstraintSumcheckRandomnessBus indexed 0..n_max. Stacking's sumcheck AIRs consume them at the same indices for eq polynomial evaluation.",
+        "airs": [
+          {
+            "name": "UnivariateSumcheckAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "r"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "MultilinearSumcheckAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "round_idx",
+                  "r"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ConstraintSumcheckRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": -1,
+                "fields": [
+                  "idx",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "UnivariateSumcheckAir",
+              "col": "r",
+              "row": -1
+            },
+            "to": {
+              "bus": "ConstraintSumcheckRandomnessBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "idx=0"
+          },
+          {
+            "from": {
+              "air": "MultilinearSumcheckAir",
+              "col": "r",
+              "row": -1
+            },
+            "to": {
+              "bus": "ConstraintSumcheckRandomnessBus",
+              "field": "challenge",
+              "row": -1
+            },
+            "kind": "send",
+            "label": "idx=n_max"
+          }
+        ]
+      },
+      "tidx-handoff": {
+        "note": "StackingModuleBus carries tidx_stack, the transcript index just after BC's contiguous region (2)-(6). Stacking's OpeningClaimsAir uses it as its starting tidx.",
+        "airs": [
+          {
+            "name": "MultilinearSumcheckAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "round_idx",
+                  "eval_idx",
+                  "cur_sum"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "StackingModuleBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "MultilinearSumcheckAir",
+              "col": "round_idx",
+              "row": -1
+            },
+            "to": {
+              "bus": "StackingModuleBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "tidx_stack"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"randomness-vector\">UnivariateSumcheckAir sends r_0 on ConstraintSumcheckRandomnessBus; MultilinearSumcheckAir sends r_1..r_{n_max}</span>. <span class=\"ref\" data-scene=\"tidx-handoff\">MultilinearSumcheckAir (on its last round) sends (tidx_stack, ...) on StackingModuleBus</span>. tidx_stack is computed from tidx_cf by summing schedule (2)-(6) slot counts.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"randomness-vector\">The randomness vector is exactly the transcript samples from bc-5/bc-6, pinned by the sponge (T)</span>. Bus balancing ensures exactly n_max + 1 r values. <span class=\"ref\" data-scene=\"tidx-handoff\">The tidx_stack handoff is deterministic</span>."
+  }
+}

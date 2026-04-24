@@ -1,0 +1,4448 @@
+{
+  "airs": [
+    {
+      "id": "transcript.TranscriptAir",
+      "name": "TranscriptAir",
+      "module": "transcript",
+      "source_path": "transcript/transcript/air.rs",
+      "role": "Fiat-Shamir transcript that absorbs (observe) and squeezes (sample) field elements via a Poseidon2 sponge.",
+      "description": "TranscriptAir maintains a 16-element Poseidon2 sponge state across rows. Each row is either an observe (absorb up to CHUNK=8 field elements) or sample (squeeze up to 8 elements) operation. When a permutation is needed between rounds it looks up the Poseidon2PermuteBus to prove the state transition. It sends every observe/sample message on TranscriptBus with sequential transcript indices within each proof, and optionally sends the final sponge state on FinalTranscriptStateBus for continuations.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_proof_start",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_sample",
+          "type": "T",
+          "description": "Indicator for sample/observe."
+        },
+        {
+          "name": "mask",
+          "type": "[T; CHUNK]",
+          "description": "0/1 indicators for the positions that we are absorbing/squeezing (i.e., are in the transcript). Constrained to be \"decreasing\". Because transcript_bus messages are sent with multiplicity 0 or 1, this also functions as the lookup count."
+        },
+        {
+          "name": "prev_state",
+          "type": "[T; POSEIDON2_WIDTH]",
+          "description": "The poseidon2 state."
+        },
+        {
+          "name": "post_state",
+          "type": "[T; POSEIDON2_WIDTH]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "direction": "S",
+          "note": "observe/sample messages"
+        },
+        {
+          "name": "Poseidon2PermuteBus",
+          "direction": "L",
+          "note": "verify state transition"
+        },
+        {
+          "name": "FinalTranscriptStateBus",
+          "direction": "S",
+          "note": "optional/continuations"
+        }
+      ],
+      "verifier_phase": "shared",
+      "struct_name": "TranscriptCols",
+      "const_generics": [],
+      "notes": "is_valid is derived as mask[0]; there is no separate is_valid column. CHUNK=8, POSEIDON2_WIDTH=16."
+    },
+    {
+      "id": "transcript.Poseidon2Air",
+      "name": "Poseidon2Air",
+      "module": "transcript",
+      "source_path": "transcript/poseidon2.rs",
+      "role": "Provides Poseidon2 permutation and compression lookup tables.",
+      "description": "Poseidon2Air is the central hash execution table. Each row contains a full Poseidon2 permutation with 16-element input and output, plus two multiplicity columns. The permute_mult column counts how many times this (input, output) pair is used as a full permutation by TranscriptAir, while compress_mult counts compression uses by MerkleVerifyAir. Identical Poseidon2 inputs are deduplicated across rows to reduce the trace size.",
+      "columns": [
+        {
+          "name": "inner",
+          "type": "Poseidon2SubCols<T, SBOX_REGISTERS>",
+          "description": "Inner Plonky3 Poseidon2 columns (type alias for p3_poseidon2_air::Poseidon2Cols): per-round permutation state including `inputs`, `beginning_full_rounds`, `partial_rounds`, and `ending_full_rounds`."
+        },
+        {
+          "name": "permute_mult",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "compress_mult",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "inputs",
+          "type": "F",
+          "description": "(from Poseidon2SubAir (Plonky3 Poseidon2Air))"
+        },
+        {
+          "name": "beginning_full_rounds",
+          "type": "F",
+          "description": "(from Poseidon2SubAir (Plonky3 Poseidon2Air))"
+        },
+        {
+          "name": "partial_rounds",
+          "type": "F",
+          "description": "(from Poseidon2SubAir (Plonky3 Poseidon2Air))"
+        },
+        {
+          "name": "ending_full_rounds",
+          "type": "F",
+          "description": "(from Poseidon2SubAir (Plonky3 Poseidon2Air))"
+        }
+      ],
+      "buses": [
+        {
+          "name": "Poseidon2PermuteBus",
+          "direction": "P"
+        },
+        {
+          "name": "Poseidon2CompressBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "shared",
+      "struct_name": "Poseidon2Cols",
+      "const_generics": [
+        "SBOX_REGISTERS"
+      ],
+      "notes": "inner is a Plonky3 `Poseidon2Cols` defined out-of-crate (p3-poseidon2-air). Its concrete fields (inputs: [T; WIDTH], ending_full_rounds[], partial_rounds[], beginning_full_rounds[], etc.) are not redefined locally; I referenced only the top-level names accessed in this AIR's eval (`inner.inputs`, `inner.ending_full_rounds[...]`)."
+    },
+    {
+      "id": "transcript.MerkleVerifyAir",
+      "name": "MerkleVerifyAir",
+      "module": "transcript",
+      "source_path": "transcript/merkle_verify/air.rs",
+      "role": "Verifies Merkle authentication paths including a leaf-combining phase.",
+      "description": "Each Merkle proof has two phases: (1) combining 2^k leaf hashes into a single root via a binary tree of 2^k - 1 compressions, and (2) walking up depth levels of a standard Merkle proof using sibling hashes. Every row performs one Poseidon2 compression (left || right -> output) and at the final row the result is checked against a commitment via CommitmentsBus. It uses single-row constraints only (no next-row access).",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": "Index of the proof this row is for"
+        },
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": "Indicator: whether this row is valid"
+        },
+        {
+          "name": "is_last_merkle",
+          "type": "T",
+          "description": "Indicator: whether this is the last row of a merkle proof"
+        },
+        {
+          "name": "is_combining_leaves",
+          "type": "T",
+          "description": "Indicator: whether this row hashes two leaves or is part of the Merkle path proof"
+        },
+        {
+          "name": "is_last_leaf",
+          "type": "T",
+          "description": "Indicator: whether this row is the root of the hashed leaves"
+        },
+        {
+          "name": "leaf_sub_idx",
+          "type": "T",
+          "description": "Row node index of this node in the leaf hash tree, 0 if is_combining_leaves is false"
+        },
+        {
+          "name": "merkle_idx_bit_src",
+          "type": "T",
+          "description": "The merkle idx of the leaf hash root"
+        },
+        {
+          "name": "current_idx_bit_src",
+          "type": "T",
+          "description": "Merkle idx suffix after shifting right max(0, height - k) bits"
+        },
+        {
+          "name": "total_depth",
+          "type": "T",
+          "description": "Total depth of the merkle proof including the leaves part = merkle_proof.len() + 1 + k"
+        },
+        {
+          "name": "height",
+          "type": "T",
+          "description": "0 -> total_depth - 1, where leaves are at height 0, combined leaf hash is at height k"
+        },
+        {
+          "name": "left",
+          "type": "[T; DIGEST_SIZE]",
+          "description": ""
+        },
+        {
+          "name": "right",
+          "type": "[T; DIGEST_SIZE]",
+          "description": ""
+        },
+        {
+          "name": "recv_flag",
+          "type": "T",
+          "description": "Flag that indicates what to receive; 0 for left, 1 for right, 2 for both"
+        },
+        {
+          "name": "commit_major",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "commit_minor",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "compression_output",
+          "type": "[T; DIGEST_SIZE]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "MerkleVerifyBus",
+          "direction": "R",
+          "note": "receive leaves and intermediate hashes"
+        },
+        {
+          "name": "MerkleVerifyBus",
+          "direction": "S",
+          "note": "send intermediate hashes to parent rows"
+        },
+        {
+          "name": "CommitmentsBus",
+          "direction": "L"
+        },
+        {
+          "name": "Poseidon2CompressBus",
+          "direction": "L"
+        },
+        {
+          "name": "RightShiftBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "shared",
+      "struct_name": "MerkleVerifyCols",
+      "const_generics": [],
+      "notes": "airs.json uses renamed columns `is_first`/`is_last`/`is_leaf`/`output` that do not exist in the Rust struct."
+    },
+    {
+      "id": "proof-shape.ProofShapeAir",
+      "name": "ProofShapeAir",
+      "module": "proof-shape",
+      "source_path": "proof_shape/proof_shape/air.rs",
+      "role": "Validates child proof structure and populates the global lookup tables consumed by the rest of the circuit.",
+      "description": "ProofShapeAir iterates over each child proof's AIRs (sorted by descending log_height) and establishes the lookup tables the rest of the circuit depends on. For each AIR, it publishes shape properties (air_id, num_interactions, need_rot), hyperdimensional parameters, lifted heights, and commitments. On the summary row for each proof it validates that total interactions stay within bounds and sends module-level messages that kick off GKR and batch constraint verification.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "sorted_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "log_height",
+          "type": "F",
+          "description": "Represents log2 trace height when `is_present`. Has a special use on summary row (when `is_last`)."
+        },
+        {
+          "name": "n_sign_bit",
+          "type": "F",
+          "description": "When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`."
+        },
+        {
+          "name": "starting_tidx",
+          "type": "F",
+          "description": "First possible tidx of the current AIR"
+        },
+        {
+          "name": "starting_cidx",
+          "type": "F",
+          "description": "First possible non-main cidx of the current AIR"
+        },
+        {
+          "name": "is_present",
+          "type": "F",
+          "description": "Columns that may be read from the transcript. Note that cached_commits is also read from the transcript."
+        },
+        {
+          "name": "height",
+          "type": "F",
+          "description": "Will be constrained to be `2^log_height` when `is_present`. Has a special use on summary row (when `is_last`)."
+        },
+        {
+          "name": "num_present",
+          "type": "F",
+          "description": "Number of present AIRs so far"
+        },
+        {
+          "name": "lifted_height_limbs",
+          "type": "[F; NUM_LIMBS]",
+          "description": "Limb decomposition of the lifted height; see the block-comment in source on interactions/lifted-height accounting (INTERACTIONS_LIMBS, CELLS_LIMBS leading-zero/n_logup tracking)."
+        },
+        {
+          "name": "num_interactions_limbs",
+          "type": "[F; NUM_LIMBS]",
+          "description": "Limb decomposition of the per-row num_interactions; reused as `diff_marker` on the summary row for the max_interaction_count bound."
+        },
+        {
+          "name": "total_interactions_limbs",
+          "type": "[F; NUM_LIMBS]",
+          "description": "Running limb-decomposed accumulator of total interactions across rows."
+        },
+        {
+          "name": "n_max",
+          "type": "F",
+          "description": "The maximum hypercube dimension across all present AIR traces, or zero. Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace."
+        },
+        {
+          "name": "is_n_max_greater",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "n_logup",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "num_air_id_lookups",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "idx_flags",
+          "type": "[F; IDX_FLAGS]",
+          "description": "(variable-length) Encoder flag columns (width = idx_encoder.width()) decoding which AIR this row refers to."
+        },
+        {
+          "name": "cached_commits",
+          "type": "[[F; DIGEST_SIZE]; MAX_CACHED]",
+          "description": "(variable-length) Per-proof cached (non-main) commitments observed from the transcript; last slot doubles as the VK / pre-hash commitment."
+        }
+      ],
+      "buses": [
+        {
+          "name": "ProofShapePermutationBus",
+          "direction": "S"
+        },
+        {
+          "name": "ProofShapePermutationBus",
+          "direction": "R"
+        },
+        {
+          "name": "RangeCheckerBus",
+          "direction": "L"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R"
+        },
+        {
+          "name": "AirShapeBus",
+          "direction": "P"
+        },
+        {
+          "name": "AirPresenceBus",
+          "direction": "P"
+        },
+        {
+          "name": "HyperdimBus",
+          "direction": "P"
+        },
+        {
+          "name": "LiftedHeightsBus",
+          "direction": "P"
+        },
+        {
+          "name": "CommitmentsBus",
+          "direction": "P"
+        },
+        {
+          "name": "PowerCheckerBus",
+          "direction": "L"
+        },
+        {
+          "name": "CachedCommitBus",
+          "direction": "S"
+        },
+        {
+          "name": "NumPublicValuesBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrModuleBus",
+          "direction": "S"
+        },
+        {
+          "name": "ExpressionClaimNMaxBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqNsNLogupMaxBus",
+          "direction": "P"
+        },
+        {
+          "name": "NLiftBus",
+          "direction": "S"
+        },
+        {
+          "name": "FractionFolderInputBus",
+          "direction": "S"
+        },
+        {
+          "name": "Eq3bShapeBus",
+          "direction": "P"
+        },
+        {
+          "name": "PreHashBus",
+          "direction": "S",
+          "note": "optional/continuations"
+        },
+        {
+          "name": "StartingTidxBus",
+          "direction": "S"
+        },
+        {
+          "name": "StartingTidxBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "preamble",
+      "struct_name": "ProofShapeCols",
+      "const_generics": [
+        "NUM_LIMBS"
+      ],
+      "notes": "Total width = ProofShapeCols width + idx_encoder.width() + max_cached * DIGEST_SIZE. ProofShapeCols is read via AlignedBorrow; NestedForLoopSubAir is fed inline from local.proof_idx/is_first/is_valid (no embedded Cols substruct). Several columns are reused on the `is_last` summary row: `lifted_height_limbs` serves as `non_zero_marker`, `height` as `limb_to_range_check`, `n_sign_bit` as its inverse, `log_height` as `msb_limb_zero_bits_exp`, and `num_interactions_limbs` as `diff_marker`. The AIR has a second const generic LIMB_BITS that affects constraints but not column shape."
+    },
+    {
+      "id": "proof-shape.PublicValuesAir",
+      "name": "PublicValuesAir",
+      "module": "proof-shape",
+      "source_path": "proof_shape/pvs/air.rs",
+      "role": "Reads public values from the transcript and distributes them to downstream consumers.",
+      "description": "PublicValuesAir iterates over each proof's AIRs and their public values, reading each value from the transcript (via TranscriptBus receive) and publishing it on PublicValuesBus. It coordinates with ProofShapeAir through NumPublicValuesBus to ensure the correct number of values per AIR is distributed. When continuations are enabled, each message is sent twice (double multiplicity).",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "air_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "pv_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_air",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "value",
+          "type": "F",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "NumPublicValuesBus",
+          "direction": "R"
+        },
+        {
+          "name": "PublicValuesBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "preamble",
+      "struct_name": "PublicValuesCols",
+      "const_generics": []
+    },
+    {
+      "id": "proof-shape.RangeCheckerAir",
+      "name": "RangeCheckerAir",
+      "module": "proof-shape",
+      "source_path": "primitives/range/air.rs",
+      "role": "Fixed 8-bit range-check lookup table.",
+      "description": "RangeCheckerAir is a fixed 256-row (2^NUM_BITS with NUM_BITS=8) lookup table. Row i contains the value i and a multiplicity count. Any AIR needing to prove a value lies in [0, 255] performs a lookup on RangeCheckerBus. It is used by ProofShapeAir for limb decomposition, PowerCheckerAir for log range checks, and other comparison operations across the circuit.",
+      "columns": [
+        {
+          "name": "value",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "mult",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "RangeCheckerBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "shared",
+      "struct_name": "RangeCheckerCols",
+      "const_generics": [],
+      "notes": "RangeCheckerAir has const generic NUM_BITS, but it does not affect column shape (only the trace-height range [0, 2^NUM_BITS))."
+    },
+    {
+      "id": "primitives.PowerCheckerAir",
+      "name": "PowerCheckerAir",
+      "module": "primitives",
+      "source_path": "primitives/pow/air.rs",
+      "role": "Fixed lookup table of powers of BASE, serving both a power bus and a secondary range bus.",
+      "description": "PowerCheckerAir is a fixed N-row lookup table parameterized by BASE and N (compile-time constants). Row i contains (log=i, pow=BASE^i). It serves two buses simultaneously: PowerCheckerBus for (log, exp) lookups and RangeCheckerBus for range checks on the log value. In the standard configuration, BASE=2 and N=32 gives a table of powers of two from 2^0 to 2^31.",
+      "columns": [
+        {
+          "name": "log",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "pow",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "mult_pow",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "mult_range",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "PowerCheckerBus",
+          "direction": "P"
+        },
+        {
+          "name": "RangeCheckerBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "shared",
+      "struct_name": "PowerCheckerCols",
+      "const_generics": [],
+      "notes": "PowerCheckerAir has const generics BASE, N but they do not affect column shape."
+    },
+    {
+      "id": "primitives.ExpBitsLenAir",
+      "name": "ExpBitsLenAir",
+      "module": "primitives",
+      "source_path": "primitives/exp_bits_len/air.rs",
+      "role": "BabyBear-specific low-bit exponentiation table also providing an optional right-shift lookup.",
+      "description": "ExpBitsLenAir is a fixed-block lookup table for low-bit exponentiation. Each request occupies 32 rows, one for each step of the canonical 31-bit decomposition plus a terminal row. Only the first row of each 32-row block publishes (base, bit_src, num_bits, result) on ExpBitsLenBus. Optionally, one designated row in the block also publishes a RightShiftBus entry for the same bit_src, used by MerkleVerifyAir to derive current_idx_bit_src.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": "Marks rows that belong to an `ExpBitsLen` request rather than trailing padding."
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": "Marks the first row of a 32-row request block. Only these rows publish on the lookup bus."
+        },
+        {
+          "name": "bit_idx",
+          "type": "T",
+          "description": "Bit position carried by this row. Rows `0..30` decompose bits, row `31` is terminal."
+        },
+        {
+          "name": "base",
+          "type": "T",
+          "description": "`base^(2^bit_idx)`."
+        },
+        {
+          "name": "bit_src",
+          "type": "T",
+          "description": "Remaining suffix of the canonical 31-bit decomposition after shifting by `bit_idx`."
+        },
+        {
+          "name": "num_bits",
+          "type": "T",
+          "description": "Remaining number of low bits that still affect `result`."
+        },
+        {
+          "name": "apply_bit",
+          "type": "T",
+          "description": "Boolean witness for `num_bits != 0`."
+        },
+        {
+          "name": "low_bits_left",
+          "type": "T",
+          "description": "Countdown for the low 27 bits used in the BabyBear `< p` canonicality check."
+        },
+        {
+          "name": "in_low_region",
+          "type": "T",
+          "description": "Boolean witness for `low_bits_left != 0`."
+        },
+        {
+          "name": "result",
+          "type": "T",
+          "description": "Running product for the requested low-bit exponentiation."
+        },
+        {
+          "name": "result_multiplier",
+          "type": "T",
+          "description": "Multiplies `result` by either `1` or `base` on the next transition."
+        },
+        {
+          "name": "bit_src_mod_2",
+          "type": "T",
+          "description": "Current decomposition bit."
+        },
+        {
+          "name": "low_bits_are_zero",
+          "type": "T",
+          "description": "Running flag: all low bits `b0..b26` seen so far are zero."
+        },
+        {
+          "name": "high_bits_all_one",
+          "type": "T",
+          "description": "Running flag: all high bits `b27..b30` seen so far are one."
+        },
+        {
+          "name": "bit_src_original",
+          "type": "T",
+          "description": "Original bit_src value"
+        },
+        {
+          "name": "shift_mult",
+          "type": "T",
+          "description": "Indicator for if this show should send a shift message"
+        }
+      ],
+      "buses": [
+        {
+          "name": "ExpBitsLenBus",
+          "direction": "P"
+        },
+        {
+          "name": "RightShiftBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "shared",
+      "struct_name": "ExpBitsLenCols",
+      "const_generics": [],
+      "notes": "Hard-coded for the BabyBear field (p = 15 * 2^27 + 1) per runtime assertion."
+    },
+    {
+      "id": "gkr.GkrInputAir",
+      "name": "GkrInputAir",
+      "module": "gkr",
+      "source_path": "gkr/input/air.rs",
+      "role": "Entry point to the GKR protocol: receives parameters, does PoW, samples alpha_logup, and dispatches layer work.",
+      "description": "GkrInputAir receives (n_logup, n_max) from ProofShapeAir, optionally performs a proof-of-work check, samples the alpha_logup challenge, observes the root denominator claim q0_claim, and dispatches work to GkrLayerAir and GkrXiSamplerAir. After receiving the input layer claims back, it forwards them to the batch constraint module with the second element having alpha_logup subtracted. It also sends transcript indices for lambda and beta challenges to the folding AIRs.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": "Whether the current row is enabled (i.e. not padding)"
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_logup",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_max",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_n_logup_zero",
+          "type": "T",
+          "description": "Flag indicating whether there are any interactions (n_logup = 0 <=> total_interactions = 0)"
+        },
+        {
+          "name": "is_n_logup_zero_aux",
+          "type": "IsZeroAuxCols<T>",
+          "description": "Auxiliary columns for the IsZeroSubAir check on n_logup."
+        },
+        {
+          "name": "is_n_max_greater_than_n_logup",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": "Transcript index"
+        },
+        {
+          "name": "q0_claim",
+          "type": "[T; D_EF]",
+          "description": "Root denominator claim"
+        },
+        {
+          "name": "alpha_logup",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "input_layer_claim",
+          "type": "[[T; D_EF]; 2]",
+          "description": ""
+        },
+        {
+          "name": "logup_pow_witness",
+          "type": "T",
+          "description": "Grinding"
+        },
+        {
+          "name": "logup_pow_sample",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "inv",
+          "type": "F",
+          "description": "(from IsZeroSubAir (openvm-circuit-primitives))"
+        }
+      ],
+      "buses": [
+        {
+          "name": "GkrModuleBus",
+          "direction": "R"
+        },
+        {
+          "name": "BatchConstraintModuleBus",
+          "direction": "S"
+        },
+        {
+          "name": "ConstraintsFoldingInputBus",
+          "direction": "S"
+        },
+        {
+          "name": "InteractionsFoldingInputBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "direction": "L"
+        },
+        {
+          "name": "GkrLayerInputBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrLayerOutputBus",
+          "direction": "R"
+        },
+        {
+          "name": "GkrXiSamplerBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrXiSamplerBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "gkr",
+      "struct_name": "GkrInputCols",
+      "const_generics": [],
+      "notes": "is_n_logup_zero_aux is `IsZeroAuxCols<T>` from openvm-circuit-primitives; in the current definition it contains a single `inv: T` witness. It is used via IsZeroSubAir.eval inside the AIR."
+    },
+    {
+      "id": "gkr.GkrLayerAir",
+      "name": "GkrLayerAir",
+      "module": "gkr",
+      "source_path": "gkr/layer/air.rs",
+      "role": "Performs the core layer-by-layer GKR reduction.",
+      "description": "Each row represents one GKR layer. At the root layer it verifies the numerator cross term p_cross = p(xi,0)*q(xi,1) + p(xi,1)*q(xi,0) = 0 and the denominator cross term q_cross = q(xi,0)*q(xi,1) matches the sumcheck claim. For each subsequent layer it samples lambda, computes the new sumcheck claim as numer + next.lambda * denom, sends the claim to GkrLayerSumcheckAir, and receives the result back. On the final layer it sends xi = mu on XiRandomnessBus.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": "Whether the current row is enabled (i.e. not padding)"
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_dummy",
+          "type": "T",
+          "description": "An enabled row which is not involved in any interactions but should satisfy air constraints"
+        },
+        {
+          "name": "layer_idx",
+          "type": "T",
+          "description": "GKR layer index"
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": "Transcript index at the start of this layer"
+        },
+        {
+          "name": "lambda",
+          "type": "[T; D_EF]",
+          "description": "Sampled batching challenge"
+        },
+        {
+          "name": "p_xi_0",
+          "type": "[T; D_EF]",
+          "description": "Layer claims"
+        },
+        {
+          "name": "q_xi_0",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "p_xi_1",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "q_xi_1",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "numer_claim",
+          "type": "[T; D_EF]",
+          "description": "(p_xi_1 - p_xi_0) * mu + p_xi_0"
+        },
+        {
+          "name": "denom_claim",
+          "type": "[T; D_EF]",
+          "description": "(q_xi_1 - q_xi_0) * mu + q_xi_0"
+        },
+        {
+          "name": "sumcheck_claim_in",
+          "type": "[T; D_EF]",
+          "description": "Sumcheck claim input"
+        },
+        {
+          "name": "eq_at_r_prime",
+          "type": "[T; D_EF]",
+          "description": "Received from GkrLayerSumcheckAir"
+        },
+        {
+          "name": "mu",
+          "type": "[T; D_EF]",
+          "description": "Corresponds to `mu` - reduction point"
+        }
+      ],
+      "buses": [
+        {
+          "name": "XiRandomnessBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "GkrLayerInputBus",
+          "direction": "R"
+        },
+        {
+          "name": "GkrLayerOutputBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrSumcheckInputBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrSumcheckChallengeBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrSumcheckOutputBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "gkr",
+      "struct_name": "GkrLayerCols",
+      "const_generics": []
+    },
+    {
+      "id": "gkr.GkrLayerSumcheckAir",
+      "name": "GkrLayerSumcheckAir",
+      "module": "gkr",
+      "source_path": "gkr/sumcheck/air.rs",
+      "role": "Per-layer cubic sumcheck with cubic Lagrange interpolation and incremental eq update.",
+      "description": "GkrLayerSumcheckAir runs a cubic sumcheck for each GKR layer. Within each layer it performs layer_idx rounds (one per variable). Each round observes three extension-field evaluations (ev1, ev2, ev3), derives ev0 = claim_in - ev1, performs cubic Lagrange interpolation at the sampled challenge point, and propagates the resulting claim to the next round. It also incrementally updates an equality evaluation eq_at_r_prime that tracks eq(xi, r).",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": "Whether the current row is enabled (i.e. not padding)"
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "layer_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_proof_start",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_dummy",
+          "type": "T",
+          "description": "An enabled row which is not involved in any interactions but should satisfy air constraints"
+        },
+        {
+          "name": "is_last_layer",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "round",
+          "type": "T",
+          "description": "Sumcheck sub-round index within this layer_idx (0..layer_idx-1)"
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": "Transcript index"
+        },
+        {
+          "name": "ev1",
+          "type": "[T; D_EF]",
+          "description": "s(1) in extension field"
+        },
+        {
+          "name": "ev2",
+          "type": "[T; D_EF]",
+          "description": "s(2) in extension field"
+        },
+        {
+          "name": "ev3",
+          "type": "[T; D_EF]",
+          "description": "s(3) in extension field"
+        },
+        {
+          "name": "claim_in",
+          "type": "[T; D_EF]",
+          "description": "The claim coming into this sub-round (either from previous sub-round or initial)"
+        },
+        {
+          "name": "claim_out",
+          "type": "[T; D_EF]",
+          "description": "The claim going out of this sub-round (result of cubic interpolation)"
+        },
+        {
+          "name": "prev_challenge",
+          "type": "[T; D_EF]",
+          "description": "Component `round` of the original point \u03be^{(j-1)} (corresponding to `gkr_r[round]`)"
+        },
+        {
+          "name": "challenge",
+          "type": "[T; D_EF]",
+          "description": "The sampled challenge for this sub-round (corresponds to `ri`)"
+        },
+        {
+          "name": "eq_in",
+          "type": "[T; D_EF]",
+          "description": "The eq value coming into this sub-round"
+        },
+        {
+          "name": "eq_out",
+          "type": "[T; D_EF]",
+          "description": "The eq value going out (updated for this round)"
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "XiRandomnessBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrSumcheckInputBus",
+          "direction": "R"
+        },
+        {
+          "name": "GkrSumcheckOutputBus",
+          "direction": "S"
+        },
+        {
+          "name": "GkrSumcheckChallengeBus",
+          "direction": "R"
+        },
+        {
+          "name": "GkrSumcheckChallengeBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "gkr",
+      "struct_name": "GkrLayerSumcheckCols",
+      "const_generics": []
+    },
+    {
+      "id": "gkr.GkrXiSamplerAir",
+      "name": "GkrXiSamplerAir",
+      "module": "gkr",
+      "source_path": "gkr/xi_sampler/air.rs",
+      "role": "Samples additional xi challenges from the transcript when n_max > n_logup.",
+      "description": "The GKR sumcheck produces challenges for indices 0..n_logup, but the batch constraint system needs challenges for all indices up to n_max + l_skip - 1. GkrXiSamplerAir fills the gap by sampling each additional challenge from the transcript and publishing it on XiRandomnessBus. It receives starting (idx, tidx) from GkrInputAir and returns ending (idx, tidx).",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": "Whether the current row is enabled (i.e. not padding)"
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_challenge",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_dummy",
+          "type": "T",
+          "description": "An enabled row which is not involved in any interactions but should satisfy air constraints"
+        },
+        {
+          "name": "idx",
+          "type": "T",
+          "description": "Challenge index"
+        },
+        {
+          "name": "xi",
+          "type": "[T; D_EF]",
+          "description": "Sampled challenge"
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": "Transcript index"
+        }
+      ],
+      "buses": [
+        {
+          "name": "XiRandomnessBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "sample"
+        },
+        {
+          "name": "GkrXiSamplerBus",
+          "direction": "R"
+        },
+        {
+          "name": "GkrXiSamplerBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "gkr",
+      "struct_name": "GkrXiSamplerCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.SymbolicExpressionAir",
+      "name": "SymbolicExpressionAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "role": "Evaluates the symbolic constraint and interaction DAG of each child AIR at the sumcheck challenge point.",
+      "description": "Each row represents one node in the flattened DAG of a child AIR. Node types include arithmetic ops (Add, Sub, Mul, Neg), variable references (VarMain, VarPreprocessed, VarPublicValue), selector evaluations (SelIsFirst, SelIsLast, SelIsTransition), constants, and interaction components (InteractionMult, InteractionMsgComp, InteractionBusIndex). The AIR is self-referential via SymbolicExpressionBus: parent nodes look up their children's values, and each node publishes its computed value with a fanout count. Supports multiple proofs via horizontally replicated per-proof columns.",
+      "columns": [
+        {
+          "name": "flags",
+          "type": "[T; NUM_FLAGS]",
+          "description": ""
+        },
+        {
+          "name": "air_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "node_or_interaction_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "attrs",
+          "type": "[T; 3]",
+          "description": "Attributes that define this gate. For binary gates such as Add, Mul, etc., this contains the node_idx's. For InteractionMsgComp, it gives (node_idx, idx_in_message). See [[NodeKind]]."
+        },
+        {
+          "name": "fanout",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_constraint",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "constraint_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "slot_state",
+          "type": "T",
+          "description": "0 = proof absent from this slot, 1 = proof present with absent air, 2 = proof present with present air"
+        },
+        {
+          "name": "args",
+          "type": "[T; 2 * D_EF]",
+          "description": "Dynamic arguments. For Add/Mul/Sub, this splits into two extension-field elements. For selectors: args[0..D_EF) = sel_uni witness (base or rotated depending on selector type). args[D_EF..2*D_EF) = eq-prefix witness (prod r_i or pro\u2026"
+        },
+        {
+          "name": "sort_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_abs",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_n_neg",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "SingleMainSymbolicExpressionColumns",
+          "type": "repeated cnt_proofs times",
+          "description": "(variable-length) The common main trace contains cnt_proofs copies of SingleMainSymbolicExpressionColumns (slot_state, args, sort_idx, n_abs, is_n_neg), one per proof slot."
+        },
+        {
+          "name": "inner (Poseidon2SubCols)",
+          "type": "F",
+          "description": "(from DagCommitCols)"
+        }
+      ],
+      "buses": [
+        {
+          "name": "SymbolicExpressionBus",
+          "direction": "P"
+        },
+        {
+          "name": "SymbolicExpressionBus",
+          "direction": "L"
+        },
+        {
+          "name": "ColumnClaimsBus",
+          "direction": "R"
+        },
+        {
+          "name": "HyperdimBus",
+          "direction": "L"
+        },
+        {
+          "name": "AirShapeBus",
+          "direction": "L"
+        },
+        {
+          "name": "AirPresenceBus",
+          "direction": "L"
+        },
+        {
+          "name": "InteractionsFoldingBus",
+          "direction": "S"
+        },
+        {
+          "name": "ConstraintsFoldingBus",
+          "direction": "S"
+        },
+        {
+          "name": "PublicValuesBus",
+          "direction": "R"
+        },
+        {
+          "name": "SelHypercubeBus",
+          "direction": "L"
+        },
+        {
+          "name": "SelUniBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "CachedSymbolicExpressionColumns + SingleMainSymbolicExpressionColumns (+ optional DagCommitCols)",
+      "const_generics": [],
+      "notes": "This AIR has an unusual layout. Two distinct #[derive(AlignedBorrow)] structs are combined: CachedSymbolicExpressionColumns (fixed, placed either in cached trace or mapped from DagCommitCols) and SingleMainSymbolicExpressionColumns (repeated cnt_proofs times in the common main trace). When dag_commit_subair is Some, a DagCommitCols block is prepended to the common main and CachedSymbolicExpressionColumns is derived from it; when None, cached_main holds CachedSymbolicExpressionColumns. The 'columns' list above concatenates Cached fields followed by a single SingleMain instance (per-proof slot)."
+    },
+    {
+      "id": "batch-constraint.FractionsFolderAir",
+      "name": "FractionsFolderAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/fractions_folder/air.rs",
+      "role": "Folds per-AIR GKR numerator and denominator claims into a single polynomial hash via Horner with mu.",
+      "description": "FractionsFolderAir iterates over AIRs in reverse order (highest air_idx first). For each AIR it reads the sum claims (sum_claim_p, sum_claim_q) from the transcript. The polynomial hash accumulates as h' = p + mu * (q + mu * h). At the end it sends the hash as the initial sumcheck claim (round = -1) to UnivariateSumcheckAir and forwards GKR input layer claims for cross-checking.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "air_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sum_claim_p",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "sum_claim_q",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "cur_p_sum",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "cur_q_sum",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "mu",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "cur_hash",
+          "type": "[T; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "FractionFolderInputBus",
+          "direction": "R"
+        },
+        {
+          "name": "UnivariateSumcheckInputBus",
+          "direction": "S"
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "direction": "S"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "P"
+        },
+        {
+          "name": "BatchConstraintModuleBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "FractionsFolderCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.UnivariateSumcheckAir",
+      "name": "UnivariateSumcheckAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/sumcheck/univariate/air.rs",
+      "role": "Front-loaded univariate sumcheck round handling the l_skip coset structure.",
+      "description": "UnivariateSumcheckAir processes a univariate polynomial of degree univariate_deg by iterating coefficients from highest to lowest degree. It computes (a) the sum of the polynomial at roots of unity of order 2^l_skip using periodic selector columns, and (b) the evaluation at a sampled point r via Horner's method. The sum at roots must match the initial sumcheck claim, and the evaluation at r becomes the new claim.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coeff_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "omega_skip_power",
+          "type": "T",
+          "description": "Powers of generator of order 2^{l_skip} to get periodic selector columns"
+        },
+        {
+          "name": "is_omega_skip_power_equal_to_one",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_omega_skip_power_equal_to_one_aux",
+          "type": "IsEqualAuxCols<T>",
+          "description": ""
+        },
+        {
+          "name": "coeff",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "sum_at_roots",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "value_at_r",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "inv",
+          "type": "F",
+          "description": "(from IsEqualAuxCols)"
+        }
+      ],
+      "buses": [
+        {
+          "name": "UnivariateSumcheckInputBus",
+          "direction": "R"
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "direction": "R"
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "direction": "S"
+        },
+        {
+          "name": "StackingModuleBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "direction": "S"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "UnivariateSumcheckCols",
+      "const_generics": [],
+      "notes": "IsEqualAuxCols has a single field `inv` of type T."
+    },
+    {
+      "id": "batch-constraint.MultilinearSumcheckAir",
+      "name": "MultilinearSumcheckAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/sumcheck/multilinear/air.rs",
+      "role": "Multilinear sumcheck rounds with Lagrange coefficients built from prefix/suffix products.",
+      "description": "MultilinearSumcheckAir performs n_max rounds of multilinear sumcheck reduction. Each round receives the current claim, reads s_deg+1 evaluations (where s_deg = max_constraint_degree + 1), computes Lagrange interpolation at a sampled point r, and propagates the result as the next round's claim. The Lagrange interpolation uses incrementally computed prefix/suffix products and factorial-based denominators.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "round_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_proof_start",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_eval",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_dummy",
+          "type": "T",
+          "description": "A valid row which is not involved in any interactions but should satisfy air constraints"
+        },
+        {
+          "name": "eval_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "cur_sum",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eval",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prefix_product",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "suffix_product",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "denom_inv",
+          "type": "T",
+          "description": "1 / i!(d - i)!"
+        },
+        {
+          "name": "lagrange_coeff",
+          "type": "[T; D_EF]",
+          "description": "Lagrange coefficients for the interpolated polynomial prefix_product * suffix_product * denom_inv"
+        },
+        {
+          "name": "r",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "SumcheckClaimBus",
+          "direction": "R"
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "direction": "S"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "P"
+        },
+        {
+          "name": "StackingModuleBus",
+          "direction": "R"
+        },
+        {
+          "name": "StackingModuleBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "MultilinearSumcheckCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.EqNsAir",
+      "name": "EqNsAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/eq_airs/eq_ns/air.rs",
+      "role": "Multivariate eq polynomial evaluation from xi and r randomness, covering dimensions n >= 0.",
+      "description": "EqNsAir extends the univariate eq base cases received from the univariate subgroup through n_max rounds. On each row n it multiplies both eq and eq_sharp by the shared factor 1 - (xi_n + r_n - 2*xi_n*r_n). The accumulated values combined with a running product of r values are provided as lookups (EqNOuterBus) to the constraint evaluation AIRs, and hypercube selector evaluations are provided on SelHypercubeBus.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_logup",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_max",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_less_than_n_logup",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_less_than_n_max",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_transition_and_n_less_than_n_max",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "xi_n",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r_n",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r_product",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r_pref_product",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "one_minus_r_pref_prod",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_sharp",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "num_traces",
+          "type": "T",
+          "description": "The number of traces whose `n_lift` equals `local.n`. Note that it cannot be derived from `xi_mult` because `xi_mult` counts interactions, not AIRs with interactions."
+        },
+        {
+          "name": "xi_mult",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sel_first_count",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sel_last_and_trans_count",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "EqZeroNBus",
+          "direction": "R"
+        },
+        {
+          "name": "XiRandomnessBus",
+          "direction": "R"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "L"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "P"
+        },
+        {
+          "name": "SelHypercubeBus",
+          "direction": "P"
+        },
+        {
+          "name": "EqNOuterBus",
+          "direction": "P"
+        },
+        {
+          "name": "EqNsNLogupMaxBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "EqNsColumns",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.Eq3bAir",
+      "name": "Eq3bAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/eq_airs/eq_3b/air.rs",
+      "role": "Computes eq(xi, stacked_idx >> l_skip) for each interaction, for use by interaction folding.",
+      "description": "Eq3bAir iterates bit-by-bit through the shifted stacked index, multiplying a running eq product by xi_n or (1 - xi_n) depending on the corresponding bit, starting at the interaction's lift height n_lift. Bits below n_lift are constrained to zero. The final eq value is sent per-interaction on Eq3bBus for InteractionsFoldingAir.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sort_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "interaction_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_lift",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_logup",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "two_to_the_n_lift",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "hypercube_volume",
+          "type": "T",
+          "description": "2^n"
+        },
+        {
+          "name": "n_at_least_n_lift",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "has_no_interactions",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_air",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_interaction",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "idx",
+          "type": "T",
+          "description": "stacked_idx >> l_skip, restored bit by bit"
+        },
+        {
+          "name": "running_idx",
+          "type": "T",
+          "description": "the current stacked_idx >> l_skip"
+        },
+        {
+          "name": "nth_bit",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "xi",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq",
+          "type": "[T; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "Eq3bBus",
+          "direction": "S"
+        },
+        {
+          "name": "Eq3bShapeBus",
+          "direction": "L"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "Eq3bColumns",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.EqSharpUniAir",
+      "name": "EqSharpUniAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/eq_airs/eq_sharp_uni/air.rs",
+      "role": "Butterfly expansion of the sharp univariate eq polynomial coefficients using roots of unity.",
+      "description": "EqSharpUniAir computes the coefficient vector of the sharp univariate equality polynomial via a butterfly-style expansion from xi challenges. It uses a 3-level loop (proof x round x iteration) where each round corresponds to a variable index xi_idx from l_skip-1 down to 0. Within each round, each partial product is split into two children using (1 - xi +/- xi * root_pow), doubling the number of terms. After l_skip rounds the AIR emits 2^l_skip coefficient terms to EqSharpUniReceiverAir.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "root",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "root_pow",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "root_half_order",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "xi_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "xi",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "product_before",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "iter_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_iter",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "XiRandomnessBus",
+          "direction": "R"
+        },
+        {
+          "name": "EqSharpUniBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqSharpUniBus",
+          "direction": "R"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "L"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "EqSharpUniCols",
+      "const_generics": [],
+      "notes": "This file also contains EqSharpUniReceiverCols for the EqSharpUniReceiverAir."
+    },
+    {
+      "id": "batch-constraint.EqSharpUniReceiverAir",
+      "name": "EqSharpUniReceiverAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/eq_airs/eq_sharp_uni/air.rs",
+      "role": "Receives EqSharpUni coefficient terms and performs Horner evaluation at r_0.",
+      "description": "EqSharpUniReceiverAir collects the 2^l_skip coefficient terms from EqSharpUniAir and performs a Horner-scheme evaluation at the sumcheck challenge r_0. The resulting polynomial evaluation, divided by 2^l_skip, is sent to EqZeroNBus as the sharp variant (is_sharp=1) of the base equality evaluation.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coeff",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "cur_sum",
+          "type": "[T; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "L"
+        },
+        {
+          "name": "EqSharpUniBus",
+          "direction": "R"
+        },
+        {
+          "name": "EqZeroNBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "EqSharpUniReceiverCols",
+      "const_generics": [],
+      "notes": "Defined in the same file as EqSharpUniCols/EqSharpUniAir."
+    },
+    {
+      "id": "batch-constraint.EqUniAir",
+      "name": "EqUniAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/eq_airs/eq_uni/air.rs",
+      "role": "Univariate eq polynomial evaluation eq_uni(r_0, xi_0) via iterative squaring.",
+      "description": "EqUniAir computes the univariate equality polynomial eq_uni(r_0, xi_0) by iteratively squaring both the sumcheck challenge r_0 and the randomness xi_0 over l_skip rounds. The result divided by 2^l_skip is sent to EqZeroNBus where it serves as the n=0 base case for the multivariate eq computation in EqNsAir.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "x",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "y",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "res",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "idx",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "L"
+        },
+        {
+          "name": "EqZeroNBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "EqUniCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.ExpressionClaimAir",
+      "name": "ExpressionClaimAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/expression_claim/air.rs",
+      "role": "Folds interaction and constraint expression claims with mu and verifies equality with the final sumcheck claim.",
+      "description": "For each proof, ExpressionClaimAir receives 2t interaction claims (numerator and denominator for each of t AIRs) and t constraint claims from the expression evaluation AIRs. Claims are folded in reverse order with the batching randomness mu via cur_sum = value * multiplier + next.cur_sum * mu. The resulting value must match the final sumcheck claim.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": "First row of a proof. Marks proof boundaries."
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "group_idx",
+          "type": "T",
+          "description": "0 = interaction group, 1 = constraint group. Monotone within a proof."
+        },
+        {
+          "name": "is_first_in_group",
+          "type": "T",
+          "description": "Marks the first row of each group (set at proof start and interaction\u2192constraint boundary)."
+        },
+        {
+          "name": "idx",
+          "type": "T",
+          "description": "Claim index within its group. For interactions: `2 * trace_idx + idx_parity` (0..2t). For constraints: `trace_idx` (0..t)."
+        },
+        {
+          "name": "idx_parity",
+          "type": "T",
+          "description": "0 = numerator, 1 = denominator. Always 0 on constraint rows. Alternates on interaction rows."
+        },
+        {
+          "name": "trace_idx",
+          "type": "T",
+          "description": "Sorted trace index within the group. Monotone non-decreasing; resets at group boundaries."
+        },
+        {
+          "name": "value",
+          "type": "[T; D_EF]",
+          "description": "The received evaluation claim. Note that for interactions, this is without norm_factor and eq_sharp_ns. These are interactions_evals (without norm_factor and eq_sharp_ns) and constraint_evals in the rust verifier."
+        },
+        {
+          "name": "eq_sharp_ns",
+          "type": "[T; D_EF]",
+          "description": "Receive from eq_ns AIR"
+        },
+        {
+          "name": "cur_sum",
+          "type": "[T; D_EF]",
+          "description": "For folding with mu."
+        },
+        {
+          "name": "mu",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "multiplier",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "n_abs",
+          "type": "T",
+          "description": "Need to know n as if n<0, we need to multiply some norm_factor."
+        },
+        {
+          "name": "n_abs_pow",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_sign",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "num_multilinear_sumcheck_rounds",
+          "type": "T",
+          "description": "The round idx for final sumcheck claim."
+        }
+      ],
+      "buses": [
+        {
+          "name": "ExpressionClaimNMaxBus",
+          "direction": "R"
+        },
+        {
+          "name": "ExpressionClaimBus",
+          "direction": "R"
+        },
+        {
+          "name": "BatchConstraintConductorBus",
+          "direction": "L"
+        },
+        {
+          "name": "SumcheckClaimBus",
+          "direction": "R"
+        },
+        {
+          "name": "EqNOuterBus",
+          "direction": "L"
+        },
+        {
+          "name": "PowerCheckerBus",
+          "direction": "L"
+        },
+        {
+          "name": "HyperdimBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "ExpressionClaimCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.InteractionsFoldingAir",
+      "name": "InteractionsFoldingAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/expr_eval/interactions_folding/air.rs",
+      "role": "Folds interaction evaluations with beta via Horner; produces per-AIR numerator and denominator claims.",
+      "description": "InteractionsFoldingAir receives interaction multiplicities, message components, and bus indices from SymbolicExpressionAir. For each interaction it performs beta-folding via Horner (cur_sum = value + beta * cur_sum). After folding all interactions for an AIR it sends the final numerator (idx=sort_idx*2) and denominator (idx=sort_idx*2+1) claims on ExpressionClaimBus.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "beta_tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "air_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sort_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "interaction_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "has_interactions",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_air",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_message",
+          "type": "T",
+          "description": "It's true for the num row, which doesn't need to be beta folded. (aka 'is_mult')"
+        },
+        {
+          "name": "is_second_in_message",
+          "type": "T",
+          "description": "the second in message is the first denom, and it's cur_sum is the folded denom"
+        },
+        {
+          "name": "is_bus_index",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "idx_in_message",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "value",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "cur_sum",
+          "type": "[T; D_EF]",
+          "description": "Current sum for doing beta folding. This is the value for one interaction. When local.is_first_in_message, next.cur_sum should be the folded denom. (because local row is for the num row, which doesn't need to be beta folded) It doesn't multiply with eq_3b yet."
+        },
+        {
+          "name": "beta",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_3b",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "final_acc_num",
+          "type": "[T; D_EF]",
+          "description": "The summed num and denom for all interactions. It's summed over all the interactions in the AIR: cur_sum * eq_3b when is_first_in_message"
+        },
+        {
+          "name": "final_acc_denom",
+          "type": "[T; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "InteractionsFoldingBus",
+          "direction": "R"
+        },
+        {
+          "name": "InteractionsFoldingInputBus",
+          "direction": "R"
+        },
+        {
+          "name": "AirShapeBus",
+          "direction": "L"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "sample"
+        },
+        {
+          "name": "ExpressionClaimBus",
+          "direction": "S"
+        },
+        {
+          "name": "Eq3bBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "InteractionsFoldingCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.ConstraintsFoldingAir",
+      "name": "ConstraintsFoldingAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/expr_eval/constraints_folding/air.rs",
+      "role": "Folds per-AIR constraint evaluations with lambda; sends normalized claim on ExpressionClaimBus.",
+      "description": "For each AIR, ConstraintsFoldingAir receives constraint values from SymbolicExpressionAir and folds them via Horner: cur_sum = value + lambda * next.cur_sum. The final folded value is multiplied by eq_n (a normalization factor looked up from EqNOuterBus) and sent on ExpressionClaimBus as a constraint claim (is_interaction=0).",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "air_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sort_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "constraint_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "n_lift",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "lambda_tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "lambda",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "value",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "cur_sum",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_n",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_air",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "ConstraintsFoldingBus",
+          "direction": "R"
+        },
+        {
+          "name": "ConstraintsFoldingInputBus",
+          "direction": "R"
+        },
+        {
+          "name": "AirShapeBus",
+          "direction": "L"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "sample"
+        },
+        {
+          "name": "ExpressionClaimBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqNOuterBus",
+          "direction": "L"
+        },
+        {
+          "name": "NLiftBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "ConstraintsFoldingCols",
+      "const_generics": []
+    },
+    {
+      "id": "batch-constraint.EqNegAir",
+      "name": "EqNegAir",
+      "module": "batch-constraint",
+      "source_path": "batch_constraint/eq_airs/eq_neg/air.rs",
+      "role": "Negative hypercube eq polynomial evaluation for AIRs with log_height < l_skip.",
+      "description": "EqNegAir handles equality polynomial evaluation for AIRs whose log-height is strictly less than l_skip, corresponding to negative hypercube dimensions. It runs l_skip sections indexed by neg_hypercube = 0..l_skip-1, where each section performs iterative squaring. The AIR computes running products prod(u^{2^i} + r'^{2^i}) and prod(u^{2^i} + (r*omega)'^{2^i}) to derive eq_n(u, r) and k_rot_n(u, r) for negative n, and also provides univariate selector values via SelUniBus.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "neg_hypercube",
+          "type": "F",
+          "description": "Negative hypercube of the current section + section row index"
+        },
+        {
+          "name": "neg_hypercube_nz_inv",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "row_index",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first_hypercube",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last_hypercube",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "u_pow",
+          "type": "[F; D_EF]",
+          "description": "Value of u^{2^row}, r'^{2^row}, and (r' * omega)^{2^row}, where r' = r^{2^neg_hypercube}"
+        },
+        {
+          "name": "r_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r_omega_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prod_u_r",
+          "type": "[F; D_EF]",
+          "description": "Running product of (u^{2^i} + r'^{2^i}) from i to row_index"
+        },
+        {
+          "name": "prod_u_r_omega",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prod_1_r",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prod_1_r_omega",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "sel_first_count",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "sel_last_trans_count",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "one_half_pow",
+          "type": "F",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "EqNegResultBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqNegBaseRandBus",
+          "direction": "R"
+        },
+        {
+          "name": "EqNegInternalBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqNegInternalBus",
+          "direction": "R"
+        },
+        {
+          "name": "SelUniBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "batch-constraint",
+      "struct_name": "EqNegCols",
+      "const_generics": []
+    },
+    {
+      "id": "stacking.OpeningClaimsAir",
+      "name": "OpeningClaimsAir",
+      "module": "stacking",
+      "source_path": "stacking/opening/air.rs",
+      "role": "Processes per-column opening claims and produces the stacking s_0 RLC and per-column coefficients.",
+      "description": "OpeningClaimsAir processes all column opening claims from the batch constraint module, ordering them by (sort_idx, part_idx, col_idx). For each claim it computes an RLC s_0 = sum(lambda_pow^i * (col_claim_i + lambda * rot_claim_i)) and a stacking coefficient lambda_pow * eq_bits * (eq_in + lambda * k_rot_in). The s_0 sum is sent to UnivariateRoundAir and per-stacked-column coefficients are sent to StackingClaimsAir.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "sort_idx",
+          "type": "F",
+          "description": "Received from batch constraints module"
+        },
+        {
+          "name": "part_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "col_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "col_claim",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "rot_claim",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "need_rot",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_main",
+          "type": "F",
+          "description": "Used to constrain the order of received messages"
+        },
+        {
+          "name": "is_transition_main",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "hypercube_dim",
+          "type": "F",
+          "description": "From proof shape (n, n_lift + l_skip, 2^{n_lift + l_skip}, 2^{- (n_lift + l_skip)})"
+        },
+        {
+          "name": "log_lifted_height",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "lifted_height",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "lifted_height_inv",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "F",
+          "description": "Sampled transcript values"
+        },
+        {
+          "name": "lambda",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "lambda_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "commit_idx",
+          "type": "F",
+          "description": "Location in stacked matrices"
+        },
+        {
+          "name": "stacked_col_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "row_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last_for_claim",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "eq_in",
+          "type": "[F; D_EF]",
+          "description": "Lookups to compute claim coefficient"
+        },
+        {
+          "name": "k_rot_in",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_bits",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "k_rot_in_when_needed",
+          "type": "[F; D_EF]",
+          "description": "This is either `k_rot_in` or zero, depending on `need_rot`"
+        },
+        {
+          "name": "lambda_pow_eq_bits",
+          "type": "[F; D_EF]",
+          "description": "Intermediate values to compute claim coefficient"
+        },
+        {
+          "name": "stacking_claim_coefficient",
+          "type": "[F; D_EF]",
+          "description": "Stacking claim coefficient to be sent"
+        },
+        {
+          "name": "s_0",
+          "type": "[F; D_EF]",
+          "description": "RLC of column claims * coefficient using lambda"
+        }
+      ],
+      "buses": [
+        {
+          "name": "LiftedHeightsBus",
+          "direction": "L"
+        },
+        {
+          "name": "StackingModuleBus",
+          "direction": "R"
+        },
+        {
+          "name": "ColumnClaimsBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R"
+        },
+        {
+          "name": "AirShapeBus",
+          "direction": "L"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "S"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "R"
+        },
+        {
+          "name": "ClaimCoefficientsBus",
+          "direction": "S"
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqKernelLookupBus",
+          "direction": "L"
+        },
+        {
+          "name": "EqBitsLookupBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "stacking",
+      "struct_name": "OpeningClaimsCols",
+      "const_generics": [],
+      "notes": "Comments on groups of fields are line `//` comments, not `///` doc comments; copied to the first field of each group."
+    },
+    {
+      "id": "stacking.UnivariateRoundAir",
+      "name": "UnivariateRoundAir",
+      "module": "stacking",
+      "source_path": "stacking/univariate/air.rs",
+      "role": "Verifies the univariate round of stacking: sum over D equals RLC; evaluates s_0(u_0).",
+      "description": "UnivariateRoundAir reads the polynomial s_0 from the transcript as 2*|D|-1 coefficients, checks that the sum s_0(z) over z in D equals the RLC from OpeningClaimsAir using the identity sum = |D| * (a_0 + a_{|D|}), and computes s_0(u_0) via Horner's method. The result is forwarded to SumcheckRoundsAir.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "F",
+          "description": "Sampled transcript values"
+        },
+        {
+          "name": "u_0",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "u_0_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "coeff",
+          "type": "[F; D_EF]",
+          "description": "Coefficients of univariate round (s_0) polynomial"
+        },
+        {
+          "name": "coeff_idx",
+          "type": "F",
+          "description": "Columns to compute s_0(z) sum over all z in D"
+        },
+        {
+          "name": "coeff_is_d",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "s_0_sum_over_d",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "poly_rand_eval",
+          "type": "[F; D_EF]",
+          "description": "Evaluation of s_0 polynomial at u_0"
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "direction": "R"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "R"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "S"
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "direction": "R"
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqRandValuesLookupBus",
+          "direction": "P"
+        },
+        {
+          "name": "EqKernelLookupBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "stacking",
+      "struct_name": "UnivariateRoundCols",
+      "const_generics": [],
+      "notes": "Field-group comments are `//` line comments; attached to the first field of each group."
+    },
+    {
+      "id": "stacking.SumcheckRoundsAir",
+      "name": "SumcheckRoundsAir",
+      "module": "stacking",
+      "source_path": "stacking/sumcheck/air.rs",
+      "role": "Executes n_stack rounds of multilinear sumcheck with quadratic interpolation and maintains eq_cube / rot_cube accumulators.",
+      "description": "Each row corresponds to one stacking sumcheck round. The prover provides evaluations s_eval_at_1 and s_eval_at_2. The AIR derives s_eval_at_0 from the previous round's claim, performs quadratic interpolation at the verifier's challenge u_round, and maintains the eq_cube, r_not_u_prod, and rot_cube_minus_prod accumulators needed for the equality kernel lookups. It also sends (idx=round+l_skip-1, u_round) to the WHIR module.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "round",
+          "type": "F",
+          "description": "Sumcheck round this row represents"
+        },
+        {
+          "name": "tidx",
+          "type": "F",
+          "description": "Starting tidx for this sumcheck round"
+        },
+        {
+          "name": "s_eval_at_0",
+          "type": "[F; D_EF]",
+          "description": "Evaluations of polynomial s_round"
+        },
+        {
+          "name": "s_eval_at_1",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "s_eval_at_2",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "s_eval_at_u",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "u_round",
+          "type": "[F; D_EF]",
+          "description": "Values of sampled u and r for this round"
+        },
+        {
+          "name": "r_round",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "has_r",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "u_mult",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "eq_prism_base",
+          "type": "[F; D_EF]",
+          "description": "Values of eq(u_0, r_0), eq(u_0, r_0 * omega), and eq(u_0, 1) * eq(r_0 * omega, 1)"
+        },
+        {
+          "name": "eq_cube_base",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "rot_cube_base",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_cube",
+          "type": "[F; D_EF]",
+          "description": "Value of eq_cube"
+        },
+        {
+          "name": "r_not_u_prod",
+          "type": "[F; D_EF]",
+          "description": "Intermediate values to compute rot_cube recursively"
+        },
+        {
+          "name": "rot_cube_minus_prod",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_rot_mult",
+          "type": "F",
+          "description": "Multiplicity of eq_round(u, r) lookup"
+        }
+      ],
+      "buses": [
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirOpeningPointBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "R"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "S"
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "direction": "R"
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqBaseBus",
+          "direction": "R"
+        },
+        {
+          "name": "EqRandValuesLookupBus",
+          "direction": "P"
+        },
+        {
+          "name": "EqKernelLookupBus",
+          "direction": "P"
+        }
+      ],
+      "verifier_phase": "stacking",
+      "struct_name": "SumcheckRoundsCols",
+      "const_generics": [],
+      "notes": "Field-group comments are `//` line comments; attached to the first field of each group."
+    },
+    {
+      "id": "stacking.StackingClaimsAir",
+      "name": "StackingClaimsAir",
+      "module": "stacking",
+      "source_path": "stacking/claims/air.rs",
+      "role": "Finalizes stacking claims, verifies inner product with coefficients, and bridges to the WHIR module.",
+      "description": "StackingClaimsAir collects all stacking claims (one per stacked column), receives their corresponding coefficients from OpeningClaimsAir, and verifies that sum(stacking_claim_i * coefficient_i) = s_{n_stack}(u_{n_stack}). It then computes an RLC of the stacking claims using a batching challenge mu and sends the resulting WHIR claim to the WHIR module. It also sends mu to InitialOpenedValuesAir and provides the stacking indices.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": "Row has a real stacking claim (bus interactions fire)."
+        },
+        {
+          "name": "is_padding",
+          "type": "F",
+          "description": "Row is padding within a proof block (no bus interactions)."
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": "Last row of the proof block (valid + padding). Triggers proof_idx transition and the w_stack check."
+        },
+        {
+          "name": "commit_idx",
+          "type": "F",
+          "description": "Correspond to stacking_claim"
+        },
+        {
+          "name": "stacked_col_idx",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "F",
+          "description": "Sampled transcript values"
+        },
+        {
+          "name": "mu",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "mu_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "mu_pow_witness",
+          "type": "F",
+          "description": "\u03bc PoW witness and sample for proof-of-work check"
+        },
+        {
+          "name": "mu_pow_sample",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "global_col_idx",
+          "type": "F",
+          "description": "Global column index (0-indexed, increments by 1 per row within a proof block, covering both valid and padding rows)."
+        },
+        {
+          "name": "stacking_claim",
+          "type": "[F; D_EF]",
+          "description": "Stacking claim and batched coefficient computed in OpeningClaimsCols"
+        },
+        {
+          "name": "claim_coefficient",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "final_s_eval",
+          "type": "[F; D_EF]",
+          "description": "Sum of each stacking_claim * claim_coefficient"
+        },
+        {
+          "name": "whir_claim",
+          "type": "[F; D_EF]",
+          "description": "RLC of stacking claims using mu"
+        }
+      ],
+      "buses": [
+        {
+          "name": "StackingIndicesBus",
+          "direction": "P"
+        },
+        {
+          "name": "WhirModuleBus",
+          "direction": "S"
+        },
+        {
+          "name": "WhirMuBus",
+          "direction": "S"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R"
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "direction": "L"
+        },
+        {
+          "name": "StackingModuleTidxBus",
+          "direction": "R"
+        },
+        {
+          "name": "ClaimCoefficientsBus",
+          "direction": "R"
+        },
+        {
+          "name": "SumcheckClaimsBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "stacking",
+      "struct_name": "StackingClaimsCols",
+      "const_generics": [],
+      "notes": "Mix of `///` doc comments and `//` line comments preserved; grouped line comments attached to first field of group."
+    },
+    {
+      "id": "stacking.EqBaseAir",
+      "name": "EqBaseAir",
+      "module": "stacking",
+      "source_path": "stacking/eq_base/air.rs",
+      "role": "Computes base equality kernels eq_0(u,r), eq_0(u, r*omega) via iterative squaring; bridges EqNeg results.",
+      "description": "EqBaseAir computes the fundamental equality polynomial evaluations eq_0(u, r) and eq_0(u, r*omega) over the first l_skip variables via iterative squaring. Starting from challenges u_0 and r_0, each row squares the running values and accumulates products of (u^{2^i} + r^{2^i}). It sends base values to SumcheckRoundsAir, sends (u, r^2) to EqNegAir and receives back negative-dimension results, and provides combined equality kernel lookups via EqKernelLookupBus for both positive and negative dimensions.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_last",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "row_idx",
+          "type": "F",
+          "description": "Row index for the given proof, in {0, 1, ..., l_skip}"
+        },
+        {
+          "name": "u_pow",
+          "type": "[F; D_EF]",
+          "description": "Value of u^{2^row}, r^{2^row}, and (r * omega)^{2^row}"
+        },
+        {
+          "name": "r_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "r_omega_pow",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prod_u_r",
+          "type": "[F; D_EF]",
+          "description": "Running product of (u^{2^i} + r^{2^i}) from i to row"
+        },
+        {
+          "name": "prod_u_r_omega",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prod_u_1",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "prod_r_omega_1",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "mult",
+          "type": "F",
+          "description": "Lookup multiplicity for eq_0(u, r) and k_rot_0(u, r)"
+        },
+        {
+          "name": "u_pow_rev",
+          "type": "[F; D_EF]",
+          "description": "Value of u^{2^{l_skip + n}}, where we set n = -row_idx"
+        },
+        {
+          "name": "eq_neg",
+          "type": "[F; D_EF]",
+          "description": "Values of eq_n(u, r) and k_rot_n(u, r) for each negative n"
+        },
+        {
+          "name": "k_rot_neg",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "in_prod",
+          "type": "[F; D_EF]",
+          "description": "Value of in_n(u) for n in {-1, -2, ..., -l_skip}, i.e. the running product of each (u_pow_rev + 1)"
+        },
+        {
+          "name": "mult_neg",
+          "type": "F",
+          "description": "Lookup multiplicity for eq_n(u, r) and k_rot_n(u, r)"
+        }
+      ],
+      "buses": [
+        {
+          "name": "ConstraintSumcheckRandomnessBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirOpeningPointBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqBaseBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqRandValuesLookupBus",
+          "direction": "L"
+        },
+        {
+          "name": "EqKernelLookupBus",
+          "direction": "P"
+        },
+        {
+          "name": "EqNegBaseRandBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqNegResultBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "stacking",
+      "struct_name": "EqBaseCols",
+      "const_generics": [],
+      "notes": "Group comments are `//` line comments; attached to first field of group."
+    },
+    {
+      "id": "stacking.EqBitsAir",
+      "name": "EqBitsAir",
+      "module": "stacking",
+      "source_path": "stacking/eq_bits/air.rs",
+      "role": "Binary-tree decomposition computing eq_bits(u, b) for stacked slices.",
+      "description": "EqBitsAir computes eq_bits(u, b) for each unique (b_value, num_bits) pair encountered across all stacked slices. It uses a tree structure: the root node has b_value=0, num_bits=0, eval=1. Each child row derives its evaluation from its parent via eval = sub_eval * (1 + 2*b_lsb*u - b_lsb - u). Internal nodes propagate their results through EqBitsInternalBus; leaf nodes provide their evaluations to OpeningClaimsAir through EqBitsLookupBus.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "F",
+          "description": "Proof index columns for continuations"
+        },
+        {
+          "name": "is_valid",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "is_first",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "internal_child_flag",
+          "type": "F",
+          "description": "Multiplicities of internal and external lookups"
+        },
+        {
+          "name": "external_mult",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "sub_b_value",
+          "type": "F",
+          "description": "Parent row's b_value and evaluation"
+        },
+        {
+          "name": "sub_eval",
+          "type": "[F; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "b_lsb",
+          "type": "F",
+          "description": "This row's b_value's LSB, number of bits, and u_{n_stack - num_bits + 1}"
+        },
+        {
+          "name": "num_bits",
+          "type": "F",
+          "description": ""
+        },
+        {
+          "name": "u_val",
+          "type": "[F; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "EqBitsInternalBus",
+          "direction": "R"
+        },
+        {
+          "name": "EqBitsInternalBus",
+          "direction": "S"
+        },
+        {
+          "name": "EqBitsLookupBus",
+          "direction": "P"
+        },
+        {
+          "name": "EqRandValuesLookupBus",
+          "direction": "L"
+        }
+      ],
+      "verifier_phase": "stacking",
+      "struct_name": "EqBitsCols",
+      "const_generics": [],
+      "notes": "Group comments are `//` line comments; attached to first field of group."
+    },
+    {
+      "id": "whir.WhirRoundAir",
+      "name": "WhirRoundAir",
+      "module": "whir",
+      "source_path": "whir/whir_round/air.rs",
+      "role": "Top-level WHIR round controller: commitment observation, OOD sampling, sumcheck dispatch, and claim propagation.",
+      "description": "WhirRoundAir has one row per WHIR round per proof. Each row manages a complete round: receives the round's starting claim, initiates sumcheck via WhirSumcheckBus, commits to the next codeword, samples the OOD point z0, observes OOD evaluation y0, generates queries, samples gamma, and computes the next round's claim. On the final round it dispatches to FinalPolyMleEvalAir and FinalPolyQueryEvalAir. It explicitly tracks omega (domain generator) as a column, initialized on the first round and squared each subsequent row.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "whir_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "num_queries",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "omega",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "z0",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "y0",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "commit",
+          "type": "[T; DIGEST_SIZE]",
+          "description": ""
+        },
+        {
+          "name": "final_poly_mle_eval",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "query_pow_witness",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_pow_sample",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "gamma",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "claim",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "next_claim",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "post_sumcheck_claim",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "whir_round_enc",
+          "type": "[T; ENC_WIDTH]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirModuleBus",
+          "direction": "R"
+        },
+        {
+          "name": "CommitmentsBus",
+          "direction": "P"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "direction": "L"
+        },
+        {
+          "name": "WhirSumcheckBus",
+          "direction": "S"
+        },
+        {
+          "name": "VerifyQueriesBus",
+          "direction": "S"
+        },
+        {
+          "name": "FinalPolyMleEvalBus",
+          "direction": "S"
+        },
+        {
+          "name": "FinalPolyQueryEvalBus",
+          "direction": "S"
+        },
+        {
+          "name": "WhirQueryBus",
+          "direction": "S"
+        },
+        {
+          "name": "WhirGammaBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "WhirRoundCols",
+      "const_generics": [
+        "ENC_WIDTH"
+      ],
+      "notes": "Struct uses generic T (not F); parameterized on const generic ENC_WIDTH for encoder width. No `///` doc comments on fields."
+    },
+    {
+      "id": "whir.SumcheckAir",
+      "name": "SumcheckAir",
+      "module": "whir",
+      "source_path": "whir/sumcheck/air.rs",
+      "role": "Inner WHIR sumcheck with quadratic interpolation and Mobius-adjusted eq_partial accumulation.",
+      "description": "SumcheckAir executes the inner sumcheck within each WHIR round. Each WHIR round contains k_whir sub-rounds; each row performs quadratic interpolation at the sampled challenge alpha and produces the post-round claim. The AIR accumulates the Mobius-adjusted equality kernel eq_partial = product(mobius_eq_1(u_i, alpha_i)) across all sub-rounds, which is sent to FinalPolyMleEvalAir on the last sub-round per proof.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "whir_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "subidx",
+          "type": "T",
+          "description": "A counter that goes from 0 to k_whir - 1."
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": "The transcript index at the beginning of the current sumcheck round."
+        },
+        {
+          "name": "ev1",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "ev2",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "folding_pow_witness",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "folding_pow_sample",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "alpha",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "u",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "pre_claim",
+          "type": "[T; D_EF]",
+          "description": "The claim at the beginning of the sumcheck round."
+        },
+        {
+          "name": "post_group_claim",
+          "type": "[T; D_EF]",
+          "description": "The claim at the end of the group of sumcheck rounds."
+        },
+        {
+          "name": "eq_partial",
+          "type": "[T; D_EF]",
+          "description": "The value `eq_i(alpha, u)` on the ith sumcheck row (within a proof)."
+        },
+        {
+          "name": "alpha_lookup_count",
+          "type": "T",
+          "description": "The number of times the challenge `alpha` is looked up by other AIRs. This is unconstrained."
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirSumcheckBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirOpeningPointBus",
+          "direction": "R"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe/sample"
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "direction": "L"
+        },
+        {
+          "name": "WhirAlphaBus",
+          "direction": "P"
+        },
+        {
+          "name": "WhirEqAlphaUBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "SumcheckCols",
+      "const_generics": [],
+      "notes": "Struct uses generic T; struct-level doc comment describes row semantics (sumcheck rounds grouped by k_whir)."
+    },
+    {
+      "id": "whir.WhirQueryAir",
+      "name": "WhirQueryAir",
+      "module": "whir",
+      "source_path": "whir/query/air.rs",
+      "role": "Generates in-domain queries for each WHIR round and links pre/post-query claims via gamma.",
+      "description": "WhirQueryAir samples num_queries query positions from the transcript, computes zi_root = omega^(sample & mask) via ExpBitsLenBus, derives zi = zi_root^{2^k}, and accumulates a gamma-weighted sum of query evaluations y_i. The accumulated sum links the pre-query claim to the post-query claim (next round's starting claim) sent by WhirRoundAir.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": "loop counters"
+        },
+        {
+          "name": "whir_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "T",
+          "description": "first flags"
+        },
+        {
+          "name": "is_first_in_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "num_queries",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "omega",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "sample",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "zi_root",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "zi",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "yi",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "gamma",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "gamma_pow",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "pre_claim",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "post_claim",
+          "type": "[T; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "sample"
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "direction": "L"
+        },
+        {
+          "name": "WhirQueryBus",
+          "direction": "S"
+        },
+        {
+          "name": "VerifyQueriesBus",
+          "direction": "R"
+        },
+        {
+          "name": "VerifyQueryBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "WhirQueryCols",
+      "const_generics": [],
+      "notes": "Struct uses generic T; group comments `//` attached to first field of group."
+    },
+    {
+      "id": "whir.InitialOpenedValuesAir",
+      "name": "InitialOpenedValuesAir",
+      "module": "whir",
+      "source_path": "whir/initial_opened_values/air.rs",
+      "role": "Processes round-0 opened values, Poseidon2-permutes row hashes and dispatches folding leaves and Merkle leaves.",
+      "description": "InitialOpenedValuesAir processes the initial round (round 0) codeword openings, which contain stacked columns from multiple AIRs. A 5-level nested loop over (proof, query, coset_idx, commit_idx, col_chunk) iterates through all opened values. For each coset element it hashes the row values using Poseidon2 permutation, accumulates batched values using mu, and sends leaf hashes to MerkleVerifyBus and folding leaves to WhirFoldingBus.",
+      "columns": [
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "commit_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coset_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "col_chunk_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_query",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_commit",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_coset",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "flags",
+          "type": "[T; CHUNK]",
+          "description": ""
+        },
+        {
+          "name": "codeword_value_acc",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "codeword_value_next_acc",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "mu_pows_even_clamped",
+          "type": "[[T; 4]; CHUNK / 2]",
+          "description": "Stores clamped even powers for the current chunk base exponent `b`: mu^(min(b + 2k, opened_row_len - 1)) for k in [0, CHUNK / 2)."
+        },
+        {
+          "name": "mu_pow_last_clamped",
+          "type": "[T; 4]",
+          "description": "Stores mu^(min(b + CHUNK - 1, opened_row_len - 1)) for the current chunk base exponent `b`. Here opened_row_len is the opened row length for the current commit."
+        },
+        {
+          "name": "mu",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "pre_state",
+          "type": "[T; POSEIDON2_WIDTH]",
+          "description": ""
+        },
+        {
+          "name": "post_state",
+          "type": "[T; POSEIDON2_WIDTH]",
+          "description": ""
+        },
+        {
+          "name": "twiddle",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "zi_root",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "zi",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "yi",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "merkle_idx_bit_src",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "StackingIndicesBus",
+          "direction": "L"
+        },
+        {
+          "name": "WhirMuBus",
+          "direction": "R"
+        },
+        {
+          "name": "VerifyQueryBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirFoldingBus",
+          "direction": "S"
+        },
+        {
+          "name": "Poseidon2PermuteBus",
+          "direction": "L"
+        },
+        {
+          "name": "MerkleVerifyBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "InitialOpenedValuesCols",
+      "const_generics": [],
+      "notes": "Struct visibility is pub(in crate::whir::initial_opened_values). Includes nested array type [[T; 4]; CHUNK / 2]."
+    },
+    {
+      "id": "whir.NonInitialOpenedValuesAir",
+      "name": "NonInitialOpenedValuesAir",
+      "module": "whir",
+      "source_path": "whir/non_initial_opened_values/air.rs",
+      "role": "Processes non-initial WHIR round opened values with Poseidon2 compression and Merkle dispatch.",
+      "description": "NonInitialOpenedValuesAir processes codeword openings for non-initial WHIR rounds (rounds 1 through num_rounds-1). Each opened value is a single extension field element. A 4-level nested loop over (proof, whir_round, query, coset_idx) hashes each value via Poseidon2 compress, sends it to the folding bus with the appropriate twiddle factor, and dispatches the leaf hash to the Merkle verification bus.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": "Indices"
+        },
+        {
+          "name": "whir_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coset_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "T",
+          "description": "Flags"
+        },
+        {
+          "name": "is_first_in_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_query",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "merkle_idx_bit_src",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "zi_root",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "zi",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "twiddle",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "value",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "value_hash",
+          "type": "[T; CHUNK]",
+          "description": ""
+        },
+        {
+          "name": "yi",
+          "type": "[T; D_EF]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "VerifyQueryBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirFoldingBus",
+          "direction": "S"
+        },
+        {
+          "name": "Poseidon2CompressBus",
+          "direction": "L"
+        },
+        {
+          "name": "MerkleVerifyBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "NonInitialOpenedValuesCols",
+      "const_generics": [],
+      "notes": "Struct visibility is pub(in crate::whir::non_initial_opened_values)."
+    },
+    {
+      "id": "whir.WhirFoldingAir",
+      "name": "WhirFoldingAir",
+      "module": "whir",
+      "source_path": "whir/folding/air.rs",
+      "role": "Binary k-folding tree that reduces a coset of opened values to a single folded value per query.",
+      "description": "WhirFoldingAir implements the binary k-folding tree used in WHIR. Each row represents one internal node of the folding tree: it receives its two children (left and right) from WhirFoldingBus, combines them using value = left + (alpha - x)(left - right)/(2x) where x = twiddle * coset_shift, and sends the result back (or absorbs it at the root). The root value equals y_final, feeding into WhirQueryAir's claim accumulation.",
+      "columns": [
+        {
+          "name": "is_valid",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "whir_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_root",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coset_shift",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coset_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "height",
+          "type": "T",
+          "description": "Distance from the leaf layer in the folding tree."
+        },
+        {
+          "name": "twiddle",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "coset_size",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "z_final",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "value",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "left_value",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "right_value",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "y_final",
+          "type": "[T; 4]",
+          "description": ""
+        },
+        {
+          "name": "alpha",
+          "type": "[T; 4]",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirAlphaBus",
+          "direction": "L"
+        },
+        {
+          "name": "WhirFoldingBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirFoldingBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "WhirFoldingCols",
+      "const_generics": [],
+      "notes": "Array types use literal 4 (not D_EF) in this struct."
+    },
+    {
+      "id": "whir.FinalPolyMleEvalAir",
+      "name": "FinalPolyMleEvalAir",
+      "module": "whir",
+      "source_path": "whir/final_poly_mle_eval/air.rs",
+      "role": "MLE evaluation of the WHIR final polynomial at the stacking opening point via a binary tree.",
+      "description": "FinalPolyMleEvalAir evaluates the final polynomial (coefficients in evaluation form) at the WHIR opening point using multilinear extension folding. A binary tree: leaf nodes hold the final polynomial coefficients; each internal node computes value = left + (right - left) * point. The root multiplied by eq_partial from SumcheckAir yields the final MLE evaluation, validated against the claim received from WhirRoundAir.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_root",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "layer",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "layer_inv",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "node_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "node_idx_inv",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "tidx_final_poly_start",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_nonleaf_and_first_in_layer",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "point",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "left_value",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "right_value",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "value",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "result",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "eq_alpha_u",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "num_nodes_in_layer",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirOpeningPointBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirOpeningPointLookupBus",
+          "direction": "P"
+        },
+        {
+          "name": "WhirOpeningPointLookupBus",
+          "direction": "L"
+        },
+        {
+          "name": "TranscriptBus",
+          "direction": "R",
+          "note": "observe coefficients"
+        },
+        {
+          "name": "FinalPolyMleEvalBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirEqAlphaUBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirFinalPolyBus",
+          "direction": "P"
+        },
+        {
+          "name": "FinalPolyFoldingBus",
+          "direction": "R"
+        },
+        {
+          "name": "FinalPolyFoldingBus",
+          "direction": "S"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "FinalyPolyMleEvalCols",
+      "const_generics": [],
+      "notes": "Struct name in source is `FinalyPolyMleEvalCols` (typo: missing the `l` \u2014 it's `Finaly` rather than `Finally`/`FinalPoly`). AIR name is `FinalPolyMleEvalAir`."
+    },
+    {
+      "id": "whir.FinalPolyQueryEvalAir",
+      "name": "FinalPolyQueryEvalAir",
+      "module": "whir",
+      "source_path": "whir/final_poly_query_eval/air.rs",
+      "role": "Query-point evaluation of the WHIR final polynomial with gamma-weighted eq-product accumulation.",
+      "description": "FinalPolyQueryEvalAir evaluates the final polynomial at each query point across all WHIR rounds and accumulates gamma-weighted contributions. For each (whir_round, query) pair it runs two phases: an eq-product phase computing gamma_eq_acc = gamma_pow * product(eq_1(alpha_i, query_pow^{2^i})), and a Horner polynomial evaluation phase at query_pow. The accumulated final_value_acc is verified against the claim difference received from WhirRoundAir.",
+      "columns": [
+        {
+          "name": "is_enabled",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "proof_idx",
+          "type": "T",
+          "description": "loop indices"
+        },
+        {
+          "name": "whir_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "phase_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "eval_idx",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_proof",
+          "type": "T",
+          "description": "is_first flags"
+        },
+        {
+          "name": "is_first_in_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_query",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_first_in_phase",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_last_round",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "is_query_zero",
+          "type": "T",
+          "description": ""
+        },
+        {
+          "name": "query_pow",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "alpha",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "gamma",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "gamma_pow",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "final_poly_coeff",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "final_value_acc",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "gamma_eq_acc",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "horner_acc",
+          "type": "[T; D_EF]",
+          "description": ""
+        },
+        {
+          "name": "do_carry",
+          "type": "T",
+          "description": ""
+        }
+      ],
+      "buses": [
+        {
+          "name": "WhirQueryBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirAlphaBus",
+          "direction": "L"
+        },
+        {
+          "name": "WhirGammaBus",
+          "direction": "R"
+        },
+        {
+          "name": "WhirFinalPolyBus",
+          "direction": "L"
+        },
+        {
+          "name": "FinalPolyQueryEvalBus",
+          "direction": "R"
+        }
+      ],
+      "verifier_phase": "whir",
+      "struct_name": "FinalPolyQueryEvalCols",
+      "const_generics": [],
+      "notes": "Struct visibility is pub(in crate::whir::final_poly_query_eval)."
+    }
+  ]
+}

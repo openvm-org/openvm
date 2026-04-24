@@ -1,0 +1,4172 @@
+{
+  "preamble-4": {
+    "default_scene": {
+      "note": "Per AIR row, ProofShapeAir observes preprocessed_commit or log_height on TranscriptBus and range-checks log_height to [0, 32) via PowerCheckerBus, which also ties height = 2^log_height.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "log_height",
+                "is_present"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "log_height",
+                "is_present"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "PowerCheckerBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "log",
+                "exp"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "log_height",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe log_height"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "log_height",
+            "row": 0
+          },
+          "to": {
+            "bus": "PowerCheckerBus",
+            "field": "log",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "height = 2^log_height"
+        }
+      ]
+    },
+    "scenes": {
+      "power-lookup": {
+        "note": "PS1a: log_height is looked up on PowerCheckerBus, which simultaneously range-checks it to [0, 32) and enforces the relation height = 2^log_height.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "log_height"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "log_height"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "log_height"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "PowerCheckerBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "log",
+                  "exp"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "log_height",
+              "row": 0
+            },
+            "to": {
+              "bus": "PowerCheckerBus",
+              "field": "log",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "range + power-of-two"
+          }
+        ]
+      },
+      "commit-registration": {
+        "note": "When an AIR has preprocessed data, the preprocessed commit is absorbed on TranscriptBus and simultaneously provided on CommitmentsBus so MerkleVerifyAir can authenticate it during WHIR.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags",
+                  "is_present"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "CommitmentsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "major_idx",
+                  "minor_idx",
+                  "commitment"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "observe preprocessed commit"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "CommitmentsBus",
+              "field": "commitment",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "VK-fixed root"
+          }
+        ]
+      }
+    },
+    "constraints_html": "ProofShapeAir observes preprocessed_commit (DIGEST_SIZE elements, VK-fixed) or log_height depending on the AIR's VK metadata. <span class=\"ref\" data-scene=\"commit-registration\">Preprocessed commitments are additionally registered on CommitmentsBus</span>. <span class=\"ref\" data-scene=\"power-lookup\">PS1a range-checks log_height to [0, 32) via PowerCheckerBus, which simultaneously enforces height = 2^log_height</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"power-lookup\">PowerCheckerBus lookup guarantees log_height in range and ties height to 2^log_height by table correctness (LT)</span>. The preprocessed commit is VK-fixed per AIR, so its value is determined by the child VK; <span class=\"ref\" data-scene=\"commit-registration\">CommitmentsBus routes it to MerkleVerifyAir for authentication when the corresponding AIR's cached trace is opened</span>."
+  },
+  "preamble-5": {
+    "default_scene": {
+      "note": "Each cached commitment per AIR is observed on TranscriptBus and registered on CommitmentsBus so MerkleVerifyAir can authenticate it; in continuations, CachedCommitBus also routes it to the enclosing circuit.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "is_present"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "is_present"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "CommitmentsBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "major_idx",
+                "minor_idx",
+                "commitment"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "idx_flags",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe cached commit"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "sorted_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "CommitmentsBus",
+            "field": "minor_idx",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "register for Merkle auth"
+        }
+      ]
+    },
+    "scenes": {
+      "transcript-observe": {
+        "note": "Each cached_commits[i] (DIGEST_SIZE elements) is absorbed into the transcript; the VK-fixed count of cached commitments per AIR determines how many transcript slots are consumed.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "observe"
+          }
+        ]
+      },
+      "cached-continuations": {
+        "note": "When continuations are enabled, the same cached commitment is also sent on CachedCommitBus so the enclosing continuations circuit can verify it against the child VK.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags",
+                  "is_present"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "CachedCommitBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "cached_idx",
+                  "global_cached_idx",
+                  "cached_commit"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "CachedCommitBus",
+              "field": "air_idx",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "sorted_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "CachedCommitBus",
+              "field": "cached_commit",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "continuations only"
+          }
+        ]
+      },
+      "same-cell": {
+        "note": "The critical invariant: the same trace cell feeds both the TranscriptBus observe and the CommitmentsBus provide, pinning the cached commitment to both the transcript and later Merkle verification.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "CommitmentsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "commitment"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "CommitmentsBus",
+              "field": "commitment",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "same cell"
+          }
+        ]
+      }
+    },
+    "constraints_html": "ProofShapeAir <span class=\"ref\" data-scene=\"transcript-observe\">observes each cached_commits[i] (DIGEST_SIZE elements) on TranscriptBus</span> and registers it on CommitmentsBus for later Merkle root authentication during WHIR. <span class=\"ref\" data-scene=\"cached-continuations\">CachedCommitBus is used for circuit-internal continuations support</span>.",
+    "soundness_html": "The number of cached commitments per AIR is VK-fixed, so the trace row structure enforces the correct count (verify_proof_shape line 343). <span class=\"ref\" data-scene=\"same-cell\">The same cell drives the transcript observation and the CommitmentsBus send, pinning the cached commitment value to both the transcript and Merkle verification</span>."
+  },
+  "preamble-6": {
+    "default_scene": {
+      "note": "PublicValuesAir iterates one row per public value, receives (tidx, value) from TranscriptBus and sends (air_idx, pv_idx, value) on PublicValuesBus to the constraint evaluator. ProofShapeAir pre-announces the per-AIR PV count on NumPublicValuesBus.",
+      "airs": [
+        {
+          "name": "PublicValuesAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_valid",
+                "air_idx",
+                "pv_idx",
+                "tidx",
+                "value"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "is_valid",
+                "air_idx",
+                "pv_idx",
+                "tidx",
+                "value"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "PublicValuesBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "air_idx",
+                "pv_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "PublicValuesAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe PV"
+        },
+        {
+          "from": {
+            "air": "PublicValuesAir",
+            "col": "value",
+            "row": 0
+          },
+          "to": {
+            "bus": "PublicValuesBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "same cell -> evaluator"
+        }
+      ]
+    },
+    "scenes": {
+      "count-handoff": {
+        "note": "ProofShapeAir announces (air_idx, tidx, num_pvs) per AIR on NumPublicValuesBus; PublicValuesAir consumes this to know where each AIR's PV block starts in the transcript.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags",
+                  "is_present"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "PublicValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "air_idx",
+                  "is_first_in_air",
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "NumPublicValuesBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "tidx",
+                  "num_pvs"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "NumPublicValuesBus",
+              "field": "air_idx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "VK-constant num_pvs"
+          },
+          {
+            "from": {
+              "air": "PublicValuesAir",
+              "col": "air_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "NumPublicValuesBus",
+              "field": "num_pvs",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "block boundary"
+          }
+        ]
+      },
+      "flow": {
+        "note": "Each PV row is a bridge: TranscriptBus receive (tidx, value, is_sample=0) on the left, PublicValuesBus send (air_idx, pv_idx, value) on the right. The same value cell serves both.",
+        "airs": [
+          {
+            "name": "PublicValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "tidx",
+                  "pv_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "tidx",
+                  "pv_idx",
+                  "value"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "PublicValuesBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "pv_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "PublicValuesAir",
+              "col": "tidx",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "PublicValuesAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "observe"
+          },
+          {
+            "from": {
+              "air": "PublicValuesAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "PublicValuesBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "to evaluator"
+          }
+        ]
+      },
+      "transition": {
+        "note": "PV rows advance pv_idx within an AIR and air_idx across AIRs; is_first_air resets pv_idx to 0.",
+        "airs": [
+          {
+            "name": "PublicValuesAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "air_idx",
+                  "pv_idx",
+                  "is_first_in_air"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "air_idx",
+                  "pv_idx",
+                  "is_first_in_air"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "PublicValuesAir",
+              "col": "pv_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "PublicValuesAir",
+              "col": "pv_idx",
+              "row": 1
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "tidx",
+              "row": 1
+            },
+            "kind": "receive"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"count-handoff\">ProofShapeAir sends (air_idx, tidx, num_pvs) on NumPublicValuesBus where num_pvs is a VK constant</span>. PublicValuesAir has one row per public value, receives from NumPublicValuesBus, and for each row: <span class=\"ref\" data-scene=\"flow\">(a) receives (tidx, value, is_sample=0) from TranscriptBus, (b) sends (air_idx, pv_idx, value) on PublicValuesBus to SymbolicExpressionAir</span>.",
+    "soundness_html": "Because the <span class=\"ref\" data-scene=\"flow\">same value cell drives both the TranscriptBus receive and the PublicValuesBus send</span>, the extracted public values are exactly the transcript-observed values AND exactly the values used in constraint evaluation. This matches the reference verifier, which observes PVs and then passes the same vector to verify_zerocheck_and_logup."
+  },
+  "preamble-7": {
+    "default_scene": {
+      "note": "Non-increasing heights are enforced by range-checking log_height[i] - log_height[i+1] on RangeCheckerBus, and log_height is additionally bounded via the PowerCheckerBus lookup.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "log_height",
+                "sorted_idx",
+                "is_present"
+              ],
+              "kind": "prev"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "log_height",
+                "sorted_idx",
+                "is_present"
+              ],
+              "kind": "next"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "RangeCheckerBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "value",
+                "max_bits"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "PowerCheckerBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "log",
+                "exp"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "log_height",
+            "row": 0
+          },
+          "to": {
+            "bus": "RangeCheckerBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "log_height[i] - log_height[i+1] \u2265 0"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "log_height",
+            "row": 1
+          },
+          "to": {
+            "bus": "PowerCheckerBus",
+            "field": "log",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "bound log_height"
+        }
+      ]
+    },
+    "scenes": {
+      "transition": {
+        "note": "Non-increasing heights: adjacent rows must satisfy log_height[i] \u2265 log_height[i+1]. The difference is range-checked on RangeCheckerBus.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "log_height"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "sorted_idx",
+                  "log_height"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "RangeCheckerBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value",
+                  "max_bits"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "log_height",
+              "row": 0
+            },
+            "to": {
+              "bus": "RangeCheckerBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "delta \u2265 0"
+          }
+        ]
+      },
+      "range-lookup": {
+        "note": "ProofShapeAir looks up log_height on PowerCheckerBus (which transitively range-checks via RangeCheckerBus). The 256-row RangeCheckerAir table is the sole provider of RangeCheckerBus entries.",
+        "airs": [
+          {
+            "name": "RangeCheckerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "value",
+                  "mult"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "value",
+                  "mult"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "value",
+                  "mult"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "RangeCheckerBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value",
+                  "max_bits"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "RangeCheckerAir",
+              "col": "value",
+              "row": 0
+            },
+            "to": {
+              "bus": "RangeCheckerBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "table provides 0..255"
+          }
+        ]
+      },
+      "shape-publish": {
+        "note": "Shape validation also provides the AirShapeBus and LiftedHeightsBus tables so downstream modules can look up per-AIR structural constants.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags",
+                  "log_height"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "AirShapeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "property_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "LiftedHeightsBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "part_idx",
+                  "lifted_height",
+                  "log_lifted_height"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "sorted_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "AirShapeBus",
+              "field": "sort_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "log_height",
+              "row": 0
+            },
+            "to": {
+              "bus": "LiftedHeightsBus",
+              "field": "log_lifted_height",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "max(log_height, l_skip)"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"range-lookup\">ProofShapeAir range-checks log_height (via PowerCheckerBus, which enforces height = 2^log_height)</span> and <span class=\"ref\" data-scene=\"transition\">enforces non-increasing heights (log_height[i] - log_height[i+1] \u2265 0 via RangeCheckerBus)</span>. The idx_encoder validates log_height bounds (log_height \u2264 l_skip + n_stack). The number of cached-commitment columns per AIR is VK-fixed in the trace.",
+    "soundness_html": "All shape validations distribute across (i) VK-fixed trace structure (num_airs, max_cached, num_pvs are circuit constants so the trace row count is correct by construction), (ii) <span class=\"ref\" data-scene=\"range-lookup\">range checks via RangeCheckerBus/PowerCheckerBus (both Primitive Lookup Tables enforce correct entries \u2014 LT)</span>, and (iii) bus balancing (e.g., <span class=\"ref\" data-scene=\"shape-publish\">stacking OpeningClaimsAir range-checks l_skip + n_stack - log_lifted_height via EqBitsLookupBus</span>, so negative values fail). See proof-shape-validation.md."
+  },
+  "preamble-8": {
+    "default_scene": {
+      "note": "The summary row (is_last = 1) accumulates total weighted interaction count across the proof, decomposes it into 8-bit limbs, and range-checks each limb on RangeCheckerBus. The bound total_interactions < max_interaction_count is baked in at circuit construction.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sorted_idx",
+                "log_height",
+                "n_logup"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "is_last",
+                "n_logup",
+                "log_height"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "RangeCheckerBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "value",
+                "max_bits"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "value",
+                "max_bits"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "n_logup",
+            "row": -1
+          },
+          "to": {
+            "bus": "RangeCheckerBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "limb 0"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "log_height",
+            "row": -1
+          },
+          "to": {
+            "bus": "RangeCheckerBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "lookup",
+          "label": "limb 1"
+        }
+      ]
+    },
+    "scenes": {
+      "boundary": {
+        "note": "PS1c: the last valid row of each proof (is_last = 1) is the summary row. It carries the accumulated total interaction count; the bound total_interactions < max_interaction_count is circuit-constant (LT).",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "is_last",
+                  "n_logup",
+                  "log_height"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "transition": {
+        "note": "Adjacent rows accumulate: n_logup[i+1] = n_logup[i] + num_interactions[i] * lifted_height[i]. The accumulator lives in n_logup and is finalized on the summary row.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "log_height",
+                  "n_logup"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "sorted_idx",
+                  "log_height",
+                  "n_logup"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "limb-decomp": {
+        "note": "On the summary row, total_interactions is split into 8-bit limbs and each limb is looked up on RangeCheckerBus. Table correctness (LT) bounds the accumulator.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "is_last",
+                  "n_logup"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "RangeCheckerBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value",
+                  "max_bits"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "value",
+                  "max_bits"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "n_logup",
+              "row": -1
+            },
+            "to": {
+              "bus": "RangeCheckerBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "n_logup",
+              "row": -1
+            },
+            "to": {
+              "bus": "RangeCheckerBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "lookup",
+            "label": "each limb"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"transition\">ProofShapeAir's summary row (last valid row per proof) accumulates total_interactions = sum_i(num_interactions[i] * lifted_height[i]) incrementally</span>, <span class=\"ref\" data-scene=\"limb-decomp\">decomposes the result into limbs, and range-checks each limb via RangeCheckerBus</span>. <span class=\"ref\" data-scene=\"boundary\">The constraint total_interactions &lt; max_interaction_count is baked into the circuit from the child VK (PS1c)</span>.",
+    "soundness_html": "The single max_interaction_count bound is <span class=\"ref\" data-scene=\"boundary\">verified at circuit construction time (VerifierSubCircuit::new) to imply every TraceHeightConstraint in the child VK</span>: for each VK constraint, coefficient[i] \u2264 num_interactions[i] and threshold \u2265 max_interaction_count. Therefore any witness satisfying PS1c's summary-row bound also satisfies all child VK constraints. <span class=\"ref\" data-scene=\"limb-decomp\">The limb range checks are sound by RangeCheckerAir's table correctness (LT)</span>."
+  },
+  "preamble-9": {
+    "default_scene": {
+      "note": "ProofShapeAir has one row per child AIR, indexed by sorted_idx. The sort enforces non-increasing log_height; absent AIRs (is_present = 0) are forced to the end with log_height = 0. The (sorted_idx, air_id) mapping is a bijection.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "log_height",
+                "is_present"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "log_height",
+                "is_present"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": 2,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "log_height",
+                "is_present"
+              ],
+              "kind": "secondary"
+            },
+            {
+              "row": -1,
+              "cols": [
+                "sorted_idx",
+                "idx_flags",
+                "log_height",
+                "is_present"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "AirShapeBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "sort_idx",
+                "property_idx",
+                "value"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "sorted_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "AirShapeBus",
+            "field": "sort_idx",
+            "row": 0
+          },
+          "kind": "lookup"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "idx_flags",
+            "row": 0
+          },
+          "to": {
+            "bus": "AirShapeBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "property_idx = AirId"
+        }
+      ]
+    },
+    "scenes": {
+      "transition": {
+        "note": "Adjacent sorted rows enforce non-increasing log_height. Tiebreakers within a height tie are a prover choice (sound because all downstream data is keyed by the same sorted_idx).",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "log_height",
+                  "is_present"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "sorted_idx",
+                  "log_height",
+                  "is_present"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "RangeCheckerBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "value",
+                  "max_bits"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "log_height",
+              "row": 0
+            },
+            "to": {
+              "bus": "RangeCheckerBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "delta \u2265 0"
+          }
+        ]
+      },
+      "absent-last": {
+        "note": "Absent AIRs have is_present = 0 and log_height = 0. They are pinned to the end of the sort by the non-increasing constraint.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 2,
+                "cols": [
+                  "sorted_idx",
+                  "log_height",
+                  "is_present"
+                ],
+                "kind": "secondary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "sorted_idx",
+                  "log_height",
+                  "is_present"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      },
+      "bijection": {
+        "note": "An internal permutation bus within ProofShapeAir (ProofShapePermutationBus) forces the sorted_idx -> air_id map to be a bijection.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      }
+    },
+    "constraints_html": "ProofShapeAir has one row per AIR indexed by sorted_idx (0..num_airs-1). It <span class=\"ref\" data-scene=\"transition\">constrains non-increasing heights via RangeCheckerBus</span>, <span class=\"ref\" data-scene=\"absent-last\">forces absent AIRs last (log_height = 0 when is_present = 0)</span>, and <span class=\"ref\" data-scene=\"bijection\">enforces the sorted_idx -&gt; air_id mapping is a bijection via an internal permutation bus</span>.",
+    "soundness_html": "The tiebreaker within a height tie is a prover choice, which is sound because: (i) <span class=\"ref\" data-scene=\"bijection\">all downstream data is keyed by the same sorted_idx, so reordering within a tie relabels everything consistently</span>, and (ii) the reference verifier's algorithm only depends on non-increasing heights, not on which specific AIR occupies each sort position within a tie."
+  },
+  "preamble-10": {
+    "default_scene": {
+      "note": "On the summary row, ProofShapeAir emits all per-proof module handoff messages at once: GkrModuleBus kicks off GKR, FractionFolderInputBus starts BatchConstraint, and EqNsNLogupMaxBus/ExpressionClaimNMaxBus pre-populate the eq-polynomial lookup tables.",
+      "airs": [
+        {
+          "name": "ProofShapeAir",
+          "rows": [
+            {
+              "row": -1,
+              "cols": [
+                "is_last",
+                "n_logup",
+                "log_height"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "GkrModuleBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "n_logup",
+                "n_max",
+                "is_n_max_greater"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "FractionFolderInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "num_present_airs"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "n_logup",
+            "row": -1
+          },
+          "to": {
+            "bus": "GkrModuleBus",
+            "field": "n_logup",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "hand off to GKR"
+        },
+        {
+          "from": {
+            "air": "ProofShapeAir",
+            "col": "is_last",
+            "row": -1
+          },
+          "to": {
+            "bus": "FractionFolderInputBus",
+            "field": "num_present_airs",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "hand off to BC"
+        }
+      ]
+    },
+    "scenes": {
+      "per-air-metadata": {
+        "note": "Per-AIR rows publish (sort_idx, num_interactions, need_rot) on AirShapeBus, (sort_idx, n_abs, n_sign_bit) on HyperdimBus, (air_idx, n_lift) on NLiftBus, and (sort_idx, n_lift, n_logup, num_interactions) on Eq3bShapeBus.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "idx_flags",
+                  "log_height",
+                  "n_sign_bit"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "AirShapeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "property_idx",
+                  "value"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "HyperdimBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "n_abs",
+                  "n_sign_bit"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "NLiftBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "air_idx",
+                  "n_lift"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "sorted_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "AirShapeBus",
+              "field": "sort_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "log_height",
+              "row": 0
+            },
+            "to": {
+              "bus": "HyperdimBus",
+              "field": "n_abs",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "n_sign_bit",
+              "row": 0
+            },
+            "to": {
+              "bus": "HyperdimBus",
+              "field": "n_abs",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "idx_flags",
+              "row": 0
+            },
+            "to": {
+              "bus": "NLiftBus",
+              "field": "air_idx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "n_lift = max(0, l_skip - log_height)"
+          }
+        ]
+      },
+      "per-proof-handoff": {
+        "note": "The summary row emits per-proof constants: tidx_end and GKR dimensions on GkrModuleBus, (n_logup, n_max) on EqNsNLogupMaxBus, n_max alone on ExpressionClaimNMaxBus, num_present_airs on FractionFolderInputBus.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "is_last",
+                  "n_logup"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrModuleBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "n_logup",
+                  "n_max",
+                  "is_n_max_greater"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "EqNsNLogupMaxBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n_logup",
+                  "n_max"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "ExpressionClaimNMaxBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "n_max"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "FractionFolderInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "num_present_airs"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "n_logup",
+              "row": -1
+            },
+            "to": {
+              "bus": "GkrModuleBus",
+              "field": "n_logup",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "n_logup",
+              "row": -1
+            },
+            "to": {
+              "bus": "EqNsNLogupMaxBus",
+              "field": "n_logup",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_last",
+              "row": -1
+            },
+            "to": {
+              "bus": "ExpressionClaimNMaxBus",
+              "field": "n_max",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "is_last",
+              "row": -1
+            },
+            "to": {
+              "bus": "FractionFolderInputBus",
+              "field": "num_present_airs",
+              "row": 0
+            },
+            "kind": "send"
+          }
+        ]
+      },
+      "eq3b-shape": {
+        "note": "Eq3bShapeBus carries per-AIR (sort_idx, n_lift, n_logup, num_interactions) as a lookup table that Eq3bAir consults when computing the partial eq polynomial.",
+        "airs": [
+          {
+            "name": "ProofShapeAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "sorted_idx",
+                  "n_logup",
+                  "log_height"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "Eq3bShapeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "sort_idx",
+                  "n_lift",
+                  "n_logup",
+                  "num_interactions"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "sorted_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bShapeBus",
+              "field": "sort_idx",
+              "row": 0
+            },
+            "kind": "lookup"
+          },
+          {
+            "from": {
+              "air": "ProofShapeAir",
+              "col": "n_logup",
+              "row": 0
+            },
+            "to": {
+              "bus": "Eq3bShapeBus",
+              "field": "n_logup",
+              "row": 0
+            },
+            "kind": "lookup"
+          }
+        ]
+      }
+    },
+    "constraints_html": "ProofShapeAir sends per-AIR metadata: <span class=\"ref\" data-scene=\"per-air-metadata\">(i, air_idx, num_interactions, need_rot) on AirShapeBus; (i, n_abs, n_sign_bit) on HyperdimBus; (air_idx, n_lift) on NLiftBus</span>; <span class=\"ref\" data-scene=\"eq3b-shape\">(i, n_lift, n_logup, num_interactions) on Eq3bShapeBus</span>. <span class=\"ref\" data-scene=\"per-proof-handoff\">Per-proof: (tidx_end, n_logup, n_max, is_n_max_greater) on GkrModuleBus; (n_logup, n_max) on EqNsNLogupMaxBus; (n_max) on ExpressionClaimNMaxBus; (num_present_airs) on FractionFolderInputBus</span>.",
+    "soundness_html": "All derived quantities are deterministic functions of the extracted attributes and VK constants (PS1c). <span class=\"ref\" data-scene=\"per-proof-handoff\">The bus messages are the only way downstream modules access these quantities</span>; since TranscriptBus/AirShapeBus/etc. are permutation buses, any attempt to send inconsistent values would cause imbalance with the receiving AIRs' constrained loop boundaries (see M-GKR, M-BC, M-Stack, M-WHIR extraction arguments)."
+  },
+  "gkr-1": {
+    "default_scene": {
+      "note": "GkrInputAir observes the logup PoW witness on TranscriptBus and samples the PoW challenge; it then looks up on ExpBitsLenBus to verify that the sample has the required low-zero-bits difficulty.",
+      "airs": [
+        {
+          "name": "GkrInputAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_enabled",
+                "proof_idx",
+                "tidx",
+                "alpha_logup"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        },
+        {
+          "name": "ExpBitsLenBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "base",
+                "bit_src",
+                "num_bits",
+                "result"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "tidx",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "tidx",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe pow_witness"
+        },
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "tidx",
+            "row": 0
+          },
+          "to": {
+            "bus": "ExpBitsLenBus",
+            "field": "bit_src",
+            "row": 0
+          },
+          "kind": "lookup",
+          "label": "pow_bits low zeros"
+        }
+      ]
+    },
+    "scenes": {
+      "lookup": {
+        "note": "ExpBitsLenAir provides the global ExpBitsLenBus table; GkrInputAir's lookup succeeds iff pow_sample has pow_bits low zero bits.",
+        "airs": [
+          {
+            "name": "ExpBitsLenAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_valid",
+                  "is_first",
+                  "bit_idx",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_enabled",
+                  "proof_idx"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ExpBitsLenBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "base",
+                  "bit_src",
+                  "num_bits",
+                  "result"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "ExpBitsLenAir",
+              "col": "result",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "result",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "table provides"
+          },
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "proof_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "ExpBitsLenBus",
+              "field": "num_bits",
+              "row": 0
+            },
+            "kind": "lookup",
+            "label": "verifier queries"
+          }
+        ]
+      },
+      "observe-sample": {
+        "note": "The Fiat-Shamir pattern: observe pow_witness, then sample pow_sample. GkrInputAir receives both messages on TranscriptBus at consecutive tidx.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "tidx",
+                  "is_enabled"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "tidx",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "is_sample",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "is_sample=0 observe"
+          },
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "tidx",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "is_sample",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "is_sample=1 sample"
+          }
+        ]
+      }
+    },
+    "constraints_html": "GkrInputAir observes logup_pow_witness on TranscriptBus and samples logup_pow_sample. It then <span class=\"ref\" data-scene=\"lookup\">issues an ExpBitsLenBus lookup that verifies the sampled value has pow_bits low zero bits</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"lookup\">ExpBitsLenAir's table correctness (LT) guarantees that the lookup succeeds iff the PoW condition holds</span>. <span class=\"ref\" data-scene=\"observe-sample\">The observation/sample pair is tied to the Poseidon2 sponge (T), so the sample is a deterministic function of the observation</span>, and the prover must do pow_bits work to find a favorable witness."
+  },
+  "gkr-2": {
+    "default_scene": {
+      "note": "GkrInputAir samples alpha_logup and sends the transcript index for beta on InteractionsFoldingInputBus; BatchConstraint's InteractionsFoldingAir samples beta at that reserved slot inside GKR's transcript range.",
+      "airs": [
+        {
+          "name": "GkrInputAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_enabled",
+                "tidx",
+                "alpha_logup"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "InteractionsFoldingAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "sort_idx",
+                "beta"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "InteractionsFoldingInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "alpha_logup",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample alpha at tidx_end + pow_offset"
+        },
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "tidx",
+            "row": 0
+          },
+          "to": {
+            "bus": "InteractionsFoldingInputBus",
+            "field": "tidx",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "hand off tidx_if"
+        },
+        {
+          "from": {
+            "air": "InteractionsFoldingAir",
+            "col": "beta",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "receive",
+          "label": "BC samples beta at tidx_if"
+        }
+      ]
+    },
+    "scenes": {
+      "handoff": {
+        "note": "InteractionsFoldingInputBus is the permutation handoff: GkrInputAir sends tidx_if, InteractionsFoldingAir receives it and places its beta sample at that transcript position.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "tidx",
+                  "is_enabled"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "beta"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "InteractionsFoldingInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "tidx",
+              "row": 0
+            },
+            "to": {
+              "bus": "InteractionsFoldingInputBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "beta",
+              "row": 0
+            },
+            "to": {
+              "bus": "InteractionsFoldingInputBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "tidx_if"
+          }
+        ]
+      },
+      "interleaved-samples": {
+        "note": "alpha (GKR) and beta (BC) are sampled at consecutive transcript slots. Per-tidx ownership of TranscriptBus ensures exactly one consumer per tidx even across modules.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "alpha_logup"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "InteractionsFoldingAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "beta"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "alpha_logup",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "alpha"
+          },
+          {
+            "from": {
+              "air": "InteractionsFoldingAir",
+              "col": "beta",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "beta (tidx_if)"
+          }
+        ]
+      }
+    },
+    "constraints_html": "GkrInputAir samples alpha_logup at tidx = tidx_end + pow_offset. It <span class=\"ref\" data-scene=\"handoff\">reserves a D_EF-wide gap for beta_logup at tidx_if = tidx_end + pow_offset + D_EF and sends tidx_if on InteractionsFoldingInputBus</span> so BatchConstraint's InteractionsFoldingAir can sample beta_logup at the reserved position.",
+    "soundness_html": "alpha_logup and beta_logup are transcript samples pinned by the Poseidon2 sponge (T). <span class=\"ref\" data-scene=\"interleaved-samples\">Although BC samples beta within GKR's transcript range, the TranscriptBus permutation check still holds because each tidx is owned by exactly one AIR</span> (GKR owns alpha, BC owns beta at tidx_if). The handoff tidx_if is a deterministic function of tidx_end and pow_bits."
+  },
+  "gkr-3": {
+    "default_scene": {
+      "note": "GkrInputAir observes q0_claim (DIGEST_SIZE = D_EF elements) on TranscriptBus. When n_logup = 0 the root denominator claim is fixed to 1 by construction and no transcript slot is consumed.",
+      "airs": [
+        {
+          "name": "GkrInputAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_enabled",
+                "n_logup",
+                "tidx",
+                "q0_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "GkrLayerInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "q0_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "q0_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe q0"
+        },
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "q0_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "GkrLayerInputBus",
+            "field": "q0_claim",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "dispatch to root layer"
+        }
+      ]
+    },
+    "scenes": {
+      "observe": {
+        "note": "The observed q0_claim is the only non-zero input to GKR's root layer; it pins the LogUp root denominator sum on the transcript.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "q0_claim",
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "q0_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "is_sample=0"
+          }
+        ]
+      },
+      "boundary": {
+        "note": "Degenerate case n_logup = 0: q0_claim is not observed (no LogUp argument), so the row's transcript-receive multiplicity is zero. The GKR chain skips directly to xi sampling.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_enabled",
+                  "n_logup",
+                  "q0_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"observe\">GkrInputAir observes q0_claim (D_EF) on TranscriptBus</span>. <span class=\"ref\" data-scene=\"boundary\">When n_logup = 0, q0_claim is set to 1 by construction and no transcript slot is used</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"observe\">The root claim is pinned on the transcript</span>. GkrLayerAir's root-layer boundary constraint then enforces q_cross == q0_claim (verified at the root layer), so any GKR reduction must match the observed root claim."
+  },
+  "gkr-4": {
+    "default_scene": {
+      "note": "Root layer (layer_idx = 0): observe p_xi_0, q_xi_0, p_xi_1, q_xi_1 on TranscriptBus, sample mu, and enforce p_cross = 0, q_cross = q0_claim. The sampled mu becomes the first xi coordinate.",
+      "airs": [
+        {
+          "name": "GkrLayerAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "layer_idx",
+                "is_first",
+                "p_xi_0",
+                "q_xi_0",
+                "p_xi_1",
+                "q_xi_1",
+                "mu"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "GkrLayerInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "q0_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrLayerAir",
+            "col": "p_xi_0",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe layer claims"
+        },
+        {
+          "from": {
+            "air": "GkrLayerAir",
+            "col": "mu",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 1
+          },
+          "kind": "receive",
+          "label": "sample mu"
+        },
+        {
+          "from": {
+            "air": "GkrLayerAir",
+            "col": "q_xi_0",
+            "row": 0
+          },
+          "to": {
+            "bus": "GkrLayerInputBus",
+            "field": "q0_claim",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "q_cross = q0_claim"
+        }
+      ]
+    },
+    "scenes": {
+      "boundary": {
+        "note": "Root-layer boundary: is_first = 1 enforces p_cross = 0 and q_cross = q0_claim (received via GkrLayerInputBus from GkrInputAir).",
+        "airs": [
+          {
+            "name": "GkrLayerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "layer_idx",
+                  "is_first",
+                  "p_xi_0",
+                  "p_xi_1",
+                  "q_xi_0",
+                  "q_xi_1"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrLayerInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "q0_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "q_xi_0",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrLayerInputBus",
+              "field": "q0_claim",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "q_cross anchor"
+          }
+        ]
+      },
+      "observe-and-sample": {
+        "note": "Four observations (p_xi_0, q_xi_0, p_xi_1, q_xi_1) followed by one mu sample. Linear interpolation with mu produces the next layer's claim.",
+        "airs": [
+          {
+            "name": "GkrLayerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "p_xi_0",
+                  "q_xi_0",
+                  "p_xi_1",
+                  "q_xi_1",
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "TranscriptBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "tidx",
+                  "value",
+                  "is_sample"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "p_xi_0",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "observe"
+          },
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "p_xi_1",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "mu",
+              "row": 0
+            },
+            "to": {
+              "bus": "TranscriptBus",
+              "field": "value",
+              "row": 1
+            },
+            "kind": "receive",
+            "label": "sample"
+          }
+        ]
+      }
+    },
+    "constraints_html": "GkrLayerAir <span class=\"ref\" data-scene=\"observe-and-sample\">observes (p_xi_0, q_xi_0, p_xi_1, q_xi_1) on TranscriptBus and samples mu</span>. On the root layer (layer_idx = 0), it enforces <span class=\"ref\" data-scene=\"boundary\">p_cross = 0 and q_cross = q0_claim (zero-check / root consistency)</span>. It then computes the next layer's claim via linear interpolation: claim_next = (p_xi_0 + mu*(p_xi_1 - p_xi_0), q_xi_0 + mu*(q_xi_1 - q_xi_0)).",
+    "soundness_html": "<span class=\"ref\" data-scene=\"boundary\">The root zero-check is the defining LogUp identity: p_cross = 0 means the numerator sum telescopes to zero, and q_cross = q0_claim ties the GKR recursion to the observed root denominator claim</span>. Linear interpolation with mu is algebraically constrained within the AIR."
+  },
+  "gkr-5": {
+    "default_scene": {
+      "note": "GkrLayerAir dispatches a j-round cubic sumcheck to GkrLayerSumcheckAir via GkrSumcheckInputBus. Each sumcheck round observes (ev1, ev2, ev3) on TranscriptBus, samples a challenge, interpolates at the sampled point, and chains to the next round.",
+      "airs": [
+        {
+          "name": "GkrLayerSumcheckAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "layer_idx",
+                "round",
+                "ev1",
+                "ev2",
+                "ev3",
+                "challenge",
+                "eq_in"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "layer_idx",
+                "round",
+                "ev1",
+                "ev2",
+                "ev3",
+                "challenge",
+                "eq_out"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "GkrSumcheckInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "layer_idx",
+                "is_last_layer",
+                "tidx",
+                "claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrLayerSumcheckAir",
+            "col": "ev1",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "observe ev1"
+        },
+        {
+          "from": {
+            "air": "GkrLayerSumcheckAir",
+            "col": "challenge",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample r"
+        },
+        {
+          "from": {
+            "air": "GkrLayerSumcheckAir",
+            "col": "layer_idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "GkrSumcheckInputBus",
+            "field": "layer_idx",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "dispatched from GkrLayerAir"
+        }
+      ]
+    },
+    "scenes": {
+      "flow": {
+        "note": "Per-layer dispatch: GkrLayerAir sends (layer_idx, claim, tidx) on GkrSumcheckInputBus; GkrLayerSumcheckAir receives and runs the sumcheck; the final (claim_out, eq_at_r_prime) returns on GkrSumcheckOutputBus.",
+        "airs": [
+          {
+            "name": "GkrLayerAir",
+            "rows": [
+              {
+                "row": 1,
+                "cols": [
+                  "layer_idx",
+                  "lambda"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "GkrLayerSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "layer_idx",
+                  "round",
+                  "claim_in"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrSumcheckInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "layer_idx",
+                  "is_last_layer",
+                  "tidx",
+                  "claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "GkrSumcheckOutputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "layer_idx",
+                  "tidx",
+                  "claim_out",
+                  "eq_at_r_prime"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "layer_idx",
+              "row": 1
+            },
+            "to": {
+              "bus": "GkrSumcheckInputBus",
+              "field": "layer_idx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "dispatch"
+          },
+          {
+            "from": {
+              "air": "GkrLayerSumcheckAir",
+              "col": "layer_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrSumcheckInputBus",
+              "field": "layer_idx",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "GkrLayerSumcheckAir",
+              "col": "layer_idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrSumcheckOutputBus",
+              "field": "layer_idx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "return (claim_out, eq)"
+          }
+        ]
+      },
+      "transition": {
+        "note": "Within a layer, round_idx starts at 0, increments by 1 per row, and must reach layer_idx - 1 on the final row. GkrSumcheckChallengeBus threads challenges between rounds.",
+        "airs": [
+          {
+            "name": "GkrLayerSumcheckAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "round",
+                  "claim_in",
+                  "challenge"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "round",
+                  "claim_in",
+                  "challenge"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrSumcheckChallengeBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "layer_idx",
+                  "sumcheck_round",
+                  "challenge"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrLayerSumcheckAir",
+              "col": "challenge",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrSumcheckChallengeBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "GkrLayerSumcheckAir",
+              "col": "challenge",
+              "row": 1
+            },
+            "to": {
+              "bus": "GkrSumcheckChallengeBus",
+              "field": "challenge",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "carry to next round"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"flow\">GkrLayerAir dispatches sumcheck to GkrLayerSumcheckAir via GkrSumcheckInputBus</span>. GkrLayerSumcheckAir has <span class=\"ref\" data-scene=\"transition\">round_idx starting at 0, incrementing by 1, reaching layer_idx - 1 on the last round (forcing exactly j sub-rounds for layer j)</span>. Each round observes (ev1, ev2, ev3) on TranscriptBus, samples r_i, performs cubic interpolation at r_i, and incrementally updates eq. The final result is sent back on GkrSumcheckOutputBus.",
+    "soundness_html": "The sumcheck chain pairing (GkrSumcheckInputBus/OutputBus) forces exactly K-1 sumcheck invocations, one per non-root layer. <span class=\"ref\" data-scene=\"transition\">The triangular polynomial structure (layer j has j sub-rounds, verifier_proof_shape line 404) is enforced by the round_idx boundary constraint</span>. Cubic interpolation and eq update are constrained algebraically; the sampled r values are pinned by the transcript."
+  },
+  "gkr-6": {
+    "default_scene": {
+      "note": "For each non-root layer, GkrLayerAir samples lambda, receives the sumcheck result on GkrSumcheckOutputBus, and enforces expected_claim == (p_cross + lambda * q_cross) * eq_at_r_prime.",
+      "airs": [
+        {
+          "name": "GkrLayerAir",
+          "rows": [
+            {
+              "row": 1,
+              "cols": [
+                "layer_idx",
+                "lambda",
+                "p_xi_0",
+                "q_xi_0",
+                "p_xi_1",
+                "q_xi_1",
+                "mu"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "GkrSumcheckOutputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "layer_idx",
+                "tidx",
+                "claim_out",
+                "eq_at_r_prime"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrLayerAir",
+            "col": "layer_idx",
+            "row": 1
+          },
+          "to": {
+            "bus": "GkrSumcheckOutputBus",
+            "field": "layer_idx",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sumcheck result"
+        },
+        {
+          "from": {
+            "air": "GkrLayerAir",
+            "col": "lambda",
+            "row": 1
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample lambda"
+        }
+      ]
+    },
+    "scenes": {
+      "consistency": {
+        "note": "Layer consistency: expected_claim (passed from the previous layer via internal state) must equal (p_cross + lambda * q_cross) * eq_at_r_prime. Any tampering with the observed (p_xi, q_xi) values breaks this identity.",
+        "airs": [
+          {
+            "name": "GkrLayerAir",
+            "rows": [
+              {
+                "row": 1,
+                "cols": [
+                  "layer_idx",
+                  "lambda",
+                  "p_xi_0",
+                  "p_xi_1",
+                  "q_xi_0",
+                  "q_xi_1"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrSumcheckOutputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "layer_idx",
+                  "claim_out",
+                  "eq_at_r_prime"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "lambda",
+              "row": 1
+            },
+            "to": {
+              "bus": "GkrSumcheckOutputBus",
+              "field": "eq_at_r_prime",
+              "row": 0
+            },
+            "kind": "receive",
+            "label": "cross-check (p+\u03bbq)\u00b7eq"
+          }
+        ]
+      },
+      "transition": {
+        "note": "Layer-to-layer chain: GkrLayerAir row i computes the claim passed to row i+1 via the internal state chain; layer_idx increments by 1 per row.",
+        "airs": [
+          {
+            "name": "GkrLayerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "layer_idx",
+                  "mu"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "layer_idx",
+                  "lambda",
+                  "mu"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [],
+        "connections": []
+      }
+    },
+    "constraints_html": "GkrLayerAir <span class=\"ref\" data-scene=\"consistency\">receives the sumcheck final output on GkrSumcheckOutputBus and checks expected_claim == (p_cross + lambda * q_cross) * eq_at_r_prime</span> where expected_claim is the (batched) claim passed in from the previous layer. It then observes (p_xi_0, q_xi_0, p_xi_1, q_xi_1), samples mu_j, and computes the next layer's claim via linear interpolation.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"consistency\">The layer consistency check binds the sumcheck output to the observed layer claims, so any tampering with the per-layer (p_xi, q_xi) values fails</span>. <span class=\"ref\" data-scene=\"transition\">The chain of layer claims is threaded by GkrLayerInputBus/OutputBus (internal permutation), so K layers are forced</span>."
+  },
+  "gkr-7": {
+    "default_scene": {
+      "note": "When n_max > n_logup (or n_logup = 0), GkrXiSamplerAir samples additional xi coordinates. GkrInputAir hands off the starting idx/tidx via GkrXiSamplerBus; the sampler returns control once it has emitted the required number of challenges.",
+      "airs": [
+        {
+          "name": "GkrXiSamplerAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_enabled",
+                "proof_idx",
+                "idx",
+                "tidx",
+                "xi"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "cols": [
+                "is_enabled",
+                "proof_idx",
+                "idx",
+                "tidx",
+                "xi"
+              ],
+              "kind": "secondary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "TranscriptBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "value",
+                "is_sample"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "GkrXiSamplerBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "XiRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrXiSamplerAir",
+            "col": "idx",
+            "row": 0
+          },
+          "to": {
+            "bus": "GkrXiSamplerBus",
+            "field": "idx",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "start from GkrInputAir"
+        },
+        {
+          "from": {
+            "air": "GkrXiSamplerAir",
+            "col": "xi",
+            "row": 0
+          },
+          "to": {
+            "bus": "TranscriptBus",
+            "field": "value",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "sample"
+        },
+        {
+          "from": {
+            "air": "GkrXiSamplerAir",
+            "col": "xi",
+            "row": 0
+          },
+          "to": {
+            "bus": "XiRandomnessBus",
+            "field": "xi",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "publish at idx"
+        }
+      ]
+    },
+    "scenes": {
+      "handoff": {
+        "note": "Round-trip on GkrXiSamplerBus: GkrInputAir sends the starting (idx, tidx); GkrXiSamplerAir advances and sends the ending (idx, tidx) back. Imbalanced multiplicity would fail verification.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "is_enabled",
+                  "n_logup",
+                  "n_max"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "GkrXiSamplerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx",
+                  "tidx"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": -1,
+                "cols": [
+                  "idx",
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrXiSamplerBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "tidx"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "idx",
+                  "tidx"
+                ],
+                "kind": "secondary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "n_max",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrXiSamplerBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "start idx"
+          },
+          {
+            "from": {
+              "air": "GkrXiSamplerAir",
+              "col": "idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrXiSamplerBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "GkrXiSamplerAir",
+              "col": "idx",
+              "row": -1
+            },
+            "to": {
+              "bus": "GkrXiSamplerBus",
+              "field": "idx",
+              "row": 1
+            },
+            "kind": "send",
+            "label": "end idx"
+          }
+        ]
+      },
+      "transition": {
+        "note": "Each row advances idx by 1 and tidx by D_EF = 4. The sampled xi is emitted on XiRandomnessBus at the corresponding idx.",
+        "airs": [
+          {
+            "name": "GkrXiSamplerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx",
+                  "tidx",
+                  "xi"
+                ],
+                "kind": "prev"
+              },
+              {
+                "row": 1,
+                "cols": [
+                  "idx",
+                  "tidx",
+                  "xi"
+                ],
+                "kind": "next"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "XiRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              },
+              {
+                "row": 1,
+                "fields": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrXiSamplerAir",
+              "col": "xi",
+              "row": 0
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "xi",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "GkrXiSamplerAir",
+              "col": "xi",
+              "row": 1
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "xi",
+              "row": 1
+            },
+            "kind": "send"
+          }
+        ]
+      }
+    },
+    "constraints_html": "GkrXiSamplerAir samples num_challenges = n_max + l_skip - has_interactions * K additional xi coordinates from TranscriptBus. It <span class=\"ref\" data-scene=\"handoff\">receives the starting tidx from GkrInputAir via GkrXiSamplerBus and sends each sampled value on XiRandomnessBus with the appropriate idx</span>.",
+    "soundness_html": "The number of additional coordinates is deterministic from (n_logup, n_max, l_skip). <span class=\"ref\" data-scene=\"handoff\">GkrInputAir's send/receive on GkrXiSamplerBus forces the correct count</span>; when n_logup = 0 all xi coordinates come from this AIR. is_n_max_greater must be 0 when n_max = n_logup &gt; 0, else the sampler leaves GkrXiSamplerBus unbalanced."
+  },
+  "gkr-8": {
+    "default_scene": {
+      "note": "The xi vector is assembled by three senders on the XiRandomnessBus permutation: GkrLayerAir (mu_{K-1} at idx=0), GkrLayerSumcheckAir (last-layer r values at idx=1..K-1), GkrXiSamplerAir (extras at idx=K..). Batch-constraint consumers read by idx.",
+      "airs": [
+        {
+          "name": "GkrLayerAir",
+          "rows": [
+            {
+              "row": -1,
+              "cols": [
+                "layer_idx",
+                "mu"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "GkrLayerSumcheckAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "layer_idx",
+                "round",
+                "challenge"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "GkrXiSamplerAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "XiRandomnessBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 1,
+              "fields": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            },
+            {
+              "row": 2,
+              "fields": [
+                "idx",
+                "xi"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrLayerAir",
+            "col": "mu",
+            "row": -1
+          },
+          "to": {
+            "bus": "XiRandomnessBus",
+            "field": "xi",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "idx = 0"
+        },
+        {
+          "from": {
+            "air": "GkrLayerSumcheckAir",
+            "col": "challenge",
+            "row": 0
+          },
+          "to": {
+            "bus": "XiRandomnessBus",
+            "field": "xi",
+            "row": 1
+          },
+          "kind": "send",
+          "label": "idx = 1..K-1"
+        },
+        {
+          "from": {
+            "air": "GkrXiSamplerAir",
+            "col": "xi",
+            "row": 0
+          },
+          "to": {
+            "bus": "XiRandomnessBus",
+            "field": "xi",
+            "row": 2
+          },
+          "kind": "send",
+          "label": "idx = K.."
+        }
+      ]
+    },
+    "scenes": {
+      "flow": {
+        "note": "XiRandomnessBus is a permutation bus; its receivers (EqNsAir, EqSharpUniAir) constrain exact indexing. Mismatched entries cause imbalance.",
+        "airs": [
+          {
+            "name": "GkrXiSamplerAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "XiRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrXiSamplerAir",
+              "col": "idx",
+              "row": 0
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "idx",
+              "row": 0
+            },
+            "kind": "send"
+          },
+          {
+            "from": {
+              "air": "GkrXiSamplerAir",
+              "col": "xi",
+              "row": 0
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "xi",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "consumed by EqNsAir/EqSharpUniAir"
+          }
+        ]
+      },
+      "boundary": {
+        "note": "The first xi coordinate is the mu from the last GKR layer (row -1 of GkrLayerAir).",
+        "airs": [
+          {
+            "name": "GkrLayerAir",
+            "rows": [
+              {
+                "row": -1,
+                "cols": [
+                  "layer_idx",
+                  "mu"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "XiRandomnessBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "idx",
+                  "xi"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrLayerAir",
+              "col": "mu",
+              "row": -1
+            },
+            "to": {
+              "bus": "XiRandomnessBus",
+              "field": "xi",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "xi[0] = mu_{K-1}"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"boundary\">GkrLayerAir sends (idx=0, mu_{K-1}) on XiRandomnessBus</span>. GkrLayerSumcheckAir sends the K-1 sumcheck challenges from the last layer at idx = 1..K-1. GkrXiSamplerAir sends any additional coordinates at idx = K.. Total: n_global + l_skip messages.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"flow\">XiRandomnessBus is a permutation bus; its receivers (BatchConstraint's EqNsAir, EqSharpUniAir; Stacking's consumers) constrain exact indexing. Mismatched entries cause imbalance</span>. The xi values are all transcript samples, pinned by the sponge (T)."
+  },
+  "gkr-9": {
+    "default_scene": {
+      "note": "GkrInputAir receives the last GKR layer's (numer_claim, denom_claim) on GkrLayerOutputBus, assembles gkr_claim = [numer, denom - alpha_logup], and sends it to BatchConstraint via BatchConstraintModuleBus. It also emits tidx_cf on ConstraintsFoldingInputBus.",
+      "airs": [
+        {
+          "name": "GkrInputAir",
+          "rows": [
+            {
+              "row": 0,
+              "cols": [
+                "is_enabled",
+                "tidx",
+                "alpha_logup",
+                "input_layer_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "buses": [
+        {
+          "name": "GkrLayerOutputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "layer_idx_end",
+                "input_layer_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "BatchConstraintModuleBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx",
+                "gkr_input_layer_claim"
+              ],
+              "kind": "primary"
+            }
+          ]
+        },
+        {
+          "name": "ConstraintsFoldingInputBus",
+          "rows": [
+            {
+              "row": 0,
+              "fields": [
+                "tidx"
+              ],
+              "kind": "primary"
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "input_layer_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "GkrLayerOutputBus",
+            "field": "input_layer_claim",
+            "row": 0
+          },
+          "kind": "receive",
+          "label": "from last layer"
+        },
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "input_layer_claim",
+            "row": 0
+          },
+          "to": {
+            "bus": "BatchConstraintModuleBus",
+            "field": "gkr_input_layer_claim",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "[p, q - alpha]"
+        },
+        {
+          "from": {
+            "air": "GkrInputAir",
+            "col": "tidx",
+            "row": 0
+          },
+          "to": {
+            "bus": "ConstraintsFoldingInputBus",
+            "field": "tidx",
+            "row": 0
+          },
+          "kind": "send",
+          "label": "tidx_cf"
+        }
+      ]
+    },
+    "scenes": {
+      "flow": {
+        "note": "The full GKR\u2192BC handoff: GkrLayerOutputBus carries the internal GKR output back to GkrInputAir, which rewrites the second component (subtract alpha_logup) and forwards via BatchConstraintModuleBus.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "alpha_logup",
+                  "input_layer_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "GkrLayerOutputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "input_layer_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          },
+          {
+            "name": "BatchConstraintModuleBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx",
+                  "gkr_input_layer_claim"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "input_layer_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "GkrLayerOutputBus",
+              "field": "input_layer_claim",
+              "row": 0
+            },
+            "kind": "receive"
+          },
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "input_layer_claim",
+              "row": 0
+            },
+            "to": {
+              "bus": "BatchConstraintModuleBus",
+              "field": "gkr_input_layer_claim",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "q \u2190 q - alpha_logup"
+          }
+        ]
+      },
+      "folding-schedule": {
+        "note": "GkrInputAir also emits tidx_cf = tidx_bc - D_EF on ConstraintsFoldingInputBus so BC's ConstraintsFoldingAir samples lambda at the right transcript slot.",
+        "airs": [
+          {
+            "name": "GkrInputAir",
+            "rows": [
+              {
+                "row": 0,
+                "cols": [
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "buses": [
+          {
+            "name": "ConstraintsFoldingInputBus",
+            "rows": [
+              {
+                "row": 0,
+                "fields": [
+                  "tidx"
+                ],
+                "kind": "primary"
+              }
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "from": {
+              "air": "GkrInputAir",
+              "col": "tidx",
+              "row": 0
+            },
+            "to": {
+              "bus": "ConstraintsFoldingInputBus",
+              "field": "tidx",
+              "row": 0
+            },
+            "kind": "send",
+            "label": "tidx_cf = tidx_bc - D_EF"
+          }
+        ]
+      }
+    },
+    "constraints_html": "<span class=\"ref\" data-scene=\"flow\">GkrInputAir receives the last layer's (numer_claim, denom_claim) via internal GkrLayerOutputBus, assembles gkr_claim = [numer_claim, denom_claim - alpha_logup], and sends (tidx_bc, gkr_claim) on BatchConstraintModuleBus</span>. It also <span class=\"ref\" data-scene=\"folding-schedule\">sends tidx_cf = tidx_bc - D_EF on ConstraintsFoldingInputBus for BC's lambda sampling</span>.",
+    "soundness_html": "<span class=\"ref\" data-scene=\"flow\">The output claim is an affine combination of sponge-pinned values (last layer's claims, alpha_logup), so it is determined by W</span>. The handoff tidx values are deterministic functions of tidx_end and the GKR schedule, <span class=\"ref\" data-scene=\"folding-schedule\">ensuring the BC module samples at the correct transcript positions</span>."
+  }
+}

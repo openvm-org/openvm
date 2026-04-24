@@ -1,0 +1,728 @@
+{
+  "main_claim": {
+    "statement": "Fix a child verifying key vk_child and the instantiated verifier sub-circuit C_ver(vk_child). If W is a satisfying witness of C_ver(vk_child) (all AIR constraints satisfied and all bus interactions balance), then there is a deterministic algorithm Extract(W) that produces proofs pi_j such that verify(vk_child, pi_j) accepts for each j, provided (1) the VK pre-hash observed on the transcript equals hash(vk_child), and (2) SymbolicExpressionAir's cached trace commitment encodes vk_child's symbolic constraints.",
+    "assumptions": [
+      "The VK pre-hash observed on the transcript equals hash(vk_child). The subcircuit cannot bind this directly without changing its own VK, so the enclosing circuit (or downstream consumer) must verify it. When continuations are enabled, ProofShapeAir exposes the pre-hash via PreHashBus for this purpose.",
+      "SymbolicExpressionAir's cached trace commitment encodes vk_child's symbolic constraint DAG (expression nodes, variable entries, interaction structure). This commitment is observed on the transcript as part of ProofShape's preamble; the enclosing circuit must check it matches the expected child VK's constraint structure."
+    ],
+    "decomposition": [
+      {
+        "label": "(T) Transcript consistency",
+        "statement": "All transcript interactions across all modules embed into a single linear transcript indexed by tidx, with no duplicated index and no gaps. TranscriptAir enforces Poseidon2 sponge correctness; TranscriptBus is a permutation bus so the multiset of (proof_idx, tidx, value, is_sample) sends by TranscriptAir must exactly equal the multiset of receives by all other AIRs."
+      },
+      {
+        "label": "(PS) ProofShape consistency",
+        "statement": "The structural messages broadcast by ProofShape encode vk_child and the child proof metadata: sort order, presence flags, heights, commitments, hypercube/lift dimensions, n_logup, n_max, and the total-interactions bound. ProofShapeAir's summary row enforces sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count, which at circuit-build time is verified to imply all of vk_child's TraceHeightConstraints."
+      },
+      {
+        "label": "(LT) Primitive lookup table correctness",
+        "statement": "Each lookup-table AIR's constraints force valid table entries. Poseidon2Air provides correct permutation and compression evaluations; PowerCheckerAir enumerates (log, 2^log) pairs; ExpBitsLenAir computes base^(bit_src & mask) via recursive binary exponentiation and also serves RightShiftBus; RangeCheckerAir exhaustively enumerates [0, 2^NUM_BITS)."
+      },
+      {
+        "label": "(M-GKR)",
+        "statement": "Given the ProofShape→GKR handoff (tidx_end, n_logup, n_max, is_n_max_greater) and a consistent transcript, the GKR AIRs (GkrInputAir, GkrLayerAir, GkrLayerSumcheckAir, GkrXiSamplerAir) extract a GkrProof from W such that the GKR portion of verify_zerocheck_and_logup (including verify_gkr) accepts. The output xi vector and aggregated gkr_claim = [p_claim, q_claim - alpha_logup] are sent to BatchConstraint."
+      },
+      {
+        "label": "(M-BC)",
+        "statement": "Given the GKR→BatchConstraint handoff (tidx_bc, gkr_claim) and xi, the 13 BatchConstraint AIRs extract a BatchConstraintProof and verify the post-GKR portion of verify_zerocheck_and_logup: beta sampling, symbolic DAG evaluation at column openings, lambda-folding of constraints, beta-folding of interactions, univariate + multilinear sumcheck, and the final claim check cur_sum == evaluated_claim."
+      },
+      {
+        "label": "(M-Stack)",
+        "statement": "Given the BC→Stacking handoff (tidx_stack, sumcheck randomness r) and column openings, the 6 Stacking AIRs extract a StackingProof and verify verify_stacked_reduction plus the outer-caller column-opening observation and mu PoW/sampling: s_0 = RLC(t_claims, lambda), univariate round at u_0, n_stack quadratic sumcheck rounds, final stacking check claim == sum(q_coeffs * stacking_openings), and whir_claim = RLC(stacking_openings, mu)."
+      },
+      {
+        "label": "(M-WHIR)",
+        "statement": "Given the Stacking→WHIR handoff (tidx_whir, whir_claim, mu, u_cube) and a consistent transcript, the 8 WHIR AIRs extract a WhirProof and verify verify_whir: per-round k_whir sumcheck steps with alpha challenges, codeword commitment observation, query generation, Merkle-path-verified row openings, binary k-fold to yi, gamma-weighted claim accumulation, and the final check acc == prefix * suffix + sum of gamma-weighted query/OOD terms."
+      }
+    ]
+  },
+  "phases": [
+    {
+      "id": "preamble",
+      "name": "Phase 1: Preamble",
+      "summary": "The reference verifier observes VK metadata, commitments, and public values into the Fiat-Shamir transcript, then validates proof shape and trace-height constraints. In the circuit, ProofShapeAir and PublicValuesAir replay these observations at matching tidx positions and broadcast per-AIR metadata on data buses that downstream modules consume.",
+      "transcript_range": "tidx 0 .. tidx_end",
+      "steps": [
+        {
+          "id": "preamble-1",
+          "title": "Observe VK pre-hash",
+          "verifier_action": "Observe MVK pre-hash into the Fiat-Shamir transcript as the first preamble operation.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["TranscriptBus", "PreHashBus"],
+          "columns": [],
+          "constraints": "ProofShapeAir observes the VK pre-hash (DIGEST_SIZE elements) on its first row via TranscriptBus with is_sample=0. When continuations are enabled, the pre-hash is also sent on PreHashBus so the enclosing circuit can expose it as a public value.",
+          "soundness": "The pre-hash is a prover-supplied value absorbed into the Fiat-Shamir sponge, so it pins all downstream challenges via the Poseidon2 sponge chain. The subcircuit cannot constrain the pre-hash to equal hash(vk_child) directly (that would bake hash(vk_child) into the circuit's own VK, breaking self-verification); instead, the enclosing circuit must verify pre-hash == hash(vk_child). This is the first assumption of the main claim.",
+          "verifier_ref": "verifier/mod.rs lines 126-128"
+        },
+        {
+          "id": "preamble-2",
+          "title": "Observe common_main_commit",
+          "verifier_action": "Observe the common main trace commitment into the transcript and record it for later Merkle verification.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["TranscriptBus", "CommitmentsBus"],
+          "columns": [],
+          "constraints": "ProofShapeAir observes common_main_commit (DIGEST_SIZE elements) on TranscriptBus, and simultaneously sends it on CommitmentsBus with (major_idx=0, minor_idx=commit_index) so MerkleVerifyAir can authenticate Merkle roots against it during WHIR query verification.",
+          "soundness": "Because the same cell is used for both the TranscriptBus observation and the CommitmentsBus send, the extracted common_main_commit equals both the transcript-observed value and the Merkle root used for query verification. Any discrepancy would cause a bus imbalance on either TranscriptBus or CommitmentsBus.",
+          "verifier_ref": "verifier/mod.rs lines 130-140 (preamble block 126-155)"
+        },
+        {
+          "id": "preamble-3",
+          "title": "Per-AIR: observe is_present flag",
+          "verifier_action": "For each optional AIR, observe the presence boolean (1 if present, 0 if absent) into the transcript.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["TranscriptBus", "AirPresenceBus"],
+          "columns": ["is_present", "log_height"],
+          "constraints": "For each AIR row, ProofShapeAir conditionally observes is_present on TranscriptBus (only when the AIR is not VK-required). PS1b enforces that VK-required AIRs have is_present = 1. AirPresenceBus broadcasts (air_idx, is_present) to downstream modules for every AIR (present or absent).",
+          "soundness": "PS1a constrains is_present to be boolean; PS1b forces VK-required AIRs to have is_present = 1. The per-AIR flag is pinned on the transcript at the correct tidx (precomputed in air_idx order via the preflight starting_tidx). Together these guarantee the presence bits in Extract(W) match the presence bits in the reference verifier's proof.",
+          "verifier_ref": "verifier/mod.rs preamble 126-155; verify_proof_shape lines 316-336"
+        },
+        {
+          "id": "preamble-4",
+          "title": "Per-AIR: observe preprocessed commit or log_height",
+          "verifier_action": "For each present AIR, observe either the preprocessed-data commitment (if the AIR has preprocessed data) or the log_height scalar.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["TranscriptBus", "CommitmentsBus"],
+          "columns": ["log_height"],
+          "constraints": "ProofShapeAir observes preprocessed_commit (DIGEST_SIZE elements, VK-fixed) or log_height depending on the AIR's VK metadata. Preprocessed commitments are additionally registered on CommitmentsBus. PS1a range-checks log_height to [0, 32) via PowerCheckerBus, which simultaneously enforces height = 2^log_height.",
+          "soundness": "PowerCheckerBus lookup guarantees log_height in range and ties height to 2^log_height by table correctness (LT). The preprocessed commit is VK-fixed per AIR, so its value is determined by the child VK; CommitmentsBus routes it to MerkleVerifyAir for authentication when the corresponding AIR's cached trace is opened.",
+          "verifier_ref": "verifier/mod.rs preamble 126-155"
+        },
+        {
+          "id": "preamble-5",
+          "title": "Per-AIR: observe cached commitments",
+          "verifier_action": "For each present AIR, observe each of its cached trace commitments into the transcript.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["TranscriptBus", "CachedCommitBus", "CommitmentsBus"],
+          "columns": ["cached_commits"],
+          "constraints": "ProofShapeAir observes each cached_commits[i] (DIGEST_SIZE elements) on TranscriptBus and registers it on CommitmentsBus for later Merkle root authentication during WHIR. CachedCommitBus is used for circuit-internal continuations support.",
+          "soundness": "The number of cached commitments per AIR is VK-fixed, so the trace row structure enforces the correct count (verify_proof_shape line 343). The same cell drives the transcript observation and the CommitmentsBus send, pinning the cached commitment value to both the transcript and Merkle verification.",
+          "verifier_ref": "verifier/mod.rs preamble 126-155; verify_proof_shape line 343"
+        },
+        {
+          "id": "preamble-6",
+          "title": "Per-AIR: observe public values",
+          "verifier_action": "For each present AIR, observe its public values into the transcript in sequence.",
+          "airs": ["proof-shape.ProofShapeAir", "proof-shape.PublicValuesAir"],
+          "buses": ["TranscriptBus", "PublicValuesBus", "NumPublicValuesBus"],
+          "columns": ["air_idx", "pv_idx", "value"],
+          "constraints": "ProofShapeAir sends (air_idx, tidx, num_pvs) on NumPublicValuesBus where num_pvs is a VK constant. PublicValuesAir has one row per public value, receives from NumPublicValuesBus, and for each row: (a) receives (tidx, value, is_sample=0) from TranscriptBus, (b) sends (air_idx, pv_idx, value) on PublicValuesBus to SymbolicExpressionAir.",
+          "soundness": "Because the same value cell drives both the TranscriptBus receive and the PublicValuesBus send, the extracted public values are exactly the transcript-observed values AND exactly the values used in constraint evaluation. This matches the reference verifier, which observes PVs and then passes the same vector to verify_zerocheck_and_logup.",
+          "verifier_ref": "verifier/mod.rs preamble 126-155; verify_proof_shape line 360"
+        },
+        {
+          "id": "preamble-7",
+          "title": "Validate proof shape (VData lengths, bounds)",
+          "verifier_action": "verify_proof_shape validates that all proof arrays have correct lengths (num_airs, cached_commitments count, log_height bounds, num_public_values, etc.).",
+          "airs": ["proof-shape.ProofShapeAir", "proof-shape.RangeCheckerAir"],
+          "buses": ["RangeCheckerBus", "AirShapeBus", "HyperdimBus", "LiftedHeightsBus", "PowerCheckerBus"],
+          "columns": ["log_height", "n_abs", "n_sign_bit", "n", "lifted_height", "log_lifted_height"],
+          "constraints": "ProofShapeAir range-checks log_height (via PowerCheckerBus, which enforces height = 2^log_height) and enforces non-increasing heights (log_height[i] - log_height[i+1] >= 0 via RangeCheckerBus). The idx_encoder validates log_height bounds (log_height <= l_skip + n_stack). The number of cached-commitment columns per AIR is VK-fixed in the trace.",
+          "soundness": "All shape validations distribute across (i) VK-fixed trace structure (num_airs, max_cached, num_pvs are circuit constants so the trace row count is correct by construction), (ii) range checks via RangeCheckerBus/PowerCheckerBus (both Primitive Lookup Tables enforce correct entries — LT), and (iii) bus balancing (e.g., stacking OpeningClaimsAir range-checks l_skip + n_stack - log_lifted_height via EqBitsLookupBus, so negative values fail). See proof-shape-validation.md.",
+          "verifier_ref": "verifier/mod.rs line 94 (verify_proof_shape); verifier/proof_shape.rs lines 316-786"
+        },
+        {
+          "id": "preamble-8",
+          "title": "Enforce trace height constraint",
+          "verifier_action": "For each TraceHeightConstraint in the VK, verify sum_i(lifted_height[i] * coefficient[i]) < threshold.",
+          "airs": ["proof-shape.ProofShapeAir", "proof-shape.RangeCheckerAir"],
+          "buses": ["RangeCheckerBus"],
+          "columns": ["total_interactions", "lifted_height"],
+          "constraints": "ProofShapeAir's summary row (last valid row per proof) accumulates total_interactions = sum_i(num_interactions[i] * lifted_height[i]) incrementally, decomposes the result into limbs, and range-checks each limb via RangeCheckerBus. The constraint total_interactions < max_interaction_count is baked into the circuit from the child VK (PS1c).",
+          "soundness": "The single max_interaction_count bound is verified at circuit construction time (VerifierSubCircuit::new) to imply every TraceHeightConstraint in the child VK: for each VK constraint, coefficient[i] <= num_interactions[i] and threshold >= max_interaction_count. Therefore any witness satisfying PS1c's summary-row bound also satisfies all child VK constraints. The limb range checks are sound by RangeCheckerAir's table correctness (LT).",
+          "verifier_ref": "verifier/mod.rs lines 108-120 (G2)"
+        },
+        {
+          "id": "preamble-9",
+          "title": "Compute sort order (trace_id_to_air_id)",
+          "verifier_action": "Sort AIRs by (is_none, Reverse(log_height), air_id) to produce trace_id_to_air_id.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["AirShapeBus"],
+          "columns": ["sort_idx", "air_idx", "log_height"],
+          "constraints": "ProofShapeAir has one row per AIR indexed by sort_idx (0..num_airs-1). It constrains non-increasing heights via RangeCheckerBus, forces absent AIRs last (log_height = 0 when is_present = 0), and enforces the sort_idx -> air_idx mapping is a bijection via an internal permutation bus.",
+          "soundness": "The tiebreaker within a height tie is a prover choice, which is sound because: (i) all downstream data is keyed by the same sort_idx, so reordering within a tie relabels everything consistently, and (ii) the reference verifier's algorithm only depends on non-increasing heights, not on which specific AIR occupies each sort position within a tie.",
+          "verifier_ref": "verifier/mod.rs lines 96-106"
+        },
+        {
+          "id": "preamble-10",
+          "title": "Populate per-AIR metadata buses",
+          "verifier_action": "Compute derived quantities (n_per_trace, n_logup, n_max, num_present_airs) and make them available for downstream phases.",
+          "airs": ["proof-shape.ProofShapeAir"],
+          "buses": ["AirShapeBus", "HyperdimBus", "NLiftBus", "FractionFolderInputBus", "ExpressionClaimNMaxBus", "GkrModuleBus", "EqNsNLogupMaxBus", "Eq3bShapeBus"],
+          "columns": ["n_logup", "n_max", "num_present_airs", "tidx_end"],
+          "constraints": "ProofShapeAir sends per-AIR metadata: (i, air_idx, num_interactions, need_rot) on AirShapeBus; (i, n_abs, n_sign_bit) on HyperdimBus; (air_idx, n_lift) on NLiftBus; (i, n_lift, n_logup, num_interactions) on Eq3bShapeBus. Per-proof: (tidx_end, n_logup, n_max, is_n_max_greater) on GkrModuleBus; (n_logup, n_max) on EqNsNLogupMaxBus; (n_max) on ExpressionClaimNMaxBus; (num_present_airs) on FractionFolderInputBus.",
+          "soundness": "All derived quantities are deterministic functions of the extracted attributes and VK constants (PS1c). The bus messages are the only way downstream modules access these quantities; since TranscriptBus/AirShapeBus/etc. are permutation buses, any attempt to send inconsistent values would cause imbalance with the receiving AIRs' constrained loop boundaries (see M-GKR, M-BC, M-Stack, M-WHIR extraction arguments).",
+          "verifier_ref": "verifier/mod.rs preamble 126-155; module chaining (GkrModuleBus handoff)"
+        }
+      ]
+    },
+    {
+      "id": "gkr",
+      "name": "Phase 2a: GKR",
+      "summary": "verify_zerocheck_and_logup begins with logup PoW, alpha sampling, and calls verify_gkr to reduce the fractional sumcheck claim layer-by-layer. In the circuit, GkrInputAir receives the ProofShape handoff, dispatches to GkrLayerAir which chains through K = n_logup + l_skip layers, each layer running a sumcheck via GkrLayerSumcheckAir. The output is the xi evaluation point and gkr_claim, handed off to BatchConstraint.",
+      "transcript_range": "tidx_end .. tidx_bc",
+      "steps": [
+        {
+          "id": "gkr-1",
+          "title": "PoW check for logup",
+          "verifier_action": "Observe logup_pow_witness, sample logup_pow_sample, and verify it satisfies the pow_bits difficulty condition (if pow_bits > 0).",
+          "airs": ["gkr.GkrInputAir", "primitives.ExpBitsLenAir"],
+          "buses": ["TranscriptBus", "ExpBitsLenBus"],
+          "columns": ["logup_pow_witness", "logup_pow_sample"],
+          "constraints": "GkrInputAir observes logup_pow_witness on TranscriptBus and samples logup_pow_sample. It then issues an ExpBitsLenBus lookup that verifies the sampled value has pow_bits low zero bits.",
+          "soundness": "ExpBitsLenAir's table correctness (LT) guarantees that the lookup succeeds iff the PoW condition holds. The observation/sample pair is tied to the Poseidon2 sponge (T), so the sample is a deterministic function of the observation, and the prover must do pow_bits work to find a favorable witness.",
+          "verifier_ref": "verify_zerocheck_and_logup (batch_constraints.rs); GKR schedule step (1)"
+        },
+        {
+          "id": "gkr-2",
+          "title": "Sample alpha_logup (and reserve beta_logup gap)",
+          "verifier_action": "Sample alpha_logup and beta_logup consecutively from the transcript.",
+          "airs": ["gkr.GkrInputAir", "batch-constraint.InteractionsFoldingAir"],
+          "buses": ["TranscriptBus", "InteractionsFoldingInputBus"],
+          "columns": ["alpha_logup", "tidx_if"],
+          "constraints": "GkrInputAir samples alpha_logup at tidx = tidx_end + pow_offset. It reserves a D_EF-wide gap for beta_logup at tidx_if = tidx_end + pow_offset + D_EF and sends tidx_if on InteractionsFoldingInputBus so BatchConstraint's InteractionsFoldingAir can sample beta_logup at the reserved position.",
+          "soundness": "alpha_logup and beta_logup are transcript samples pinned by the Poseidon2 sponge (T). Although BC samples beta within GKR's transcript range, the TranscriptBus permutation check still holds because each tidx is owned by exactly one AIR (GKR owns alpha, BC owns beta at tidx_if). The handoff tidx_if is a deterministic function of tidx_end and pow_bits.",
+          "verifier_ref": "verify_zerocheck_and_logup (batch_constraints.rs); GKR schedule step (2)"
+        },
+        {
+          "id": "gkr-3",
+          "title": "Observe q0_claim (root GKR claim)",
+          "verifier_action": "Observe the root denominator claim q0_claim = Σ_i alpha^i into the transcript (if n_logup > 0).",
+          "airs": ["gkr.GkrInputAir"],
+          "buses": ["TranscriptBus"],
+          "columns": ["q0_claim"],
+          "constraints": "GkrInputAir observes q0_claim (D_EF) on TranscriptBus. When n_logup = 0, q0_claim is set to 1 by construction and no transcript slot is used.",
+          "soundness": "The root claim is pinned on the transcript. GkrLayerAir's root-layer boundary constraint then enforces q_cross == q0_claim (verified at the root layer), so any GKR reduction must match the observed root claim.",
+          "verifier_ref": "verify_gkr (fractional_sumcheck_gkr.rs); GKR schedule step (3)"
+        },
+        {
+          "id": "gkr-4",
+          "title": "GKR layer 0 (root): zero-check + observe layer claims",
+          "verifier_action": "At the root layer, check p_cross = 0 and q_cross = q0_claim. Observe (p_xi_0, q_xi_0, p_xi_1, q_xi_1) and sample mu_0.",
+          "airs": ["gkr.GkrLayerAir"],
+          "buses": ["TranscriptBus", "XiRandomnessBus", "GkrLayerInputBus", "GkrLayerOutputBus"],
+          "columns": ["p_xi_0", "q_xi_0", "p_xi_1", "q_xi_1", "mu"],
+          "constraints": "GkrLayerAir observes (p_xi_0, q_xi_0, p_xi_1, q_xi_1) on TranscriptBus and samples mu. On the root layer (layer_idx = 0), it enforces p_cross = 0 and q_cross = q0_claim (zero-check / root consistency). It then computes the next layer's claim via linear interpolation: claim_next = (p_xi_0 + mu*(p_xi_1 - p_xi_0), q_xi_0 + mu*(q_xi_1 - q_xi_0)).",
+          "soundness": "The root zero-check is the defining LogUp identity: p_cross = 0 means the numerator sum telescopes to zero, and q_cross = q0_claim ties the GKR recursion to the observed root denominator claim. Linear interpolation with mu is algebraically constrained within the AIR.",
+          "verifier_ref": "verify_gkr layer loop (fractional_sumcheck_gkr.rs); GKR schedule step (4)"
+        },
+        {
+          "id": "gkr-5",
+          "title": "GKR layers 1..K-1: per-layer sumcheck",
+          "verifier_action": "For layer j = 1..K-1, run a j-round sumcheck: sample lambda_j, then for each sub-round observe (ev1, ev2, ev3) and sample r_i, verifying cubic interpolation.",
+          "airs": ["gkr.GkrLayerAir", "gkr.GkrLayerSumcheckAir"],
+          "buses": ["TranscriptBus", "GkrSumcheckInputBus", "GkrSumcheckOutputBus", "GkrSumcheckChallengeBus"],
+          "columns": ["round", "ev1", "ev2", "ev3", "r_i", "eq"],
+          "constraints": "GkrLayerAir dispatches sumcheck to GkrLayerSumcheckAir via GkrSumcheckInputBus. GkrLayerSumcheckAir has round_idx starting at 0, incrementing by 1, reaching layer_idx - 1 on the last round (forcing exactly j sub-rounds for layer j). Each round observes (ev1, ev2, ev3) on TranscriptBus, samples r_i, performs cubic interpolation at r_i, and incrementally updates eq. The final result is sent back on GkrSumcheckOutputBus.",
+          "soundness": "The sumcheck chain pairing (GkrSumcheckInputBus/OutputBus) forces exactly K-1 sumcheck invocations, one per non-root layer. The triangular polynomial structure (layer j has j sub-rounds, verifier_proof_shape line 404) is enforced by the round_idx boundary constraint. Cubic interpolation and eq update are constrained algebraically; the sampled r values are pinned by the transcript.",
+          "verifier_ref": "verify_gkr_sumcheck (fractional_sumcheck_gkr.rs); GKR schedule step (4)"
+        },
+        {
+          "id": "gkr-6",
+          "title": "GKR layers 1..K-1: verify layer consistency",
+          "verifier_action": "For each non-root layer, verify expected_claim == (p_cross + lambda * q_cross) * eq_at_r_prime.",
+          "airs": ["gkr.GkrLayerAir"],
+          "buses": ["GkrSumcheckOutputBus", "TranscriptBus", "XiRandomnessBus"],
+          "columns": ["layer_idx", "p_cross", "q_cross", "lambda", "eq_at_r_prime", "expected_claim"],
+          "constraints": "GkrLayerAir receives the sumcheck final output on GkrSumcheckOutputBus and checks expected_claim == (p_cross + lambda * q_cross) * eq_at_r_prime where expected_claim is the (batched) claim passed in from the previous layer. It then observes (p_xi_0, q_xi_0, p_xi_1, q_xi_1), samples mu_j, and computes the next layer's claim via linear interpolation.",
+          "soundness": "The layer consistency check binds the sumcheck output to the observed layer claims, so any tampering with the per-layer (p_xi, q_xi) values fails. The chain of layer claims is threaded by GkrLayerInputBus/OutputBus (internal permutation), so K layers are forced.",
+          "verifier_ref": "verify_gkr layer loop; GKR module argument"
+        },
+        {
+          "id": "gkr-7",
+          "title": "Sample additional xi coordinates (if needed)",
+          "verifier_action": "If n_max > n_logup (or n_logup = 0), sample additional xi coordinates from the transcript until xi has n_global + l_skip entries.",
+          "airs": ["gkr.GkrXiSamplerAir"],
+          "buses": ["TranscriptBus", "XiRandomnessBus", "GkrXiSamplerBus"],
+          "columns": ["xi_k"],
+          "constraints": "GkrXiSamplerAir samples num_challenges = n_max + l_skip - has_interactions * K additional xi coordinates from TranscriptBus. It receives the starting tidx from GkrInputAir via GkrXiSamplerBus and sends each sampled value on XiRandomnessBus with the appropriate idx.",
+          "soundness": "The number of additional coordinates is deterministic from (n_logup, n_max, l_skip). GkrInputAir's send/receive on GkrXiSamplerBus forces the correct count; when n_logup = 0 all xi coordinates come from this AIR. is_n_max_greater must be 0 when n_max = n_logup > 0, else the sampler leaves GkrXiSamplerBus unbalanced.",
+          "verifier_ref": "verify_zerocheck_and_logup xi extension; GKR schedule step (5)"
+        },
+        {
+          "id": "gkr-8",
+          "title": "Assemble xi vector",
+          "verifier_action": "The xi vector is built: xi[0] = mu_{K-1}, xi[1..K] = sumcheck r values from the last layer, xi[K..] = additional samples.",
+          "airs": ["gkr.GkrLayerAir", "gkr.GkrLayerSumcheckAir", "gkr.GkrXiSamplerAir"],
+          "buses": ["XiRandomnessBus"],
+          "columns": ["xi", "idx"],
+          "constraints": "GkrLayerAir sends (idx=0, mu_{K-1}) on XiRandomnessBus. GkrLayerSumcheckAir sends the K-1 sumcheck challenges from the last layer at idx = 1..K-1. GkrXiSamplerAir sends any additional coordinates at idx = K.. Total: n_global + l_skip messages.",
+          "soundness": "XiRandomnessBus is a permutation bus; its receivers (BatchConstraint's EqNsAir, EqSharpUniAir; Stacking's consumers) constrain exact indexing. Mismatched entries cause imbalance. The xi values are all transcript samples, pinned by the sponge (T).",
+          "verifier_ref": "verify_gkr xi assembly; GKR module argument on xi vector"
+        },
+        {
+          "id": "gkr-9",
+          "title": "Output gkr_claim to BatchConstraint",
+          "verifier_action": "Pass gkr_claim = [p_claim, q_claim - alpha_logup] and tidx_bc to BatchConstraint.",
+          "airs": ["gkr.GkrInputAir"],
+          "buses": ["BatchConstraintModuleBus", "GkrLayerOutputBus", "ConstraintsFoldingInputBus"],
+          "columns": ["p_claim", "q_claim", "gkr_claim", "tidx_bc"],
+          "constraints": "GkrInputAir receives the last layer's (numer_claim, denom_claim) via internal GkrLayerOutputBus, assembles gkr_claim = [numer_claim, denom_claim - alpha_logup], and sends (tidx_bc, gkr_claim) on BatchConstraintModuleBus. It also sends tidx_cf = tidx_bc - D_EF on ConstraintsFoldingInputBus for BC's lambda sampling.",
+          "soundness": "The output claim is an affine combination of sponge-pinned values (last layer's claims, alpha_logup), so it is determined by W. The handoff tidx values are deterministic functions of tidx_end and the GKR schedule, ensuring the BC module samples at the correct transcript positions.",
+          "verifier_ref": "verify_zerocheck_and_logup GKR return; GKR module argument (final output)"
+        }
+      ]
+    },
+    {
+      "id": "bc",
+      "name": "Phase 2b: Batch Constraint",
+      "summary": "After GKR, the verifier samples beta, observes per-AIR numerator/denominator terms, samples mu, runs a univariate + multilinear sumcheck, and evaluates the symbolic constraint DAG at the final point to verify the batched claim. In the circuit, the 13 BC AIRs split this into a sumcheck pipeline (FractionsFolder → UnivariateSumcheck → MultilinearSumcheck → ExpressionClaim), DAG evaluation (SymbolicExpressionAir), folding (Constraints/InteractionsFoldingAir), and eq-polynomial precomputation (EqNs, EqNeg, EqUni, EqSharpUni, Eq3b).",
+      "transcript_range": "tidx_bc .. tidx_stack",
+      "steps": [
+        {
+          "id": "bc-1",
+          "title": "Sample beta_logup (interaction batching)",
+          "verifier_action": "Sample beta_logup from the transcript for batching interaction evaluations (interleaved at tidx_if within GKR's range).",
+          "airs": ["batch-constraint.InteractionsFoldingAir"],
+          "buses": ["TranscriptBus", "InteractionsFoldingInputBus", "BatchConstraintConductorBus"],
+          "columns": ["beta_logup"],
+          "constraints": "InteractionsFoldingAir receives tidx_if from GkrInputAir via InteractionsFoldingInputBus, samples beta_logup on TranscriptBus at that position, and places it on BatchConstraintConductorBus for later consumption.",
+          "soundness": "Although BC's beta sample is interleaved into GKR's transcript range, TranscriptBus's per-tidx ownership ensures no collision: GKR's alpha is at tidx_if - D_EF, BC's beta is at tidx_if. The sponge state at tidx_if absorbs alpha (GKR's sample) first, so beta is a deterministic function of everything before it.",
+          "verifier_ref": "verify_zerocheck_and_logup (batch_constraints.rs); BC schedule step (1)"
+        },
+        {
+          "id": "bc-2",
+          "title": "Sample lambda (constraint batching)",
+          "verifier_action": "Sample lambda for batching per-AIR constraint evaluations at tidx_cf.",
+          "airs": ["batch-constraint.ConstraintsFoldingAir"],
+          "buses": ["TranscriptBus", "ConstraintsFoldingInputBus", "BatchConstraintConductorBus"],
+          "columns": ["lambda", "tidx_cf"],
+          "constraints": "ConstraintsFoldingAir receives tidx_cf from GkrInputAir, samples lambda on TranscriptBus at tidx_cf, and distributes it via BatchConstraintConductorBus.",
+          "soundness": "lambda is a transcript sample pinned by the sponge, and its tidx is a deterministic function of GKR's outputs. BatchConstraintConductorBus is the distribution mechanism for challenges throughout the BC module; each consumer receives lambda at a known tidx.",
+          "verifier_ref": "verify_zerocheck_and_logup; BC schedule step (2)"
+        },
+        {
+          "id": "bc-3",
+          "title": "Observe numerator/denominator terms and verify GKR claim consistency",
+          "verifier_action": "For each present AIR, observe (numerator_term[i], denominator_term[i]) on the transcript; verify p_xi_claim == 0 and q_xi_claim == alpha_logup.",
+          "airs": ["batch-constraint.FractionsFolderAir"],
+          "buses": ["TranscriptBus", "BatchConstraintModuleBus", "FractionFolderInputBus"],
+          "columns": ["numerator_term", "denominator_term", "air_idx", "p_xi_claim", "q_xi_claim"],
+          "constraints": "FractionsFolderAir receives num_present_airs from ProofShapeAir via FractionFolderInputBus and gkr_claim via BatchConstraintModuleBus. It decrements air_idx by 1 per row, reaching 0 on the last row (forcing exactly num_present_airs rows). For each row, it observes (numerator_term[i], denominator_term[i]) on TranscriptBus and, in aggregate, checks p_xi_claim = Σ numerator_term[i] == 0 and q_xi_claim = Σ denominator_term[i] == alpha_logup.",
+          "soundness": "The row count is forced by the FractionFolderInputBus handoff (matching ProofShapeAir's num_present_airs). The aggregate equality p_xi_claim == 0, q_xi_claim == alpha_logup is the defining LogUp/fractional-sumcheck identity at xi. Per-AIR observations are pinned on the transcript.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 112-137; BC schedule step (3); M-BC(d)"
+        },
+        {
+          "id": "bc-4",
+          "title": "Sample mu (fraction batching)",
+          "verifier_action": "Sample mu to batch numerator and denominator terms into a single sum_claim = Σ_k μ^k * x_k.",
+          "airs": ["batch-constraint.FractionsFolderAir"],
+          "buses": ["TranscriptBus", "BatchConstraintConductorBus"],
+          "columns": ["mu", "sum_claim"],
+          "constraints": "FractionsFolderAir samples mu on TranscriptBus after the per-AIR observations. It computes sum_claim = Σ_k μ^k * x_k interleaving numerator and denominator terms, and broadcasts mu on BatchConstraintConductorBus.",
+          "soundness": "mu is a transcript sample at a fixed tidx. The sum is computed via algebraic constraints within the AIR; the resulting sum_claim is the input to the sumcheck pipeline.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 112-137; BC schedule step (4)"
+        },
+        {
+          "id": "bc-5",
+          "title": "Univariate sumcheck round",
+          "verifier_action": "Observe univariate_round_coeffs, verify |D| * (a_0 + a_{|D|}) == sum_claim over the roots-of-unity domain, sample r_0, and evaluate s_0(r_0) via Horner.",
+          "airs": ["batch-constraint.UnivariateSumcheckAir"],
+          "buses": ["TranscriptBus", "SumcheckClaimBus", "ConstraintSumcheckRandomnessBus"],
+          "columns": ["coeff_idx", "univariate_coeffs", "r_0", "s_0_at_r_0"],
+          "constraints": "UnivariateSumcheckAir has coeff_idx starting at univariate_deg = (max_constraint_degree + 1) * (2^l_skip - 1), decrementing by 1 each row, reaching 0 on the last row (forcing univariate_deg + 1 coeffs). On the first row it receives sum_claim on SumcheckClaimBus; it observes each coefficient on TranscriptBus, aggregates the domain sum check, samples r_0, evaluates via Horner, and sends the claim forward on SumcheckClaimBus. r_0 is also sent on ConstraintSumcheckRandomnessBus.",
+          "soundness": "The coeff count is VK-determined (forces exactly univariate_deg + 1 coeffs, verify_proof_shape line 433). The |D| * (a_0 + a_{|D|}) identity is the univariate sumcheck check at the roots-of-unity domain. Horner evaluation is algebraically enforced. r_0 is transcript-pinned.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 139-205 univariate round; BC schedule step (5); M-BC(e)"
+        },
+        {
+          "id": "bc-6",
+          "title": "Multilinear sumcheck rounds (n_max rounds)",
+          "verifier_action": "For j = 1..n_max, observe degree-(d+1) evaluations, verify s(0) + s(1) == current claim, sample r_j, and compute next claim via Lagrange interpolation.",
+          "airs": ["batch-constraint.MultilinearSumcheckAir"],
+          "buses": ["TranscriptBus", "SumcheckClaimBus", "ConstraintSumcheckRandomnessBus", "BatchConstraintConductorBus"],
+          "columns": ["round", "eval_idx", "evals", "r_j", "claim"],
+          "constraints": "Per round, eval_idx starts at 0, increments by 1, and must reach s_deg = max_constraint_degree + 1 on the last eval (verify_proof_shape line 457). Each round: receive claim on SumcheckClaimBus, observe evals on TranscriptBus, verify s(0) + s(1) == claim, sample r_j, interpolate at r_j via Lagrange, send next claim. n_max is forced by the ExpressionClaimNMaxBus → ExpressionClaimAir → SumcheckClaimBus chain.",
+          "soundness": "Round count is exactly n_max (forced by chain ending at ExpressionClaimAir's final claim send, verify_proof_shape line 440). Per-round degree is VK-fixed. The s(0)+s(1) identity is the multilinear sumcheck round check. Challenges r_j are transcript-pinned and sent on ConstraintSumcheckRandomnessBus to Stacking.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 139-205 multilinear rounds; BC schedule step (6); M-BC(e)"
+        },
+        {
+          "id": "bc-7",
+          "title": "Observe column openings",
+          "verifier_action": "Observe per-AIR per-partition column opening values (common main, preprocessed, cached) on the transcript.",
+          "airs": ["stacking.OpeningClaimsAir", "batch-constraint.SymbolicExpressionAir", "batch-constraint.InteractionsFoldingAir", "batch-constraint.ConstraintsFoldingAir"],
+          "buses": ["TranscriptBus", "ColumnClaimsBus"],
+          "columns": ["col_claim", "rot_claim"],
+          "constraints": "Note: in the circuit, column opening observations are performed by Stacking's OpeningClaimsAir (phase A of Stacking schedule), though the reference verifier performs them in verify_zerocheck_and_logup. OpeningClaimsAir observes each (col_claim, rot_claim) on TranscriptBus (rot_claim only when need_rot = 1) and sends them on ColumnClaimsBus. SymbolicExpressionAir consumes these when resolving variables in the DAG.",
+          "soundness": "Observations are pinned on TranscriptBus. ColumnClaimsBus is a permutation bus, so the per-AIR per-partition values used in constraint evaluation equal the transcript-observed values. The need_rot flag from AirShapeBus gates rot_claim, and when need_rot = 0, rot_claim is constrained to zero.",
+          "verifier_ref": "verify_zerocheck_and_logup column opening loop; M-BC(a), Stacking phase A"
+        },
+        {
+          "id": "bc-8",
+          "title": "Compute eq_3b per interaction",
+          "verifier_action": "Compute eq_3b_per_trace[i][interaction_idx] = eval_eq_mle(xi[l_skip+n_lift..l_skip+n_logup], b) for each interaction.",
+          "airs": ["batch-constraint.Eq3bAir"],
+          "buses": ["Eq3bBus", "Eq3bShapeBus", "XiRandomnessBus", "BatchConstraintConductorBus"],
+          "columns": ["eq_3b", "b_vec"],
+          "constraints": "Eq3bAir receives (i, n_lift, n_logup, num_interactions) on Eq3bShapeBus and the relevant xi coordinates on XiRandomnessBus. It computes eq_3b values for each interaction's stacked b index and sends them on Eq3bBus to InteractionsFoldingAir.",
+          "soundness": "The b indices are derived from VK structure and interaction idx; xi coords are transcript-pinned (via GKR, T). Eq3bAir's constraints enforce the multilinear eq polynomial evaluation algebraically. Bus balancing forces the correct count.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 207-254 eq_3b computation; M-BC(c)"
+        },
+        {
+          "id": "bc-9",
+          "title": "Compute eq_ns and eq_sharp_ns multilinear eq products",
+          "verifier_action": "Compute eq_ns[i] = eval_eq_uni(l_skip, xi[0], r_0) * prod of multilinear factors * front-loaded r product; similar for eq_sharp_ns using eval_eq_sharp_uni.",
+          "airs": ["batch-constraint.EqNsAir", "batch-constraint.EqUniAir", "batch-constraint.EqSharpUniAir", "batch-constraint.EqSharpUniReceiverAir"],
+          "buses": ["EqZeroNBus", "EqNOuterBus", "XiRandomnessBus", "SelHypercubeBus", "ConstraintSumcheckRandomnessBus"],
+          "columns": ["eq_ns", "eq_sharp_ns"],
+          "constraints": "EqUniAir computes eval_eq_uni(l_skip, xi[0], r_0) (base factor). EqSharpUniAir + EqSharpUniReceiverAir compute eval_eq_sharp_uni with roots of unity (accumulator). EqNsAir multiplies these with eval_eq_mle([xi[l_skip+j-1]], [r_j]) for j = 1..i and a trailing r product (front-loading). Results are sent on EqNOuterBus to ConstraintsFoldingAir and ExpressionClaimAir; on SelHypercubeBus to SymbolicExpressionAir.",
+          "soundness": "All eq polynomial formulas are algebraically constrained. xi and r are transcript-pinned. PowerCheckerBus provides roots-of-unity powers (LT). Front-loading the batch correction prod(r_j for j > i) avoids redundant computation while preserving correctness.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 207-254; M-BC(c)"
+        },
+        {
+          "id": "bc-10",
+          "title": "Compute negative-dimension eq polynomials",
+          "verifier_action": "For AIRs with log_height < l_skip (n < 0), compute eq evaluations in negative hypercube dimensions using r_0^{2^|n|} and norm_factor = 1/2^|n|.",
+          "airs": ["batch-constraint.EqNegAir"],
+          "buses": ["EqNegResultBus", "EqNegBaseRandBus", "EqNegInternalBus", "SelUniBus"],
+          "columns": ["eq_neg", "norm_factor"],
+          "constraints": "EqNegAir receives (u_0, r_0^2) on EqNegBaseRandBus from Stacking's EqBaseAir and computes eq_neg evaluations for each negative-n dimension. It sends results on EqNegResultBus (to EqBaseAir) and sel_uni(n, r_0) values on SelUniBus (to SymbolicExpressionAir).",
+          "soundness": "Negative-dimension handling is the lift adjustment described in M-BC(c): use l = l_skip + n and r_0^{2^|n|}. The shared computation with Stacking (via EqNegBaseRandBus/EqNegResultBus) eliminates duplication while a single AIR enforces the arithmetic.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 207-254 (n<0 branch); M-BC(c)"
+        },
+        {
+          "id": "bc-11",
+          "title": "Evaluate symbolic constraint DAG",
+          "verifier_action": "For each present AIR, compute is_first_row, is_last_row, is_transition selectors from rs and omega_skip, then walk the symbolic expression DAG resolving variables to column openings and public values.",
+          "airs": ["batch-constraint.SymbolicExpressionAir"],
+          "buses": ["SymbolicExpressionBus", "AirShapeBus", "ColumnClaimsBus", "PublicValuesBus", "HyperdimBus", "SelHypercubeBus", "SelUniBus"],
+          "columns": ["node_idx", "node_val", "entry"],
+          "constraints": "SymbolicExpressionAir evaluates the DAG node-by-node (constants, arithmetic ops, variables from ColumnClaimsBus (offset 0 = value, offset 1 = rotated), public values from PublicValuesBus). Selectors is_first_row/is_last_row/is_transition are computed using SelHypercubeBus (n >= 0, from EqNsAir) and SelUniBus (n < 0, from EqNegAir). The cached trace encodes the DAG structure.",
+          "soundness": "The DAG structure is committed via the SymbolicExpressionAir cached trace commitment, observed in ProofShape's preamble (second assumption of the main claim: commitment encodes vk_child). Variables resolve to transcript-observed column openings (bc-7) and public values (preamble-6). Selectors are computed correctly by EqNsAir and EqNegAir. Therefore the DAG evaluation equals the reference verifier's VerifierConstraintEvaluator output.",
+          "verifier_ref": "verifier/evaluator.rs (VerifierConstraintEvaluator); verify_zerocheck_and_logup line 314; M-BC(a)"
+        },
+        {
+          "id": "bc-12",
+          "title": "Fold constraint evaluations",
+          "verifier_action": "Fold per-constraint evaluations with lambda powers and weight by eq_ns: numerator_term[i] = eq_ns[n_lift] * Σ_j λ^j * constraint_j.",
+          "airs": ["batch-constraint.ConstraintsFoldingAir"],
+          "buses": ["ConstraintsFoldingBus", "ExpressionClaimBus", "EqNOuterBus", "NLiftBus", "TranscriptBus"],
+          "columns": ["lambda_pow", "constraint_eval", "folded"],
+          "constraints": "ConstraintsFoldingAir receives per-constraint evaluations from SymbolicExpressionAir, folds with lambda powers (BatchConstraintConductorBus), weights by eq_ns (EqNOuterBus from EqNsAir) with n_lift (NLiftBus from ProofShapeAir), and sends the resulting claim on ExpressionClaimBus to ExpressionClaimAir.",
+          "soundness": "Lambda-folding is algebraically constrained. eq_ns correctly weights by the multilinear equality factor at r. Bus balancing ensures each AIR contributes exactly one numerator_term.",
+          "verifier_ref": "verify_zerocheck_and_logup constraint folding loop; M-BC(a)"
+        },
+        {
+          "id": "bc-13",
+          "title": "Fold interaction evaluations (numerator/denominator)",
+          "verifier_action": "For each interaction, compute num = eval(count), denom = Σ_k β^k * eval(msg_k) + (bus_idx+1) * β^{msg_len}; weight by eq_3b and eq_sharp_ns.",
+          "airs": ["batch-constraint.InteractionsFoldingAir"],
+          "buses": ["InteractionsFoldingBus", "ExpressionClaimBus", "AirShapeBus", "Eq3bBus", "TranscriptBus"],
+          "columns": ["beta_pow", "num", "denom"],
+          "constraints": "InteractionsFoldingAir receives interaction evaluations from SymbolicExpressionAir, folds with beta_logup powers, weights each interaction by eq_3b (from Eq3bBus), aggregates per-AIR totals, weights by eq_sharp_ns, and sends denominator_term[i] on ExpressionClaimBus.",
+          "soundness": "Beta-folding is algebraically constrained; the bus_index offset enforces per-interaction domain separation. eq_3b selects the correct stacked b index within the logup dimension; eq_sharp_ns applies the sharp univariate eq factor.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 332-357; M-BC(b)"
+        },
+        {
+          "id": "bc-14",
+          "title": "Verify final batched claim: cur_sum == evaluated_claim",
+          "verifier_action": "Compute evaluated_claim = Σ_k μ^k * x_k over interactions_evals ++ constraints_evals; check cur_sum == evaluated_claim.",
+          "airs": ["batch-constraint.ExpressionClaimAir"],
+          "buses": ["ExpressionClaimBus", "SumcheckClaimBus", "BatchConstraintConductorBus", "EqNOuterBus", "PowerCheckerBus", "HyperdimBus", "ExpressionClaimNMaxBus"],
+          "columns": ["mu_pow", "evaluated_claim", "cur_sum"],
+          "constraints": "ExpressionClaimAir receives per-AIR (numerator_term, denominator_term) claims on ExpressionClaimBus, batches them with mu powers (from BatchConstraintConductorBus), applies norm_factor and eq_sharp_ns accounting, and sends the final evaluated_claim on SumcheckClaimBus at round n_max. MultilinearSumcheckAir's chain ends at this final claim, so cur_sum (sumcheck output) == evaluated_claim.",
+          "soundness": "This is the defining batch-constraint identity: the multilinear sumcheck chain terminates at ExpressionClaimAir's computed evaluated_claim. Because SumcheckClaimBus is a permutation bus threading through all sumcheck rounds, if sum does not match, the bus is unbalanced. ExpressionClaimNMaxBus forces n_max rounds.",
+          "verifier_ref": "verify_zerocheck_and_logup lines 359-367; M-BC(f)"
+        },
+        {
+          "id": "bc-15",
+          "title": "Output sumcheck randomness to Stacking",
+          "verifier_action": "Pass the sumcheck randomness r = [r_0, r_1, ..., r_{n_max}] and tidx_stack to the stacking module.",
+          "airs": ["batch-constraint.UnivariateSumcheckAir", "batch-constraint.MultilinearSumcheckAir"],
+          "buses": ["ConstraintSumcheckRandomnessBus", "StackingModuleBus"],
+          "columns": ["r", "tidx_stack"],
+          "constraints": "UnivariateSumcheckAir sends r_0 on ConstraintSumcheckRandomnessBus; MultilinearSumcheckAir sends r_1..r_{n_max}. MultilinearSumcheckAir (on its last round) sends (tidx_stack, ...) on StackingModuleBus. tidx_stack is computed from tidx_cf by summing schedule (2)-(6) slot counts.",
+          "soundness": "The randomness vector is exactly the transcript samples from bc-5/bc-6, pinned by the sponge (T). Bus balancing ensures exactly n_max + 1 r values. The tidx_stack handoff is deterministic.",
+          "verifier_ref": "verify_zerocheck_and_logup return; BC module C1, C2"
+        }
+      ]
+    },
+    {
+      "id": "stacking",
+      "name": "Phase 3: Stacking",
+      "summary": "verify_stacked_reduction reduces per-AIR column opening claims into a single WHIR claim via a univariate round + n_stack multilinear sumcheck rounds. In the circuit, OpeningClaimsAir observes column openings and computes s_0, UnivariateRoundAir/SumcheckRoundsAir run the sumcheck, EqBase/EqBitsAir compute eq polynomial coefficients, and StackingClaimsAir finalizes the WHIR claim and handles mu PoW/sampling.",
+      "transcript_range": "tidx_stack .. tidx_whir",
+      "steps": [
+        {
+          "id": "stacking-1",
+          "title": "Observe column openings and sample lambda (stacking batching)",
+          "verifier_action": "Observe per-AIR column openings (col_claim, rot_claim) in sort order; then sample lambda for batching.",
+          "airs": ["stacking.OpeningClaimsAir"],
+          "buses": ["TranscriptBus", "ColumnClaimsBus", "LiftedHeightsBus", "AirShapeBus"],
+          "columns": ["col_claim", "rot_claim", "lambda"],
+          "constraints": "OpeningClaimsAir iterates over num_airs_present AIRs, observing (col_claim, rot_claim) on TranscriptBus (rot_claim only when need_rot = 1 from AirShapeBus), then samples lambda (at stacking/opening/air.rs:554-563). Column claims are sent on ColumnClaimsBus; lifted heights come from LiftedHeightsBus.",
+          "soundness": "Observations are pinned on the transcript. need_rot gating from AirShapeBus (VK data from ProofShape) ensures rot_claim is zero when the AIR doesn't need rotation. lambda is a transcript sample at a fixed tidx.",
+          "verifier_ref": "verify_zerocheck_and_logup column opening; verify_stacked_reduction; Stacking schedule (1)-(2)"
+        },
+        {
+          "id": "stacking-2",
+          "title": "Compute s_0 from column opening claims",
+          "verifier_action": "Compute s_0 = Σ_i (col_claim_i + rot_claim_i * lambda) * lambda^{2i} — the random linear combination of column openings with lambda.",
+          "airs": ["stacking.OpeningClaimsAir"],
+          "buses": ["ColumnClaimsBus", "LiftedHeightsBus", "AirShapeBus", "ClaimCoefficientsBus", "SumcheckClaimsBus"],
+          "columns": ["s_0", "lambda_pow"],
+          "constraints": "OpeningClaimsAir computes s_0 = RLC(t_claims, lambda) as the linear combination of observed (col_claim, rot_claim) with lambda^{2i} powers. It sends s_0 on SumcheckClaimsBus (module_idx 0) to start the sumcheck chain, and batched claim coefficients on ClaimCoefficientsBus for StackingClaimsAir.",
+          "soundness": "The formula is algebraically constrained within OpeningClaimsAir. Lambda powers are computed via PowerCheckerBus lookups (LT). SumcheckClaimsBus threads s_0 through the sumcheck chain to the finalizer.",
+          "verifier_ref": "verify_stacked_reduction s_0 computation; M-Stack s_0 bullet"
+        },
+        {
+          "id": "stacking-3",
+          "title": "Univariate sumcheck round",
+          "verifier_action": "Observe univariate_round_coeffs, verify |D| * (a_0 + a_{|D|}) == s_0 over the multiplicative subgroup D, and sample u_0.",
+          "airs": ["stacking.UnivariateRoundAir"],
+          "buses": ["TranscriptBus", "SumcheckClaimsBus", "EqRandValuesLookupBus", "EqKernelLookupBus"],
+          "columns": ["coeff_idx", "univariate_coeffs", "u_0"],
+          "constraints": "UnivariateRoundAir has coeff_idx from 0 to 2*(2^l_skip - 1) (VK-fixed, verify_proof_shape line 522). It observes coefficients on TranscriptBus, receives s_0 via SumcheckClaimsBus (module_idx 0), checks the sum-over-D identity, samples u_0, evaluates via Horner, and sends the next claim on SumcheckClaimsBus (module_idx 1).",
+          "soundness": "Coefficient count is VK-fixed. The sum-over-D identity is the univariate sumcheck check for the multiplicative subgroup D of order |D| = 2^l_skip. u_0 is transcript-pinned.",
+          "verifier_ref": "verify_stacked_reduction univariate round; Stacking schedule (3); M-Stack univariate bullet"
+        },
+        {
+          "id": "stacking-4",
+          "title": "Quadratic sumcheck rounds (n_stack rounds)",
+          "verifier_action": "For j = 1..n_stack: observe s_j(1), s_j(2); compute s_j(0) = claim - s_j(1); sample u_j; interpolate quadratically.",
+          "airs": ["stacking.SumcheckRoundsAir"],
+          "buses": ["TranscriptBus", "SumcheckClaimsBus", "EqBaseBus", "EqRandValuesLookupBus", "ConstraintSumcheckRandomnessBus", "WhirOpeningPointBus"],
+          "columns": ["round", "s_j_1", "s_j_2", "u_j", "claim"],
+          "constraints": "SumcheckRoundsAir has round index from 1 to n_stack (VK-fixed, verify_proof_shape line 529). Each round: receive claim on SumcheckClaimsBus, observe (s_j(1), s_j(2)) on TranscriptBus, sample u_j, interpolate at u_j, send next claim. Also receives the BC sumcheck randomness r via ConstraintSumcheckRandomnessBus and sends each u_j on WhirOpeningPointBus (with idx = round + l_skip - 1) for WHIR's u_cube.",
+          "soundness": "Round count is VK-fixed. Quadratic interpolation at u_j is algebraically constrained. The claim chain via SumcheckClaimsBus (module_idx 1 -> 2) forces the correct sequencing.",
+          "verifier_ref": "verify_stacked_reduction multilinear sumcheck; Stacking schedule (4); M-Stack sumcheck bullet"
+        },
+        {
+          "id": "stacking-5",
+          "title": "Compute eq_prism and rot_kernel_prism coefficients",
+          "verifier_action": "Compute eq_prism(l, u[..=n_lift], r[..=n_lift]) and optionally rot_kernel_prism per column, used in q_coeffs.",
+          "airs": ["stacking.EqBaseAir"],
+          "buses": ["EqBaseBus", "EqRandValuesLookupBus", "EqKernelLookupBus", "EqNegBaseRandBus", "EqNegResultBus", "WhirOpeningPointBus"],
+          "columns": ["eq_prism", "rot_kernel_prism", "u_0_pow"],
+          "constraints": "EqBaseAir evaluates eq_prism(l, u[..=n_lift], r[..=n_lift]) and rot_kernel_prism using stacking randomness u and BC randomness r. It sends (u_0^{2^i}, i) for i = 0..l_skip-1 on WhirOpeningPointBus (building u_cube's prefix). It also sends eq-neg base randomness (u_0, r_0^2) on EqNegBaseRandBus and receives eq_neg results on EqNegResultBus.",
+          "soundness": "The eq_prism/rot_kernel_prism formulas are algebraically constrained. u and r are transcript-pinned. Shared eq-neg computation with BC via EqNegBaseRandBus/EqNegResultBus avoids duplication; EqNegAir enforces correctness on BC side.",
+          "verifier_ref": "verify_stacked_reduction q_coeffs assembly; M-Stack q_coeffs bullet; G4 (u_cube)"
+        },
+        {
+          "id": "stacking-6",
+          "title": "Compute eq_mle for stacking slice indices",
+          "verifier_action": "Compute eq_mle(u[n_lift+1..], b) for each stacking row index b, via bit decomposition.",
+          "airs": ["stacking.EqBitsAir"],
+          "buses": ["EqBitsLookupBus", "EqRandValuesLookupBus", "EqBitsInternalBus"],
+          "columns": ["b_bits", "eq_mle"],
+          "constraints": "EqBitsAir bit-decomposes each stacking row index b (stacking_index_mult-based range-check), computes eq_mle as product of per-bit factors, and provides lookups for StackingClaimsAir.",
+          "soundness": "Bit decomposition is range-checked (ensuring log_lifted_height <= l_skip + n_stack, verify_proof_shape line 351). Multilinear eq product is algebraically constrained.",
+          "verifier_ref": "verify_stacked_reduction eq_mle; M-Stack q_coeffs bullet"
+        },
+        {
+          "id": "stacking-7",
+          "title": "Verify final stacking claim",
+          "verifier_action": "Verify claim == Σ_{j'} stacking_openings[j'] * q_coeffs[j'] where q_coeffs are assembled from eq/rot-kernel evaluations.",
+          "airs": ["stacking.StackingClaimsAir"],
+          "buses": ["SumcheckClaimsBus", "ClaimCoefficientsBus", "StackingIndicesBus", "TranscriptBus"],
+          "columns": ["stacking_openings", "q_coeffs", "global_col_idx"],
+          "constraints": "StackingClaimsAir has global_col_idx reaching exactly w_stack - 1 on the last valid row (VK-fixed, verify_proof_shape line 571). It observes stacking_openings on TranscriptBus, receives the final sumcheck claim on SumcheckClaimsBus (module_idx 2), and receives q_coeffs from ClaimCoefficientsBus and eq evaluations (via internal lookups from EqBaseAir/EqBitsAir). It checks the inner product.",
+          "soundness": "w_stack boundary forces correct stacked width. SumcheckClaimsBus pairing forces the claim matches the sumcheck output. The inner-product check ties stacking_openings to the sumcheck claim.",
+          "verifier_ref": "verify_stacked_reduction final check; M-Stack final bullet"
+        },
+        {
+          "id": "stacking-8",
+          "title": "PoW check for mu (WHIR batching)",
+          "verifier_action": "Verify mu_pow_witness satisfies mu_pow_bits difficulty (if mu_pow_bits > 0).",
+          "airs": ["stacking.StackingClaimsAir", "primitives.ExpBitsLenAir"],
+          "buses": ["TranscriptBus", "ExpBitsLenBus"],
+          "columns": ["mu_pow_witness", "mu_pow_sample"],
+          "constraints": "StackingClaimsAir observes mu_pow_witness and samples mu_pow_sample on TranscriptBus. The ExpBitsLenBus lookup checks mu_pow_bits low zero bits.",
+          "soundness": "Standard PoW mechanism: ExpBitsLenAir table correctness (LT) enforces the difficulty check; Poseidon2 sponge (T) pins the sample.",
+          "verifier_ref": "verify_whir mu PoW; Stacking schedule (6)"
+        },
+        {
+          "id": "stacking-9",
+          "title": "Sample mu (WHIR batching)",
+          "verifier_action": "Sample mu for batching stacking openings into the WHIR claim.",
+          "airs": ["stacking.StackingClaimsAir"],
+          "buses": ["TranscriptBus", "WhirMuBus"],
+          "columns": ["mu"],
+          "constraints": "StackingClaimsAir samples mu on TranscriptBus and sends it on WhirMuBus to InitialOpenedValuesAir.",
+          "soundness": "mu is transcript-pinned; WhirMuBus routes it to the WHIR module.",
+          "verifier_ref": "verify_whir mu sampling; Stacking schedule (7)"
+        },
+        {
+          "id": "stacking-10",
+          "title": "Output WHIR claim and u_cube",
+          "verifier_action": "Compute whir_claim = RLC(stacking_openings, mu) and pass tidx_whir, whir_claim, u_cube, and stacking indices to WHIR.",
+          "airs": ["stacking.StackingClaimsAir", "stacking.EqBaseAir", "stacking.SumcheckRoundsAir"],
+          "buses": ["WhirModuleBus", "WhirMuBus", "WhirOpeningPointBus", "StackingIndicesBus"],
+          "columns": ["whir_claim", "tidx_whir", "u_cube"],
+          "constraints": "StackingClaimsAir computes whir_claim = RLC(stacking_openings, mu) and sends (tidx_whir, whir_claim) on WhirModuleBus, plus stacking indices on StackingIndicesBus. EqBaseAir sends u_cube[0..l_skip-1] = u_0^{2^i} on WhirOpeningPointBus; SumcheckRoundsAir sends u_cube[l_skip..l_skip+n_stack-1] = u_j. Total l_skip + n_stack u_cube entries.",
+          "soundness": "whir_claim is an algebraic function of sponge-pinned values. WhirOpeningPointBus is a permutation bus; WHIR receivers (SumcheckAir, FinalPolyMleEvalAir) forcibly consume exactly l_skip + n_stack entries (G4).",
+          "verifier_ref": "verify_whir inputs; G4 (u_cube from u_prism); Stacking C1-C3"
+        }
+      ]
+    },
+    {
+      "id": "whir",
+      "name": "Phase 4: WHIR",
+      "summary": "verify_whir runs num_whir_rounds of folding sumcheck, codeword commitment / OOD observations, query-phase PoW, query generation, Merkle-verified opening, binary k-fold, and a final accumulated claim check. In the circuit, 8 WHIR AIRs orchestrate this: WhirRoundAir per-round control, SumcheckAir for folding, WhirQueryAir for queries, Initial/NonInitialOpenedValuesAir + MerkleVerifyAir for openings, WhirFoldingAir for k-fold, FinalPolyMleEvalAir + FinalPolyQueryEvalAir for the final check.",
+      "transcript_range": "tidx_whir .. end",
+      "steps": [
+        {
+          "id": "whir-1",
+          "title": "Per-round folding sumcheck (k sub-rounds with alpha challenges)",
+          "verifier_action": "For each round i and sub-round j = 0..k_whir-1: observe (ev1, ev2), run folding PoW (if folding_pow_bits > 0), sample alpha_{i*k+j}, update claim = interpolate([claim - ev1, ev1, ev2], alpha).",
+          "airs": ["whir.SumcheckAir"],
+          "buses": ["WhirSumcheckBus", "TranscriptBus", "ExpBitsLenBus", "WhirAlphaBus", "WhirEqAlphaUBus"],
+          "columns": ["round", "step", "ev1", "ev2", "alpha", "claim"],
+          "constraints": "SumcheckAir has trace height k_whir * num_whir_rounds per proof. Each row: receive claim via WhirSumcheckBus (from WhirRoundAir), observe (ev1, ev2) on TranscriptBus, verify folding PoW via ExpBitsLenBus, sample alpha, interpolate quadratically. Alphas are sent on WhirAlphaBus to WhirFoldingAir and FinalPolyQueryEvalAir. eq_partial = prod mobius_eq_1(u[j], alpha_j) is accumulated and sent on WhirEqAlphaUBus to FinalPolyMleEvalAir.",
+          "soundness": "Trace height is VK-fixed (verify_proof_shape line 614). Sumcheck interpolation is algebraically constrained. PoW checks (LT via ExpBitsLenAir) prevent cheap biasing. Alphas are transcript-pinned (T).",
+          "verifier_ref": "verify_whir sumcheck loop; WHIR schedule step (1); M-WHIR sumcheck bullet"
+        },
+        {
+          "id": "whir-2",
+          "title": "Non-final rounds: observe codeword commitment",
+          "verifier_action": "For non-final rounds, observe the codeword commitment and register it on CommitmentsBus.",
+          "airs": ["whir.WhirRoundAir"],
+          "buses": ["TranscriptBus", "CommitmentsBus"],
+          "columns": ["codeword_commit", "round_idx"],
+          "constraints": "WhirRoundAir observes codeword_commit[i] on TranscriptBus (gated by is_not_final_round, round index from 0 to num_whir_rounds-1) and sends it on CommitmentsBus with (major_idx = round+1, minor_idx = 0) for Merkle root authentication.",
+          "soundness": "Commitment observation is transcript-pinned. CommitmentsBus routes the commitment to MerkleVerifyAir; any tampering with the commitment fails Merkle verification during query phase.",
+          "verifier_ref": "verify_whir round loop (commitment); WHIR schedule step (2)"
+        },
+        {
+          "id": "whir-3",
+          "title": "Non-final rounds: sample z0, observe OOD value",
+          "verifier_action": "Sample out-of-domain point z0 and observe OOD evaluation y0.",
+          "airs": ["whir.WhirRoundAir"],
+          "buses": ["TranscriptBus"],
+          "columns": ["z0", "ood_value"],
+          "constraints": "WhirRoundAir samples z0 (D_EF) on TranscriptBus and observes ood_value (D_EF) on TranscriptBus (gated by is_not_final_round).",
+          "soundness": "z0 and ood_value are transcript-pinned. They are later used in the final claim accumulation (whir-9).",
+          "verifier_ref": "verify_whir OOD step; WHIR schedule step (2)"
+        },
+        {
+          "id": "whir-4",
+          "title": "Final round: observe final polynomial coefficients",
+          "verifier_action": "Observe final_poly coefficients (2^log_final_poly_len * D_EF elements).",
+          "airs": ["whir.WhirRoundAir", "whir.FinalPolyMleEvalAir"],
+          "buses": ["TranscriptBus", "WhirFinalPolyBus"],
+          "columns": ["final_poly"],
+          "constraints": "FinalPolyMleEvalAir observes final_poly coefficients on TranscriptBus at the last round. The total count is 2^log_final_poly_len (forced by FinalPolyMleEvalAir's binary tree structure with 2^(log_final_poly_len+1)-1 nodes, verify_proof_shape line 661). Coefficients are provided to FinalPolyQueryEvalAir via WhirFinalPolyBus.",
+          "soundness": "Coefficient count is VK-fixed. Observations pinned on transcript. Binary tree structure enforces proper MLE evaluation at u[t..].",
+          "verifier_ref": "verify_whir final round; WHIR schedule step (3); M-WHIR final check (suffix)"
+        },
+        {
+          "id": "whir-5",
+          "title": "Per-round: query-phase PoW check",
+          "verifier_action": "For each round, verify query_phase_pow_witness satisfies query_phase_pow_bits difficulty.",
+          "airs": ["whir.WhirRoundAir", "primitives.ExpBitsLenAir"],
+          "buses": ["TranscriptBus", "ExpBitsLenBus"],
+          "columns": ["query_pow_witness"],
+          "constraints": "WhirRoundAir observes query_phase_pow_witness on TranscriptBus per round (trace height = num_whir_rounds, verify_proof_shape line 634) and verifies via ExpBitsLenBus.",
+          "soundness": "Standard PoW mechanism via ExpBitsLenAir (LT) and Poseidon2 sponge (T).",
+          "verifier_ref": "verify_whir query phase PoW; WHIR schedule step (4)"
+        },
+        {
+          "id": "whir-6",
+          "title": "Per-round: sample query indices",
+          "verifier_action": "Sample num_queries[i] query indices (bits) from the transcript.",
+          "airs": ["whir.WhirQueryAir"],
+          "buses": ["TranscriptBus", "ExpBitsLenBus", "WhirQueryBus", "VerifyQueriesBus"],
+          "columns": ["query_idx", "query_bits"],
+          "constraints": "WhirQueryAir samples query indices from TranscriptBus. It receives per-round dispatch from WhirRoundAir via VerifyQueriesBus and dispatches per-query Merkle verification to Initial/NonInitialOpenedValuesAir via VerifyQueryBus. The sampled index is used to derive zi_root = omega^{index} via ExpBitsLenBus lookup.",
+          "soundness": "Query indices are transcript-pinned. ExpBitsLenBus provides omega^{index} via correct exponentiation (LT). Per-round query count num_queries[i] is VK-fixed.",
+          "verifier_ref": "verify_whir query sampling; WHIR schedule step (4)"
+        },
+        {
+          "id": "whir-7",
+          "title": "Initial round: open from stacking commitments, compute codeword",
+          "verifier_action": "For each stacking commitment, open rows at the query index, Merkle-verify against stacking commitments, and compute codeword_vals[j] = Σ_c μ^c * opened_rows[j][c].",
+          "airs": ["whir.InitialOpenedValuesAir", "transcript.MerkleVerifyAir", "transcript.Poseidon2Air"],
+          "buses": ["StackingIndicesBus", "WhirMuBus", "VerifyQueryBus", "WhirFoldingBus", "Poseidon2PermuteBus", "MerkleVerifyBus"],
+          "columns": ["opened_rows", "codeword_val", "mu_pow"],
+          "constraints": "InitialOpenedValuesAir uses a 5-level NestedForLoopSubAir (proof -> query -> coset -> commit -> chunk) enforcing contiguous rows and proper counter transitions (verify_proof_shape lines 639-720). Leaf hashes are computed via Poseidon2PermuteBus and sent on MerkleVerifyBus with total_depth = initial_log_domain_size + 1. It combines opened values with mu powers (from WhirMuBus) into codeword_vals, sent on WhirFoldingBus to WhirFoldingAir.",
+          "soundness": "Nested loop enforces correct query/commit/coset counts. Leaf binding via MerkleVerifyBus (T - merkle correctness) ensures opened rows are those committed to. Mu-weighting ties initial codeword to the stacking commitments and mu (from Stacking).",
+          "verifier_ref": "verify_whir round 0 query verification; WHIR M-WHIR commitment-verification bullet"
+        },
+        {
+          "id": "whir-8",
+          "title": "Non-initial rounds: open from codeword commitments",
+          "verifier_action": "Open values at query index from the previous round's codeword commitment, Merkle-verify, and pass to folding.",
+          "airs": ["whir.NonInitialOpenedValuesAir", "transcript.MerkleVerifyAir", "transcript.Poseidon2Air"],
+          "buses": ["VerifyQueryBus", "WhirFoldingBus", "Poseidon2CompressBus", "MerkleVerifyBus"],
+          "columns": ["opened_values", "whir_round"],
+          "constraints": "NonInitialOpenedValuesAir uses a 4-level NestedForLoopSubAir (proof -> round -> query -> coset), with coset_idx reaching 2^k-1 when transitioning between queries (whir/non_initial_opened_values/air.rs:80-82). Opened values are hashed via Poseidon2CompressBus and sent on MerkleVerifyBus with total_depth = initial_log_domain_size + 1 - whir_round (decreasing per round). Values are sent on WhirFoldingBus.",
+          "soundness": "Nested loop enforces query/round/coset counts. MerkleVerifyBus binds to codeword commitments registered on CommitmentsBus by WhirRoundAir (whir-2). Decreasing depth per round matches the reference verifier's domain halving.",
+          "verifier_ref": "verify_whir non-initial round query verification; WHIR M-WHIR commitment-verification bullet"
+        },
+        {
+          "id": "whir-9",
+          "title": "Binary k-fold of opened values",
+          "verifier_action": "Apply binary_k_fold: fold(h; alpha)(X^2) = h(X) + (alpha - X) * (h(X) - h(-X)) / (2X), reducing 2^k opened values to a single yi.",
+          "airs": ["whir.WhirFoldingAir"],
+          "buses": ["WhirFoldingBus", "WhirAlphaBus"],
+          "columns": ["fold_level", "left", "right", "folded"],
+          "constraints": "WhirFoldingAir receives opened values on WhirFoldingBus and alphas on WhirAlphaBus (from SumcheckAir). It performs k_whir levels of binary folding: at each level, combines pairs (h(X), h(-X)) using the folding formula, producing a single yi after k steps.",
+          "soundness": "Folding is algebraically constrained. alphas are transcript-pinned (from whir-1). The fold formula is the standard WHIR binary fold that produces yi consistent with the sumcheck claim at alpha.",
+          "verifier_ref": "verify_whir binary_k_fold; WHIR M-WHIR binary k-fold bullet"
+        },
+        {
+          "id": "whir-10",
+          "title": "Sample gamma and accumulate claims",
+          "verifier_action": "Sample gamma per round; accumulate y0 * gamma (non-final) and Σ_q yi[q] * gamma^{q+2} (all rounds) into claim.",
+          "airs": ["whir.WhirRoundAir"],
+          "buses": ["TranscriptBus", "WhirGammaBus"],
+          "columns": ["gamma", "gamma_pow", "claim_acc"],
+          "constraints": "WhirRoundAir samples gamma on TranscriptBus per round (WHIR schedule step (5)) and sends it on WhirGammaBus to FinalPolyQueryEvalAir. It performs the running claim update via VerifyQueriesBus, combining y0 and yi[q] per-query values into the claim accumulator.",
+          "soundness": "gamma is transcript-pinned per round. The per-round accumulation formula is algebraically constrained.",
+          "verifier_ref": "verify_whir gamma sampling and claim update; WHIR schedule step (5); M-WHIR claim-accumulation bullet"
+        },
+        {
+          "id": "whir-11",
+          "title": "Final check: acc == claim (MLE + query evaluations)",
+          "verifier_action": "Verify acc == prefix * suffix + Σ_round gamma-weighted (y0 term + Σ_q query evaluations), where prefix = eval_mobius_eq_mle(u[..t], alphas[..t]), suffix = eval_mle(final_poly, u[t..]).",
+          "airs": ["whir.FinalPolyMleEvalAir", "whir.FinalPolyQueryEvalAir", "whir.WhirRoundAir"],
+          "buses": ["WhirFinalPolyBus", "FinalPolyMleEvalBus", "FinalPolyQueryEvalBus", "WhirEqAlphaUBus", "WhirAlphaBus", "WhirGammaBus", "FinalPolyFoldingBus"],
+          "columns": ["prefix", "suffix", "acc", "claim"],
+          "constraints": "FinalPolyMleEvalAir computes suffix = eval_mle(final_poly, u[t..]) via binary tree over 2^log_final_poly_len leaves (FinalPolyFoldingBus). SumcheckAir provides eq_partial on WhirEqAlphaUBus, which FinalPolyMleEvalAir combines as prefix * suffix. FinalPolyQueryEvalAir computes per-query Horner evaluations using alphas (WhirAlphaBus) and gammas (WhirGammaBus). WhirRoundAir receives FinalPolyMleEvalBus and FinalPolyQueryEvalBus results and checks the final claim equality.",
+          "soundness": "All components of acc are algebraically computed from transcript-pinned values (u, alphas, gammas) and observed values (final_poly, opened values, y0). The final check ties sumcheck output claim to the MLE+query accumulator; any discrepancy between the folding sumcheck and the polynomial opening fails the bus/AIR constraints. This completes the M-WHIR extraction argument: verify(vk_child, Extract(W)) accepts.",
+          "verifier_ref": "verify_whir final check lines 145-154; WHIR M-WHIR final check bullet"
+        }
+      ]
+    }
+  ],
+  "correctness_concerns": [
+    {
+      "id": "transcript-ordering",
+      "title": "Transcript ordering / Fiat-Shamir soundness",
+      "concern": "The Fiat-Shamir transcript must be deterministic and match the verifier's observe/sample sequence exactly. Any reordering, omission, or extra observation would break soundness.",
+      "resolution": "TranscriptBus is a per-proof permutation bus carrying (tidx, value, is_sample) tuples. TranscriptAir is the sole sender and constrains: (a) sequential tidx indexing matching the Poseidon2 sponge state; (b) Poseidon2 permutation at every observe/sample mode transition (via Poseidon2PermuteBus lookup against Poseidon2Air); (c) state continuity (prev_state/post_state chain); (d) per-proof isolation (is_proof_start resets the sponge). All other AIRs reference tidx values computed in preflight to replay the exact same transcript sequence. The TranscriptBus permutation check ensures the multiset of sends equals the multiset of receives — any missing/extra operation causes imbalance. Moreover, reordering observations and samples while maintaining tidx balance would produce different sponge states, so sampled values would fail bus checks against other AIRs that embed the correct protocol-determined values.",
+      "key_airs": ["transcript.TranscriptAir", "transcript.Poseidon2Air"],
+      "key_buses": ["TranscriptBus", "Poseidon2PermuteBus"]
+    },
+    {
+      "id": "logup-soundness",
+      "title": "Linear constraints / LogUp soundness",
+      "concern": "The verifier checks trace_height_constraints to ensure total weighted interaction count does not exceed max_interaction_count. If the interaction count is too large, the GKR reduction may overflow, breaking the fractional sumcheck guarantee.",
+      "resolution": "ProofShapeAir's summary row enforces sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count via limb decomposition and RangeCheckerBus checks. lifted_height[i] = max(trace_height[i], 2^l_skip) = 2^max(log_height[i], l_skip). The recursion circuit constructor (VerifierSubCircuit::new, circuit build time) verifies that this single constraint implies every TraceHeightConstraint in the child VK: for each constraint, coefficient[i] <= num_interactions[i] and threshold >= max_interaction_count. ProofShapeAir additionally constrains log_height <= l_skip + n_stack (matching LogHeightOutOfBounds) and derives n_logup correctly from the interaction count sum.",
+      "key_airs": ["proof-shape.ProofShapeAir", "proof-shape.RangeCheckerAir"],
+      "key_buses": ["RangeCheckerBus", "GkrModuleBus"]
+    },
+    {
+      "id": "bus-wiring-completeness",
+      "title": "Completeness of bus wiring",
+      "concern": "Every data dependency in the verifier must be captured by a bus; no information can flow out of band.",
+      "resolution": "The recursion circuit's modules communicate exclusively through typed buses forming a complete graph of verifier data dependencies: (1) Preamble->GKR via GkrModuleBus; (2) GKR->BatchConstraint via BatchConstraintModuleBus + ConstraintsFoldingInputBus + InteractionsFoldingInputBus; (3) BC->Stacking via StackingModuleBus + ConstraintSumcheckRandomnessBus + ColumnClaimsBus; (4) Stacking->WHIR via WhirModuleBus + WhirMuBus + WhirOpeningPointBus + StackingIndicesBus; (5) shared data buses (AirShapeBus, HyperdimBus, LiftedHeightsBus, CommitmentsBus, NLiftBus); (6) challenge buses (XiRandomnessBus, ConstraintSumcheckRandomnessBus, WhirOpeningPointBus); (7) TranscriptBus for all Fiat-Shamir interactions; (8) CommitmentsBus + MerkleVerifyBus + Poseidon2CompressBus for commitment verification. Typed bus macros (define_typed_per_proof_permutation_bus!, etc.) enforce that message types match between senders and receivers, preventing wiring errors.",
+      "key_airs": ["proof-shape.ProofShapeAir", "gkr.GkrInputAir", "batch-constraint.MultilinearSumcheckAir", "stacking.StackingClaimsAir", "whir.WhirRoundAir"],
+      "key_buses": ["TranscriptBus", "GkrModuleBus", "BatchConstraintModuleBus", "StackingModuleBus", "WhirModuleBus", "CommitmentsBus"]
+    },
+    {
+      "id": "boundary-conditions",
+      "title": "Boundary conditions",
+      "concern": "How does the circuit ensure proofs start and end correctly — correct sponge initialization, correct number of rows per proof, correct sequencing of multi-step protocols?",
+      "resolution": "TranscriptAir uses is_proof_start to mark the first row of each proof's transcript, resetting the Poseidon2 sponge to zero. ProofShapeAir processes one proof per contiguous block of rows; ProofShapePermutationBus (internal) enforces exactly num_airs rows per proof, with a summary row running the linear constraint check. GkrLayerAir uses explicit layer indices with GkrLayerInputBus/GkrLayerOutputBus chain forcing K = n_logup + l_skip layers. Both BC sumcheck AIRs (Univariate, Multilinear) use SumcheckClaimBus chaining; final claim consumed by ExpressionClaimAir. WhirRoundAir tracks round index explicitly; WhirModuleBus from StackingClaimsAir includes starting tidx so rounds dispatch sumcheck/query/final-poly tasks with correct round indices.",
+      "key_airs": ["transcript.TranscriptAir", "proof-shape.ProofShapeAir", "gkr.GkrLayerAir", "batch-constraint.MultilinearSumcheckAir", "whir.WhirRoundAir"],
+      "key_buses": ["TranscriptBus", "GkrLayerInputBus", "GkrLayerOutputBus", "SumcheckClaimBus", "WhirModuleBus"]
+    },
+    {
+      "id": "challenge-independence",
+      "title": "Challenge independence (Fiat-Shamir property)",
+      "concern": "Challenges sampled from the transcript must not be influenced by the prover beyond what was already observed.",
+      "resolution": "TranscriptAir + Poseidon2Air enforce: (1) Poseidon2 modeled as a random oracle, with every observe->sample transition (or CHUNK-size absorption) triggering a permutation lookup; (2) observations binding — once absorbed, the value cannot change without changing the sponge output; (3) samples deterministic — extracted from sponge state positions (prev_state[CHUNK-1-idx]) and appearing as TranscriptBus messages with is_sample=1, so any AIR using a challenge reads the value determined by the sponge at that tidx; (4) PoW checks (logup, folding, query phase) add computational cost via ExpBitsLenAir bit-length verification, preventing cheap biasing; (5) no tidx reuse (monotonically increasing, permutation-checked).",
+      "key_airs": ["transcript.TranscriptAir", "transcript.Poseidon2Air", "primitives.ExpBitsLenAir"],
+      "key_buses": ["TranscriptBus", "Poseidon2PermuteBus", "ExpBitsLenBus"]
+    }
+  ]
+}

@@ -1,0 +1,642 @@
+{
+  "id": "bc",
+  "name": "Phase 2b: Batch Constraint",
+  "summary": "<p>After the GKR phase reduces the logUp claim to an evaluation claim at a random point <code>xi</code>, the <strong>Batch Constraint</strong> module takes over. It must verify that every present AIR's numerator/denominator contribution at <code>xi</code> is consistent with the stated constraints and interactions. This is done by batching across AIRs (with challenge <code>mu</code>), batching across constraints within an AIR (with <code>lambda</code>), batching across interaction message components (with <code>beta_logup</code>), running a sumcheck, and finally evaluating each AIR's symbolic constraint DAG at the opening point.</p><p>Thirteen AIRs cooperate: <code>FractionsFolderAir</code> receives the per-AIR claims from GKR and samples <code>mu</code>; <code>UnivariateSumcheckAir</code> and <code>MultilinearSumcheckAir</code> run the sumcheck protocol; <code>InteractionsFoldingAir</code> and <code>ConstraintsFoldingAir</code> sample their respective challenges and fold per-interaction/per-constraint evaluations; a cluster of Eq AIRs (<code>Eq3bAir</code>, <code>EqNsAir</code>, <code>EqUniAir</code>, <code>EqSharpUniAir</code>, <code>EqNegAir</code>) precomputes multilinear eq polynomial values used as weights; <code>SymbolicExpressionAir</code> walks every AIR's constraint DAG node-by-node; and <code>ExpressionClaimAir</code> aggregates all per-trace <code>(num, denom)</code> claims into the single value that the sumcheck pipeline must equal.</p>",
+  "blocks": [
+    {
+      "type": "prose",
+      "html": "<p>The verifier reaches BC with a pair of running claims <code>(p_xi_claim, q_xi_claim)</code> produced by GKR, along with the opening point <code>xi</code> and the logUp batching challenge <code>alpha_logup</code>. BC's job is to prove that these claims are what you would get if you (a) opened every column of every present AIR at <code>xi</code>, (b) plugged those openings into each AIR's symbolic constraints and interactions, and (c) summed everything weighted by appropriate Lagrange / eq-polynomial factors. The protocol does this soundly via several layers of random batching plus a two-stage sumcheck (one univariate round that skips <code>l_skip</code> variables, then <code>n_max</code> multilinear rounds).</p><p>We'll follow the verifier's own order: first the handoff from GKR (<code>FractionsFolderAir</code>), then the batching samples (beta, lambda), then the sumcheck itself, then the eq-polynomial subsystem, and finally DAG evaluation plus the closing claim-aggregation step that ties everything together.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.FractionsFolderAir",
+      "heading": "FractionsFolderAir",
+      "html": "<p>This AIR is the handoff point from GKR. For each present AIR it observes the pair <code>(numerator_term[i], denominator_term[i])</code> on the transcript, aggregates them into <code>(cur_p_sum, cur_q_sum)</code>, samples the fraction-batching challenge <code>mu</code>, and hashes the two aggregates into a single <code>sum_claim</code> that becomes the input to the sumcheck. It also forces the row count to equal <code>num_present_airs</code> (handed in from <code>ProofShapeAir</code>).</p>",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: per-row state",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs",
+      "source_lines": "27-44",
+      "code": "#[derive(AlignedBorrow, Clone, Copy, Debug)]\n#[repr(C)]\npub struct FractionsFolderCols<T> {\n    pub is_valid: T,\n    pub proof_idx: T,\n    pub is_first: T,\n\n    pub air_idx: T,\n\n    pub tidx: T,\n\n    pub sum_claim_p: [T; D_EF],\n    pub sum_claim_q: [T; D_EF],\n    pub cur_p_sum: [T; D_EF],\n    pub cur_q_sum: [T; D_EF],\n    pub mu: [T; D_EF],\n    pub cur_hash: [T; D_EF],\n}",
+      "explain": "<p>Each row represents one present AIR. <code>sum_claim_p</code> / <code>sum_claim_q</code> are the per-AIR numerator/denominator observed on the transcript; <code>cur_p_sum</code> / <code>cur_q_sum</code> accumulate them; <code>mu</code> is the batching challenge broadcast to all downstream AIRs; <code>cur_hash</code> is the Horner-style fold that becomes the sumcheck input.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Decrement air_idx row-by-row; force it to end at 0",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs",
+      "source_lines": "102-110",
+      "code": "        let is_transition = next.is_valid - next.is_first;\n        let is_last = local.is_valid - is_transition.clone();\n\n        // Air index decrements by 1\n        builder\n            .when(is_transition.clone())\n            .assert_eq(next.air_idx, local.air_idx - AB::Expr::ONE);\n        // Air index ends at 0\n        builder.when(is_last.clone()).assert_zero(local.air_idx);",
+      "explain": "<p><code>air_idx</code> starts at <code>num_present_airs - 1</code> on the first row and decrements by 1 per row, ending at 0 on the last row. Combined with the <code>FractionFolderInputBus</code> handoff (below), this forces the row count to exactly equal the number of present AIRs — the verifier cannot silently skip an AIR's contribution.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Accumulate per-AIR p and q into running sums",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs",
+      "source_lines": "126-148",
+      "code": "        // Initialize running sums\n        assert_array_eq(\n            &mut builder.when(local.is_first),\n            local.cur_p_sum,\n            local.sum_claim_p,\n        );\n        assert_array_eq(\n            &mut builder.when(local.is_first),\n            local.cur_q_sum,\n            local.sum_claim_q,\n        );\n\n        // Add air sums to running sums\n        assert_array_eq(\n            &mut builder.when(is_transition.clone()),\n            next.cur_p_sum,\n            ext_field_add(local.cur_p_sum, next.sum_claim_p),\n        );\n        assert_array_eq(\n            &mut builder.when(is_transition.clone()),\n            next.cur_q_sum,\n            ext_field_add(local.cur_q_sum, next.sum_claim_q),\n        );",
+      "explain": "<p>The final <code>cur_p_sum</code> / <code>cur_q_sum</code> on the last row must equal the GKR outputs <code>p_xi_claim</code> / <code>q_xi_claim</code> — the check is closed out by the <code>gkr_claim_bus.receive</code> at the end of this AIR. Soundness here is: each AIR's contribution appears in the transcript and shows up in the running sum; the identity <code>p_xi == 0</code> and <code>q_xi == alpha_logup</code> is enforced elsewhere by whoever sent the original claims on <code>BatchConstraintModuleBus</code>.</p>",
+      "scene": "bc-3"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Horner hash: sum_claim = p + mu * q, folded across AIRs",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs",
+      "source_lines": "154-180",
+      "code": "        // Initialize hash\n        // h = p + mu * q\n        assert_array_eq(\n            &mut builder.when(local.is_first),\n            local.cur_hash,\n            ext_field_add(\n                local.sum_claim_p,\n                ext_field_multiply(local.mu, local.sum_claim_q),\n            ),\n        );\n\n        // Update hash\n        // h' = p + mu * (q + mu * h)\n        assert_array_eq(\n            &mut builder.when(is_transition.clone()),\n            next.cur_hash,\n            ext_field_add(\n                next.sum_claim_p,\n                ext_field_multiply(\n                    next.mu,\n                    ext_field_add(\n                        next.sum_claim_q,\n                        ext_field_multiply(next.mu, local.cur_hash),\n                    ),\n                ),\n            ),\n        );",
+      "explain": "<p>This is the algebraic heart of the fraction-folding step: every pair <code>(sum_claim_p[i], sum_claim_q[i])</code> is interleaved into a single polynomial <code>sum_k mu^k * x_k</code> using Horner's method with two terms per AIR (numerator then denominator). After the last row, <code>cur_hash</code> is the single extension-field value that the sumcheck will have to match.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Receive num_present_airs, sample mu, observe (p, q)",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs",
+      "source_lines": "186-217",
+      "code": "        // Air index starts at num_present_airs - 1\n        self.fraction_folder_input_bus.receive(\n            builder,\n            local.proof_idx,\n            FractionFolderInputMessage {\n                num_present_airs: local.air_idx + AB::Expr::ONE,\n            },\n            local.is_first,\n        );\n\n        // Sample mu\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.tidx + AB::Expr::from_usize(2 * D_EF),\n            local.mu,\n            local.is_first,\n        );\n        self.transcript_bus.observe_ext(\n            builder,\n            local.proof_idx,\n            local.tidx + AB::Expr::from_usize(D_EF),\n            local.sum_claim_q,\n            local.is_valid,\n        );\n        self.transcript_bus.observe_ext(\n            builder,\n            local.proof_idx,\n            local.tidx,\n            local.sum_claim_p,\n            local.is_valid,\n        );",
+      "explain": "<p>The transcript absorbs every <code>(p, q)</code> pair first, then samples <code>mu</code> at the tidx just after the last observation. Because each row decrements <code>tidx</code> by <code>2 * D_EF</code> (see the transition constraint on line 119), the tidxes of all observations are deterministic, non-overlapping, and pinned to the transcript state.</p>",
+      "scene": "bc-4"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Send sum_claim to sumcheck; close GKR handoff; broadcast mu",
+      "source_path": "crates/recursion/src/batch_constraint/fractions_folder/air.rs",
+      "source_lines": "219-260",
+      "code": "        self.sumcheck_bus.send(\n            builder,\n            local.proof_idx,\n            SumcheckClaimMessage {\n                round: AB::Expr::NEG_ONE,\n                value: local.cur_hash.map(Into::into),\n            },\n            is_last.clone(),\n        );\n\n        // Receive initial tidx and input layer claim from gkr module\n        self.gkr_claim_bus.receive(\n            builder,\n            local.proof_idx,\n            BatchConstraintModuleMessage {\n                // Skip lambda\n                tidx: local.tidx,\n                gkr_input_layer_claim: [local.cur_p_sum, local.cur_q_sum],\n            },\n            is_last,\n        );\n        // Send final tidx value to univariate sumcheck\n        self.univariate_sumcheck_input_bus.send(\n            builder,\n            local.proof_idx,\n            UnivariateSumcheckInputMessage {\n                // Skip mu\n                tidx: local.tidx + AB::Expr::from_usize(3 * D_EF),\n            },\n            local.is_first,\n        );\n\n        self.mu_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            BatchConstraintConductorMessage {\n                msg_type: BatchConstraintInnerMessageType::Mu.to_field(),\n                idx: AB::Expr::ZERO,\n                value: local.mu.map(Into::into),\n            },\n            local.is_first,\n        );",
+      "explain": "<p>Three handoffs close out the AIR: (1) <code>cur_hash</code> is sent to <code>UnivariateSumcheckAir</code> as the initial sumcheck claim (round <code>-1</code>); (2) the <code>gkr_claim_bus</code> receive verifies that the totals equal what GKR output; (3) <code>mu</code> is broadcast on <code>BatchConstraintConductorBus</code> so <code>ExpressionClaimAir</code> can use the same value when it folds in the other direction at the end.</p>"
+    },
+    {
+      "type": "prose",
+      "html": "<p>Before sumcheck can run, BC also samples two more batching challenges: <code>beta_logup</code> (for interactions) and <code>lambda</code> (for constraints). These are both drawn from the transcript <em>before</em> the <code>mu</code> sample conceptually — they're interleaved into GKR's transcript range using <code>tidx</code> handoffs from <code>GkrInputAir</code>. The transcript's per-tidx ownership ensures no collision.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.InteractionsFoldingAir",
+      "heading": "InteractionsFoldingAir",
+      "html": "<p>This AIR has two jobs. Early on it <strong>samples <code>beta_logup</code></strong> — the challenge used to fold each interaction's multi-field message into a single extension-field value <code>count</code> for the numerator and <code>sum_k beta^k * msg_k + (bus_idx + 1) * beta^{len}</code> for the denominator. Later on (row-by-row, after column openings are available via <code>SymbolicExpressionAir</code>), it <strong>computes those folded values and accumulates them per-AIR</strong>, weighted by <code>eq_3b</code>, ready to be sent to <code>ExpressionClaimAir</code>.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: interaction-folding state",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "29-65",
+      "code": "#[derive(AlignedBorrow, Copy, Clone)]\n#[repr(C)]\npub struct InteractionsFoldingCols<T> {\n    pub is_valid: T,\n    pub is_first: T,\n    pub proof_idx: T,\n\n    pub beta_tidx: T,\n\n    pub air_idx: T,\n    pub sort_idx: T,\n    pub interaction_idx: T,\n\n    pub has_interactions: T,\n\n    pub is_first_in_air: T,\n    /// It's true for the num row, which doesn't need to be beta folded.\n    pub is_first_in_message: T, // aka \"is_mult\"\n    // the second in message is the first denom, and it's cur_sum is the folded denom\n    pub is_second_in_message: T,\n    pub is_bus_index: T,\n\n    pub idx_in_message: T,\n    pub value: [T; D_EF],\n    /// Current sum for doing beta folding. This is the value for one interaction.\n    /// When local.is_first_in_message, next.cur_sum should be the folded denom.\n    /// (because local row is for the num row, which doesn't need to be beta folded)\n    /// It doesn't multiply with eq_3b yet.\n    pub cur_sum: [T; D_EF],\n    pub beta: [T; D_EF],\n    pub eq_3b: [T; D_EF],\n\n    /// The summed num and denom for all interactions.\n    /// It's summed over all the interactions in the AIR: cur_sum * eq_3b when is_first_in_message\n    pub final_acc_num: [T; D_EF],\n    pub final_acc_denom: [T; D_EF],\n}",
+      "explain": "<p>Rows are a <em>three-level nested loop</em>: (proof_idx, sort_idx, interaction_idx), with each interaction spanning multiple rows for its <code>count</code>, <code>bus_idx</code>, and per-message-component values. <code>cur_sum</code> runs beta-Horner within a single interaction; <code>final_acc_num</code> / <code>final_acc_denom</code> accumulate <code>cur_sum * eq_3b</code> across all interactions inside an AIR.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sample beta_logup on the first row of each proof",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "352-387",
+      "code": "        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.beta_tidx,\n            local.beta,\n            local.is_valid * local.is_first,\n        );\n\n        self.air_shape_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            AirShapeBusMessage {\n                sort_idx: local.sort_idx.into(),\n                property_idx: AirShapeProperty::NumInteractions.to_field(),\n                value: (local.interaction_idx + AB::Expr::ONE) * local.has_interactions,\n            },\n            next_is_first_in_air_or_invalid * local.is_valid,\n        );\n        self.air_shape_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            AirShapeBusMessage {\n                sort_idx: local.sort_idx.into(),\n                property_idx: AirShapeProperty::AirId.to_field(),\n                value: local.air_idx.into(),\n            },\n            local.is_first_in_air,\n        );\n        self.interactions_folding_input_bus.receive(\n            builder,\n            local.proof_idx,\n            InteractionsFoldingInputMessage {\n                tidx: local.beta_tidx,\n            },\n            local.is_first,\n        );",
+      "explain": "<p><code>beta_tidx</code> is handed in from <code>GkrInputAir</code> through <code>InteractionsFoldingInputBus</code>. The tidx lives inside GKR's transcript range (interleaved at <code>tidx_if</code>) but because TranscriptBus enforces per-tidx ownership, the sample is bound to a specific sponge state. The second / third <code>air_shape_bus</code> lookups are what forces the row count inside each AIR to equal its declared <code>NumInteractions</code>.</p>",
+      "scene": "bc-1"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Beta-fold: cur_sum = value + beta * next.cur_sum",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "275-290",
+      "code": "        // ======================== beta and cur sum consistency ============================\n        assert_array_eq(&mut builder.when(is_same_proof), local.beta, next.beta);\n        assert_array_eq(\n            &mut builder.when(is_same_message * not(local.is_first_in_message)),\n            local.cur_sum,\n            ext_field_add(\n                local.value,\n                ext_field_multiply::<AB::Expr>(local.beta, next.cur_sum),\n            ),\n        );\n        // numerator and the last element of the message are just the corresponding values\n        assert_array_eq(\n            &mut builder.when(next_is_first_in_message_or_invalid + local.is_first_in_message),\n            local.cur_sum,\n            local.value,\n        );",
+      "explain": "<p>The denominator side of each interaction is <code>sum_k beta^k * msg_k + (bus_idx + 1) * beta^{msg_len}</code>. This is evaluated by Horner iteration backwards through the message rows: on the last row, <code>cur_sum = value</code> (the bus index, shifted); on each preceding row, <code>cur_sum = value + beta * next.cur_sum</code>. The numerator (<code>is_first_in_message</code>) is just <code>value</code> untouched — it's the <code>count</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Accumulate folded (num, denom) per AIR, multiplied by eq_3b",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "201-243",
+      "code": "        // final_acc_num only changes when it's first in message\n        assert_array_eq(\n            &mut builder\n                .when(not(local.is_first_in_message) * local.is_valid * is_same_air.clone()),\n            local.final_acc_num,\n            next.final_acc_num,\n        );\n        assert_array_eq(\n            &mut builder.when(local.is_first_in_message * local.has_interactions),\n            local.final_acc_num,\n            ext_field_add(\n                next.final_acc_num,\n                ext_field_multiply(local.cur_sum, local.eq_3b),\n            ),\n        );\n        assert_zeros(\n            &mut builder\n                .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),\n            local.final_acc_num,\n        );\n        assert_zeros(\n            &mut builder\n                .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),\n            local.final_acc_denom,\n        );\n        // final_acc_denom only changes when it's second in message\n        assert_array_eq(\n            &mut builder.when(\n                (not(local.is_second_in_message) + not(local.has_interactions))\n                    * local.is_valid\n                    * is_same_air.clone(),\n            ),\n            local.final_acc_denom,\n            next.final_acc_denom,\n        );\n        assert_array_eq(\n            &mut builder.when(local.is_second_in_message * local.is_valid),\n            local.final_acc_denom,\n            ext_field_add(\n                next.final_acc_denom,\n                ext_field_multiply(local.cur_sum, local.eq_3b),\n            ),\n        );",
+      "explain": "<p>Once <code>cur_sum</code> is the folded numerator (at <code>is_first_in_message</code>) or folded denominator (at <code>is_second_in_message</code>), it is multiplied by <code>eq_3b</code> (the multilinear eq polynomial evaluated at this interaction's stacked index, supplied by <code>Eq3bAir</code>) and accumulated into <code>final_acc_num</code> / <code>final_acc_denom</code>. These running sums hold all the interactions of one AIR combined.</p>",
+      "scene": "bc-13"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Send per-AIR (num, denom) claims to ExpressionClaimAir",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "292-313",
+      "code": "        self.expression_claim_bus.send(\n            builder,\n            local.proof_idx,\n            ExpressionClaimMessage {\n                is_interaction: AB::Expr::ONE,\n                idx: local.sort_idx * AB::Expr::TWO,\n                // value: ext_field_multiply(local.cur_sum, local.eq_3b),\n                value: local.final_acc_num.map(Into::into),\n            },\n            local.is_first_in_air * local.is_valid,\n        );\n        self.expression_claim_bus.send(\n            builder,\n            local.proof_idx,\n            ExpressionClaimMessage {\n                is_interaction: AB::Expr::ONE,\n                idx: local.sort_idx * AB::Expr::TWO + AB::Expr::ONE,\n                // value: ext_field_multiply(next.cur_sum, next.eq_3b),\n                value: local.final_acc_denom.map(Into::into),\n            },\n            local.is_first_in_air * local.is_valid,\n        );",
+      "explain": "<p>On the first row of each AIR, the completed <code>(final_acc_num, final_acc_denom)</code> pair is sent to <code>ExpressionClaimAir</code> at indices <code>(2 * sort_idx, 2 * sort_idx + 1)</code> — matching the interleave scheme that <code>ExpressionClaimAir</code> uses when folding with <code>mu</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Receive per-interaction values from SymbolicExpressionAir",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "314-350",
+      "code": "        self.interaction_bus.receive(\n            builder,\n            local.proof_idx,\n            InteractionsFoldingMessage {\n                air_idx: local.air_idx.into(),\n                interaction_idx: local.interaction_idx.into(),\n                is_mult: AB::Expr::ZERO,\n                idx_in_message: local.idx_in_message.into(),\n                value: local.value.map(Into::into),\n            },\n            local.has_interactions\n                * (AB::Expr::ONE - local.is_first_in_message - local.is_bus_index),\n        );\n        self.interaction_bus.receive(\n            builder,\n            local.proof_idx,\n            InteractionsFoldingMessage {\n                air_idx: local.air_idx.into(),\n                interaction_idx: local.interaction_idx.into(),\n                is_mult: AB::Expr::ONE,\n                idx_in_message: AB::Expr::ZERO,\n                value: local.value.map(Into::into),\n            },\n            local.is_first_in_message * local.has_interactions,\n        );\n        self.interaction_bus.receive(\n            builder,\n            local.proof_idx,\n            InteractionsFoldingMessage {\n                air_idx: local.air_idx.into(),\n                interaction_idx: local.interaction_idx.into(),\n                is_mult: AB::Expr::ZERO,\n                idx_in_message: AB::Expr::NEG_ONE,\n                value: local.value.map(Into::into),\n            },\n            local.is_bus_index,\n        );",
+      "explain": "<p>The actual <code>value</code> columns aren't computed here: they come from <code>SymbolicExpressionAir</code>, which evaluates each interaction's <code>count</code>, <code>msg_k</code>, and <code>bus_idx</code> node from the DAG. This is a <em>permutation</em> bus: each <code>(air_idx, interaction_idx, idx_in_message)</code> must match exactly one DAG evaluation. The three branches distinguish multiplicity (numerator), message components (denominator), and bus index (shifted by 1 because <code>(bus_idx + 1)</code> prevents collision with empty messages).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Receive eq_3b from Eq3bAir on the per-interaction message start",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/interactions_folding/air.rs",
+      "source_lines": "389-398",
+      "code": "        self.eq_3b_bus.receive(\n            builder,\n            local.proof_idx,\n            Eq3bMessage {\n                sort_idx: local.sort_idx,\n                interaction_idx: local.interaction_idx,\n                eq_3b: local.eq_3b,\n            },\n            local.has_interactions * local.is_first_in_message,\n        );",
+      "explain": "<p>Exactly one <code>eq_3b</code> value per interaction is pulled from <code>Eq3bAir</code>, on the <code>is_first_in_message</code> row. All other rows within the interaction inherit it via the <code>is_same_message</code> consistency constraint above.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.ConstraintsFoldingAir",
+      "heading": "ConstraintsFoldingAir",
+      "html": "<p>Symmetric to <code>InteractionsFoldingAir</code> but for constraints. It samples <code>lambda</code> (the constraint-batching challenge), receives one evaluation per constraint from <code>SymbolicExpressionAir</code>, folds them via Horner as <code>sum_j lambda^j * constraint_j</code>, multiplies by the AIR's <code>eq_n</code> factor (the multilinear eq evaluation at the opening point), and sends one <code>(idx = sort_idx, value)</code> per AIR to <code>ExpressionClaimAir</code>.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: constraint-folding state",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs",
+      "source_lines": "29-49",
+      "code": "#[derive(AlignedBorrow, Copy, Clone)]\n#[repr(C)]\npub struct ConstraintsFoldingCols<T> {\n    pub is_valid: T,\n    pub is_first: T,\n    pub proof_idx: T,\n\n    pub air_idx: T,\n    pub sort_idx: T,\n    pub constraint_idx: T,\n    pub n_lift: T,\n\n    pub lambda_tidx: T,\n    pub lambda: [T; D_EF],\n\n    pub value: [T; D_EF],\n    pub cur_sum: [T; D_EF],\n    pub eq_n: [T; D_EF],\n\n    pub is_first_in_air: T,\n}",
+      "explain": "<p>A simpler two-level loop than <code>InteractionsFoldingAir</code>: <code>(proof_idx, sort_idx)</code> with <code>constraint_idx</code> iterating within each AIR. <code>n_lift</code> is the AIR's lift amount (inherited from <code>NLiftBus</code>) used to look up the correct <code>eq_n</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sample lambda on the first row of each proof",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs",
+      "source_lines": "187-201",
+      "code": "        self.constraints_folding_input_bus.receive(\n            builder,\n            local.proof_idx,\n            ConstraintsFoldingInputMessage {\n                tidx: local.lambda_tidx,\n            },\n            local.is_first,\n        );\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.lambda_tidx,\n            local.lambda,\n            local.is_valid * local.is_first,\n        );",
+      "explain": "<p>Same pattern as <code>beta_logup</code>: the tidx is handed in from <code>GkrInputAir</code>, and the sample is bound to the transcript sponge state at that position.</p>",
+      "scene": "bc-2"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Horner-fold constraints and multiply by eq_n",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs",
+      "source_lines": "125-152",
+      "code": "        // ======================== lambda and cur sum consistency ============================\n        assert_array_eq(&mut builder.when(is_same_proof), local.lambda, next.lambda);\n        assert_array_eq(\n            &mut builder.when(is_same_air.clone()),\n            local.cur_sum,\n            ext_field_add(\n                local.value,\n                ext_field_multiply::<AB::Expr>(local.lambda, next.cur_sum),\n            ),\n        );\n        assert_array_eq(\n            &mut builder.when(is_same_air.clone()),\n            local.eq_n,\n            next.eq_n,\n        );\n        // numerator and the last element of the message are just the corresponding values\n        assert_array_eq(\n            &mut builder.when(AB::Expr::ONE - is_same_air.clone()),\n            local.cur_sum,\n            local.value,\n        );\n        // If we don't have constraints then `value` is zero\n        assert_zeros(\n            &mut builder\n                .when(local.is_first_in_air)\n                .when(not::<AB::Expr>(is_same_air.clone())),\n            local.value,\n        );",
+      "explain": "<p>The first-in-air row holds <code>cur_sum = sum_j lambda^j * constraint_j</code> after rolling through all constraints via Horner. AIRs with zero constraints are handled by the last assertion: their single row holds <code>value = 0</code>.</p>",
+      "scene": "bc-12"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Send batched (eq_n * folded_sum) per-AIR to ExpressionClaimAir",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs",
+      "source_lines": "154-186",
+      "code": "        self.n_lift_bus.receive(\n            builder,\n            local.proof_idx,\n            NLiftMessage {\n                air_idx: local.air_idx,\n                n_lift: local.n_lift,\n            },\n            local.is_first_in_air * local.is_valid,\n        );\n        self.constraint_bus.receive(\n            builder,\n            local.proof_idx,\n            ConstraintsFoldingMessage {\n                air_idx: local.air_idx.into(),\n                constraint_idx: local.constraint_idx - AB::Expr::ONE,\n                value: local.value.map(Into::into),\n            },\n            local.is_valid * (AB::Expr::ONE - local.is_first_in_air),\n        );\n        let folded_sum: [AB::Expr; D_EF] = ext_field_add(\n            ext_field_multiply_scalar::<AB::Expr>(next.cur_sum, is_same_air.clone()),\n            ext_field_multiply_scalar::<AB::Expr>(local.cur_sum, AB::Expr::ONE - is_same_air),\n        );\n        self.expression_claim_bus.send(\n            builder,\n            local.proof_idx,\n            ExpressionClaimMessage {\n                is_interaction: AB::Expr::ZERO,\n                idx: local.sort_idx.into(),\n                value: ext_field_multiply(folded_sum, local.eq_n),\n            },\n            local.is_first_in_air * local.is_valid,\n        );",
+      "explain": "<p>The <code>folded_sum</code> trick handles the edge case where an AIR has no constraints (the row is the only one, so <code>is_same_air = 0</code> and we fall back to <code>local.cur_sum = local.value = 0</code>). Multiplying by <code>eq_n</code> weights the claim by the outer eq polynomial before sending it to <code>ExpressionClaimAir</code> at index <code>sort_idx</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Look up eq_n by (n_lift, is_sharp=0)",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/constraints_folding/air.rs",
+      "source_lines": "203-212",
+      "code": "        self.eq_n_outer_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            EqNOuterMessage {\n                is_sharp: AB::Expr::ZERO,\n                n: local.n_lift.into(),\n                value: local.eq_n.map(Into::into),\n            },\n            local.is_first_in_air * local.is_valid,\n        );",
+      "explain": "<p><code>EqNsAir</code> publishes all <code>eq_n</code> values on <code>EqNOuterBus</code> keyed by <code>(is_sharp, n)</code>. Here we look up the non-sharp variant at <code>n = n_lift</code>. For interactions, <code>ExpressionClaimAir</code> will use the sharp variant on the same bus.</p>"
+    },
+    {
+      "type": "prose",
+      "html": "<p>With beta, lambda, and mu all sampled, and the handoff from GKR sealed, the sumcheck proper begins. It has two stages: one univariate round that handles the <code>l_skip</code> skipped variables all at once over the roots-of-unity domain, then <code>n_max</code> standard multilinear rounds.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.UnivariateSumcheckAir",
+      "heading": "UnivariateSumcheckAir",
+      "html": "<p>The first sumcheck round is run over the roots-of-unity domain of size <code>2^l_skip</code> (where <code>l_skip</code> is the number of variables skipped at the front — chosen to make this round efficient). The prover sends a univariate polynomial of degree <code>univariate_deg = (max_constraint_degree + 1) * (2^l_skip - 1)</code> as a list of coefficients; the verifier observes each, checks the domain-sum identity <code>|D| * (a_0 + a_{|D|}) == sum_claim</code>, samples <code>r_0</code>, and evaluates the polynomial at <code>r_0</code> via Horner.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: univariate sumcheck state",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs",
+      "source_lines": "31-52",
+      "code": "#[derive(AlignedBorrow, Clone, Copy, Debug)]\n#[repr(C)]\npub struct UnivariateSumcheckCols<T> {\n    pub is_valid: T,\n    pub proof_idx: T,\n    pub is_first: T,\n\n    pub coeff_idx: T,\n\n    /// Powers of generator of order 2^{l_skip} to get periodic selector columns\n    pub omega_skip_power: T,\n    pub is_omega_skip_power_equal_to_one: T,\n    pub is_omega_skip_power_equal_to_one_aux: IsEqualAuxCols<T>,\n\n    pub coeff: [T; D_EF],\n    pub sum_at_roots: [T; D_EF],\n\n    pub r: [T; D_EF],\n    pub value_at_r: [T; D_EF],\n\n    pub tidx: T,\n}",
+      "explain": "<p>One row per coefficient, iterating <code>coeff_idx</code> from <code>univariate_deg</code> down to <code>0</code>. <code>omega_skip_power</code> cycles through powers of the domain generator; when it equals 1, the current coefficient lies on the domain and contributes <code>|D| * coeff</code> to <code>sum_at_roots</code>. <code>value_at_r</code> runs Horner evaluation at <code>r_0</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Force exactly univariate_deg + 1 coefficients",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs",
+      "source_lines": "117-126",
+      "code": "        // Coeff index starts at univariate degree\n        builder\n            .when(local.is_first)\n            .assert_eq(local.coeff_idx, AB::Expr::from_usize(self.univariate_deg));\n        // Coeff index decrements by 1\n        builder\n            .when(is_transition.clone())\n            .assert_eq(next.coeff_idx, local.coeff_idx - AB::Expr::ONE);\n        // Coeff index ends at zero\n        builder.when(is_last.clone()).assert_zero(local.coeff_idx);",
+      "explain": "<p>The row count is VK-determined: the prover cannot submit more or fewer coefficients than the declared degree allows. This is a key soundness property — if the prover could truncate, they could hide a nonzero high-degree term.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sum-over-roots check: accumulate |D| * coeff at domain points",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs",
+      "source_lines": "162-196",
+      "code": "        let domain_size = AB::Expr::from_usize(1 << self.l_skip);\n\n        // Initialize sum over roots\n        assert_array_eq(\n            &mut builder\n                .when(local.is_first)\n                .when(local.is_omega_skip_power_equal_to_one),\n            local.sum_at_roots,\n            ext_field_multiply_scalar(local.coeff, domain_size.clone()),\n        );\n        assert_zeros(\n            &mut builder\n                .when(local.is_first)\n                .when(not(local.is_omega_skip_power_equal_to_one)),\n            local.sum_at_roots,\n        );\n        // Add c * 2^{l_skip} at every 2^{l_skip} coefficient\n        assert_array_eq(\n            &mut builder\n                .when(is_transition.clone())\n                .when(next.is_omega_skip_power_equal_to_one),\n            next.sum_at_roots,\n            ext_field_add(\n                local.sum_at_roots,\n                ext_field_multiply_scalar(next.coeff, domain_size.clone()),\n            ),\n        );\n        // Keep the sum over roots unchanged for other values\n        assert_array_eq(\n            &mut builder\n                .when(is_transition.clone())\n                .when(not(next.is_omega_skip_power_equal_to_one)),\n            next.sum_at_roots,\n            local.sum_at_roots,\n        );",
+      "explain": "<p>For a polynomial with coefficients <code>a_0, a_1, ..., a_n</code> and domain of size <code>|D|</code>, the sum over <code>x in D</code> equals <code>|D| * sum_{i : i ≡ 0 mod |D|} a_i</code>. That's the identity being checked: accumulate <code>|D| * coeff</code> exactly when <code>omega_skip_power = 1</code>.</p>",
+      "scene": "bc-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Horner evaluation at r_0",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs",
+      "source_lines": "202-216",
+      "code": "        assert_array_eq(&mut builder.when(is_transition.clone()), next.r, local.r);\n\n        // Initialize evaluation\n        // e = c\n        assert_array_eq(\n            &mut builder.when(local.is_first),\n            local.value_at_r,\n            local.coeff,\n        );\n        // e' = c + r * e\n        assert_array_eq(\n            &mut builder.when(is_transition.clone()),\n            next.value_at_r,\n            ext_field_add(next.coeff, ext_field_multiply(next.r, local.value_at_r)),\n        );",
+      "explain": "<p>Standard Horner: <code>a_n + r*(a_{n-1} + r*(a_{n-2} + ...))</code>. Because <code>coeff_idx</code> decreases from <code>n</code> to <code>0</code>, the first row's coeff is <code>a_n</code> and the last row's coeff is <code>a_0</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Observe coefficients, sample r_0, check domain identity, hand off",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs",
+      "source_lines": "230-282",
+      "code": "        // Sample r\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.tidx + AB::Expr::from_usize(D_EF),\n            local.r,\n            local.is_first,\n        );\n        // Observe coefficients\n        self.transcript_bus.observe_ext(\n            builder,\n            local.proof_idx,\n            local.tidx,\n            local.coeff,\n            local.is_valid,\n        );\n\n        // Receive initial tidx value\n        self.univariate_sumcheck_input_bus.receive(\n            builder,\n            local.proof_idx,\n            UnivariateSumcheckInputMessage { tidx: local.tidx },\n            is_last.clone(),\n        );\n        // Send tidx when there are no multilinear rounds\n        self.stacking_module_bus.send(\n            builder,\n            local.proof_idx,\n            StackingModuleMessage {\n                // Skip r\n                tidx: local.tidx + AB::Expr::from_usize(2 * D_EF),\n            },\n            local.is_first,\n        );\n\n        self.claim_bus.receive(\n            builder,\n            local.proof_idx,\n            SumcheckClaimMessage {\n                round: AB::Expr::NEG_ONE,\n                value: local.sum_at_roots.map(Into::into),\n            },\n            is_last.clone(),\n        );\n        self.claim_bus.send(\n            builder,\n            local.proof_idx,\n            SumcheckClaimMessage {\n                round: AB::Expr::ZERO,\n                value: local.value_at_r.map(Into::into),\n            },\n            is_last,\n        );",
+      "explain": "<p>The <code>claim_bus.receive</code> with <code>round = -1</code> is what pins <code>sum_at_roots</code> to equal <code>cur_hash</code> from <code>FractionsFolderAir</code> — i.e. <code>|D| * (a_0 + a_|D|) == sum_claim</code>. The <code>claim_bus.send</code> with <code>round = 0</code> hands <code>value_at_r</code> to <code>MultilinearSumcheckAir</code> as the starting claim for its first multilinear round.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Broadcast r_0 on ConstraintSumcheckRandomnessBus and BatchConstraintConductorBus",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/univariate/air.rs",
+      "source_lines": "283-303",
+      "code": "        self.randomness_bus.send(\n            builder,\n            local.proof_idx,\n            ConstraintSumcheckRandomness {\n                idx: AB::Expr::ZERO,\n                challenge: local.r.map(Into::into),\n            },\n            local.is_first,\n        );\n\n        // Here idx = 0 and is called once per proof_idx\n        self.batch_constraint_conductor_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            BatchConstraintConductorMessage {\n                msg_type: BatchConstraintInnerMessageType::R.to_field(),\n                idx: AB::Expr::ZERO,\n                value: local.r.map(Into::into),\n            },\n            local.is_valid * local.is_first * AB::Expr::TWO,\n        );",
+      "explain": "<p>The challenge <code>r_0</code> is sent to two buses: <code>ConstraintSumcheckRandomnessBus</code> (consumed by Stacking at the end) and <code>BatchConstraintConductorBus</code> as <code>R[0]</code> (consumed by the Eq AIRs, which need <code>r_0</code> alongside the other <code>r_j</code>s). The <code>* TWO</code> multiplicity is because it is looked up by both <code>EqUniAir</code> and other places.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.MultilinearSumcheckAir",
+      "heading": "MultilinearSumcheckAir",
+      "html": "<p>After the univariate round, we run <code>n_max</code> standard multilinear sumcheck rounds. Each round: the prover sends a degree-<code>s_deg = max_constraint_degree + 1</code> polynomial as <code>s_deg + 1</code> point evaluations <code>s(0), s(1), ..., s(s_deg)</code>; the verifier observes them, checks <code>s(0) + s(1) == current_claim</code>, samples <code>r_j</code>, and computes the next claim as <code>s(r_j)</code> via Lagrange interpolation.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: multilinear sumcheck state",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs",
+      "source_lines": "29-59",
+      "code": "#[derive(AlignedBorrow, Clone, Copy, Debug)]\n#[repr(C)]\npub struct MultilinearSumcheckCols<T> {\n    pub is_valid: T,\n    pub proof_idx: T,\n    pub round_idx: T,\n    pub is_proof_start: T,\n    pub is_first_eval: T,\n\n    /// A valid row which is not involved in any interactions\n    /// but should satisfy air constraints\n    pub is_dummy: T,\n\n    pub eval_idx: T,\n\n    pub cur_sum: [T; D_EF],\n    pub eval: [T; D_EF],\n\n    pub prefix_product: [T; D_EF],\n    pub suffix_product: [T; D_EF],\n    // 1 / i!(d - i)!\n    pub denom_inv: T,\n\n    // Lagrange coefficients for the interpolated polynomial\n    // prefix_product * suffix_product * denom_inv\n    pub lagrange_coeff: [T; D_EF],\n\n    pub r: [T; D_EF],\n\n    pub tidx: T,\n}",
+      "explain": "<p>Rows are a nested loop over <code>(proof_idx, round_idx, eval_idx)</code>, with <code>eval_idx</code> running <code>0..=s_deg</code> per round. <code>prefix_product</code>, <code>suffix_product</code>, and <code>denom_inv</code> together give the Lagrange coefficient for interpolating at <code>r_j</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Maintain prefix/suffix products and denom_inv (Lagrange coefficients)",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs",
+      "source_lines": "160-211",
+      "code": "        let d_factorial_inv = AB::Expr::from_prime_subfield(\n            <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::from_usize((1..=s_deg).product())\n                .inverse(),\n        );\n        // Starts at d!\n        builder\n            .when(local.is_first_eval)\n            .assert_eq(local.denom_inv, d_factorial_inv);\n        // 1 / (i + 1)!(d - i - 1)!  (i + 1) = 1 / i!(d - i)! * (d - i)\n        builder.when(is_transition_eval.clone()).assert_eq(\n            next.denom_inv * next.eval_idx,\n            local.denom_inv * (AB::Expr::from_usize(s_deg) - local.eval_idx),\n        );\n\n        ///////////////////////////////////////////////////////////////////////\n        // Prefix/Suffix Product Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        assert_array_eq(\n            &mut builder.when(is_transition_eval.clone()),\n            next.r,\n            local.r,\n        );\n\n        // Prefix Product\n        // Starts at 1\n        assert_one_ext(&mut builder.when(local.is_first_eval), local.prefix_product);\n        // p' = p * (r - i)\n        assert_array_eq(\n            &mut builder.when(is_transition_eval.clone()),\n            next.prefix_product,\n            ext_field_multiply(\n                local.prefix_product,\n                ext_field_subtract_scalar(local.r, local.eval_idx),\n            ),\n        );\n\n        // Suffix Product\n        // Ends at 1\n        assert_one_ext(\n            &mut builder.when(is_last_eval.clone()),\n            local.suffix_product,\n        );\n        // s = s' * (i + 1 - r)\n        assert_array_eq(\n            &mut builder.when(is_transition_eval.clone()),\n            local.suffix_product,\n            ext_field_multiply(\n                next.suffix_product,\n                scalar_subtract_ext_field(local.eval_idx + AB::Expr::ONE, local.r),\n            ),\n        );",
+      "explain": "<p>For evaluating <code>s(r)</code> from values <code>s(0), s(1), ..., s(d)</code>, the standard Lagrange formula is <code>s(r) = sum_i s(i) * prod_{j != i} (r - j)/(i - j)</code>. Here, <code>prefix_product = prod_{j &lt; i} (r - j)</code>, <code>suffix_product = prod_{j &gt; i} (r - j) * (-1)^{d - i}</code>, and <code>denom_inv = 1 / (i! * (d - i)!)</code>. Together they give the Lagrange coefficient without ever needing division in-circuit.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Accumulate s(r_j) = sum_i s(i) * lagrange_coeff(i)",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs",
+      "source_lines": "217-242",
+      "code": "        // Lagrange coefficient\n        assert_array_eq(\n            &mut builder.when(local.is_valid),\n            local.lagrange_coeff,\n            ext_field_multiply_scalar(\n                ext_field_multiply(local.prefix_product, local.suffix_product),\n                local.denom_inv,\n            ),\n        );\n\n        // Initialize at first evaluation\n        assert_array_eq(\n            &mut builder.when(local.is_first_eval),\n            local.cur_sum,\n            ext_field_multiply(local.eval, local.lagrange_coeff),\n        );\n\n        // Cumulative sum\n        assert_array_eq(\n            &mut builder.when(is_transition_eval.clone()),\n            next.cur_sum,\n            ext_field_add(\n                local.cur_sum,\n                ext_field_multiply(next.eval, next.lagrange_coeff),\n            ),\n        );",
+      "explain": "<p>On the last <code>eval_idx</code> of a round, <code>cur_sum</code> equals <code>s(r_j)</code> — the new claim for round <code>j + 1</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-round: observe evals, check s(0)+s(1)=claim, sample r_j, send next claim",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs",
+      "source_lines": "256-306",
+      "code": "        // Observe evaluations s(1), s(2) etc.\n        self.transcript_bus.observe_ext(\n            builder,\n            local.proof_idx,\n            local.tidx,\n            next.eval,\n            is_transition_eval.clone() * is_not_dummy.clone(),\n        );\n        // Sample challenge r\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.tidx,\n            local.r,\n            is_last_eval.clone() * is_not_dummy.clone(),\n        );\n\n        // Receive tidx from univariate sumcheck and send it to stacking module\n        self.stacking_module_bus.receive(\n            builder,\n            local.proof_idx,\n            StackingModuleMessage { tidx: local.tidx },\n            local.is_proof_start * is_not_dummy.clone(),\n        );\n        self.stacking_module_bus.send(\n            builder,\n            local.proof_idx,\n            StackingModuleMessage {\n                tidx: local.tidx + AB::Expr::from_usize(D_EF),\n            },\n            is_proof_end.clone() * is_not_dummy.clone(),\n        );\n\n        self.claim_bus.receive(\n            builder,\n            local.proof_idx,\n            SumcheckClaimMessage {\n                round: local.round_idx.into(),\n                value: ext_field_add(local.eval, next.eval),\n            },\n            local.is_first_eval * is_not_dummy.clone(),\n        );\n        self.claim_bus.send(\n            builder,\n            local.proof_idx,\n            SumcheckClaimMessage {\n                round: local.round_idx + AB::Expr::ONE,\n                value: local.cur_sum.map(Into::into),\n            },\n            is_last_eval.clone() * is_not_dummy.clone(),\n        );",
+      "explain": "<p>On the first <code>eval_idx</code> of each round, <code>claim_bus.receive</code> asserts <code>s(0) + s(1) == current_claim</code>. On the last <code>eval_idx</code>, the sampled <code>r_j</code> is locked in and <code>cur_sum = s(r_j)</code> is sent as the next claim. The <code>round_idx</code> chain closes on <code>ExpressionClaimAir</code>'s <code>num_multilinear_sumcheck_rounds = n_max</code>, forcing the number of rounds.</p>",
+      "scene": "bc-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Broadcast r_j to downstream modules",
+      "source_path": "crates/recursion/src/batch_constraint/sumcheck/multilinear/air.rs",
+      "source_lines": "307-326",
+      "code": "        self.randomness_bus.send(\n            builder,\n            local.proof_idx,\n            ConstraintSumcheckRandomness {\n                idx: local.round_idx + AB::Expr::ONE,\n                challenge: local.r.map(|x| x.into()),\n            },\n            local.is_first_eval * is_not_dummy.clone(),\n        );\n        // Here idx > 0 and all idx are distinct within one proof_idx\n        self.batch_constraint_conductor_bus.add_key_with_lookups(\n            builder,\n            local.proof_idx,\n            BatchConstraintConductorMessage {\n                msg_type: BatchConstraintInnerMessageType::R.to_field(),\n                idx: local.round_idx + AB::Expr::ONE,\n                value: local.r.map(|x| x.into()),\n            },\n            local.is_first_eval * is_not_dummy,\n        );",
+      "explain": "<p>Each <code>r_j</code> is sent on <code>ConstraintSumcheckRandomnessBus</code> (consumed by Stacking's <code>OpeningClaimsAir</code> to check that the column openings match this sumcheck point) and on <code>BatchConstraintConductorBus</code> as <code>R[round_idx + 1]</code> (consumed by the Eq AIRs). Indices <code>1..=n_max</code> are all distinct within one proof.</p>",
+      "scene": "bc-15"
+    },
+    {
+      "type": "prose",
+      "html": "<p>Parallel to the sumcheck, a cluster of Eq AIRs precomputes the multilinear equality polynomial evaluations that the folding AIRs need. The key building blocks are: <code>EqUniAir</code> computes <code>eval_eq_uni(l_skip, xi[0], r_0)</code> — the \"base factor\" that covers the skipped dimensions. <code>EqSharpUniAir</code>/<code>EqSharpUniReceiverAir</code> compute <code>eval_eq_sharp_uni</code> — the logUp-specific variant over roots of unity. <code>EqNsAir</code> multiplies these with per-dimension factors <code>eval_eq_mle([xi[l_skip + j - 1]], [r_j])</code>. <code>Eq3bAir</code> handles the stacked-b-index bit lookup for interactions. And <code>EqNegAir</code> handles the edge case where <code>log_height &lt; l_skip</code> (negative dimension count).</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.Eq3bAir",
+      "heading": "Eq3bAir",
+      "html": "<p>For each interaction in each AIR, <code>Eq3bAir</code> computes <code>eq_3b_per_trace[i][interaction_idx] = eval_eq_mle(xi[l_skip + n_lift..l_skip + n_logup], b)</code>, where <code>b</code> is the interaction's stacked-b index restored bit by bit. This weighs each interaction by its position in the logUp virtual-row numbering.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_3b/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: per-bit eq product state",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_3b/air.rs",
+      "source_lines": "29-57",
+      "code": "#[derive(AlignedBorrow, Clone, Copy)]\n#[repr(C)]\npub struct Eq3bColumns<T> {\n    pub is_valid: T,\n    pub is_first: T,\n    pub proof_idx: T,\n\n    pub sort_idx: T,\n    pub interaction_idx: T,\n\n    pub n_lift: T,\n    pub n_logup: T,\n    pub two_to_the_n_lift: T,\n    pub n: T,\n    pub hypercube_volume: T, // 2^n\n    pub n_at_least_n_lift: T,\n\n    pub has_no_interactions: T,\n\n    pub is_first_in_air: T,\n    pub is_first_in_interaction: T,\n\n    pub idx: T,         // stacked_idx >> l_skip, restored bit by bit\n    pub running_idx: T, // the current stacked_idx >> l_skip\n    pub nth_bit: T,\n\n    pub xi: [T; D_EF],\n    pub eq: [T; D_EF],\n}",
+      "explain": "<p>Three-level loop <code>(proof_idx, sort_idx, interaction_idx)</code>, with <code>n</code> iterating through bits of the stacked-b index inside each interaction. Only bits at positions <code>[n_lift, n_logup)</code> contribute — below <code>n_lift</code> they're padded zero, above <code>n_logup</code> the AIR doesn't have that many dimensions.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-bit eq multiplication",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_3b/air.rs",
+      "source_lines": "228-250",
+      "code": "        // Within transition, idx increases by nth_bit * hypercube_volume\n        builder\n            .when(within_one_interaction.clone())\n            .assert_eq(next.idx, local.idx + local.nth_bit * local.hypercube_volume);\n        // It can't increase if n < n_lift\n        builder\n            .when(not(local.n_at_least_n_lift))\n            .assert_zero(local.nth_bit);\n        // When transition, eq multiplies correspondingly\n        assert_array_eq(\n            &mut builder.when(within_one_interaction.clone()),\n            next.eq,\n            ext_field_multiply(\n                local.eq,\n                ext_field_add::<AB::Expr>(\n                    ext_field_multiply_scalar(local.xi, local.nth_bit),\n                    ext_field_multiply_scalar::<AB::Expr>(\n                        ext_field_one_minus(local.xi),\n                        AB::Expr::ONE - local.nth_bit,\n                    ),\n                ),\n            ),\n        );",
+      "explain": "<p>This is the classic multilinear-eq recurrence: <code>eq(x, y) = prod_i (x_i * y_i + (1 - x_i) * (1 - y_i))</code>. Here <code>x_i = xi[l_skip + n]</code> (a field element) and <code>y_i = nth_bit</code> (a boolean). The factor is <code>xi * nth_bit + (1 - xi) * (1 - nth_bit)</code>.</p>",
+      "scene": "bc-8"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Send eq_3b at last bit of each interaction",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_3b/air.rs",
+      "source_lines": "263-295",
+      "code": "        self.batch_constraint_conductor_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            BatchConstraintConductorMessage {\n                msg_type: BatchConstraintInnerMessageType::Xi.to_field(),\n                idx: local.n + AB::Expr::from_usize(self.l_skip),\n                value: local.xi.map(|x| x.into()),\n            },\n            local.n_at_least_n_lift * within_one_interaction,\n        );\n\n        self.eq_3b_shape_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            Eq3bShapeMessage {\n                sort_idx: local.sort_idx.into(),\n                n_lift: local.n_lift.into(),\n                n_logup: local.n_logup.into(),\n                num_interactions: local.interaction_idx + not(local.has_no_interactions),\n            },\n            LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first_in_air),\n        );\n\n        self.eq_3b_bus.send(\n            builder,\n            local.proof_idx,\n            Eq3bMessage {\n                sort_idx: local.sort_idx,\n                interaction_idx: local.interaction_idx,\n                eq_3b: local.eq,\n            },\n            is_last_in_interaction * (local.is_valid - local.has_no_interactions),\n        );",
+      "explain": "<p><code>xi[l_skip + n]</code> is looked up on <code>BatchConstraintConductorBus</code> at each bit that actually contributes. The final <code>eq</code> is sent to <code>InteractionsFoldingAir</code> on <code>eq_3b_bus</code>. <code>eq_3b_shape_bus</code> forces <code>(n_lift, n_logup, num_interactions)</code> to match the AIR's VK.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.EqNsAir",
+      "heading": "EqNsAir",
+      "html": "<p>Multiplies per-dimension factors to produce <code>eq_ns[n]</code> and <code>eq_sharp_ns[n]</code> for each <code>n</code>. These are looked up by <code>ConstraintsFoldingAir</code> (<code>is_sharp = 0</code>) and <code>ExpressionClaimAir</code> (<code>is_sharp = 1</code>). Each row corresponds to one <code>n</code> value.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_ns/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: per-n eq accumulator",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_ns/air.rs",
+      "source_lines": "32-60",
+      "code": "#[derive(AlignedBorrow, Clone, Copy)]\n#[repr(C)]\npub struct EqNsColumns<T> {\n    pub is_valid: T,\n    pub is_first: T,\n    pub proof_idx: T,\n\n    pub n: T,\n    pub n_logup: T,\n    pub n_max: T,\n    pub n_less_than_n_logup: T,\n    pub n_less_than_n_max: T,\n    pub is_transition_and_n_less_than_n_max: T,\n    pub xi_n: [T; D_EF],\n    pub r_n: [T; D_EF],\n    pub r_product: [T; D_EF],\n    pub r_pref_product: [T; D_EF],\n    pub one_minus_r_pref_prod: [T; D_EF],\n    pub eq: [T; D_EF],\n    pub eq_sharp: [T; D_EF],\n\n    /// The number of traces whose `n_lift` equals `local.n`.\n    /// Note that it cannot be derived from `xi_mult` because\n    /// `xi_mult` counts interactions, not AIRs with interactions.\n    pub num_traces: T,\n    pub xi_mult: T,\n    pub sel_first_count: T,\n    pub sel_last_and_trans_count: T,\n}",
+      "explain": "<p>Each row fixes one <code>n</code>. <code>xi_n = xi[l_skip + n]</code>, <code>r_n = r[n + 1]</code>. <code>eq</code> and <code>eq_sharp</code> accumulate the per-dimension product; they differ only in their seed (from <code>EqUniAir</code> vs. <code>EqSharpUniReceiverAir</code> on <code>EqZeroNBus</code>).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-row eq update: multiply both eq and eq_sharp by (1 - xi - r + 2*xi*r)",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_ns/air.rs",
+      "source_lines": "245-266",
+      "code": "        // ========================= eq consistency ===============================\n        let mult = ext_field_one_minus::<AB::Expr>(ext_field_subtract::<AB::Expr>(\n            ext_field_add(local.xi_n, local.r_n),\n            ext_field_multiply_scalar::<AB::Expr>(\n                ext_field_multiply(local.xi_n, local.r_n),\n                AB::Expr::TWO,\n            ),\n        ));\n        builder.assert_eq(\n            local.is_transition_and_n_less_than_n_max,\n            is_transition.clone() * local.n_less_than_n_max,\n        );\n        assert_array_eq(\n            &mut builder.when(local.is_transition_and_n_less_than_n_max),\n            next.eq,\n            ext_field_multiply(local.eq, mult.clone()),\n        );\n        assert_array_eq(\n            &mut builder.when(local.is_transition_and_n_less_than_n_max),\n            next.eq_sharp,\n            ext_field_multiply(local.eq_sharp, mult.clone()),\n        );",
+      "explain": "<p>The multiplier is <code>1 - (xi + r - 2*xi*r) = xi*r + (1-xi)*(1-r)</code> — the standard eq factor. Both <code>eq</code> and <code>eq_sharp</code> accumulate it identically; they differ only in initial conditions (supplied on <code>EqZeroNBus</code>).</p>",
+      "scene": "bc-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Publish eq_n values on EqNOuterBus (keyed by is_sharp, n)",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_ns/air.rs",
+      "source_lines": "319-338",
+      "code": "        self.eq_n_outer_bus.add_key_with_lookups(\n            builder,\n            next.proof_idx,\n            EqNOuterMessage {\n                is_sharp: AB::Expr::ZERO,\n                n: next.n.into(),\n                value: ext_field_multiply(next.eq, next.r_product),\n            },\n            next.is_valid * next.num_traces,\n        );\n        self.eq_n_outer_bus.add_key_with_lookups(\n            builder,\n            next.proof_idx,\n            EqNOuterMessage {\n                is_sharp: AB::Expr::ONE,\n                n: next.n.into(),\n                value: ext_field_multiply(next.eq_sharp, next.r_product),\n            },\n            next.is_valid * next.num_traces * AB::Expr::TWO, // two because num+denom per trace\n        );",
+      "explain": "<p>The published value is <code>eq[n] * r_product</code>, where <code>r_product = prod_{k &gt;= n+1} r[k]</code> — the \"front-loaded\" correction that folds in the tail of <code>r</code>. The multiplicity is <code>num_traces</code> (for the is_sharp=0 variant, consumed by ConstraintsFolding) or <code>2 * num_traces</code> (for the sharp variant, consumed twice by ExpressionClaim, once per num+denom).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Receive initial eq/eq_sharp seeds from EqUniAir / EqSharpUniReceiverAir",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_ns/air.rs",
+      "source_lines": "289-306",
+      "code": "        self.zero_n_bus.receive(\n            builder,\n            local.proof_idx,\n            EqZeroNMessage {\n                is_sharp: AB::Expr::ZERO,\n                value: local.eq.map(|x| x.into()),\n            },\n            local.is_first,\n        );\n        self.zero_n_bus.receive(\n            builder,\n            local.proof_idx,\n            EqZeroNMessage {\n                is_sharp: AB::Expr::ONE,\n                value: local.eq_sharp.map(|x| x.into()),\n            },\n            local.is_first,\n        );",
+      "explain": "<p>On the first row, <code>eq = eval_eq_uni(l_skip, xi[0], r_0)</code> (from <code>EqUniAir</code>) and <code>eq_sharp = eval_eq_sharp_uni(...)</code> (from <code>EqSharpUniReceiverAir</code>). <code>EqZeroNBus</code> is the permutation handoff.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.EqUniAir",
+      "heading": "EqUniAir",
+      "html": "<p>Computes the base factor <code>eval_eq_uni(l_skip, xi[0], r_0) / 2^l_skip</code> iteratively by squaring <code>x</code> and <code>y</code> at each step and updating <code>res = (x + y) * res + (1 - x)(1 - y)</code>. This is exactly the iterative form of <code>eval_eq_uni</code> over <code>l_skip</code> steps.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_uni/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols and iterative recurrence",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_uni/air.rs",
+      "source_lines": "25-36",
+      "code": "#[derive(AlignedBorrow, Clone, Copy)]\n#[repr(C)]\npub struct EqUniCols<T> {\n    pub is_valid: T,\n    pub is_first: T,\n    pub proof_idx: T,\n\n    pub x: [T; D_EF],\n    pub y: [T; D_EF],\n    pub res: [T; D_EF],\n    pub idx: T,\n}",
+      "explain": "<p><code>x</code> starts at <code>xi[0]</code>, <code>y</code> at <code>r_0</code>. Each row squares both and multiplies the running <code>res</code>. After <code>l_skip</code> steps, <code>res / 2^l_skip</code> is sent on <code>EqZeroNBus</code> as the non-sharp seed for <code>EqNsAir</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Recurrence: square x, y; update res",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_uni/air.rs",
+      "source_lines": "143-169",
+      "code": "        // ======================== Values recalculation ==========================\n        assert_one_ext(&mut builder.when(local.is_first), local.res);\n\n        let mut when_transition = builder.when(is_transition);\n        assert_array_eq(\n            &mut when_transition,\n            next.x.map(Into::into),\n            ext_field_multiply::<AB::Expr>(local.x, local.x),\n        );\n        assert_array_eq(\n            &mut when_transition,\n            next.y.map(Into::into),\n            ext_field_multiply::<AB::Expr>(local.y, local.y),\n        );\n\n        let x_plus_y = ext_field_add::<AB::Expr>(local.x, local.y);\n        let one_minus_x = ext_field_one_minus::<AB::Expr>(local.x);\n        let one_minus_y = ext_field_one_minus::<AB::Expr>(local.y);\n        let next_res_expected = ext_field_add::<AB::Expr>(\n            ext_field_multiply::<AB::Expr>(x_plus_y, local.res),\n            ext_field_multiply::<AB::Expr>(one_minus_x, one_minus_y),\n        );\n        assert_array_eq(\n            &mut when_transition,\n            next.res.map(Into::into),\n            next_res_expected,\n        );",
+      "explain": "<p>The <code>eval_eq_uni</code> function computes <code>prod_{i &lt; l_skip} (1 - x^{2^i} - y^{2^i} + 2*x^{2^i}*y^{2^i}) / 2</code>. Rewriting as <code>(x+y)*res + (1-x)(1-y)</code> with <code>res</code> being the running product gives the recurrence used here. On the first row <code>res = 1</code>; on the last (<code>idx == l_skip</code>) <code>res</code> is the full product.</p>",
+      "scene": "bc-9"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.EqSharpUniAir",
+      "heading": "EqSharpUniAir",
+      "html": "<p>The sharp variant of <code>EqUniAir</code>: computes <code>eval_eq_sharp_uni(xi[0..l_skip], r_0)</code> over roots of unity. This is more involved than <code>EqUniAir</code> because it iterates over nested rounds, each corresponding to successive halvings of the unit-root order, and uses a bus (<code>EqSharpUniBus</code>) to express the recursion algebraically across rows.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_sharp_uni/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: per-iteration state (xi_idx, iter_idx, roots, running product)",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_sharp_uni/air.rs",
+      "source_lines": "30-47",
+      "code": "#[derive(AlignedBorrow, Clone, Copy)]\n#[repr(C)]\npub struct EqSharpUniCols<T> {\n    pub is_valid: T,\n    pub is_first: T,\n    pub proof_idx: T,\n\n    pub root: T,\n    pub root_pow: T,\n    pub root_half_order: T,\n\n    pub xi_idx: T,\n    pub xi: [T; D_EF],\n    pub product_before: [T; D_EF],\n\n    pub iter_idx: T,\n    pub is_first_iter: T,\n}",
+      "explain": "<p><code>xi_idx</code> iterates from <code>l_skip - 1</code> down to 0 (the variable being folded in this \"round\"). <code>iter_idx</code> runs through the current <code>root_half_order</code> iterations within the round. At the final row, <code>root</code> must equal <code>canonical_inverse_generator</code> — enforcing the correct size of the final domain.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Root squaring: every time iter_idx wraps, root^2 and order doubles",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_sharp_uni/air.rs",
+      "source_lines": "150-180",
+      "code": "        // =========================== Root consistency =============================\n        // If iter_idx doesn't become zero (increases by one), then:\n        // - root_pow is multiplied by root,\n        // - root is preserved.\n        builder\n            .when(next.iter_idx)\n            .assert_eq(next.root_pow, local.root_pow * local.root);\n        builder.when(next.iter_idx).assert_eq(local.root, next.root);\n        builder\n            .when(next.iter_idx)\n            .assert_eq(local.root_half_order, next.root_half_order);\n        // Otherwise the new root is the square of the current one, and the root order doubles.\n        builder\n            .when(next.is_first_iter * not(next.is_first))\n            .assert_eq(local.root_half_order * AB::Expr::TWO, next.root_half_order);\n        builder\n            .when(next.is_first_iter * not(next.is_first))\n            .assert_eq(local.root, next.root * next.root);\n        // Important: we need to enforce dropping iter_idx to zero if root_pow is going to become\n        // one. We can leave this to inner interactions, but then we need to guarantee that\n        // the first layer has size 1.\n        builder\n            .when(next.is_valid * local.is_first)\n            .assert_one(next.is_first_iter);\n        // Also, on the first row we have some conditions\n        builder\n            .when(local.is_valid * local.is_first)\n            .assert_eq(local.root, AB::Expr::NEG_ONE);\n        builder\n            .when(local.is_valid * local.is_first)\n            .assert_eq(local.root_half_order, AB::Expr::ONE);",
+      "explain": "<p>Start with <code>root = -1</code>, <code>root_half_order = 1</code> (a 2-element domain: {1, -1}). Each wrap squares root and doubles the order, doubling the effective domain size. By iteration <code>l_skip</code>, the domain has <code>2^{l_skip}</code> elements.</p>",
+      "scene": "bc-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-iteration: split product into (1 - xi + xi*root_pow) and (1 - xi - xi*root_pow) halves",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_sharp_uni/air.rs",
+      "source_lines": "239-277",
+      "code": "        self.eq_bus.receive(\n            builder,\n            local.proof_idx,\n            EqSharpUniMessage {\n                xi_idx: local.xi_idx + AB::Expr::ONE,\n                iter_idx: local.iter_idx.into(),\n                product: local.product_before.map(|x| x.into()),\n            },\n            local.is_valid * (AB::Expr::ONE - local.is_first),\n        );\n        let second: [AB::Expr; D_EF] = ext_field_multiply_scalar(local.xi, local.root_pow);\n        let one_minus_xi: [AB::Expr; D_EF] = ext_field_one_minus(local.xi);\n\n        self.eq_bus.send(\n            builder,\n            local.proof_idx,\n            EqSharpUniMessage {\n                xi_idx: local.xi_idx.into(),\n                iter_idx: local.iter_idx.into(),\n                product: ext_field_multiply(\n                    local.product_before,\n                    ext_field_add::<AB::Expr>(one_minus_xi.clone(), second.clone()),\n                ),\n            },\n            local.is_valid,\n        );\n        self.eq_bus.send(\n            builder,\n            local.proof_idx,\n            EqSharpUniMessage {\n                xi_idx: local.xi_idx.into(),\n                iter_idx: local.iter_idx + local.root_half_order,\n                product: ext_field_multiply(\n                    local.product_before,\n                    ext_field_subtract::<AB::Expr>(one_minus_xi.clone(), second.clone()),\n                ),\n            },\n            local.is_valid,\n        );",
+      "explain": "<p><code>EqSharpUniBus</code> is a self-permutation bus: each row receives <code>product_before</code> at its current position and sends two products <em>forward</em> — one at the same <code>iter_idx</code>, one at <code>iter_idx + root_half_order</code>. The two sends use <code>(1 - xi + xi*root_pow)</code> and <code>(1 - xi - xi*root_pow)</code> respectively, implementing the sharp-eq tree split. The final (received on the <code>receiver</code> AIR) collects all <code>2^{l_skip}</code> leaves.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.EqSharpUniReceiverAir",
+      "heading": "EqSharpUniReceiverAir",
+      "html": "<p>Collector for <code>EqSharpUniAir</code>: Horner-combines the <code>2^{l_skip}</code> sharp-uni leaves with <code>r_0</code> and divides by <code>2^{l_skip}</code> to produce the initial <code>eq_sharp</code> seed for <code>EqNsAir</code>.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_sharp_uni/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Receive leaves, Horner-fold with r_0, send seed on EqZeroNBus",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_sharp_uni/air.rs",
+      "source_lines": "360-405",
+      "code": "        assert_array_eq(&mut builder.when(is_same_proof.clone()), next.r, local.r);\n        assert_array_eq(\n            &mut builder.when(LoopSubAir::local_is_last(\n                local.is_valid,\n                next.is_valid,\n                next.is_first,\n            )),\n            local.cur_sum,\n            local.coeff,\n        );\n        assert_array_eq(\n            &mut builder.when(is_same_proof),\n            local.cur_sum,\n            ext_field_add(local.coeff, ext_field_multiply(local.r, next.cur_sum)),\n        );\n\n        self.r_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            BatchConstraintConductorMessage {\n                msg_type: BatchConstraintInnerMessageType::R.to_field(),\n                idx: AB::Expr::ZERO,\n                value: local.r.map(|x| x.into()),\n            },\n            local.is_valid * local.is_first,\n        );\n        self.eq_bus.receive(\n            builder,\n            local.proof_idx,\n            EqSharpUniMessage {\n                xi_idx: AB::Expr::ZERO,\n                iter_idx: local.idx.into(),\n                product: local.coeff.map(|x| x.into()),\n            },\n            local.is_valid,\n        );\n        let l_skip_inv: AB::Expr = AB::F::from_usize(1 << self.l_skip).inverse().into();\n        self.zero_n_bus.send(\n            builder,\n            local.proof_idx,\n            EqZeroNMessage {\n                is_sharp: AB::Expr::ONE,\n                value: local.cur_sum.map(|x| l_skip_inv.clone() * x),\n            },\n            local.is_valid * local.is_first,\n        );",
+      "explain": "<p>The Horner recurrence <code>cur_sum = coeff + r * next.cur_sum</code> produces <code>sum_i coeff_i * r_0^i</code> over all <code>2^{l_skip}</code> leaves. Dividing by <code>2^{l_skip}</code> gives the final <code>eq_sharp_0</code> seed.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.EqNegAir",
+      "heading": "EqNegAir",
+      "html": "<p>Handles AIRs whose <code>log_height &lt; l_skip</code> (so <code>n = log_height - l_skip &lt; 0</code>). In this regime the eq and selector polynomials cannot be computed by the standard <code>EqUniAir</code>/<code>EqSharpUniAir</code> pipeline and require a separate iterative scheme over <code>r^{2^|n|}</code>.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_neg/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: per-(neg_hypercube, row_index) state",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_neg/air.rs",
+      "source_lines": "31-61",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct EqNegCols<F> {\n    // Proof index columns for continuations\n    pub proof_idx: F,\n    pub is_valid: F,\n    pub is_first: F,\n    pub is_last: F,\n\n    // Negative hypercube of the current section + section row index\n    pub neg_hypercube: F,\n    pub neg_hypercube_nz_inv: F,\n    pub row_index: F,\n    pub is_first_hypercube: F,\n    pub is_last_hypercube: F,\n\n    // Value of u^{2^row}, r'^{2^row}, and (r' * omega)^{2^row}, where\n    // r' = r^{2^neg_hypercube}\n    pub u_pow: [F; D_EF],\n    pub r_pow: [F; D_EF],\n    pub r_omega_pow: [F; D_EF],\n\n    // Running product of (u^{2^i} + r'^{2^i}) from i to row_index\n    pub prod_u_r: [F; D_EF],\n    pub prod_u_r_omega: [F; D_EF],\n    pub prod_1_r: [F; D_EF],\n    pub prod_1_r_omega: [F; D_EF],\n    pub sel_first_count: F,\n    pub sel_last_trans_count: F,\n    pub one_half_pow: F,\n}",
+      "explain": "<p><code>neg_hypercube</code> indexes the size of the negative-dimension hypercube; within each section, <code>row_index</code> iterates. <code>u_pow</code> / <code>r_pow</code> are the squaring chains; the four <code>prod_*</code> columns accumulate running products used to build <code>eq_n(u, r)</code> and the rotation selector <code>k_rot_n(u, r)</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Squaring chains for u_pow, r_pow, r_omega_pow",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_neg/air.rs",
+      "source_lines": "239-264",
+      "code": "        assert_array_eq(\n            &mut builder.when(local.is_valid - local.is_last_hypercube),\n            ext_field_multiply(local.u_pow, local.u_pow),\n            next.u_pow,\n        );\n\n        assert_array_eq(\n            &mut builder.when(local.is_valid - local.is_last_hypercube),\n            ext_field_multiply(local.r_pow, local.r_pow),\n            next.r_pow,\n        );\n\n        assert_array_eq(\n            &mut builder.when(local.is_valid - local.is_last_hypercube),\n            ext_field_multiply(local.prod_u_r, ext_field_add(next.u_pow, next.r_pow)),\n            next.prod_u_r,\n        );\n\n        assert_array_eq(\n            &mut builder.when(local.is_valid - local.is_last_hypercube),\n            ext_field_multiply(\n                local.prod_1_r,\n                ext_field_add(next.r_pow, base_to_ext::<AB::Expr>(AB::F::ONE)),\n            ),\n            next.prod_1_r,\n        );",
+      "explain": "<p>At each row, <code>u_pow</code> and <code>r_pow</code> square, and the running products <code>prod_u_r = prod_i (u^{2^i} + r^{2^i})</code> / <code>prod_1_r = prod_i (1 + r^{2^i})</code> accumulate. These are the factors needed for the negative-dimension eq polynomial.</p>",
+      "scene": "bc-10"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Send eq and rotation selector to EqNegResultBus",
+      "source_path": "crates/recursion/src/batch_constraint/eq_airs/eq_neg/air.rs",
+      "source_lines": "361-381",
+      "code": "        let eq = ext_field_add_scalar::<AB::Expr>(\n            ext_field_subtract(local.prod_u_r, next.u_pow),\n            AB::F::ONE,\n        );\n        let k_rot = ext_field_add_scalar::<AB::Expr>(\n            ext_field_subtract(local.prod_u_r_omega, next.u_pow),\n            AB::F::ONE,\n        );\n\n        let is_neg = local.neg_hypercube * local.neg_hypercube_nz_inv;\n        builder.when(local.neg_hypercube).assert_one(is_neg.clone());\n        self.result_bus.send(\n            builder,\n            local.proof_idx,\n            EqNegResultMessage {\n                n: AB::Expr::ZERO - local.neg_hypercube,\n                eq,\n                k_rot,\n            },\n            is_neg * next.is_last_hypercube,\n        );",
+      "explain": "<p>The closed-form <code>eq = prod_u_r - u^{2^|n|} + 1</code> uses the invariant <code>prod_i (u^{2^i} + r^{2^i}) - u^{2^|n|} + 1 = eq_|n|(u, r)</code>. Same for <code>k_rot</code> with <code>r * omega</code>.</p>"
+    },
+    {
+      "type": "prose",
+      "html": "<p>With all the eq values precomputed, we can now tackle the core of BC: evaluating each AIR's symbolic constraint DAG at the opening point, feeding those values into the folding AIRs, and finally checking the aggregated claim against the sumcheck output.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.SymbolicExpressionAir",
+      "heading": "SymbolicExpressionAir",
+      "html": "<p>Walks every present AIR's symbolic expression DAG node-by-node. Each row evaluates one node: constants, variables (columns or public values), selectors (<code>is_first</code>/<code>is_last</code>/<code>is_transition</code>), arithmetic (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>Neg</code>), and interaction markers (<code>InteractionMult</code>, <code>InteractionMsgComp</code>, <code>InteractionBusIndex</code>). Values are looked up and sent on <code>SymbolicExpressionBus</code> (a self-permutation bus keyed by <code>(air_idx, node_idx)</code>). When a root node is reached — a constraint or an interaction component — the value is forwarded to <code>ConstraintsFoldingAir</code> or <code>InteractionsFoldingAir</code>.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "NodeKind: the DAG opcode set",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "source_lines": "41-71",
+      "code": "#[derive(Debug, Clone, Copy, EnumIter, EnumCount)]\npub(crate) enum NodeKind {\n    // Args: (col_idx, is_next)\n    VarPreprocessed = 0,\n    // Args: (col_idx, is_next)\n    VarMain = 1,\n    // Args: (pv_idx,)\n    VarPublicValue = 2,\n    // Args: ()\n    SelIsFirst = 3,\n    // Args: ()\n    SelIsLast = 4,\n    // Args: ()\n    SelIsTransition = 5,\n    // Args: (val,)\n    Constant = 6,\n    // Args: (left_node_idx, right_node_idx)\n    Add = 7,\n    // Args: (left_node_idx, right_node_idx)\n    Sub = 8,\n    // Args: (node_idx,)\n    Neg = 9,\n    // Args: (left_node_idx, right_node_idx)\n    Mul = 10,\n    // Args: (node_idx,)\n    InteractionMult = 11,\n    // Args: (node_idx, idx_in_message)\n    InteractionMsgComp = 12,\n    // Args: (node_idx,)\n    InteractionBusIndex = 13,\n}",
+      "explain": "<p>14 opcodes. Each <code>NodeKind</code> is selected by the <code>flags</code> encoder (degree-2 over <code>NUM_FLAGS = 4</code>), so at most one opcode is active per row.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cached (VK-pinned) columns vs per-proof single-main columns",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "source_lines": "73-104",
+      "code": "#[derive(AlignedBorrow, Copy, Clone)]\n#[repr(C)]\npub struct CachedSymbolicExpressionColumns<T> {\n    pub(in crate::batch_constraint) flags: [T; NUM_FLAGS],\n\n    pub(in crate::batch_constraint) air_idx: T,\n    pub(in crate::batch_constraint) node_or_interaction_idx: T,\n    /// Attributes that define this gate. For binary gates such as Add, Mul, etc.,\n    /// this contains the node_idx's. For InteractionMsgComp, it gives (node_idx, idx_in_message).\n    /// See [[NodeKind]].\n    pub(in crate::batch_constraint) attrs: [T; 3],\n    pub(in crate::batch_constraint) fanout: T,\n\n    pub(in crate::batch_constraint) is_constraint: T,\n    pub(in crate::batch_constraint) constraint_idx: T,\n}\n\n#[derive(AlignedBorrow, Copy, Clone)]\n#[repr(C)]\npub struct SingleMainSymbolicExpressionColumns<T> {\n    // 0 = proof absent from this slot, 1 = proof present with absent air, 2 = proof present with\n    // present air\n    pub(in crate::batch_constraint) slot_state: T,\n    // Dynamic arguments. For Add/Mul/Sub, this splits into two extension-field elements.\n    // For selectors:\n    //   args[0..D_EF)   = sel_uni witness (base or rotated depending on selector type).\n    //   args[D_EF..2*D_EF) = eq-prefix witness (prod r_i or prod (1-r_i)).\n    pub(in crate::batch_constraint) args: [T; 2 * D_EF],\n    pub(in crate::batch_constraint) sort_idx: T,\n    pub(in crate::batch_constraint) n_abs: T,\n    pub(in crate::batch_constraint) is_n_neg: T,\n}",
+      "explain": "<p>The DAG structure (<code>flags</code>, <code>attrs</code>, <code>fanout</code>, <code>constraint_idx</code>) is fixed by the VK and lives in a cached trace. The dynamic data (<code>slot_state</code>, <code>args</code>, <code>sort_idx</code>, <code>n_abs</code>) is per-proof and lives in the common main.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Per-opcode evaluation: build value from args based on selector",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "source_lines": "270-300",
+      "code": "            let mut value = [AB::Expr::ZERO; D_EF];\n            for node_kind in NodeKind::iter() {\n                // deg 2\n                let sel = enc.get_flag_expr::<AB>(node_kind as usize, &flags);\n                let expr = match node_kind {\n                    NodeKind::Add => ext_field_add::<AB::Expr>(arg_ef0, arg_ef1),\n                    NodeKind::Sub => ext_field_subtract::<AB::Expr>(arg_ef0, arg_ef1),\n                    NodeKind::Neg => scalar_subtract_ext_field::<AB::Expr>(AB::F::ZERO, arg_ef0),\n                    NodeKind::Mul => ext_field_multiply::<AB::Expr>(arg_ef0, arg_ef1),\n                    NodeKind::Constant => base_to_ext(cached_cols.attrs[0]),\n                    NodeKind::VarPublicValue => base_to_ext(cols.args[0]),\n                    NodeKind::SelIsFirst => ext_field_multiply(arg_ef0, arg_ef1),\n                    NodeKind::SelIsLast => ext_field_multiply(arg_ef0, arg_ef1),\n                    NodeKind::SelIsTransition => scalar_subtract_ext_field(\n                        AB::Expr::ONE,\n                        ext_field_multiply(arg_ef0, arg_ef1),\n                    ),\n                    NodeKind::VarPreprocessed\n                    | NodeKind::VarMain\n                    | NodeKind::InteractionMult\n                    | NodeKind::InteractionMsgComp => arg_ef0.map(Into::into),\n                    NodeKind::InteractionBusIndex => {\n                        base_to_ext(cached_cols.attrs[0] + AB::Expr::ONE)\n                    }\n                };\n                // deg <= 4\n                value = ext_field_add::<AB::Expr>(\n                    value,\n                    ext_field_multiply_scalar::<AB::Expr>(expr, sel),\n                );\n            }",
+      "explain": "<p>The loop computes <code>value</code> as <code>sum_k sel_k * expr_k</code> where at most one <code>sel_k</code> is 1. For variables, the args are the witnessed column opening (provided on <code>ColumnClaimsBus</code>). For arithmetic, args are sub-DAG results looked up on <code>SymbolicExpressionBus</code>. For selectors, the two args are <code>sel_uni</code> (base-field selector from <code>SelUniBus</code>) and the eq prefix (<code>SelHypercubeBus</code>), multiplied to produce <code>is_first</code>/<code>is_last</code>.</p>",
+      "scene": "bc-11"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Publish value on SymbolicExpressionBus; lookup child args",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "source_lines": "302-331",
+      "code": "            self.expr_bus.add_key_with_lookups(\n                builder,\n                proof_idx,\n                SymbolicExpressionMessage {\n                    air_idx: cached_cols.air_idx.into(),\n                    node_idx: cached_cols.node_or_interaction_idx.into(),\n                    value: value.clone(),\n                },\n                air_present.clone() * cached_cols.fanout,\n            );\n            self.expr_bus.lookup_key(\n                builder,\n                proof_idx,\n                SymbolicExpressionMessage {\n                    air_idx: cached_cols.air_idx,\n                    node_idx: cached_cols.attrs[0],\n                    value: arg_ef0,\n                },\n                air_present.clone() * is_arg0_node_idx.clone(),\n            );\n            self.expr_bus.lookup_key(\n                builder,\n                proof_idx,\n                SymbolicExpressionMessage {\n                    air_idx: cached_cols.air_idx,\n                    node_idx: cached_cols.attrs[1],\n                    value: arg_ef1,\n                },\n                air_present.clone() * is_arg1_node_idx.clone(),\n            );",
+      "explain": "<p>Each node's value is <em>published</em> on <code>SymbolicExpressionBus</code> with multiplicity <code>fanout</code> (how many parent nodes reference this one). Child args for <code>Add</code>/<code>Mul</code>/etc. are <em>looked up</em> from the same bus. Because it's a permutation bus, the prover cannot fabricate intermediate values — every reference must match a publication.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Resolve variables: lookup column openings on ColumnClaimsBus",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "source_lines": "333-359",
+      "code": "            let is_var = enc.contains_flag::<AB>(\n                &flags,\n                &[NodeKind::VarMain, NodeKind::VarPreprocessed].map(|x| x as usize),\n            );\n            self.column_claims_bus.receive(\n                builder,\n                proof_idx,\n                ColumnClaimsMessage {\n                    sort_idx: cols.sort_idx.into(),\n                    part_idx: cached_cols.attrs[1].into(),\n                    col_idx: cached_cols.attrs[0].into(),\n                    claim: array::from_fn(|i| cols.args[i].into()),\n                    is_rot: cached_cols.attrs[2].into(),\n                },\n                is_var * air_present.clone(),\n            );\n            self.public_values_bus.receive(\n                builder,\n                proof_idx,\n                PublicValuesBusMessage {\n                    air_idx: cached_cols.air_idx,\n                    pv_idx: cached_cols.attrs[0],\n                    value: cols.args[0],\n                },\n                enc.get_flag_expr::<AB>(NodeKind::VarPublicValue as usize, &flags)\n                    * air_present.clone(),\n            );",
+      "explain": "<p><code>ColumnClaimsBus</code> carries the transcript-observed column openings from Stacking's <code>OpeningClaimsAir</code>. <code>PublicValuesBus</code> carries the public values declared by each AIR. Both are permutation buses, pinning variable values to what was observed.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Forward interaction nodes to InteractionsFoldingAir",
+      "source_path": "crates/recursion/src/batch_constraint/expr_eval/symbolic_expression/air.rs",
+      "source_lines": "442-475",
+      "code": "            self.interactions_folding_bus.send(\n                builder,\n                proof_idx,\n                InteractionsFoldingMessage {\n                    air_idx: cached_cols.air_idx.into(),\n                    interaction_idx: cached_cols.node_or_interaction_idx.into(),\n                    is_mult,\n                    idx_in_message: cached_cols.attrs[1].into(),\n                    value: value.clone(),\n                },\n                is_interaction * air_present.clone(),\n            );\n            self.interactions_folding_bus.send(\n                builder,\n                proof_idx,\n                InteractionsFoldingMessage {\n                    air_idx: cached_cols.air_idx.into(),\n                    interaction_idx: cached_cols.node_or_interaction_idx.into(),\n                    is_mult: AB::Expr::ZERO,\n                    idx_in_message: AB::Expr::NEG_ONE,\n                    value: value.clone(),\n                },\n                is_bus_index * air_present.clone(),\n            );\n            self.constraints_folding_bus.send(\n                builder,\n                proof_idx,\n                ConstraintsFoldingMessage {\n                    air_idx: cached_cols.air_idx.into(),\n                    constraint_idx: cached_cols.constraint_idx.into(),\n                    value: value.clone(),\n                },\n                cached_cols.is_constraint * air_present,\n            );",
+      "explain": "<p>Root nodes are forwarded out: <code>InteractionMult</code>/<code>InteractionMsgComp</code> nodes go to <code>InteractionsFoldingAir</code>; <code>InteractionBusIndex</code> nodes also go there (with <code>idx_in_message = -1</code>); constraint roots (with <code>is_constraint = 1</code>) go to <code>ConstraintsFoldingAir</code>. These are exactly the messages whose receives we saw earlier in those two AIRs.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "batch-constraint.ExpressionClaimAir",
+      "heading": "ExpressionClaimAir",
+      "html": "<p>The closing AIR of BC. For each present AIR it receives <code>(num, denom)</code> from <code>InteractionsFoldingAir</code> (two claims per AIR) and <code>value</code> from <code>ConstraintsFoldingAir</code> (one claim per AIR). It folds them all with <code>mu</code> (using the same interleave scheme as <code>FractionsFolderAir</code>), multiplies each by a <code>multiplier</code> that encodes <code>eq_sharp_ns</code> plus a norm factor for negative-dimension AIRs, and on the first row of each proof checks that the aggregate equals the sumcheck's final claim. This is the closing equality that makes BC sound.</p>",
+      "source_path": "crates/recursion/src/batch_constraint/expression_claim/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cols: (proof, group, trace, parity) nested indexing",
+      "source_path": "crates/recursion/src/batch_constraint/expression_claim/air.rs",
+      "source_lines": "53-93",
+      "code": "#[derive(AlignedBorrow, Copy, Clone, Debug)]\n#[repr(C)]\npub struct ExpressionClaimCols<T> {\n    // --- Loop structure (enforced by NestedForLoopSubAir<4>) ---\n    pub is_valid: T,\n    /// First row of a proof. Marks proof boundaries.\n    pub is_first: T,\n    pub proof_idx: T,\n    /// 0 = interaction group, 1 = constraint group. Monotone within a proof.\n    pub group_idx: T,\n    /// Marks the first row of each group (set at proof start and interaction→constraint boundary).\n    pub is_first_in_group: T,\n\n    // --- Claim indexing (derived from loop counters) ---\n    /// Claim index within its group. For interactions: `2 * trace_idx + idx_parity` (0..2t).\n    /// For constraints: `trace_idx` (0..t).\n    pub idx: T,\n    /// 0 = numerator, 1 = denominator. Always 0 on constraint rows. Alternates on interaction\n    /// rows.\n    pub idx_parity: T,\n    /// Sorted trace index within the group. Monotone non-decreasing; resets at group boundaries.\n    pub trace_idx: T,\n    /// The received evaluation claim. Note that for interactions, this is without norm_factor and\n    /// eq_sharp_ns. These are interactions_evals (without norm_factor and eq_sharp_ns) and\n    /// constraint_evals in the rust verifier.\n    pub value: [T; D_EF],\n    /// Receive from eq_ns AIR\n    pub eq_sharp_ns: [T; D_EF],\n\n    /// For folding with mu.\n    pub cur_sum: [T; D_EF],\n    pub mu: [T; D_EF],\n    pub multiplier: [T; D_EF],\n\n    /// Need to know n as if n<0, we need to multiply some norm_factor.\n    pub n_abs: T,\n    pub n_abs_pow: T,\n    pub n_sign: T,\n    /// The round idx for final sumcheck claim.\n    pub num_multilinear_sumcheck_rounds: T,\n}",
+      "explain": "<p>For <code>t</code> present AIRs there are <code>2t</code> interaction rows (num/denom per trace) followed by <code>t</code> constraint rows, giving <code>3t</code> rows per proof. <code>idx_parity</code> alternates 0/1 on interaction rows. The doc-comment in the source shows the exact row layout example.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Compute multiplier: eq_sharp_ns or eq_sharp_ns / 2^|n| depending on sign",
+      "source_path": "crates/recursion/src/batch_constraint/expression_claim/air.rs",
+      "source_lines": "247-271",
+      "code": "        // multiplier = 1 if not interaction\n        assert_array_eq(\n            &mut builder.when(local.group_idx).when(local.is_valid),\n            local.multiplier,\n            base_to_ext::<AB::Expr>(AB::Expr::ONE),\n        );\n\n        // IF negative n and numerator\n        assert_array_eq(\n            &mut builder.when(local.n_sign * (is_interaction.clone() - local.idx_parity)),\n            ext_field_multiply_scalar::<AB::Expr>(local.multiplier, local.n_abs_pow),\n            local.eq_sharp_ns,\n        );\n        // ELSE 1: positive n, interaction row\n        assert_array_eq(\n            &mut builder.when(is_interaction.clone() * (AB::Expr::ONE - local.n_sign)),\n            local.multiplier,\n            local.eq_sharp_ns,\n        );\n        // ELSE 2: denominator row\n        assert_array_eq(\n            &mut builder.when(local.idx_parity),\n            local.multiplier,\n            local.eq_sharp_ns,\n        );",
+      "explain": "<p>Constraint rows use <code>multiplier = 1</code> (the eq_n factor is already baked in by <code>ConstraintsFoldingAir</code>). For interactions: positive-<code>n</code> rows use <code>multiplier = eq_sharp_ns</code>; numerator rows on negative-<code>n</code> AIRs multiply by <code>2^{|n|}</code> to undo the <code>norm_factor = 1 / 2^{|n|}</code> applied during the sumcheck domain. The denominator uses <code>eq_sharp_ns</code> unconditionally.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Mu-fold: cur_sum = value * multiplier + next_cur_sum * mu",
+      "source_path": "crates/recursion/src/batch_constraint/expression_claim/air.rs",
+      "source_lines": "230-245",
+      "code": "        // === cum sum folding ===\n        // Fold recurrence within a proof: cur_sum = value * multiplier + next_cur_sum * mu\n        assert_array_eq(\n            &mut builder.when(is_same_proof),\n            local.cur_sum,\n            ext_field_add::<AB::Expr>(\n                ext_field_multiply::<AB::Expr>(local.value, local.multiplier),\n                ext_field_multiply::<AB::Expr>(next.cur_sum, local.mu),\n            ),\n        );\n        // Terminal base case: last row of each proof's fold\n        assert_array_eq(\n            &mut builder.when(is_last_in_proof),\n            local.cur_sum,\n            ext_field_multiply::<AB::Expr>(local.value, local.multiplier),\n        );",
+      "explain": "<p>The fold interleaves all <code>3t</code> <code>(value * multiplier)</code> terms via Horner, yielding <code>evaluated_claim = sum_k mu^k * (value_k * multiplier_k)</code>. The order matches the order <code>FractionsFolderAir</code> used when it built <code>sum_claim</code>.</p>",
+      "scene": "bc-14"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Close the loop: check evaluated_claim == final sumcheck claim",
+      "source_path": "crates/recursion/src/batch_constraint/expression_claim/air.rs",
+      "source_lines": "274-314",
+      "code": "        self.expr_claim_bus.receive(\n            builder,\n            local.proof_idx,\n            ExpressionClaimMessage {\n                is_interaction: is_interaction.clone(),\n                idx: local.idx.into(),\n                value: local.value.map(Into::into),\n            },\n            local.is_valid,\n        );\n\n        self.mu_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            BatchConstraintConductorMessage {\n                msg_type: BatchConstraintInnerMessageType::Mu.to_field(),\n                idx: AB::Expr::ZERO,\n                value: local.mu.map(Into::into),\n            },\n            local.is_first * local.is_valid,\n        );\n\n        // Receive n_max value from proof shape air\n        self.expression_claim_n_max_bus.receive(\n            builder,\n            local.proof_idx,\n            ExpressionClaimNMaxMessage {\n                n_max: local.num_multilinear_sumcheck_rounds,\n            },\n            local.is_first * local.is_valid,\n        );\n\n        self.sumcheck_claim_bus.receive(\n            builder,\n            local.proof_idx,\n            SumcheckClaimMessage::<AB::Expr> {\n                round: local.num_multilinear_sumcheck_rounds.into(),\n                value: local.cur_sum.map(Into::into),\n            },\n            local.is_first * local.is_valid,\n        );",
+      "explain": "<p>The <code>sumcheck_claim_bus.receive</code> at <code>round = n_max</code> is BC's closing equality: <code>MultilinearSumcheckAir</code> sends the final claim from its last round, and <code>ExpressionClaimAir</code> receives it here as the expected value of <code>cur_sum</code>. If these don't match, the permutation bus balance fails. The <code>expression_claim_n_max_bus.receive</code> forces <code>num_multilinear_sumcheck_rounds</code> to equal the sumcheck's declared round count, and the <code>expr_claim_bus.receive</code> closes the permutation with <code>InteractionsFoldingAir</code> and <code>ConstraintsFoldingAir</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Look up eq_sharp_ns and check power consistency via PowerCheckerBus",
+      "source_path": "crates/recursion/src/batch_constraint/expression_claim/air.rs",
+      "source_lines": "316-345",
+      "code": "        self.hyperdim_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            HyperdimBusMessage {\n                sort_idx: local.trace_idx.into(),\n                n_abs: local.n_abs.into(),\n                n_sign_bit: local.n_sign.into(),\n            },\n            local.is_valid * (is_interaction.clone() - local.idx_parity),\n        );\n\n        self.eq_n_outer_bus.lookup_key(\n            builder,\n            local.proof_idx,\n            EqNOuterMessage {\n                is_sharp: AB::Expr::ONE,\n                n: local.n_abs * (AB::Expr::ONE - local.n_sign),\n                value: local.eq_sharp_ns.map(Into::into),\n            },\n            local.is_valid * is_interaction.clone(),\n        );\n\n        self.pow_checker_bus.lookup_key(\n            builder,\n            PowerCheckerBusMessage {\n                log: local.n_abs.into(),\n                exp: local.n_abs_pow.into(),\n            },\n            local.is_valid * is_interaction,\n        );",
+      "explain": "<p><code>hyperdim_bus</code> forces <code>(n_abs, n_sign)</code> to match each trace's declared <code>log_height</code>. <code>eq_n_outer_bus</code> pulls the sharp eq value — and only at <code>n = n_abs * (1 - n_sign)</code>, i.e. zero for negative-dimension AIRs (where the eq is handled separately by <code>EqNegAir</code>). <code>pow_checker_bus</code> verifies <code>n_abs_pow == 2^{n_abs}</code>, needed for the negative-dimension norm factor above.</p>"
+    },
+    {
+      "type": "prose",
+      "html": "<p>At this point every constraint inside BC has closed out via permutation bus balances: the sumcheck's output claim equals the aggregated <code>(num, denom)</code> claim, which is exactly what the verifier would compute if they had every column opening and every constraint evaluation. Sumcheck soundness plus the random batching with <code>beta</code>, <code>lambda</code>, and <code>mu</code> completes the argument.</p><p>The remaining outputs of BC — the sumcheck point <code>(r_0, r_1, ..., r_{n_max})</code> and the final <code>tidx</code> — flow to the Stacking module via <code>ConstraintSumcheckRandomnessBus</code> and <code>StackingModuleBus</code>. Stacking's <code>OpeningClaimsAir</code> will use them to check that the transcript-observed column openings are consistent with the commitment at that point.</p>"
+    }
+  ]
+}

@@ -1,0 +1,348 @@
+{
+  "id": "gkr",
+  "name": "Phase 2a: GKR",
+  "summary": "<p>This phase runs the fractional / LogUp sumcheck via <em>layered GKR</em>. Starting from a root denominator claim <code>q0_claim</code>, the verifier reduces through <code>K = n_logup + l_skip</code> layers, each layer executing a cubic sumcheck of length <code>layer_idx</code> and linearly interpolating the next-layer claim at a fresh challenge <code>mu</code>. The final output is a single evaluation point <code>xi</code> and a reduced <code>(numer, denom)</code> claim that is handed to BatchConstraint.</p><p>Four AIRs collaborate. <code>GkrInputAir</code> owns per-proof bookkeeping: PoW grinding, alpha sampling, observing the root claim, and dispatching to the layer chain. <code>GkrLayerAir</code> handles per-layer logic (root zero-check, layer-claim observation, mu sampling, handoff between layers). <code>GkrLayerSumcheckAir</code> runs the cubic sumcheck rounds inside each non-root layer. <code>GkrXiSamplerAir</code> samples any extra <code>xi</code> coordinates when the zerocheck dimension <code>n_max</code> exceeds the LogUp dimension <code>n_logup</code>. The resulting <code>xi</code> vector is assembled across three AIRs on <code>XiRandomnessBus</code>.</p>",
+  "blocks": [
+    {
+      "type": "prose",
+      "html": "<p>The preamble has already produced a <code>GkrModuleMessage</code> per proof carrying <code>(tidx, n_logup, n_max, is_n_max_greater)</code>. GKR picks that message up, runs the reduction, and emits a <code>BatchConstraintModuleMessage</code> carrying the reduced claim and the post-GKR transcript cursor. Everything in between is a schedule of transcript observations, samples, and a chain of layer-wise sumchecks &mdash; all wired through permutation buses so that imbalance is the only way a prover can cheat.</p>"
+    },
+    {
+      "type": "air_header",
+      "air_id": "gkr.GkrInputAir",
+      "heading": "GkrInputAir",
+      "html": "<p><code>GkrInputAir</code> is the one-row-per-proof driver. It receives the handoff from the preamble, runs LogUp proof-of-work, samples <code>alpha_logup</code>, observes the root denominator claim <code>q0_claim</code>, and bookkeeps transcript-index arithmetic for the entire GKR schedule. It then dispatches the layer chain and the optional xi-sampler, receives their outputs, and hands the reduced claim to BatchConstraint.</p>",
+      "source_path": "crates/recursion/src/gkr/input/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "GkrInputCols",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "32-63",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct GkrInputCols<T> {\n    /// Whether the current row is enabled (i.e. not padding)\n    pub is_enabled: T,\n\n    pub proof_idx: T,\n\n    pub n_logup: T,\n    pub n_max: T,\n\n    /// Flag indicating whether there are any interactions\n    /// n_logup = 0 <=> total_interactions = 0\n    pub is_n_logup_zero: T,\n    pub is_n_logup_zero_aux: IsZeroAuxCols<T>,\n\n    pub is_n_max_greater_than_n_logup: T,\n\n    /// Transcript index\n    pub tidx: T,\n\n    /// Root denominator claim\n    pub q0_claim: [T; D_EF],\n\n    pub alpha_logup: [T; D_EF],\n\n    pub input_layer_claim: [[T; D_EF]; 2],\n\n    // Grinding\n    pub logup_pow_witness: T,\n    pub logup_pow_sample: T,\n}",
+      "explain": "<p>One row per proof. The row carries the shape counts (<code>n_logup</code>, <code>n_max</code>), the starting transcript index <code>tidx</code>, the root <code>q0_claim</code> (EF-valued), the sampled <code>alpha_logup</code> (EF-valued), the final reduced <code>input_layer_claim</code> coming back from the layer chain, and the PoW witness/sample pair. The <code>IsZero</code> aux cells let the AIR decide whether <code>n_logup == 0</code> (i.e. the proof has no interactions at all).</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Boolean + proof-index + is-zero sub-AIRs",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "101-146",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Boolean Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        builder.assert_bool(local.is_n_max_greater_than_n_logup);\n\n        ///////////////////////////////////////////////////////////////////////\n        // Proof Index Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // This subair has the following constraints:\n        // 1. Boolean enabled flag\n        // 2. Disabled rows are followed by disabled rows\n        // 3. Proof index increments by exactly one between enabled rows\n        ProofIdxSubAir.eval(\n            builder,\n            (\n                ProofIdxIoCols {\n                    is_enabled: local.is_enabled,\n                    proof_idx: local.proof_idx,\n                }\n                .map_into(),\n                ProofIdxIoCols {\n                    is_enabled: next.is_enabled,\n                    proof_idx: next.proof_idx,\n                }\n                .map_into(),\n            ),\n        );\n\n        ///////////////////////////////////////////////////////////////////////\n        // Base Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // 1. Check if n_logup is zero (no logup constraints needed)\n        IsZeroSubAir.eval(\n            builder,\n            (\n                IsZeroIo::new(\n                    local.n_logup.into(),\n                    local.is_n_logup_zero.into(),\n                    local.is_enabled.into(),\n                ),\n                local.is_n_logup_zero_aux.inv,\n            ),\n        );",
+      "explain": "<p>Before touching transcript or layer buses, boilerplate fires: <code>is_n_max_greater_than_n_logup</code> is forced boolean, the proof index is enforced to increment by one per enabled row, and <code>IsZeroSubAir</code> sets <code>is_n_logup_zero</code> to the indicator of <code>n_logup == 0</code>. The latter becomes the main case split below: proofs with no LogUp interactions still need <code>xi</code> coordinates but skip the entire layer chain.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Degenerate case: n_logup == 0",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "148-162",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Output Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        let has_interactions = AB::Expr::ONE - local.is_n_logup_zero;\n        // Input layer claim is [0, \\alpha] when no interactions\n        assert_zeros(\n            &mut builder.when(not::<AB::Expr>(has_interactions.clone())),\n            local.input_layer_claim[0],\n        );\n        assert_array_eq(\n            &mut builder.when(not::<AB::Expr>(has_interactions.clone())),\n            local.input_layer_claim[1],\n            local.alpha_logup,\n        );",
+      "explain": "<p>When the proof has no interactions, the GKR chain is skipped entirely. The AIR nevertheless hands BatchConstraint a well-defined claim: <code>input_layer_claim = [0, alpha_logup]</code>. Downstream, BC subtracts <code>alpha_logup</code> from the denominator, leaving <code>[0, 0]</code> &mdash; a trivially satisfied LogUp identity. This lets the BC pipeline be dimension-generic regardless of whether the proof actually has interactions."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Transcript-index arithmetic",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "164-186",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Module Interactions\n        ///////////////////////////////////////////////////////////////////////\n\n        let num_layers = local.n_logup + AB::Expr::from_usize(self.l_skip);\n\n        let needs_challenges = or(local.is_n_max_greater_than_n_logup, local.is_n_logup_zero);\n        let num_challenges = local.n_max + AB::Expr::from_usize(self.l_skip)\n            - has_interactions.clone() * num_layers.clone();\n\n        // Add PoW (if any) and alpha, beta\n        let logup_pow_offset = pow_tidx_count(self.logup_pow_bits);\n        let tidx_after_pow_and_alpha_beta =\n            local.tidx + AB::Expr::from_usize(logup_pow_offset + 2 * D_EF);\n        // Add GKR layers + Sumcheck\n        let tidx_after_gkr_layers = tidx_after_pow_and_alpha_beta.clone()\n            + has_interactions.clone()\n                * num_layers.clone()\n                * (num_layers.clone() + AB::Expr::TWO)\n                * AB::Expr::from_usize(2 * D_EF);\n        // Add separately sampled challenges\n        let tidx_end = tidx_after_gkr_layers.clone()\n            + needs_challenges.clone() * num_challenges.clone() * AB::Expr::from_usize(D_EF);",
+      "explain": "<p>The schedule's transcript footprint is computed as a linear combination of shape counts. <code>logup_pow_offset</code> is 0 or 2 (one obs + one sample). Alpha and beta together occupy <code>2 * D_EF</code> slots. Each GKR layer <code>j</code> contributes <code>j</code> sumcheck rounds (4 EF slots each) plus 4 EF claim observations, giving the closed form <code>K * (K + 2) * 2 * D_EF</code> where <code>K = num_layers</code>. If <code>n_max &gt; n_logup</code> or there are no interactions, extra xi slots are appended. <code>tidx_end</code> is the cursor passed to BatchConstraint."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Dispatch to GkrLayerAir and GkrXiSamplerAir",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "188-233",
+      "code": "        // 1. GkrLayerInputBus\n        // 1a. Send input to GkrLayerAir\n        self.layer_input_bus.send(\n            builder,\n            local.proof_idx,\n            GkrLayerInputMessage {\n                // Skip q0_claim\n                tidx: (tidx_after_pow_and_alpha_beta + AB::Expr::from_usize(D_EF))\n                    * has_interactions.clone(),\n                q0_claim: local.q0_claim.map(Into::into),\n            },\n            local.is_enabled * has_interactions.clone(),\n        );\n        // 2. GkrLayerOutputBus\n        // 2a. Receive input layer claim from GkrLayerAir\n        self.layer_output_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrLayerOutputMessage {\n                tidx: tidx_after_gkr_layers.clone(),\n                layer_idx_end: num_layers.clone() - AB::Expr::ONE,\n                input_layer_claim: local.input_layer_claim.map(|claim| claim.map(Into::into)),\n            },\n            local.is_enabled * has_interactions.clone(),\n        );\n        // 3. GkrXiSamplerBus\n        // 3a. Send input to GkrXiSamplerAir\n        self.xi_sampler_bus.send(\n            builder,\n            local.proof_idx,\n            GkrXiSamplerMessage {\n                idx: has_interactions.clone() * num_layers,\n                tidx: tidx_after_gkr_layers,\n            },\n            local.is_enabled * needs_challenges.clone(),\n        );\n        // 3b. Receive output from GkrXiSamplerAir\n        self.xi_sampler_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrXiSamplerMessage {\n                idx: local.n_max + AB::Expr::from_usize(self.l_skip - 1),\n                tidx: tidx_end.clone(),\n            },\n            local.is_enabled * needs_challenges,\n        );",
+      "explain": "<p>Two internal chains are threaded from here. The layer chain starts at the transcript slot right after <code>q0_claim</code> is observed (offset by <code>+D_EF</code>), and a matching <code>GkrLayerOutputMessage</code> is expected back carrying the final <code>input_layer_claim</code> along with <code>layer_idx_end = num_layers - 1</code>. The xi sampler is entered at index <code>num_layers</code> (or 0 if there are no interactions) and must exit at index <code>n_max + l_skip - 1</code>. Because these are permutation buses, any miscount on either side causes imbalance.</p>",
+      "scene": "gkr-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Receive preamble handoff (GkrModuleBus)",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "235-251",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // External Interactions\n        ///////////////////////////////////////////////////////////////////////\n\n        // 1. GkrModuleBus\n        // 1a. Receive initial GKR module message on first layer\n        self.gkr_module_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrModuleMessage {\n                tidx: local.tidx,\n                n_logup: local.n_logup,\n                n_max: local.n_max,\n                is_n_max_greater: local.is_n_max_greater_than_n_logup,\n            },\n            local.is_enabled,\n        );",
+      "explain": "<p>This is the receive side of the preamble handoff: the preamble already committed to <code>(tidx, n_logup, n_max, is_n_max_greater)</code> for each proof on <code>GkrModuleBus</code>, and this AIR picks those values up. Because the bus is a permutation, the row's shape counts are forced to equal whatever the preamble sent &mdash; the prover can't mis-declare the LogUp dimensions here."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "PoW observation + sample",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "253-271",
+      "code": "        // 2. TranscriptBus\n        if self.logup_pow_bits > 0 {\n            // 2a. Observe pow witness\n            self.transcript_bus.observe(\n                builder,\n                local.proof_idx,\n                local.tidx.into(),\n                local.logup_pow_witness.into(),\n                local.is_enabled,\n            );\n            // 2b. Sample pow challenge\n            self.transcript_bus.sample(\n                builder,\n                local.proof_idx,\n                local.tidx.into() + AB::Expr::ONE,\n                local.logup_pow_sample.into(),\n                local.is_enabled,\n            );\n        }",
+      "explain": "<p>If <code>logup_pow_bits &gt; 0</code>, the AIR first observes the prover's PoW witness at <code>tidx</code> and then samples a base-field challenge at <code>tidx + 1</code>. These are ordinary <code>observe</code>/<code>sample</code> calls (base-field, single slot each) on the global <code>TranscriptBus</code>. The constraint that this sample satisfies the grinding difficulty is enforced by a separate <code>ExpBitsLenBus</code> lookup below.</p>",
+      "scene": "gkr-1"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sample alpha_logup (and reserve beta slot)",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "272-279",
+      "code": "        // 2c. Sample alpha_logup challenge\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.tidx.into() + AB::Expr::from_usize(logup_pow_offset),\n            local.alpha_logup.map(Into::into),\n            local.is_enabled,\n        );",
+      "explain": "<p><code>alpha_logup</code> is sampled as an EF element at <code>tidx + logup_pow_offset</code>. The next <code>D_EF</code> slots are deliberately left untouched here: BatchConstraint's <code>InteractionsFoldingAir</code> will sample <code>beta_logup</code> at <code>tidx + logup_pow_offset + D_EF</code> via the <code>InteractionsFoldingInputBus</code> handoff below. Because <code>TranscriptBus</code> enforces per-slot ownership, only one AIR can touch any given <code>tidx</code>, so the alpha/beta interleave is safe.</p>",
+      "scene": "gkr-2"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Observe q0_claim",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "280-287",
+      "code": "        // 2d. Observe `q0_claim` claim\n        self.transcript_bus.observe_ext(\n            builder,\n            local.proof_idx,\n            local.tidx + AB::Expr::from_usize(logup_pow_offset + 2 * D_EF),\n            local.q0_claim,\n            local.is_enabled * has_interactions,\n        );",
+      "explain": "<p>At <code>tidx + logup_pow_offset + 2*D_EF</code> the root denominator claim <code>q0_claim</code> is observed as an EF element &mdash; but only when <code>has_interactions</code>; if <code>n_logup == 0</code> no transcript slot is consumed and no claim exists. That same value is re-checked at the root-layer boundary inside <code>GkrLayerAir</code> via the root consistency constraint <code>q_cross == q0_claim</code>, so the observed value is tied both to the sponge state and to the algebraic structure of the first GKR layer.</p>",
+      "scene": "gkr-3"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Handoff to BatchConstraint",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "289-317",
+      "code": "        // 3. BatchConstraintModuleBus\n        // 3a. Send input layer claims for further verification\n        self.bc_module_bus.send(\n            builder,\n            local.proof_idx,\n            BatchConstraintModuleMessage {\n                tidx: tidx_end.clone() + AB::Expr::from_usize(D_EF),\n                gkr_input_layer_claim: [\n                    local.input_layer_claim[0].map(Into::into),\n                    ext_field_subtract(local.input_layer_claim[1], local.alpha_logup),\n                ],\n            },\n            local.is_enabled,\n        );\n\n        self.constraints_folding_input_bus.send(\n            builder,\n            local.proof_idx,\n            ConstraintsFoldingInputMessage { tidx: tidx_end },\n            local.is_enabled,\n        );\n        self.interactions_folding_input_bus.send(\n            builder,\n            local.proof_idx,\n            InteractionsFoldingInputMessage {\n                tidx: local.tidx + AB::Expr::from_usize(logup_pow_offset + D_EF), // skip alpha\n            },\n            local.is_enabled,\n        );",
+      "explain": "<p>Three messages are shipped out. <code>BatchConstraintModuleBus</code> carries the final reduced claim <code>[numer, denom - alpha_logup]</code> &mdash; the <code>alpha</code> subtraction normalizes the running LogUp accumulator so BC sees a clean zero-sum target. <code>ConstraintsFoldingInputBus</code> hands BC the transcript cursor <code>tidx_end</code> for lambda sampling. <code>InteractionsFoldingInputBus</code> points BC at the reserved <code>beta_logup</code> slot inside GKR's transcript range.</p>",
+      "scene": "gkr-9"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "PoW difficulty lookup",
+      "source_path": "crates/recursion/src/gkr/input/air.rs",
+      "source_lines": "319-334",
+      "code": "        // 4. ExpBitsLenBus\n        // 4a. Check proof-of-work using `ExpBitsLenBus`.\n        if self.logup_pow_bits > 0 {\n            self.exp_bits_len_bus.lookup_key(\n                builder,\n                ExpBitsLenMessage {\n                    base: AB::Expr::from_prime_subfield(\n                        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::GENERATOR,\n                    ),\n                    bit_src: local.logup_pow_sample.into(),\n                    num_bits: AB::Expr::from_usize(self.logup_pow_bits),\n                    result: AB::Expr::ONE,\n                },\n                local.is_enabled,\n            );\n        }",
+      "explain": "<p>Finally, the grinding check. <code>ExpBitsLenBus</code> is a global lookup table that maps <code>(base, bit_src, num_bits) -&gt; result</code>, where <code>result = 1</code> iff <code>bit_src</code> has <code>num_bits</code> low zero bits (modelled as <code>base^{bit_src}</code> for <code>base = GENERATOR</code>). Matching a row with <code>result = 1</code> is equivalent to asserting the PoW condition &mdash; and because <code>bit_src</code> equals the sampled <code>logup_pow_sample</code>, the prover must have searched for a witness that forces the sponge into a state whose low <code>pow_bits</code> are zero.</p>",
+      "scene": "gkr-1"
+    },
+    {
+      "type": "air_header",
+      "air_id": "gkr.GkrLayerAir",
+      "heading": "GkrLayerAir",
+      "html": "<p><code>GkrLayerAir</code> has one row per (proof, layer). The root layer enforces the LogUp boundary identities <code>p_cross = 0</code> and <code>q_cross = q0_claim</code>; every layer observes <code>(p_xi_0, q_xi_0, p_xi_1, q_xi_1)</code>, samples <code>mu</code>, and linearly interpolates the next-layer claim. Non-root layers additionally sample <code>lambda</code> for batching numer/denom and dispatch a sumcheck to <code>GkrLayerSumcheckAir</code>.</p>",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "GkrLayerCols",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "27-67",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct GkrLayerCols<T> {\n    /// Whether the current row is enabled (i.e. not padding)\n    pub is_enabled: T,\n    pub proof_idx: T,\n    pub is_first: T,\n\n    /// An enabled row which is not involved in any interactions\n    /// but should satisfy air constraints\n    pub is_dummy: T,\n\n    /// GKR layer index\n    pub layer_idx: T,\n\n    /// Transcript index at the start of this layer\n    pub tidx: T,\n\n    /// Sampled batching challenge\n    pub lambda: [T; D_EF],\n\n    /// Layer claims\n    pub p_xi_0: [T; D_EF],\n    pub q_xi_0: [T; D_EF],\n    pub p_xi_1: [T; D_EF],\n    pub q_xi_1: [T; D_EF],\n\n    // (p_xi_1 - p_xi_0) * mu + p_xi_0\n    pub numer_claim: [T; D_EF],\n    // (q_xi_1 - q_xi_0) * mu + q_xi_0\n    pub denom_claim: [T; D_EF],\n\n    // Sumcheck claim input\n    pub sumcheck_claim_in: [T; D_EF],\n\n    /// Received from GkrLayerSumcheckAir\n    pub eq_at_r_prime: [T; D_EF],\n\n    /// Corresponds to `mu` - reduction point\n    pub mu: [T; D_EF],\n}",
+      "explain": "<p>Each row holds one layer's entire state: the layer index, the incoming <code>sumcheck_claim_in</code>, four layer-claim EF elements, the sampled <code>lambda</code> and <code>mu</code>, the reduced <code>(numer_claim, denom_claim)</code>, and the <code>eq_at_r_prime</code> value returned from the sumcheck AIR. <code>is_first</code> marks the root of each proof's layer chain, <code>is_dummy</code> tags a singleton placeholder row for proofs with no interactions.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Layer-index loop counter",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "110-146",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Proof Index and Loop Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        type LoopSubAir = NestedForLoopSubAir<1>;\n\n        // This subair has the following constraints:\n        // 1. Boolean enabled flag\n        // 2. Disabled rows are followed by disabled rows\n        // 3. Proof index increments by exactly one between enabled rows\n        LoopSubAir {}.eval(\n            builder,\n            (\n                NestedForLoopIoCols {\n                    is_enabled: local.is_enabled,\n                    counter: [local.proof_idx],\n                    is_first: [local.is_first],\n                }\n                .map_into(),\n                NestedForLoopIoCols {\n                    is_enabled: next.is_enabled,\n                    counter: [next.proof_idx],\n                    is_first: [next.is_first],\n                }\n                .map_into(),\n            ),\n        );\n\n        let is_transition = LoopSubAir::local_is_transition(next.is_enabled, next.is_first);\n        let is_last = LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first);\n\n        // Layer index starts from 0\n        builder.when(local.is_first).assert_zero(local.layer_idx);\n        // Layer index increments by 1\n        builder\n            .when(is_transition.clone())\n            .assert_eq(next.layer_idx, local.layer_idx + AB::Expr::ONE);",
+      "explain": "<p>The <code>NestedForLoopSubAir&lt;1&gt;</code> wires the shared (proof_idx, is_first) structure: rows within a proof are contiguous and in order. Then <code>layer_idx</code> is pinned to 0 on <code>is_first</code> and to <code>prev + 1</code> on transitions. The layer chain cannot skip or repeat a layer.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Dummy-row structural constraints",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "148-163",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Dummy Row Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // A proof can't contribute both dummy and non-dummy rows\n        builder\n            .when(is_transition.clone())\n            .assert_eq(next.is_dummy, local.is_dummy);\n        // Any proof segment with more than one layer row must be non-dummy\n        builder\n            .when(is_transition.clone())\n            .assert_zero(local.is_dummy);\n\n        // Dummy rows are only allowed as a singleton placeholder row\n        builder.when(local.is_dummy).assert_one(local.is_first);\n        builder.when(local.is_dummy).assert_one(is_last.clone());",
+      "explain": "<p>A proof with no LogUp interactions contributes exactly one dummy row so that the <code>GkrLayerInputBus</code> permutation still balances with <code>GkrInputAir</code>&apos;s send. These constraints force such rows to be true singletons (first == last) and forbid mixing dummy/non-dummy rows within a proof."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Root-layer zero-check",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "165-182",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Root Layer Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // Compute cross terms: p_cross = p_xi_0 * q_xi_1 + p_xi_1 * q_xi_0\n        //                       q_cross = q_xi_0 * q_xi_1\n        let (p_cross_term, q_cross_term) =\n            compute_recursive_relations(local.p_xi_0, local.q_xi_0, local.p_xi_1, local.q_xi_1);\n\n        // Zero-check: verify p_cross = 0 at root layer\n        assert_zeros(&mut builder.when(local.is_first), p_cross_term.clone());\n\n        // Root consistency check: verify q_cross = q0_claim\n        assert_array_eq(\n            &mut builder.when(local.is_first),\n            q_cross_term.clone(),\n            local.sumcheck_claim_in,\n        );",
+      "explain": "<p>The defining LogUp identity at the root: <code>p_cross = p_xi_0 * q_xi_1 + p_xi_1 * q_xi_0 = 0</code> (numerator sums telescope to zero) and <code>q_cross = q_xi_0 * q_xi_1 = q0_claim</code> (the observed root denominator). Here <code>sumcheck_claim_in</code> at the root row is forced by <code>GkrLayerInputBus</code> to equal <code>q0_claim</code> from <code>GkrInputAir</code>, so the consistency check ties the claim to the transcript.</p>",
+      "scene": "gkr-4"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Reduce to single evaluation (numer/denom at mu)",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "184-199",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Layer Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // Reduce to single evaluation\n        // `numer_claim = (p_xi_1 - p_xi_0) * mu + p_xi_0`\n        // `denom_claim = (q_xi_1 - q_xi_0) * mu + q_xi_0`\n        let (numer_claim, denom_claim) = reduce_to_single_evaluation(\n            local.p_xi_0,\n            local.p_xi_1,\n            local.q_xi_0,\n            local.q_xi_1,\n            local.mu,\n        );\n        assert_array_eq(builder, local.numer_claim, numer_claim);\n        assert_array_eq(builder, local.denom_claim, denom_claim);",
+      "explain": "<p>Every layer produces a single (numer, denom) pair by linearly interpolating the two-point evaluations at <code>mu</code>. This is the &ldquo;reduce from a 2-point claim to a 1-point claim&rdquo; step of GKR. Both <code>numer_claim</code> and <code>denom_claim</code> are materialized as explicit columns so downstream rows can reference them without recomputation."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Layer-to-layer RLC handoff",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "201-223",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Inter-Layer Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // Next layer claim is RLC of previous layer numer_claim and denom_claim\n        assert_array_eq(\n            &mut builder.when(is_transition.clone()),\n            next.sumcheck_claim_in,\n            ext_field_add::<AB::Expr>(\n                local.numer_claim,\n                ext_field_multiply::<AB::Expr>(next.lambda, local.denom_claim),\n            ),\n        );\n\n        // Transcript index increment\n        let tidx_after_sumcheck = local.tidx\n            // Sample lambda on non-root layer\n            + (AB::Expr::ONE - local.is_first) * AB::Expr::from_usize(D_EF)\n            + local.layer_idx * AB::Expr::from_usize(4 * D_EF);\n        let tidx_end = tidx_after_sumcheck.clone() + AB::Expr::from_usize(5 * D_EF);\n        builder\n            .when(is_transition.clone())\n            .assert_eq(next.tidx, tidx_end.clone());",
+      "explain": "<p>Between layers, the incoming claim for the next layer is <code>numer + lambda_next * denom</code> &mdash; a fresh random-linear combination. The <code>lambda</code> is sampled <em>on the next row</em> (non-root), so the value used in the combination is pinned to a specific transcript slot. The <code>tidx</code> arithmetic accounts for: the optional lambda sample (<code>D_EF</code>), the sumcheck rounds (<code>layer_idx * 4 * D_EF</code>), and the 5 EF slots for observing the four layer claims plus sampling <code>mu</code>.</p>",
+      "scene": "gkr-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "GkrLayerInputBus receive (root) + GkrLayerOutputBus send (last)",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "229-257",
+      "code": "        let is_not_dummy = AB::Expr::ONE - local.is_dummy;\n        let is_non_root_layer = local.is_enabled * (AB::Expr::ONE - local.is_first);\n\n        // 1. GkrLayerInputBus\n        // 1a. Receive GKR layers input\n        self.layer_input_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrLayerInputMessage {\n                tidx: local.tidx,\n                q0_claim: local.sumcheck_claim_in,\n            },\n            local.is_first * is_not_dummy.clone(),\n        );\n        // 2. GkrLayerOutputBus\n        // 2a. Send GKR input layer claims back\n        self.layer_output_bus.send(\n            builder,\n            local.proof_idx,\n            GkrLayerOutputMessage {\n                tidx: tidx_end,\n                layer_idx_end: local.layer_idx.into(),\n                input_layer_claim: [\n                    local.numer_claim.map(Into::into),\n                    local.denom_claim.map(Into::into),\n                ],\n            },\n            is_last.clone() * is_not_dummy.clone(),\n        );",
+      "explain": "<p>The root-layer row pulls <code>(tidx, q0_claim)</code> off <code>GkrLayerInputBus</code>, matching <code>GkrInputAir</code>&apos;s send. The last-layer row pushes <code>(tidx_end, layer_idx_end, [numer_claim, denom_claim])</code> onto <code>GkrLayerOutputBus</code>, completing the chain. <code>GkrInputAir</code>&apos;s <code>layer_idx_end = num_layers - 1</code> receive pins the chain length exactly."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Dispatch sumcheck (non-root layers)",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "258-302",
+      "code": "        // 3. GkrSumcheckInputBus\n        // 3a. Send claim to sumcheck\n        self.sumcheck_input_bus.send(\n            builder,\n            local.proof_idx,\n            GkrSumcheckInputMessage {\n                layer_idx: local.layer_idx.into(),\n                is_last_layer: is_last.clone(),\n                tidx: local.tidx + AB::Expr::from_usize(D_EF),\n                claim: local.sumcheck_claim_in.map(Into::into),\n            },\n            is_non_root_layer.clone() * is_not_dummy.clone(),\n        );\n        // 3. GkrSumcheckOutputBus\n        // 3a. Receive sumcheck results\n        let sumcheck_claim_out = ext_field_multiply::<AB::Expr>(\n            ext_field_add::<AB::Expr>(\n                p_cross_term,\n                ext_field_multiply::<AB::Expr>(local.lambda, q_cross_term),\n            ),\n            local.eq_at_r_prime,\n        );\n        self.sumcheck_output_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrSumcheckOutputMessage {\n                layer_idx: local.layer_idx.into(),\n                tidx: tidx_after_sumcheck.clone(),\n                claim_out: sumcheck_claim_out.map(Into::into),\n                eq_at_r_prime: local.eq_at_r_prime.map(Into::into),\n            },\n            is_non_root_layer.clone() * is_not_dummy.clone(),\n        );\n        // 4. GkrSumcheckChallengeBus\n        // 4a. Send challenge mu\n        self.sumcheck_challenge_bus.send(\n            builder,\n            local.proof_idx,\n            GkrSumcheckChallengeMessage {\n                layer_idx: local.layer_idx.into(),\n                sumcheck_round: AB::Expr::ZERO,\n                challenge: local.mu.map(Into::into),\n            },\n            is_transition.clone() * is_not_dummy.clone(),\n        );",
+      "explain": "<p>Each non-root layer dispatches a sumcheck: it sends <code>(layer_idx, is_last_layer, tidx+D_EF, claim_in)</code> to the sumcheck AIR and receives back <code>(tidx_after_sumcheck, claim_out, eq_at_r_prime)</code>. The received <code>claim_out</code> is algebraically forced to equal <code>(p_cross + lambda * q_cross) * eq_at_r_prime</code> &mdash; the layer consistency identity. The <code>GkrSumcheckChallengeBus</code> send seeds the sumcheck's first round with <code>mu</code> (the reduction point of the <em>previous</em> layer).</p>",
+      "scene": "gkr-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sample lambda + observe layer claims + sample mu",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "304-336",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // External Interactions\n        ///////////////////////////////////////////////////////////////////////\n\n        // 1. TranscriptBus\n        // 1a. Sample `lambda`\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.tidx,\n            local.lambda,\n            is_non_root_layer.clone() * is_not_dummy.clone(),\n        );\n        // 1b. Observe layer claims\n        let mut tidx = tidx_after_sumcheck;\n        for claim in [local.p_xi_0, local.q_xi_0, local.p_xi_1, local.q_xi_1].into_iter() {\n            self.transcript_bus.observe_ext(\n                builder,\n                local.proof_idx,\n                tidx.clone(),\n                claim,\n                local.is_enabled * is_not_dummy.clone(),\n            );\n            tidx += AB::Expr::from_usize(D_EF);\n        }\n        // 1c. Sample `mu`\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            tidx,\n            local.mu,\n            local.is_enabled * is_not_dummy.clone(),\n        );",
+      "explain": "<p>On non-root layers, <code>lambda</code> is sampled at <code>tidx</code>. Then (on every real layer) the four EF-valued layer claims are observed contiguously starting at <code>tidx_after_sumcheck</code>, and <code>mu</code> is sampled at the slot right after. This matches the schedule tallied in <code>GkrInputAir</code>&apos;s <code>tidx</code> arithmetic: each layer <code>j</code> uses <code>4 * j * D_EF</code> slots for its sumcheck (handled by the sumcheck AIR) plus <code>5 * D_EF</code> slots here.</p>",
+      "scene": "gkr-6"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Emit xi[0] = mu on last layer",
+      "source_path": "crates/recursion/src/gkr/layer/air.rs",
+      "source_lines": "338-348",
+      "code": "        // 2. XiRandomnessBus\n        // 2a. Send shared randomness\n        self.xi_randomness_bus.send(\n            builder,\n            local.proof_idx,\n            XiRandomnessMessage {\n                idx: AB::Expr::ZERO,\n                xi: local.mu.map(Into::into),\n            },\n            is_last * is_not_dummy.clone(),\n        );",
+      "explain": "<p>On the final layer row, <code>mu</code> is published as <code>xi[0]</code> on <code>XiRandomnessBus</code>. This is the first entry of the final evaluation point the GKR reduction commits to; the remaining entries come from the sumcheck's last-layer challenges and the xi-sampler.</p>",
+      "scene": "gkr-8"
+    },
+    {
+      "type": "air_header",
+      "air_id": "gkr.GkrLayerSumcheckAir",
+      "heading": "GkrLayerSumcheckAir",
+      "html": "<p><code>GkrLayerSumcheckAir</code> has one row per sumcheck sub-round. For each non-root layer <code>j</code>, it runs <code>j</code> cubic sumcheck rounds: observe <code>(ev1, ev2, ev3)</code>, sample <code>r_i</code>, assert <code>claim_out = cubic_interp(ev0, ev1, ev2, ev3)(r_i)</code> where <code>ev0 = claim_in - ev1</code>, and incrementally update the <code>eq</code> polynomial. On the last layer it additionally emits each sampled <code>r_i</code> on <code>XiRandomnessBus</code> at index <code>round + 1</code>.</p>",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "GkrLayerSumcheckCols",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "26-71",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct GkrLayerSumcheckCols<T> {\n    /// Whether the current row is enabled (i.e. not padding)\n    pub is_enabled: T,\n    pub proof_idx: T,\n    pub layer_idx: T,\n    pub is_proof_start: T,\n    pub is_first_round: T,\n\n    /// An enabled row which is not involved in any interactions\n    /// but should satisfy air constraints\n    pub is_dummy: T,\n\n    pub is_last_layer: T,\n\n    /// Sumcheck sub-round index within this layer_idx (0..layer_idx-1)\n    // perf(ayush): can probably remove round if XiRandomnessMessage takes tidx instead\n    pub round: T,\n\n    /// Transcript index\n    pub tidx: T,\n\n    /// s(1) in extension field\n    pub ev1: [T; D_EF],\n    /// s(2) in extension field\n    pub ev2: [T; D_EF],\n    /// s(3) in extension field\n    pub ev3: [T; D_EF],\n\n    /// The claim coming into this sub-round (either from previous sub-round or initial)\n    pub claim_in: [T; D_EF],\n    /// The claim going out of this sub-round (result of cubic interpolation)\n    pub claim_out: [T; D_EF],\n\n    /// Component `round` of the original point \u03be^{(j-1)}\n    /// (corresponding to `gkr_r[round]`)\n    pub prev_challenge: [T; D_EF],\n    /// The sampled challenge for this sub-round (corresponds to `ri`)\n    pub challenge: [T; D_EF],\n\n    /// The eq value coming into this sub-round\n    pub eq_in: [T; D_EF],\n    /// The eq value going out (updated for this round)\n    pub eq_out: [T; D_EF],\n}",
+      "explain": "<p>Each row is one sub-round. It holds the three EF evaluations <code>ev1, ev2, ev3</code> (the prover's cubic polynomial's values at 1, 2, 3), the claim flowing through the round, <code>prev_challenge</code> (the corresponding coordinate of the previous layer's <code>xi</code> point) and the freshly sampled <code>challenge</code>, plus the eq polynomial's running value <code>eq_in</code> / <code>eq_out</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Nested loop: (proof_idx, round within layer_idx)",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "128-165",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Proof Index and Loop Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        type LoopSubAir = NestedForLoopSubAir<2>;\n        LoopSubAir {}.eval(\n            builder,\n            (\n                NestedForLoopIoCols {\n                    is_enabled: local.is_enabled.into(),\n                    counter: [local.proof_idx.into(), local.layer_idx - AB::F::ONE],\n                    is_first: [local.is_proof_start.into(), local.is_first_round.into()],\n                }\n                .map_into(),\n                NestedForLoopIoCols {\n                    is_enabled: next.is_enabled.into(),\n                    counter: [next.proof_idx.into(), next.layer_idx - AB::F::ONE],\n                    is_first: [next.is_proof_start.into(), next.is_first_round.into()],\n                },\n            ),\n        );\n\n        let is_transition_round =\n            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_round);\n        let is_last_round =\n            LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_round);\n        let is_transition_proof = next.is_enabled - next.is_proof_start;\n\n        // Sumcheck round flag starts at 0\n        builder.when(local.is_first_round).assert_zero(local.round);\n        // Sumcheck round flag increments by 1\n        builder\n            .when(is_transition_round.clone())\n            .assert_eq(next.round, local.round + AB::Expr::ONE);\n        // Sumcheck round flag end\n        builder\n            .when(is_last_round.clone())\n            .assert_eq(local.round, local.layer_idx - AB::Expr::ONE);",
+      "explain": "<p>A <code>NestedForLoopSubAir&lt;2&gt;</code> enforces the (proof_idx, layer_idx - 1) nested counter structure. The <code>round</code> column starts at 0 on <code>is_first_round</code>, increments by 1 per sub-round, and is forced to reach exactly <code>layer_idx - 1</code> on the last round &mdash; so layer <code>j</code> runs exactly <code>j</code> rounds (the triangular GKR sumcheck shape).</p>",
+      "scene": "gkr-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Eq initialization + update",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "199-222",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Round Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // Layer metadata must remain same\n        builder\n            .when(is_transition_round.clone())\n            .assert_eq(next.is_last_layer, local.is_last_layer);\n\n        // Eq initialization: eq_in = 1 at first round\n        assert_one_ext(&mut builder.when(local.is_first_round), local.eq_in);\n\n        // Eq update: incrementally compute eq *= (xi * ri + (1-xi) * (1-ri))\n        let eq_out: [AB::Expr; D_EF] =\n            update_eq(local.eq_in, local.prev_challenge, local.challenge);\n        assert_array_eq(&mut builder.when(local.is_enabled), local.eq_out, eq_out);\n\n        // Eq propagation\n        assert_array_eq(\n            &mut builder.when(is_transition_round.clone()),\n            local.eq_out,\n            next.eq_in,\n        );",
+      "explain": "<p>At the first round of a layer the eq product starts at 1 (EF). Each round multiplies eq by the standard Lagrange factor <code>xi*ri + (1-xi)*(1-ri)</code>, where <code>xi = prev_challenge</code> (the corresponding coordinate of the previous layer's evaluation point) and <code>ri = challenge</code> (the freshly sampled round challenge). The running product is propagated across rows via <code>eq_out -&gt; next.eq_in</code>."
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Cubic interpolation of the round claim",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "223-242",
+      "code": "        // Compute s(0) = claim_in - s(1)\n        let ev0: [AB::Expr; D_EF] = ext_field_subtract(local.claim_in, local.ev1);\n\n        // Cubic interpolation: compute claim_out from polynomial evals at 0,1,2,3\n        let claim_out: [AB::Expr; D_EF] =\n            interpolate_cubic_at_0123(ev0, local.ev1, local.ev2, local.ev3, local.challenge);\n        assert_array_eq(builder, local.claim_out, claim_out);\n\n        // Claim propagation\n        assert_array_eq(\n            &mut builder.when(is_transition_round.clone()),\n            local.claim_out,\n            next.claim_in,\n        );\n\n        // Transcript index increment\n        builder.when(is_transition_round.clone()).assert_eq(\n            next.tidx,\n            local.tidx.into() + AB::Expr::from_usize(4 * D_EF),\n        );",
+      "explain": "<p>The &ldquo;sum constraint&rdquo; <code>s(0) + s(1) = claim_in</code> is folded directly into <code>ev0 := claim_in - ev1</code>, so only three evaluations are observed. Then <code>claim_out = s(challenge)</code> via cubic Lagrange interpolation through <code>(0, ev0), (1, ev1), (2, ev2), (3, ev3)</code>. The outgoing claim is propagated to the next round's <code>claim_in</code>, and <code>tidx</code> advances by <code>4 * D_EF</code> (three observations plus one sample) per round.</p>",
+      "scene": "gkr-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sumcheck dispatch buses",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "248-275",
+      "code": "        let is_not_dummy = AB::Expr::ONE - local.is_dummy;\n\n        // 1. GkrSumcheckInputBus\n        // 1a. Receive initial sumcheck input on first round\n        self.sumcheck_input_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrSumcheckInputMessage {\n                layer_idx: local.layer_idx,\n                is_last_layer: local.is_last_layer,\n                tidx: local.tidx,\n                claim: local.claim_in,\n            },\n            local.is_first_round * is_not_dummy.clone(),\n        );\n        // 2. GkrSumcheckOutputBus\n        // 2a. Send output back to GkrLayerAir on final round\n        self.sumcheck_output_bus.send(\n            builder,\n            local.proof_idx,\n            GkrSumcheckOutputMessage {\n                layer_idx: local.layer_idx.into(),\n                tidx: local.tidx.into() + AB::Expr::from_usize(4 * D_EF),\n                claim_out: local.claim_out.map(Into::into),\n                eq_at_r_prime: local.eq_out.map(Into::into),\n            },\n            is_last_round.clone() * is_not_dummy.clone(),\n        );",
+      "explain": "<p>The first-round row receives <code>GkrSumcheckInputMessage</code> (dispatched by <code>GkrLayerAir</code>) &mdash; <code>claim_in</code> is pinned to <code>GkrLayerAir</code>&apos;s <code>sumcheck_claim_in</code>. The last-round row sends back <code>GkrSumcheckOutputMessage</code> carrying the final <code>claim_out</code> and the fully-accumulated <code>eq_at_r_prime = eq_out</code>. <code>GkrLayerAir</code>&apos;s algebraic check <code>claim_out == (p_cross + lambda * q_cross) * eq_at_r_prime</code> closes the loop.</p>",
+      "scene": "gkr-5"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Previous-layer challenges on GkrSumcheckChallengeBus",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "277-299",
+      "code": "        // 3. GkrSumcheckChallengeBus\n        // 3a. Receive challenge from previous GKR layer_idx sumcheck\n        self.sumcheck_challenge_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrSumcheckChallengeMessage {\n                layer_idx: local.layer_idx - AB::Expr::ONE,\n                sumcheck_round: local.round.into(),\n                challenge: local.prev_challenge.map(Into::into),\n            },\n            local.is_enabled * is_not_dummy.clone(),\n        );\n        // 3b. Send challenge to next GKR layer_idx sumcheck for eq calculation\n        self.sumcheck_challenge_bus.send(\n            builder,\n            local.proof_idx,\n            GkrSumcheckChallengeMessage {\n                layer_idx: local.layer_idx.into(),\n                sumcheck_round: local.round.into() + AB::Expr::ONE,\n                challenge: local.challenge.map(Into::into),\n            },\n            local.is_enabled * (AB::Expr::ONE - local.is_last_layer) * is_not_dummy.clone(),\n        );",
+      "explain": "<p>The eq update needs the corresponding coordinate <code>xi_round</code> of the <em>previous</em> layer's final evaluation point. Each round receives <code>(layer_idx - 1, round, prev_challenge)</code> off <code>GkrSumcheckChallengeBus</code>, matched with a send from the previous layer's sumcheck (or the mu send from <code>GkrLayerAir</code> at round 0). Each round also sends its freshly-sampled <code>challenge</code> forward for the next layer's consumption &mdash; except on the last layer, whose challenges leave via <code>XiRandomnessBus</code> instead.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sumcheck transcript + last-layer xi emission",
+      "source_path": "crates/recursion/src/gkr/sumcheck/air.rs",
+      "source_lines": "301-337",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // External Interactions\n        ///////////////////////////////////////////////////////////////////////\n\n        // 1. TranscriptBus\n        // 1a. Observe evaluations\n        let mut tidx = local.tidx.into();\n        for eval in [local.ev1, local.ev2, local.ev3].into_iter() {\n            self.transcript_bus.observe_ext(\n                builder,\n                local.proof_idx,\n                tidx.clone(),\n                eval,\n                local.is_enabled * is_not_dummy.clone(),\n            );\n            tidx += AB::Expr::from_usize(D_EF);\n        }\n        // 1b. Sample challenge `ri`\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            tidx,\n            local.challenge,\n            local.is_enabled * is_not_dummy.clone(),\n        );\n\n        // 2. XiRandomnessBus\n        // 2a. Send last challenge\n        self.xi_randomness_bus.send(\n            builder,\n            local.proof_idx,\n            XiRandomnessMessage {\n                idx: local.round + AB::Expr::ONE,\n                xi: local.challenge.map(Into::into),\n            },\n            local.is_enabled * local.is_last_layer * is_not_dummy.clone(),\n        );",
+      "explain": "<p>Per sub-round: observe three EF evaluations, sample one EF challenge &mdash; exactly <code>4 * D_EF</code> transcript slots. On the last layer (<code>is_last_layer = 1</code>), each sampled <code>challenge</code> is additionally emitted on <code>XiRandomnessBus</code> at index <code>round + 1</code>, building up <code>xi[1..num_layers]</code>. Combined with <code>GkrLayerAir</code>&apos;s <code>xi[0] = mu</code> and <code>GkrXiSamplerAir</code>&apos;s extras, this fully populates the evaluation point.</p>",
+      "scene": "gkr-8"
+    },
+    {
+      "type": "air_header",
+      "air_id": "gkr.GkrXiSamplerAir",
+      "heading": "GkrXiSamplerAir",
+      "html": "<p><code>GkrXiSamplerAir</code> generates the tail of the <code>xi</code> vector when the zerocheck dimension <code>n_max</code> strictly exceeds the GKR dimension <code>n_logup</code> (or when there are no interactions at all). It is a thin loop: one row per extra coordinate, each row samples one EF value from the transcript and publishes it on <code>XiRandomnessBus</code> at the correct index.</p>",
+      "source_path": "crates/recursion/src/gkr/xi_sampler/air.rs"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "GkrXiSamplerCols",
+      "source_path": "crates/recursion/src/gkr/xi_sampler/air.rs",
+      "source_lines": "22-42",
+      "code": "#[repr(C)]\n#[derive(AlignedBorrow, Debug)]\npub struct GkrXiSamplerCols<T> {\n    /// Whether the current row is enabled (i.e. not padding)\n    pub is_enabled: T,\n    pub proof_idx: T,\n    pub is_first_challenge: T,\n\n    /// An enabled row which is not involved in any interactions\n    /// but should satisfy air constraints\n    pub is_dummy: T,\n\n    /// Challenge index\n    // perf(ayush): can probably remove idx if XiRandomnessMessage takes tidx instead\n    pub idx: T,\n\n    /// Sampled challenge\n    pub xi: [T; D_EF],\n    /// Transcript index\n    pub tidx: T,\n}",
+      "explain": "<p>One row per additional xi coordinate. The row carries the challenge <code>idx</code>, the sampled EF value <code>xi</code>, and the transcript slot <code>tidx</code> it was sampled at. <code>is_first_challenge</code> marks the first row of each proof's run.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Loop counter + tidx increment",
+      "source_path": "crates/recursion/src/gkr/xi_sampler/air.rs",
+      "source_lines": "78-138",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Proof Index and Loop Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        type LoopSubAir = NestedForLoopSubAir<1>;\n        LoopSubAir {}.eval(\n            builder,\n            (\n                NestedForLoopIoCols {\n                    is_enabled: local.is_enabled,\n                    counter: [local.proof_idx],\n                    is_first: [local.is_first_challenge],\n                }\n                .map_into(),\n                NestedForLoopIoCols {\n                    is_enabled: next.is_enabled,\n                    counter: [next.proof_idx],\n                    is_first: [next.is_first_challenge],\n                }\n                .map_into(),\n            ),\n        );\n\n        let is_transition_challenge =\n            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_challenge);\n        let is_last_challenge =\n            LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_challenge);\n\n        // Challenge index increments by 1\n        builder\n            .when(is_transition_challenge.clone())\n            .assert_eq(next.idx, local.idx + AB::Expr::ONE);\n\n        ///////////////////////////////////////////////////////////////////////\n        // Dummy Row Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        // A proof can't contribute both dummy and non-dummy rows\n        builder\n            .when(is_transition_challenge.clone())\n            .assert_eq(next.is_dummy, local.is_dummy);\n        // Any proof segment with more than one challenge row must be non-dummy\n        builder\n            .when(is_transition_challenge.clone())\n            .assert_zero(local.is_dummy);\n\n        // Dummy rows are only allowed as a singleton placeholder row\n        builder\n            .when(local.is_dummy)\n            .assert_one(local.is_first_challenge);\n        builder\n            .when(local.is_dummy)\n            .assert_one(is_last_challenge.clone());\n\n        ///////////////////////////////////////////////////////////////////////\n        // Transition Constraints\n        ///////////////////////////////////////////////////////////////////////\n\n        builder\n            .when(is_transition_challenge.clone())\n            .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(D_EF));",
+      "explain": "<p>Standard loop wiring: <code>idx</code> increments by 1 per row, <code>tidx</code> increments by <code>D_EF</code>. Dummy rows (used when this AIR is entered but produces no coordinates) must be singletons. The starting <code>(idx, tidx)</code> and the ending <code>(idx, tidx)</code> are both pinned by <code>GkrXiSamplerBus</code> via the matching sends and receives in <code>GkrInputAir</code>.</p>"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "XiSampler dispatch handoff",
+      "source_path": "crates/recursion/src/gkr/xi_sampler/air.rs",
+      "source_lines": "140-167",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // Module Interactions\n        ///////////////////////////////////////////////////////////////////////\n\n        let is_not_dummy = AB::Expr::ONE - local.is_dummy;\n\n        // 1. GkrXiSamplerBus\n        // 1a. Receive input from GkrInputAir\n        self.xi_sampler_bus.receive(\n            builder,\n            local.proof_idx,\n            GkrXiSamplerMessage {\n                idx: local.idx.into(),\n                tidx: local.tidx.into(),\n            },\n            local.is_first_challenge * is_not_dummy.clone(),\n        );\n        // 1b. Send output to GkrInputAir\n        let tidx_end = local.tidx + AB::Expr::from_usize(D_EF);\n        self.xi_sampler_bus.send(\n            builder,\n            local.proof_idx,\n            GkrXiSamplerMessage {\n                idx: local.idx.into(),\n                tidx: tidx_end,\n            },\n            is_last_challenge.clone() * is_not_dummy.clone(),\n        );",
+      "explain": "<p>The first-challenge row receives the starting <code>(idx, tidx)</code> from <code>GkrInputAir</code> on <code>GkrXiSamplerBus</code> (the latter sent <code>idx = has_interactions * num_layers</code>, which is <code>num_layers</code> when there are interactions or 0 when not). The last-challenge row sends back the ending <code>(idx, tidx_end)</code>, with the <code>idx</code> matching <code>GkrInputAir</code>&apos;s expected <code>n_max + l_skip - 1</code> and <code>tidx_end</code> being <code>tidx</code> of the last sample plus one <code>D_EF</code> slot &mdash; jointly forcing the exact count of xi coordinates produced.</p>",
+      "scene": "gkr-7"
+    },
+    {
+      "type": "code",
+      "lang": "rust",
+      "heading": "Sample xi + publish on XiRandomnessBus",
+      "source_path": "crates/recursion/src/gkr/xi_sampler/air.rs",
+      "source_lines": "169-193",
+      "code": "        ///////////////////////////////////////////////////////////////////////\n        // External Interactions\n        ///////////////////////////////////////////////////////////////////////\n\n        // 1. TranscriptBus\n        // 1a. Sample challenge from transcript\n        self.transcript_bus.sample_ext(\n            builder,\n            local.proof_idx,\n            local.tidx,\n            local.xi,\n            local.is_enabled * is_not_dummy.clone(),\n        );\n\n        // 2. XiRandomnessBus\n        // 2a. Send shared randomness\n        self.xi_randomness_bus.send(\n            builder,\n            local.proof_idx,\n            XiRandomnessMessage {\n                idx: local.idx.into(),\n                xi: local.xi.map(Into::into),\n            },\n            local.is_enabled * is_not_dummy,\n        );",
+      "explain": "<p>Each non-dummy row samples one EF challenge on <code>TranscriptBus</code> at <code>tidx</code> and publishes it on <code>XiRandomnessBus</code> at the current <code>idx</code>. Combined with <code>GkrLayerAir</code>&apos;s <code>idx = 0</code> message and <code>GkrLayerSumcheckAir</code>&apos;s <code>idx = 1..num_layers</code> messages, the receivers in BatchConstraint and Stacking (EqNsAir, EqSharpUniAir, etc.) see a complete, index-addressable xi vector of length <code>n_max + l_skip</code>.</p>",
+      "scene": "gkr-8"
+    },
+    {
+      "type": "prose",
+      "html": "<p>At the end of the phase, <code>GkrInputAir</code>'s <code>BatchConstraintModuleBus</code> send delivers the reduced claim <code>[numer, denom - alpha_logup]</code> and the post-GKR transcript cursor <code>tidx_bc = tidx_end + D_EF</code> to the Batch Constraint phase. The xi vector has been assembled in parallel on <code>XiRandomnessBus</code>, ready to be consumed by BC&apos;s eq-polynomial AIRs and the Stacking phase&apos;s WHIR point. Every transcript slot touched is deterministic in the shape counts, every claim flowing between AIRs rides a permutation bus, and every sampled challenge is pinned to the Poseidon2 sponge &mdash; so the prover has no freedom beyond the values it commits to in the extracted proof.</p>"
+    }
+  ]
+}
