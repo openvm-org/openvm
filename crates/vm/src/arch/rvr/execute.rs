@@ -224,7 +224,7 @@ pub fn execute<F: PrimeField32>(
 
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
-        memory.as_ptr(),
+        memory.as_mut_ptr(),
         deferral,
     );
     io_state.hint_stream = hint_stream;
@@ -272,7 +272,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
 
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
-        memory.as_ptr(),
+        memory.as_mut_ptr(),
         deferral,
     );
     io_state.hint_stream = hint_stream;
@@ -323,7 +323,7 @@ pub fn execute_with_limit<F: PrimeField32>(
 
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
-        memory.as_ptr(),
+        memory.as_mut_ptr(),
         deferral,
     );
     io_state.hint_stream = hint_stream;
@@ -383,7 +383,7 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
 
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
-        memory.as_ptr(),
+        memory.as_mut_ptr(),
         deferral,
     );
     io_state.hint_stream = hint_stream;
@@ -456,7 +456,7 @@ pub fn execute_metered<F: PrimeField32>(
 
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
-        memory.as_ptr(),
+        memory.as_mut_ptr(),
         deferral,
     );
     io_state.hint_stream = hint_stream;

@@ -253,7 +253,7 @@ pub(crate) fn copy_guest_memory_to_rvr_memory(
             .memory
             .get_u8_slice(RV32_MEMORY_AS, 0, memory_capacity)
     };
-    let dst = unsafe { std::slice::from_raw_parts_mut(rvr_memory.as_ptr(), rvr_memory.size()) };
+    let dst = unsafe { std::slice::from_raw_parts_mut(rvr_memory.as_mut_ptr(), rvr_memory.size()) };
     let len = std::cmp::min(dst.len(), source_memory.len());
     dst[..len].copy_from_slice(&source_memory[..len]);
 }

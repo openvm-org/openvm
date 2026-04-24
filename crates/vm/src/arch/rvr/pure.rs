@@ -112,7 +112,7 @@ where
             None => state.suspender.disable(),
         }
 
-        let mut io_state = build_io_state(input_stream, memory.as_ptr(), Default::default());
+        let mut io_state = build_io_state(input_stream, memory.as_mut_ptr(), Default::default());
         io_state.hint_stream = hint_stream;
         io_state.hint_pos = 0;
         io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
