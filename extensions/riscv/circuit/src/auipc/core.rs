@@ -26,8 +26,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    RV64_WORD_NUM_LIMBS,
+    expand_to_rv64_register, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS,
+    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -169,13 +169,7 @@ where
                 acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
             });
 
-        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                rd_data[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let write_data = expand_to_rv64_register(&rd_data);
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
         AdapterAirContext {
             to_pc: None,

@@ -14,7 +14,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_riscv_circuit::adapters::rv64_register_to_u32;
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
@@ -157,12 +157,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &XorinPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let buffer_u32 =
-        rv64_register_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-    let input_u32 =
-        rv64_register_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32));
-    let length_u32 =
-        rv64_register_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32));
+    let buffer_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
+    let input_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32));
+    let length_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32));
     debug_assert!(
         (length_u32 as usize).is_multiple_of(DEFAULT_BLOCK_SIZE),
         "xorin length must be {}-byte aligned",

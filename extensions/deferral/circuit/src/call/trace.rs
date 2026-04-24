@@ -25,7 +25,7 @@ use openvm_instructions::{
         RV64_WORD_NUM_LIMBS,
     },
 };
-use openvm_riscv_circuit::adapters::{tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -289,11 +289,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             a.as_canonical_u32(),
             &mut record.rd_aux.prev_timestamp,
         );
-        debug_assert_eq!(
-            rd_bytes[RV64_WORD_NUM_LIMBS..],
-            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
-        );
-        record.rd_val = u32::from_le_bytes(rd_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+        record.rd_val = rv64_bytes_to_u32(rd_bytes);
 
         let rs_bytes: [u8; RV64_REGISTER_NUM_LIMBS] = tracing_read(
             memory,
@@ -301,11 +297,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             b.as_canonical_u32(),
             &mut record.rs_aux.prev_timestamp,
         );
-        debug_assert_eq!(
-            rs_bytes[RV64_WORD_NUM_LIMBS..],
-            [0u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS]
-        );
-        record.rs_val = u32::from_le_bytes(rs_bytes[..RV64_WORD_NUM_LIMBS].try_into().unwrap());
+        record.rs_val = rv64_bytes_to_u32(rs_bytes);
 
         let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
             tracing_read(
