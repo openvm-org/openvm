@@ -1,4 +1,4 @@
-#[cfg(feature = "aot")]
+#[cfg(any(feature = "aot", feature = "rvr"))]
 use std::{collections::HashMap, sync::Arc};
 use std::{
     collections::HashSet,
@@ -19,6 +19,11 @@ use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::execution_mode::{ExecutionCtx, MeteredCtx};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::{
+    execution_mode::MeteredCtx,
+    rvr::{RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance},
+};
 use openvm_circuit::{
     arch::{execution_mode::MeteredCostCtx, instructions::exe::VmExe, *},
     derive::VmConfig,
@@ -81,6 +86,20 @@ static AOT_CACHE: OnceLock<Mutex<HashMap<String, Arc<AotInstance<BabyBear, Execu
 static METERED_AOT_CACHE: OnceLock<
     Mutex<HashMap<String, Arc<(AotInstance<BabyBear, MeteredCtx>, MeteredCtx)>>>,
 > = OnceLock::new();
+#[cfg(feature = "rvr")]
+type BenchExecutor = <ExecuteConfig as VmExecutionConfig<BabyBear>>::Executor;
+#[cfg(feature = "rvr")]
+type RvrMetered = (RvrMeteredInstance<BabyBear, BenchExecutor>, MeteredCtx);
+#[cfg(feature = "rvr")]
+type RvrMeteredCost = RvrMeteredCostInstance<BabyBear, BenchExecutor>;
+#[cfg(feature = "rvr")]
+static RVR_CACHE: OnceLock<Mutex<HashMap<String, Arc<RvrPureInstance<BabyBear>>>>> =
+    OnceLock::new();
+#[cfg(feature = "rvr")]
+static METERED_RVR_CACHE: OnceLock<Mutex<HashMap<String, Arc<RvrMetered>>>> = OnceLock::new();
+#[cfg(feature = "rvr")]
+static METERED_COST_RVR_CACHE: OnceLock<Mutex<HashMap<String, Arc<RvrMeteredCost>>>> =
+    OnceLock::new();
 
 fn report_program_success(mode: &str, program: &str) {
     let successes = SUCCESSFUL_EXECUTIONS.get_or_init(|| Mutex::new(HashSet::new()));
@@ -303,7 +322,23 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
             });
     }
 
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(feature = "rvr", not(feature = "aot")))]
+    {
+        let program_name = program.to_string();
+        let rvr_instance = create_rvr_instance(&program_name);
+        bencher
+            .with_inputs(Vec::<Vec<BabyBear>>::new)
+            .bench_values(|input| {
+                expect_execution(
+                    rvr_instance.execute(input, None),
+                    "RVR benchmark",
+                    program,
+                    "Failed to execute program in RVR mode",
+                );
+            });
+    }
+
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     {
         bencher
             .with_inputs(|| {
@@ -336,6 +371,85 @@ fn create_aot_instance(program: &str) -> Arc<AotInstance<BabyBear, ExecutionCtx>
                 executor().instance(&exe).unwrap_or_else(|err| {
                     panic!("Failed to create AOT instance for {program}: {err}")
                 }),
+            )
+        })
+        .clone()
+}
+
+#[cfg(feature = "rvr")]
+fn create_rvr_instance(program: &str) -> Arc<RvrPureInstance<BabyBear>> {
+    let cache = RVR_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap();
+    cache
+        .entry(program.to_string())
+        .or_insert_with(|| {
+            let exe = load_program_executable(program)
+                .expect("Failed to load program executable for RVR cache");
+            let config = ExecuteConfig::default();
+            let engine = Engine::new(SystemParams::new_for_testing(21));
+            let pk = vm_proving_key();
+            let d_pk = engine.device().transport_pk_to_device(pk);
+            let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk)
+                .expect("Failed to create VM for RVR setup");
+            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+            Arc::new(
+                executor()
+                    .instance(&exe, &executor_idx_to_air_idx)
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to create RVR instance for {program}: {err}")
+                    }),
+            )
+        })
+        .clone()
+}
+
+#[cfg(feature = "rvr")]
+fn create_metered_rvr_instance(
+    program: &str,
+) -> Arc<(RvrMeteredInstance<BabyBear, BenchExecutor>, MeteredCtx)> {
+    let cache = METERED_RVR_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap();
+    cache
+        .entry(program.to_string())
+        .or_insert_with(|| {
+            let exe = load_program_executable(program)
+                .expect("Failed to load program executable for metered RVR cache");
+            let config = ExecuteConfig::default();
+            let engine = Engine::new(SystemParams::new_for_testing(21));
+            let pk = vm_proving_key();
+            let d_pk = engine.device().transport_pk_to_device(pk);
+            let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk)
+                .expect("Failed to create VM for metered RVR setup");
+            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+            let ctx = vm.build_metered_ctx(&exe);
+            let instance = executor()
+                .metered_instance(&exe, &executor_idx_to_air_idx)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to create metered RVR instance for {program}: {err}")
+                });
+            Arc::new((instance, ctx))
+        })
+        .clone()
+}
+
+#[cfg(feature = "rvr")]
+fn create_metered_cost_rvr_instance(
+    program: &str,
+) -> Arc<RvrMeteredCostInstance<BabyBear, BenchExecutor>> {
+    let cache = METERED_COST_RVR_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap();
+    cache
+        .entry(program.to_string())
+        .or_insert_with(|| {
+            let exe = load_program_executable(program)
+                .expect("Failed to load program executable for metered cost RVR cache");
+            let (_, executor_idx_to_air_idx) = metered_cost_setup();
+            Arc::new(
+                executor()
+                    .metered_cost_instance(&exe, executor_idx_to_air_idx)
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to create metered cost RVR instance for {program}: {err}")
+                    }),
             )
         })
         .clone()
@@ -389,7 +503,23 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             });
     }
 
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(feature = "rvr", not(feature = "aot")))]
+    {
+        let program_name = program.to_string();
+        let metered = create_metered_rvr_instance(&program_name);
+        bencher
+            .with_inputs(Vec::<Vec<BabyBear>>::new)
+            .bench_values(|input| {
+                expect_execution(
+                    metered.0.execute_metered(input, metered.1.clone()),
+                    "metered RVR benchmark",
+                    program,
+                    "Failed to execute program in metered RVR mode",
+                );
+            });
+    }
+
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     {
         bencher
             .with_inputs(|| {
@@ -421,21 +551,42 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
 
 #[divan::bench(ignore = true, args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
-    bencher
-        .with_inputs(|| {
-            let exe = load_program_executable(program).expect("Failed to load program executable");
-            let (ctx, executor_idx_to_air_idx) = metered_cost_setup();
-            let interpreter = executor()
-                .metered_cost_instance(&exe, executor_idx_to_air_idx)
-                .unwrap();
-            (interpreter, vec![], ctx.clone())
-        })
-        .bench_values(|(interpreter, input, ctx)| {
-            expect_execution(
-                interpreter.execute_metered_cost(input, ctx),
-                "metered cost benchmark",
-                program,
-                "Failed to execute program with metered cost",
-            );
-        });
+    #[cfg(feature = "rvr")]
+    {
+        let program_name = program.to_string();
+        let metered_cost = create_metered_cost_rvr_instance(&program_name);
+        let (ctx, _) = metered_cost_setup();
+        bencher
+            .with_inputs(Vec::<Vec<BabyBear>>::new)
+            .bench_values(|input| {
+                expect_execution(
+                    metered_cost.execute_metered_cost(input, ctx.clone()),
+                    "metered cost RVR benchmark",
+                    program,
+                    "Failed to execute program with metered cost in RVR mode",
+                );
+            });
+    }
+
+    #[cfg(not(feature = "rvr"))]
+    {
+        bencher
+            .with_inputs(|| {
+                let exe =
+                    load_program_executable(program).expect("Failed to load program executable");
+                let (ctx, executor_idx_to_air_idx) = metered_cost_setup();
+                let interpreter = executor()
+                    .metered_cost_instance(&exe, executor_idx_to_air_idx)
+                    .unwrap();
+                (interpreter, vec![], ctx.clone())
+            })
+            .bench_values(|(interpreter, input, ctx)| {
+                expect_execution(
+                    interpreter.execute_metered_cost(input, ctx),
+                    "metered cost benchmark",
+                    program,
+                    "Failed to execute program with metered cost",
+                );
+            });
+    }
 }
