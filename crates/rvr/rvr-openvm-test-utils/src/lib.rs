@@ -247,7 +247,8 @@ where
         } else {
             rvr_openvm::compile_with_extensions(exe, &self.extensions)?
         };
-        let rvr_result = rvr_openvm::execute(&compiled, exe, input_stream, Default::default())?;
+        let rvr_result =
+            rvr_openvm::execute(&compiled, exe, input_stream, Vec::new(), Default::default())?;
 
         // Compare PC + registers
         assert_eq!(
@@ -303,6 +304,7 @@ where
             &compiled,
             exe,
             VecDeque::from(input),
+            Vec::new(),
             metered_cost_config,
             Default::default(),
         )?;
@@ -372,6 +374,7 @@ where
             &compiled,
             exe,
             VecDeque::from(input),
+            Vec::new(),
             trace_config,
             Default::default(),
         )?;

@@ -214,6 +214,7 @@ pub fn execute<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
+    hint_stream: Vec<u8>,
     deferral: DeferralData,
 ) -> Result<RvrExecutionResult, ExecuteError> {
     let mut memory = GuardedMemory::new(MEM_SIZE)?;
@@ -226,6 +227,8 @@ pub fn execute<F: PrimeField32>(
         memory.as_ptr(),
         deferral,
     );
+    io_state.hint_stream = hint_stream;
+    io_state.hint_pos = 0;
     let callbacks = build_callbacks(&mut io_state);
     // SAFETY: state pointer is valid and matches the tracer variant.
     unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
@@ -253,6 +256,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
+    hint_stream: Vec<u8>,
     metered_cost_config: MeteredCostConfig,
     deferral: DeferralData,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
@@ -271,6 +275,8 @@ pub fn execute_metered_cost<F: PrimeField32>(
         memory.as_ptr(),
         deferral,
     );
+    io_state.hint_stream = hint_stream;
+    io_state.hint_pos = 0;
     let callbacks = build_callbacks(&mut io_state);
     // SAFETY: state pointer is valid and matches the tracer variant.
     unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
@@ -305,6 +311,7 @@ pub fn execute_with_limit<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
+    hint_stream: Vec<u8>,
     instruction_limit: u64,
     deferral: DeferralData,
 ) -> Result<RvrLimitedResult, ExecuteError> {
@@ -319,6 +326,8 @@ pub fn execute_with_limit<F: PrimeField32>(
         memory.as_ptr(),
         deferral,
     );
+    io_state.hint_stream = hint_stream;
+    io_state.hint_pos = 0;
     let callbacks = build_callbacks(&mut io_state);
     // SAFETY: state pointer is valid and matches the tracer variant.
     unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
@@ -356,6 +365,7 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
+    hint_stream: Vec<u8>,
     metered_cost_config: MeteredCostConfig,
     instruction_limit: u64,
     deferral: DeferralData,
@@ -376,6 +386,8 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
         memory.as_ptr(),
         deferral,
     );
+    io_state.hint_stream = hint_stream;
+    io_state.hint_pos = 0;
     let callbacks = build_callbacks(&mut io_state);
     // SAFETY: state pointer is valid and matches the tracer variant.
     unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
@@ -416,6 +428,7 @@ pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
+    hint_stream: Vec<u8>,
     trace_config: MeteredConfig,
     deferral: DeferralData,
 ) -> Result<RvrMeteredResult, ExecuteError> {
@@ -446,6 +459,8 @@ pub fn execute_metered<F: PrimeField32>(
         memory.as_ptr(),
         deferral,
     );
+    io_state.hint_stream = hint_stream;
+    io_state.hint_pos = 0;
     let callbacks = build_callbacks(&mut io_state);
     // SAFETY: state pointer is valid and matches the tracer variant.
     unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;

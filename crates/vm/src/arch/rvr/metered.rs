@@ -728,6 +728,12 @@ where
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let inputs = inputs.into();
+        let input_stream = inputs.input_stream;
+        let hint_stream: Vec<u8> = inputs
+            .hint_stream
+            .into_iter()
+            .map(|f| f.as_canonical_u32() as u8)
+            .collect();
 
         let constant_trace_heights: Vec<Option<usize>> = ctx
             .trace_heights
@@ -762,7 +768,8 @@ where
         let metered_result = execute_metered(
             &compiled_metered,
             self.exe.as_ref(),
-            inputs.input_stream,
+            input_stream,
+            hint_stream,
             trace_config,
             Default::default(),
         )

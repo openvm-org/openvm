@@ -215,6 +215,13 @@ where
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         let inputs = inputs.into();
+        let input_stream = inputs.input_stream;
+        let hint_stream: Vec<u8> = inputs
+            .hint_stream
+            .into_iter()
+            .map(|f| f.as_canonical_u32() as u8)
+            .collect();
+
         let metered_cost_config = build_metered_cost_config(
             self.exe.as_ref(),
             self.inventory.as_ref(),
@@ -234,7 +241,8 @@ where
         let result = execute_metered_cost(
             &compiled,
             self.exe.as_ref(),
-            inputs.input_stream,
+            input_stream,
+            hint_stream,
             metered_cost_config,
             Default::default(),
         )

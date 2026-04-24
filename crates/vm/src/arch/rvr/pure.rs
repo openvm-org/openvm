@@ -39,12 +39,18 @@ where
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let inputs = inputs.into();
         let input_stream = inputs.input_stream;
+        let hint_stream: Vec<u8> = inputs
+            .hint_stream
+            .into_iter()
+            .map(|f| f.as_canonical_u32() as u8)
+            .collect();
 
         if let Some(limit) = num_insns {
             let result = execute_with_limit(
                 &self.compiled,
                 self.exe.as_ref(),
                 input_stream,
+                hint_stream,
                 limit,
                 Default::default(),
             )
@@ -63,6 +69,7 @@ where
             &self.compiled,
             self.exe.as_ref(),
             input_stream,
+            hint_stream,
             Default::default(),
         )
         .map_err(map_rvr_execute_error)?;
