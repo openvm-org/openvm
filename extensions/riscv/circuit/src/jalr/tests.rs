@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerChip,
 };
 #[cfg(feature = "aot")]
-use openvm_instructions::{exe::VmExe, program::Program, riscv::RV32_REGISTER_AS, SystemOpcode};
+use openvm_instructions::{exe::VmExe, program::Program, riscv::RV64_REGISTER_AS, SystemOpcode};
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 #[cfg(feature = "aot")]
 use openvm_riscv_transpiler::BaseAluOpcode::ADD;
@@ -35,7 +35,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32JalrAdapterRecord, Rv32JalrChipGpu, Rv32JalrCoreRecord},
+    crate::{adapters::Rv64JalrAdapterRecord, Rv64JalrChipGpu, Rv64JalrCoreRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -615,7 +615,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
     u32::from_le_bytes(bytes)
 }
 
@@ -624,10 +624,10 @@ fn read_register(state: &VmState<F>, offset: usize) -> u32 {
 fn test_jalr_aot_jump_forward() {
     eprintln!("test_jalr_aot_jump_forward called");
     let instructions = vec![
-        Instruction::from_usize(ADD.global_opcode(), [4, 0, 8, RV32_REGISTER_AS as usize, 0]),
+        Instruction::from_usize(ADD.global_opcode(), [4, 0, 8, RV64_REGISTER_AS as usize, 0]),
         Instruction::from_usize(
             JALR.global_opcode(),
-            [0, 4, 0, RV32_REGISTER_AS as usize, 0, 0, 0],
+            [0, 4, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
         ),
         Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
@@ -650,11 +650,11 @@ fn test_jalr_aot_writes_return_address() {
     let instructions = vec![
         Instruction::from_usize(
             ADD.global_opcode(),
-            [4, 0, 12, RV32_REGISTER_AS as usize, 0],
+            [4, 0, 12, RV64_REGISTER_AS as usize, 0],
         ),
         Instruction::from_usize(
             JALR.global_opcode(),
-            [12, 4, 0xfffc, RV32_REGISTER_AS as usize, 0, 1, 1],
+            [12, 4, 0xfffc, RV64_REGISTER_AS as usize, 0, 1, 1],
         ),
         Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
@@ -683,13 +683,13 @@ fn test_jalr_aot_writes_return_address() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChipGpu, Rv32JalrChip<F>>;
+    GpuTestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChipGpu, Rv64JalrChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -701,7 +701,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32JalrChipGpu::new(
+    let gpu_chip = Rv64JalrChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -734,13 +734,13 @@ fn test_cuda_rand_jalr_tracegen() {
         );
     }
 
-    type Record<'a> = (&'a mut Rv32JalrAdapterRecord, &'a mut Rv32JalrCoreRecord);
+    type Record<'a> = (&'a mut Rv64JalrAdapterRecord, &'a mut Rv64JalrCoreRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32JalrAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new(),
         );
 
     tester

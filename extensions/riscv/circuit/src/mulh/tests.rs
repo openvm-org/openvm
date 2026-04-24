@@ -35,7 +35,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{
     exe::VmExe,
     program::Program,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
     SystemOpcode,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -64,7 +64,7 @@ use rand::Rng;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32MultAdapterRecord, MulHCoreRecord, Rv32MulHChipGpu},
+    crate::{adapters::Rv64MultAdapterRecord, MulHCoreRecord, Rv64MulHChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -598,7 +598,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
     u32::from_le_bytes(bytes)
 }
 
@@ -610,8 +610,8 @@ fn add_immediate(rd: usize, imm: u32) -> Instruction<F> {
             rd,
             0,
             imm as usize,
-            RV32_REGISTER_AS as usize,
-            RV32_IMM_AS as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
         ],
     )
 }
@@ -624,8 +624,8 @@ fn mulh_register(op: MulHOpcode, rd: usize, rs1: usize, rs2: usize) -> Instructi
             rd,
             rs1,
             rs2,
-            RV32_REGISTER_AS as usize,
-            RV32_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
         ],
     )
 }
@@ -763,14 +763,14 @@ fn test_aot_mulh_randomized() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv32MulHExecutor, Rv32MulHAir, Rv32MulHChipGpu, Rv32MulHChip<F>>;
+    GpuTestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulHChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_tuple_chip =
@@ -783,7 +783,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32MulHChipGpu::new(
+    let gpu_chip = Rv64MulHChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
@@ -821,8 +821,8 @@ fn test_cuda_rand_mulh_tracegen(opcode: MulHOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv32MultAdapterRecord,
-        &'a mut MulHCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+        &'a mut Rv64MultAdapterRecord,
+        &'a mut MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
     );
 
     harness
@@ -830,7 +830,7 @@ fn test_cuda_rand_mulh_tracegen(opcode: MulHOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
         );
 
     tester

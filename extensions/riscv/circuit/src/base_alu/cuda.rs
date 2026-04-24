@@ -11,24 +11,24 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     cuda_abi::alu_cuda::tracegen,
     BaseAluCoreCols, BaseAluCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv32BaseAluChipGpu {
+pub struct Rv64BaseAluChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32BaseAluChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64BaseAluChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv32BaseAluAdapterRecord,
-            BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+            Rv64BaseAluAdapterRecord,
+            BaseAluCoreRecord<RV64_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -36,8 +36,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BaseAluChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = BaseAluCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width()
-            + Rv32BaseAluAdapterCols::<F>::width();
+        let trace_width = BaseAluCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>::width()
+            + Rv64BaseAluAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -52,7 +52,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BaseAluChipGpu {
                 &self.range_checker.count,
                 self.range_checker.count.len(),
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
+                RV64_CELL_BITS,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
