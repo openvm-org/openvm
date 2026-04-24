@@ -20,8 +20,6 @@ use openvm_stark_backend::{
 };
 use strum::IntoEnumIterator;
 
-use crate::adapters::debug_assert_valid_pc_target;
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct BranchLessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -248,9 +246,7 @@ where
         core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
 
         if run_cmp::<NUM_LIMBS, LIMB_BITS>(core_record.local_opcode, &rs1, &rs2).0 {
-            let to_pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
-            debug_assert_valid_pc_target(to_pc);
-            *state.pc = to_pc;
+            *state.pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         }

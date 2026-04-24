@@ -7,13 +7,13 @@ use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
-    program::DEFAULT_PC_STEP,
+    program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv64JalrExecutor;
-use crate::adapters::{debug_assert_valid_pc_target, rv64_bytes_to_u32};
+use crate::adapters::rv64_bytes_to_u32;
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -213,7 +213,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     let rs1 = rv64_bytes_to_u32(rs1);
     let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
     let to_pc = to_pc - (to_pc & 1);
-    debug_assert_valid_pc_target(to_pc);
+    debug_assert!(to_pc < (1 << PC_BITS));
     let mut rd = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd[..4].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
 

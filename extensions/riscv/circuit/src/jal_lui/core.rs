@@ -22,8 +22,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    debug_assert_valid_pc_target, Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller,
-    RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
+    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV64_CELL_BITS,
+    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
 };
 
 #[repr(C)]
@@ -279,9 +279,8 @@ pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u8; RV64_RE
         let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
         rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
         let next_pc = pc as i32 + imm;
-        let next_pc = next_pc as u32;
-        debug_assert_valid_pc_target(next_pc);
-        (next_pc, rd_data)
+        debug_assert!(next_pc >= 0);
+        (next_pc as u32, rd_data)
     } else {
         let imm = imm as u32;
         let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];

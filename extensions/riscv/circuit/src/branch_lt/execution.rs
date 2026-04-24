@@ -12,7 +12,6 @@ use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BranchLessThanExecutor;
-use crate::adapters::debug_assert_valid_pc_target;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -159,7 +158,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
     let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
     if jmp {
         pc = (pc as isize + pre_compute.imm) as u32;
-        debug_assert_valid_pc_target(pc);
     } else {
         pc = pc.wrapping_add(DEFAULT_PC_STEP);
     };

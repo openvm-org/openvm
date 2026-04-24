@@ -27,9 +27,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    debug_assert_valid_pc_target, expand_to_rv64_register, rv64_bytes_to_u32,
-    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    RV64_WORD_NUM_LIMBS,
+    expand_to_rv64_register, rv64_bytes_to_u32, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
+    RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -333,7 +332,7 @@ pub(super) fn run_jalr(
     imm_sign: bool,
 ) -> (u32, [u8; RV64_REGISTER_NUM_LIMBS]) {
     let to_pc = rs1.wrapping_add(imm as u32 + (imm_sign as u32 * 0xffff0000));
-    debug_assert_valid_pc_target(to_pc);
+    assert!(to_pc < (1 << PC_BITS));
 
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());

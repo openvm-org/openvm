@@ -8,7 +8,6 @@ use openvm_circuit::{
     },
 };
 use openvm_instructions::{
-    program::MAX_ALLOWED_PC,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
 };
@@ -46,14 +45,6 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
-
-#[inline(always)]
-pub fn debug_assert_valid_pc_target(to_pc: u32) {
-    debug_assert!(
-        to_pc <= MAX_ALLOWED_PC,
-        "PC target 0x{to_pc:08x} exceeds maximum PC 0x{MAX_ALLOWED_PC:08x}"
-    );
-}
 
 /// Convert the RISC-V register data (64 bits represented as 8 bytes, where each byte is represented
 /// as a field element) back into its value as u64.

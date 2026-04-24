@@ -16,8 +16,6 @@ use openvm_stark_backend::{
 };
 use strum::IntoEnumIterator;
 
-use crate::adapters::debug_assert_valid_pc_target;
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
@@ -196,9 +194,7 @@ where
         core_record.local_opcode = branch_eq_opcode as u8;
 
         if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {
-            let to_pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
-            debug_assert_valid_pc_target(to_pc);
-            *state.pc = to_pc;
+            *state.pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
