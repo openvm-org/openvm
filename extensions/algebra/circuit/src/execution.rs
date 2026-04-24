@@ -16,6 +16,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::FieldExprVecHeapExecutor;
@@ -390,14 +391,9 @@ unsafe fn execute_e12_impl<
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs_vals = pre_compute.rs_addrs.map(|addr| {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, addr as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    });
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
@@ -410,14 +406,7 @@ unsafe fn execute_e12_impl<
         field_operation::<FIELD_TYPE, BLOCKS, BLOCK_SIZE, OP>(read_data)
     };
 
-    let rd_val = {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    };
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     for (i, block) in output_data.into_iter().enumerate() {
@@ -438,14 +427,9 @@ unsafe fn execute_e12_generic_impl<
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs_vals = pre_compute.rs_addrs.map(|addr| {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, addr as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    });
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
@@ -459,14 +443,7 @@ unsafe fn execute_e12_generic_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val = {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    };
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
@@ -491,14 +468,9 @@ unsafe fn execute_e12_setup_impl<
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     // Read the first input (which should be the prime)
-    let rs_vals = pre_compute.rs_addrs.map(|addr| {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, addr as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    });
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
         from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
@@ -527,14 +499,7 @@ unsafe fn execute_e12_setup_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val = {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    };
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
