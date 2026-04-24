@@ -116,13 +116,13 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-codec-derive = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
+openvm-codec-derive = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
+openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/halo2-gpu", default-features = false }
 
 # OpenVM
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
@@ -279,7 +279,9 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 ignored = ["cargo-openvm"]
 
 # Point halo2-base / halo2-ecc at the GPU fork of halo2-axiom (halo2-gpu)
-# so the CUDA prover path is exercised. Pinned by rev for reproducibility;
-# bump when halo2-gpu advances. Tracking INT-6841.
+# so the CUDA prover path is exercised. Tracks the Phase 1 cuda-common
+# migration branch; once that work merges back into halo2-gpu's main
+# line, switch this to a stable branch or pinned rev. Tracking INT-6841
+# / INT-7555.
 [patch.crates-io]
-halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", rev = "22d2b9f33b8d690e9eb891423191d56fe177496c" }
+halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", branch = "feat/cuda-common-bn254" }
