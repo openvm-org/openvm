@@ -16,8 +16,8 @@ struct LessThanResult {
 template <size_t NUM_LIMBS>
 __forceinline__ __device__ LessThanResult
 run_less_than(bool is_slt, const uint8_t x[NUM_LIMBS], const uint8_t y[NUM_LIMBS]) {
-    bool x_sign = ((x[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) == 1) && is_slt;
-    bool y_sign = ((y[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) == 1) && is_slt;
+    bool x_sign = ((x[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) == 1) && is_slt;
+    bool y_sign = ((y[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) == 1) && is_slt;
 
 #pragma unroll
     for (int i = NUM_LIMBS - 1; i >= 0; i--) {
@@ -71,16 +71,16 @@ template <size_t NUM_LIMBS> struct LessThanCore {
         uint8_t c_raw_msb = record.c[NUM_LIMBS - 1];
 
         uint32_t b_msb_f =
-            b_sign ? (Fp::P - ((1u << RV32_CELL_BITS) - b_raw_msb)) : uint32_t(b_raw_msb);
+            b_sign ? (Fp::P - ((1u << RV64_CELL_BITS) - b_raw_msb)) : uint32_t(b_raw_msb);
         uint32_t c_msb_f =
-            c_sign ? (Fp::P - ((1u << RV32_CELL_BITS) - c_raw_msb)) : uint32_t(c_raw_msb);
+            c_sign ? (Fp::P - ((1u << RV64_CELL_BITS) - c_raw_msb)) : uint32_t(c_raw_msb);
 
         uint8_t b_msb_range =
-            b_sign ? uint8_t(b_raw_msb - (1u << (RV32_CELL_BITS - 1)))
-                   : uint8_t(b_raw_msb + ((is_slt ? 1u : 0u) << (RV32_CELL_BITS - 1)));
+            b_sign ? uint8_t(b_raw_msb - (1u << (RV64_CELL_BITS - 1)))
+                   : uint8_t(b_raw_msb + ((is_slt ? 1u : 0u) << (RV64_CELL_BITS - 1)));
         uint8_t c_msb_range =
-            c_sign ? uint8_t(c_raw_msb - (1u << (RV32_CELL_BITS - 1)))
-                   : uint8_t(c_raw_msb + ((is_slt ? 1u : 0u) << (RV32_CELL_BITS - 1)));
+            c_sign ? uint8_t(c_raw_msb - (1u << (RV64_CELL_BITS - 1)))
+                   : uint8_t(c_raw_msb + ((is_slt ? 1u : 0u) << (RV64_CELL_BITS - 1)));
 
         uint32_t diff_val = 0;
         if (diff_idx == NUM_LIMBS) {

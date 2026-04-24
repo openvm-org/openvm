@@ -86,9 +86,19 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // - For JAL, enforce rd[3] < 64 by range checking 4 * rd[3].
-        // - For LUI, enforce sign-extension selector from the top bit of rd[3]: 2 * rd[3] - 256 *
-        //   is_sign_extend must be in [0, 255].
+        // Pack two range checks into a single bitwise-bus send; both values are constrained to
+        // [0, 2^RV64_CELL_BITS) and the send is gated by `is_valid`.
+        //
+        // 1. First value `rd[3] * (4 * is_jal + is_lui)`:
+        //    - JAL: becomes `4 * rd[3]`, so the range check forces `rd[3] < 64`. Combined with
+        //      the PC composition below, this bounds `from_pc + DEFAULT_PC_STEP < 2^30`.
+        //    - LUI: becomes `rd[3]`, which is already a byte — no extra constraint.
+        //
+        // 2. Second value `2 * rd[3] - 2^RV64_CELL_BITS * is_sign_extend`:
+        //    Forces `is_sign_extend = msb(rd[3])`:
+        //      - is_sign_extend = 0 ⟹ rd[3] ∈ [0, 128)  (top bit 0)
+        //      - is_sign_extend = 1 ⟹ rd[3] ∈ [128, 256) (top bit 1)
+        //    This ties the upper-limb sign extension below to the actual sign of rd[3].
         self.bus
             .send_range(
                 rd[3] * (AB::Expr::from_u32(4) * is_jal + is_lui),
