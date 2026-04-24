@@ -8,6 +8,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{Sha2Config, Sha2VmExecutor, SHA2_READ_SIZE};
@@ -114,27 +115,9 @@ unsafe fn execute_e12_impl<
     let input: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
     // Pointers are 32-bit-addressable; upper 4 bytes of each register must be zero.
-    let dst_u64 = u64::from_le_bytes(dst);
-    let state_u64 = u64::from_le_bytes(state);
-    let input_u64 = u64::from_le_bytes(input);
-    debug_assert_eq!(
-        dst_u64 >> 32,
-        0,
-        "sha2 dst pointer upper 4 bytes must be zero"
-    );
-    debug_assert_eq!(
-        state_u64 >> 32,
-        0,
-        "sha2 state pointer upper 4 bytes must be zero"
-    );
-    debug_assert_eq!(
-        input_u64 >> 32,
-        0,
-        "sha2 input pointer upper 4 bytes must be zero"
-    );
-    let dst_u32 = dst_u64 as u32;
-    let state_u32 = state_u64 as u32;
-    let input_u32 = input_u64 as u32;
+    let dst_u32 = rv64_bytes_to_u32(dst);
+    let state_u32 = rv64_bytes_to_u32(state);
+    let input_u32 = rv64_bytes_to_u32(input);
 
     // state is in 4-byte little-endian words
     let mut state_data = Vec::with_capacity(C::STATE_BYTES);

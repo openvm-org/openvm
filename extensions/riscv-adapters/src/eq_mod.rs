@@ -29,7 +29,8 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    tracing_read, tracing_write, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    abstract_compose, expand_to_rv64_register, tracing_read, tracing_write, RV64_CELL_BITS,
+    RV64_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -37,13 +38,12 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use crate::helpers::{compose_ptr, pad_reg_val, tracing_read_reg_ptr};
+use crate::helpers::tracing_read_reg_ptr;
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap,
-///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap.
 /// * Writes are to 64-bit register rd (8 bytes).
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -134,7 +134,7 @@ impl<
             self.memory_bridge
                 .read(
                     MemoryAddress::new(d, ptr),
-                    pad_reg_val::<AB>(val),
+                    expand_to_rv64_register(&val),
                     timestamp_pp(),
                     aux,
                 )
@@ -143,7 +143,7 @@ impl<
 
         // Compose the 4 materialized bytes of each register value into a single field element
         // used as the heap base address.
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose_ptr);
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
         let need_range_check: [_; 2] = from_fn(|i| {
             if i < NUM_READS {

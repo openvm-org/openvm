@@ -22,7 +22,7 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::{timed_write, tracing_read};
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, timed_write, tracing_read};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -143,7 +143,7 @@ where
             rd_ptr,
             &mut record.rd_aux.prev_timestamp,
         );
-        let buffer_ptr = u32::from_le_bytes(rd_val[..4].try_into().unwrap());
+        let buffer_ptr = rv64_bytes_to_u32(rd_val);
         record.buffer_ptr = buffer_ptr;
 
         let guest_mem = state.memory.data();

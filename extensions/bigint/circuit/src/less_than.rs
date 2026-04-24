@@ -12,7 +12,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::LessThanExecutor;
+use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, LessThanExecutor};
 use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -137,16 +137,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr =
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        u64::from_le_bytes(rs1_ptr) as u32,
-    );
-    let rs2 = read_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        u64::from_le_bytes(rs2_ptr) as u32,
-    );
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
     let cmp_result = if IS_U256 {
         common::u256_lt(rs1, rs2)
     } else {
@@ -154,12 +146,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     };
     let mut rd = [0u8; INT256_NUM_LIMBS];
     rd[0] = cmp_result as u8;
-    write_int256(
-        exec_state,
-        RV64_MEMORY_AS,
-        u64::from_le_bytes(rd_ptr) as u32,
-        &rd,
-    );
+    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

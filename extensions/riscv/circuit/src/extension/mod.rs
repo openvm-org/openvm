@@ -842,7 +842,9 @@ mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::StdRng, Rng};
 
-    use crate::adapters::{memory_read, read_rv64_register, RV64_REGISTER_NUM_LIMBS};
+    use crate::adapters::{
+        memory_read, read_rv64_register, read_rv64_register_as_u32, RV64_REGISTER_NUM_LIMBS,
+    };
 
     const HINT_DWORD_BYTES: usize = RV64_REGISTER_NUM_LIMBS;
 
@@ -917,8 +919,8 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = read_rv64_register(memory, a) as u32;
-            let rs1 = read_rv64_register(memory, b) as u32;
+            let rd = read_rv64_register_as_u32(memory, a);
+            let rs1 = read_rv64_register_as_u32(memory, b);
             let bytes = (0..rs1)
                 .map(|i| memory_read::<1>(memory, 2, rd + i)[0])
                 .collect::<Vec<u8>>();
