@@ -17,7 +17,7 @@ use crate::{
             read_public_values_from_guest_memory, read_rv32_regs_from_guest_memory, state_from_rvr,
             streams_from_io_state, streams_to_io_seed, write_rvr_memory_to_guest_memory,
         },
-        ExecutionError, StaticProgramError, Streams, SystemConfig, VmState,
+        ExecutionError, Streams, SystemConfig, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -96,11 +96,8 @@ where
         #[cfg(feature = "metrics")]
         let metrics = from_state.metrics;
 
-        let mut memory = GuardedMemory::new(MEM_SIZE).map_err(|err| {
-            ExecutionError::Static(StaticProgramError::FailToGenerateDynamicLibrary {
-                err: err.to_string(),
-            })
-        })?;
+        let mut memory = GuardedMemory::new(MEM_SIZE)
+            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
 
         let mut tracer_data = PureTracerData;
         let mut state = init_rvr_state(self.exe.as_ref(), &mut memory);

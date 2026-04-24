@@ -167,9 +167,7 @@ pub(crate) fn map_rvr_compile_error(err: rvr::CompileError) -> StaticProgramErro
 pub(crate) fn map_rvr_execute_error(err: rvr::ExecuteError) -> ExecutionError {
     match err {
         rvr::ExecuteError::GuestExit(code) => ExecutionError::FailedWithExitCode(code as u32),
-        other => ExecutionError::Static(StaticProgramError::FailToGenerateDynamicLibrary {
-            err: other.to_string(),
-        }),
+        other => ExecutionError::RvrExecution(other.to_string()),
     }
 }
 
@@ -331,13 +329,9 @@ pub(crate) fn ensure_rvr_outcome(
         }
         return Err(ExecutionError::FailedWithExitCode(guest_exit_code as u32));
     }
-    Err(ExecutionError::Static(
-        StaticProgramError::FailToGenerateDynamicLibrary {
-            err: format!(
-                "{context} failed: terminated={terminated}, suspended={suspended}, guest_exit_code={guest_exit_code}"
-            ),
-        },
-    ))
+    Err(ExecutionError::RvrExecution(format!(
+        "{context} failed: terminated={terminated}, suspended={suspended}, guest_exit_code={guest_exit_code}"
+    )))
 }
 
 /// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a

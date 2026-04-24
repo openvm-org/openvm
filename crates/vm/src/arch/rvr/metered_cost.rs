@@ -24,8 +24,7 @@ use crate::{
             read_rv32_regs_from_guest_memory, state_from_rvr, streams_from_io_state,
             streams_to_io_seed, write_rvr_memory_to_guest_memory,
         },
-        ExecutionError, ExecutorInventory, MeteredExecutor, StaticProgramError, Streams,
-        SystemConfig, VmState,
+        ExecutionError, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -292,11 +291,8 @@ where
         }
         .map_err(map_rvr_compile_error)?;
 
-        let mut memory = GuardedMemory::new(MEM_SIZE).map_err(|err| {
-            ExecutionError::Static(StaticProgramError::FailToGenerateDynamicLibrary {
-                err: err.to_string(),
-            })
-        })?;
+        let mut memory = GuardedMemory::new(MEM_SIZE)
+            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
         let mut tracer_data = MeteredCostData::default();
         let mut state = init_rvr_state_with_metered_cost(self.exe.as_ref(), &mut memory);
         state.tracer = MeteredCostMeter(&mut tracer_data);
