@@ -26,7 +26,7 @@ pub use openvm_algebra_guest as algebra;
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.
 /// These should **only** be importable on a host machine.
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
 pub mod halo2curves_shims;
 
 /// Traits for optimal Ate pairing check using intrinsic functions.

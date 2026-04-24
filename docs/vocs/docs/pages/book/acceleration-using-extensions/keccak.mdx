@@ -17,7 +17,7 @@ unsafe extern "C" {
 }
 
 fn keccak256(input: &[u8]) -> [u8; 32] {
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     {
         let mut output = [0u8; 32];
         unsafe {
@@ -25,7 +25,7 @@ fn keccak256(input: &[u8]) -> [u8; 32] {
         }
         output
     }
-    #[cfg(not(target_os = "zkvm"))] {
+    #[cfg(not(openvm_intrinsics))] {
         // Regular Keccak-256 implementation
     }
 }

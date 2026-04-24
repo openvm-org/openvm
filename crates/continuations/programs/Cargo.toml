@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-continuations-test-programs"
 version = "0.0.0"
@@ -13,6 +15,9 @@ openvm-deferral-guest = { path = "../../../extensions/deferral/guest", default-f
 [features]
 default = []
 std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
 
 [profile.release]
 panic = "abort"

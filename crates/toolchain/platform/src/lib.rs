@@ -8,6 +8,8 @@
 pub use openvm_custom_insn::{custom_insn_i, custom_insn_r};
 #[cfg(openvm_intrinsics)]
 pub mod alloc;
+#[cfg(openvm_intrinsics)]
+mod critical_section;
 #[cfg(all(feature = "rust-runtime", openvm_intrinsics))]
 pub mod heap;
 #[cfg(all(feature = "export-libm", openvm_intrinsics))]
