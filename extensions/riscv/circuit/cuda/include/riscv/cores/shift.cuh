@@ -25,7 +25,7 @@ template <typename T, size_t NUM_LIMBS> struct ShiftCoreCols {
     T bit_multiplier_right;
     T b_sign;
 
-    T bit_shift_marker[RV32_CELL_BITS];
+    T bit_shift_marker[RV64_CELL_BITS];
     T limb_shift_marker[NUM_LIMBS];
 
     T bit_shift_carry[NUM_LIMBS];
@@ -37,10 +37,10 @@ __forceinline__ __device__ void get_shift(
     size_t &limb_shift,
     size_t &bit_shift
 ) {
-    size_t max_bits = NUM_LIMBS * RV32_CELL_BITS;
+    size_t max_bits = NUM_LIMBS * RV64_CELL_BITS;
     size_t shift = y[0] % max_bits;
-    limb_shift = shift / RV32_CELL_BITS;
-    bit_shift = shift % RV32_CELL_BITS;
+    limb_shift = shift / RV64_CELL_BITS;
+    bit_shift = shift % RV64_CELL_BITS;
 }
 
 template <size_t NUM_LIMBS>
@@ -62,11 +62,11 @@ __forceinline__ __device__ void run_shift_left(
     for (size_t i = limb_shift; i < NUM_LIMBS; i++) {
         if (i > limb_shift) {
             uint16_t high = (uint16_t)x[i - limb_shift] << bit_shift;
-            uint16_t low = (uint16_t)x[i - limb_shift - 1] >> (RV32_CELL_BITS - bit_shift);
-            result[i] = (high | low) % (1u << RV32_CELL_BITS);
+            uint16_t low = (uint16_t)x[i - limb_shift - 1] >> (RV64_CELL_BITS - bit_shift);
+            result[i] = (high | low) % (1u << RV64_CELL_BITS);
         } else {
             uint16_t high = (uint16_t)x[i - limb_shift] << bit_shift;
-            result[i] = high % (1u << RV32_CELL_BITS);
+            result[i] = high % (1u << RV64_CELL_BITS);
         }
     }
 }
@@ -80,8 +80,8 @@ __forceinline__ __device__ void run_shift_right(
     size_t &bit_shift,
     bool logical
 ) {
-    uint8_t msb = x[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1);
-    uint8_t fill = logical ? 0u : ((1u << RV32_CELL_BITS) - 1u) * msb;
+    uint8_t msb = x[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1);
+    uint8_t fill = logical ? 0u : ((1u << RV64_CELL_BITS) - 1u) * msb;
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
         result[i] = fill;
@@ -92,8 +92,8 @@ __forceinline__ __device__ void run_shift_right(
     for (size_t i = 0; i < limit; i++) {
         uint16_t part1 = (uint16_t)(x[i + limb_shift] >> bit_shift);
         uint16_t part2_val = (i + limb_shift + 1 < NUM_LIMBS) ? x[i + limb_shift + 1] : fill;
-        uint16_t part2 = (uint16_t)part2_val << (RV32_CELL_BITS - bit_shift);
-        result[i] = (part1 | part2) % (1u << RV32_CELL_BITS);
+        uint16_t part2 = (uint16_t)part2_val << (RV64_CELL_BITS - bit_shift);
+        result[i] = (part1 | part2) % (1u << RV64_CELL_BITS);
     }
 }
 
@@ -124,16 +124,16 @@ template <size_t NUM_LIMBS> struct ShiftCore {
             bitwise_lookup.add_range(a[i], a[i + 1]);
         }
 
-        size_t combined_bits = NUM_LIMBS * RV32_CELL_BITS;
+        size_t combined_bits = NUM_LIMBS * RV64_CELL_BITS;
         size_t num_bits_log = 0;
         while ((1u << num_bits_log) < combined_bits) {
             ++num_bits_log;
         }
         range_checker.add_count(
             ((uint32_t)record.c[0] - (uint32_t)bit_shift -
-             (uint32_t)(limb_shift * RV32_CELL_BITS)) >>
+             (uint32_t)(limb_shift * RV64_CELL_BITS)) >>
                 num_bits_log,
-            RV32_CELL_BITS - num_bits_log
+            RV64_CELL_BITS - num_bits_log
         );
 
         uint8_t carry_arr[NUM_LIMBS];
@@ -146,7 +146,7 @@ template <size_t NUM_LIMBS> struct ShiftCore {
         } else {
 #pragma unroll
             for (size_t i = 0; i < NUM_LIMBS; i++) {
-                uint8_t carry = is_sll ? (record.b[i] >> (RV32_CELL_BITS - bit_shift))
+                uint8_t carry = is_sll ? (record.b[i] >> (RV64_CELL_BITS - bit_shift))
                                        : (record.b[i] & ((1u << bit_shift) - 1u));
                 range_checker.add_count((uint32_t)carry, bit_shift);
                 carry_arr[i] = carry;
@@ -158,14 +158,14 @@ template <size_t NUM_LIMBS> struct ShiftCore {
         uint8_t limb_marker[NUM_LIMBS] = {0};
         limb_marker[limb_shift] = 1u;
         COL_WRITE_ARRAY(row, Cols, limb_shift_marker, limb_marker);
-        uint8_t bit_marker[RV32_CELL_BITS] = {0};
+        uint8_t bit_marker[RV64_CELL_BITS] = {0};
         bit_marker[bit_shift] = 1u;
         COL_WRITE_ARRAY(row, Cols, bit_shift_marker, bit_marker);
 
-        uint8_t b_sign_val = is_sra ? (record.b[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) : 0u;
+        uint8_t b_sign_val = is_sra ? (record.b[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) : 0u;
         COL_WRITE_VALUE(row, Cols, b_sign, b_sign_val);
         if (is_sra) {
-            bitwise_lookup.add_xor(record.b[NUM_LIMBS - 1], 1u << (RV32_CELL_BITS - 1));
+            bitwise_lookup.add_xor(record.b[NUM_LIMBS - 1], 1u << (RV64_CELL_BITS - 1));
         }
         COL_WRITE_VALUE(row, Cols, bit_multiplier_left, is_sll ? (1u << bit_shift) : 0u);
         COL_WRITE_VALUE(row, Cols, bit_multiplier_right, is_sll ? 0u : (1u << bit_shift));

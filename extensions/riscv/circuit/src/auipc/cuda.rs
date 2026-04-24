@@ -10,28 +10,28 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv32RdWriteAdapterCols, Rv32RdWriteAdapterRecord, RV32_CELL_BITS},
+    adapters::{Rv64RdWriteAdapterCols, Rv64RdWriteAdapterRecord, RV64_CELL_BITS},
     cuda_abi::auipc_cuda::tracegen,
-    Rv32AuipcCoreCols, Rv32AuipcCoreRecord,
+    Rv64AuipcCoreCols, Rv64AuipcCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv32AuipcChipGpu {
+pub struct Rv64AuipcChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32AuipcChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64AuipcChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv32RdWriteAdapterRecord, Rv32AuipcCoreRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64RdWriteAdapterRecord, Rv64AuipcCoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv32AuipcCoreCols::<F>::width() + Rv32RdWriteAdapterCols::<F>::width();
+        let trace_width = Rv64AuipcCoreCols::<F>::width() + Rv64RdWriteAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -45,7 +45,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32AuipcChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
+                RV64_CELL_BITS,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
