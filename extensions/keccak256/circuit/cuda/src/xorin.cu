@@ -12,6 +12,8 @@
 
 using namespace xorin;
 using namespace riscv;
+using namespace keccak256;
+using namespace program;
 
 #define XORIN_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, XorinVmCols, FIELD, VALUE)
 #define XORIN_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, XorinVmCols, FIELD, VALUES)
@@ -39,7 +41,7 @@ __global__ void xorin_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        assert((rec.len % program::DEFAULT_BLOCK_SIZE) == 0);
+        assert((rec.len % DEFAULT_BLOCK_SIZE) == 0);
         assert(rec.len <= XORIN_RATE_BYTES);
         assert((uint64_t)rec.buffer + rec.len <= (1ULL << pointer_max_bits));
         assert((uint64_t)rec.input + rec.len <= (1ULL << pointer_max_bits));
@@ -52,7 +54,7 @@ __global__ void xorin_tracegen(
 
         auto record_len = rec.len;
         auto num_reads =
-            (record_len + program::DEFAULT_BLOCK_SIZE - 1) / program::DEFAULT_BLOCK_SIZE;
+            (record_len + DEFAULT_BLOCK_SIZE - 1) / DEFAULT_BLOCK_SIZE;
 
         // Fill instruction columns
         XORIN_WRITE(instruction.pc, rec.from_pc);
@@ -75,10 +77,10 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(rec.len));
 
         // Fill is_padding_bytes
-        for (auto i = 0u; i < num_reads && i < keccak256::KECCAK_RATE_MEM_OPS; i++) {
+        for (auto i = 0u; i < num_reads && i < KECCAK_RATE_MEM_OPS; i++) {
             XORIN_WRITE(sponge.is_padding_bytes[i], 0);
         }
-        for (auto i = num_reads; i < keccak256::KECCAK_RATE_MEM_OPS; i++) {
+        for (auto i = num_reads; i < KECCAK_RATE_MEM_OPS; i++) {
             XORIN_WRITE(sponge.is_padding_bytes[i], 1);
         }
 
@@ -112,7 +114,7 @@ __global__ void xorin_tracegen(
         }
 
         // Buffer bytes read aux cols
-        for (auto t = 0u; t < num_reads && t < keccak256::KECCAK_RATE_MEM_OPS; t++) {
+        for (auto t = 0u; t < num_reads && t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.buffer_bytes_read_aux_cols[t].base),
                 rec.buffer_read_aux_cols[t].prev_timestamp,
@@ -120,12 +122,12 @@ __global__ void xorin_tracegen(
             );
             timestamp++;
         }
-        for (auto t = num_reads; t < keccak256::KECCAK_RATE_MEM_OPS; t++) {
+        for (auto t = num_reads; t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill_zero(XORIN_SLICE(mem_oc.buffer_bytes_read_aux_cols[t].base));
         }
 
         // Input bytes read aux cols
-        for (auto t = 0u; t < num_reads && t < keccak256::KECCAK_RATE_MEM_OPS; t++) {
+        for (auto t = 0u; t < num_reads && t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.input_bytes_read_aux_cols[t].base),
                 rec.input_read_aux_cols[t].prev_timestamp,
@@ -133,12 +135,12 @@ __global__ void xorin_tracegen(
             );
             timestamp++;
         }
-        for (auto t = num_reads; t < keccak256::KECCAK_RATE_MEM_OPS; t++) {
+        for (auto t = num_reads; t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill_zero(XORIN_SLICE(mem_oc.input_bytes_read_aux_cols[t].base));
         }
 
         // Buffer bytes write aux cols
-        for (auto t = 0u; t < num_reads && t < keccak256::KECCAK_RATE_MEM_OPS; t++) {
+        for (auto t = 0u; t < num_reads && t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.buffer_bytes_write_aux_cols[t].base),
                 rec.buffer_write_aux_cols[t].prev_timestamp,
@@ -150,7 +152,7 @@ __global__ void xorin_tracegen(
             );
             timestamp++;
         }
-        for (auto t = num_reads; t < keccak256::KECCAK_RATE_MEM_OPS; t++) {
+        for (auto t = num_reads; t < KECCAK_RATE_MEM_OPS; t++) {
             XORIN_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
         }
 
