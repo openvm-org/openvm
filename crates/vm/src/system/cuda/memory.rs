@@ -184,19 +184,12 @@ impl MemoryInventoryGPU {
             self.boundary
                 .finalize_records_device::<DIGEST_WIDTH>(d_records, records.len());
 
-            let merkle_records: Vec<MemoryMerkleRecord> = records
-                .iter()
-                .map(|r| MemoryMerkleRecord {
-                    address_space: r.address_space,
-                    ptr: r.ptr,
-                    timestamp: r.timestamps[0],
-                    values: r.values,
-                })
-                .collect();
+            // `MemoryInventoryRecord<DIGEST_WIDTH, 1>` has the same layout as
+            // `MemoryMerkleRecord`, so reinterpret `records` directly.
             let merkle_words: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    merkle_records.as_ptr() as *const u32,
-                    merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
+                    records.as_ptr() as *const u32,
+                    records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
                 )
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
