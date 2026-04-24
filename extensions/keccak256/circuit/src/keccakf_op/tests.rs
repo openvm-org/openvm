@@ -292,22 +292,22 @@ fn cuda_set_and_execute(
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(rng, 4);
+    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
     tester.write(
         1,
         buffer_reg,
-        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
     let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.random()).collect();
-    for (i, chunk) in state_data.chunks(4).enumerate() {
-        let mut word = [F::ZERO; 4];
+    for (i, chunk) in state_data.chunks(DEFAULT_BLOCK_SIZE).enumerate() {
+        let mut word = [F::ZERO; DEFAULT_BLOCK_SIZE];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * 4, word);
+        tester.write(2, buffer_ptr + i * DEFAULT_BLOCK_SIZE, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -402,17 +402,21 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(&mut rng, 4);
+    let buffer_reg = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
     tester.write(
         1,
         buffer_reg,
-        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
-    for i in 0..(KECCAK_STATE_BYTES / 4) {
-        tester.write(2, buffer_ptr + i * 4, [F::ZERO; 4]);
+    for i in 0..(KECCAK_STATE_BYTES / DEFAULT_BLOCK_SIZE) {
+        tester.write(
+            2,
+            buffer_ptr + i * DEFAULT_BLOCK_SIZE,
+            [F::ZERO; DEFAULT_BLOCK_SIZE],
+        );
     }
 
     let instruction = Instruction::from_usize(

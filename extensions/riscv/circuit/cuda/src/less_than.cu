@@ -3,28 +3,28 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32im/adapters/alu.cuh"
-#include "rv32im/cores/less_than.cuh"
+#include "riscv/adapters/alu.cuh"
+#include "riscv/cores/less_than.cuh"
 
 using namespace riscv;
 using namespace program;
 
-// Concrete type aliases for 32-bit
-using Rv32LessThanCoreRecord = LessThanCoreRecord<RV32_REGISTER_NUM_LIMBS>;
-using Rv32LessThanCore = LessThanCore<RV32_REGISTER_NUM_LIMBS>;
-template <typename T> using Rv32LessThanCoreCols = LessThanCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
+// Concrete type aliases for 64-bit
+using Rv64LessThanCoreRecord = LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS>;
+using Rv64LessThanCore = LessThanCore<RV64_REGISTER_NUM_LIMBS>;
+template <typename T> using Rv64LessThanCoreCols = LessThanCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
 
 template <typename T> struct LessThanCols {
-    Rv32BaseAluAdapterCols<T> adapter;
-    Rv32LessThanCoreCols<T> core;
+    Rv64BaseAluAdapterCols<T> adapter;
+    Rv64LessThanCoreCols<T> core;
 };
 
 struct LessThanRecord {
-    Rv32BaseAluAdapterRecord adapter;
-    Rv32LessThanCoreRecord core;
+    Rv64BaseAluAdapterRecord adapter;
+    Rv64LessThanCoreRecord core;
 };
 
-__global__ void rv32_less_than_tracegen(
+__global__ void rv64_less_than_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<LessThanRecord> records,
@@ -39,21 +39,21 @@ __global__ void rv32_less_than_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv32BaseAluAdapter(
+        auto adapter = Rv64BaseAluAdapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        auto core = Rv32LessThanCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
+        auto core = Rv64LessThanCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
         core.fill_trace_row(row.slice_from(COL_INDEX(LessThanCols, core)), record.core);
     } else {
         row.fill_zero(0, sizeof(LessThanCols<uint8_t>));
     }
 }
 
-extern "C" int _rv32_less_than_tracegen(
+extern "C" int _rv64_less_than_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -71,7 +71,7 @@ extern "C" int _rv32_less_than_tracegen(
     assert(width == sizeof(LessThanCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
-    rv32_less_than_tracegen<<<grid, block, 0, stream>>>(
+    rv64_less_than_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
