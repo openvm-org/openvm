@@ -13,7 +13,7 @@ inline constexpr size_t COMMIT_NUM_BYTES = DIGEST_SIZE * F_NUM_BYTES;
 inline constexpr size_t OUTPUT_LEN_NUM_BYTES = 8;
 inline constexpr size_t OUTPUT_TOTAL_BYTES = COMMIT_NUM_BYTES + OUTPUT_LEN_NUM_BYTES;
 
-inline constexpr size_t MEMORY_OP_SIZE = 4;
+inline constexpr size_t MEMORY_OP_SIZE = 8;
 inline constexpr size_t DIGEST_MEMORY_OPS = DIGEST_SIZE / MEMORY_OP_SIZE;
 inline constexpr size_t COMMIT_MEMORY_OPS = COMMIT_NUM_BYTES / MEMORY_OP_SIZE;
 inline constexpr size_t OUTPUT_TOTAL_MEMORY_OPS = OUTPUT_TOTAL_BYTES / MEMORY_OP_SIZE;

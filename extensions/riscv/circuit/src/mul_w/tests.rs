@@ -53,9 +53,9 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32MultAdapterRecord, MultiplicationCoreRecord, Rv32MultiplicationChipGpu},
+    crate::{adapters::Rv64MultWAdapterRecord, MultiplicationCoreRecord, Rv64MulWChipGpu},
     openvm_circuit::arch::{
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
@@ -413,7 +413,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
-    let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
+    let memory_dimensions = config.rv64i.system.memory_config.memory_dimensions();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
@@ -592,27 +592,28 @@ fn test_aot_mul_chained_dependencies() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "cuda")]
-type GpuHarness = GpuTestChipHarness<
-    F,
-    Rv32MultiplicationExecutor,
-    Rv32MultiplicationAir,
-    Rv32MultiplicationChipGpu,
-    Rv32MultiplicationChip<F>,
->;
+type GpuHarness =
+    GpuTestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChipGpu, Rv64MulWChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
+        dummy_bitwise_chip,
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32MultiplicationChipGpu::new(
+    let gpu_chip = Rv64MulWChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
         tester.timestamp_max_bits(),
     );
@@ -622,11 +623,14 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_cuda_rand_mul_tracegen() {
+fn test_cuda_rand_mul_w_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester = GpuChipTestBuilder::default().with_range_tuple_checker(
-        RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES),
-    );
+    let mut tester = GpuChipTestBuilder::default()
+        .with_bitwise_op_lookup(default_bitwise_lookup_bus())
+        .with_range_tuple_checker(RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            TUPLE_CHECKER_SIZES,
+        ));
 
     let mut harness = create_cuda_harness(&tester);
     let num_ops = 100;
@@ -636,22 +640,21 @@ fn test_cuda_rand_mul_tracegen() {
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            MulOpcode::MUL,
             None,
             None,
         );
     }
 
     type Record<'a> = (
-        &'a mut Rv32MultAdapterRecord,
-        &'a mut MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+        &'a mut Rv64MultWAdapterRecord,
+        &'a mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record<'_>, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new(),
         );
 
     tester

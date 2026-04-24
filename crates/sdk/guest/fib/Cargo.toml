@@ -1,4 +1,6 @@
 [workspace]
+resolver = "2"
+
 [package]
 name = "openvm-sdk-example-test"
 version = "0.0.0"
@@ -6,3 +8,10 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../toolchain/openvm" }
+
+[features]
+default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

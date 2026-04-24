@@ -43,7 +43,7 @@ cfg_if::cfg_if! {
         pub use self::cuda::*;
         pub use self::cuda::{
             Int256GpuProverExt as Int256ProverExt,
-            Int256Rv32GpuBuilder as Int256Rv32Builder,
+            Int256Rv64GpuBuilder as Int256Rv64Builder,
         };
     } else {
         pub use self::{

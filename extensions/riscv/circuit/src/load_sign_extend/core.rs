@@ -271,7 +271,7 @@ where
         core_record.read_data = tmp.0 .1;
         core_record.shift_amount = tmp.1;
 
-        let write_data = run_write_data_sign_extend(
+        let write_data = run_write_data_sign_extend::<NUM_CELLS, LIMB_BITS>(
             local_opcode,
             core_record.read_data,
             core_record.shift_amount as usize,
@@ -313,19 +313,19 @@ where
         let inner_shift = shift & 3;
 
         let mut shifted = record.read_data;
-        shifted.rotate_left(shift_most_sig_bit * 4);
+        shifted.rotate_left(shift_most_sig_bit * (NUM_CELLS / 2));
 
         let most_sig_limb = if record.is_byte {
             shifted[inner_shift]
         } else if record.is_word {
-            shifted[3]
+            shifted[NUM_CELLS / 2 - 1]
         } else {
             shifted[inner_shift + 1]
         };
 
-        let most_sig_bit = most_sig_limb & (1 << 7);
+        let most_sig_bit = most_sig_limb & (1 << (LIMB_BITS - 1));
         self.range_checker_chip
-            .add_count((most_sig_limb - most_sig_bit) as u32, 7);
+            .add_count((most_sig_limb - most_sig_bit) as u32, LIMB_BITS - 1);
 
         core_row.prev_data = record.prev_data.map(F::from_u8);
         core_row.shifted_read_data = shifted.map(F::from_u8);
@@ -349,25 +349,24 @@ where
 
 // Returns write_data
 #[inline(always)]
-pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
+pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize, const LIMB_BITS: usize>(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u8; NUM_CELLS],
     shift: usize,
 ) -> [u8; NUM_CELLS] {
-    assert!(
-        NUM_CELLS > 4,
-        "sign extension must extend at least one byte"
-    );
+    const { assert!(NUM_CELLS == RV64_REGISTER_NUM_LIMBS) };
+    let word_width = NUM_CELLS / 2;
+    let half_width = NUM_CELLS / 4;
     match opcode {
         LOADW => {
             assert!(
-                shift == 0 || shift == 4,
-                "LOADW requires 4-byte aligned shift, got {shift}"
+                shift == 0 || shift == word_width,
+                "LOADW requires {word_width}-byte aligned shift, got {shift}"
             );
-            assert!(shift + 4 <= NUM_CELLS);
-            let ext = (read_data[shift + 3] >> 7) * u8::MAX;
+            assert!(shift + word_width <= NUM_CELLS);
+            let ext = (read_data[shift + word_width - 1] >> (LIMB_BITS - 1)) * u8::MAX;
             array::from_fn(|i| {
-                if i < 4 {
+                if i < word_width {
                     read_data[i + shift]
                 } else {
                     ext
@@ -376,13 +375,13 @@ pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
         }
         LOADH => {
             assert!(
-                shift.is_multiple_of(2),
-                "LOADH requires 2-byte aligned shift, got {shift}"
+                shift.is_multiple_of(half_width),
+                "LOADH requires {half_width}-byte aligned shift, got {shift}"
             );
-            debug_assert!(shift + 2 <= NUM_CELLS);
-            let ext = (read_data[shift + 1] >> 7) * u8::MAX;
+            debug_assert!(shift + half_width <= NUM_CELLS);
+            let ext = (read_data[shift + half_width - 1] >> (LIMB_BITS - 1)) * u8::MAX;
             array::from_fn(|i| {
-                if i < 2 {
+                if i < half_width {
                     read_data[i + shift]
                 } else {
                     ext
@@ -391,7 +390,7 @@ pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
         }
         LOADB => {
             debug_assert!(shift < NUM_CELLS);
-            let ext = (read_data[shift] >> 7) * u8::MAX;
+            let ext = (read_data[shift] >> (LIMB_BITS - 1)) * u8::MAX;
             array::from_fn(|i| {
                 if i == 0 {
                     read_data[i + shift]

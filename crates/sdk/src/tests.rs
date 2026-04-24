@@ -47,7 +47,7 @@ fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
-    let sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
+    let sdk = Sdk::riscv64(app_params.clone(), agg_params.clone());
     (sdk, app_params, agg_params)
 }
 
@@ -121,7 +121,7 @@ fn make_deferral_sdk(
     let user_public_values = output_raw[64..].to_vec();
     let deferral_state = get_deferral_state(&fib_vk, from_ref(&fib_proof), 0)?;
 
-    let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv32();
+    let mut vs_config = openvm_sdk_config::SdkVmConfig::riscv64();
     vs_config.deferral = Some(deferral_ext);
     vs_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
@@ -263,7 +263,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     let deferral_prover = make_deferral_prover(&fib_sdk, &agg_params);
 
     let sdk = Sdk::builder()
-        .app_config(AppConfig::riscv32(app_params))
+        .app_config(AppConfig::riscv64(app_params))
         .agg_params(agg_params.clone())
         .deferral_prover(deferral_prover)
         .build()?;
@@ -362,7 +362,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 include_bytes!("../programs/examples/fibonacci.elf"),
                 MEM_SIZE as u32,
             )?;
-            let sdk = Sdk::riscv32(app_params, agg_params);
+            let sdk = Sdk::riscv64(app_params, agg_params);
             let app_exe = sdk.convert_to_exe(elf)?;
 
             // Compute trace heights for root prover with profiling params

@@ -25,7 +25,7 @@ use openvm_cuda_common::{
     common::get_device,
     stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
 };
-use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{program::PC_BITS, riscv::RV64_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -244,7 +244,7 @@ impl Default for GpuChipTestBuilder {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
         // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
         Self::new(mem_config, default_var_range_checker_bus())
     }
 }

@@ -25,6 +25,15 @@ use super::{
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
+// The CUDA merge kernel in `inventory.cu` is hardcoded to a 2-way merge of
+// `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so only two
+// (DEFAULT_BLOCK_SIZE, DIGEST_WIDTH) shapes are currently supported: the equal case (no merge) and
+// (4, 8) (the hardcoded merge).
+const _: () = assert!(
+    DEFAULT_BLOCK_SIZE == DIGEST_WIDTH || (DEFAULT_BLOCK_SIZE == 4 && DIGEST_WIDTH == 8),
+    "CUDA memory inventory only supports DEFAULT_BLOCK_SIZE == DIGEST_WIDTH or (DEFAULT_BLOCK_SIZE, DIGEST_WIDTH) == (4, 8)"
+);
+
 pub struct MemoryInventoryGPU {
     pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
@@ -158,12 +167,21 @@ impl MemoryInventoryGPU {
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
             self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
+<<<<<<< HEAD
         } else if BLOCKS_PER_CHUNK == 1 {
             // TODO: remove this fast path once the u16 cell switch restores
             // `DEFAULT_BLOCK_SIZE < DIGEST_WIDTH` (and thus `BLOCKS_PER_CHUNK > 1`). Until then,
             // the merge kernel in `inventory.cu` hardcodes a 2-way merge (`<4,1> → <8,2>`), so
             // with `BLOCKS_PER_CHUNK == 1` we have to bypass it: each touched block is already a
             // full chunk, so no merge is needed.
+=======
+        } else if DEFAULT_BLOCK_SIZE == DIGEST_WIDTH {
+            // TODO: remove this fast path once the u16 cell switch restores
+            // `DEFAULT_BLOCK_SIZE < DIGEST_WIDTH` (and thus `BLOCKS_PER_CHUNK > 1`). Until then,
+            // the merge kernel in `inventory.cu` hardcodes a 2-way merge (`<4,1> → <8,2>`), so
+            // when `DEFAULT_BLOCK_SIZE == DIGEST_WIDTH` we bypass it: each touched block is
+            // already a full chunk, so no merge is needed.
+>>>>>>> origin/develop-v2.1.0-rv64
             // `partition` is already sorted by (addr_space, ptr) — see `GuestMemory::finalize`
             // in system/memory/online.rs.
             let records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
@@ -184,6 +202,7 @@ impl MemoryInventoryGPU {
             self.boundary
                 .finalize_records_device::<DIGEST_WIDTH>(d_records, records.len());
 
+<<<<<<< HEAD
             let merkle_records: Vec<MemoryMerkleRecord> = records
                 .iter()
                 .map(|r| MemoryMerkleRecord {
@@ -202,6 +221,20 @@ impl MemoryInventoryGPU {
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
         } else {
             // Merge DEFAULT_BLOCK_SIZE-sized input blocks into DIGEST_WIDTH-sized chunks.
+=======
+            // `MemoryInventoryRecord<DIGEST_WIDTH, 1>` has the same layout as
+            // `MemoryMerkleRecord`, so reinterpret `records` directly.
+            let merkle_words: &[u32] = unsafe {
+                std::slice::from_raw_parts(
+                    records.as_ptr() as *const u32,
+                    records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
+                )
+            };
+            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
+        } else if DEFAULT_BLOCK_SIZE == 4 && DIGEST_WIDTH == 8 {
+            // Merge DEFAULT_BLOCK_SIZE-sized input blocks into DIGEST_WIDTH-sized chunks via the
+            // hardcoded `<4,1> → <8,2>` kernel in `inventory.cu`.
+>>>>>>> origin/develop-v2.1.0-rv64
             let in_records: Vec<MemoryInventoryRecord<DEFAULT_BLOCK_SIZE, 1>> = partition
                 .iter()
                 .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
@@ -282,11 +315,10 @@ impl MemoryInventoryGPU {
                     &out_records
                         [base + 2 + BLOCKS_PER_CHUNK..base + 2 + BLOCKS_PER_CHUNK + DIGEST_WIDTH],
                 );
-                let timestamp = out_records[base + 2..base + 2 + BLOCKS_PER_CHUNK]
+                let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_CHUNK]
                     .iter()
-                    .copied()
                     .max()
-                    .unwrap_or(0);
+                    .unwrap();
                 let record = MemoryMerkleRecord {
                     address_space: out_records[base],
                     ptr: out_records[base + 1],
@@ -302,6 +334,12 @@ impl MemoryInventoryGPU {
                 )
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
+<<<<<<< HEAD
+=======
+        } else {
+            // Excluded by the module-level const assert on (DEFAULT_BLOCK_SIZE, DIGEST_WIDTH).
+            unreachable!()
+>>>>>>> origin/develop-v2.1.0-rv64
         }
 
         let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);

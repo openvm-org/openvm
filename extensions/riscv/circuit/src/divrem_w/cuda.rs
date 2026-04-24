@@ -4,55 +4,51 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-    var_range::VariableRangeCheckerChipGPU,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cuda_backend::{
-    base::DeviceMatrix,
-    chip::{get_empty_air_proving_ctx, UInt2},
-    prover_backend::GpuBackend,
-    types::F,
-};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_WORD_NUM_LIMBS};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv32MultAdapterCols, Rv32MultAdapterRecord},
-    cuda_abi::divrem_cuda::tracegen,
+    adapters::{Rv64MultWAdapterCols, Rv64MultWAdapterRecord},
+    cuda_abi::{divrem_w_cuda::tracegen, UInt2},
     DivRemCoreCols, DivRemCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv32DivRemChipGpu {
+pub struct Rv64DivRemWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemWChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv32MultAdapterRecord,
-            DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+            Rv64MultWAdapterRecord,
+            DivRemCoreRecord<RV64_WORD_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = DivRemCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width()
-            + Rv32MultAdapterCols::<F>::width();
+        let trace_width = DivRemCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>::width()
+            + Rv64MultWAdapterCols::<F>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
 
         let tuple_checker_sizes = self.range_tuple_checker.sizes;
         let tuple_checker_sizes = UInt2::new(tuple_checker_sizes[0], tuple_checker_sizes[1]);
+        let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device().unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity(padded_height, trace_width);
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
         unsafe {
             tracegen(
                 d_trace.buffer(),
@@ -61,10 +57,11 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS as u32,
+                RV64_CELL_BITS as u32,
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
                 self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }

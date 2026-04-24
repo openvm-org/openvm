@@ -19,6 +19,7 @@ inline constexpr size_t RV64_IMM_AS = 0;
 namespace program {
 inline constexpr size_t PC_BITS = 30;
 inline constexpr size_t DEFAULT_PC_STEP = 4;
+inline constexpr size_t DEFAULT_BLOCK_SIZE = 8;
 } // namespace program
 
 namespace poseidon2 {
@@ -56,12 +57,10 @@ inline constexpr size_t KECCAK_DIGEST_U64S = KECCAK_DIGEST_BYTES / 8;
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len
 inline constexpr size_t KECCAK_REGISTER_READS = 3;
-/// Number of cells to read/write in a single memory access
-inline constexpr size_t KECCAK_WORD_SIZE = 4;
+/// Memory reads for the full state per row
+inline constexpr size_t KECCAK_WIDTH_MEM_OPS = KECCAK_WIDTH_BYTES / program::DEFAULT_BLOCK_SIZE;
 /// Memory reads for absorb per row
-inline constexpr size_t KECCAK_ABSORB_READS = KECCAK_RATE_BYTES / KECCAK_WORD_SIZE;
-/// Memory writes for digest per row
-inline constexpr size_t KECCAK_DIGEST_WRITES = KECCAK_DIGEST_BYTES / KECCAK_WORD_SIZE;
+inline constexpr size_t KECCAK_RATE_MEM_OPS = KECCAK_RATE_BYTES / program::DEFAULT_BLOCK_SIZE;
 /// keccakf parameters
 inline constexpr size_t KECCAK_ROUND = 24;
 inline constexpr size_t KECCAK_STATE_SIZE = 25;

@@ -26,6 +26,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_adapters::Rv64IsEqualModAdapterExecutor;
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -699,14 +700,9 @@ unsafe fn execute_e12_impl<
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
-    let rs_vals = pre_compute.rs_addrs.map(|addr| {
-        let val = u64::from_le_bytes(exec_state.vm_read(RV64_REGISTER_AS, addr as u32));
-        debug_assert!(
-            val <= u32::MAX as u64,
-            "upper 4 bytes of register must be zero for pointer"
-        );
-        val as u32
-    });
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {

@@ -28,7 +28,7 @@ use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv32LoadStoreChipGpu},
+    crate::{adapters::Rv64LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv64LoadStoreChipGpu},
     openvm_circuit::arch::{
         testing::{
             default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
@@ -44,8 +44,9 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor,
-        Rv64LoadStoreAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        rv64_bytes_to_u32, Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols,
+        Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller, RV64_CELL_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
 };
@@ -128,7 +129,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let ptr = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
-    let rs1_low = u32::from_le_bytes(rs1[..4].try_into().unwrap());
+    let rs1_low = rv64_bytes_to_u32(rs1);
     let ptr_val = imm_ext.wrapping_add(rs1_low);
     let shift_amount = (ptr_val as usize) & (RV64_REGISTER_NUM_LIMBS - 1);
 
@@ -771,10 +772,10 @@ fn run_loadbu_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv32LoadStoreExecutor,
-    Rv32LoadStoreAir,
-    Rv32LoadStoreChipGpu,
-    Rv32LoadStoreChip<F>,
+    Rv64LoadStoreExecutor,
+    Rv64LoadStoreAir,
+    Rv64LoadStoreChipGpu,
+    Rv64LoadStoreChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -789,7 +790,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = Rv32LoadStoreChipGpu::new(
+    let gpu_chip = Rv64LoadStoreChipGpu::new(
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
@@ -799,20 +800,23 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(LOADW, 100)]
+#[test_case(LOADD, 100)]
 #[test_case(LOADBU, 100)]
 #[test_case(LOADHU, 100)]
+#[test_case(LOADWU, 100)]
+#[test_case(STORED, 100)]
 #[test_case(STOREW, 100)]
 #[test_case(STOREB, 100)]
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    if [STOREW, STOREB, STOREH].contains(&opcode) {
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = GpuChipTestBuilder::from_config(mem_config, default_var_range_checker_bus());
+    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 
     let mut harness = create_cuda_harness(&tester);
     for _ in 0..num_ops {
@@ -830,8 +834,8 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
     }
 
     type Record<'a> = (
-        &'a mut Rv32LoadStoreAdapterRecord,
-        &'a mut LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+        &'a mut Rv64LoadStoreAdapterRecord,
+        &'a mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
     );
 
     harness
@@ -839,7 +843,7 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
         );
 
     tester

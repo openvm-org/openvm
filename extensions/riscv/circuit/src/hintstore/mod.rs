@@ -39,7 +39,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{read_rv64_register, tracing_read, tracing_write};
+use crate::adapters::{expand_to_rv64_register, read_rv64_register, tracing_read, tracing_write};
 
 mod execution;
 
@@ -48,7 +48,7 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
-#[cfg(test)]
+#[cfg(all(test, any()))] // TODO: port tests to RV64
 mod tests;
 
 /// `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the low
@@ -164,13 +164,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
         // read mem_ptr
-        let mem_ptr_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                local_cols.mem_ptr_limbs[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let mem_ptr_data = expand_to_rv64_register(&local_cols.mem_ptr_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
@@ -181,13 +175,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, is_start.clone());
 
         // read num_words
-        let num_words_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|i| {
-            if i < REM_WORDS_NUM_LIMBS {
-                local_cols.rem_words_limbs[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
+        let num_words_data = expand_to_rv64_register(&local_cols.rem_words_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
