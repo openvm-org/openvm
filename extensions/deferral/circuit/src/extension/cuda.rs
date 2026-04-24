@@ -24,7 +24,7 @@ use crate::{
     count::{DeferralCircuitCountAir, DeferralCircuitCountChipGpu},
     output::{DeferralOutputAir, DeferralOutputChipGpu},
     poseidon2::{DeferralPoseidon2Air, DeferralPoseidon2ChipGpu},
-    DeferralExtension, Rv32DeferralConfig,
+    DeferralExtension, Rv64DeferralConfig,
 };
 
 pub struct DeferralGpuProverExt;
@@ -104,10 +104,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
 }
 
 #[derive(Clone)]
-pub struct Rv32DeferralGpuBuilder;
+pub struct Rv64DeferralGpuBuilder;
 
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
-    type VmConfig = Rv32DeferralConfig;
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
+    type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 

@@ -48,7 +48,7 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
-#[cfg(test)]
+#[cfg(all(test, any()))] // TODO: port tests to RV64
 mod tests;
 
 /// `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the low

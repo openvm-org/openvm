@@ -24,7 +24,7 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::Program,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
     SystemOpcode,
 };
 #[cfg(feature = "aot")]
@@ -43,7 +43,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv32MultAdapterRecord, MultiplicationCoreRecord, Rv32MultiplicationChipGpu},
+    crate::{adapters::Rv64MultAdapterRecord, MultiplicationCoreRecord, Rv64MultiplicationChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -313,7 +313,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
     u32::from_le_bytes(bytes)
 }
 
@@ -325,8 +325,8 @@ fn add_immediate(rd: usize, imm: u32) -> Instruction<F> {
             rd,
             0,
             imm as usize,
-            RV32_REGISTER_AS as usize,
-            RV32_IMM_AS as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
         ],
     )
 }
@@ -339,8 +339,8 @@ fn mul_register(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
             rd,
             rs1,
             rs2,
-            RV32_REGISTER_AS as usize,
-            RV32_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
         ],
     )
 }
@@ -467,10 +467,10 @@ fn test_aot_mul_chained_dependencies() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv32MultiplicationExecutor,
-    Rv32MultiplicationAir,
-    Rv32MultiplicationChipGpu,
-    Rv32MultiplicationChip<F>,
+    Rv64MultiplicationExecutor,
+    Rv64MultiplicationAir,
+    Rv64MultiplicationChipGpu,
+    Rv64MultiplicationChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -484,7 +484,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv32MultiplicationChipGpu::new(
+    let gpu_chip = Rv64MultiplicationChipGpu::new(
         tester.range_checker(),
         tester.range_tuple_checker(),
         tester.timestamp_max_bits(),
@@ -516,15 +516,15 @@ fn test_cuda_rand_mul_tracegen() {
     }
 
     type Record<'a> = (
-        &'a mut Rv32MultAdapterRecord,
-        &'a mut MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+        &'a mut Rv64MultAdapterRecord,
+        &'a mut MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record<'_>, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
         );
 
     tester
