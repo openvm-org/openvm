@@ -1,6 +1,6 @@
 use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
+use openvm_instructions::riscv::{RV64_IMM_AS, RV64_REGISTER_AS};
 
 use super::{
     memory_ctx::MemoryCtx,
@@ -224,7 +224,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
-            address_space != RV32_IMM_AS,
+            address_space != RV64_IMM_AS,
             "address space must not be immediate"
         );
         debug_assert!(size > 0, "size must be greater than 0, got {size}");
@@ -234,7 +234,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         );
 
         // Handle merkle tree updates
-        if address_space != RV32_REGISTER_AS {
+        if address_space != RV64_REGISTER_AS {
             self.memory_ctx
                 .update_boundary_merkle_heights(address_space, ptr, size);
         }

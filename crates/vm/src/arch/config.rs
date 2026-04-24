@@ -6,7 +6,7 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
+use openvm_instructions::riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
@@ -180,8 +180,8 @@ impl Default for MemoryConfig {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         const MAX_CELLS: usize = 1 << 29;
-        addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
-        addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
+        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 32 * size_of::<u64>();
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
@@ -192,10 +192,10 @@ impl MemoryConfig {
         // By default only address spaces 1..=4 have non-empty cell counts.
         let mut addr_spaces =
             vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
-        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
-        addr_spaces[RV32_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV64_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        addr_spaces[RV64_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
-        addr_spaces[RV32_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV64_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
         addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
 
