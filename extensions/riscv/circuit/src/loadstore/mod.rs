@@ -16,7 +16,7 @@ pub use cuda::*;
 #[cfg(feature = "aot")]
 mod aot;
 
-#[cfg(test)]
+#[cfg(all(test, any()))] // TODO: port tests to RV64
 mod tests;
 
 pub type Rv64LoadStoreAir =

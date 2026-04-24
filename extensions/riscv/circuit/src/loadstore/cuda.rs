@@ -9,22 +9,22 @@ use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterRecord},
+    adapters::{Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterRecord},
     cuda_abi::loadstore_cuda::tracegen,
     LoadStoreCoreCols, LoadStoreCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv32LoadStoreChipGpu {
+pub struct Rv64LoadStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv32LoadStoreAdapterRecord,
+            Rv64LoadStoreAdapterRecord,
             LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
@@ -33,7 +33,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv32LoadStoreAdapterCols::<F>::width()
+        let trace_width = Rv64LoadStoreAdapterCols::<F>::width()
             + LoadStoreCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);

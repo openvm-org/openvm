@@ -16,7 +16,7 @@ template <typename T> struct MemoryReadAuxCols {
     MemoryBaseAuxCols<T> base;
 };
 
-template <typename T, size_t NUM_LIMBS = RV32_REGISTER_NUM_LIMBS> struct MemoryWriteAuxCols {
+template <typename T, size_t NUM_LIMBS = RV64_REGISTER_NUM_LIMBS> struct MemoryWriteAuxCols {
     MemoryBaseAuxCols<T> base;
     T prev_data[NUM_LIMBS];
 };

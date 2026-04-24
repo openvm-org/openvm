@@ -10,21 +10,21 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv32CondRdWriteAdapterCols, Rv32RdWriteAdapterRecord, RV32_CELL_BITS},
+    adapters::{Rv64CondRdWriteAdapterCols, Rv64RdWriteAdapterRecord, RV64_CELL_BITS},
     cuda_abi::jal_lui_cuda::tracegen,
-    Rv32JalLuiCoreCols, Rv32JalLuiCoreRecord,
+    Rv64JalLuiCoreCols, Rv64JalLuiCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv32JalLuiChipGpu {
+pub struct Rv64JalLuiChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32JalLuiChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64JalLuiChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv32RdWriteAdapterRecord, Rv32JalLuiCoreRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64RdWriteAdapterRecord, Rv64JalLuiCoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -32,7 +32,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32JalLuiChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width =
-            Rv32JalLuiCoreCols::<F>::width() + Rv32CondRdWriteAdapterCols::<F>::width();
+            Rv64JalLuiCoreCols::<F>::width() + Rv64CondRdWriteAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -46,7 +46,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32JalLuiChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
+                RV64_CELL_BITS,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
