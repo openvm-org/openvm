@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -25,7 +25,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64LoadStoreAdapterRecord,
-            LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+            LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -34,7 +34,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64LoadStoreAdapterCols::<F>::width()
-            + LoadStoreCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width();
+            + LoadStoreCoreCols::<F, RV64_REGISTER_NUM_LIMBS>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
         let device_ctx = &self.range_checker.device_ctx;
