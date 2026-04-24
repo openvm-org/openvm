@@ -394,7 +394,7 @@ pub mod loadstore_cuda {
     use super::*;
 
     extern "C" {
-        pub fn _rv32_load_store_tracegen(
+        pub fn _rv64_load_store_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -417,7 +417,7 @@ pub mod loadstore_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv32_load_store_tracegen(
+        CudaError::from_result(_rv64_load_store_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
