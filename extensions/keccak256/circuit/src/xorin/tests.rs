@@ -344,15 +344,14 @@ fn cuda_set_and_execute(
 ) {
     use openvm_circuit::arch::testing::memory::gen_pointer;
 
-    let len = len.unwrap_or_else(|| rng.random_range(4..=136));
-    let len = (len / 4) * 4;
+    let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * DEFAULT_BLOCK_SIZE);
     if len == 0 {
         return;
     }
 
-    let buffer_reg = gen_pointer(rng, 4);
-    let input_reg = gen_pointer(rng, 4);
-    let len_reg = gen_pointer(rng, 4);
+    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let input_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let len_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let buffer_ptr = gen_pointer(rng, len);
     let input_ptr = gen_pointer(rng, len);
@@ -360,31 +359,31 @@ fn cuda_set_and_execute(
     tester.write(
         1,
         buffer_reg,
-        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     tester.write(
         1,
         input_reg,
-        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(1, len_reg, (len as u32).to_le_bytes().map(F::from_u8));
+    tester.write(1, len_reg, (len as u64).to_le_bytes().map(F::from_u8));
 
     let buffer_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
-    for (i, chunk) in buffer_data.chunks(4).enumerate() {
-        let mut word = [F::ZERO; 4];
+    for (i, chunk) in buffer_data.chunks(DEFAULT_BLOCK_SIZE).enumerate() {
+        let mut word = [F::ZERO; DEFAULT_BLOCK_SIZE];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * 4, word);
+        tester.write(2, buffer_ptr + i * DEFAULT_BLOCK_SIZE, word);
     }
 
     let input_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
-    for (i, chunk) in input_data.chunks(4).enumerate() {
-        let mut word = [F::ZERO; 4];
+    for (i, chunk) in input_data.chunks(DEFAULT_BLOCK_SIZE).enumerate() {
+        let mut word = [F::ZERO; DEFAULT_BLOCK_SIZE];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, input_ptr + i * 4, word);
+        tester.write(2, input_ptr + i * DEFAULT_BLOCK_SIZE, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -415,7 +414,7 @@ fn test_xorin_cuda_tracegen() {
         );
     }
 
-    for len in [4, 8, 16, 32, 64, 128, 136] {
+    for len in [8, 16, 24, 32, 64, 128, 136] {
         cuda_set_and_execute(
             &mut tester,
             &mut harness.executor,
