@@ -9,6 +9,12 @@ using namespace program;
 using hintstore::MAX_HINT_BUFFER_DWORDS;
 using hintstore::MAX_HINT_BUFFER_DWORDS_BITS;
 
+// The num_words range check below only works for MAX_HINT_BUFFER_DWORDS_BITS in [8, 16)
+static_assert(
+    MAX_HINT_BUFFER_DWORDS_BITS >= 8 && MAX_HINT_BUFFER_DWORDS_BITS < 16,
+    "MAX_HINT_BUFFER_DWORDS_BITS must be in [8, 16) for the num_words range check"
+);
+
 constexpr size_t REM_WORDS_NUM_LIMBS = 2;
 
 template <typename T> struct Rv64HintStoreCols {
@@ -92,14 +98,17 @@ struct Rv64HintStore {
         COL_WRITE_ARRAY(row, Rv64HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
+#ifdef CUDA_DEBUG
+            // The overflow check for mem_ptr + num_words * 8 is not needed because
+            // 8 * MAX_HINT_BUFFER_DWORDS < 2^pointer_max_bits guarantees no overflow
+            assert(MAX_HINT_BUFFER_DWORDS_BITS + 3 < pointer_max_bits);
+            assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
+#endif
+
             // Range check for mem_ptr (using pointer_max_bits). `mem_ptr` is a 4-limb value;
             // the range check packs the most-significant of those 4 limbs into a single byte.
             uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS;
             uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - pointer_max_bits;
-
-#ifdef CUDA_DEBUG
-            assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
-#endif
 
             // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
             uint32_t rem_words_msl_lshift =
