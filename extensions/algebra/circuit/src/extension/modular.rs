@@ -2,7 +2,7 @@ use std::{array, sync::Arc};
 
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
-use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     self,
     arch::{
@@ -101,7 +101,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
+                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
             let modulus_limbs = big_uint_to_limbs(modulus, 8);
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -118,8 +118,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv64_32(addsub),
-                    ((Rv32ModularArithmeticOpcode::ADD as usize)
-                        ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                    ((Rv64ModularArithmeticOpcode::ADD as usize)
+                        ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -132,8 +132,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv64_32(muldiv),
-                    ((Rv32ModularArithmeticOpcode::MUL as usize)
-                        ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize))
+                    ((Rv64ModularArithmeticOpcode::MUL as usize)
+                        ..=(Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -153,8 +153,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv64_32(is_eq),
-                    ((Rv32ModularArithmeticOpcode::IS_EQ as usize)
-                        ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize))
+                    ((Rv64ModularArithmeticOpcode::IS_EQ as usize)
+                        ..=(Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
@@ -172,8 +172,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv64_48(addsub),
-                    ((Rv32ModularArithmeticOpcode::ADD as usize)
-                        ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                    ((Rv64ModularArithmeticOpcode::ADD as usize)
+                        ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -186,8 +186,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv64_48(muldiv),
-                    ((Rv32ModularArithmeticOpcode::MUL as usize)
-                        ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize))
+                    ((Rv64ModularArithmeticOpcode::MUL as usize)
+                        ..=(Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -207,8 +207,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv64_48(is_eq),
-                    ((Rv32ModularArithmeticOpcode::IS_EQ as usize)
-                        ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize))
+                    ((Rv64ModularArithmeticOpcode::IS_EQ as usize)
+                        ..=(Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
@@ -260,7 +260,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
+                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -387,7 +387,7 @@ where
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
+                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs = big_uint_to_limbs(modulus, 8);
 

@@ -52,9 +52,11 @@ pub fn to_vec<T>(value: &T) -> Result<Vec<u64>>
 where
     T: serde::Serialize + ?Sized,
 {
-    // Use the in-memory size of the value as a guess for the length
-    // of the serialized value.
-    let mut vec: Vec<u64> = Vec::with_capacity(core::mem::size_of_val(value));
+    // Use the in-memory size of the value (in bytes), converted to u64 words, as a guess
+    // for the serialized length. `size_of_val` returns bytes; `Vec::<u64>::with_capacity`
+    // takes element count, so divide by `size_of::<u64>()` to avoid an 8x over-allocation.
+    let mut vec: Vec<u64> =
+        Vec::with_capacity(core::mem::size_of_val(value).div_ceil(core::mem::size_of::<u64>()));
     let mut serializer = Serializer::new(&mut vec);
     value.serialize(&mut serializer)?;
     Ok(vec)
