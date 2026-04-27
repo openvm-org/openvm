@@ -75,10 +75,10 @@ printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 #### Local Builds
 
 By default, if you run `cargo build` or `cargo run` from the guest program root directory, it will
-build with target set to your **host** machine. If you want to directly build for `openvm` (more specifically a RISC-V target), run `cargo openvm build` and it will output a RISC-V ELF file to `target/riscv64im-unknown-none-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
+build with target set to your **host** machine. If you want to directly build for `openvm` (more specifically a RISC-V target), run `cargo openvm build` and it will output a RISC-V ELF file to `target/riscv64im-openvm-none-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
 
 ```bash
-rust-objdump -d target/riscv64im-unknown-none-elf/release/openvm-fibonacci-program
+rust-objdump -d target/riscv64im-openvm-none-elf/release/openvm-fibonacci-program
 ```
 
 ## Running a Benchmark Locally
