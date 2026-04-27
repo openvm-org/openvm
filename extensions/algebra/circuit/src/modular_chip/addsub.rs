@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -54,9 +54,9 @@ fn gen_base_expr(
     let (expr, is_add_flag, is_sub_flag) = addsub_expr(config, range_checker_bus);
 
     let local_opcode_idx = vec![
-        Rv32ModularArithmeticOpcode::ADD as usize,
-        Rv32ModularArithmeticOpcode::SUB as usize,
-        Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
+        Rv64ModularArithmeticOpcode::ADD as usize,
+        Rv64ModularArithmeticOpcode::SUB as usize,
+        Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize,
     ];
     let opcode_flag_idx = vec![is_add_flag, is_sub_flag];
 

@@ -4,7 +4,7 @@ use std::{
 };
 
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
@@ -232,17 +232,17 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
 
             Ok(op)
         } else {
-            let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize
-                || local_opcode == Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize;
+            let is_setup = local_opcode == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize
+                || local_opcode == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize;
 
             let op = if is_setup {
                 None
             } else {
                 match local_opcode {
-                    x if x == Rv32ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
-                    x if x == Rv32ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
-                    x if x == Rv32ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
-                    x if x == Rv32ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
+                    x if x == Rv64ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
+                    x if x == Rv64ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
+                    x if x == Rv64ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
+                    x if x == Rv64ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
                     _ => unreachable!(),
                 }
             };
