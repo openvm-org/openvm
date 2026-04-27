@@ -162,6 +162,7 @@ fn rand_auipc_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
+    pub is_sign_extend: Option<u32>,
     pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     pub imm_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
     pub pc_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 2]>,
@@ -194,6 +195,9 @@ fn run_negative_auipc_test(
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
 
+        if let Some(val) = prank_vals.is_sign_extend {
+            core_cols.is_sign_extend = F::from_u32(val);
+        }
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_u32);
         }
@@ -269,6 +273,7 @@ fn invalid_limb_negative_tests() {
             rd_data: Some([197, 202, 49, 70]),
             imm_limbs: Some([166, 243, 17]),
             pc_limbs: Some([36, 62]),
+            ..Default::default()
         },
         true,
     );
@@ -316,6 +321,34 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 }
 
 #[test]
+fn sign_extend_flag_negative_tests() {
+    // is_sign_extend = 1 when the result fits in 32 bits (MSB of rd_data[3] is 0).
+    // pc=4, imm=0 ⟹ rd = 4 ⟹ rd_data = [4, 0, 0, 0, 0, 0, 0, 0].
+    run_negative_auipc_test(
+        AUIPC,
+        Some(0),
+        Some(4),
+        AuipcPrankValues {
+            is_sign_extend: Some(1),
+            ..Default::default()
+        },
+        true,
+    );
+    // is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[3] is 1).
+    // pc=0, imm=2^23 ⟹ rd = 2^31 ⟹ rd_data = [0, 0, 0, 128, 255, 255, 255, 255].
+    run_negative_auipc_test(
+        AUIPC,
+        Some(1 << 23),
+        Some(0),
+        AuipcPrankValues {
+            is_sign_extend: Some(0),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
 fn overflow_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
@@ -355,6 +388,7 @@ fn overflow_negative_tests() {
             rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
             imm_limbs: Some([0, 0, 0]),
             pc_limbs: Some([1, 0]),
+            ..Default::default()
         },
         true,
     );
@@ -372,7 +406,7 @@ fn run_auipc_sanity_test() {
     let imm = 11302451;
     let rd_data = run_auipc(initial_pc, imm);
 
-    assert_eq!(rd_data, [210, 107, 113, 186, 0, 0, 0, 0]);
+    assert_eq!(rd_data, [210, 107, 113, 186, 255, 255, 255, 255]);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

@@ -405,6 +405,34 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 }
 
 #[test]
+fn sign_extend_flag_negative_tests() {
+    // LUI with imm small enough that imm << 12 has bit 31 unset (MSB of rd[3] is 0).
+    // is_sign_extend pranked to true should fail.
+    run_negative_jal_lui_test(
+        LUI,
+        Some(1),
+        None,
+        JalLuiPrankValues {
+            is_sign_extend: Some(true),
+            ..Default::default()
+        },
+        true,
+    );
+    // JAL writes pc+4 with pc < 2^30, so MSB of rd[3] is always 0.
+    // is_sign_extend pranked to true should fail.
+    run_negative_jal_lui_test(
+        JAL,
+        None,
+        None,
+        JalLuiPrankValues {
+            is_sign_extend: Some(true),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
 fn overflow_negative_tests() {
     run_negative_jal_lui_test(
         JAL,
