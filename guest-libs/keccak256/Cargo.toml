@@ -14,7 +14,7 @@ openvm-keccak256-guest = { workspace = true }
 tiny-keccak = { workspace = true, optional = true }
 
 [target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
-spin = { workspace = true, features = ["mutex", "spin_mutex", "portable_atomic"] }
+spin = { workspace = true, features = ["mutex", "spin_mutex"] }
 
 [dev-dependencies]
 hex = { workspace = true }
