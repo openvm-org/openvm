@@ -6,7 +6,7 @@
 //! This module optimizes the preflight path by using native field arithmetic for known
 //! field types (K256, P256, BN254, BLS12-381).
 
-use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
     system::memory::online::TracingMemory,
@@ -144,12 +144,12 @@ fn compute_fp2_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 /// Convert local opcode to Operation enum for modular arithmetic.
 #[inline]
 fn local_opcode_to_modular_operation(local_opcode: usize) -> Option<Operation> {
-    let base_opcode = local_opcode % Rv32ModularArithmeticOpcode::COUNT;
+    let base_opcode = local_opcode % Rv64ModularArithmeticOpcode::COUNT;
     match base_opcode {
-        x if x == Rv32ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
-        x if x == Rv32ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
-        x if x == Rv32ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
-        x if x == Rv32ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
+        x if x == Rv64ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
+        x if x == Rv64ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
+        x if x == Rv64ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
+        x if x == Rv64ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
         _ => None,
     }
 }
