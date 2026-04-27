@@ -22,7 +22,7 @@ use crate::{
     poseidon2::deferral_poseidon2_chip,
     utils::{
         byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
-        COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_MEMORY_OPS,
+        COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_LEN_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn, CALL_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
@@ -204,8 +204,13 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     let output_f_commit =
         byte_commit_to_f(&output_commit.iter().map(|v| F::from_u8(*v)).collect_vec());
 
-    // (output_commit, output_len) pair, corresponds to guest struct OutputKey
-    let output_key = combine_output(output_commit, output_len.to_le_bytes());
+    let output_len_u32 =
+        u32::try_from(output_len).expect("deferral output length should fit in a u32");
+    let mut output_len_full = [0u8; OUTPUT_LEN_NUM_BYTES];
+    output_len_full[..4].copy_from_slice(&output_len_u32.to_le_bytes());
+
+    // (output_commit, output_len) pair, corresponds to guest struct OutputKey.
+    let output_key = combine_output(output_commit, output_len_full);
 
     let new_input_acc = poseidon2_chip.perm(&old_input_acc, &input_commit, true);
     let new_output_acc = poseidon2_chip.perm(&old_output_acc, &output_f_commit, true);

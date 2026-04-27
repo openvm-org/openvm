@@ -1,5 +1,4 @@
 mod eq_mod;
-mod helpers;
 mod vec_heap;
 mod vec_heap_branch;
 mod vec_to_flat;

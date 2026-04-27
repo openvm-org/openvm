@@ -42,7 +42,10 @@ use {
 
 use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
-    adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller},
+    adapters::{
+        rv64_bytes_to_u32, Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor,
+        Rv64LoadStoreAdapterFiller,
+    },
     load_sign_extend::LoadSignExtendCoreCols,
     LoadSignExtendFiller, Rv64LoadSignExtendAir, Rv64LoadSignExtendChip,
     Rv64LoadSignExtendExecutor,
@@ -129,8 +132,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         let low4 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
     });
-    let rs1_low4: [u8; 4] = rs1[..4].try_into().unwrap();
-    let ptr_val = imm_ext.wrapping_add(u32::from_le_bytes(rs1_low4));
+    let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
     let a = gen_pointer(rng, 8);
     let b = gen_pointer(rng, 8);
 

@@ -30,15 +30,14 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, expand_to_rv64_register, tracing_read, tracing_write, RV64_CELL_BITS,
+    abstract_compose, expand_to_rv64_register, tracing_read, tracing_read_reg_ptr, tracing_write,
+    RV64_CELL_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
-
-use crate::helpers::tracing_read_reg_ptr;
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -376,6 +375,7 @@ impl<
                 memory,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
+                self.pointer_max_bits,
             )
         });
 
@@ -384,6 +384,7 @@ impl<
             memory,
             record.rd_ptr,
             &mut record.rd_read_aux.prev_timestamp,
+            self.pointer_max_bits,
         );
 
         // Read memory values

@@ -189,7 +189,7 @@ where
         let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
         let (output_commit, output_len) = split_output(output_key);
 
-        let output_len_val = u64::from_le_bytes(output_len) as usize;
+        let output_len_val = rv64_bytes_to_u32(output_len) as usize;
         let num_rows = output_len_val / DIGEST_SIZE + 1;
         debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
 
