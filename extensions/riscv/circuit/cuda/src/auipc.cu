@@ -10,6 +10,7 @@ using namespace program;
 
 template <typename T> struct Rv64AuipcCoreCols {
     T is_valid;
+    T is_sign_extend;
     // The limbs of the immediate except the least significant limb since it is always 0
     T imm_limbs[RV64_WORD_NUM_LIMBS - 1];
     // The limbs of the PC except the most significant and the least significant limbs
@@ -44,10 +45,16 @@ struct Rv64AuipcCore {
         for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
             bitwise_lookup.add_range(rd_data[i], rd_data[i + 1]);
         }
+        uint32_t is_sign_ext = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
+        bitwise_lookup.add_range(
+            rd_data[RV64_WORD_NUM_LIMBS - 1],
+            2 * rd_data[RV64_WORD_NUM_LIMBS - 1] - is_sign_ext * (1 << RV64_CELL_BITS)
+        );
 
         COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, imm_limbs, imm_limbs);
         COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, pc_limbs, pc_limbs + 1);
         COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, rd_data, rd_data);
+        COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_sign_extend, is_sign_ext);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
     }
 };
