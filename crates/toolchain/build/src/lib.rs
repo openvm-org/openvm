@@ -19,9 +19,8 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-/// Custom rustc target; spec lives at `<RUSTC_TARGET>.json` next to this crate.
-/// Based on `riscv64im-unknown-none-elf` with `atomic-cas: true` and
-/// `singlethread: true`.
+/// Custom rustc target for the openvm guest. The JSON spec lives at
+/// `<RUSTC_TARGET>.json` next to this crate.
 pub const RUSTC_TARGET: &str = "riscv64im-openvm-none-elf";
 
 /// Directory containing the target JSON; passed to cargo as `RUST_TARGET_PATH`.
