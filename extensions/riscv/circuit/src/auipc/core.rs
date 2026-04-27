@@ -26,14 +26,15 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_register, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS,
-    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv64AuipcCoreCols<T> {
     pub is_valid: T,
+    pub is_sign_extend: T,
     // The limbs of the immediate except the least significant limb since it is always 0
     pub imm_limbs: [T; RV64_WORD_NUM_LIMBS - 1],
     // The limbs of the PC except the most significant and the least significant limbs
@@ -72,11 +73,13 @@ where
 
         let Rv64AuipcCoreCols {
             is_valid,
+            is_sign_extend,
             imm_limbs,
             pc_limbs,
             rd_data,
         } = *cols;
         builder.assert_bool(is_valid);
+        builder.assert_bool(is_sign_extend);
 
         // We want to constrain rd = pc + imm (i32 add) where:
         // - rd_data represents limbs of rd
@@ -118,12 +121,21 @@ where
             builder.when(is_valid).assert_bool(carry[i].clone());
         }
 
-        // Range checking of rd_data entries to RV64_CELL_BITS bits
-        for i in 0..(RV64_WORD_NUM_LIMBS / 2) {
-            self.bus
-                .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
-                .eval(builder, is_valid);
-        }
+        // Byte-range check rd_data with two bus sends:
+        //   1. (rd_data[0], rd_data[1]).
+        //   2. (rd_data[2], 2*rd_data[3] - is_sign_extend * 2^RV64_CELL_BITS) — constraining the
+        //      second value to [0, 2^RV64_CELL_BITS) forces is_sign_extend = msb(rd_data[3]) and
+        //      (combined with the carry chain) byte-bounds rd_data[3].
+        self.bus
+            .send_range(rd_data[0], rd_data[1])
+            .eval(builder, is_valid);
+        self.bus
+            .send_range(
+                rd_data[RV64_WORD_NUM_LIMBS - 2],
+                AB::Expr::from_u32(2) * rd_data[RV64_WORD_NUM_LIMBS - 1]
+                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
+            )
+            .eval(builder, is_valid);
 
         // The immediate and PC limbs need range checking to ensure they're within [0,
         // 2^RV64_CELL_BITS) Since we range check two items at a time, doing this way helps
@@ -169,7 +181,14 @@ where
                 acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
             });
 
-        let write_data = expand_to_rv64_register(&rd_data);
+        let sign_extend_limb = is_sign_extend * AB::Expr::from_u32(u8::MAX as u32);
+        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
+                rd_data[i].into()
+            } else {
+                sign_extend_limb.clone()
+            }
+        });
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
         AdapterAirContext {
             to_pc: None,
@@ -275,15 +294,23 @@ where
         let msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
-        for pair in rd_data[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
+        // Mirror the AIR: rd_data[0..2] pair, then rd_data[2] paired with the sign-extend
+        // constraint on rd_data[3].
+        self.bitwise_lookup_chip
+            .request_range(rd_data[0] as u32, rd_data[1] as u32);
+        let is_sign_extend = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
+        self.bitwise_lookup_chip.request_range(
+            rd_data[RV64_WORD_NUM_LIMBS - 2] as u32,
+            2 * rd_data[RV64_WORD_NUM_LIMBS - 1] as u32
+                - is_sign_extend as u32 * (1 << RV64_CELL_BITS),
+        );
+
         // Writing in reverse order
         core_row.rd_data = from_fn(|i| F::from_u8(rd_data[i]));
         // only the middle 2 limbs:
         core_row.pc_limbs = from_fn(|i| F::from_u8(pc_limbs[i + 1]));
         core_row.imm_limbs = from_fn(|i| F::from_u8(imm_limbs[i]));
+        core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
 
         core_row.is_valid = F::ONE;
     }
@@ -295,5 +322,7 @@ pub(super) fn run_auipc(pc: u32, imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV64_CELL_BITS);
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&rd.to_le_bytes());
+    let sign_extend_limb = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) * u8::MAX;
+    rd_data[RV64_WORD_NUM_LIMBS..].fill(sign_extend_limb);
     rd_data
 }
