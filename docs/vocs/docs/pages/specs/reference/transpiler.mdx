@@ -71,7 +71,7 @@ We handle writes to `x0` in transpilation as follows:
 - Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
 - Instructions that write to a register which might be `x0` with side effects (JAL, JALR) are transpiled to the corresponding custom instruction whose write behavior is controlled by a flag specifying whether the target register is `x0`.
 
-Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV64IM conforms to the RV64IM specification for `x0`.
+Because `[0:8]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV64IM conforms to the RV64IM specification for `x0`.
 
 ### System Level Extensions to RV64IM
 
@@ -115,6 +115,23 @@ Because `[0:4]_1` is initialized to `0` and never written to, this guarantees th
 | sb          | STOREB_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
 | sh          | STOREH_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
 | sw          | STOREW_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
+| lwu         | LOADWU_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                  |
+| ld          | LOADD_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
+| sd          | STORED_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
+| addw        | ADDW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| subw        | SUBW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| addiw       | ADDW_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
+| sllw        | SLLW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| srlw        | SRLW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| sraw        | SRAW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
+| slliw       | SLLW_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| srliw       | SRLW_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| sraiw       | SRAW_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| mulw        | MULW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
+| divw        | DIVW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
+| divuw       | DIVUW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
+| remw        | REMW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
+| remuw       | REMUW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
 | beq         | BEQ_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
 | bne         | BNE_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
 | blt         | BLT_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
@@ -141,7 +158,7 @@ to OpenVM. In order to preserve correctness of handling of `x0`, the transpilati
 the constraint that any instruction that writes to a register must:
 
 - Transpile to `Nop` if the register is `x0` and there are no side effects.
-- Transpile to an OpenVM assembly instruction that does not write to `[0:4]_1` and processes side effects if the register is `x0` and there are side effects.
+- Transpile to an OpenVM assembly instruction that does not write to `[0:8]_1` and processes side effects if the register is `x0` and there are side effects.
 
 Each VM extension's behavior is specified below.
 

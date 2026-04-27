@@ -50,6 +50,14 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | RV64IM | `Rv64LoadStoreOpcode::STOREB` | STOREB_RV64      |
 | RV64IM | `Rv64LoadStoreOpcode::STOREH` | STOREH_RV64      |
 | RV64IM | `Rv64LoadStoreOpcode::STOREW` | STOREW_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::LOADWU` | LOADWU_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::LOADD` | LOADD_RV64       |
+| RV64IM | `Rv64LoadStoreOpcode::STORED` | STORED_RV64      |
+| RV64IM | `BaseAluWOpcode::ADDW` | ADDW_RV64        |
+| RV64IM | `BaseAluWOpcode::SUBW` | SUBW_RV64        |
+| RV64IM | `ShiftWOpcode::SLLW` | SLLW_RV64        |
+| RV64IM | `ShiftWOpcode::SRLW` | SRLW_RV64        |
+| RV64IM | `ShiftWOpcode::SRAW` | SRAW_RV64        |
 | RV64IM | `BranchEqualOpcode::BEQ` | BEQ_RV64         |
 | RV64IM | `BranchEqualOpcode::BNE` | BNE_RV64         |
 | RV64IM | `BranchLessThanOpcode::BLT` | BLT_RV64         |
@@ -68,6 +76,11 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | RV64IM | `DivRemOpcode::DIVU` | DIVU_RV64        |
 | RV64IM | `DivRemOpcode::REM` | REM_RV64         |
 | RV64IM | `DivRemOpcode::REMU` | REMU_RV64        |
+| RV64IM | `MulWOpcode::MULW` | MULW_RV64        |
+| RV64IM | `DivRemWOpcode::DIVW` | DIVW_RV64        |
+| RV64IM | `DivRemWOpcode::DIVUW` | DIVUW_RV64       |
+| RV64IM | `DivRemWOpcode::REMW` | REMW_RV64        |
+| RV64IM | `DivRemWOpcode::REMUW` | REMUW_RV64       |
 | RV64IM | `Rv64HintStoreOpcode::HINT_STORED` | HINT_STORED_RV64 |
 | RV64IM | `Rv64HintStoreOpcode::HINT_BUFFER` | HINT_BUFFER_RV64 |
 | RV64IM | Pseudo-instruction for `STORED_RV64` | REVEAL_RV64      |

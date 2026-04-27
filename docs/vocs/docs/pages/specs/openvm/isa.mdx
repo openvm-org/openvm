@@ -321,6 +321,20 @@ unsigned integer, and convert to field element. In the instructions below, `[c:8
 | SLT_RV64  | `a,b,c,1,e` | `[a:8]_1 = i64([b:8]_1) < i64([c:8]_e) ? 1 : 0`                                                          |
 | SLTU_RV64 | `a,b,c,1,e` | `[a:8]_1 = u64([b:8]_1) < u64([c:8]_e) ? 1 : 0`                                                          |
 
+#### Word-Width ALU
+
+The W-suffix instructions operate on the lower 32 bits of 64-bit registers and sign-extend the 32-bit result to 64 bits before writing back the full 64-bit register. In all W-suffix ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`, the `c` operand encoding follows the same convention as the [ALU](#alu) instructions.
+
+We define `w32(x)` where `x: [F; 8]` to mean `u32(x[0:4])`, i.e., the lower 32 bits of the 64-bit register value. We define `sign_extend_32(y)` where `y` is a 32-bit value to mean the 64-bit value obtained by sign-extending bit 31 of `y`.
+
+| Name       | Operands     | Description                                                                                                                          |
+| ---------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ADDW_RV64  | `a,b,c,1,e`  | `[a:8]_1 = sign_extend_32(w32([b:8]_1) + w32([c:8]_e))`. Overflow is ignored and the lower 32-bits are sign-extended to 64-bits.     |
+| SUBW_RV64  | `a,b,c,1,e`  | `[a:8]_1 = sign_extend_32(w32([b:8]_1) - w32([c:8]_e))`. Overflow is ignored and the lower 32-bits are sign-extended to 64-bits.     |
+| SLLW_RV64  | `a,b,c,1,e`  | `[a:8]_1 = sign_extend_32(w32([b:8]_1) << (w32([c:8]_e) & 0x1F))`. Only the low 5 bits of the shift amount are used.                 |
+| SRLW_RV64  | `a,b,c,1,e`  | `[a:8]_1 = sign_extend_32(w32([b:8]_1) >> (w32([c:8]_e) & 0x1F))`. Logical (zero-fill) right shift. Only the low 5 bits are used.    |
+| SRAW_RV64  | `a,b,c,1,e`  | `[a:8]_1 = sign_extend_32(i32(w32([b:8]_1)) >> (w32([c:8]_e) & 0x1F))`. Arithmetic (sign-fill) right shift. Only the low 5 bits are used. |
+
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
@@ -418,6 +432,22 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | DIVU_RV64    | `a,b,c,1` | `[a:8]_1 = [b:8]_1 / [c:8]_1` integer division. Division by zero: if `u64([c:8]_1) = 0`, set `u64([a:8]_1) = 2^64 - 1`.                                                                                    |
 | REM_RV64     | `a,b,c,1` | `[a:8]_1 = [b:8]_1 % [c:8]_1` integer remainder. Division by zero: if `i64([c:8]_1) = 0`, set `[a:8]_1 = [b:8]_1`. Overflow: if `i64([b:8]_1) = -2^63` and `i64([c:8]_1) = -1`, set `[a:8]_1 = 0`.         |
 | REMU_RV64    | `a,b,c,1` | `[a:8]_1 = [b:8]_1 % [c:8]_1` integer remainder. Division by zero: if `u64([c:8]_1) = 0`, set `[a:8]_1 = [b:8]_1`.                                                                                         |
+
+##### Word-Width Multiplication
+
+MULW_RV64 performs a 32-bit×32-bit multiplication on the lower 32 bits of the source registers
+and sign-extends the lower 32 bits of the result to 64 bits. DIVW_RV64, DIVUW_RV64, REMW_RV64,
+and REMUW_RV64 perform 32-bit division and remainder operations on the lower 32 bits. All results
+are sign-extended to 64 bits. We reuse the notation `w32(x)` and `sign_extend_32(y)` from the
+[Word-Width ALU](#word-width-alu-w-suffix) section.
+
+| Name         | Operands  | Description                                                                                                                                                                                                                        |
+| ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MULW_RV64    | `a,b,c,1` | `[a:8]_1 = sign_extend_32(w32([b:8]_1) * w32([c:8]_1))`. Lower 32-bits of the product, sign-extended to 64-bits.                                                                                                                   |
+| DIVW_RV64    | `a,b,c,1` | `[a:8]_1 = sign_extend_32(i32(w32([b:8]_1)) / i32(w32([c:8]_1)))`. Signed 32-bit division. Division by zero: if `w32([c:8]_1) = 0`, set result to `sign_extend_32(0xFFFFFFFF)`. Overflow: if `i32(w32([b:8]_1)) = -2^31` and `i32(w32([c:8]_1)) = -1`, set result to `sign_extend_32(0x80000000)`. |
+| DIVUW_RV64   | `a,b,c,1` | `[a:8]_1 = sign_extend_32(w32([b:8]_1) / w32([c:8]_1))`. Unsigned 32-bit division. Division by zero: if `w32([c:8]_1) = 0`, set result to `sign_extend_32(0xFFFFFFFF)`.                                                             |
+| REMW_RV64    | `a,b,c,1` | `[a:8]_1 = sign_extend_32(i32(w32([b:8]_1)) % i32(w32([c:8]_1)))`. Signed 32-bit remainder. Division by zero: if `w32([c:8]_1) = 0`, set result to `sign_extend_32(w32([b:8]_1))`. Overflow: if `i32(w32([b:8]_1)) = -2^31` and `i32(w32([c:8]_1)) = -1`, set result to `sign_extend_32(0)`. |
+| REMUW_RV64   | `a,b,c,1` | `[a:8]_1 = sign_extend_32(w32([b:8]_1) % w32([c:8]_1))`. Unsigned 32-bit remainder. Division by zero: if `w32([c:8]_1) = 0`, set result to `sign_extend_32(w32([b:8]_1))`.                                                          |
 
 #### User IO
 
