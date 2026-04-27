@@ -150,7 +150,7 @@ __global__ void deferral_output_tracegen(
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_buffer(bitwise_ptr, RV64_CELL_BITS);
+    BitwiseOperationLookup bitwise_buffer(bitwise_ptr);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );

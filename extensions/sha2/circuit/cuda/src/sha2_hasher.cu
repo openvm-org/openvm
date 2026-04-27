@@ -623,7 +623,7 @@ __global__ void sha2_first_pass_phase2(
         prev_hashes + ((global_block_idx + 1) % total_num_blocks) * V::HASH_WORDS;
 
     Sha2TraceHelper<V> helper;
-    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, RV64_CELL_BITS);
+    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr);
 
     if (row_in_block < V::ROUND_ROWS) {
         SHA2_WRITE_ROUND(V, row, request_id, Fp(record_idx));

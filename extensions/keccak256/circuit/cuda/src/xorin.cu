@@ -49,7 +49,7 @@ __global__ void xorin_tracegen(
         MemoryAuxColsFactory mem_helper(
             VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
-        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, RV64_CELL_BITS);
+        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
 
         auto record_len = rec.len;
         auto num_reads =

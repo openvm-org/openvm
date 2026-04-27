@@ -33,7 +33,7 @@ static __device__ __forceinline__ void sha2_main_row_body(
 ) {
     Sha2RecordHeader<V> *header = record.header;
 
-    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, RV64_CELL_BITS);
+    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );

@@ -38,7 +38,7 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, RV64_CELL_BITS);
+    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
 
     // CUDA is little-endian, so the u64 word and byte representations below are the same memory
     // layout.

@@ -29,7 +29,7 @@ __global__ void bitwise_dummy_tracegen(
 
     if (idx < height) {
         auto const &record = records[idx];
-        BitwiseOperationLookup bitwise(bitwise_count, RV64_CELL_BITS);
+        BitwiseOperationLookup bitwise(bitwise_count);
         RowSlice row(trace + idx, height);
 
         COL_WRITE_VALUE(row, DummyChipCols, count, 1);
