@@ -218,6 +218,22 @@ pub fn tracing_read<const N: usize>(
     data
 }
 
+/// Reads an RV64 register, records the memory access, and returns the low 32 bits. Debug-asserts
+/// the returned value fits in `pointer_max_bits` (which, for `pointer_max_bits <= 32`, also
+/// implies the upper 32 bits are zero).
+#[inline(always)]
+pub fn tracing_read_reg_ptr(
+    memory: &mut TracingMemory,
+    ptr: u32,
+    prev_timestamp: &mut u32,
+    pointer_max_bits: usize,
+) -> u32 {
+    let bytes = tracing_read(memory, RV64_REGISTER_AS, ptr, prev_timestamp);
+    let val = rv64_bytes_to_u32(bytes);
+    debug_assert!((val as u64) < (1u64 << pointer_max_bits));
+    val
+}
+
 #[inline(always)]
 pub fn tracing_read_imm(
     memory: &mut TracingMemory,

@@ -343,7 +343,7 @@ fn test_hint_buffer_mem_ptr_range_check() {
 }
 
 #[test]
-#[should_panic(expected = "mem_ptr upper 4 bytes must be zero for hintstore")]
+#[should_panic(expected = "upper 4 bytes must be zero")]
 fn test_hintstore_rs1_upper_bytes_non_zero() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();

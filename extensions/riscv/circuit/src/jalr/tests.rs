@@ -362,7 +362,11 @@ fn invalid_cols_negative_tests() {
         },
         false,
     );
+}
 
+#[test]
+#[should_panic(expected = "upper 4 bytes must be zero")]
+fn rs1_upper_bytes_preflight_rejects_test() {
     run_negative_jalr_test(
         JALR,
         None,
