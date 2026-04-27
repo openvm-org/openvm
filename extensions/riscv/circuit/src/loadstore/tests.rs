@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
     },
     system::memory::{
@@ -10,6 +10,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
 };
@@ -133,8 +135,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let ptr_val = imm_ext.wrapping_add(rs1_low);
     let shift_amount = (ptr_val as usize) & (RV64_REGISTER_NUM_LIMBS - 1);
 
-    let a = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let b = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let max_addr = 1usize << tester.address_bits();
+    let a = rng.random_range(0..(max_addr - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
+        * RV64_REGISTER_NUM_LIMBS;
+    let b = rng.random_range(0..(max_addr - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
+        * RV64_REGISTER_NUM_LIMBS;
 
     let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
     let mem_as = mem_as.unwrap_or(if is_load {
@@ -810,11 +815,15 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    let mut mem_config = MemoryConfig {
+        pointer_max_bits: 20,
+        ..Default::default()
+    };
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 20;
+    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     }
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 
