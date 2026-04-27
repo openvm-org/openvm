@@ -125,7 +125,7 @@ fn make_multi_deferral_circuit_prover_with_count(
     multi_deferral_circuit_prover
 }
 
-/// Builds a deferral-enabled riscv32 SDK whose App VM inventory includes the
+/// Builds a deferral-enabled riscv64 SDK whose App VM inventory includes the
 /// deferral periphery chips (DeferralPoseidon2Chip, count chip, etc.).
 fn make_deferral_enabled_sdk(
     fib_sdk: &Sdk,
@@ -146,7 +146,9 @@ fn make_deferral_enabled_sdk_with_count(
     let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
     let deferral_config = multi_deferral_circuit_prover.make_config(supported_deferrals);
 
-    let vm_config = riscv32_config_with_deferral(deferral_config);
+    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv64();
+    vm_config.deferral = Some(deferral_ext);
+    vm_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
