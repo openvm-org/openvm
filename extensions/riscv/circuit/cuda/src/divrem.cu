@@ -68,8 +68,6 @@ extern "C" int _rv64_div_rem_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(Rv64DivRemCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 

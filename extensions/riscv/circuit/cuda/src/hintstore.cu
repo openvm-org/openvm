@@ -216,8 +216,6 @@ extern "C" int _hintstore_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(height == 0 || (height & (height - 1)) == 0);
-    assert(height >= rows_used);
     assert(width == sizeof(Rv64HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 

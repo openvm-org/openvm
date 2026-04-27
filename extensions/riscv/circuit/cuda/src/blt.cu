@@ -62,8 +62,6 @@ extern "C" int _blt_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThanCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);

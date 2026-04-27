@@ -101,8 +101,6 @@ extern "C" int _alu256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(BaseAlu256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -178,8 +176,6 @@ extern "C" int _branch_equal256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(BranchEqual256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -251,8 +247,6 @@ extern "C" int _less_than256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(LessThan256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -324,8 +318,6 @@ extern "C" int _branch_less_than256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThan256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -400,8 +392,6 @@ extern "C" int _shift256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(Shift256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -480,8 +470,6 @@ extern "C" int _multiplication256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(Multiplication256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);

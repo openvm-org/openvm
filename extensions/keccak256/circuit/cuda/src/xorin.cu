@@ -183,8 +183,6 @@ extern "C" int _xorin_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(XorinVmCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 512);

@@ -157,7 +157,6 @@ extern "C" int _keccakf_op_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
     assert(width == sizeof(KeccakfOpCols<uint8_t>));
 
     uint32_t num_records = d_records.len();

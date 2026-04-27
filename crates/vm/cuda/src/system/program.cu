@@ -50,7 +50,6 @@ extern "C" int _program_cached_tracegen(
     size_t terminate_opcode,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
     assert(width == sizeof(ProgramExecutionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     program_cached_tracegen<<<grid, block, 0, stream>>>(

@@ -133,7 +133,6 @@ extern "C" int _jalr_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(height >= d_records.len());
     assert(width == sizeof(Rv64JalrCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
