@@ -80,7 +80,7 @@ __global__ void alu256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BaseAlu256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
+        BaseAlu256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BaseAlu256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BaseAlu256Cols<uint8_t>));
@@ -220,7 +220,7 @@ __global__ void less_than256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        LessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
+        LessThan256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(LessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(LessThan256Cols<uint8_t>));
@@ -288,7 +288,7 @@ __global__ void branch_less_than256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchLessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
+        BranchLessThan256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThan256Cols<uint8_t>));

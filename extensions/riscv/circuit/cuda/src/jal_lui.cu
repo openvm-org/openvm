@@ -22,7 +22,7 @@ struct Rv64JalLuiCoreRecord {
 struct Rv64JalLuiCore {
     BitwiseOperationLookup bw;
 
-    __device__ Rv64JalLuiCore(uint32_t *bw_ptr, uint32_t bw_bits) : bw(bw_ptr, bw_bits) {}
+    __device__ Rv64JalLuiCore(uint32_t *bw_ptr) : bw(bw_ptr) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64JalLuiCoreRecord record) {
 #pragma unroll
@@ -69,7 +69,6 @@ __global__ void jal_lui_tracegen(
     uint32_t *rc_ptr,
     uint32_t rc_bins,
     uint32_t *bw_ptr,
-    uint32_t bw_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -80,7 +79,7 @@ __global__ void jal_lui_tracegen(
 
         Rv64CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
-        Rv64JalLuiCore core(bw_ptr, bw_bits);
+        Rv64JalLuiCore core(bw_ptr);
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalLuiCols, core)), full.core);
     } else {
         row.fill_zero(0, sizeof(Rv64JalLuiCols<uint8_t>));
@@ -95,7 +94,6 @@ extern "C" int _jal_lui_tracegen(
     uint32_t *d_rc,
     uint32_t rc_bins,
     uint32_t *d_bw,
-    uint32_t bw_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -104,7 +102,7 @@ extern "C" int _jal_lui_tracegen(
     auto [grid, block] = kernel_launch_params(height);
 
     jal_lui_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_rc, rc_bins, d_bw, bw_bits, timestamp_max_bits
+        d_trace, height, d_records, d_rc, rc_bins, d_bw, timestamp_max_bits
     );
     return CHECK_KERNEL();
 }

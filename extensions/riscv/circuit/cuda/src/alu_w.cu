@@ -43,7 +43,7 @@ __global__ void rv64_alu_w_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        Rv64BaseAluWCore core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
+        Rv64BaseAluWCore core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64BaseAluWCols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(Rv64BaseAluWCols<uint8_t>));

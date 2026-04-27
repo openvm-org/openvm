@@ -63,7 +63,6 @@ extern "C" int _rv64_less_than_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    // We require the height to be a power of two for the tracegen to work
     assert(width == sizeof(LessThanCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 

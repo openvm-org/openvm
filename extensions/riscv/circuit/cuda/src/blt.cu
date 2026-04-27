@@ -42,7 +42,7 @@ __global__ void blt_tracegen(
         Rv64BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full_record.adapter);
 
-        Rv64BranchLessThanCore core(BitwiseOperationLookup(bw_ptr));
+        Rv64BranchLessThanCore core{BitwiseOperationLookup(bw_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThanCols, core)), full_record.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThanCols<uint8_t>));
