@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
@@ -74,7 +74,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS as u32,
+                RV64_CELL_BITS as u32,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
