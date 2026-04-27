@@ -49,7 +49,7 @@ This section specifies the behavior of the transpiler for the default VM extensi
 - We use `sign_extend_16` for the analogous conversion into a 16-bit integer via sign extension.
 - We use `zero_extend_24` to convert an unsigned integer with at most 24 bits into a 24-bit unsigned integer by zero extension. This is used in conjunction with `utof` to convert unsigned integers to field elements.
 - We use `sign_of(imm)` to get the sign bit of the immediate `imm`.
-- The notation `imm[0:4]` means the lowest 5 bits of the immediate.
+- The notation `imm[0:n]` means the lowest `n + 1` bits of the immediate.
 - For a phantom instruction `ins`, `disc(ins)` is the discriminant specified in the [ISA specification](/specs/openvm/isa#system-instructions).
 - For a phantom instruction `ins` and a 16-bit `c_upper`, `phantom_c(c_upper, ins) = c_upper << 16 | disc(ins)` is the corresponding 32-bit operand `c` for PHANTOM.
 
