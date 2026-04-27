@@ -13,6 +13,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv64JalrExecutor;
+use crate::adapters::rv64_bytes_to_u32;
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -209,11 +210,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     let pc = exec_state.pc();
     let rs1 =
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    debug_assert!(
-        rs1[4..].iter().all(|&b| b == 0),
-        "upper bytes of rs1 must be zero"
-    );
-    let rs1 = u32::from_le_bytes([rs1[0], rs1[1], rs1[2], rs1[3]]);
+    let rs1 = rv64_bytes_to_u32(rs1);
     let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
     let to_pc = to_pc - (to_pc & 1);
     debug_assert!(to_pc < (1 << PC_BITS));
