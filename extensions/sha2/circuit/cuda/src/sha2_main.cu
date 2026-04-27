@@ -53,9 +53,9 @@ static __device__ __forceinline__ void sha2_main_row_body(
     SHA2_MAIN_WRITE_INSTR(V, row, state_reg_ptr, header->state_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, input_reg_ptr, header->input_reg_ptr);
 
-    uint8_t dst_ptr_bytes[RV32_REGISTER_NUM_LIMBS];
-    uint8_t state_ptr_bytes[RV32_REGISTER_NUM_LIMBS];
-    uint8_t input_ptr_bytes[RV32_REGISTER_NUM_LIMBS];
+    uint8_t dst_ptr_bytes[RV64_WORD_NUM_LIMBS];
+    uint8_t state_ptr_bytes[RV64_WORD_NUM_LIMBS];
+    uint8_t input_ptr_bytes[RV64_WORD_NUM_LIMBS];
     memcpy(dst_ptr_bytes, &header->dst_ptr, sizeof(uint32_t));
     memcpy(state_ptr_bytes, &header->state_ptr, sizeof(uint32_t));
     memcpy(input_ptr_bytes, &header->input_ptr, sizeof(uint32_t));
@@ -66,12 +66,12 @@ static __device__ __forceinline__ void sha2_main_row_body(
 
     // Range checks on top limbs
     uint8_t needs_range_check[4] = {
-        dst_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
-        state_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
-        input_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
-        input_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
+        dst_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
+        state_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
+        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
+        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
     };
-    uint32_t shift = 1u << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - ptr_max_bits);
+    uint32_t shift = 1u << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - ptr_max_bits);
     for (int i = 0; i < 4; i += 2) {
         bitwise_lookup.add_range(
             static_cast<uint32_t>(needs_range_check[i]) * shift,
