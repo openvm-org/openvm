@@ -7,7 +7,7 @@
 // Begin Macro
 //-----------------------------------------------------------------------
 
-#define RVTEST_RV32U                                                    \
+#define RVTEST_RV64U                                                    \
   .macro terminate ec;                                                  \
       .insn i 0x0b, 0, x0, x0, \ec;                                     \
   .endm
