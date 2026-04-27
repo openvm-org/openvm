@@ -7,9 +7,8 @@ namespace sha2 {
 
 // Common VM constants across SHA-2 variants.
 inline constexpr size_t SHA2_REGISTER_READS = 3;
-inline constexpr size_t SHA2_READ_SIZE = 4;
-inline constexpr size_t SHA2_WRITE_SIZE = 4;
-inline constexpr size_t SHA2_MAIN_READ_SIZE = 4;
+inline constexpr size_t SHA2_READ_SIZE = 8;
+inline constexpr size_t SHA2_WRITE_SIZE = 8;
 
 template <
     typename WordT,
@@ -43,8 +42,8 @@ struct Sha2VariantBase {
 
     static constexpr size_t NUM_READ_ROWS = BLOCK_U8S / SHA2_READ_SIZE;
     static constexpr size_t STATE_BYTES = HASH_WORDS * WORD_U8S;
-    static constexpr size_t BLOCK_READS = BLOCK_U8S / SHA2_MAIN_READ_SIZE;
-    static constexpr size_t STATE_READS = STATE_BYTES / SHA2_MAIN_READ_SIZE;
+    static constexpr size_t BLOCK_READS = BLOCK_U8S / SHA2_READ_SIZE;
+    static constexpr size_t STATE_READS = STATE_BYTES / SHA2_READ_SIZE;
     static constexpr size_t STATE_WRITES = STATE_BYTES / SHA2_WRITE_SIZE;
     static constexpr size_t TIMESTAMP_DELTA =
         BLOCK_READS + STATE_READS + STATE_WRITES + SHA2_REGISTER_READS;
