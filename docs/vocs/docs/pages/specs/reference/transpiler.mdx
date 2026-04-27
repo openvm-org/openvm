@@ -102,9 +102,9 @@ Because `[0:8]_1` is initialized to `0` and never written to, this guarantees th
 | xori        | XOR_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
 | ori         | OR_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`             |
 | andi        | AND_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
-| slli        | SLL_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
-| srli        | SRL_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
-| srai        | SRA_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| slli        | SLL_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:5])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| srli        | SRL_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:5])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| srai        | SRA_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:5])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
 | slti        | SLT_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
 | sltiu       | SLTU_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`           |
 | lb          | LOADB_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
