@@ -18,10 +18,10 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{tracing_read, tracing_read_reg_ptr, tracing_write};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -247,53 +247,36 @@ where
         record.inner.state_reg_ptr = b.as_canonical_u32();
         record.inner.input_reg_ptr = c.as_canonical_u32();
 
-        // Pointers live in 8-byte RV64 registers; upper 4 bytes must be zero because
-        // this chip only supports 32-bit-addressable memory.
-        let dst_reg = u64::from_le_bytes(tracing_read::<RV64_REGISTER_NUM_LIMBS>(
+        record.inner.dst_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             record.inner.dst_reg_ptr,
             &mut record.inner.register_reads_aux[0].prev_timestamp,
-        ));
-        let state_reg = u64::from_le_bytes(tracing_read::<RV64_REGISTER_NUM_LIMBS>(
+            self.pointer_max_bits,
+        );
+        record.inner.state_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             record.inner.state_reg_ptr,
             &mut record.inner.register_reads_aux[1].prev_timestamp,
-        ));
-        let input_reg = u64::from_le_bytes(tracing_read::<RV64_REGISTER_NUM_LIMBS>(
+            self.pointer_max_bits,
+        );
+        record.inner.input_ptr = tracing_read_reg_ptr(
             state.memory,
-            RV64_REGISTER_AS,
             record.inner.input_reg_ptr,
             &mut record.inner.register_reads_aux[2].prev_timestamp,
-        ));
-        debug_assert_eq!(
-            dst_reg >> 32,
-            0,
-            "sha2 dst pointer upper 4 bytes must be zero"
+            self.pointer_max_bits,
         );
-        debug_assert_eq!(
-            state_reg >> 32,
-            0,
-            "sha2 state pointer upper 4 bytes must be zero"
-        );
-        debug_assert_eq!(
-            input_reg >> 32,
-            0,
-            "sha2 input pointer upper 4 bytes must be zero"
-        );
-        record.inner.dst_ptr = dst_reg as u32;
-        record.inner.state_ptr = state_reg as u32;
-        record.inner.input_ptr = input_reg as u32;
 
         debug_assert!(
-            record.inner.dst_ptr as usize + C::STATE_BYTES <= (1 << self.pointer_max_bits)
+            (record.inner.dst_ptr as u64 + (C::STATE_BYTES - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
         debug_assert!(
-            record.inner.state_ptr as usize + C::STATE_BYTES <= (1 << self.pointer_max_bits)
+            (record.inner.state_ptr as u64 + (C::STATE_BYTES - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
         debug_assert!(
-            record.inner.input_ptr as usize + C::BLOCK_BYTES <= (1 << self.pointer_max_bits)
+            (record.inner.input_ptr as u64 + (C::BLOCK_BYTES - 1) as u64)
+                < (1u64 << self.pointer_max_bits)
         );
 
         for idx in 0..C::BLOCK_READS {
