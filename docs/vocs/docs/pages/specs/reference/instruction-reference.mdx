@@ -150,14 +150,14 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Algebra | `Rv32ModularArithmeticOpcode::ADD` | ADDMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SUB` | SUBMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SETUP_ADDSUB` | SETUP_ADDSUBMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::MUL` | MULMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::DIV` | DIVMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SETUP_MULDIV` | SETUP_MULDIVMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::IS_EQ` | ISEQMOD_RV64\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SETUP_ISEQ` | SETUP_ISEQMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::ADD` | ADDMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SUB` | SUBMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SETUP_ADDSUB` | SETUP_ADDSUBMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::MUL` | MULMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::DIV` | DIVMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SETUP_MULDIV` | SETUP_MULDIVMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::IS_EQ` | ISEQMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SETUP_ISEQ` | SETUP_ISEQMOD_RV64\<N\> |
 | Algebra | `Fp2Opcode::ADD` | ADD_RV64\<Fp2\> |
 | Algebra | `Fp2Opcode::SUB` | SUB_RV64\<Fp2\> |
 | Algebra | `Fp2Opcode::SETUP_ADDSUB` | SETUP_ADDSUB_RV64\<Fp2\> |
@@ -178,10 +178,10 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE_RV64\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE_RV64\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE_RV64\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE_RV64\<C\> |
 
 ## Pairing Extension
 
