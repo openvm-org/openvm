@@ -14,14 +14,6 @@ derive_more = { version = "1.0.0", default-features = false, features = [
     "display",
 ] }
 
-# On guest targets lacking the A extension, route transitive CAS consumers
-# through `portable-atomic` (which `openvm-platform` backs with
-# `critical-section`): `bytes` via `extra-platforms`, and the legacy
-# `spin 0.9` pulled in by `lazy_static` via `portable_atomic`.
-[target.'cfg(all(target_arch = "riscv64", target_os = "none", not(target_feature = "a")))'.dependencies]
-bytes = { version = "1.11.1", default-features = false, features = ["extra-platforms"] }
-spin = { version = "0.9", default-features = false, features = ["portable_atomic", "spin_mutex"] }
-
 [features]
 default = []
 std = ["openvm/std"]
