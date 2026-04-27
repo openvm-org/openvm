@@ -5216,7 +5216,6 @@ dependencies = [
  "libm",
  "openvm-custom-insn",
  "openvm-riscv-guest",
- "portable-atomic",
 ]
 
 [[package]]
@@ -6256,9 +6255,6 @@ name = "portable-atomic"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
-dependencies = [
- "critical-section",
-]
 
 [[package]]
 name = "portable-atomic-util"
@@ -7824,7 +7820,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
 dependencies = [
  "lock_api",
- "portable-atomic",
 ]
 
 [[package]]
