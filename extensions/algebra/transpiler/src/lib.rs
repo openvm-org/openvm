@@ -18,7 +18,7 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[opcode_offset = 0x500]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv32ModularArithmeticOpcode {
+pub enum Rv64ModularArithmeticOpcode {
     ADD,
     SUB,
     SETUP_ADDSUB,
@@ -78,21 +78,21 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
             let base_funct7 =
                 (dec_insn.funct7 as u8) % ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS;
             assert!(
-                Rv32ModularArithmeticOpcode::COUNT
+                Rv64ModularArithmeticOpcode::COUNT
                     <= ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize
             );
             let mod_idx = ((dec_insn.funct7 as u8)
                 / ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS)
                 as usize;
-            let mod_idx_shift = mod_idx * Rv32ModularArithmeticOpcode::COUNT;
+            let mod_idx_shift = mod_idx * Rv64ModularArithmeticOpcode::COUNT;
             if base_funct7 == ModArithBaseFunct7::SetupMod as u8 {
                 let local_opcode = match dec_insn.rs2 {
-                    0 => Rv32ModularArithmeticOpcode::SETUP_ADDSUB,
-                    1 => Rv32ModularArithmeticOpcode::SETUP_MULDIV,
-                    2 => Rv32ModularArithmeticOpcode::SETUP_ISEQ,
+                    0 => Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
+                    1 => Rv64ModularArithmeticOpcode::SETUP_MULDIV,
+                    2 => Rv64ModularArithmeticOpcode::SETUP_ISEQ,
                     _ => panic!("invalid opcode"),
                 };
-                if local_opcode == Rv32ModularArithmeticOpcode::SETUP_ISEQ && dec_insn.rd == 0 {
+                if local_opcode == Rv64ModularArithmeticOpcode::SETUP_ISEQ && dec_insn.rd == 0 {
                     panic!("SETUP_ISEQ is not valid for rd = x0");
                 } else {
                     Some(Instruction::new(
@@ -130,24 +130,24 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
             } else {
                 let global_opcode = match ModArithBaseFunct7::from_repr(base_funct7) {
                     Some(ModArithBaseFunct7::AddMod) => {
-                        Rv32ModularArithmeticOpcode::ADD as usize
-                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
+                        Rv64ModularArithmeticOpcode::ADD as usize
+                            + Rv64ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::SubMod) => {
-                        Rv32ModularArithmeticOpcode::SUB as usize
-                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
+                        Rv64ModularArithmeticOpcode::SUB as usize
+                            + Rv64ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::MulMod) => {
-                        Rv32ModularArithmeticOpcode::MUL as usize
-                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
+                        Rv64ModularArithmeticOpcode::MUL as usize
+                            + Rv64ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::DivMod) => {
-                        Rv32ModularArithmeticOpcode::DIV as usize
-                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
+                        Rv64ModularArithmeticOpcode::DIV as usize
+                            + Rv64ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     Some(ModArithBaseFunct7::IsEqMod) => {
-                        Rv32ModularArithmeticOpcode::IS_EQ as usize
-                            + Rv32ModularArithmeticOpcode::CLASS_OFFSET
+                        Rv64ModularArithmeticOpcode::IS_EQ as usize
+                            + Rv64ModularArithmeticOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

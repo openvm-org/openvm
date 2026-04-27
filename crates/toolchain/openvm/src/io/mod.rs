@@ -16,6 +16,7 @@ use crate::serde::Deserializer;
 mod read;
 
 pub use openvm_platform::print::{print, println};
+use openvm_platform::WORD_SIZE;
 
 /// Read `size: u64` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
@@ -57,8 +58,8 @@ fn hint_store_word(ptr: *mut u64) {
 
 /// Read the next `len` bytes from the hint stream into a vector.
 pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
-    let num_words = len.div_ceil(8);
-    let capacity = num_words * 8;
+    let num_words = len.div_ceil(WORD_SIZE);
+    let capacity = num_words * WORD_SIZE;
 
     #[cfg(openvm_intrinsics)]
     {
