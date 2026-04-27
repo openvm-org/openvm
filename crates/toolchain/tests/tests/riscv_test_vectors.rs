@@ -14,10 +14,10 @@ type F = BabyBear;
 
 #[test]
 #[ignore = "must run makefile"]
-fn test_rv32im_riscv_vector_runtime() -> Result<()> {
-    let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
+fn test_rv64im_riscv_vector_runtime() -> Result<()> {
+    let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
     let config = Rv64ImConfig::default();
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -76,13 +76,13 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 // Running Prove tests only when CUDA is enabled because it is slow on CPU
 #[test]
 #[ignore = "long prover tests"]
-fn test_rv32im_riscv_vector_prove() -> Result<()> {
+fn test_rv64im_riscv_vector_prove() -> Result<()> {
     use openvm_circuit::utils::air_test;
     use openvm_riscv_circuit::Rv64ImBuilder;
 
     let config = Rv64ImConfig::default();
-    let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
+    let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();

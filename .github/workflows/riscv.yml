@@ -86,7 +86,7 @@ jobs:
           rm gcc.tar.xz
 
       - name: Run Makefile
-        working-directory: crates/toolchain/tests/rv32im-test-vectors
+        working-directory: crates/toolchain/tests/riscv-test-vectors
         run: |
           make
 
@@ -96,9 +96,9 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
           if [[ ${{ matrix.platform.runner }} == *"gpu"* ]]; then
-            TEST_NAME=test_rv32im_riscv_vector_prove
+            TEST_NAME=test_rv64im_riscv_vector_prove
           else
-            TEST_NAME=test_rv32im_riscv_vector_runtime
+            TEST_NAME=test_rv64im_riscv_vector_runtime
           fi
           cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
 
