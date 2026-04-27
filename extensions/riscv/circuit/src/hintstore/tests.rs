@@ -446,10 +446,10 @@ fn execute_roundtrip_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv32HintStoreExecutor,
-    Rv32HintStoreAir,
-    Rv32HintStoreChipGpu,
-    Rv32HintStoreChip<F>,
+    Rv64HintStoreExecutor,
+    Rv64HintStoreAir,
+    Rv64HintStoreChipGpu,
+    Rv64HintStoreChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -457,7 +457,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     // getting bus from tester since `gpu_chip` and `air` must use the same bus
     let bitwise_bus = default_bitwise_lookup_bus();
     // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -468,7 +468,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = Rv32HintStoreChipGpu::new(
+    let gpu_chip = Rv64HintStoreChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),
@@ -489,7 +489,7 @@ fn test_cuda_rand_hintstore_tracegen() {
     let num_ops = 50;
     for _ in 0..num_ops {
         let opcode = if rng.random_bool(0.5) {
-            HINT_STOREW
+            HINT_STORED
         } else {
             HINT_BUFFER
         };
@@ -504,7 +504,7 @@ fn test_cuda_rand_hintstore_tracegen() {
 
     harness
         .dense_arena
-        .get_record_seeker::<_, Rv32HintStoreLayout>()
+        .get_record_seeker::<_, Rv64HintStoreLayout>()
         .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
