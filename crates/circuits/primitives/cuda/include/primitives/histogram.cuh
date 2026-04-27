@@ -1,5 +1,6 @@
 #pragma once
 
+#include "constants.h"
 #include "launcher.cuh"
 #include "utils.cuh"
 #include "trace_access.h"
