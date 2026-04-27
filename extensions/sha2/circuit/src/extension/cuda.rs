@@ -77,18 +77,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
     }
 }
 
-pub struct Sha2Rv32GpuBuilder;
+pub struct Sha2Rv64GpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Sha2Rv32GpuBuilder {
-    type VmConfig = Sha2Rv32Config;
+impl VmBuilder<E> for Sha2Rv64GpuBuilder {
+    type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Sha2Rv32Config,
+        config: &Sha2Rv64Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
