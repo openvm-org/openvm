@@ -19,6 +19,7 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::Rv64HintStoreExecutor;
+use crate::adapters::rv64_bytes_to_u32;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -165,26 +166,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     let pc = exec_state.pc();
     let mem_ptr_limbs =
         exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr_u64 = u64::from_le_bytes(mem_ptr_limbs);
-    assert_eq!(
-        mem_ptr_u64 >> 32,
-        0,
-        "mem_ptr upper 4 bytes must be zero for hintstore"
-    );
-    let mem_ptr = mem_ptr_u64 as u32;
+    let mem_ptr = rv64_bytes_to_u32(mem_ptr_limbs);
 
     let num_words = if IS_HINT_STORED {
         1
     } else {
         let num_words_limbs = exec_state
             .vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-        let num_words_u64 = u64::from_le_bytes(num_words_limbs);
-        assert_eq!(
-            num_words_u64 >> 32,
-            0,
-            "num_words upper 4 bytes must be zero"
-        );
-        num_words_u64 as u32
+        rv64_bytes_to_u32(num_words_limbs)
     };
     debug_assert_ne!(num_words, 0);
 
