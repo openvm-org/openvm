@@ -19,8 +19,15 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-/// The rustc compiler [target](https://doc.rust-lang.org/rustc/targets/index.html).
-pub const RUSTC_TARGET: &str = "riscv64im-unknown-none-elf";
+/// Custom rustc target; spec lives at `<RUSTC_TARGET>.json` next to this crate.
+/// Based on `riscv64im-unknown-none-elf` with `atomic-cas: true` and
+/// `singlethread: true`.
+pub const RUSTC_TARGET: &str = "riscv64im-openvm-none-elf";
+
+/// Directory containing the target JSON; passed to cargo as `RUST_TARGET_PATH`.
+pub fn rustc_target_spec_dir() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+}
 /// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
 pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2026-01-18";
 
@@ -278,6 +285,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     cmd.env("RUSTC", rustc)
         .env("CARGO_ENCODED_RUSTFLAGS", encoded_rust_flags)
+        .env("RUST_TARGET_PATH", rustc_target_spec_dir())
         .args(args);
     cmd
 }
@@ -312,6 +320,9 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             // Declare `openvm_intrinsics` to rustc so guest crates (ours and users')
             // don't need a per-crate `unexpected_cfgs` lint declaration.
             "--check-cfg=cfg(openvm_intrinsics)",
+            // Custom JSON target specs require this unstable option.
+            "-Z",
+            "unstable-options",
         ],
     ]
     .concat()
