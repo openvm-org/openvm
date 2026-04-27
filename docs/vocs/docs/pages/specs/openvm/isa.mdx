@@ -297,7 +297,7 @@ instructions preserve this constraint.
 The `i`th RISC-V register is represented by the block `[8 * i:8]_1` of 8 limbs in address space `1`. All memory
 addresses in address space `1` behave uniformly, and in particular writes to the block `[0:8]_1` corresponding to the
 RISC-V register `x0` are allowed in the RV64IM extension. However, as detailed
-in [RV64IM Transpilation](/specs/reference/transpiler#rv64im-transpilation), any OpenVM program transpiled from a RV64IM ELF will
+in [RV64IM Transpilation](/specs/reference/transpiler#rv64im-extension), any OpenVM program transpiled from a RV64IM ELF will
 never contain such a write and conforms to the RV64IM specification.
 
 #### ALU
@@ -369,7 +369,7 @@ All load/store instructions always do block accesses of block size `8`, even for
 | LOADWU_RV64  | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = zero_extend([r64{c,g}(b):4]_e)` The operand `f` is assumed to be boolean. Must zero-extend the 32-bit word to 64 bits.                                      |
 | STOREB_RV64  | `a,b,c,1,e,1,g` | `[r64{c,g}(b):1]_e <- [a:1]_1`                                                                                                                                                      |
 | STOREH_RV64  | `a,b,c,1,e,1,g` | `[r64{c,g}(b):2]_e <- [a:2]_1`                                                                                                                                                      |
-| STOREW_RV64  | `a,b,c,1,e,1,g` | `[r64{c,g}(b):4]_e <- [a:8]_1`                                                                                                                                                      |
+| STOREW_RV64  | `a,b,c,1,e,1,g` | `[r64{c,g}(b):4]_e <- [a:4]_1`                                                                                                                                                      |
 | STORED_RV64  | `a,b,c,1,e,1,g` | `[r64{c,g}(b):8]_e <- [a:8]_1`                                                                                                                                                      |
 
 #### Branch/Jump/Upper Immediate
@@ -439,7 +439,7 @@ MULW_RV64 performs a 32-bit×32-bit multiplication on the lower 32 bits of the s
 and sign-extends the lower 32 bits of the result to 64 bits. DIVW_RV64, DIVUW_RV64, REMW_RV64,
 and REMUW_RV64 perform 32-bit division and remainder operations on the lower 32 bits. All results
 are sign-extended to 64 bits. We reuse the notation `w32(x)` and `sign_extend_32(y)` from the
-[Word-Width ALU](#word-width-alu-w-suffix) section.
+[Word-Width ALU](#word-width-alu) section.
 
 | Name         | Operands  | Description                                                                                                                                                                                                                        |
 | ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

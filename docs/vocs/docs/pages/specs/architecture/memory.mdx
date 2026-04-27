@@ -115,7 +115,7 @@ separately.
 
 Most instruction executors satisfy a stronger property: they increase the timestamp by `1` per
 memory access, and each memory access contributes `4` interactions in the AIR: `2` on the memory
-bus and `2` range-check interactions (for a block size of `8`, there are `4` range-check interactions per access). For one-row instruction executors, this implies
+bus and `2` range-check interactions. For one-row instruction executors, this implies
 `timestamp_delta <= num_interactions / 4`.
 
 It therefore remains to examine:
@@ -151,14 +151,14 @@ change is therefore `3 + 3 * 17 = 54`. Each XORIN instruction uses `1` trace row
 
 In the AIR constraints:
 
-- `eval_instruction` does an `execute_and_increment_pc` (`3`), `3` register reads (`12`), and `2`
-  range checks (`2`), giving `17` interactions.
+- `eval_instruction` does an `execute_and_increment_pc` (`3`), `3` register reads (`12`), and `1`
+  range check (`1`), giving `16` interactions.
 - `constrain_input_read` does up to `17` input reads (`68`) and `17` buffer reads (`68`).
 - `constrain_xor` does up to `136` XOR lookups on the bitwise lookup bus.
 - `constrain_output_write` does up to `17` buffer writes (`68`).
 
-In total, there are at least `17 + 68 + 68 + 136 + 68 = 357` interactions per row when
-`num_blocks = 17`. Since `timestamp_delta = 54 < 357 = num_interactions`, the condition is
+In total, there are at least `16 + 68 + 68 + 136 + 68 = 356` interactions per row when
+`num_blocks = 17`. Since `timestamp_delta = 54 < 356 = num_interactions`, the condition is
 satisfied.
 
 #### KeccakfOpChip
