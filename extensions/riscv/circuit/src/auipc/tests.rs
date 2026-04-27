@@ -26,7 +26,10 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64RdWriteAdapterRecord, Rv64AuipcChipGpu, Rv64AuipcCoreRecord},
+    crate::{
+        adapters::{Rv64RdWriteAdapterRecord, RV64_REGISTER_NUM_LIMBS},
+        Rv64AuipcChipGpu, Rv64AuipcCoreRecord,
+    },
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness,
@@ -39,7 +42,7 @@ use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64A
 use crate::{
     adapters::{
         Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
     },
     Rv64AuipcAir, Rv64AuipcFiller,
 };
