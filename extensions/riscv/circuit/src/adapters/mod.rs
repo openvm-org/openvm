@@ -350,8 +350,3 @@ pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const
             acc + limb * T::from_u64(1u64 << (i * RV64_CELL_BITS))
         })
 }
-
-// TEMP[jpw]
-pub fn tmp_convert_to_u8s<F: PrimeField32, const N: usize>(data: [F; N]) -> [u8; N] {
-    data.map(|x| x.as_canonical_u32() as u8)
-}
