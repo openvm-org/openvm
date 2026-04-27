@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
 use num_traits::Zero;
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{
@@ -61,7 +61,7 @@ type F = BabyBear;
 mod addsub_tests {
     use super::*;
 
-    const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
+    const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
 
     type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
         F,
@@ -276,7 +276,7 @@ mod addsub_tests {
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -363,7 +363,7 @@ mod addsub_tests {
         let mut tester =
             GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -435,7 +435,7 @@ mod addsub_tests {
 mod muldiv_tests {
     use super::*;
 
-    const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
+    const MUL_LOCAL: usize = Rv64ModularArithmeticOpcode::MUL as usize;
     type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
         F,
         ModularExecutor<BLOCKS, BLOCK_SIZE>,
@@ -657,7 +657,7 @@ mod muldiv_tests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
 
         let (mut harness, bitwise) = create_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
 
@@ -739,7 +739,7 @@ mod muldiv_tests {
         let mut tester =
             GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -899,7 +899,7 @@ mod is_equal_tests {
             (
                 modulus_limbs,
                 [F::ZERO; TOTAL_LIMBS],
-                offset + Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize,
+                offset + Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize,
             )
         } else {
             let b = b.unwrap_or(
@@ -911,7 +911,7 @@ mod is_equal_tests {
                 generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(modulus, rng).map(F::from_u32)
             });
 
-            (b, c, offset + Rv32ModularArithmeticOpcode::IS_EQ as usize)
+            (b, c, offset + Rv64ModularArithmeticOpcode::IS_EQ as usize)
         };
 
         let instruction = rv64_write_heap_default::<TOTAL_LIMBS>(tester, vec![b], vec![c], opcode);

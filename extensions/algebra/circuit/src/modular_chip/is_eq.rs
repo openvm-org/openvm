@@ -4,7 +4,7 @@ use std::{
 };
 
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
     system::memory::{
@@ -260,9 +260,9 @@ where
 
         let expected_opcode = AB::Expr::from_usize(self.offset)
             + cols.is_setup
-                * AB::Expr::from_usize(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize)
+                * AB::Expr::from_usize(Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize)
             + (AB::Expr::ONE - cols.is_setup)
-                * AB::Expr::from_usize(Rv32ModularArithmeticOpcode::IS_EQ as usize);
+                * AB::Expr::from_usize(Rv64ModularArithmeticOpcode::IS_EQ as usize);
         let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
@@ -343,11 +343,11 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =
-            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        matches!(
+            Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        debug_assert!(matches!(
             local_opcode,
-            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
-        );
+            Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
+        ));
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -358,7 +358,7 @@ where
             .into();
 
         core_record.is_setup = instruction.opcode.local_opcode_idx(self.offset)
-            == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
+            == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
         let mut write_data = [0u8; WRITE_LIMBS];
         write_data[0] = (core_record.b == core_record.c) as u8;
@@ -378,7 +378,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32ModularArithmeticOpcode::from_usize(opcode - self.offset)
+            Rv64ModularArithmeticOpcode::from_usize(opcode - self.offset)
         )
     }
 }
@@ -491,7 +491,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         } = inst;
 
         let local_opcode =
-            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.0.offset));
+            Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.0.offset));
 
         // Validate instruction format
         let a = a.as_canonical_u32();
@@ -505,7 +505,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
 
         if !matches!(
             local_opcode,
-            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+            Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
         ) {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -517,7 +517,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
             modulus_limbs: self.0.modulus_limbs,
         };
 
-        let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ISEQ;
+        let is_setup = local_opcode == Rv64ModularArithmeticOpcode::SETUP_ISEQ;
 
         Ok(is_setup)
     }

@@ -17,7 +17,7 @@ use openvm_circuit::{
 };
 use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, BabyBearPoseidon2GpuEngine};
 use openvm_deferral_circuit::{
-    DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
+    DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
@@ -119,7 +119,7 @@ fn input_commit_to_f(commit: &[u8; 32]) -> [F; DIGEST_SIZE] {
 fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
     commit
         .iter()
-        .flat_map(|b| [*b, 0, 0, 0])
+        .flat_map(|b| [*b, 0, 0, 0, 0, 0, 0, 0])
         .map(F::from_u8)
         .collect()
 }
@@ -308,12 +308,12 @@ fn test_deferral_e2e() -> Result<()> {
     let transpiler_commits = vec![def_circuit_commit_bytes; NUM_DEF_CIRCUITS];
 
     // =========================================================================
-    // SECTION 1: Set up Rv32DeferralConfig, build ELF, set up deferral streams.
+    // SECTION 1: Set up Rv64DeferralConfig, build ELF, set up deferral streams.
     // =========================================================================
     let mut system = test_system_config().with_max_segment_len(1 << 20);
     system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
-    let config = Rv32DeferralConfig {
+    let config = Rv64DeferralConfig {
         system: system.clone(),
         rv64i: Rv64I,
         rv64m: Rv64M::default(),
@@ -370,7 +370,7 @@ fn test_deferral_e2e() -> Result<()> {
     // SECTION 2: Run the VM, capture merkle proofs before and after execution.
     // =========================================================================
     let app_engine = GpuEngine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, Rv32DeferralBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, Rv64DeferralBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
 
