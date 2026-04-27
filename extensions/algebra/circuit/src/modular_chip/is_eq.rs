@@ -344,10 +344,10 @@ where
 
         let local_opcode =
             Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        matches!(
+        debug_assert!(matches!(
             local_opcode,
             Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
-        );
+        ));
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 

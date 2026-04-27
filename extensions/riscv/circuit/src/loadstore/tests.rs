@@ -10,6 +10,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
 };
@@ -811,10 +813,12 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.pointer_max_bits = 22;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 22;
+    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 22;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 22;
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 22;
     }
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
 

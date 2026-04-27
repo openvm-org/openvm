@@ -119,7 +119,7 @@ fn input_commit_to_f(commit: &[u8; 32]) -> [F; DIGEST_SIZE] {
 fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
     commit
         .iter()
-        .flat_map(|b| [*b, 0, 0, 0])
+        .flat_map(|b| [*b, 0, 0, 0, 0, 0, 0, 0])
         .map(F::from_u8)
         .collect()
 }
