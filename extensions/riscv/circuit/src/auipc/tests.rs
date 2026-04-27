@@ -321,6 +321,34 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 }
 
 #[test]
+fn sign_extend_flag_negative_tests() {
+    // is_sign_extend = 1 when the result fits in 32 bits (MSB of rd_data[3] is 0).
+    // pc=4, imm=0 ⟹ rd = 4 ⟹ rd_data = [4, 0, 0, 0, 0, 0, 0, 0].
+    run_negative_auipc_test(
+        AUIPC,
+        Some(0),
+        Some(4),
+        AuipcPrankValues {
+            is_sign_extend: Some(1),
+            ..Default::default()
+        },
+        true,
+    );
+    // is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[3] is 1).
+    // pc=0, imm=2^23 ⟹ rd = 2^31 ⟹ rd_data = [0, 0, 0, 128, 255, 255, 255, 255].
+    run_negative_auipc_test(
+        AUIPC,
+        Some(1 << 23),
+        Some(0),
+        AuipcPrankValues {
+            is_sign_extend: Some(0),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
 fn overflow_negative_tests() {
     run_negative_auipc_test(
         AUIPC,

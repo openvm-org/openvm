@@ -121,18 +121,18 @@ where
             builder.when(is_valid).assert_bool(carry[i].clone());
         }
 
-        // Range checking of rd_data entries to RV64_CELL_BITS bits
-        for i in 0..(RV64_WORD_NUM_LIMBS / 2) {
-            self.bus
-                .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
-                .eval(builder, is_valid);
-        }
-
-        // Constrain is_sign_extend to the MSB of rd_data[RV64_WORD_NUM_LIMBS - 1].
+        // Byte-range check rd_data with two bus sends:
+        //   1. (rd_data[0], rd_data[1]).
+        //   2. (rd_data[2], 2*rd_data[3] - is_sign_extend * 2^RV64_CELL_BITS) — constraining the
+        //      second value to [0, 2^RV64_CELL_BITS) forces is_sign_extend = msb(rd_data[3]) and
+        //      (combined with the carry chain) byte-bounds rd_data[3].
+        self.bus
+            .send_range(rd_data[0], rd_data[1])
+            .eval(builder, is_valid);
         self.bus
             .send_range(
-                rd_data[3],
-                AB::Expr::from_u32(2) * rd_data[3]
+                rd_data[RV64_WORD_NUM_LIMBS - 2],
+                AB::Expr::from_u32(2) * rd_data[RV64_WORD_NUM_LIMBS - 1]
                     - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
             )
             .eval(builder, is_valid);
@@ -294,13 +294,13 @@ where
         let msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
-        for pair in rd_data[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
+        // Mirror the AIR: rd_data[0..2] pair, then rd_data[2] paired with the sign-extend
+        // constraint on rd_data[3].
+        self.bitwise_lookup_chip
+            .request_range(rd_data[0] as u32, rd_data[1] as u32);
         let is_sign_extend = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
         self.bitwise_lookup_chip.request_range(
-            rd_data[RV64_WORD_NUM_LIMBS - 1] as u32,
+            rd_data[RV64_WORD_NUM_LIMBS - 2] as u32,
             2 * rd_data[RV64_WORD_NUM_LIMBS - 1] as u32
                 - is_sign_extend as u32 * (1 << RV64_CELL_BITS),
         );

@@ -41,13 +41,10 @@ struct Rv64AuipcCore {
         bitwise_lookup.add_range(imm_limbs[2], pc_limbs[1]);
         auto msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
         bitwise_lookup.add_range(pc_limbs[2], pc_limbs[3] << msl_shift);
-#pragma unroll
-        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
-            bitwise_lookup.add_range(rd_data[i], rd_data[i + 1]);
-        }
+        bitwise_lookup.add_range(rd_data[0], rd_data[1]);
         uint32_t is_sign_ext = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
         bitwise_lookup.add_range(
-            rd_data[RV64_WORD_NUM_LIMBS - 1],
+            rd_data[RV64_WORD_NUM_LIMBS - 2],
             2 * rd_data[RV64_WORD_NUM_LIMBS - 1] - is_sign_ext * (1 << RV64_CELL_BITS)
         );
 
