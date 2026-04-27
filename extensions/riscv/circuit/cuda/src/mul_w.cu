@@ -30,7 +30,6 @@ __global__ void rv64_mul_w_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t timestamp_max_bits
@@ -42,7 +41,7 @@ __global__ void rv64_mul_w_tracegen(
 
         Rv64MultWAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -65,7 +64,6 @@ extern "C" int _rv64_mul_w_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t timestamp_max_bits,
@@ -81,7 +79,6 @@ extern "C" int _rv64_mul_w_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         d_range_tuple_ptr,
         range_tuple_sizes,
         timestamp_max_bits

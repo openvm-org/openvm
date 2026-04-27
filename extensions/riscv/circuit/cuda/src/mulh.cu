@@ -159,7 +159,6 @@ __global__ void mulh_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t *d_range_tuple_checker_ptr,
     uint2 range_tuple_checker_sizes,
     uint32_t timestamp_max_bits
@@ -178,7 +177,7 @@ __global__ void mulh_tracegen(
         MulHCore<RV64_REGISTER_NUM_LIMBS> core(
             d_range_tuple_checker_ptr,
             (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y},
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(MulHCols, core)), rec.core);
     } else {
@@ -194,7 +193,6 @@ extern "C" int _mulh_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t *d_range_tuple_checker_ptr,
     uint2 range_tuple_checker_sizes,
     uint32_t timestamp_max_bits,
@@ -211,7 +209,6 @@ extern "C" int _mulh_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         d_range_tuple_checker_ptr,
         range_tuple_checker_sizes,
         timestamp_max_bits

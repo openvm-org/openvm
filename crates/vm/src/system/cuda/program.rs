@@ -71,7 +71,6 @@ impl ProgramChipGPU {
                 trace.width(),
                 &records,
                 program.pc_base,
-                DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
                 device_ctx.stream.as_raw(),
             )

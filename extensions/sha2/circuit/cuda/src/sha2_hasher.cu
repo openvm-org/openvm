@@ -593,7 +593,7 @@ __global__ void sha2_first_pass_phase2(
     uint32_t total_num_blocks, size_t num_records,
     typename V::Word *prev_hashes,
     typename V::Word const *__restrict__ d_scratch,
-    uint32_t *bitwise_lookup_ptr, uint32_t bitwise_num_bits
+    uint32_t *bitwise_lookup_ptr
 ) {
     size_t absolute_row = blockIdx.x * blockDim.x + threadIdx.x;
     if (absolute_row >= trace_height) return;
@@ -623,7 +623,7 @@ __global__ void sha2_first_pass_phase2(
         prev_hashes + ((global_block_idx + 1) % total_num_blocks) * V::HASH_WORDS;
 
     Sha2TraceHelper<V> helper;
-    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, bitwise_num_bits);
+    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, RV64_CELL_BITS);
 
     if (row_in_block < V::ROUND_ROWS) {
         SHA2_WRITE_ROUND(V, row, request_id, Fp(record_idx));
@@ -1016,7 +1016,6 @@ int launch_sha2_first_pass_tracegen(
     uint32_t total_num_blocks,
     typename V::Word *d_prev_hashes,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     typename V::Word *d_scratch,
     size_t scratch_words,
     cudaStream_t stream
@@ -1040,7 +1039,7 @@ int launch_sha2_first_pass_tracegen(
         auto [grid_size, block_size] = kernel_launch_params(rows_used, 256);
         sha2_first_pass_phase2<V><<<grid_size, block_size, 0, stream>>>(
             d_trace, trace_height, total_num_blocks, num_records,
-            d_prev_hashes, d_scratch, d_bitwise_lookup, bitwise_num_bits);
+            d_prev_hashes, d_scratch, d_bitwise_lookup);
         if (int r = CHECK_KERNEL()) return r;
     }
 
@@ -1128,14 +1127,13 @@ int launch_sha256_first_pass_tracegen(
     uint32_t total_num_blocks,
     uint32_t *d_prev_hashes,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint32_t *d_scratch,
     size_t scratch_words,
     cudaStream_t stream
 ) {
     return launch_sha2_first_pass_tracegen<Sha256Variant>(
         d_trace, trace_height, d_records, num_records, d_record_offsets,
-        total_num_blocks, d_prev_hashes, d_bitwise_lookup, bitwise_num_bits,
+        total_num_blocks, d_prev_hashes, d_bitwise_lookup,
         d_scratch, scratch_words, stream
     );
 }
@@ -1149,14 +1147,13 @@ int launch_sha512_first_pass_tracegen(
     uint32_t total_num_blocks,
     uint64_t *d_prev_hashes,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint64_t *d_scratch,
     size_t scratch_words,
     cudaStream_t stream
 ) {
     return launch_sha2_first_pass_tracegen<Sha512Variant>(
         d_trace, trace_height, d_records, num_records, d_record_offsets,
-        total_num_blocks, d_prev_hashes, d_bitwise_lookup, bitwise_num_bits,
+        total_num_blocks, d_prev_hashes, d_bitwise_lookup,
         d_scratch, scratch_words, stream
     );
 }

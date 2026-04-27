@@ -29,7 +29,6 @@ __global__ void rv64_alu_w_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -39,12 +38,12 @@ __global__ void rv64_alu_w_tracegen(
 
         Rv64BaseAluWAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        Rv64BaseAluWCore core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
+        Rv64BaseAluWCore core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64BaseAluWCols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(Rv64BaseAluWCols<uint8_t>));
@@ -59,7 +58,6 @@ extern "C" int _rv64_alu_w_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -72,7 +70,6 @@ extern "C" int _rv64_alu_w_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

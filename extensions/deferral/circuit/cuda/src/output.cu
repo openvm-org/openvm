@@ -120,7 +120,6 @@ __global__ void deferral_output_tracegen(
     const uint32_t range_checker_num_bins,
     const uint32_t timestamp_max_bits,
     uint32_t *bitwise_ptr,
-    const size_t bitwise_num_bits,
     const size_t address_bits,
     FpArray<16> *poseidon2_records,
     DeferralPoseidon2Count *poseidon2_counts,
@@ -151,7 +150,7 @@ __global__ void deferral_output_tracegen(
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_buffer(bitwise_ptr, bitwise_num_bits);
+    BitwiseOperationLookup bitwise_buffer(bitwise_ptr, RV64_CELL_BITS);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
@@ -318,7 +317,6 @@ extern "C" int _deferral_output_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
     uint32_t *d_bitwise,
-    uint32_t bitwise_num_bits,
     size_t address_bits,
     Fp *d_poseidon2_records,
     DeferralPoseidon2Count *d_poseidon2_counts,
@@ -346,7 +344,6 @@ extern "C" int _deferral_output_tracegen(
         range_checker_num_bins,
         timestamp_max_bits,
         d_bitwise,
-        bitwise_num_bits,
         address_bits,
         reinterpret_cast<FpArray<16> *>(d_poseidon2_records),
         d_poseidon2_counts,

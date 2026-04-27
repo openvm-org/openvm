@@ -32,14 +32,13 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
+    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, RV64_CELL_BITS);
 
     // CUDA is little-endian, so the u64 word and byte representations below are the same memory
     // layout.
@@ -105,7 +104,6 @@ __global__ void keccakf_op_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -131,7 +129,6 @@ __global__ void keccakf_op_tracegen(
             d_range_checker_ptr,
             range_checker_num_bins,
             d_bitwise_lookup_ptr,
-            bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits
         );
@@ -152,7 +149,6 @@ extern "C" int _keccakf_op_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -171,7 +167,6 @@ extern "C" int _keccakf_op_tracegen(
         d_range_checker_ptr,
         range_checker_num_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );

@@ -64,7 +64,6 @@ __global__ void alu256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -76,12 +75,12 @@ __global__ void alu256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BaseAlu256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
+        BaseAlu256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(BaseAlu256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BaseAlu256Cols<uint8_t>));
@@ -96,7 +95,6 @@ extern "C" int _alu256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -111,7 +109,6 @@ extern "C" int _alu256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -139,7 +136,6 @@ __global__ void branch_equal256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -151,7 +147,7 @@ __global__ void branch_equal256_tracegen(
         Rv64VecHeapBranchAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -171,7 +167,6 @@ extern "C" int _branch_equal256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -186,7 +181,6 @@ extern "C" int _branch_equal256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -210,7 +204,6 @@ __global__ void less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -222,12 +215,12 @@ __global__ void less_than256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        LessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
+        LessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(LessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(LessThan256Cols<uint8_t>));
@@ -242,7 +235,6 @@ extern "C" int _less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -257,7 +249,6 @@ extern "C" int _less_than256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -281,7 +272,6 @@ __global__ void branch_less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -293,12 +283,12 @@ __global__ void branch_less_than256_tracegen(
         Rv64VecHeapBranchAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchLessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
+        BranchLessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThan256Cols<uint8_t>));
@@ -313,7 +303,6 @@ extern "C" int _branch_less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -328,7 +317,6 @@ extern "C" int _branch_less_than256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -352,7 +340,6 @@ __global__ void shift256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -364,13 +351,13 @@ __global__ void shift256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
         Shift256Core core(
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(Shift256Cols, core)), rec.core);
@@ -387,7 +374,6 @@ extern "C" int _shift256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -402,7 +388,6 @@ extern "C" int _shift256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -426,7 +411,6 @@ __global__ void multiplication256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t pointer_max_bits,
@@ -440,7 +424,7 @@ __global__ void multiplication256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -463,7 +447,6 @@ extern "C" int _multiplication256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t pointer_max_bits,
@@ -480,7 +463,6 @@ extern "C" int _multiplication256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         d_range_tuple_ptr,
         range_tuple_sizes,
         pointer_max_bits,

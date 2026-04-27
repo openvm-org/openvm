@@ -25,7 +25,6 @@ __global__ void rv64_div_rem_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_bits,
     uint32_t *d_bitwise_lookup_ptr,
-    uint32_t bitwise_lookup_bits,
     uint32_t *d_range_tuple_checker_ptr,
     uint2 range_tuple_checker_sizes,
     uint32_t timestamp_max_bits
@@ -42,7 +41,7 @@ __global__ void rv64_div_rem_tracegen(
         adapter.fill_trace_row(row, record.adapter);
 
         DivRemCore<RV64_REGISTER_NUM_LIMBS> core(
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_lookup_bits),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             RangeTupleChecker<2>(
                 d_range_tuple_checker_ptr,
                 (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y}
@@ -62,7 +61,6 @@ extern "C" int _rv64_div_rem_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t *d_range_tuple_checker_ptr,
     uint2 range_tuple_checker_sizes,
     uint32_t timestamp_max_bits,
@@ -78,7 +76,6 @@ extern "C" int _rv64_div_rem_tracegen(
         d_range_checker_ptr,
         range_checker_num_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         d_range_tuple_checker_ptr,
         range_tuple_checker_sizes,
         timestamp_max_bits

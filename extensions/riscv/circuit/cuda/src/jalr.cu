@@ -95,7 +95,6 @@ __global__ void jalr_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -113,7 +112,7 @@ __global__ void jalr_tracegen(
         // core pass
         Rv64JalrCore core(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(bitwise_lookup_ptr)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalrCols, core)), full.core);
     } else {
@@ -129,7 +128,6 @@ extern "C" int _jalr_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -144,7 +142,6 @@ extern "C" int _jalr_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
