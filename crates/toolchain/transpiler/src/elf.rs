@@ -18,7 +18,7 @@ use eyre::{self, bail, ContextCompat};
 use openvm_instructions::exe::FnBound;
 use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
 
-/// The size of a RISC-V instruction in bytes (32-bit regardless of RV32/RV64).
+/// The size of a RISC-V instruction in bytes.
 const ELF_WORD_SIZE: usize = 4;
 
 /// RISC-V 64IM ELF (Executable and Linkable Format) File.

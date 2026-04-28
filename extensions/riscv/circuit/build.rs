@@ -16,7 +16,7 @@ fn main() {
             .watch("cuda")
             .watch("../../../crates/circuits/primitives/cuda")
             .watch("../../../crates/vm/cuda")
-            .library_name("tracegen_gpu_rv32im")
+            .library_name("tracegen_gpu_rv64im")
             .files_from_glob("cuda/src/**/*.cu");
 
         builder.emit_link_directives();
