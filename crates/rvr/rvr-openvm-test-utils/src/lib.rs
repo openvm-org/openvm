@@ -237,7 +237,7 @@ where
         compare_full_memory: bool,
     ) -> Result<()> {
         // OpenVM reference
-        let interpreter = self.vm.executor().instance(exe, &self.air_idx)?;
+        let interpreter = self.vm.executor().instance(exe)?;
         let interp_state = interpreter.execute(self.make_streams(&input), None)?;
 
         // rvr execution

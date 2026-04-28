@@ -9,7 +9,7 @@ use openvm_instructions::{
 use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 use rvr_state::{GuardedMemory, TracerState};
 
 use super::{
@@ -42,8 +42,6 @@ use crate::{
         merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK as MERKLE_CHUNK,
     },
 };
-
-const NO_CHIP: u32 = u32::MAX;
 
 pub struct RvrMeteredInstance<F: PrimeField32, E> {
     pub(crate) system_config: SystemConfig,
