@@ -173,7 +173,7 @@ This circuit proves that:
 
 - `compose(b) = compose(c) * compose(q) + compose(r)`
 - `0 <= |compose(r)| < |compose(c)|`
-- If `compose(c) == 0`, then `compose(q) == -1` for signed operations and `compose(q) == 2^32 - 1` for unsigned operations
+- If `compose(c) == 0`, then `compose(q) == -1` for signed operations and `compose(q) == 2^64 - 1` for unsigned operations
 - Each limb of `q` and `r` is in the range `[0, 2^RV64_CELL_BITS)`
 - `a = q` if the instruction is `div` or `divu`
 - `a = r` if the instruction is `rem` or `remu`
@@ -262,12 +262,12 @@ This circuit proves that `write_data` equals `shift(read_data)`, where the shift
 Given:
 
 - `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_CELL_BITS)`
-- `a` is the decomposition of the lower 32 bits of the result
+- `a` is the decomposition of the lower 64 bits of the result
 - `opcode` indicates the operation to be performed
 
 This circuit proves that:
 
-- `compose(a) == (compose(b) * compose(c)) % 2^32`
+- `compose(a) == (compose(b) * compose(c)) % 2^64`
 - Each limb of `a` is in the range `[0, 2^RV64_CELL_BITS)`
 
 #### 11. [MULH](./mulh/core.rs)
@@ -275,15 +275,15 @@ This circuit proves that:
 Given:
 
 - `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_CELL_BITS)`
-- `a` is the decomposition of the upper 32 bits of the result
+- `a` is the decomposition of the upper 64 bits of the result
 - `opcode` indicates the operation to be performed
 
 This circuit proves that:
 
-- Let `u32(x) = compose(x)`, and let `i32(x)` denote the signed 32-bit integer with bit decomposition `x`.
-- If `opcode` is `mulh`, then `compose(a) = floor((i32(b) * i32(c) mod 2^64) / 2^32)`.
-- If `opcode` is `mulhsu`, then `compose(a) = floor((i32(b) * u32(c) mod 2^64) / 2^32)`.
-- If `opcode` is `mulhu`, then `compose(a) = floor((u32(b) * u32(c)) / 2^32)`.
+- Let `u64(x) = compose(x)`, and let `i64(x)` denote the signed 64-bit integer with bit decomposition `x`.
+- If `opcode` is `mulh`, then `compose(a) = floor((i64(b) * i64(c) mod 2^128) / 2^64)`.
+- If `opcode` is `mulhsu`, then `compose(a) = floor((i64(b) * u64(c) mod 2^128) / 2^64)`.
+- If `opcode` is `mulhu`, then `compose(a) = floor((u64(b) * u64(c)) / 2^64)`.
 - Each limb of `a` is in the range `[0, 2^RV64_CELL_BITS)`
 
 #### 12. [Shift](./shift/core.rs)
