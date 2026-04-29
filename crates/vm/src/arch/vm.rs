@@ -466,6 +466,9 @@ where
         // Pure execution does not consult air indices, so we hand the extension
         // registry a placeholder filled with `NO_CHIP` sentinels sized to cover
         // every executor.
+        // TODO: Drop this placeholder by making `RvrExtensionCtx` take an
+        // `Option<Vec<usize>>` (or be generic over a trait/value) so pure
+        // execution can avoid passing `executor_idx_to_air_idx` altogether.
         let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
         let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
         let compiled =
