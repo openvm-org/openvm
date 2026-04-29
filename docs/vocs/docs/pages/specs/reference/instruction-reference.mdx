@@ -26,59 +26,72 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | System | `SysPhantom::CtStart` | CtStart |
 | System | `SysPhantom::CtEnd` | CtEnd |
 
-## RV32IM Extension
+## RV64IM Extension
 
 #### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction  |
 | ------------- | ---------- |------------------|
-| RV32IM | `BaseAluOpcode::ADD` | ADD_RV32         |
-| RV32IM | `BaseAluOpcode::SUB` | SUB_RV32         |
-| RV32IM | `BaseAluOpcode::XOR` | XOR_RV32         |
-| RV32IM | `BaseAluOpcode::OR` | OR_RV32          |
-| RV32IM | `BaseAluOpcode::AND` | AND_RV32         |
-| RV32IM | `ShiftOpcode::SLL` | SLL_RV32         |
-| RV32IM | `ShiftOpcode::SRL` | SRL_RV32         |
-| RV32IM | `ShiftOpcode::SRA` | SRA_RV32         |
-| RV32IM | `LessThanOpcode::SLT` | SLT_RV32         |
-| RV32IM | `LessThanOpcode::SLTU` | SLTU_RV32        |
-| RV32IM | `Rv32LoadStoreOpcode::LOADB` | LOADB_RV32       |
-| RV32IM | `Rv32LoadStoreOpcode::LOADH` | LOADH_RV32       |
-| RV32IM | `Rv32LoadStoreOpcode::LOADW` | LOADW_RV32       |
-| RV32IM | `Rv32LoadStoreOpcode::LOADBU` | LOADBU_RV32      |
-| RV32IM | `Rv32LoadStoreOpcode::LOADHU` | LOADHU_RV32      |
-| RV32IM | `Rv32LoadStoreOpcode::STOREB` | STOREB_RV32      |
-| RV32IM | `Rv32LoadStoreOpcode::STOREH` | STOREH_RV32      |
-| RV32IM | `Rv32LoadStoreOpcode::STOREW` | STOREW_RV32      |
-| RV32IM | `BranchEqualOpcode::BEQ` | BEQ_RV32         |
-| RV32IM | `BranchEqualOpcode::BNE` | BNE_RV32         |
-| RV32IM | `BranchLessThanOpcode::BLT` | BLT_RV32         |
-| RV32IM | `BranchLessThanOpcode::BGE` | BGE_RV32         |
-| RV32IM | `BranchLessThanOpcode::BLTU` | BLTU_RV32        |
-| RV32IM | `BranchLessThanOpcode::BGEU` | BGEU_RV32        |
-| RV32IM | `Rv32JalLuiOpcode::JAL` | JAL_RV32         |
-| RV32IM | `Rv32JalrOpcode::JALR` | JALR_RV32        |
-| RV32IM | `Rv32JalLuiOpcode::LUI` | LUI_RV32         |
-| RV32IM | `Rv32AuipcOpcode::AUIPC` | AUIPC_RV32       |
-| RV32IM | `MulOpcode::MUL` | MUL_RV32         |
-| RV32IM | `MulHOpcode::MULH` | MULH_RV32        |
-| RV32IM | `MulHOpcode::MULHSU` | MULHSU_RV32      |
-| RV32IM | `MulHOpcode::MULHU` | MULHU_RV32       |
-| RV32IM | `DivRemOpcode::DIV` | DIV_RV32         |
-| RV32IM | `DivRemOpcode::DIVU` | DIVU_RV32        |
-| RV32IM | `DivRemOpcode::REM` | REM_RV32         |
-| RV32IM | `DivRemOpcode::REMU` | REMU_RV32        |
-| RV32IM | `Rv32HintStoreOpcode::HINT_STOREW` | HINT_STOREW_RV32 |
-| RV32IM | `Rv32HintStoreOpcode::HINT_BUFFER` | HINT_BUFFER_RV32 |
-| RV32IM | Pseudo-instruction for `STOREW_RV32` | REVEAL_RV32      |
+| RV64IM | `BaseAluOpcode::ADD` | ADD_RV64         |
+| RV64IM | `BaseAluOpcode::SUB` | SUB_RV64         |
+| RV64IM | `BaseAluOpcode::XOR` | XOR_RV64         |
+| RV64IM | `BaseAluOpcode::OR` | OR_RV64          |
+| RV64IM | `BaseAluOpcode::AND` | AND_RV64         |
+| RV64IM | `ShiftOpcode::SLL` | SLL_RV64         |
+| RV64IM | `ShiftOpcode::SRL` | SRL_RV64         |
+| RV64IM | `ShiftOpcode::SRA` | SRA_RV64         |
+| RV64IM | `LessThanOpcode::SLT` | SLT_RV64         |
+| RV64IM | `LessThanOpcode::SLTU` | SLTU_RV64        |
+| RV64IM | `Rv64LoadStoreOpcode::LOADB` | LOADB_RV64       |
+| RV64IM | `Rv64LoadStoreOpcode::LOADH` | LOADH_RV64       |
+| RV64IM | `Rv64LoadStoreOpcode::LOADW` | LOADW_RV64       |
+| RV64IM | `Rv64LoadStoreOpcode::LOADBU` | LOADBU_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::LOADHU` | LOADHU_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::STOREB` | STOREB_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::STOREH` | STOREH_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::STOREW` | STOREW_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::LOADWU` | LOADWU_RV64      |
+| RV64IM | `Rv64LoadStoreOpcode::LOADD` | LOADD_RV64       |
+| RV64IM | `Rv64LoadStoreOpcode::STORED` | STORED_RV64      |
+| RV64IM | `BaseAluWOpcode::ADDW` | ADDW_RV64        |
+| RV64IM | `BaseAluWOpcode::SUBW` | SUBW_RV64        |
+| RV64IM | `ShiftWOpcode::SLLW` | SLLW_RV64        |
+| RV64IM | `ShiftWOpcode::SRLW` | SRLW_RV64        |
+| RV64IM | `ShiftWOpcode::SRAW` | SRAW_RV64        |
+| RV64IM | `BranchEqualOpcode::BEQ` | BEQ_RV64         |
+| RV64IM | `BranchEqualOpcode::BNE` | BNE_RV64         |
+| RV64IM | `BranchLessThanOpcode::BLT` | BLT_RV64         |
+| RV64IM | `BranchLessThanOpcode::BGE` | BGE_RV64         |
+| RV64IM | `BranchLessThanOpcode::BLTU` | BLTU_RV64        |
+| RV64IM | `BranchLessThanOpcode::BGEU` | BGEU_RV64        |
+| RV64IM | `Rv64JalLuiOpcode::JAL` | JAL_RV64         |
+| RV64IM | `Rv64JalrOpcode::JALR` | JALR_RV64        |
+| RV64IM | `Rv64JalLuiOpcode::LUI` | LUI_RV64         |
+| RV64IM | `Rv64AuipcOpcode::AUIPC` | AUIPC_RV64       |
+| RV64IM | `MulOpcode::MUL` | MUL_RV64         |
+| RV64IM | `MulHOpcode::MULH` | MULH_RV64        |
+| RV64IM | `MulHOpcode::MULHSU` | MULHSU_RV64      |
+| RV64IM | `MulHOpcode::MULHU` | MULHU_RV64       |
+| RV64IM | `DivRemOpcode::DIV` | DIV_RV64         |
+| RV64IM | `DivRemOpcode::DIVU` | DIVU_RV64        |
+| RV64IM | `DivRemOpcode::REM` | REM_RV64         |
+| RV64IM | `DivRemOpcode::REMU` | REMU_RV64        |
+| RV64IM | `MulWOpcode::MULW` | MULW_RV64        |
+| RV64IM | `DivRemWOpcode::DIVW` | DIVW_RV64        |
+| RV64IM | `DivRemWOpcode::DIVUW` | DIVUW_RV64       |
+| RV64IM | `DivRemWOpcode::REMW` | REMW_RV64        |
+| RV64IM | `DivRemWOpcode::REMUW` | REMUW_RV64       |
+| RV64IM | `Rv64HintStoreOpcode::HINT_STORED` | HINT_STORED_RV64 |
+| RV64IM | `Rv64HintStoreOpcode::HINT_BUFFER` | HINT_BUFFER_RV64 |
+| RV64IM | Pseudo-instruction for `STORED_RV64` | REVEAL_RV64      |
 
 #### Phantom Sub-Instructions
 
 | VM Extension | `PhantomDiscriminant`         | ISA Phantom Sub-Instruction |
 | ------------- |-------------------------------| ------------- |
-| RV32IM | `Rv32Phantom::HintInput`      | Rv32HintInput |
-| RV32IM | `Rv32Phantom::PrintStr`       | Rv32PrintStr |
-| RV32IM | `Rv32Phantom::HintRandom`     | Rv32HintRandom |
+| RV64IM | `Rv64Phantom::HintInput`      | Rv64HintInput |
+| RV64IM | `Rv64Phantom::PrintStr`       | Rv64PrintStr |
+| RV64IM | `Rv64Phantom::HintRandom`     | Rv64HintRandom |
 
 ## Deferral Extension
 
@@ -86,8 +99,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Deferral | `DeferralOpcode::CALL` | CALL_RV32 |
-| Deferral | `DeferralOpcode::OUTPUT` | OUTPUT_RV32 |
+| Deferral | `DeferralOpcode::CALL` | CALL_RV64 |
+| Deferral | `DeferralOpcode::OUTPUT` | OUTPUT_RV64 |
 
 ## Keccak Extension
 
@@ -95,8 +108,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Keccak | `XorinOpcode::XORIN` | XORIN_RV32 |
-| Keccak | `KeccakfOpcode::KECCAKF` | KECCAKF_RV32 |
+| Keccak | `XorinOpcode::XORIN` | XORIN_RV64 |
+| Keccak | `KeccakfOpcode::KECCAKF` | KECCAKF_RV64 |
 
 ## SHA-2 Extension
 
@@ -104,8 +117,8 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension  | `LocalOpcode`            | ISA Instruction          |
 | ------------- | ------------------------ | ------------------------ |
-| SHA-2         | `Rv32Sha2Opcode::SHA256` | SHA256_UPDATE_RV32       |
-| SHA-2         | `Rv32Sha2Opcode::SHA512` | SHA512_UPDATE_RV32       |
+| SHA-2         | `Rv64Sha2Opcode::SHA256` | SHA256_UPDATE_RV64       |
+| SHA-2         | `Rv64Sha2Opcode::SHA512` | SHA512_UPDATE_RV64       |
 
 ## BigInt Extension
 
@@ -113,23 +126,23 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::ADD)` | ADD256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::SUB)` | SUB256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::XOR)` | XOR256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::OR)` | OR256_RV32 |
-| BigInt | `Rv32BaseAlu256Opcode(BaseAluOpcode::AND)` | AND256_RV32 |
-| BigInt | `Rv32Shift256Opcode(ShiftOpcode::SLL)` | SLL256_RV32 |
-| BigInt | `Rv32Shift256Opcode(ShiftOpcode::SRL)` | SRL256_RV32 |
-| BigInt | `Rv32Shift256Opcode(ShiftOpcode::SRA)` | SRA256_RV32 |
-| BigInt | `Rv32LessThan256Opcode(LessThanOpcode::SLT)` | SLT256_RV32 |
-| BigInt | `Rv32LessThan256Opcode(LessThanOpcode::SLTU)` | SLTU256_RV32 |
-| BigInt | `Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ)` | BEQ256_RV32 |
-| BigInt | `Rv32BranchEqual256Opcode(BranchEqualOpcode::BNE)` | BNE256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT)` | BLT256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BGE)` | BGE256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLTU)` | BLTU256_RV32 |
-| BigInt | `Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BGEU)` | BGEU256_RV32 |
-| BigInt | `Rv32Mul256Opcode(MulOpcode::MUL)` | MUL256_RV32 |
+| BigInt | `Rv64BaseAlu256Opcode(BaseAluOpcode::ADD)` | ADD256_RV64 |
+| BigInt | `Rv64BaseAlu256Opcode(BaseAluOpcode::SUB)` | SUB256_RV64 |
+| BigInt | `Rv64BaseAlu256Opcode(BaseAluOpcode::XOR)` | XOR256_RV64 |
+| BigInt | `Rv64BaseAlu256Opcode(BaseAluOpcode::OR)` | OR256_RV64 |
+| BigInt | `Rv64BaseAlu256Opcode(BaseAluOpcode::AND)` | AND256_RV64 |
+| BigInt | `Rv64Shift256Opcode(ShiftOpcode::SLL)` | SLL256_RV64 |
+| BigInt | `Rv64Shift256Opcode(ShiftOpcode::SRL)` | SRL256_RV64 |
+| BigInt | `Rv64Shift256Opcode(ShiftOpcode::SRA)` | SRA256_RV64 |
+| BigInt | `Rv64LessThan256Opcode(LessThanOpcode::SLT)` | SLT256_RV64 |
+| BigInt | `Rv64LessThan256Opcode(LessThanOpcode::SLTU)` | SLTU256_RV64 |
+| BigInt | `Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ)` | BEQ256_RV64 |
+| BigInt | `Rv64BranchEqual256Opcode(BranchEqualOpcode::BNE)` | BNE256_RV64 |
+| BigInt | `Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT)` | BLT256_RV64 |
+| BigInt | `Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BGE)` | BGE256_RV64 |
+| BigInt | `Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLTU)` | BLTU256_RV64 |
+| BigInt | `Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BGEU)` | BGEU256_RV64 |
+| BigInt | `Rv64Mul256Opcode(MulOpcode::MUL)` | MUL256_RV64 |
 
 ## Algebra Extension
 
@@ -137,20 +150,20 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Algebra | `Rv32ModularArithmeticOpcode::ADD` | ADDMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SUB` | SUBMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SETUP_ADDSUB` | SETUP_ADDSUBMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::MUL` | MULMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::DIV` | DIVMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SETUP_MULDIV` | SETUP_MULDIVMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::IS_EQ` | ISEQMOD_RV32\<N\> |
-| Algebra | `Rv32ModularArithmeticOpcode::SETUP_ISEQ` | SETUP_ISEQMOD_RV32\<N\> |
-| Algebra | `Fp2Opcode::ADD` | ADD_RV32\<Fp2\> |
-| Algebra | `Fp2Opcode::SUB` | SUB_RV32\<Fp2\> |
-| Algebra | `Fp2Opcode::SETUP_ADDSUB` | SETUP_ADDSUB_RV32\<Fp2\> |
-| Algebra | `Fp2Opcode::MUL` | MUL_RV32\<Fp2\> |
-| Algebra | `Fp2Opcode::DIV` | DIV_RV32\<Fp2\> |
-| Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV_RV32\<Fp2\> |
+| Algebra | `Rv64ModularArithmeticOpcode::ADD` | ADDMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SUB` | SUBMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SETUP_ADDSUB` | SETUP_ADDSUBMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::MUL` | MULMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::DIV` | DIVMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SETUP_MULDIV` | SETUP_MULDIVMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::IS_EQ` | ISEQMOD_RV64\<N\> |
+| Algebra | `Rv64ModularArithmeticOpcode::SETUP_ISEQ` | SETUP_ISEQMOD_RV64\<N\> |
+| Algebra | `Fp2Opcode::ADD` | ADD_RV64\<Fp2\> |
+| Algebra | `Fp2Opcode::SUB` | SUB_RV64\<Fp2\> |
+| Algebra | `Fp2Opcode::SETUP_ADDSUB` | SETUP_ADDSUB_RV64\<Fp2\> |
+| Algebra | `Fp2Opcode::MUL` | MUL_RV64\<Fp2\> |
+| Algebra | `Fp2Opcode::DIV` | DIV_RV64\<Fp2\> |
+| Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV_RV64\<Fp2\> |
 
 #### Phantom Sub-Instructions
 
@@ -165,10 +178,10 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE_RV32\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE_RV32\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE_RV32\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE_RV32\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE_RV64\<C\> |
+| Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE_RV64\<C\> |
 
 ## Pairing Extension
 
