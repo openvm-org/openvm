@@ -1,6 +1,9 @@
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
 #include "primitives/histogram.cuh"
+
+using namespace riscv;
 
 template <typename T> struct DummyChipCols {
     T count;
@@ -19,15 +22,14 @@ struct DummyRecord {
 __global__ void bitwise_dummy_tracegen(
     Fp *trace,
     DeviceBufferConstView<DummyRecord> records,
-    uint32_t *bitwise_count,
-    uint32_t bitwise_num_bits
+    uint32_t *bitwise_count
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     auto const height = records.len();
 
     if (idx < height) {
         auto const &record = records[idx];
-        BitwiseOperationLookup bitwise(bitwise_count, bitwise_num_bits);
+        BitwiseOperationLookup bitwise(bitwise_count);
         RowSlice row(trace + idx, height);
 
         COL_WRITE_VALUE(row, DummyChipCols, count, 1);
@@ -49,10 +51,9 @@ extern "C" int _bitwise_dummy_tracegen(
     Fp *d_trace,
     DeviceBufferConstView<DummyRecord> records,
     uint32_t *bitwise_count,
-    uint32_t bitwise_num_bits,
     cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(records.len());
-    bitwise_dummy_tracegen<<<grid, block, 0, stream>>>(d_trace, records, bitwise_count, bitwise_num_bits);
+    bitwise_dummy_tracegen<<<grid, block, 0, stream>>>(d_trace, records, bitwise_count);
     return CHECK_KERNEL();
 }

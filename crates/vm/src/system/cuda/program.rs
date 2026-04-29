@@ -3,10 +3,7 @@ use std::{mem::size_of, sync::Arc};
 use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
-use openvm_instructions::{
-    program::{Program, DEFAULT_PC_STEP},
-    LocalOpcode, SystemOpcode,
-};
+use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::prover::{
     AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
 };
@@ -71,7 +68,6 @@ impl ProgramChipGPU {
                 trace.width(),
                 &records,
                 program.pc_base,
-                DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
                 device_ctx.stream.as_raw(),
             )

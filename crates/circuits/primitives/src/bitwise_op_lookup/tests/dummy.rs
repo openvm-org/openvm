@@ -80,7 +80,6 @@ pub mod cuda {
                     trace.buffer(),
                     &self.data,
                     &self.bitwise.count,
-                    NUM_BITS as u32,
                     device_ctx.stream.as_raw(),
                 )
                 .unwrap();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "constants.h"
 #include "launcher.cuh"
 #include "utils.cuh"
 #include "trace_access.h"
@@ -10,6 +11,8 @@
  */
 
 static constexpr uint WARP_MASK = WARP_SIZE - 1;
+static constexpr uint32_t BITWISE_NUM_BITS = riscv::RV64_CELL_BITS;
+static constexpr uint32_t BITWISE_NUM_ROWS = 1 << (BITWISE_NUM_BITS << 1);
 
 namespace lookup {
 
@@ -120,27 +123,25 @@ template <uint32_t N> struct RangeTupleChecker {
 
 // Histogram for BitwiseOperationLookup, which either does a range check
 // or an XOR check for two field elements at a time. We expect global_hist
-// to be of size 2 * 2^num_bits, where the first 2^num_bits elements store
-// the range check histogram and the rest store for XOR.
+// to be of size 2 * 2^RV64_CELL_BITS, where the first 2^RV64_CELL_BITS
+// elements store the range check histogram and the rest store for XOR.
 struct BitwiseOperationLookup {
-    uint32_t num_bits;
-    uint32_t num_rows;
     lookup::Histogram hist;
 
-    __device__ BitwiseOperationLookup(uint32_t *global_hist, uint32_t num_bits)
-        : num_bits(num_bits), num_rows(1 << (num_bits << 1)), hist(global_hist, num_rows << 1) {}
+    __device__ BitwiseOperationLookup(uint32_t *global_hist)
+        : hist(global_hist, BITWISE_NUM_ROWS << 1) {}
 
     __device__ void add_range(uint32_t x, uint32_t y) {
-        uint32_t idx = x * (1 << num_bits) + y;
-        if (idx < num_rows) {
+        uint32_t idx = x * (1 << BITWISE_NUM_BITS) + y;
+        if (idx < BITWISE_NUM_ROWS) {
             hist.add_count(idx);
         }
     }
 
     __device__ void add_xor(uint32_t x, uint32_t y) {
-        uint32_t idx = x * (1 << num_bits) + y;
-        if (idx < num_rows) {
-            hist.add_count(idx + num_rows);
+        uint32_t idx = x * (1 << BITWISE_NUM_BITS) + y;
+        if (idx < BITWISE_NUM_ROWS) {
+            hist.add_count(idx + BITWISE_NUM_ROWS);
         }
     }
 

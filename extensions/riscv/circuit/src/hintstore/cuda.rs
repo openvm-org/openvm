@@ -74,7 +74,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV64_CELL_BITS as u32,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
