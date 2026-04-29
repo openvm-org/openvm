@@ -59,7 +59,6 @@ pub struct CProject {
     output_dir: PathBuf,
     name: String,
     pub tracer_mode: TracerMode,
-    pub memory_bits: u8,
     pub hot_regs: HashSet<u8>,
     /// Maximum blocks per partition file.
     pub blocks_per_partition: usize,
@@ -79,7 +78,7 @@ pub struct CProject {
 }
 
 impl CProject {
-    pub fn new(output_dir: &Path, name: &str, tracer_mode: TracerMode, memory_bits: u8) -> Self {
+    pub fn new(output_dir: &Path, name: &str, tracer_mode: TracerMode) -> Self {
         // Hot registers in priority order (matching original rvr's REG_PRIORITY).
         // Limited by platform's preserve_none register capacity minus 1 (state ptr).
         let hot_regs = Self::default_hot_regs();
@@ -88,7 +87,6 @@ impl CProject {
             output_dir: output_dir.to_path_buf(),
             name: name.to_string(),
             tracer_mode,
-            memory_bits,
             hot_regs,
             blocks_per_partition: 512,
             enable_lto: true,
@@ -208,7 +206,7 @@ impl CProject {
         text_start: u32,
         extensions: &ExtensionRegistry<F>,
     ) -> io::Result<()> {
-        self.write_constants(text_start)?;
+        self.write_constants()?;
         self.write_support_files()?;
         self.write_extension_files(extensions)?;
         let ext_headers = extensions.c_headers();
@@ -221,8 +219,8 @@ impl CProject {
 
     // ── Generated constants header ──────────────────────────────────────
 
-    fn write_constants(&self, text_start: u32) -> io::Result<()> {
-        let h = crate::metered::constants_header(text_start, self.memory_bits);
+    fn write_constants(&self) -> io::Result<()> {
+        let h = crate::constants::constants_header();
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }
