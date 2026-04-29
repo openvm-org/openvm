@@ -756,6 +756,8 @@ where
         trace_config.initial_trace_heights = ctx.trace_heights.clone();
         trace_config.is_constant = ctx.is_trace_height_constant.clone();
 
+        // TODO: hoist compilation to instance construction; `ChipMapping` is independent of
+        // `MeteredCtx`.
         let chips = trace_config.chip_mapping();
         let compiled_metered = if self.extensions.is_empty() {
             compile_metered(self.exe.as_ref(), &chips)
