@@ -1,8 +1,5 @@
-#[path = "utils.rs"]
-mod utils;
-
 use eyre::Result;
-use utils::ExecutionMode::Pure;
+use rvr_openvm_test_utils::{self as utils, ExecutionMode::Pure};
 
 #[test]
 fn test_fib() -> Result<()> {

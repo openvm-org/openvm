@@ -1,71 +1,28 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use openvm_circuit::{
+use openvm_instructions::{
+    exe::VmExe, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
+};
+use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
+use rvr_state::TracerState;
+
+use crate::{
     arch::{
         execution_mode::metered::{
             ctx::DEFAULT_PAGE_BITS,
-            segment_ctx::{SegmentationConfig, DEFAULT_SEGMENT_CHECK_INSNS},
+            segment_ctx::{
+                SegmentationConfig, DEFAULT_INTERACTION_CONSTANT_OVERHEAD,
+                DEFAULT_SEGMENT_CHECK_INSNS,
+            },
         },
         ExecutorInventory, SystemConfig,
     },
     system::memory::{merkle::public_values::PUBLIC_VALUES_AS, CHUNK as MERKLE_CHUNK},
 };
-use openvm_instructions::{
-    exe::VmExe, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
-};
-use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_state::TracerState;
-
-/// Maximum AS_MEMORY page buffer entries per segment check interval.
-///
-/// **No bounds checks in C — capacity must be sufficient.**
-///
-/// Flushed at most every 2 × `DEFAULT_SEGMENT_CHECK_INSNS` instructions
-/// (block-granular check can overshoot by up to one block, which is at
-/// most `DEFAULT_SEGMENT_CHECK_INSNS` instructions).
-/// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER).
-/// 2000 insns × 10 pages = 20 000 — well under 65 536.
-const MEM_PAGE_BUF_CAP: usize = 1 << 16;
-
-/// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
-/// No bounds checks in C. At most 1 page per instruction (reveal/publish).
-const PV_PAGE_BUF_CAP: usize = 1 << 12;
-
-/// Maximum AS_DEFERRAL page buffer entries per segment check interval.
-/// No bounds checks in C.
-// TODO: justify this bound (audit max deferral pages per instruction).
-const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
-
-/// Constant overhead for interaction memory (matches OpenVM's
-/// DEFAULT_INTERACTION_CONSTANT_OVERHEAD).
-const INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
 
 const NO_CHIP: u32 = u32::MAX;
-
-// ── Generated constants header ──────────────────────────────────────────────
-
-/// Generate the `openvm_constants.h` content with compile-time constants
-/// for the C tracer headers.
-pub fn constants_header(_text_start: u32, memory_bits: u8) -> String {
-    let chunk_bits = MERKLE_CHUNK.ilog2();
-    let memory_mask = (1u64 << memory_bits) - 1;
-
-    format!(
-        "\
-#pragma once
-#include <stdint.h>
-
-static constexpr uint32_t MEMORY_MASK = 0x{memory_mask:x}u;
-static constexpr uint32_t TRACER_CHUNK_BITS = {chunk_bits};
-static constexpr uint32_t TRACER_PAGE_BITS = {DEFAULT_PAGE_BITS};
-static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
-static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
-static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
-static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {DEFAULT_SEGMENT_CHECK_INSNS};
-"
-    )
-}
 
 // ── C-compatible tracer struct ───────────────────────────────────────────────
 
@@ -174,8 +131,8 @@ pub struct MeteredConfig {
 
 impl MeteredConfig {
     /// Extract chip mapping for compilation.
-    pub fn chip_mapping(&self) -> crate::compile::ChipMapping {
-        crate::compile::ChipMapping {
+    pub fn chip_mapping(&self) -> super::compile::ChipMapping {
+        super::compile::ChipMapping {
             pc_to_chip: self.pc_to_chip.clone(),
             hint_store_chip_idx: self.hint_store_chip_idx,
             chip_widths: None,
@@ -526,7 +483,7 @@ impl SegmentationState {
             as f64
             * interaction_weight)
             .ceil() as usize
-            + INTERACTION_CONSTANT_OVERHEAD;
+            + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
         let total_memory = main_memory + std::cmp::max(main_secondary_memory, interaction_memory);
 
         if total_memory > config.limits.max_memory {

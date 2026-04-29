@@ -12,6 +12,8 @@ mod integration_api;
 /// [RecordArena] trait definitions and implementations. Currently there are two concrete
 /// implementations: [MatrixRecordArena] and [DenseRecordArena].
 mod record_arena;
+#[cfg(feature = "rvr")]
+pub mod rvr;
 /// VM state definitions
 mod state;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.

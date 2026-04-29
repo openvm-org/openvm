@@ -9,8 +9,6 @@
 //!   - "single"   (1 deferral circuit, 3 calls) × Pure / MeteredCost / Metered
 //!   - "multiple" (2 circuits, cross-circuit isolation) × Pure / MeteredCost / Metered
 
-mod utils;
-
 use std::{collections::VecDeque, path::PathBuf, process::Command, slice::from_ref, sync::Arc};
 
 use eyre::Result;
@@ -18,7 +16,7 @@ use openvm_circuit::{
     arch::{
         deferral::{DeferralResult, DeferralState},
         execution_mode::{MeteredCostCtx, MeteredCtx},
-        Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
+        rvr as rvr_openvm, Streams, SystemConfig, VirtualMachine, VmExecutionConfig,
     },
     utils::TestStarkEngine,
 };
@@ -56,6 +54,7 @@ use openvm_verify_stark_host::vk::VmStarkVerifyingKey;
 use rvr_openvm::DeferralData;
 use rvr_openvm_ext_deferral::{DeferralCircuitInputs, DeferralRvrExtension};
 use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_test_utils::{self as utils, workspace_root};
 
 type F = BabyBear;
 type Engine = TestStarkEngine;
@@ -180,8 +179,7 @@ fn make_multiple_streams() -> Streams<F> {
 }
 
 fn deferral_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../openvm/extensions/deferral/tests/programs")
+    workspace_root().join("extensions/deferral/tests/programs")
 }
 
 fn transpile_with_deferral(
@@ -199,8 +197,7 @@ fn transpile_with_deferral(
 }
 
 fn build_deferral_staticlib() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let deferral_ffi_crate = manifest_dir.join("../extensions/deferral/ffi");
+    let deferral_ffi_crate = workspace_root().join("extensions/deferral/rvr/ffi");
 
     let output = Command::new("cargo")
         .args(["build", "--release"])
@@ -215,8 +212,7 @@ fn build_deferral_staticlib() -> PathBuf {
         );
     }
 
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_deferral_ffi.a");
+    let lib_path = workspace_root().join("target/release/librvr_openvm_ext_deferral_ffi.a");
     assert!(
         lib_path.exists(),
         "Deferral FFI staticlib not found at {}",
@@ -338,7 +334,6 @@ impl DeferralTestHarness {
         circuit_inputs: Vec<DeferralCircuitInputs>,
     ) -> Result<()> {
         let ctx: MeteredCostCtx = self.vm.build_metered_cost_ctx();
-        let system_config: &SystemConfig = self.config.as_ref();
 
         // OpenVM reference
         let instance = self
@@ -357,7 +352,6 @@ impl DeferralTestHarness {
             &inventory,
             &self.air_idx,
             &ctx.widths,
-            system_config,
             hint_buffer_opcode,
         );
         let chips = metered_cost_config.chip_mapping();
