@@ -18,7 +18,7 @@ An OpenVM circuit has two kinds of AIRs:
 - **System AIRs and chips**, which are shared across VM configurations. These include the program
   AIR, the VM connector AIR, the memory boundary and memory Merkle AIRs, the Poseidon2 periphery AIR
   (used for Merkle hashing), and shared lookup AIRs (e.g., range checking).
-- **Instruction executor AIRs and chips**, which constrain opcode families. For example, an RV32
+- **Instruction executor AIRs and chips**, which constrain opcode families. For example, an RV64
   arithmetic AIR may constrain operations such as `add` and `sub`, while precompile AIRs may
   constrain instructions such as SHA256 or Keccak.
 
@@ -84,7 +84,7 @@ An _instruction executor_ is a chip that packages an instruction-handling AIR to
 execution logic and trace generation.
 
 An instruction executor typically handles a family of related opcodes rather than a single opcode.
-For example, one executor may constrain several RV32 arithmetic operations, while others constrain
+For example, one executor may constrain several RV64 arithmetic operations, while others constrain
 precompile instructions such as SHA256 or Keccak.
 
 Most instruction executors are implemented in two parts:
@@ -116,7 +116,7 @@ instruction execution. See
 ## Global meaning
 
 Local AIR constraints ensure that each individual step is correct (e.g., an arithmetic AIR
-constrains that a destination register receives the correct 32-bit result). The bus interactions
+constrains that a destination register receives the correct result). The bus interactions
 stitch those local constraints into one execution flow and one memory history, anchored by the
 boundary AIRs and the committed program.
 
