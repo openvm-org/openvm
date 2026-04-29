@@ -1,9 +1,9 @@
 # How to write integration tests for an extension
 
-Make a `test` crate inside the extension folder. As an example, here is the structure of the [`openvm-rv32im-integration-tests`](../../extensions/rv32im/tests/) crate:
+Make a `test` crate inside the extension folder. As an example, here is the structure of the [`openvm-riscv-integration-tests`](../../extensions/riscv/tests/) crate:
 
 ```
-extensions/rv32im/tests/
+extensions/riscv/tests/
 ├── Cargo.toml
 ├── src
 │   └── lib.rs
@@ -45,16 +45,16 @@ And then to `transpile`, `run`, and `prove` the above program, in the `src/lib.r
 ```rust
 #[test]
 fn test_fibonacci_prove() -> Result<()> {
-    let config = Rv32ImConfig::default();
+    let config = Rv64ImConfig::default();
     let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
-    air_test(Rv32ImBuilder, config, exe);
+    air_test(Rv64ImBuilder, config, exe);
     Ok(())
 }
 ```
