@@ -34,3 +34,7 @@ eyre.workspace = true
 halo2curves-axiom.workspace = true
 num-bigint.workspace = true
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
+
+[features]
+default = []
+rvr = ["rvr-openvm-test-utils/rvr"]

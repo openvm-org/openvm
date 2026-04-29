@@ -11,6 +11,8 @@ use std::{any::TypeId, borrow::Borrow, collections::VecDeque, marker::PhantomDat
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
+#[cfg(feature = "rvr")]
+use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
@@ -33,12 +35,16 @@ use openvm_stark_backend::{
     Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::ExtensionRegistry;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
+#[cfg(feature = "rvr")]
+use super::rvr::{self, RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance};
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
     hasher::poseidon2::vm_poseidon2_hasher,
@@ -50,6 +56,8 @@ use super::{
     VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
+#[cfg(feature = "rvr")]
+use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
 use crate::{
     arch::deferral::DeferralState,
     execute_spanned,
@@ -139,6 +147,193 @@ impl<F> From<Vec<Vec<F>>> for Streams<F> {
 type PreflightInterpretedInstance2<F, VC> =
     PreflightInterpretedInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
 
+/// Typedef for [RvrMeteredInstance] that is generic in `VC: VmExecutionConfig<F>`
+#[cfg(feature = "rvr")]
+type RvrMeteredInstance2<F, VC> = RvrMeteredInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
+
+/// Typedef for [RvrMeteredCostInstance] that is generic in `VC: VmExecutionConfig<F>`
+#[cfg(feature = "rvr")]
+type RvrMeteredCostInstance2<F, VC> =
+    RvrMeteredCostInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
+
+#[cfg(feature = "rvr")]
+pub(crate) fn map_rvr_compile_error(err: rvr::CompileError) -> StaticProgramError {
+    StaticProgramError::FailToGenerateDynamicLibrary {
+        err: err.to_string(),
+    }
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn map_rvr_execute_error(err: rvr::ExecuteError) -> ExecutionError {
+    match err {
+        rvr::ExecuteError::GuestExit(code) => ExecutionError::FailedWithExitCode(code as u32),
+        other => ExecutionError::RvrExecution(other.to_string()),
+    }
+}
+
+// TODO: Unify format of the VM state for rvr and interpreted execution.
+#[cfg(feature = "rvr")]
+pub(crate) fn state_from_rvr<F: PrimeField32>(
+    system_config: &SystemConfig,
+    exe: &VmExe<F>,
+    pc: u32,
+    regs: &[u32],
+    rvr_memory: &rvr_state::GuardedMemory,
+    public_values: &[u8],
+) -> VmState<F, GuestMemory> {
+    let mut guest_memory = create_memory_image(&system_config.memory_config, &exe.init_memory);
+    write_rvr_memory_to_guest_memory(&mut guest_memory, regs, rvr_memory, public_values);
+
+    VmState::new_with_defaults(pc, guest_memory, Streams::default(), 0)
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn write_rvr_memory_to_guest_memory(
+    guest_memory: &mut GuestMemory,
+    regs: &[u32],
+    rvr_memory: &rvr_state::GuardedMemory,
+    public_values: &[u8],
+) {
+    let source_memory =
+        unsafe { std::slice::from_raw_parts(rvr_memory.as_ptr(), rvr_memory.size()) };
+    let memory_capacity = guest_memory.memory.config[RV32_MEMORY_AS as usize].num_cells;
+    let memory_len = std::cmp::min(memory_capacity, source_memory.len());
+    unsafe {
+        guest_memory
+            .memory
+            .copy_slice_nonoverlapping((RV32_MEMORY_AS, 0), &source_memory[..memory_len]);
+    }
+
+    let mut register_bytes = Vec::with_capacity(std::mem::size_of_val(regs));
+    for reg in regs {
+        register_bytes.extend_from_slice(&reg.to_le_bytes());
+    }
+    let register_capacity = guest_memory.memory.config[RV32_REGISTER_AS as usize].num_cells;
+    let register_len = std::cmp::min(register_capacity, register_bytes.len());
+    unsafe {
+        guest_memory
+            .memory
+            .copy_slice_nonoverlapping((RV32_REGISTER_AS, 0), &register_bytes[..register_len]);
+    }
+
+    if !public_values.is_empty() {
+        let pv_capacity = guest_memory.memory.config[PUBLIC_VALUES_AS as usize].num_cells;
+        let pv_len = std::cmp::min(pv_capacity, public_values.len());
+        unsafe {
+            guest_memory
+                .memory
+                .copy_slice_nonoverlapping((PUBLIC_VALUES_AS, 0), &public_values[..pv_len]);
+        }
+    }
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn read_rv32_regs_from_guest_memory(guest_memory: &GuestMemory) -> [u32; 32] {
+    let reg_capacity = guest_memory.memory.config[RV32_REGISTER_AS as usize].num_cells;
+    let regs_u8 = unsafe {
+        guest_memory
+            .memory
+            .get_u8_slice(RV32_REGISTER_AS, 0, reg_capacity)
+    };
+    let mut regs = [0u32; 32];
+    for (i, chunk) in regs_u8.chunks_exact(4).take(32).enumerate() {
+        regs[i] = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+    }
+    regs
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn copy_guest_memory_to_rvr_memory(
+    guest_memory: &GuestMemory,
+    rvr_memory: &mut rvr_state::GuardedMemory,
+) {
+    let memory_capacity = guest_memory.memory.config[RV32_MEMORY_AS as usize].num_cells;
+    let source_memory = unsafe {
+        guest_memory
+            .memory
+            .get_u8_slice(RV32_MEMORY_AS, 0, memory_capacity)
+    };
+    let dst = unsafe { std::slice::from_raw_parts_mut(rvr_memory.as_mut_ptr(), rvr_memory.size()) };
+    let len = std::cmp::min(dst.len(), source_memory.len());
+    dst[..len].copy_from_slice(&source_memory[..len]);
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn read_public_values_from_guest_memory(guest_memory: &GuestMemory) -> Vec<u8> {
+    let pv_capacity = guest_memory.memory.config[PUBLIC_VALUES_AS as usize].num_cells;
+    unsafe {
+        guest_memory
+            .memory
+            .get_u8_slice(PUBLIC_VALUES_AS, 0, pv_capacity)
+            .to_vec()
+    }
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn streams_to_io_seed<F: PrimeField32>(
+    streams: Streams<F>,
+) -> (VecDeque<Vec<u8>>, Vec<u8>, Vec<DeferralState>) {
+    let mut input_stream = VecDeque::with_capacity(streams.input_stream.len());
+    for vec in streams.input_stream {
+        input_stream.push_back(
+            vec.into_iter()
+                .map(|f| f.as_canonical_u32() as u8)
+                .collect::<Vec<u8>>(),
+        );
+    }
+    let hint_stream = streams
+        .hint_stream
+        .into_iter()
+        .map(|f| f.as_canonical_u32() as u8)
+        .collect();
+    (input_stream, hint_stream, streams.deferrals)
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn streams_from_io_state<F: PrimeField32>(
+    io_state: &rvr::io::OpenVmIoState,
+    deferrals: Vec<DeferralState>,
+) -> Streams<F> {
+    let input_stream = io_state
+        .input_stream
+        .iter()
+        .map(|vec| vec.iter().map(|&b| F::from_u8(b)).collect::<Vec<F>>())
+        .collect::<VecDeque<_>>();
+    let hint_stream = io_state
+        .hint_stream
+        .iter()
+        .skip(io_state.hint_pos)
+        .map(|&b| F::from_u8(b))
+        .collect::<VecDeque<_>>();
+    Streams {
+        input_stream,
+        hint_stream,
+        deferrals,
+    }
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn ensure_rvr_outcome(
+    context: &str,
+    terminated: bool,
+    suspended: bool,
+    guest_exit_code: u8,
+    allow_suspended: bool,
+) -> Result<(), ExecutionError> {
+    if allow_suspended && suspended {
+        return Ok(());
+    }
+    if terminated {
+        if guest_exit_code == 0 {
+            return Ok(());
+        }
+        return Err(ExecutionError::FailedWithExitCode(guest_exit_code as u32));
+    }
+    Err(ExecutionError::RvrExecution(format!(
+        "{context} failed: terminated={terminated}, suspended={suspended}, guest_exit_code={guest_exit_code}"
+    )))
+}
+
 /// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
 /// [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
 /// Internally once it is given a program, it will preprocess the program to rewrite it into a more
@@ -219,7 +414,7 @@ where
     /// the given `exe`.
     ///
     /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
@@ -227,7 +422,7 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "aot")]
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<F>,
@@ -242,7 +437,52 @@ where
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         Self::aot_instance(self, exe)
     }
+
+    #[cfg(feature = "rvr")]
+    pub fn instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        Self::rvr_instance(self, exe, executor_idx_to_air_idx)
+    }
 }
+
+#[cfg(feature = "rvr")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+{
+    fn build_rvr_extensions(&self, executor_idx_to_air_idx: &[usize]) -> ExtensionRegistry<F> {
+        self.config.create_rvr_extensions(executor_idx_to_air_idx)
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: Executor<F>,
+{
+    pub fn rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+        let compiled =
+            rvr::compile_with_extensions(exe, &extensions).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrPureInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            compiled,
+        })
+    }
+}
+
 #[cfg(feature = "aot")]
 impl<F, VC> VmExecutor<F, VC>
 where
@@ -265,7 +505,7 @@ where
     VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
@@ -274,7 +514,7 @@ where
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
-    #[cfg(feature = "aot")]
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<F>,
@@ -304,12 +544,69 @@ where
 
     /// Creates an instance of the interpreter specialized for cost metering execution of the given
     /// `exe`.
+    #[cfg(not(feature = "rvr"))]
     pub fn metered_cost_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: MeteredExecutor<F>,
+{
+    pub fn metered_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredInstance<F, VC::Executor>, StaticProgramError> {
+        Self::metered_rvr_instance(self, exe, executor_idx_to_air_idx)
+    }
+
+    pub fn metered_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredInstance<F, VC::Executor>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+
+        Ok(RvrMeteredInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            inventory: self.inventory.clone(),
+            executor_idx_to_air_idx: executor_idx_to_air_idx.to_vec(),
+            extensions,
+        })
+    }
+
+    pub fn metered_cost_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredCostInstance<F, VC::Executor>, StaticProgramError> {
+        Self::metered_cost_rvr_instance(self, exe, executor_idx_to_air_idx)
+    }
+
+    pub fn metered_cost_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredCostInstance<F, VC::Executor>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            inventory: self.inventory.clone(),
+            executor_idx_to_air_idx: executor_idx_to_air_idx.to_vec(),
+            extensions,
+        })
     }
 }
 
@@ -446,7 +743,7 @@ where
     }
 
     /// Pure interpreter.
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -458,8 +755,33 @@ where
         self.executor().instance(exe)
     }
 
-    // Pure AOT execution
-    #[cfg(feature = "aot")]
+    #[cfg(feature = "rvr")]
+    pub fn interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrPureInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        Self::get_rvr_instance(self, exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrPureInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor().rvr_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    // Pure AOT / RVR execution
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     pub fn naive_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -496,7 +818,7 @@ where
         self.executor().aot_instance(exe)
     }
 
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -508,6 +830,34 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_metered_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_rvr_instance(exe, &executor_idx_to_air_idx)
     }
 
     #[cfg(feature = "aot")]
@@ -539,7 +889,7 @@ where
             .metered_aot_instance(exe, &executor_idx_to_air_idx)
     }
 
-    #[cfg(feature = "aot")]
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     pub fn naive_metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -553,6 +903,7 @@ where
             .metered_interpreter_instance(exe, &executor_idx_to_air_idx)
     }
 
+    #[cfg(not(feature = "rvr"))]
     pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -564,6 +915,32 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_cost_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_cost_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        Self::get_metered_cost_rvr_instance(self, exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_metered_cost_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx)
     }
 
     pub fn preflight_interpreter(

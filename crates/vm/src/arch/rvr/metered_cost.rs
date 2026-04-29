@@ -1,10 +1,33 @@
 //! Metered cost execution: per-chip trace cost tracking matching OpenVM's `MeteredCostCtx`.
 
-use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_state::TracerState;
+use std::sync::Arc;
 
-use crate::arch::ExecutorInventory;
+use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
+use openvm_platform::memory::MEM_SIZE;
+use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_lift::ExtensionRegistry;
+use rvr_state::{GuardedMemory, TracerState};
+
+use super::{
+    build_callbacks, build_io_state,
+    compile::ChipMapping,
+    compile_metered_cost, compile_metered_cost_with_extensions, execute_metered_cost,
+    register_and_execute,
+    state::{init_rvr_state_with_metered_cost, state_as_void_ptr},
+};
+use crate::{
+    arch::{
+        execution_mode::MeteredCostCtx,
+        vm::{
+            copy_guest_memory_to_rvr_memory, ensure_rvr_outcome, map_rvr_compile_error,
+            map_rvr_execute_error, read_public_values_from_guest_memory,
+            read_rv32_regs_from_guest_memory, state_from_rvr, streams_from_io_state,
+            streams_to_io_seed, write_rvr_memory_to_guest_memory,
+        },
+        ExecutionError, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VmState,
+    },
+    system::memory::online::GuestMemory,
+};
 
 /// Configuration for mapping PCs and memory operations to metering costs.
 pub struct MeteredCostConfig {
@@ -20,8 +43,8 @@ pub struct MeteredCostConfig {
 
 impl MeteredCostConfig {
     /// Extract chip mapping for compilation.
-    pub fn chip_mapping(&self) -> super::compile::ChipMapping {
-        super::compile::ChipMapping {
+    pub fn chip_mapping(&self) -> ChipMapping {
+        ChipMapping {
             pc_to_chip: self.pc_to_chip.clone(),
             hint_store_chip_idx: self.hint_store_chip_idx,
             chip_widths: Some(self.widths.iter().map(|&w| w as u64).collect()),
@@ -30,6 +53,14 @@ impl MeteredCostConfig {
 }
 
 const NO_CHIP: u32 = u32::MAX;
+
+pub struct RvrMeteredCostInstance<F: PrimeField32, E> {
+    pub(crate) system_config: SystemConfig,
+    pub(crate) exe: Arc<VmExe<F>>,
+    pub(crate) inventory: Arc<ExecutorInventory<E>>,
+    pub(crate) executor_idx_to_air_idx: Vec<usize>,
+    pub(crate) extensions: ExtensionRegistry<F>,
+}
 
 /// Build a `MeteredCostConfig` from the program, executor inventory, AIR index mapping, and widths.
 pub fn build_metered_cost_config<F, E>(
@@ -170,4 +201,146 @@ impl std::ops::DerefMut for PureTracer {
 /// Returns `widths_u64` for the C tracer.
 pub fn prepare_metered_cost(config: &MeteredCostConfig) -> Vec<u64> {
     config.widths.iter().map(|&w| w as u64).collect()
+}
+
+impl<F, E> RvrMeteredCostInstance<F, E>
+where
+    F: PrimeField32,
+    E: MeteredExecutor<F>,
+{
+    pub fn execute_metered_cost(
+        &self,
+        inputs: impl Into<Streams<F>>,
+        ctx: MeteredCostCtx,
+    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+        let inputs = inputs.into();
+        let input_stream = inputs.input_stream;
+        let hint_stream: Vec<u8> = inputs
+            .hint_stream
+            .into_iter()
+            .map(|f| f.as_canonical_u32() as u8)
+            .collect();
+
+        let metered_cost_config = build_metered_cost_config(
+            self.exe.as_ref(),
+            self.inventory.as_ref(),
+            &self.executor_idx_to_air_idx,
+            &ctx.widths,
+            None,
+        );
+        let chips = metered_cost_config.chip_mapping();
+
+        let compiled = if self.extensions.is_empty() {
+            compile_metered_cost(self.exe.as_ref(), &chips)
+        } else {
+            compile_metered_cost_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
+        }
+        .map_err(map_rvr_compile_error)?;
+
+        let result = execute_metered_cost(
+            &compiled,
+            self.exe.as_ref(),
+            input_stream,
+            hint_stream,
+            metered_cost_config,
+            Default::default(),
+        )
+        .map_err(map_rvr_execute_error)?;
+
+        let mut output_ctx = ctx;
+        output_ctx.instret = result.instret;
+        output_ctx.cost = result.cost;
+
+        let state = state_from_rvr(
+            &self.system_config,
+            self.exe.as_ref(),
+            result.state.pc,
+            &result.state.regs,
+            &result.memory,
+            &[],
+        );
+
+        Ok((output_ctx, state))
+    }
+
+    pub fn execute_metered_cost_from_state(
+        &self,
+        from_state: VmState<F, GuestMemory>,
+        ctx: MeteredCostCtx,
+    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+        let pc = from_state.pc();
+        let mut guest_memory = from_state.memory;
+        let (input_stream, hint_stream, deferrals) = streams_to_io_seed(from_state.streams);
+        let rng = from_state.rng;
+        #[cfg(feature = "metrics")]
+        let metrics = from_state.metrics;
+
+        let metered_cost_config = build_metered_cost_config(
+            self.exe.as_ref(),
+            self.inventory.as_ref(),
+            &self.executor_idx_to_air_idx,
+            &ctx.widths,
+            None,
+        );
+        let chips = metered_cost_config.chip_mapping();
+
+        let compiled = if self.extensions.is_empty() {
+            compile_metered_cost(self.exe.as_ref(), &chips)
+        } else {
+            compile_metered_cost_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
+        }
+        .map_err(map_rvr_compile_error)?;
+
+        let mut memory = GuardedMemory::new(MEM_SIZE)
+            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        let mut tracer_data = MeteredCostData::default();
+        let mut state = init_rvr_state_with_metered_cost(self.exe.as_ref(), &mut memory);
+        state.tracer = MeteredCostMeter(&mut tracer_data);
+        state.pc = pc;
+        state
+            .regs
+            .copy_from_slice(&read_rv32_regs_from_guest_memory(&guest_memory));
+        copy_guest_memory_to_rvr_memory(&guest_memory, &mut memory);
+
+        let widths_u64 = prepare_metered_cost(&metered_cost_config);
+        state.tracer.chip_widths = widths_u64.as_ptr();
+        state.tracer.cost = 0;
+
+        let mut io_state = build_io_state(input_stream, memory.as_mut_ptr(), Default::default());
+        io_state.hint_stream = hint_stream;
+        io_state.hint_pos = 0;
+        io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
+        io_state.rng = rng;
+        let callbacks = build_callbacks(&mut io_state);
+        unsafe { register_and_execute(&compiled, &callbacks, state_as_void_ptr(&mut state)) }
+            .map_err(map_rvr_execute_error)?;
+        ensure_rvr_outcome(
+            "metered-cost execution from state",
+            state.is_terminated(),
+            state.is_suspended(),
+            state.result_code(),
+            false,
+        )?;
+
+        let mut output_ctx = ctx;
+        output_ctx.instret = state.instret;
+        output_ctx.cost = state.tracer.cost;
+
+        write_rvr_memory_to_guest_memory(
+            &mut guest_memory,
+            &state.regs,
+            &memory,
+            &io_state.public_values,
+        );
+        let to_state = VmState::new(
+            state.pc,
+            guest_memory,
+            streams_from_io_state(&io_state, deferrals),
+            io_state.rng,
+            #[cfg(feature = "metrics")]
+            metrics,
+        );
+
+        Ok((output_ctx, to_state))
+    }
 }

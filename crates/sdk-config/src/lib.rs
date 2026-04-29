@@ -21,9 +21,13 @@ use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::*;
 use openvm_sha2_circuit::*;
 use openvm_sha2_transpiler::*;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::ExtensionRegistry;
 use serde::{Deserialize, Serialize};
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -321,6 +325,14 @@ where
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
         self.to_inner().create_executors()
     }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_extensions(&self, air_idx: &[usize]) -> ExtensionRegistry<F>
+    where
+        F: PrimeField32,
+    {
+        self.to_inner().create_rvr_extensions(air_idx)
+    }
 }
 
 impl<SC: StarkProtocolConfig> VmCircuitConfig<SC> for SdkVmConfig
@@ -329,19 +341,6 @@ where
 {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError> {
         self.to_inner().create_airs()
-    }
-}
-
-#[cfg(feature = "rvr")]
-impl SdkVmConfig {
-    pub fn create_rvr_extensions<F>(
-        &self,
-        air_idx: &[usize],
-    ) -> rvr_openvm_lift::ExtensionRegistry<F>
-    where
-        F: VmField,
-    {
-        self.to_inner().create_rvr_extensions(air_idx)
     }
 }
 
