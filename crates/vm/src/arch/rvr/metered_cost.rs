@@ -228,6 +228,8 @@ where
             &ctx.widths,
             None,
         );
+        // TODO: hoist compilation to instance construction; requires moving `ctx.widths` onto the
+        // instance.
         let chips = metered_cost_config.chip_mapping();
 
         let compiled = if self.extensions.is_empty() {

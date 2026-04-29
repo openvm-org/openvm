@@ -27,6 +27,7 @@ openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-sha2-circuit.workspace = true
 openvm-sha2-transpiler.workspace = true
+rvr-openvm-lift = { workspace = true, optional = true }
 
 clap.workspace = true
 eyre.workspace = true
@@ -63,7 +64,17 @@ aot = [
     "openvm-rv32im-circuit/aot",
     "openvm-sha2-circuit/aot",
 ]
-rvr = ["openvm-circuit/rvr"]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "openvm-circuit/rvr",
+    "openvm-algebra-circuit/rvr",
+    "openvm-bigint-circuit/rvr",
+    "openvm-ecc-circuit/rvr",
+    "openvm-keccak256-circuit/rvr",
+    "openvm-pairing-circuit/rvr",
+    "openvm-rv32im-circuit/rvr",
+    "openvm-sha2-circuit/rvr",
+]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
