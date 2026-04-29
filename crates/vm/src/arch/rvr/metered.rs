@@ -745,14 +745,14 @@ where
             self.exe.as_ref(),
             self.inventory.as_ref(),
             &self.executor_idx_to_air_idx,
-            ctx.segmentation_ctx.widths(),
-            ctx.segmentation_ctx.interactions(),
+            &ctx.segmentation_ctx.widths,
+            &ctx.segmentation_ctx.interactions,
             &constant_trace_heights,
             &self.system_config,
             None,
         );
-        trace_config.segmentation_config = ctx.segmentation_ctx.config().clone();
-        trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns();
+        trace_config.segmentation_config = ctx.segmentation_ctx.config.clone();
+        trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns;
         trace_config.initial_trace_heights = ctx.trace_heights.clone();
         trace_config.is_constant = ctx.is_trace_height_constant.clone();
 
@@ -819,14 +819,14 @@ where
             self.exe.as_ref(),
             self.inventory.as_ref(),
             &self.executor_idx_to_air_idx,
-            ctx.segmentation_ctx.widths(),
-            ctx.segmentation_ctx.interactions(),
+            &ctx.segmentation_ctx.widths,
+            &ctx.segmentation_ctx.interactions,
             &constant_trace_heights,
             &self.system_config,
             None,
         );
-        trace_config.segmentation_config = ctx.segmentation_ctx.config().clone();
-        trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns();
+        trace_config.segmentation_config = ctx.segmentation_ctx.config.clone();
+        trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns;
         trace_config.initial_trace_heights = ctx.trace_heights.clone();
         trace_config.is_constant = ctx.is_trace_height_constant.clone();
 

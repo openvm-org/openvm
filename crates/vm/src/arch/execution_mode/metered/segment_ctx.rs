@@ -142,12 +142,12 @@ impl SegmentationLimits {
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     pub(crate) air_names: Vec<String>,
-    pub(crate) widths: Vec<usize>,
-    interactions: Vec<usize>,
-    pub(crate) config: SegmentationConfig,
+    pub widths: Vec<usize>,
+    pub interactions: Vec<usize>,
+    pub config: SegmentationConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
-    pub(super) segment_check_insns: u64,
+    pub segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
@@ -205,22 +205,6 @@ impl SegmentationCtx {
 
     pub fn set_base_field_size(&mut self, base_field_size: usize) {
         self.config.base_field_size = base_field_size;
-    }
-
-    pub fn widths(&self) -> &[usize] {
-        &self.widths
-    }
-
-    pub fn interactions(&self) -> &[usize] {
-        &self.interactions
-    }
-
-    pub fn config(&self) -> &SegmentationConfig {
-        &self.config
-    }
-
-    pub fn segment_check_insns(&self) -> u64 {
-        self.segment_check_insns
     }
 
     /// Calculate the maximum trace height and corresponding air name

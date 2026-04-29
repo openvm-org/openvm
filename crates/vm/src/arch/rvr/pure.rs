@@ -32,6 +32,8 @@ impl<F> RvrPureInstance<F>
 where
     F: PrimeField32,
 {
+    // TODO: deduplicate `execute` and `execute_from_state` — they share the rvr invocation
+    // and result-translation logic and only differ in how the initial state is set up.
     pub fn execute(
         &self,
         inputs: impl Into<Streams<F>>,
