@@ -35,7 +35,6 @@ pub mod auipc_cuda {
             d_range_checker: *mut u32,
             rc_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -47,7 +46,6 @@ pub mod auipc_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -59,7 +57,6 @@ pub mod auipc_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -81,7 +78,6 @@ pub mod hintstore_cuda {
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -97,7 +93,6 @@ pub mod hintstore_cuda {
         pointer_max_bits: u32,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: u32,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -112,7 +107,6 @@ pub mod hintstore_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             timestamp_max_bits,
             stream,
         ))
@@ -131,7 +125,6 @@ pub mod jalr_cuda {
             d_range_checker: *mut u32,
             rc_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -143,7 +136,6 @@ pub mod jalr_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -156,7 +148,6 @@ pub mod jalr_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -175,7 +166,6 @@ pub mod less_than_cuda {
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -187,7 +177,6 @@ pub mod less_than_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -199,7 +188,6 @@ pub mod less_than_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -264,7 +252,6 @@ pub mod divrem_cuda {
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             d_range_tuple_checker: *mut u32,
             range_tuple_checker_sizes: UInt2,
             timestamp_max_bits: u32,
@@ -280,7 +267,6 @@ pub mod divrem_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: u32,
         d_range_tuple_checker: &DeviceBuffer<F>,
         range_tuple_checker_sizes: UInt2,
         timestamp_max_bits: u32,
@@ -294,7 +280,6 @@ pub mod divrem_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             d_range_tuple_checker.as_mut_ptr() as *mut u32,
             range_tuple_checker_sizes,
             timestamp_max_bits,
@@ -315,7 +300,6 @@ pub mod shift_cuda {
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -327,7 +311,6 @@ pub mod shift_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -339,7 +322,6 @@ pub mod shift_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -357,7 +339,6 @@ pub mod alu_cuda {
             d_range_checker: *mut u32,
             range_checker_bins: usize,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: usize,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -370,7 +351,6 @@ pub mod alu_cuda {
         d_range_checker: &DeviceBuffer<F>,
         range_bins: usize,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -383,7 +363,6 @@ pub mod alu_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             range_bins,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             timestamp_max_bits,
             stream,
         ))
@@ -484,7 +463,6 @@ pub mod jal_lui_cuda {
             d_range_checker: *mut u32,
             rc_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -496,7 +474,6 @@ pub mod jal_lui_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -509,7 +486,6 @@ pub mod jal_lui_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -566,7 +542,6 @@ pub mod branch_lt_cuda {
             d_range_checker: *mut u32,
             rc_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -578,7 +553,6 @@ pub mod branch_lt_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -591,7 +565,6 @@ pub mod branch_lt_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -610,7 +583,6 @@ pub mod mulh_cuda {
             d_range_checker: *mut u32,
             range_checker_bins: usize,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             d_range_tuple_checker: *mut u32,
             range_tuple_checker_sizes: UInt2,
             timestamp_max_bits: u32,
@@ -625,7 +597,6 @@ pub mod mulh_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         d_range_tuple_checker: &DeviceBuffer<F>,
         range_tuple_checker_sizes: UInt2,
         timestamp_max_bits: u32,
@@ -640,7 +611,6 @@ pub mod mulh_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             d_range_tuple_checker.as_mut_ptr() as *mut u32,
             range_tuple_checker_sizes,
             timestamp_max_bits,
@@ -660,7 +630,6 @@ pub mod alu_w_cuda {
             d_range_checker: *mut u32,
             range_checker_bins: usize,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: usize,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -673,7 +642,6 @@ pub mod alu_w_cuda {
         d_range_checker: &DeviceBuffer<F>,
         range_bins: usize,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -686,7 +654,6 @@ pub mod alu_w_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             range_bins,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             timestamp_max_bits,
             stream,
         ))
@@ -705,7 +672,6 @@ pub mod shift_w_cuda {
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -717,7 +683,6 @@ pub mod shift_w_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -729,7 +694,6 @@ pub mod shift_w_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits as u32,
             timestamp_max_bits,
             stream,
         ))
@@ -748,7 +712,6 @@ pub mod mul_w_cuda {
             d_range: *mut u32,
             range_bins: usize,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: usize,
             d_range_tuple: *mut u32,
             range_tuple_sizes: UInt2,
             timestamp_max_bits: u32,
@@ -763,7 +726,6 @@ pub mod mul_w_cuda {
         d_range: &DeviceBuffer<F>,
         range_bins: usize,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: usize,
         d_range_tuple: &DeviceBuffer<F>,
         range_tuple_sizes: UInt2,
         timestamp_max_bits: u32,
@@ -778,7 +740,6 @@ pub mod mul_w_cuda {
             d_range.as_mut_ptr() as *mut u32,
             range_bins,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             d_range_tuple.as_ptr() as *mut u32,
             range_tuple_sizes,
             timestamp_max_bits,
@@ -799,7 +760,6 @@ pub mod divrem_w_cuda {
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
-            bitwise_num_bits: u32,
             d_range_tuple_checker: *mut u32,
             range_tuple_checker_sizes: UInt2,
             timestamp_max_bits: u32,
@@ -815,7 +775,6 @@ pub mod divrem_w_cuda {
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
-        bitwise_num_bits: u32,
         d_range_tuple_checker: &DeviceBuffer<F>,
         range_tuple_checker_sizes: UInt2,
         timestamp_max_bits: u32,
@@ -829,7 +788,6 @@ pub mod divrem_w_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             d_range_tuple_checker.as_mut_ptr() as *mut u32,
             range_tuple_checker_sizes,
             timestamp_max_bits,
