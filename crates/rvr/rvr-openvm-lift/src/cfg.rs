@@ -6,15 +6,14 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use openvm_instructions::{
+    program::DEFAULT_PC_STEP as INSTR_SIZE, riscv::RV32_NUM_REGISTERS as NUM_REGS,
+};
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
 
-const NUM_REGS: usize = 32;
 const MAX_VALUES: usize = 16;
 const MAX_ITERATIONS_MULTIPLIER: usize = 20;
 const MAX_JUMP_TABLE_SCAN: usize = 256;
-
-/// Every OpenVM instruction is 4 bytes.
-const INSTR_SIZE: u32 = 4;
 
 // ── RegisterValue ──────────────────────────────────────────────────────────
 
@@ -989,11 +988,7 @@ fn binary_search_le(sorted: &[u32], target: u32) -> Option<u32> {
 /// function pointer arrays).
 ///
 /// Returns `Vec<Block>` with resolved `JumpDyn` targets filled in.
-pub fn build_blocks(
-    instructions: &[LiftedInstr],
-    extra_targets: &[u32],
-    max_block_insns: u32,
-) -> Vec<Block> {
+pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u32]) -> Vec<Block> {
     if instructions.is_empty() {
         return Vec::new();
     }
@@ -1060,7 +1055,7 @@ pub fn build_blocks(
     );
 
     // Build blocks by splitting at leaders and patching resolved JumpDyn targets.
-    build_block_list(instructions, &leaders, &resolved_jumps, max_block_insns)
+    build_block_list(instructions, &leaders, &resolved_jumps)
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,
@@ -1069,8 +1064,10 @@ fn build_block_list(
     instructions: &[LiftedInstr],
     leaders: &BTreeSet<u32>,
     resolved_jumps: &HashMap<u32, HashSet<u32>>,
-    max_block_insns: u32,
 ) -> Vec<Block> {
+    // Max block size; used to flush periodically so the segmentation check in
+    // metered mode (which fires at block boundaries) stays granular enough.
+    let max_block_insns = rvr_openvm_ext_ffi_common::DEFAULT_SEGMENT_CHECK_INSNS;
     let mut blocks: Vec<Block> = Vec::new();
 
     // Accumulate body instructions for the current block.
