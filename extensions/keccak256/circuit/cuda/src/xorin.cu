@@ -27,7 +27,6 @@ __global__ void xorin_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -50,7 +49,7 @@ __global__ void xorin_tracegen(
         MemoryAuxColsFactory mem_helper(
             VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
-        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
+        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
 
         auto record_len = rec.len;
         auto num_reads =
@@ -178,13 +177,10 @@ extern "C" int _xorin_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(XorinVmCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 512);
@@ -196,7 +192,6 @@ extern "C" int _xorin_tracegen(
         d_range_checker_ptr,
         range_checker_num_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
