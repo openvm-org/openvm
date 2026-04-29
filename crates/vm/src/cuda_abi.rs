@@ -267,7 +267,6 @@ pub mod program {
             width: usize,
             d_records: DeviceBufferView,
             pc_base: u32,
-            pc_step: u32,
             terminate_opcode: usize,
             stream: cudaStream_t,
         ) -> i32;
@@ -280,7 +279,6 @@ pub mod program {
         width: usize,
         d_records: &DeviceBuffer<T>,
         pc_base: u32,
-        pc_step: u32,
         terminate_opcode: usize,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -290,7 +288,6 @@ pub mod program {
             width,
             d_records.view(),
             pc_base,
-            pc_step,
             terminate_opcode,
             stream,
         ))
