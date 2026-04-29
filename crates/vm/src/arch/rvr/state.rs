@@ -6,7 +6,7 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{GuardedMemory, InstretSuspender, Rv32State, RvState, NUM_REGS_I};
 
-use crate::{
+use super::{
     metered::MeteredTracer,
     metered_cost::{MeteredCostMeter, PureTracer},
 };
