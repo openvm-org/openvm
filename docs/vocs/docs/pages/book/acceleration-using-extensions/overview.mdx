@@ -36,9 +36,9 @@ We will explain in each extension how to configure the `openvm.toml` file.
 A template `openvm.toml` file using the default VM extensions shipping with OpenVM is as follows:
 
 ```toml
-[app_vm_config.rv32i]
+[app_vm_config.rv64i]
 
-[app_vm_config.rv32m]
+[app_vm_config.rv64m]
 range_tuple_checker_sizes = [256, 8192]
 
 [app_vm_config.io]
@@ -74,5 +74,5 @@ a = "<a_2>"
 b = "<b_2>"
 ```
 
-`rv32i`, `io`, and `rv32m` need to be always included if you make an `openvm.toml` file while the rest are optional and should be included if you want to use the corresponding extension.
+`rv64i`, `io`, and `rv64m` need to be always included if you make an `openvm.toml` file while the rest are optional and should be included if you want to use the corresponding extension.
 All moduli and scalars must be provided in decimal format. Currently `pairing` supports only pre-defined `Bls12_381` and `Bn254` curves. To add more `ecc` curves you need to add more `[[app_vm_config.ecc.supported_curves]]` entries.
