@@ -11,6 +11,8 @@
  */
 
 static constexpr uint WARP_MASK = WARP_SIZE - 1;
+static constexpr uint32_t BITWISE_NUM_BITS = riscv::RV64_CELL_BITS;
+static constexpr uint32_t BITWISE_NUM_ROWS = 1 << (BITWISE_NUM_BITS << 1);
 
 namespace lookup {
 
@@ -124,24 +126,22 @@ template <uint32_t N> struct RangeTupleChecker {
 // to be of size 2 * 2^RV64_CELL_BITS, where the first 2^RV64_CELL_BITS
 // elements store the range check histogram and the rest store for XOR.
 struct BitwiseOperationLookup {
-    static constexpr uint32_t NUM_BITS = riscv::RV64_CELL_BITS;
-    static constexpr uint32_t NUM_ROWS = 1 << (NUM_BITS << 1);
     lookup::Histogram hist;
 
     __device__ BitwiseOperationLookup(uint32_t *global_hist)
-        : hist(global_hist, NUM_ROWS << 1) {}
+        : hist(global_hist, BITWISE_NUM_ROWS << 1) {}
 
     __device__ void add_range(uint32_t x, uint32_t y) {
-        uint32_t idx = x * (1 << NUM_BITS) + y;
-        if (idx < NUM_ROWS) {
+        uint32_t idx = x * (1 << BITWISE_NUM_BITS) + y;
+        if (idx < BITWISE_NUM_ROWS) {
             hist.add_count(idx);
         }
     }
 
     __device__ void add_xor(uint32_t x, uint32_t y) {
-        uint32_t idx = x * (1 << NUM_BITS) + y;
-        if (idx < NUM_ROWS) {
-            hist.add_count(idx + NUM_ROWS);
+        uint32_t idx = x * (1 << BITWISE_NUM_BITS) + y;
+        if (idx < BITWISE_NUM_ROWS) {
+            hist.add_count(idx + BITWISE_NUM_ROWS);
         }
     }
 
