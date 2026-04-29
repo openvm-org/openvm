@@ -404,7 +404,7 @@ For LUI_RV64, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
 For AUIPC_RV64, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.
 The instruction does not need to interpret whether the register is signed or unsigned.
 For AUIPC_RV64, the addition is treated as unchecked `u32` addition since that is the same as `i32` addition at the bit
-level. The result is zero-extended to 64 bits before writing to the register.
+level. The result is sign-extended to 64 bits before writing to the register.
 
 Note that AUIPC_RV64 does not have any condition for the register write.
 
