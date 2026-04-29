@@ -57,7 +57,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV64_CELL_BITS as u32,
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
                 self.timestamp_max_bits as u32,

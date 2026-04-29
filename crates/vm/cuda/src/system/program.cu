@@ -1,5 +1,6 @@
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
 #include "primitives/trace_access.h"
 #include "system/program.cuh"
 
@@ -11,7 +12,6 @@ __global__ void program_cached_tracegen(
     size_t width,
     DeviceBufferConstView<ProgramExecutionCols<Fp>> records,
     uint32_t pc_base,
-    uint32_t pc_step,
     size_t terminate_opcode
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -28,7 +28,7 @@ __global__ void program_cached_tracegen(
         COL_WRITE_VALUE(row, ProgramExecutionCols, f, rec.f);
         COL_WRITE_VALUE(row, ProgramExecutionCols, g, rec.g);
     } else {
-        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, pc_base + (idx * pc_step));
+        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, pc_base + (idx * program::DEFAULT_PC_STEP));
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, terminate_opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, Fp::zero());
         COL_WRITE_VALUE(row, ProgramExecutionCols, b, Fp::zero());
@@ -46,15 +46,13 @@ extern "C" int _program_cached_tracegen(
     size_t width,
     DeviceBufferConstView<ProgramExecutionCols<Fp>> d_records,
     uint32_t pc_base,
-    uint32_t pc_step,
     size_t terminate_opcode,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
     assert(width == sizeof(ProgramExecutionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     program_cached_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, width, d_records, pc_base, pc_step, terminate_opcode
+        d_trace, height, width, d_records, pc_base, terminate_opcode
     );
     return CHECK_KERNEL();
 }

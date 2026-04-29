@@ -32,7 +32,6 @@ __global__ void rv64_shift_tracegen(
     uint32_t *range_ptr,
     uint32_t range_bins,
     uint32_t *lookup_ptr,
-    uint32_t lookup_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -41,12 +40,12 @@ __global__ void rv64_shift_tracegen(
         auto const &rec = records[idx];
         auto adapter = Rv64BaseAluAdapter(
             VariableRangeChecker(range_ptr, range_bins),
-            BitwiseOperationLookup(lookup_ptr, lookup_bits),
+            BitwiseOperationLookup(lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
         auto core = Rv64ShiftCore(
-            BitwiseOperationLookup(lookup_ptr, lookup_bits),
+            BitwiseOperationLookup(lookup_ptr),
             VariableRangeChecker(range_ptr, range_bins)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftCols, core)), rec.core);
@@ -63,12 +62,9 @@ extern "C" int _rv64_shift_tracegen(
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *__restrict__ d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
@@ -80,7 +76,6 @@ extern "C" int _rv64_shift_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

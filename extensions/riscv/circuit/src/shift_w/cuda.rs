@@ -50,7 +50,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV64_CELL_BITS,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )

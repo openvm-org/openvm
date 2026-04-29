@@ -7,6 +7,24 @@
 
 using namespace riscv;
 
+template <size_t NUM_LIMBS>
+__device__ __forceinline__ uint64_t limbs_to_u64(const uint8_t (&limbs)[NUM_LIMBS]) {
+    uint64_t val = 0;
+#pragma unroll
+    for (size_t i = 0; i < NUM_LIMBS; i++) {
+        val |= (uint64_t)limbs[i] << (i * RV64_CELL_BITS);
+    }
+    return val;
+}
+
+template <size_t NUM_LIMBS>
+__device__ __forceinline__ void u64_to_limbs(uint64_t val, uint8_t (&limbs)[NUM_LIMBS]) {
+#pragma unroll
+    for (size_t i = 0; i < NUM_LIMBS; i++) {
+        limbs[i] = (uint8_t)(val >> (i * RV64_CELL_BITS));
+    }
+}
+
 template <typename T, size_t NUM_LIMBS> struct DivRemCoreCols {
     // b = c * q + r for some 0 <= |r| < |c | and sign(r) = sign(b) or r = 0.
     T b[NUM_LIMBS];
@@ -89,13 +107,8 @@ template <size_t NUM_LIMBS> struct DivRemCore {
         bool q_sign = false;
         bool case_none = false;
 
-        uint64_t b_val = 0;
-        uint64_t c_val = 0;
-#pragma unroll
-        for (size_t i = 0; i < NUM_LIMBS; i++) {
-            b_val |= (uint64_t)record.b[i] << (i * RV64_CELL_BITS);
-            c_val |= (uint64_t)record.c[i] << (i * RV64_CELL_BITS);
-        }
+        uint64_t b_val = limbs_to_u64(record.b);
+        uint64_t c_val = limbs_to_u64(record.c);
         uint64_t q_val = 0;
         uint64_t r_val = 0;
 
@@ -120,12 +133,9 @@ template <size_t NUM_LIMBS> struct DivRemCore {
         uint8_t r[NUM_LIMBS];
         uint8_t r_prime[NUM_LIMBS];
         uint64_t r_prime_val = abs_mod(r_val, b_sign ^ c_sign);
-#pragma unroll
-        for (size_t i = 0; i < NUM_LIMBS; i++) {
-            q[i] = (uint8_t)(q_val >> (i * RV64_CELL_BITS));
-            r[i] = (uint8_t)(r_val >> (i * RV64_CELL_BITS));
-            r_prime[i] = (uint8_t)(r_prime_val >> (i * RV64_CELL_BITS));
-        }
+        u64_to_limbs(q_val, q);
+        u64_to_limbs(r_val, r);
+        u64_to_limbs(r_prime_val, r_prime);
         bool r_zero = (r_val == 0) && (c_val != 0);
 
         COL_WRITE_ARRAY(row, Cols, b, record.b);

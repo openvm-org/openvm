@@ -59,7 +59,6 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 &self.bitwise_lookup.count,
-                RV64_CELL_BITS as u32,
                 &self.poseidon2.records,
                 &self.poseidon2.counts,
                 &self.poseidon2.idx,

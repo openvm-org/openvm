@@ -145,7 +145,6 @@ extern "C" int _keccakf_perm_tracegen(
     size_t round_state_words,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
     assert(width == sizeof(KeccakfPermCols<uint8_t>));
 
     uint32_t blocks_to_fill = div_ceil(height, uint32_t(NUM_ROUNDS));
