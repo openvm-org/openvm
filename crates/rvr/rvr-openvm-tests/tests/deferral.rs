@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! Deferral extension integration tests.
 //!
 //! Builds guest programs that use deferral, transpiles them with the deferral
@@ -293,7 +295,7 @@ impl DeferralTestHarness {
         let input_stream = streams.input_stream.clone();
 
         // OpenVM reference
-        let interpreter = self.vm.executor().instance(exe)?;
+        let interpreter = self.vm.executor().instance(exe, &self.air_idx)?;
         let interp_state = interpreter.execute(streams, None)?;
 
         // rvr compile + execute

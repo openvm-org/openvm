@@ -39,7 +39,7 @@ fn init_memory<F: PrimeField32>(exe: &VmExe<F>, memory: &mut GuardedMemory) {
 pub fn init_rvr_state<F: PrimeField32>(exe: &VmExe<F>, memory: &mut GuardedMemory) -> PureState {
     let mut state = PureState::new();
     init_memory(exe, memory);
-    state.set_memory(memory.as_ptr());
+    state.set_memory(memory.as_mut_ptr());
     state.pc = exe.pc_start;
     state.suspender.disable();
     state
@@ -52,7 +52,7 @@ pub fn init_rvr_state_with_metered_cost<F: PrimeField32>(
 ) -> MeteredCostState {
     let mut state = MeteredCostState::new();
     init_memory(exe, memory);
-    state.set_memory(memory.as_ptr());
+    state.set_memory(memory.as_mut_ptr());
     state.pc = exe.pc_start;
     state.suspender.disable();
     state
@@ -65,7 +65,7 @@ pub fn init_rvr_state_with_metered<F: PrimeField32>(
 ) -> MeteredState {
     let mut state = MeteredState::new();
     init_memory(exe, memory);
-    state.set_memory(memory.as_ptr());
+    state.set_memory(memory.as_mut_ptr());
     state.pc = exe.pc_start;
     state.suspender.disable();
     state

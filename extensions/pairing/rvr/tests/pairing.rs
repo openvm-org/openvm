@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! Pairing extension integration tests.
 //!
 //! Tests pairing guest programs (fp12_mul, pairing_check) against the

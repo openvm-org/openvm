@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! Algebra extension integration tests.
 
 use std::{path::PathBuf, process::Command, str::FromStr};

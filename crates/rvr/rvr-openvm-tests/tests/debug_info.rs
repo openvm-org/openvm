@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! End-to-end validation for source annotations and DWARF line info.
 
 use std::{
