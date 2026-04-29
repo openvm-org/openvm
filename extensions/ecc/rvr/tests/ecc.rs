@@ -5,9 +5,6 @@
 //! using both the algebra and ECC rvr extensions, executes, and compares against
 //! the OpenVM interpreter.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -23,14 +20,14 @@ use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_algebra::AlgebraExtension;
 use rvr_openvm_ext_ecc::EccExtension;
-use utils::{ExecutionMode, F};
+use rvr_openvm_test_utils::{self as utils, workspace_root, ExecutionMode, F};
 
 /// Curve IDs.
 const CURVE_K256: u32 = 0;
 const CURVE_P256: u32 = 1;
 
 fn ecc_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../openvm/extensions/ecc/tests/programs")
+    workspace_root().join("extensions/ecc/tests/programs")
 }
 
 fn transpile_with_ecc(elf: Elf) -> Result<VmExe<F>> {
@@ -45,21 +42,20 @@ fn transpile_with_ecc(elf: Elf) -> Result<VmExe<F>> {
     )?)
 }
 
-fn build_staticlib(ffi_crate: &str, lib_name: &str) -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let ffi_dir = manifest_dir.join(format!("../extensions/{ffi_crate}"));
+fn build_staticlib(ffi_dir: PathBuf, lib_name: &str) -> PathBuf {
     let output = Command::new("cargo")
         .args(["build", "--release"])
         .current_dir(&ffi_dir)
         .output()
-        .unwrap_or_else(|_| panic!("failed to run cargo build for {ffi_crate}"));
+        .unwrap_or_else(|_| panic!("failed to run cargo build for {}", ffi_dir.display()));
     if !output.status.success() {
         panic!(
-            "Failed to build {ffi_crate} staticlib:\n{}",
+            "Failed to build staticlib at {}:\n{}",
+            ffi_dir.display(),
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let lib_path = manifest_dir.join(format!("../../target/release/{lib_name}"));
+    let lib_path = workspace_root().join(format!("target/release/{lib_name}"));
     assert!(
         lib_path.exists(),
         "staticlib not found at {}",
@@ -69,11 +65,13 @@ fn build_staticlib(ffi_crate: &str, lib_name: &str) -> PathBuf {
 }
 
 fn build_algebra_staticlib() -> PathBuf {
-    build_staticlib("algebra/ffi", "librvr_openvm_ext_algebra_ffi.a")
+    let ffi_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../algebra/rvr/ffi");
+    build_staticlib(ffi_dir, "librvr_openvm_ext_algebra_ffi.a")
 }
 
 fn build_ecc_staticlib() -> PathBuf {
-    build_staticlib("ecc/ffi", "librvr_openvm_ext_ecc_ffi.a")
+    let ffi_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffi");
+    build_staticlib(ffi_dir, "librvr_openvm_ext_ecc_ffi.a")
 }
 
 fn build_ecc_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
@@ -129,6 +127,7 @@ fn register_extensions(
     harness.register(algebra_ext);
     harness.register(ecc_ext);
 }
+
 // ── Pure execution test ─────────────────────────────────────────────────────
 
 #[test]

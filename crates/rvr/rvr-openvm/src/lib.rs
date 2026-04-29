@@ -1,38 +1,12 @@
-//! rvr-openvm: Compilation, linking, and execution bridge
-//! between OpenVM and rvr's C-based recompilation pipeline.
+//! rvr-openvm backend pieces shared by OpenVM integration.
 
-pub mod compile;
-pub mod debug;
+mod constants;
 pub mod emit;
-pub mod execute;
-pub mod io;
-pub mod metered;
-pub mod metered_cost;
-pub mod state;
 pub mod toolchain;
 
-pub use compile::{
-    compile, compile_cached, compile_metered, compile_metered_cached, compile_metered_cost,
-    compile_metered_cost_with_extensions, compile_metered_cost_with_limit,
-    compile_metered_with_extensions, compile_with_extensions, compile_with_limit,
-    compile_with_options, load_compiled_from_path, native_cache_key, native_cache_stamp,
-    ChipMapping, CompileError, CompileOptions, RvrCompiled,
-};
-pub use debug::{default_addr2line_cmd, GuestDebugMap};
-pub use emit::TracerMode;
-pub use execute::{
-    build_callbacks, build_io_state, execute, execute_metered, execute_metered_cost,
-    execute_metered_cost_with_limit, execute_with_limit, register_and_execute, ExecuteError,
-    RvrExecutionResult, RvrLimitedResult, RvrMeteredCostLimitedResult, RvrMeteredCostResult,
-};
-pub use io::DeferralData;
-pub use metered::{build_metered_config, MeteredConfig, RvrMeteredResult, RvrSegment};
-pub use metered_cost::{
-    build_metered_cost_config, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-    PureTracerData,
-};
+pub use constants::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
+pub use emit::{CProject, EmitContext, InstrCodegen, TracerMode};
 pub use toolchain::{
-    default_addr2line_cmd as default_llvm_addr2line_cmd,
-    default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
-    default_linker,
+    default_addr2line_cmd, default_compiler, default_compiler_command, default_dwarfdump_cmd,
+    default_linker, default_linker_or_lld, linker_exists, Compiler,
 };

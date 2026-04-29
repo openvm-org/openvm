@@ -4,15 +4,15 @@
 
 use std::{
     collections::VecDeque,
-    env, fs,
+    fs,
     path::{Path, PathBuf},
 };
 
 use eyre::Result;
 use openvm_circuit::arch::{
     execution_mode::{MeteredCostCtx, MeteredCtx, Segment},
-    Executor, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VirtualMachine,
-    VmExecutionConfig,
+    rvr as rvr_openvm, Executor, ExecutorInventory, MeteredExecutor, Streams, SystemConfig,
+    VirtualMachine, VmExecutionConfig,
 };
 use openvm_instructions::{
     exe::VmExe,
@@ -61,12 +61,14 @@ pub enum ExecutionMode {
 
 // ── Path helpers ────────────────────────────────────────────────────────────
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+// `rvr-openvm-test-utils` lives at `<workspace>/crates/rvr/rvr-openvm-test-utils/`,
+// three levels below the workspace root.
+pub fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-fn openvm_root() -> PathBuf {
-    workspace_root().join("openvm")
+pub fn openvm_root() -> PathBuf {
+    workspace_root()
 }
 
 pub fn rv32im_programs_dir() -> PathBuf {
@@ -272,7 +274,6 @@ where
 
     fn compare_metered_cost(&self, label: &str, exe: &VmExe<F>, input: Vec<Vec<F>>) -> Result<()> {
         let ctx: MeteredCostCtx = self.vm.build_metered_cost_ctx();
-        let system_config: &SystemConfig = self.config.as_ref();
 
         // OpenVM reference
         let instance = self
@@ -289,7 +290,6 @@ where
             &inventory,
             &self.air_idx,
             &ctx.widths,
-            system_config,
             hint_buffer_opcode,
         );
         let chips = metered_cost_config.chip_mapping();

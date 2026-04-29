@@ -1,9 +1,10 @@
 //! Metered cost execution: per-chip trace cost tracking matching OpenVM's `MeteredCostCtx`.
 
-use openvm_circuit::arch::{ExecutorInventory, SystemConfig};
 use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::TracerState;
+
+use crate::arch::ExecutorInventory;
 
 /// Configuration for mapping PCs and memory operations to metering costs.
 pub struct MeteredCostConfig {
@@ -19,8 +20,8 @@ pub struct MeteredCostConfig {
 
 impl MeteredCostConfig {
     /// Extract chip mapping for compilation.
-    pub fn chip_mapping(&self) -> crate::compile::ChipMapping {
-        crate::compile::ChipMapping {
+    pub fn chip_mapping(&self) -> super::compile::ChipMapping {
+        super::compile::ChipMapping {
             pc_to_chip: self.pc_to_chip.clone(),
             hint_store_chip_idx: self.hint_store_chip_idx,
             chip_widths: Some(self.widths.iter().map(|&w| w as u64).collect()),
@@ -36,7 +37,6 @@ pub fn build_metered_cost_config<F, E>(
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     widths: &[usize],
-    _system_config: &SystemConfig,
     hint_buffer_opcode: Option<VmOpcode>,
 ) -> MeteredCostConfig
 where

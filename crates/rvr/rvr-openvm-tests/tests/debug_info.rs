@@ -7,6 +7,7 @@ use std::{
 };
 
 use eyre::{Context, ContextCompat, Result};
+use openvm_circuit::arch::rvr as rvr_openvm;
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_transpiler::{
@@ -17,14 +18,7 @@ use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm::{CompileOptions, GuestDebugMap, TracerMode};
 use rvr_openvm_ir::SourceLoc;
 use rvr_openvm_lift::ExtensionRegistry;
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn openvm_root() -> PathBuf {
-    workspace_root().join("openvm")
-}
+use rvr_openvm_test_utils::workspace_root;
 
 fn transpile(elf: Elf) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(
@@ -61,7 +55,7 @@ fn shared_lib_extension() -> &'static str {
 
 #[test]
 fn test_debug_info_line_directives_and_dwarf() -> Result<()> {
-    let elf_path = openvm_root().join("crates/toolchain/tests/tests/data/rv32im-fib-from-as");
+    let elf_path = workspace_root().join("crates/toolchain/tests/tests/data/rv32im-fib-from-as");
     let data = fs::read(&elf_path)?;
     let exe = transpile(Elf::decode(&data, MEM_SIZE as u32)?)?;
 
@@ -91,24 +85,25 @@ fn test_debug_info_line_directives_and_dwarf() -> Result<()> {
         "synthetic debug map should not be empty"
     );
 
-    let cache_dir = tmp.path().join("debug_test_cache");
     let registry = ExtensionRegistry::new();
     let opts = CompileOptions {
         base_name: Some("debug_test"),
         tracer_mode: TracerMode::Pure,
         extensions: &registry,
         chips: None,
-        cache_dir: Some(&cache_dir),
         guest_debug_map: Some(&debug_map),
         native_debug_info: true,
     };
 
-    let _compiled = rvr_openvm::compile_with_options(&exe, &opts)?;
+    let compiled = rvr_openvm::compile_with_options(&exe, &opts)?;
+    let artifact_dir = compiled
+        .artifact_dir()
+        .context("compile_with_options should return an artifact directory")?;
 
     let mut found_line_directive = false;
     let mut found_comment = false;
     let fake_source_str = fake_source.to_str().unwrap();
-    for entry in fs::read_dir(&cache_dir)? {
+    for entry in fs::read_dir(artifact_dir)? {
         let path = entry?.path();
         if path.extension().and_then(|ext| ext.to_str()) == Some("c") {
             let content = fs::read_to_string(&path)?;
@@ -127,14 +122,14 @@ fn test_debug_info_line_directives_and_dwarf() -> Result<()> {
     );
     assert!(found_comment, "expected source comments in generated C");
 
-    let built_lib = find_paths_with_extension(&cache_dir, shared_lib_extension())?;
+    let built_lib = find_paths_with_extension(artifact_dir, shared_lib_extension())?;
     assert!(
         !built_lib.is_empty(),
-        "expected compiled shared library in cache dir"
+        "expected compiled shared library in artifact dir"
     );
 
     if let Some(dwarfdump) = llvm_dwarfdump_path() {
-        let object_files = find_paths_with_extension(&cache_dir, "o")?;
+        let object_files = find_paths_with_extension(artifact_dir, "o")?;
         assert!(
             !object_files.is_empty(),
             "expected generated object files for DWARF inspection"
