@@ -109,6 +109,7 @@ rvr = [
     "dep:openvm-platform",
     "dep:libloading",
     "dep:tempfile",
+    "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance
 unprotected = []

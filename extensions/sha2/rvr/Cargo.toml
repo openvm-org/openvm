@@ -26,3 +26,7 @@ openvm-transpiler.workspace = true
 
 eyre.workspace = true
 sha2 = { workspace = true, features = ["std"] }
+
+[features]
+default = []
+rvr = ["rvr-openvm-test-utils/rvr"]
