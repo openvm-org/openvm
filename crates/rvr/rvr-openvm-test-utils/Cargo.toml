@@ -1,6 +1,6 @@
 [package]
-name = "rvr-openvm-ext-keccak"
-description = "rvr lifter for the OpenVM keccak256 extension"
+name = "rvr-openvm-test-utils"
+description = "Shared helpers for rvr-openvm integration tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,21 +8,18 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-rvr-openvm-ir.workspace = true
-rvr-openvm-lift.workspace = true
-
+openvm-circuit = { workspace = true, features = ["test-utils", "rvr"] }
 openvm-instructions.workspace = true
-openvm-keccak256-transpiler.workspace = true
-openvm-stark-backend.workspace = true
-
-[dev-dependencies]
-rvr-openvm-test-utils.workspace = true
-
-openvm-keccak256-circuit.workspace = true
+openvm-platform.workspace = true
+openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-toolchain-tests.workspace = true
 openvm-transpiler.workspace = true
 
+rvr-openvm.workspace = true
+rvr-openvm-lift.workspace = true
+rvr-state.workspace = true
+
 eyre.workspace = true
-tiny-keccak.workspace = true
