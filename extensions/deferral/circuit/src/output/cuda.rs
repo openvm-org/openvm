@@ -133,7 +133,6 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 &self.bitwise_lookup.count,
-                RV64_CELL_BITS as u32,
                 self.address_bits,
                 &self.poseidon2.records,
                 &self.poseidon2.counts,
