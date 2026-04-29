@@ -80,13 +80,13 @@ pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     pub(crate) air_names: Vec<String>,
     pub(crate) widths: Vec<usize>,
-    interactions: Vec<usize>,
-    need_rot: Vec<bool>,
+    pub(crate) interactions: Vec<usize>,
+    pub(crate) need_rot: Vec<bool>,
     pub(crate) limits: SegmentationLimits,
     pub(crate) memory_config: ProvingMemoryConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
-    pub(super) segment_check_insns: u64,
+    pub segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
