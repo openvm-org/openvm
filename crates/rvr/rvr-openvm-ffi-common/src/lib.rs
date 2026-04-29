@@ -35,6 +35,17 @@ pub const AS_PUBLIC_VALUES: u32 = 3;
 /// Deferral output address space.
 pub const DEFERRAL_AS: u32 = 4;
 
+// ── OpenVM memory / metered-execution layout ──────────────────────────
+// Redefined here to avoid a cycle with openvm-circuit. Checked against
+// upstream in `openvm-circuit`'s `arch::rvr::abi_consts`.
+
+pub const MEM_BITS: usize = 29;
+pub const CHUNK: usize = 8;
+/// Default, not an invariant; see TODO in `abi_consts.rs`.
+pub const DEFAULT_PAGE_BITS: usize = 6;
+/// Default, not an invariant; see TODO in `abi_consts.rs`.
+pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
+
 extern "C" {
     // ── Memory access (single word, data) ─────────────────────────────
     pub fn rd_mem_u32_wrapper(state: *mut c_void, addr: u32) -> u32;
