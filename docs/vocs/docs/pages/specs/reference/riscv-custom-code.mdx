@@ -3,7 +3,7 @@
 VM extensions in OpenVM are supported in the Rust frontend by inserting custom RISC-V machine code to be passed through LLVM into the RISC-V ELF using a standard 32-bit RISC-V encoding. This document specifies the custom machine code used for the default set of VM extensions. This custom code will be transpiled to OpenVM assembly using the modular transpiler specified [here](/specs/reference/transpiler).
 The default VM extensions that support transpilation are:
 
-- [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
+- [RV64IM](#rv64im-extension): An extension supporting the 64-bit RISC-V ISA with multiplication.
 - [Keccak-256](#keccak-extension): An extension implementing low-level Keccak sponge operations (XOR-in and keccak-f[1600] permutation) compatibly with RISC-V memory, used to implement the Keccak-256 hash function.
 - [SHA2](#sha-2-extension): An extension implementing the SHA-256 and SHA-512 compression functions compatibly with RISC-V memory. These are sufficient to implement SHA-256, SHA-384, and SHA-512.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format.
@@ -30,10 +30,10 @@ We now specify the custom instructions for the default set of VM extensions.
 
 The `terminate` instruction is a requested trap that will cause an orderly termination to guest execution with the specified exit code.
 
-## RV32IM Extension
+## RV64IM Extension
 
-The RV32IM extension supports the RV32I Base Integer Instruction Set, Version 2.1 with `XLEN=32`
-and the "M" Extension for Integer Multiplication and Division, Version 2.0 with `XLEN=32`, following
+The RV64IM extension supports the RV64I Base Integer Instruction Set with `XLEN=64`
+and the "M" Extension for Integer Multiplication and Division with `XLEN=64`, following
 the specification of the [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) (Version 20240411).
 
 **Memory Alignment**: Chapter 2.6 of _loc. cit._ specifies that the behavior of
@@ -44,7 +44,7 @@ loads and stores. More specifically, guest execution considers misaligned access
 and host execution will raise an exception resulting in a fatal trap.
 
 ### IO
-In addition to the standard RV32IM opcodes, we support the following additional intrinsic instructions to handle interactions between the guest and host environments.
+In addition to the standard RV64IM opcodes, we support the following additional intrinsic instructions to handle interactions between the guest and host environments.
 These instructions require the host execution environment to maintain the following data structures
 as part of its state:
 
@@ -59,12 +59,12 @@ the guest must take care to validate all data and account for behavior in cases 
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                                                               |
 | ----------- | --- | ----------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hintstorew  | I   | 0001011     | 001    | 0x0       | Stores next 4-byte word from hint stream in user memory at `[rd]_2`. The address `rd` does not have any alignment requirements. |
-| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `4 * rs1` bytes from hint stream in user memory at `[rd..rd + 4 * rs1]_2`. Only valid if next `4 * rs1` values in hint stream are bytes and `rs1` is non-zero and at most `1023`. The address `rd` does not have any alignment requirements. |
-| reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space. The address `rd + imm` must be aligned to a 4-byte boundary. |
-| hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to `[(len as u32).to_le_bytes(), vector, zero padding to 4-byte alignment]`, where `len` is the vector length in bytes. |
+| hintstored  | I   | 0001011     | 001    | 0x0       | Stores next 8-byte dword from hint stream in user memory at `[rd]_2`. The address `rd` does not have any alignment requirements. |
+| hintbuffer  | I   | 0001011     | 001    | 0x1       | Stores next `8 * rs1` bytes from hint stream in user memory at `[rd..rd + 8 * rs1]_2`. Only valid if next `8 * rs1` values in hint stream are bytes and `rs1` is non-zero and at most `1023`. The address `rd` does not have any alignment requirements. |
+| reveal      | I   | 0001011     | 010    |           | Stores the 8-byte dword `rs1` at address `rd + imm` in user IO space. The address `rd + imm` must be aligned to an 8-byte boundary. |
+| hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to `[(len as u64).to_le_bytes(), vector, zero padding to 8-byte alignment]`, where `len` is the vector length in bytes. |
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
-| hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from a fixed-seed RNG (`rand::rngs::StdRng`) on the host.                                                                                      |
+| hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `8 * rd` random bytes from a fixed-seed RNG (`rand::rngs::StdRng`) on the host.                                                                                      |
 
 ## Deferral Extension
 
