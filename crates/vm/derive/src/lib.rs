@@ -903,9 +903,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut extend_rvr = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
-    let mut rvr_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     execution_where_predicates.push(parse_quote! { F: ::openvm_circuit::arch::VmField });
-    rvr_where_predicates.push(parse_quote! { F: ::openvm_circuit::arch::VmField });
 
     let source_field_ty = source_field.ty.clone();
 
@@ -924,14 +922,11 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         execution_where_predicates.push(parse_quote! {
             #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<F, Executor = #executor_type>
         });
-        rvr_where_predicates.push(parse_quote! {
-            #extension_ty: ::rvr_openvm_lift::VmRvrExtension<F>
-        });
         extend_rvr.push(quote! {
             <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
                 &self.#ext_field_name,
-                registry,
-                ctx,
+                &mut registry,
+                &ctx,
             );
         });
         create_airs.push(quote! {
@@ -951,15 +946,8 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     circuit_where_predicates.push(parse_quote! {
         #source_field_ty: ::openvm_circuit::arch::VmCircuitConfig<SC>
     });
-    rvr_where_predicates.push(parse_quote! {
-        #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<F, Executor = #source_executor_type>
-    });
-    rvr_where_predicates.push(parse_quote! {
-        #source_field_ty: ::rvr_openvm_lift::VmRvrExtension<F>
-    });
     let execution_where_clause = quote! { where #(#execution_where_predicates),* };
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
-    let rvr_where_clause = quote! { where #(#rvr_where_predicates),* };
 
     let executor_type = Ident::new(&format!("{name}Executor"), name.span());
 
@@ -989,40 +977,13 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                 #(#create_executors)*
                 Ok(inventory)
             }
-        }
 
-        impl<SC: openvm_stark_backend::StarkProtocolConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
-            fn create_airs(
-                &self,
-            ) -> Result<::openvm_circuit::arch::AirInventory<SC>, ::openvm_circuit::arch::AirInventoryError> {
-                let mut inventory = self.#source_name.create_airs()?;
-                #(#create_airs)*
-                Ok(inventory)
-            }
-        }
-
-        #[cfg(feature = "rvr")]
-        impl<F: ::openvm_circuit::arch::VmField> ::rvr_openvm_lift::VmRvrExtension<F> for #name #rvr_where_clause {
-            fn extend_rvr(
-                &self,
-                registry: &mut ::rvr_openvm_lift::ExtensionRegistry<F>,
-                ctx: &::rvr_openvm_lift::RvrExtensionCtx,
-            ) {
-                <#source_field_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
-                    &self.#source_name,
-                    registry,
-                    ctx,
-                );
-                #(#extend_rvr)*
-            }
-        }
-
-        #[cfg(feature = "rvr")]
-        impl #name {
-            pub fn create_rvr_extensions<F>(
+            #[cfg(feature = "rvr")]
+            fn create_rvr_extensions(
                 &self,
                 air_idx: &[usize],
-            ) -> ::rvr_openvm_lift::ExtensionRegistry<F> #rvr_where_clause {
+            ) -> ::rvr_openvm_lift::ExtensionRegistry<F>
+            {
                 let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_executors(self)
                     .expect("create_executors failed in create_rvr_extensions");
                 let opcode_to_executor_idx = inventory
@@ -1033,13 +994,22 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                     opcode_to_executor_idx,
                     air_idx.to_vec(),
                 );
-                let mut registry = ::rvr_openvm_lift::ExtensionRegistry::new();
-                <Self as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
-                    self,
-                    &mut registry,
-                    &ctx,
+                let mut registry = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_rvr_extensions(
+                    &self.#source_name,
+                    air_idx,
                 );
+                #(#extend_rvr)*
                 registry
+            }
+        }
+
+        impl<SC: openvm_stark_backend::StarkProtocolConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
+            fn create_airs(
+                &self,
+            ) -> Result<::openvm_circuit::arch::AirInventory<SC>, ::openvm_circuit::arch::AirInventoryError> {
+                let mut inventory = self.#source_name.create_airs()?;
+                #(#create_airs)*
+                Ok(inventory)
             }
         }
 
