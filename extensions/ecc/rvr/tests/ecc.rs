@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! ECC extension integration tests.
 //!
 //! Builds a guest program that uses elliptic curve operations on secp256k1,

@@ -1,3 +1,5 @@
+#![cfg(feature = "rvr")]
+
 //! SHA-2 extension integration tests.
 //!
 //! Builds a guest program that uses sha2, transpiles it with the sha2

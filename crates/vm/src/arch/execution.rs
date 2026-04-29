@@ -82,6 +82,9 @@ pub enum ExecutionError {
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
     Static(#[from] StaticProgramError),
+    #[cfg(feature = "rvr")]
+    #[error("rvr execution failed: {0}")]
+    RvrExecution(String),
 }
 
 /// Errors in the program that can be statically analyzed before runtime.
