@@ -7,7 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_state::GuardedMemory;
 
-use crate::{
+use super::{
     compile::RvrCompiled,
     io::{
         convert_input_stream, host_deferral_call_lookup, host_deferral_output_lookup,

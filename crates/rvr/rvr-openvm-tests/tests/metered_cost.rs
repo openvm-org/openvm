@@ -1,9 +1,6 @@
-#[path = "utils.rs"]
-mod utils;
-
 use eyre::Result;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-use utils::{ExecutionMode::MeteredCost, F};
+use rvr_openvm_test_utils::{self as utils, ExecutionMode::MeteredCost, F};
 
 // ── Prebuilt ELF tests (fast) ───────────────────────────────────────────────
 

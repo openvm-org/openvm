@@ -3,9 +3,6 @@
 //! Tests pairing guest programs (fp12_mul, pairing_check) against the
 //! OpenVM interpreter using the RVR execution pipeline.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command};
 
 use eyre::Result;
@@ -37,7 +34,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand08::SeedableRng;
 use rvr_openvm_ext_algebra::AlgebraExtension;
 use rvr_openvm_ext_pairing::PairingExtension;
-use utils::{ExecutionMode, F};
+use rvr_openvm_test_utils::{self as utils, workspace_root, ExecutionMode, F};
 
 // ── Config ──────────────────────────────────────────────────────────────
 
@@ -74,7 +71,7 @@ fn get_bls12_381_testing_config() -> Rv32PairingConfig {
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 fn pairing_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../openvm/guest-libs/pairing/tests/programs")
+    workspace_root().join("guest-libs/pairing/tests/programs")
 }
 
 fn transpile_with_pairing(elf: openvm_transpiler::elf::Elf) -> Result<VmExe<F>> {
@@ -90,52 +87,36 @@ fn transpile_with_pairing(elf: openvm_transpiler::elf::Elf) -> Result<VmExe<F>> 
     )?)
 }
 
-fn build_algebra_staticlib() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let algebra_ffi_crate = manifest_dir.join("../extensions/algebra/ffi");
+fn build_staticlib(ffi_dir: PathBuf, lib_name: &str) -> PathBuf {
     let output = Command::new("cargo")
         .args(["build", "--release"])
-        .current_dir(&algebra_ffi_crate)
+        .current_dir(&ffi_dir)
         .output()
-        .expect("failed to run cargo build for algebra-ffi extension");
+        .unwrap_or_else(|_| panic!("failed to run cargo build for {}", ffi_dir.display()));
     if !output.status.success() {
         panic!(
-            "Failed to build algebra-ffi staticlib:\n{}",
+            "Failed to build staticlib at {}:\n{}",
+            ffi_dir.display(),
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_algebra_ffi.a");
+    let lib_path = workspace_root().join(format!("target/release/{lib_name}"));
     assert!(
         lib_path.exists(),
-        "Algebra FFI staticlib not found at {}",
+        "staticlib not found at {}",
         lib_path.display()
     );
     lib_path
 }
 
+fn build_algebra_staticlib() -> PathBuf {
+    let ffi_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../algebra/rvr/ffi");
+    build_staticlib(ffi_dir, "librvr_openvm_ext_algebra_ffi.a")
+}
+
 fn build_pairing_staticlib() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let pairing_ffi_crate = manifest_dir.join("../extensions/pairing/ffi");
-    let output = Command::new("cargo")
-        .args(["build", "--release"])
-        .current_dir(&pairing_ffi_crate)
-        .output()
-        .expect("failed to run cargo build for pairing-ffi extension");
-    if !output.status.success() {
-        panic!(
-            "Failed to build pairing-ffi staticlib:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_pairing_ffi.a");
-    assert!(
-        lib_path.exists(),
-        "Pairing FFI staticlib not found at {}",
-        lib_path.display()
-    );
-    lib_path
+    let ffi_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffi");
+    build_staticlib(ffi_dir, "librvr_openvm_ext_pairing_ffi.a")
 }
 
 fn make_algebra_ext(moduli: Vec<num_bigint::BigUint>) -> AlgebraExtension {

@@ -15,8 +15,6 @@ use std::{
 use rvr_openvm_ir::SourceLoc;
 use serde::{Deserialize, Serialize};
 
-use crate::toolchain;
-
 const ADDR2LINE_CHUNK_SIZE: usize = 1_000;
 
 /// Maps OpenVM PCs to guest source locations.
@@ -172,7 +170,7 @@ fn parse_addr2line_chunk(
 /// Best-effort `llvm-addr2line` command lookup.
 #[must_use]
 pub fn default_addr2line_cmd() -> String {
-    toolchain::default_addr2line_cmd()
+    rvr_openvm::default_addr2line_cmd()
 }
 
 /// Parse a single addr2line function/location pair into a `SourceLoc`.

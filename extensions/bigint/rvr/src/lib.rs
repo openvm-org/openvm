@@ -10,7 +10,9 @@ use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
     Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
@@ -328,8 +330,6 @@ fn decode_imm<F: PrimeField32>(f: F) -> i32 {
         v as i32
     }
 }
-
-const DEFAULT_PC_STEP: u32 = 4;
 
 impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
     fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {

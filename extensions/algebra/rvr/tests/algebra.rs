@@ -1,8 +1,5 @@
 //! Algebra extension integration tests.
 
-#[path = "utils.rs"]
-mod utils;
-
 use std::{path::PathBuf, process::Command, str::FromStr};
 
 use eyre::Result;
@@ -18,12 +15,12 @@ use openvm_rv32im_transpiler::*;
 use openvm_toolchain_tests::build_example_program_at_path_with_features;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rvr_openvm_ext_algebra::AlgebraExtension;
-use utils::{ExecutionMode, F};
+use rvr_openvm_test_utils::{self as utils, workspace_root, ExecutionMode, F};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn algebra_programs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../openvm/extensions/algebra/tests/programs")
+    workspace_root().join("extensions/algebra/tests/programs")
 }
 
 fn transpile_with_modular(elf: openvm_transpiler::elf::Elf) -> Result<VmExe<F>> {
@@ -51,7 +48,7 @@ fn transpile_with_fp2(elf: openvm_transpiler::elf::Elf) -> Result<VmExe<F>> {
 
 fn build_algebra_staticlib() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let algebra_ffi_crate = manifest_dir.join("../extensions/algebra/ffi");
+    let algebra_ffi_crate = manifest_dir.join("ffi");
     let output = Command::new("cargo")
         .args(["build", "--release"])
         .current_dir(&algebra_ffi_crate)
@@ -63,8 +60,7 @@ fn build_algebra_staticlib() -> PathBuf {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let workspace_root = manifest_dir.join("../..");
-    let lib_path = workspace_root.join("target/release/librvr_openvm_ext_algebra_ffi.a");
+    let lib_path = workspace_root().join("target/release/librvr_openvm_ext_algebra_ffi.a");
     assert!(
         lib_path.exists(),
         "Algebra FFI staticlib not found at {}",
