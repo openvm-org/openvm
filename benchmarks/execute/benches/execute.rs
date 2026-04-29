@@ -304,6 +304,7 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     })
 }
 
+// TODO: reduce repeated code between execution types, e.g. via a common trait interface.
 #[divan::bench(args = APP_PROGRAMS, sample_count=10)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
     #[cfg(feature = "aot")]
