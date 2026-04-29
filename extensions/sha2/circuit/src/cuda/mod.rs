@@ -95,7 +95,6 @@ where
                         self.pointer_max_bits,
                         &self.range_checker.count,
                         &self.bitwise_lookup.count,
-                        8,
                         self.timestamp_max_bits,
                         device_ctx.stream.as_raw(),
                     )
@@ -111,7 +110,6 @@ where
                         self.pointer_max_bits,
                         &self.range_checker.count,
                         &self.bitwise_lookup.count,
-                        8,
                         self.timestamp_max_bits,
                         device_ctx.stream.as_raw(),
                     )
@@ -207,7 +205,6 @@ where
                         num_blocks,
                         &d_prev_hashes,
                         &self.bitwise_lookup.count,
-                        8,
                         &d_scratch,
                         device_ctx.stream.as_raw(),
                     )
@@ -263,7 +260,6 @@ where
                         num_blocks,
                         &d_prev_hashes,
                         &self.bitwise_lookup.count,
-                        8,
                         &d_scratch,
                         device_ctx.stream.as_raw(),
                     )
