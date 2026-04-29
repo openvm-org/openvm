@@ -130,8 +130,8 @@ The chips that fall into these categories are:
 | --------------------- | --------------- | ----------------- | ---------------------------------------------------------- |
 | PhantomChip           | 1               | 3                 | Case 2. No memory accesses; only program and execution interactions. |
 | XorinVmChip           | -               | -                 | Case 2. Special timestamp jump.                            |
-| KeccakfOpChip         | 51              | -                 | Case 2. 1 register read + 50 word writes.                  |
-| Rv32HintStoreChip     | –               | –                 | Case 1.                                                    |
+| KeccakfOpChip         | 26              | -                 | Case 2. 1 register read + 25 block writes.                 |
+| Rv64HintStoreChip     | –               | –                 | Case 1.                                                    |
 | Sha2MainChip          | –               | –                 | Case 1.                                                    |
 | DeferralOutputChip    | –               | –                 | Case 1.                                                    |
 
@@ -145,34 +145,34 @@ these memory accesses account for all timestamp increments. Therefore
 
 #### XorinVmChip
 
-The `XorinVmAir` timestamp change is `3 + 3 * num_words` where `num_words = len / 4` is the number
-of non-padding 4-byte chunks (at most `34`, since `len` is at most `136`). The maximum timestamp
-change is therefore `3 + 3 * 34 = 105`. Each XORIN instruction uses `1` trace row.
+The `XorinVmAir` timestamp change is `3 + 3 * num_blocks` where `num_blocks = len / 8` is the number
+of non-padding 8-byte blocks (at most `17`, since `len` is at most `136`). The maximum timestamp
+change is therefore `3 + 3 * 17 = 54`. Each XORIN instruction uses `1` trace row.
 
 In the AIR constraints:
 
-- `eval_instruction` does an `execute_and_increment_pc` (`3`), `3` register reads (`12`), and `2`
-  range checks (`2`), giving `17` interactions.
-- `constrain_input_read` does up to `34` input reads (`136`) and `34` buffer reads (`136`).
+- `eval_instruction` does an `execute_and_increment_pc` (`3`), `3` register reads (`12`), and `1`
+  range check (`1`), giving `16` interactions.
+- `constrain_input_read` does up to `17` input reads (`68`) and `17` buffer reads (`68`).
 - `constrain_xor` does up to `136` XOR lookups on the bitwise lookup bus.
-- `constrain_output_write` does up to `34` buffer writes (`136`).
+- `constrain_output_write` does up to `17` buffer writes (`68`).
 
-In total, there are at least `17 + 136 + 136 + 136 + 136 = 561` interactions per row when
-`num_words = 34`. Since `timestamp_delta = 105 < 561 = num_interactions`, the condition is
+In total, there are at least `16 + 68 + 68 + 136 + 68 = 356` interactions per row when
+`num_blocks = 17`. Since `timestamp_delta = 54 < 356 = num_interactions`, the condition is
 satisfied.
 
 #### KeccakfOpChip
 
-The `KeccakfOpAir` timestamp delta is `51` (`1` register read + `50` word writes). Each KECCAKF
+The `KeccakfOpAir` timestamp delta is `26` (`1` register read + `25` block writes). Each KECCAKF
 instruction uses `1` trace row in the `KeccakfOpAir` and `24` rows in the separate
 `KeccakfPermAir`.
 
 In the AIR constraints:
 
 - `1` `execute_and_increment_pc` (`3`), `1` register read (`4`), `1` pointer range check (`1`),
-  `50` word writes (`200`), `100` paired byte range checks (`100`), and `2` keccakf state bus sends (`2`).
+  `25` block writes (`100`), `100` paired byte range checks (`100`), and `2` keccakf state bus sends (`2`).
 
-In total, there are at least `310` interactions per row. Since `timestamp_delta = 51 < 310`, the
+In total, there are at least `210` interactions per row. Since `timestamp_delta = 26 < 210`, the
 condition is satisfied.
 
 ### Memory consistency
