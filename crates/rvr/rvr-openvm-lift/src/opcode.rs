@@ -9,12 +9,12 @@
 //! - STOREW address space dispatch: memory (e=2), reveal (e=3)
 
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SystemOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
-    Rv32LoadStoreOpcode, ShiftOpcode,
+    Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{
@@ -42,24 +42,18 @@ pub fn lift_instruction<F: PrimeField32>(
         });
     }
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
-        let discriminant = field_to_u32(insn.c) & 0xffff;
+        let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
         // Try built-in phantom handlers first, then fall through to extensions
         // for unknown discriminants (e.g. algebra HintNonQr/HintSqrt).
-        match discriminant {
-            phantom_disc::NOP
-            | phantom_disc::CT_START
-            | phantom_disc::CT_END
-            | phantom_disc::DEBUG_PANIC
-            | phantom_disc::RV32_HINT_INPUT
-            | phantom_disc::RV32_PRINT_STR
-            | phantom_disc::RV32_HINT_RANDOM => return Some(lift_phantom(insn, pc)),
-            _ => {
-                if let Some(lifted) = extensions.try_lift(insn, pc) {
-                    return Some(lifted);
-                }
-                return Some(body(pc, Instr::Nop));
-            }
+        if SysPhantom::from_repr(discriminant).is_some()
+            || Rv32Phantom::from_repr(discriminant).is_some()
+        {
+            return Some(lift_phantom(insn, pc));
         }
+        if let Some(lifted) = extensions.try_lift(insn, pc) {
+            return Some(lifted);
+        }
+        return Some(body(pc, Instr::Nop));
     }
 
     // HINT_STOREW: _,b,_,1,2 — pop 4 bytes from hint stream to mem[[b]_1]
@@ -459,55 +453,51 @@ fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 // ============= System / IO Instructions =============
 
-/// Phantom sub-instruction discriminants (lower 16 bits of field c).
-mod phantom_disc {
-    // System phantoms
-    pub const NOP: u32 = 0x00;
-    pub const DEBUG_PANIC: u32 = 0x01;
-    pub const CT_START: u32 = 0x02;
-    pub const CT_END: u32 = 0x03;
-    // RV32IM extension phantoms
-    pub const RV32_HINT_INPUT: u32 = 0x20;
-    pub const RV32_PRINT_STR: u32 = 0x21;
-    pub const RV32_HINT_RANDOM: u32 = 0x22;
-}
-
 /// Lift PHANTOM instruction by dispatching on the sub-discriminant in field c.
 fn lift_phantom<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
     let c_val = field_to_u32(insn.c);
-    let discriminant = c_val & 0xffff;
+    let discriminant = (c_val & 0xffff) as u16;
 
-    match discriminant {
-        // Nop, CtStart, CtEnd — no-ops for execution
-        phantom_disc::NOP | phantom_disc::CT_START | phantom_disc::CT_END => body(pc, Instr::Nop),
+    // System phantoms (SysPhantom variants). `from_repr` returns None for
+    // non-system discriminants; fall through to the Rv32Phantom check.
+    if let Some(sys) = SysPhantom::from_repr(discriminant) {
+        return match sys {
+            // Nop, CtStart, CtEnd — no-ops for execution
+            SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),
 
-        // DebugPanic — trap on host
-        phantom_disc::DEBUG_PANIC => term(
-            pc,
-            Terminator::Trap {
-                message: "PHANTOM DebugPanic".to_string(),
-            },
-        ),
-
-        // HintInput — pop from input_stream, reset hint_stream with length-prefixed data
-        phantom_disc::RV32_HINT_INPUT => body(pc, Instr::HintInput),
-
-        // PrintStr — print UTF-8 string from memory; a=ptr_reg, b=len_reg
-        phantom_disc::RV32_PRINT_STR => {
-            let ptr_reg = decode_reg(insn.a);
-            let len_reg = decode_reg(insn.b);
-            body(pc, Instr::PrintStr { ptr_reg, len_reg })
-        }
-
-        // HintRandom — fill hint_stream with [a]_1 random words
-        phantom_disc::RV32_HINT_RANDOM => {
-            let num_words_reg = decode_reg(insn.a);
-            body(pc, Instr::HintRandom { num_words_reg })
-        }
-
-        // Unknown phantom — treat as nop (forward compatible)
-        _ => body(pc, Instr::Nop),
+            // DebugPanic — trap on host
+            SysPhantom::DebugPanic => term(
+                pc,
+                Terminator::Trap {
+                    message: "PHANTOM DebugPanic".to_string(),
+                },
+            ),
+        };
     }
+
+    // RV32IM extension phantoms (Rv32Phantom variants).
+    if let Some(rv32) = Rv32Phantom::from_repr(discriminant) {
+        return match rv32 {
+            // HintInput — pop from input_stream, reset hint_stream with length-prefixed data
+            Rv32Phantom::HintInput => body(pc, Instr::HintInput),
+
+            // PrintStr — print UTF-8 string from memory; a=ptr_reg, b=len_reg
+            Rv32Phantom::PrintStr => {
+                let ptr_reg = decode_reg(insn.a);
+                let len_reg = decode_reg(insn.b);
+                body(pc, Instr::PrintStr { ptr_reg, len_reg })
+            }
+
+            // HintRandom — fill hint_stream with [a]_1 random words
+            Rv32Phantom::HintRandom => {
+                let num_words_reg = decode_reg(insn.a);
+                body(pc, Instr::HintRandom { num_words_reg })
+            }
+        };
+    }
+
+    // Unknown phantom — treat as nop (forward compatible).
+    body(pc, Instr::Nop)
 }
 
 /// Lift HINT_STOREW: pop 4 bytes from hint_stream, write to mem[ptr].
