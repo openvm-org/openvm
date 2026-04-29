@@ -18,7 +18,7 @@ OpenVM is a performant and modular zkVM framework built for customization and ex
 
 - **Extensible Instruction Set**: The instruction set architecture (ISA) is designed to be extended with new custom instructions that integrate directly with the virtual machine. Current extensions available for OpenVM include:
 
-  - RISC-V support via RV32IM
+  - RISC-V support via RV64IM
   - The Keccak-256 and SHA2-256 hash functions
   - Int256 arithmetic
   - Modular arithmetic over arbitrary fields
