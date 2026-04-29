@@ -176,7 +176,7 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub(super) fn segment_check_insns(&self) -> u64 {
+    pub(crate) fn segment_check_insns(&self) -> u64 {
         self.params.segment_check_insns
     }
 

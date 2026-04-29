@@ -82,9 +82,15 @@ impl GuardedMemory {
         })
     }
 
-    /// Returns pointer to usable memory (after first guard page).
+    /// Returns a read-only pointer to usable memory (after first guard page).
     #[must_use]
-    pub const fn as_ptr(&self) -> *mut u8 {
+    pub const fn as_ptr(&self) -> *const u8 {
+        unsafe { self.region.as_ptr().cast::<u8>().add(GUARD_SIZE) }
+    }
+
+    /// Returns a mutable pointer to usable memory (after first guard page).
+    #[must_use]
+    pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         unsafe { self.region.as_ptr().cast::<u8>().add(GUARD_SIZE) }
     }
 
@@ -102,7 +108,7 @@ impl GuardedMemory {
     pub unsafe fn copy_from(&mut self, offset: usize, data: &[u8]) {
         debug_assert!(offset + data.len() <= self.memory_size);
         unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr(), self.as_ptr().add(offset), data.len());
+            std::ptr::copy_nonoverlapping(data.as_ptr(), self.as_mut_ptr().add(offset), data.len());
         }
     }
 
@@ -124,7 +130,7 @@ impl GuardedMemory {
     /// Caller must ensure `offset < self.size()`.
     pub unsafe fn write_u8(&mut self, offset: usize, value: u8) {
         debug_assert!(offset < self.memory_size);
-        unsafe { *self.as_ptr().add(offset) = value };
+        unsafe { *self.as_mut_ptr().add(offset) = value };
     }
 }
 

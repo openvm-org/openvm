@@ -20,4 +20,5 @@ itertools = { workspace = true }
 
 [features]
 aot = []
+rvr = []
 tco = []
