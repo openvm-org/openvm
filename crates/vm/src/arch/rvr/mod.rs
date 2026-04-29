@@ -7,6 +7,7 @@ pub mod execute;
 pub mod io;
 pub mod metered;
 pub mod metered_cost;
+pub mod pure;
 pub mod state;
 
 pub use compile::{
@@ -22,11 +23,14 @@ pub use execute::{
     RvrExecutionResult, RvrLimitedResult, RvrMeteredCostLimitedResult, RvrMeteredCostResult,
 };
 pub use io::DeferralData;
-pub use metered::{build_metered_config, MeteredConfig, RvrMeteredResult, RvrSegment};
+pub use metered::{
+    build_metered_config, MeteredConfig, RvrMeteredInstance, RvrMeteredResult, RvrSegment,
+};
 pub use metered_cost::{
     build_metered_cost_config, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-    PureTracerData,
+    PureTracerData, RvrMeteredCostInstance,
 };
+pub use pure::RvrPureInstance;
 pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
     default_linker, TracerMode,
