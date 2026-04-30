@@ -54,7 +54,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        change_rv32m_insn_to_nop(&mut exe);
+        change_rv64m_insn_to_nop(&mut exe);
         air_test_with_min_segments(Rv64IBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
@@ -368,10 +368,10 @@ mod tests {
         air_test(Rv64ImBuilder, config, exe);
     }
 
-    // For testing programs that should only execute RV32I:
+    // For testing programs that should only execute RV64I:
     // The ELF might still have Mul instructions even though the program doesn't use them. We
     // mask those to NOP here.
-    fn change_rv32m_insn_to_nop(exe: &mut VmExe<F>) {
+    fn change_rv64m_insn_to_nop(exe: &mut VmExe<F>) {
         for (insn, _) in exe
             .program
             .instructions_and_debug_infos
