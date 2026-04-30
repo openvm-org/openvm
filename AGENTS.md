@@ -62,11 +62,11 @@ cargo test -p openvm-circuit
 cargo nextest run --cargo-profile=fast -p openvm-circuit -- test_name
 
 # Run tests in a working directory (as CI does)
-cd extensions/rv32im/circuit && cargo nextest run --cargo-profile=fast
+cd extensions/riscv/circuit && cargo nextest run --cargo-profile=fast
 
 # Integration tests for extensions (requires nightly rust-src for guest program compilation)
 rustup component add rust-src --toolchain nightly-2026-01-18
-cd extensions/rv32im/tests && cargo nextest run --cargo-profile=fast --profile=heavy
+cd extensions/riscv/tests && cargo nextest run --cargo-profile=fast --profile=heavy
 
 # Run with parallelism (used in CI)
 cargo nextest run --cargo-profile=fast --features parallel
@@ -102,10 +102,10 @@ The VM has **no CPU**. All instruction handling (including base RISC-V) is provi
 
 | Component    | Purpose                                                       | Example path                    |
 | ------------ | ------------------------------------------------------------- | ------------------------------- |
-| `circuit`    | AIR constraints + chips for proving                           | `extensions/rv32im/circuit/`    |
-| `transpiler` | Converts RISC-V ELF instructions to OpenVM instructions       | `extensions/rv32im/transpiler/` |
-| `guest`      | Rust library with intrinsics for guest programs               | `extensions/rv32im/guest/`      |
-| `tests`      | Integration tests with guest programs in `programs/examples/` | `extensions/rv32im/tests/`      |
+| `circuit`    | AIR constraints + chips for proving                           | `extensions/riscv/circuit/`    |
+| `transpiler` | Converts RISC-V ELF instructions to OpenVM instructions       | `extensions/riscv/transpiler/` |
+| `guest`      | Rust library with intrinsics for guest programs               | `extensions/riscv/guest/`      |
+| `tests`      | Integration tests with guest programs in `programs/examples/` | `extensions/riscv/tests/`      |
 
 ### Extension Framework (Three Traits)
 
@@ -121,7 +121,7 @@ Extensions are composed into a `VmConfig` using the `#[derive(VmConfig)]` macro:
 #[derive(VmConfig)]
 pub struct MyConfig {
     #[config]
-    pub rv32im: Rv32ImConfig,  // existing config (implements VmConfig)
+    pub rv64im: Rv64ImConfig,  // existing config (implements VmConfig)
     #[extension]
     pub my_ext: MyExtension,   // new extension
 }
@@ -173,11 +173,11 @@ For host `cargo check`/`clippy`, guest crates need `[lints.rust] unexpected_cfgs
 ```rust
 let elf = build_example_program_at_path(get_programs_dir!(), "program_name")?;
 let exe = VmExe::from_elf(elf, Transpiler::<F>::default()
-    .with_extension(Rv32ITranspilerExtension)
-    .with_extension(Rv32MTranspilerExtension)
-    .with_extension(Rv32IoTranspilerExtension))?;
-let config = Rv32ImConfig::default();
-air_test(Rv32ImCpuBuilder, config, exe);
+    .with_extension(Rv64ITranspilerExtension)
+    .with_extension(Rv64MTranspilerExtension)
+    .with_extension(Rv64IoTranspilerExtension))?;
+let config = Rv64ImConfig::default();
+air_test(Rv64ImCpuBuilder, config, exe);
 ```
 
 ### Proof Field
@@ -190,7 +190,7 @@ OpenVM uses semver naming but with ZK-specific semantics: patch versions preserv
 
 ## CUDA/GPU Support
 
-CUDA is behind the `cuda` feature flag, disabled by default. Feature-gate non-CUDA-compatible code with `#[cfg(not(feature = "cuda"))]`. GPU prover extensions implement `VmProverExtension` separately (e.g., `Rv32ImGpuProverExt`).
+CUDA is behind the `cuda` feature flag, disabled by default. Feature-gate non-CUDA-compatible code with `#[cfg(not(feature = "cuda"))]`. GPU prover extensions implement `VmProverExtension` separately (e.g., `Rv64ImGpuProverExt`).
 
 ## File Structure
 

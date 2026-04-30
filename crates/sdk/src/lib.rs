@@ -186,7 +186,7 @@ where
         GenericSdk::new(AppConfig::standard(app_params), agg_params).unwrap()
     }
 
-    /// Creates SDK with a configuration with RISC-V RV32IM and IO VM extensions loaded.
+    /// Creates SDK with a configuration with RISC-V RV64IM and IO VM extensions loaded.
     ///
     /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
     ///
