@@ -13,7 +13,7 @@ openvm-riscv-guest.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
-[target.'cfg(all(target_arch = "riscv64", target_os = "none"))'.dependencies]
+[target.'cfg(all(target_arch = "riscv64", any(target_os = "none", target_os = "openvm")))'.dependencies]
 critical-section = { workspace = true, optional = true }
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
