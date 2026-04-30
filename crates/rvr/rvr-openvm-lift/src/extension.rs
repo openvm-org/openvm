@@ -9,6 +9,12 @@ use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
 
+/// Sentinel air index meaning "no chip" — used for opcodes/instructions that do
+/// not contribute to a chip's trace (e.g. `TERMINATE`) and to fill placeholder
+/// `executor_idx_to_air_idx` arrays in pure execution where air indices are
+/// irrelevant.
+pub const NO_CHIP: u32 = u32::MAX;
+
 /// Data needed by extension crates to resolve opcode/chip metadata when
 /// registering rvr extension handlers.
 #[derive(Clone, Debug, Default)]
