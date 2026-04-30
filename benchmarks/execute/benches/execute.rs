@@ -386,19 +386,10 @@ fn create_rvr_instance(program: &str) -> Arc<RvrPureInstance<BabyBear>> {
         .or_insert_with(|| {
             let exe = load_program_executable(program)
                 .expect("Failed to load program executable for RVR cache");
-            let config = ExecuteConfig::default();
-            let engine = Engine::new(SystemParams::new_for_testing(21));
-            let pk = vm_proving_key();
-            let d_pk = engine.device().transport_pk_to_device(pk);
-            let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk)
-                .expect("Failed to create VM for RVR setup");
-            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
             Arc::new(
-                executor()
-                    .instance(&exe, &executor_idx_to_air_idx)
-                    .unwrap_or_else(|err| {
-                        panic!("Failed to create RVR instance for {program}: {err}")
-                    }),
+                executor().instance(&exe).unwrap_or_else(|err| {
+                    panic!("Failed to create RVR instance for {program}: {err}")
+                }),
             )
         })
         .clone()
