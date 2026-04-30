@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(any(target_os = "none", target_os = "openvm"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm::io::print;

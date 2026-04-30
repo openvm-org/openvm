@@ -20,6 +20,8 @@ pub use openvm_riscv_guest::*;
 
 #[cfg(openvm_intrinsics)]
 mod getrandom;
+#[cfg(openvm_intrinsics)]
+mod pal_abi;
 pub mod io;
 pub mod process;
 pub mod serde;
@@ -71,7 +73,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
-#[cfg(all(not(feature = "std"), openvm_intrinsics))]
+#[cfg(openvm_intrinsics)]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -88,9 +90,8 @@ macro_rules! entry {
         }
     };
 }
-/// This macro does nothing. You should name the function `main` so that the normal rust main
-/// function setup is used.
-#[cfg(any(feature = "std", not(openvm_intrinsics)))]
+/// This macro does nothing when not compiling for the guest target.
+#[cfg(not(openvm_intrinsics))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {};

@@ -19,16 +19,15 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-/// Custom rustc target for the openvm guest. The JSON spec lives at
-/// `<RUSTC_TARGET>.json` next to this crate.
-pub const RUSTC_TARGET: &str = "riscv64im-openvm-none-elf";
+/// Custom rustc target for the openvm guest.
+pub const RUSTC_TARGET: &str = "riscv64im-unknown-openvm-elf";
 
 /// Directory containing the target JSON; passed to cargo as `RUST_TARGET_PATH`.
 pub fn rustc_target_spec_dir() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 /// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
-pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2026-01-18";
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-rv64";
 
 /// Get the Rust toolchain name from environment variable or default
 pub fn get_rustup_toolchain_name() -> String {
@@ -251,7 +250,8 @@ fn sanitized_cmd(tool: &str) -> Command {
 
 /// Creates a std::process::Command to execute the given cargo
 /// command in an environment suitable for targeting the zkvm guest.
-pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
+/// If `with_std` is true, `std` is added to the `-Zbuild-std` crate list.
+pub fn cargo_command(subcmd: &str, rust_flags: &[&str], with_std: bool) -> Command {
     let toolchain = format!("+{}", get_rustup_toolchain_name());
 
     let rustc = sanitized_cmd("rustup")
@@ -271,12 +271,12 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         args.push("--locked");
     }
 
-    args.extend_from_slice(&[
-        "-Z",
-        "build-std=alloc,core,panic_abort",
-        "-Z",
-        "build-std-features=compiler-builtins-mem",
-    ]);
+    let build_std = if with_std {
+        "build-std=alloc,core,panic_abort,std"
+    } else {
+        "build-std=alloc,core,panic_abort"
+    };
+    args.extend_from_slice(&["-Z", build_std, "-Z", "build-std-features=compiler-builtins-mem"]);
 
     println!("Building guest package: cargo {}", args.join(" "));
 
@@ -398,16 +398,23 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
 
     // Check if the required toolchain and rust-src component are installed, and if not, install
     // them. This requires that `rustup` is installed.
-    if let Err(code) = ensure_toolchain_installed(&get_rustup_toolchain_name(), &["rust-src"]) {
-        eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
-        return Err(Some(code));
+    // Skip for linked toolchains (e.g. custom-built rustc) where rustup component commands
+    // don't apply — the toolchain is expected to already include rust-src.
+    let toolchain_name = get_rustup_toolchain_name();
+    let is_linked_toolchain = !toolchain_name.contains("nightly") && !toolchain_name.contains("stable") && !toolchain_name.contains("beta");
+    if !is_linked_toolchain {
+        if let Err(code) = ensure_toolchain_installed(&toolchain_name, &["rust-src"]) {
+            eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
+            return Err(Some(code));
+        }
     }
 
     let target_dir = guest_opts.target_dir.as_ref().unwrap();
     fs::create_dir_all(target_dir).unwrap();
     let rust_flags: Vec<_> = guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect();
 
-    let mut cmd = cargo_command("build", &rust_flags);
+    let with_std = guest_opts.features.iter().any(|f| f == "std");
+    let mut cmd = cargo_command("build", &rust_flags, with_std);
 
     if !guest_opts.features.is_empty() {
         cmd.args(["--features", guest_opts.features.join(",").as_str()]);
