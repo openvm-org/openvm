@@ -5,7 +5,7 @@ use std::sync::Arc;
 use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 use rvr_state::{GuardedMemory, TracerState};
 
 use super::{
@@ -51,8 +51,6 @@ impl MeteredCostConfig {
         }
     }
 }
-
-const NO_CHIP: u32 = u32::MAX;
 
 pub struct RvrMeteredCostInstance<F: PrimeField32, E> {
     pub(crate) system_config: SystemConfig,
