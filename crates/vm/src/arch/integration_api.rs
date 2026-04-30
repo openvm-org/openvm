@@ -250,27 +250,17 @@ where
     M: ColumnsAir<F>,
 {
     fn columns(&self) -> Option<Vec<String>> {
-        let adapter_cols = self.adapter.columns();
-        let core_cols = self.core.columns();
-        match (adapter_cols, core_cols) {
-            (Some(mut a), Some(c)) => {
-                a.extend(c);
-                Some(a)
-            }
-            (Some(a), None) => {
-                let mut cols = a;
-                cols.extend((0..self.core.width()).map(|i| format!("core[{i}]")));
-                Some(cols)
-            }
-            (None, Some(c)) => {
-                let mut cols: Vec<String> = (0..self.adapter.width())
-                    .map(|i| format!("adapter[{i}]"))
-                    .collect();
-                cols.extend(c);
-                Some(cols)
-            }
-            (None, None) => None,
-        }
+        let mut cols = self.adapter.columns().unwrap_or_else(|| {
+            (0..self.adapter.width())
+                .map(|i| format!("adapter[{i}]"))
+                .collect()
+        });
+        cols.extend(self.core.columns().unwrap_or_else(|| {
+            (0..self.core.width())
+                .map(|i| format!("core[{i}]"))
+                .collect()
+        }));
+        Some(cols)
     }
 }
 
