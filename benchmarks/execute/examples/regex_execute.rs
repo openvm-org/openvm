@@ -1,5 +1,5 @@
 // use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-// use openvm_keccak256_circuit::Keccak256Rv32Config;
+// use openvm_keccak256_circuit::Keccak256Rv64Config;
 // use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 // use openvm_riscv_transpiler::{
 //     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
@@ -22,8 +22,8 @@ fn main() {
     // )
     // .unwrap();
 
-    // let config = Keccak256Rv32Config::default();
-    // let executor = VmExecutor::<BabyBear, Keccak256Rv32Config>::new(config);
+    // let config = Keccak256Rv64Config::default();
+    // let executor = VmExecutor::<BabyBear, Keccak256Rv64Config>::new(config);
 
     // let data = include_str!("../../guest/regex/regex_email.txt");
 
