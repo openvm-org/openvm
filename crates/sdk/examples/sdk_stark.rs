@@ -33,7 +33,7 @@ fn main() -> eyre::Result<()> {
     /// let target_path = path.to_str().unwrap();
     /// ```
     // [!region build]
-    // 1. Initialize the SDK with the RV32IM preset and default aggregation parameters.
+    // 1. Initialize the SDK with the RV64IM preset and default aggregation parameters.
     let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_params = AggregationSystemParams::default();
     let sdk = Sdk::riscv64(app_params, agg_params);
