@@ -110,8 +110,7 @@ pub enum Rv64LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-    // Sign-extend loads. Unlike RV32 where LOADW needs no extension (it fills the
-    // full 32-bit register), in RV64 LOADW must sign-extend 32→64.
+    // Sign-extend loads. LOADW sign-extends 32→64 to fill the full register.
     LOADB,
     LOADH,
     LOADW,
