@@ -36,7 +36,7 @@ use openvm_stark_backend::{
 };
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -439,12 +439,8 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrPureInstance<F>, StaticProgramError> {
-        Self::rvr_instance(self, exe, executor_idx_to_air_idx)
+    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        Self::rvr_instance(self, exe)
     }
 }
 
@@ -466,12 +462,15 @@ where
     VC: VmExecutionConfig<F>,
     VC::Executor: Executor<F>,
 {
-    pub fn rvr_instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrPureInstance<F>, StaticProgramError> {
-        let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+    pub fn rvr_instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        // Pure execution does not consult air indices, so we hand the extension
+        // registry a placeholder filled with `NO_CHIP` sentinels sized to cover
+        // every executor.
+        // TODO: Drop this placeholder by making `RvrExtensionCtx` take an
+        // `Option<Vec<usize>>` (or be generic over a trait/value) so pure
+        // execution can avoid passing `executor_idx_to_air_idx` altogether.
+        let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
+        let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
         let compiled =
             rvr::compile_with_extensions(exe, &extensions).map_err(map_rvr_compile_error)?;
 
@@ -776,8 +775,7 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor().rvr_instance(exe, &executor_idx_to_air_idx)
+        self.executor().rvr_instance(exe)
     }
 
     // Pure AOT / RVR execution
