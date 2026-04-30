@@ -551,6 +551,15 @@ where
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_cost_interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
+        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
 }
 
 #[cfg(feature = "rvr")]
