@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, iter};
 
+use openvm_circuit_primitives::{ColumnsAir, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
@@ -21,6 +22,13 @@ pub struct KeccakfPermCols<T> {
     /// The AIR **assumes** but does not constrain that the timestamp should be unique for each
     /// distinct preimage state.
     pub timestamp: T,
+}
+
+/// Manual impl because KeccakCols is an external type without StructReflection.
+impl<T> StructReflectionHelper for KeccakfPermCols<T> {
+    fn struct_reflection() -> Option<Vec<String>> {
+        None
+    }
 }
 
 /// A periphery AIR that wraps the Plonky3 AIR with a direct interaction on a [PermutationCheckBus].
@@ -51,6 +59,7 @@ pub const NUM_KECCAKF_PERM_COLS: usize = size_of::<KeccakfPermCols<u8>>();
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfPermAir {}
 impl<F> PartitionedBaseAir<F> for KeccakfPermAir {}
+impl<F> ColumnsAir<F> for KeccakfPermAir {}
 impl<F> BaseAir<F> for KeccakfPermAir {
     fn width(&self) -> usize {
         NUM_KECCAKF_PERM_COLS

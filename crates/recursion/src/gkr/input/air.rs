@@ -3,7 +3,7 @@ use core::borrow::Borrow;
 use openvm_circuit_primitives::{
     is_zero::{IsZeroAuxCols, IsZeroIo, IsZeroSubAir},
     utils::{assert_array_eq, not, or},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -87,6 +87,7 @@ impl<F: Field> BaseAir<F> for GkrInputAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrInputAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrInputAir {}
+impl<F: Field> ColumnsAir<F> for GkrInputAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
     fn eval(&self, builder: &mut AB) {

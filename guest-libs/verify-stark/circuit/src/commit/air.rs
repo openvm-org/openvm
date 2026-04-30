@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{ColumnsAir, SubAir};
 use openvm_continuations::circuit::subair::{
     MerkleRootBus, MerkleTreeCols, MerkleTreeInternalBus, MerkleTreeSubAir,
 };
@@ -65,6 +65,7 @@ impl<F> BaseAir<F> for UserPvsCommitValuesAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsCommitValuesAir {}
+impl<F> ColumnsAir<F> for UserPvsCommitValuesAir {}
 impl<F> PartitionedBaseAir<F> for UserPvsCommitValuesAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

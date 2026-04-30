@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::var_range::bus::VariableRangeCheckerBus;
+use crate::{var_range::bus::VariableRangeCheckerBus, ColumnsAir};
 
 // dummy AIR for testing VariableRangeCheckerBus::send
 pub struct TestSendAir {
@@ -21,6 +21,7 @@ impl TestSendAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for TestSendAir {}
 impl<F: Field> PartitionedBaseAir<F> for TestSendAir {}
+impl<F: Field> ColumnsAir<F> for TestSendAir {}
 impl<F: Field> BaseAir<F> for TestSendAir {
     fn width(&self) -> usize {
         2
@@ -54,6 +55,7 @@ impl TestRangeCheckAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for TestRangeCheckAir {}
 impl<F: Field> PartitionedBaseAir<F> for TestRangeCheckAir {}
+impl<F: Field> ColumnsAir<F> for TestRangeCheckAir {}
 impl<F: Field> BaseAir<F> for TestRangeCheckAir {
     fn width(&self) -> usize {
         1
@@ -85,6 +87,7 @@ pub mod cuda {
 
     use crate::{
         cuda_abi::var_range::dummy_tracegen, var_range::VariableRangeCheckerChipGPU, Chip,
+        ColumnsAir,
     };
 
     /// Width of the dummy trace: [count, value, bits] = 3 columns

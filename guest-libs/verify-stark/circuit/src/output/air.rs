@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow};
+use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow, ColumnsAir};
 use openvm_continuations::utils::digests_to_poseidon2_input;
 use openvm_deferral_circuit::canonicity::{CanonicityAuxCols, CanonicitySubAir};
 use openvm_recursion_circuit::{
@@ -55,6 +55,7 @@ impl<F> BaseAir<F> for DeferralOutputCommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputCommitAir {}
+impl<F> ColumnsAir<F> for DeferralOutputCommitAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir

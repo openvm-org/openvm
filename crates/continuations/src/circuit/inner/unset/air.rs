@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -32,6 +33,7 @@ impl<F> BaseAir<F> for UnsetPvsAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UnsetPvsAir {}
+impl<F> ColumnsAir<F> for UnsetPvsAir {}
 impl<F> PartitionedBaseAir<F> for UnsetPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnsetPvsAir {

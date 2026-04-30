@@ -2,7 +2,7 @@
 
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{ColumnsAir, SubAir};
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     any_air_arc_vec,
@@ -31,6 +31,7 @@ impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAirWithPublicValues<F>
 {
 }
 impl<F: Field, const DEPTH_MINUS_ONE: usize> PartitionedBaseAir<F> for TestAir<DEPTH_MINUS_ONE> {}
+impl<F: Field, const DEPTH_MINUS_ONE: usize> ColumnsAir<F> for TestAir<DEPTH_MINUS_ONE> {}
 impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAir<F> for TestAir<DEPTH_MINUS_ONE> {
     fn width(&self) -> usize {
         width::<DEPTH_MINUS_ONE>()

@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -87,6 +87,7 @@ impl<F: Field> BaseAir<F> for GkrLayerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrLayerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrLayerAir {}
+impl<F: Field> ColumnsAir<F> for GkrLayerAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerAir
 where

@@ -9,7 +9,9 @@ use openvm_circuit::{
         SystemPort,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
+};
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -64,6 +66,7 @@ impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
 
 impl<F, C: Sha2MainChipConfig> BaseAirWithPublicValues<F> for Sha2MainAir<C> {}
 impl<F, C: Sha2MainChipConfig> PartitionedBaseAir<F> for Sha2MainAir<C> {}
+impl<F, C: Sha2MainChipConfig> ColumnsAir<F> for Sha2MainAir<C> {}
 impl<F, C: Sha2MainChipConfig> BaseAir<F> for Sha2MainAir<C> {
     fn width(&self) -> usize {
         C::MAIN_CHIP_WIDTH

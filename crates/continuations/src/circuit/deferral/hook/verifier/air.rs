@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{ColumnsAir, SubAir};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
     PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
@@ -106,6 +106,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for DeferralHookPvsAir {
         DeferralPvs::<u8>::width()
     }
 }
+impl<F: Field> ColumnsAir<F> for DeferralHookPvsAir {}
 impl<F: Field> PartitionedBaseAir<F> for DeferralHookPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

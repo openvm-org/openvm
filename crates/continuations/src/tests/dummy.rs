@@ -1,6 +1,7 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use eyre::Result;
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
@@ -28,6 +29,7 @@ impl<F> BaseAirWithPublicValues<F> for EmptyAirWithPvs {
         self.0
     }
 }
+impl<F> ColumnsAir<F> for EmptyAirWithPvs {}
 impl<F> PartitionedBaseAir<F> for EmptyAirWithPvs {}
 impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
     fn eval(&self, builder: &mut AB) {

@@ -8,7 +8,7 @@
 
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::utils::assert_array_eq;
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -64,6 +64,7 @@ pub struct FinalPolyMleEvalAir {
 
 impl BaseAirWithPublicValues<F> for FinalPolyMleEvalAir {}
 impl PartitionedBaseAir<F> for FinalPolyMleEvalAir {}
+impl<F> ColumnsAir<F> for FinalPolyMleEvalAir {}
 
 impl<F> BaseAir<F> for FinalPolyMleEvalAir {
     fn width(&self) -> usize {

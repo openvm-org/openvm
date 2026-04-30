@@ -24,10 +24,10 @@ use {
 };
 
 use super::*;
-use crate::utils::test_engine_small;
+use crate::{utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper};
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct IsLtArrayCols<T, const NUM: usize, const AUX_LEN: usize> {
     pub x: [T; NUM],
     pub y: [T; NUM],
@@ -50,6 +50,10 @@ impl<F: Field, const NUM: usize, const AUX_LEN: usize> BaseAir<F>
     }
 }
 impl<F: Field, const NUM: usize, const AUX_LEN: usize> PartitionedBaseAir<F>
+    for IsLtArrayTestAir<NUM, AUX_LEN>
+{
+}
+impl<F: Field, const NUM: usize, const AUX_LEN: usize> ColumnsAir<F>
     for IsLtArrayTestAir<NUM, AUX_LEN>
 {
 }

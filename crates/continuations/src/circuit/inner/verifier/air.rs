@@ -3,7 +3,7 @@ use std::{array::from_fn, borrow::Borrow};
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit::{
     bus::{
@@ -58,6 +58,7 @@ impl<F> BaseAirWithPublicValues<F> for VerifierPvsAir {
         VerifierBasePvs::<u8>::width() + self.deferral_config.num_public_values()
     }
 }
+impl<F> ColumnsAir<F> for VerifierPvsAir {}
 impl<F> PartitionedBaseAir<F> for VerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for VerifierPvsAir {

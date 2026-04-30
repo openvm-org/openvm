@@ -26,7 +26,7 @@ use crate::{
     is_less_than::IsLtSubAir,
     utils::test_engine_small,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    ColumnsAir, SubAir, TraceSubRowGenerator,
 };
 
 /// Struct purely for testing purposes. We could make this have a const generic just like
@@ -47,6 +47,7 @@ pub struct IsLtTestAir(pub IsLtSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
+impl<F: Field> ColumnsAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {
     fn width(&self) -> usize {
         // Cannot use size_of because Cols has Vec<T> which is stored on the heap

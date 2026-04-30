@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit::{bus::Poseidon2CompressBus, utils::assert_zeros};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -67,6 +67,7 @@ impl<F> BaseAirWithPublicValues<F> for UserPvsCommitAir {
         self.num_user_pvs
     }
 }
+impl<F> ColumnsAir<F> for UserPvsCommitAir {}
 impl<F> PartitionedBaseAir<F> for UserPvsCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

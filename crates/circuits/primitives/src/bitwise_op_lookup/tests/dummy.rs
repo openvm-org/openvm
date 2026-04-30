@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::bitwise_op_lookup::bus::BitwiseOperationLookupBus;
+use crate::{bitwise_op_lookup::bus::BitwiseOperationLookupBus, ColumnsAir};
 
 pub struct DummyAir {
     bus: BitwiseOperationLookupBus,
@@ -20,6 +20,7 @@ impl DummyAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for DummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for DummyAir {}
+impl<F: Field> ColumnsAir<F> for DummyAir {}
 impl<F: Field> BaseAir<F> for DummyAir {
     fn width(&self) -> usize {
         4
@@ -50,7 +51,7 @@ pub mod cuda {
 
     use crate::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-        cuda_abi::bitwise_op_lookup::dummy_tracegen, Chip,
+        cuda_abi::bitwise_op_lookup::dummy_tracegen, Chip, ColumnsAir,
     };
 
     const RECORD_WIDTH: usize = 3;

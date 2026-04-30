@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, not},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -62,6 +62,7 @@ pub struct EqBitsAir {
 
 impl BaseAirWithPublicValues<F> for EqBitsAir {}
 impl PartitionedBaseAir<F> for EqBitsAir {}
+impl<F> ColumnsAir<F> for EqBitsAir {}
 
 impl<F> BaseAir<F> for EqBitsAir {
     fn width(&self) -> usize {

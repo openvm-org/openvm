@@ -1,6 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::utils::{assert_array_eq, not};
+use openvm_circuit_primitives::{
+    utils::{assert_array_eq, not},
+    ColumnsAir,
+};
 use openvm_recursion_circuit::{
     bus::{
         Poseidon2CompressBus, Poseidon2CompressMessage, PublicValuesBus, PublicValuesBusMessage,
@@ -54,6 +57,7 @@ impl<F> BaseAirWithPublicValues<F> for DeferralAggPvsAir {
         DeferralAggregationPvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for DeferralAggPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralAggPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

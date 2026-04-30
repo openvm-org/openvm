@@ -1,5 +1,6 @@
 use core::borrow::Borrow;
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -29,6 +30,7 @@ impl<F, const NUM_BITS: usize> BaseAir<F> for RangeCheckerAir<NUM_BITS> {
 }
 impl<F, const NUM_BITS: usize> BaseAirWithPublicValues<F> for RangeCheckerAir<NUM_BITS> {}
 impl<F, const NUM_BITS: usize> PartitionedBaseAir<F> for RangeCheckerAir<NUM_BITS> {}
+impl<F, const NUM_BITS: usize> ColumnsAir<F> for RangeCheckerAir<NUM_BITS> {}
 
 impl<AB: AirBuilder + InteractionBuilder, const NUM_BITS: usize> Air<AB>
     for RangeCheckerAir<NUM_BITS>

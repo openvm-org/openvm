@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::{utils::not, ColumnsAir};
 use openvm_recursion_circuit::{
     bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
     prelude::DIGEST_SIZE,
@@ -48,6 +48,7 @@ impl<F> BaseAir<F> for OnionHashAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for OnionHashAir {}
+impl<F> ColumnsAir<F> for OnionHashAir {}
 impl<F> PartitionedBaseAir<F> for OnionHashAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for OnionHashAir {

@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
@@ -82,6 +82,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir {
         RootVerifierPvs::<u8>::width()
     }
 }
+impl<F: Field> ColumnsAir<F> for RootVerifierPvsAir {}
 impl<F: Field> PartitionedBaseAir<F> for RootVerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

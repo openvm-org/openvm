@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_continuations::{
     circuit::{
         deferral::DeferralCircuitPvs,
@@ -95,6 +95,7 @@ impl<F> BaseAirWithPublicValues<F> for DeferredVerifyPvsAir {
         DeferralCircuitPvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for DeferredVerifyPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferredVerifyPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

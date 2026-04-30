@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, iter::once, sync::Arc};
 
-use openvm_circuit_primitives::AlignedBorrow;
+use openvm_circuit_primitives::{AlignedBorrow, ColumnsAir};
 use openvm_poseidon2_air::{
     Poseidon2Config, Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
 };
@@ -44,6 +44,7 @@ impl<F: Field> BaseAir<F> for DeferralPoseidon2Air<F> {
     }
 }
 impl<F: Field> BaseAirWithPublicValues<F> for DeferralPoseidon2Air<F> {}
+impl<F: Field> ColumnsAir<F> for DeferralPoseidon2Air<F> {}
 impl<F: Field> PartitionedBaseAir<F> for DeferralPoseidon2Air<F> {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralPoseidon2Air<AB::F> {

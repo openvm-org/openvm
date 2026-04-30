@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{utils::not, SubAir};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, SubAir};
 use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
@@ -56,6 +56,7 @@ impl<F> BaseAir<F> for InputCommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for InputCommitAir {}
+impl<F> ColumnsAir<F> for InputCommitAir {}
 impl<F> PartitionedBaseAir<F> for InputCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for InputCommitAir {

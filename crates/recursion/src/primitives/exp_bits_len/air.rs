@@ -1,5 +1,6 @@
 use core::borrow::Borrow;
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -68,6 +69,7 @@ fn assert_babybear_field<F: PrimeField32>() {
 
 impl<F: PrimeField32> BaseAirWithPublicValues<F> for ExpBitsLenAir {}
 impl<F: PrimeField32> PartitionedBaseAir<F> for ExpBitsLenAir {}
+impl<F: PrimeField32> ColumnsAir<F> for ExpBitsLenAir {}
 
 impl<F: PrimeField32> BaseAir<F> for ExpBitsLenAir {
     fn width(&self) -> usize {

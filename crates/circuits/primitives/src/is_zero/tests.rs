@@ -28,10 +28,13 @@ use {
 };
 
 use super::{IsZeroIo, IsZeroSubAir};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsZeroCols<T> {
     pub x: T,
     pub out: T,
@@ -43,6 +46,7 @@ pub struct IsZeroTestAir(IsZeroSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsZeroTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsZeroTestAir {}
+impl<F: Field> ColumnsAir<F> for IsZeroTestAir {}
 impl<F: Field> BaseAir<F> for IsZeroTestAir {
     fn width(&self) -> usize {
         IsZeroCols::<F>::width()

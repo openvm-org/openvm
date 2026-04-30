@@ -18,14 +18,14 @@ use std::{
 use getset::{CopyGetters, Getters};
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir},
-    AnyChip, Chip,
+    AnyChip, Chip, ColumnsAir,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::BusIndex,
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val,
+    AnyAir, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 use tracing::info_span;
@@ -54,6 +54,26 @@ pub const BOUNDARY_AIR_ID: usize = MEMORY_AIRS_START_IDX + BOUNDARY_AIR_OFFSET;
 pub const MERKLE_AIR_ID: usize = MEMORY_AIRS_START_IDX + MERKLE_AIR_OFFSET;
 
 pub type ExecutorId = u32;
+
+/// AIR trait object combining [`AnyAir`] (used by stark-backend for proving) with
+/// [`ColumnsAir`] (OpenVM-internal column-name introspection used by external tooling). The
+/// blanket impl below makes every type satisfying both traits also satisfy this one, so existing
+/// concrete AIRs need no changes.
+///
+/// Trait upcasting (stable since Rust 1.86) coerces `Arc<dyn AnyAirWithColumns<SC>>` to
+/// `Arc<dyn AnyAir<SC>>` in argument position, so [`AirRefWithColumns`] passes transparently to
+/// stark-backend APIs that expect [`AirRef`](openvm_stark_backend::AirRef).
+pub trait AnyAirWithColumns<SC: StarkProtocolConfig>: AnyAir<SC> + ColumnsAir<Val<SC>> {}
+
+impl<SC, T> AnyAirWithColumns<SC> for T
+where
+    SC: StarkProtocolConfig,
+    T: AnyAir<SC> + ColumnsAir<Val<SC>>,
+{
+}
+
+/// Reference-counted dyn pointer to an AIR with column-name introspection.
+pub type AirRefWithColumns<SC> = Arc<dyn AnyAirWithColumns<SC>>;
 
 // ======================= VM Extension Traits =============================
 
@@ -138,7 +158,7 @@ pub struct AirInventory<SC: StarkProtocolConfig> {
     /// Note that the system will ensure that the first AIR in the list is always the
     /// [VariableRangeCheckerAir].
     #[get = "pub"]
-    ext_airs: Vec<AirRef<SC>>,
+    ext_airs: Vec<AirRefWithColumns<SC>>,
     /// `ext_start[i]` will have the starting index in `ext_airs` for extension `i`
     ext_start: Vec<usize>,
 
@@ -427,11 +447,11 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
             .filter_map(|air| air.as_any().downcast_ref())
     }
 
-    pub fn add_air<A: AnyAir<SC> + 'static>(&mut self, air: A) {
+    pub fn add_air<A: AnyAirWithColumns<SC> + 'static>(&mut self, air: A) {
         self.add_air_ref(Arc::new(air));
     }
 
-    pub fn add_air_ref(&mut self, air: AirRef<SC>) {
+    pub fn add_air_ref(&mut self, air: AirRefWithColumns<SC>) {
         self.ext_airs.push(air);
     }
 
@@ -445,7 +465,7 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
     /// This is the system AIRs, followed by the other AIRs in the **reverse** of the order they
     /// were added in the VM extension definitions. In particular, the AIRs that have dependencies
     /// appear later. The system guarantees that the last AIR is the [VariableRangeCheckerAir].
-    pub fn into_airs(self) -> impl Iterator<Item = AirRef<SC>> {
+    pub fn into_airs(self) -> impl Iterator<Item = AirRefWithColumns<SC>> {
         self.system
             .into_airs()
             .into_iter()

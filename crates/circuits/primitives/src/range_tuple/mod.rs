@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
-use crate::Chip;
+use crate::{Chip, ColumnsAir};
 
 mod bus;
 pub use bus::*;
@@ -79,6 +79,7 @@ impl<const N: usize> RangeTupleCheckerAir<N> {
 }
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
+impl<F: Field, const N: usize> ColumnsAir<F> for RangeTupleCheckerAir<N> {}
 
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {

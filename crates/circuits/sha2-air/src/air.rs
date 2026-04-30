@@ -2,7 +2,8 @@ use std::{iter::once, marker::PhantomData};
 
 use ndarray::s;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, SubAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, ColumnsAir,
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -47,6 +48,7 @@ impl<F, C: Sha2BlockHasherSubairConfig> BaseAir<F> for Sha2BlockHasherSubAir<C> 
         C::SUBAIR_WIDTH
     }
 }
+impl<F, C: Sha2BlockHasherSubairConfig> ColumnsAir<F> for Sha2BlockHasherSubAir<C> {}
 
 impl<AB: InteractionBuilder, C: Sha2BlockHasherSubairConfig> SubAir<AB>
     for Sha2BlockHasherSubAir<C>

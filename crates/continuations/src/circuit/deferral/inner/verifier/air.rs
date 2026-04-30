@@ -1,6 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::utils::{and, not};
+use openvm_circuit_primitives::{
+    utils::{and, not},
+    ColumnsAir,
+};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, PreHashBus, PreHashMessage, PublicValuesBus,
     PublicValuesBusMessage,
@@ -54,6 +57,7 @@ impl<F> BaseAirWithPublicValues<F> for DeferralVerifierPvsAir {
         VerifierBasePvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for DeferralVerifierPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralVerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

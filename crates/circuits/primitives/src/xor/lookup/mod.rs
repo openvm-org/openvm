@@ -21,14 +21,14 @@ use openvm_stark_backend::{
 };
 
 use super::bus::XorBus;
-use crate::Chip;
+use crate::{Chip, ColumnsAir, StructReflection, StructReflectionHelper};
 
 #[cfg(test)]
 mod tests;
 
 /// Columns for the main trace of the XOR lookup
 #[repr(C)]
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorLookupCols<T> {
     /// Multiplicity counter tracking the number of XOR operations requested for each triple
     pub mult: T,
@@ -36,7 +36,7 @@ pub struct XorLookupCols<T> {
 
 /// Columns for the preprocessed table of the XOR lookup
 #[repr(C)]
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,
@@ -56,6 +56,11 @@ pub struct XorLookupAir<const M: usize> {
 
 impl<F: Field, const M: usize> BaseAirWithPublicValues<F> for XorLookupAir<M> {}
 impl<F: Field, const M: usize> PartitionedBaseAir<F> for XorLookupAir<M> {}
+impl<F: Field, const M: usize> ColumnsAir<F> for XorLookupAir<M> {
+    fn columns(&self) -> Option<Vec<String>> {
+        <XorLookupCols<F> as crate::StructReflectionHelper>::struct_reflection()
+    }
+}
 impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
     fn width(&self) -> usize {
         NUM_XOR_LOOKUP_COLS

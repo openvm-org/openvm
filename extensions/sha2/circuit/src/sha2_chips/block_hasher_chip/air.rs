@@ -1,4 +1,4 @@
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, SubAir};
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir, SubAir};
 use openvm_sha2_air::{compose, Sha2BlockHasherSubAir};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -33,6 +33,7 @@ impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
 
 impl<F: Field, C: Sha2BlockHasherVmConfig> BaseAirWithPublicValues<F> for Sha2BlockHasherVmAir<C> {}
 impl<F: Field, C: Sha2BlockHasherVmConfig> PartitionedBaseAir<F> for Sha2BlockHasherVmAir<C> {}
+impl<F: Field, C: Sha2BlockHasherVmConfig> ColumnsAir<F> for Sha2BlockHasherVmAir<C> {}
 impl<F: Field, C: Sha2BlockHasherVmConfig> BaseAir<F> for Sha2BlockHasherVmAir<C> {
     fn width(&self) -> usize {
         C::BLOCK_HASHER_WIDTH

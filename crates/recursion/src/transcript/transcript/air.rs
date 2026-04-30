@@ -2,7 +2,7 @@ use core::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not, or},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -54,6 +54,7 @@ impl<F: Field> BaseAir<F> for TranscriptAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for TranscriptAir {}
 impl<F: Field> PartitionedBaseAir<F> for TranscriptAir {}
+impl<F: Field> ColumnsAir<F> for TranscriptAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
     fn eval(&self, builder: &mut AB) {

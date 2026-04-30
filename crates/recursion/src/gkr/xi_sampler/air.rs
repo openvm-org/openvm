@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 use std::convert::Into;
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{ColumnsAir, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -55,6 +55,7 @@ impl<F: Field> BaseAir<F> for GkrXiSamplerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrXiSamplerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrXiSamplerAir {}
+impl<F: Field> ColumnsAir<F> for GkrXiSamplerAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir
 where

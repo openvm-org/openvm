@@ -2,7 +2,7 @@ use core::borrow::Borrow;
 use std::{array::from_fn, sync::Arc};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_poseidon2_air::{
     Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip, Poseidon2SubCols,
     BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH,
@@ -69,6 +69,7 @@ impl<F: Field> BaseAir<F> for DagCommitSubAir<F> {
         DagCommitCols::<u8>::width()
     }
 }
+impl<F: Field> ColumnsAir<F> for DagCommitSubAir<F> {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> SubAir<AB>
     for DagCommitSubAir<AB::F>

@@ -1,11 +1,12 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
+use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 
 use crate::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
 
 #[repr(C)]
-#[derive(Debug, AlignedBorrow)]
+#[derive(Debug, AlignedBorrow, StructReflection)]
 pub struct XorinVmCols<T> {
     pub sponge: XorinSpongeCols<T>,
     pub instruction: XorinInstructionCols<T>,
@@ -13,7 +14,7 @@ pub struct XorinVmCols<T> {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow, StructReflection, derive_new::new)]
 #[allow(clippy::too_many_arguments)]
 pub struct XorinInstructionCols<T> {
     pub pc: T,
@@ -31,7 +32,7 @@ pub struct XorinInstructionCols<T> {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorinSpongeCols<T> {
     // is_padding_bytes is a boolean where is_padding_bytes[i] = 1 if 4*(i+1) >= len
     // and is_padding_bytes[i] = 0 otherwise
@@ -43,7 +44,7 @@ pub struct XorinSpongeCols<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, AlignedBorrow)]
+#[derive(Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],

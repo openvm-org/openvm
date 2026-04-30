@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::not, SubAir};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, SubAir};
 use openvm_recursion_circuit::utils::assert_zeros;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -34,6 +34,7 @@ impl<F> BaseAir<F> for MerkleDecommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for MerkleDecommitAir {}
+impl<F> ColumnsAir<F> for MerkleDecommitAir {}
 impl<F> PartitionedBaseAir<F> for MerkleDecommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

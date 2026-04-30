@@ -11,6 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
+    ColumnsAir,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -101,6 +102,7 @@ impl<F> BaseAir<F> for DeferralOutputAir {
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputAir {}
+impl<F> ColumnsAir<F> for DeferralOutputAir {}
 
 impl<AB> Air<AB> for DeferralOutputAir
 where

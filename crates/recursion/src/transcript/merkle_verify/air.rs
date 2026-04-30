@@ -1,5 +1,6 @@
 use core::{array, borrow::Borrow};
 
+use openvm_circuit_primitives::ColumnsAir;
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -102,6 +103,7 @@ impl<F: Field> BaseAir<F> for MerkleVerifyAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for MerkleVerifyAir {}
 impl<F: Field> PartitionedBaseAir<F> for MerkleVerifyAir {}
+impl<F: Field> ColumnsAir<F> for MerkleVerifyAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
     fn eval(&self, builder: &mut AB) {

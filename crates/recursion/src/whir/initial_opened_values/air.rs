@@ -1,6 +1,6 @@
 use core::{array, borrow::Borrow};
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -67,6 +67,7 @@ pub struct InitialOpenedValuesAir {
 
 impl BaseAirWithPublicValues<F> for InitialOpenedValuesAir {}
 impl PartitionedBaseAir<F> for InitialOpenedValuesAir {}
+impl<F> ColumnsAir<F> for InitialOpenedValuesAir {}
 
 impl<F> BaseAir<F> for InitialOpenedValuesAir {
     fn width(&self) -> usize {

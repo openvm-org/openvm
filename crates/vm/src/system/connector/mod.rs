@@ -3,8 +3,9 @@ use std::{
     marker::PhantomData,
 };
 
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+use openvm_circuit_primitives::{
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
@@ -41,7 +42,7 @@ pub struct VmConnectorAir {
     timestamp_max_bits: usize,
 }
 
-#[derive(Debug, Clone, Copy, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
     /// The initial PC of this segment.
@@ -76,6 +77,11 @@ impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
+impl<F: Field> ColumnsAir<F> for VmConnectorAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        <ConnectorCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+    }
+}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
         ConnectorCols::<F>::width()
@@ -114,7 +120,7 @@ impl VmConnectorAir {
     }
 }
 
-#[derive(Debug, Copy, Clone, AlignedBorrow, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, AlignedBorrow, StructReflection, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ConnectorCols<T> {
     pub pc: T,

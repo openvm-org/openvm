@@ -19,6 +19,8 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
+use crate::{ColumnsAir, StructReflection, StructReflectionHelper};
+
 mod bus;
 
 #[cfg(test)]
@@ -26,14 +28,14 @@ pub mod tests;
 
 pub use bus::*;
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(Default, AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct RangeCols<T> {
     /// Number of range checks for each value
     pub mult: T,
 }
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(Default, AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct RangePreprocessedCols<T> {
     /// Contains all possible values within range [0, max)
@@ -56,6 +58,11 @@ impl RangeCheckerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for RangeCheckerAir {}
 impl<F: Field> PartitionedBaseAir<F> for RangeCheckerAir {}
+impl<F: Field> ColumnsAir<F> for RangeCheckerAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        <RangeCols<F> as crate::StructReflectionHelper>::struct_reflection()
+    }
+}
 impl<F: Field> BaseAir<F> for RangeCheckerAir {
     fn width(&self) -> usize {
         NUM_RANGE_COLS

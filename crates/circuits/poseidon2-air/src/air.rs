@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
@@ -58,6 +59,10 @@ impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> BaseAirWit
 {
 }
 impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
+    for Poseidon2SubAir<F, SBOX_REGISTERS>
+{
+}
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> ColumnsAir<F>
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }

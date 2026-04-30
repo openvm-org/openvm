@@ -14,7 +14,7 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, proof::Proof, StarkEngine, SystemParams,
+    keygen::types::MultiStarkVerifyingKey, proof::Proof, AirRef, StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::{
     config::{
@@ -219,7 +219,13 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     let config = test_rv32im_config();
 
     let engine = Engine::new(app_system_params());
-    let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
+    let (_, app_vk) = engine.keygen(
+        &config
+            .create_airs()?
+            .into_airs()
+            .map(|a| a as AirRef<_>)
+            .collect_vec(),
+    );
     let def_hook_cached_commit = def_hook_cached_commit_set.then_some([F::ZERO; DIGEST_SIZE]);
 
     const MAX_LEAF_NUM_PROOFS: usize = 3;

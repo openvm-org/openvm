@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit_primitives::{
     is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
     utils::{assert_array_eq, not},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -67,6 +67,7 @@ pub struct UnivariateSumcheckAir {
 
 impl<F> BaseAirWithPublicValues<F> for UnivariateSumcheckAir {}
 impl<F> PartitionedBaseAir<F> for UnivariateSumcheckAir {}
+impl<F> ColumnsAir<F> for UnivariateSumcheckAir {}
 
 impl<F> BaseAir<F> for UnivariateSumcheckAir {
     fn width(&self) -> usize {

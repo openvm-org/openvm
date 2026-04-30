@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -70,6 +70,7 @@ pub struct EqNegAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqNegAir {}
 impl<F> PartitionedBaseAir<F> for EqNegAir {}
+impl<F> ColumnsAir<F> for EqNegAir {}
 impl<F> BaseAir<F> for EqNegAir {
     fn width(&self) -> usize {
         EqNegCols::<F>::width()

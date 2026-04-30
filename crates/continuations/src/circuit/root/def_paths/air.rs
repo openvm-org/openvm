@@ -5,7 +5,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit::bus::Poseidon2CompressBus;
 use openvm_recursion_circuit_derive::AlignedBorrow;
@@ -90,6 +90,7 @@ impl<F> BaseAir<F> for DeferralAccMerklePathsAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralAccMerklePathsAir {}
+impl<F> ColumnsAir<F> for DeferralAccMerklePathsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralAccMerklePathsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir {

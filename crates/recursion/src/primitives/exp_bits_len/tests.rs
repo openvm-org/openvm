@@ -1,6 +1,7 @@
 use core::borrow::Borrow;
 use std::borrow::BorrowMut;
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
@@ -90,6 +91,7 @@ impl<F> BaseAir<F> for ExpBitsLenLookupAir {
 }
 
 impl<F> BaseAirWithPublicValues<F> for ExpBitsLenLookupAir {}
+impl<F> ColumnsAir<F> for ExpBitsLenLookupAir {}
 impl<F> PartitionedBaseAir<F> for ExpBitsLenLookupAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpBitsLenLookupAir {
@@ -317,6 +319,7 @@ fn test_exp_bits_len_rejects_nonzero_terminal_tail_on_last_row() {
 mod cuda_tests {
     use std::sync::Arc;
 
+    use openvm_circuit_primitives::ColumnsAir;
     use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix;
 
     use super::*;

@@ -13,7 +13,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    ColumnsAir, SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -98,6 +98,7 @@ impl<F: Field> BaseAir<F> for FieldExpressionCoreAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for FieldExpressionCoreAir {}
+impl<F: Field> ColumnsAir<F> for FieldExpressionCoreAir {}
 
 impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for FieldExpressionCoreAir
 where

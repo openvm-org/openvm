@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
@@ -16,6 +17,7 @@ pub struct ProgramDummyAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
+impl<F: Field> ColumnsAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {
     fn width(&self) -> usize {
         ProgramTester::<F>::width()

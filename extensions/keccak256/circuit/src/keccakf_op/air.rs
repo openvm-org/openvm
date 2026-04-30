@@ -8,7 +8,7 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir};
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -43,6 +43,11 @@ pub struct KeccakfOpAir {
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfOpAir {}
 impl<F> PartitionedBaseAir<F> for KeccakfOpAir {}
+impl<F> ColumnsAir<F> for KeccakfOpAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        <KeccakfOpCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+    }
+}
 impl<F> BaseAir<F> for KeccakfOpAir {
     fn width(&self) -> usize {
         NUM_KECCAKF_OP_COLS

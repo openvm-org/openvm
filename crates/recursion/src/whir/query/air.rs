@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -57,6 +57,7 @@ pub struct WhirQueryAir {
 
 impl BaseAirWithPublicValues<F> for WhirQueryAir {}
 impl PartitionedBaseAir<F> for WhirQueryAir {}
+impl<F> ColumnsAir<F> for WhirQueryAir {}
 
 impl<F> BaseAir<F> for WhirQueryAir {
     fn width(&self) -> usize {

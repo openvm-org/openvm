@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -75,6 +75,7 @@ pub struct InteractionsFoldingAir {
 
 impl<F> BaseAirWithPublicValues<F> for InteractionsFoldingAir {}
 impl<F> PartitionedBaseAir<F> for InteractionsFoldingAir {}
+impl<F> ColumnsAir<F> for InteractionsFoldingAir {}
 
 impl<F> BaseAir<F> for InteractionsFoldingAir {
     fn width(&self) -> usize {

@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use openvm_circuit::system::connector::DEFAULT_SUSPEND_EXIT_CODE;
-use openvm_circuit_primitives::utils::{and, assert_array_eq, not};
+use openvm_circuit_primitives::{
+    utils::{and, assert_array_eq, not},
+    ColumnsAir,
+};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage,
 };
@@ -47,6 +50,7 @@ impl<F> BaseAirWithPublicValues<F> for VmPvsAir {
         VmPvs::<u8>::width()
     }
 }
+impl<F> ColumnsAir<F> for VmPvsAir {}
 impl<F> PartitionedBaseAir<F> for VmPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for VmPvsAir {
