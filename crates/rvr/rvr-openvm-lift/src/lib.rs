@@ -21,6 +21,6 @@ pub use convert::{
     ConvertError,
 };
 pub use extension::{
-    ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx, VmRvrExtension,
+    ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx, VmRvrExtension, NO_CHIP,
 };
 pub use helpers::decode_reg;

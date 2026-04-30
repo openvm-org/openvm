@@ -295,7 +295,7 @@ impl DeferralTestHarness {
         let input_stream = streams.input_stream.clone();
 
         // OpenVM reference
-        let interpreter = self.vm.executor().instance(exe, &self.air_idx)?;
+        let interpreter = self.vm.executor().instance(exe)?;
         let interp_state = interpreter.execute(streams, None)?;
 
         // rvr compile + execute
