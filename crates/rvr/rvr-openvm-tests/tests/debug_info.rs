@@ -20,7 +20,10 @@ use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use rvr_openvm::{CompileOptions, GuestDebugMap, TracerMode};
 use rvr_openvm_ir::SourceLoc;
 use rvr_openvm_lift::ExtensionRegistry;
-use rvr_openvm_test_utils::workspace_root;
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
+}
 
 fn transpile(elf: Elf) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(

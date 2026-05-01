@@ -80,7 +80,6 @@ members = [
     "crates/rvr/rvr-openvm-ir",
     "crates/rvr/rvr-openvm-lift",
     "crates/rvr/rvr-openvm-ffi-common",
-    "crates/rvr/rvr-openvm-test-utils",
     "crates/rvr/rvr-openvm-tests",
     "extensions/keccak256/rvr",
     "extensions/keccak256/rvr/ffi",
