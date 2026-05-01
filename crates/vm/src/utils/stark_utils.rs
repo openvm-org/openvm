@@ -8,11 +8,11 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::setup_tracing,
 };
 
-#[cfg(feature = "aot")]
+#[cfg(any(feature = "aot", feature = "rvr"))]
 use crate::arch::SystemConfig;
-#[cfg(feature = "aot")]
+#[cfg(any(feature = "aot", feature = "rvr"))]
 use crate::arch::VmState;
-#[cfg(feature = "aot")]
+#[cfg(any(feature = "aot", feature = "rvr"))]
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
@@ -102,6 +102,14 @@ where
     final_memory
 }
 
+// Periphery AIRs (memory/hash system chips not tied to executors)
+fn is_periphery_air(air_name: &str) -> bool {
+    air_name.contains("MemoryMerkleAir")
+        || air_name.contains("Poseidon2PeripheryAir")
+        || air_name.contains("PersistentBoundaryAir")
+        || air_name.contains("NativeAdapterAir")
+}
+
 // Compares the output of the interpreter and the AOT instance for pure and metered execution
 #[cfg(feature = "aot")]
 pub fn check_aot_equivalence<E, VB>(
@@ -183,6 +191,145 @@ where
     Ok(())
 }
 
+// Compares the output of the interpreter and the RVR instance for pure and metered execution.
+// Metered comparison is relaxed because rvr segments at block granularity while OpenVM segments
+// per-instruction, so segment boundaries differ. We assert: equal pure end-state, equal total
+// instret, contiguous non-empty rvr segments, and equal per-chip trace-height totals (skipping
+// boundary/merkle/poseidon2/native-adapter and constant-height airs).
+#[cfg(feature = "rvr")]
+pub fn check_rvr_equivalence<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    config: &VB::VmConfig,
+    exe: &VmExe<Val<E::SC>>,
+    input: &Streams<Val<E::SC>>,
+) -> eyre::Result<()>
+where
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+{
+    /*
+    Assertions for Pure Execution RVR
+    */
+    {
+        let interp_state_pure = vm
+            .naive_interpreter(exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
+
+        let rvr_state_pure = vm
+            .get_rvr_instance(exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces;
+        let assert_vm_state_eq =
+            |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
+                assert_eq!(lhs.pc(), rhs.pc());
+                for r in 0..addr_spaces[1].num_cells {
+                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                    assert_eq!(a, b);
+                }
+            };
+        assert_vm_state_eq(&interp_state_pure, &rvr_state_pure);
+    }
+
+    /*
+    Assertions for Metered-Cost RVR
+    */
+    println!("Checking metered-cost RVR equivalence");
+    {
+        let air_idx = vm.executor_idx_to_air_idx();
+        let metered_cost_ctx = vm.build_metered_cost_ctx();
+
+        let (rvr_cost_ctx, _) = vm
+            .get_metered_cost_rvr_instance(exe)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+        let (interp_cost_ctx, _) = vm
+            .executor()
+            .metered_cost_interpreter_instance(exe, &air_idx)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx)?;
+
+        assert_eq!(
+            interp_cost_ctx.instret, rvr_cost_ctx.instret,
+            "metered-cost instret mismatch: interp={}, rvr={}",
+            interp_cost_ctx.instret, rvr_cost_ctx.instret
+        );
+        assert_eq!(
+            interp_cost_ctx.cost, rvr_cost_ctx.cost,
+            "metered-cost trace-cost mismatch: interp={}, rvr={}",
+            interp_cost_ctx.cost, rvr_cost_ctx.cost
+        );
+    }
+
+    /*
+    Assertions for Metered RVR (relaxed: rvr uses block-level segmentation)
+    */
+    println!("Checking metered RVR equivalence");
+    {
+        let metered_ctx = vm.build_metered_ctx(exe);
+        let (rvr_segments, _rvr_state_metered) = vm
+            .get_metered_rvr_instance(exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        let (interp_segments, _interp_state_metered) = vm
+            .naive_metered_interpreter(exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        let interp_total: u64 = interp_segments.iter().map(|s| s.num_insns).sum();
+        let rvr_total: u64 = rvr_segments.iter().map(|s| s.num_insns).sum();
+        assert_eq!(
+            interp_total, rvr_total,
+            "total instret mismatch: interp={interp_total}, rvr={rvr_total}"
+        );
+
+        let mut expected_start = 0u64;
+        for (i, seg) in rvr_segments.iter().enumerate() {
+            assert_eq!(
+                seg.instret_start, expected_start,
+                "rvr segment {i} not contiguous: expected {expected_start}, got {}",
+                seg.instret_start
+            );
+            assert!(seg.num_insns > 0, "rvr segment {i} is empty");
+            expected_start += seg.num_insns;
+        }
+
+        let air_names: Vec<&str> = vm.air_names().collect();
+        let num_chips = interp_segments[0].trace_heights.len();
+        for chip in 0..num_chips {
+            if metered_ctx.is_trace_height_constant[chip] {
+                continue;
+            }
+            let air_name = air_names.get(chip).copied().unwrap_or("unknown");
+            // For periphery airs, overestimates are expected
+            if is_periphery_air(air_name) {
+                continue;
+            }
+            let interp_sum: u64 = interp_segments
+                .iter()
+                .map(|s| s.trace_heights[chip] as u64)
+                .sum();
+            let rvr_sum: u64 = rvr_segments
+                .iter()
+                .map(|s| s.trace_heights[chip] as u64)
+                .sum();
+            assert_eq!(
+                interp_sum, rvr_sum,
+                "chip {chip} ({air_name}) trace-height total mismatch: interp={interp_sum}, rvr={rvr_sum}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// Executes and proves the VM and returns the final memory state.
 /// If `debug` is true, runs the debug prover.
 //
@@ -219,6 +366,9 @@ where
 
     #[cfg(feature = "aot")]
     check_aot_equivalence(&vm, &config, &exe, &input)?;
+
+    #[cfg(feature = "rvr")]
+    check_rvr_equivalence(&vm, &config, &exe, &input)?;
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
@@ -343,12 +493,8 @@ fn validate_metered_estimates<E, VB>(
             seg_idx
         );
 
-        // For some airs, the overestimates are expected
-        if air_name.contains("MemoryMerkleAir")
-            || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("PersistentBoundaryAir")
-            || air_name.contains("NativeAdapterAir")
-        {
+        // For periphery airs, overestimates are expected
+        if is_periphery_air(air_name) {
             continue;
         }
 
