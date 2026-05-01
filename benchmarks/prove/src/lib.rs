@@ -10,8 +10,8 @@ use openvm_stark_backend::SystemParams;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::{
-        app_params_with_100_bits_security, internal_params_with_100_bits_security,
-        leaf_params_with_100_bits_security,
+        app_params_with_128_bits_security, internal_params_with_128_bits_security,
+        leaf_params_with_128_bits_security,
     },
 };
 use openvm_transpiler::{elf::Elf, FromElf};
@@ -149,8 +149,8 @@ pub fn run_default_benchmark(vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> 
         elf,
         stdin,
         default_bench_app_params(),
-        leaf_params_with_100_bits_security(),
-        internal_params_with_100_bits_security(),
+        leaf_params_with_128_bits_security(),
+        internal_params_with_128_bits_security(),
     )
 }
 
@@ -176,8 +176,8 @@ pub fn run_evm_benchmark(
         let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
         let app_config = AppConfig::new(vm_config, default_bench_app_params());
         let agg_params = AggregationSystemParams {
-            leaf: leaf_params_with_100_bits_security(),
-            internal: internal_params_with_100_bits_security(),
+            leaf: leaf_params_with_128_bits_security(),
+            internal: internal_params_with_128_bits_security(),
         };
         let mut builder = Sdk::builder().app_config(app_config).agg_params(agg_params);
         if halo2_wrapper_k.is_some() {
@@ -202,5 +202,5 @@ pub fn run_evm_benchmark(
 }
 
 pub fn default_bench_app_params() -> SystemParams {
-    app_params_with_100_bits_security(DEFAULT_LOG_STACKED_HEIGHT)
+    app_params_with_128_bits_security(DEFAULT_LOG_STACKED_HEIGHT)
 }

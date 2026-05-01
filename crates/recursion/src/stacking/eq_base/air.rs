@@ -27,7 +27,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
-        assert_one_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
+        assert_one_ext, base_to_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_subtract,
     },
 };
@@ -270,23 +270,24 @@ where
          * Constrain the running products that are used to compute eq_0(u, 1)
          * and eq_0(r * omega, 1).
          */
-        let ef_one = [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO];
-
         assert_array_eq(
             &mut builder.when(local.is_first),
             local.prod_u_1,
-            ext_field_add(local.u_pow, ef_one),
+            ext_field_add(local.u_pow, base_to_ext::<AB::Expr>(AB::Expr::ONE)),
         );
 
         assert_array_eq(
             &mut builder.when(local.is_first),
             local.prod_r_omega_1,
-            ext_field_add(local.r_omega_pow, ef_one),
+            ext_field_add(local.r_omega_pow, base_to_ext::<AB::Expr>(AB::Expr::ONE)),
         );
 
         assert_array_eq(
             &mut builder.when(not(local.is_last)),
-            ext_field_multiply(local.prod_u_1, ext_field_add(next.u_pow, ef_one)),
+            ext_field_multiply(
+                local.prod_u_1,
+                ext_field_add(next.u_pow, base_to_ext::<AB::Expr>(AB::Expr::ONE)),
+            ),
             next.prod_u_1,
         );
 
@@ -294,7 +295,7 @@ where
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(
                 local.prod_r_omega_1,
-                ext_field_add(next.r_omega_pow, ef_one),
+                ext_field_add(next.r_omega_pow, base_to_ext::<AB::Expr>(AB::Expr::ONE)),
             ),
             next.prod_r_omega_1,
         );
@@ -306,12 +307,18 @@ where
         let omega_pow_inv = AB::F::from_usize(1 << self.l_skip).inverse();
 
         let eq_u_r = ext_field_multiply_scalar(
-            ext_field_add::<AB::Expr>(ext_field_subtract(local.prod_u_r, next.u_pow), ef_one),
+            ext_field_add::<AB::Expr>(
+                ext_field_subtract(local.prod_u_r, next.u_pow),
+                base_to_ext::<AB::Expr>(AB::Expr::ONE),
+            ),
             omega_pow_inv,
         );
 
         let eq_u_r_omega = ext_field_multiply_scalar(
-            ext_field_add::<AB::Expr>(ext_field_subtract(local.prod_u_r_omega, next.u_pow), ef_one),
+            ext_field_add::<AB::Expr>(
+                ext_field_subtract(local.prod_u_r_omega, next.u_pow),
+                base_to_ext::<AB::Expr>(AB::Expr::ONE),
+            ),
             omega_pow_inv,
         );
 

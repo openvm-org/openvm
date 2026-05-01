@@ -30,11 +30,11 @@ pub struct WhirFoldingCols<T> {
     pub twiddle: T,
     pub coset_size: T,
     pub z_final: T,
-    pub value: [T; 4],
-    pub left_value: [T; 4],
-    pub right_value: [T; 4],
-    pub y_final: [T; 4],
-    pub alpha: [T; 4],
+    pub value: [T; D_EF],
+    pub left_value: [T; D_EF],
+    pub right_value: [T; D_EF],
+    pub y_final: [T; D_EF],
+    pub alpha: [T; D_EF],
 }
 
 pub struct WhirFoldingAir {

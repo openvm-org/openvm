@@ -17,7 +17,10 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
-use crate::utils::{guarded_debug_assert, guarded_debug_assert_eq};
+use crate::{
+    field::baby_bear::BABY_BEAR_EXT_DEGREE,
+    utils::{guarded_debug_assert, guarded_debug_assert_eq},
+};
 
 pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
 // bits reserved so that if we do lazy range checking, we still have a valid result
@@ -286,13 +289,17 @@ impl BabyBearChip {
         s: usize,
     ) -> BabyBearWire {
         assert!(a.len() == b.len());
-        assert!(a.len() == 4);
+        assert!(a.len() == BABY_BEAR_EXT_DEGREE);
         let mut max_bits = 0;
-        let lb = s.saturating_sub(3);
-        let ub = 4.min(s + 1);
+        let lb = s.saturating_sub(BABY_BEAR_EXT_DEGREE - 1);
+        let ub = BABY_BEAR_EXT_DEGREE.min(s + 1);
         let range = lb..ub;
         let other_range = (s + 1 - ub)..(s + 1 - lb);
-        let len = if s < 3 { s + 1 } else { 7 - s };
+        let len = if s < BABY_BEAR_EXT_DEGREE - 1 {
+            s + 1
+        } else {
+            2 * BABY_BEAR_EXT_DEGREE - 1 - s
+        };
         for (i, (c, d)) in a[range.clone()]
             .iter_mut()
             .zip(b[other_range.clone()].iter_mut().rev())

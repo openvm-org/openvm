@@ -7,7 +7,7 @@ use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
 /// Extension field size.
-const D_EF: usize = 4;
+const D_EF: usize = 5;
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;

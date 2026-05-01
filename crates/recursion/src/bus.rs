@@ -239,7 +239,7 @@ pub struct WhirModuleMessage<T> {
     /// The `tidx` _after_ batching randomness `mu` is sampled.
     pub tidx: T,
     /// The reduced opening claim after batching.
-    pub claim: [T; 4],
+    pub claim: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(WhirModuleBus, WhirModuleMessage);
