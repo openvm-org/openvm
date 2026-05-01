@@ -1,0 +1,20 @@
+[package]
+name = "rvr-openvm-ext-rv32im"
+description = "rvr lifter for the OpenVM rv32im I/O extension (HINT_STOREW, HINT_BUFFER, REVEAL)"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+rvr-openvm-ir.workspace = true
+rvr-openvm-lift.workspace = true
+rvr-openvm-ext-ffi-common.workspace = true
+
+openvm-instructions.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm-stark-backend.workspace = true
+
+[features]
+default = []

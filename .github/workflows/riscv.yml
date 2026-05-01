@@ -47,6 +47,12 @@ jobs:
               features: "aot",
             }
           - {
+              name: "runtime (RVR)",
+              labels: "family=c8i-flex.8xlarge+c8i.8xlarge+c8a.8xlarge+m8i-flex.8xlarge+m8i.8xlarge+m8a.8xlarge+c7i.8xlarge+c7a.8xlarge+m7i.8xlarge+m7a.8xlarge/image=ubuntu24-full-x64/volume=80gb",
+              image: "ubuntu24-full-x64",
+              features: "rvr",
+            }
+          - {
               name: "prover (CUDA)",
               labels: "image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized",
               image: "ubuntu24-gpu-x64",
