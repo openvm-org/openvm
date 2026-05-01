@@ -58,7 +58,7 @@ use crate::metrics::emit_opcode_counts;
 #[cfg(feature = "perf-metrics")]
 use crate::metrics::end_segment_metrics;
 #[cfg(feature = "rvr")]
-use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
+use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::LinearMemory};
 use crate::{
     arch::deferral::DeferralState,
     execute_spanned,
@@ -218,7 +218,7 @@ pub(crate) fn write_rvr_memory_to_guest_memory(
     }
 
     if !public_values.is_empty() {
-        let pv_capacity = guest_memory.memory.config[PUBLIC_VALUES_AS as usize].num_cells;
+        let pv_capacity = guest_memory.memory.mem[PUBLIC_VALUES_AS as usize].size();
         let pv_len = std::cmp::min(pv_capacity, public_values.len());
         unsafe {
             guest_memory
