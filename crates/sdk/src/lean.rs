@@ -31,6 +31,9 @@ use openvm_recursion_circuit::{
         expr_eval::{
             constraints_folding::ConstraintsFoldingCols,
             interactions_folding::InteractionsFoldingCols,
+            symbolic_expression::{
+                CachedSymbolicExpressionColumns, SingleMainSymbolicExpressionColumns,
+            },
         },
         expression_claim::ExpressionClaimCols,
         fractions_folder::FractionsFolderCols,
@@ -41,7 +44,7 @@ use openvm_recursion_circuit::{
         xi_sampler::GkrXiSamplerCols,
     },
     primitives::{exp_bits_len::ExpBitsLenCols, pow::PowerCheckerCols, range::RangeCheckerCols},
-    proof_shape::pvs::PublicValuesCols,
+    proof_shape::{proof_shape::ProofShapeCols, pvs::PublicValuesCols},
     stacking::{
         claims::StackingClaimsCols, eq_base::EqBaseCols, eq_bits::EqBitsCols,
         opening::OpeningClaimsCols, sumcheck::SumcheckRoundsCols, univariate::UnivariateRoundCols,
@@ -52,7 +55,7 @@ use openvm_recursion_circuit::{
         final_poly_mle_eval::FinalyPolyMleEvalCols, final_poly_query_eval::FinalPolyQueryEvalCols,
         folding::WhirFoldingCols, initial_opened_values::InitialOpenedValuesCols,
         non_initial_opened_values::NonInitialOpenedValuesCols, query::WhirQueryCols,
-        sumcheck::SumcheckCols,
+        sumcheck::SumcheckCols, whir_round::WhirRoundCols,
     },
 };
 use openvm_stark_backend::{
@@ -317,17 +320,94 @@ fn flat_column_names(air_name: &str) -> Option<Vec<String>> {
         }
         n if n.starts_with("PowerCheckerAir") => flat_columns_of::<PowerCheckerCols<u8>>(),
         n if n.starts_with("ExpBitsLenAir") => flat_columns_of::<ExpBitsLenCols<u8>>(),
-        // V1 unsupported (multi-partition / encoder-parameterized /
-        // sub-air-heavy). Skipped at the driver level.
-        n if n.starts_with("SymbolicExpressionAir")
-            || n.starts_with("ProofShapeAir")
-            || n.starts_with("WhirRoundAir")
-            || n.starts_with("Poseidon2Air") =>
-        {
-            return None;
-        }
+        // Hardcoded layouts for AIRs that don't fit the simple
+        // `flat_columns_of::<Cols<u8>>` pattern (sub-air-heavy or
+        // encoder-parameterized). Names sourced from the previous
+        // generator's deprecated output (ws-fv/Recursion/Deprecated/Airs/).
+        n if n.starts_with("Poseidon2Air") => poseidon2_air_columns(),
+        n if n.starts_with("ProofShapeAir") => proof_shape_air_columns(),
+        n if n.starts_with("WhirRoundAir") => whir_round_air_columns(),
+        // SymbolicExpressionAir: cached partition + MAX_NUM_PROOFS-fold
+        // repeated SingleMain partition. Schema.lean emits a flat
+        // singleMain layout (concatenated cached + per-proof
+        // SingleMain blocks); the constraint renderer uses
+        // partition_offsets to map (part_index, index) to flat name.
+        n if n.starts_with("SymbolicExpressionAir") => symbolic_expression_air_columns(),
         _ => return None,
     })
+}
+
+fn symbolic_expression_air_columns() -> Vec<String> {
+    let cached = flat_columns_of::<CachedSymbolicExpressionColumns<u8>>();
+    let single_main = flat_columns_of::<SingleMainSymbolicExpressionColumns<u8>>();
+    let mut cols = cached;
+    for proof in 0..MAX_NUM_PROOFS {
+        for field in &single_main {
+            cols.push(format!("{field}_proof_{proof}"));
+        }
+    }
+    cols
+}
+
+fn poseidon2_air_columns() -> Vec<String> {
+    let mut cols: Vec<String> = Vec::with_capacity(301);
+    cols.push("export_col".to_string());
+    for i in 0..16 {
+        cols.push(format!("inputs_{i}"));
+    }
+    for round in 0..4 {
+        for lane in 0..16 {
+            cols.push(format!(
+                "beginning_full_rounds_{round}_sbox_{lane}_registers_0"
+            ));
+        }
+        for lane in 0..16 {
+            cols.push(format!("beginning_full_rounds_{round}_post_{lane}"));
+        }
+    }
+    for round in 0..13 {
+        cols.push(format!("partial_rounds_{round}_sbox_registers_0"));
+        cols.push(format!("partial_rounds_{round}_post"));
+    }
+    for round in 0..4 {
+        for lane in 0..16 {
+            cols.push(format!(
+                "ending_full_rounds_{round}_sbox_{lane}_registers_0"
+            ));
+        }
+        for lane in 0..16 {
+            cols.push(format!("ending_full_rounds_{round}_post_{lane}"));
+        }
+    }
+    cols.push("permute_mult".to_string());
+    cols.push("compress_mult".to_string());
+    debug_assert_eq!(cols.len(), 301);
+    cols
+}
+
+fn proof_shape_air_columns() -> Vec<String> {
+    // 28 fixed columns from ProofShapeCols<u8, 4> + idx_encoder.width()=11
+    // (`idx_flags_*`) + max_cached=1 × DIGEST_SIZE=8 (`cached_commits_*_*`) = 47.
+    // Encoder width and max_cached are runtime-determined; values here match
+    // the standard Sdk config.
+    let mut cols = flat_columns_of::<ProofShapeCols<u8, 4>>();
+    for i in 0..11 {
+        cols.push(format!("idx_flags_{i}"));
+    }
+    for cached_idx in 0..1 {
+        for elem_idx in 0..8 {
+            cols.push(format!("cached_commits_{cached_idx}_{elem_idx}"));
+        }
+    }
+    debug_assert_eq!(cols.len(), 47);
+    cols
+}
+
+fn whir_round_air_columns() -> Vec<String> {
+    // 45 base columns + ENC_WIDTH=2 (`whir_round_enc_*`) = 47. The
+    // standard Sdk uses the enc2 variant; if a future config picks
+    // enc1 or enc3, swap the const generic here.
+    flat_columns_of::<WhirRoundCols<u8, 2>>()
 }
 
 /// Generates Lean files for the verifier recursion circuit AIRs under a
@@ -383,10 +463,25 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
             }
         };
 
-        if !air_vk.params.width.cached_mains.is_empty() {
+        // For non-partitioned AIRs (no cached partition), partition_offsets
+        // is just `[0]`. For SymbolicExpressionAir we build a partitioned
+        // layout (cached at part 0, common-of-MAX_NUM_PROOFS-singles at part 1).
+        let cached_widths = &air_vk.params.width.cached_mains;
+        let partition_offsets: Vec<usize> = if cached_widths.is_empty() {
+            vec![0]
+        } else if air_name.starts_with("SymbolicExpressionAir") {
+            let mut offsets = Vec::with_capacity(cached_widths.len() + 1);
+            let mut acc = 0usize;
+            offsets.push(acc);
+            for w in cached_widths {
+                acc += w;
+                offsets.push(acc);
+            }
+            offsets
+        } else {
             skipped.push((air_name.clone(), "cached partition (v1 unsupported)"));
             continue;
-        }
+        };
 
         let column_names = match flat_column_names(&air_name) {
             Some(n) => n,
@@ -395,10 +490,12 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
                 continue;
             }
         };
-        if column_names.len() != air_vk.params.width.common_main {
+        let expected_width: usize =
+            cached_widths.iter().sum::<usize>() + air_vk.params.width.common_main;
+        if column_names.len() != expected_width {
             skipped.push((
                 air_name.clone(),
-                "column count mismatch with common_main width",
+                "column count mismatch with main_width",
             ));
             continue;
         }
@@ -416,6 +513,7 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
             air_namespace: air_namespace.clone(),
             schema_import: schema_import.clone(),
             constraints_import: constraints_import.clone(),
+            partition_offsets: partition_offsets.clone(),
         };
 
         let rendered: RenderedAir = match render_air(
@@ -465,17 +563,6 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
                 .wrap_err_with(|| format!("write {}", facts_path.display()))?;
         }
 
-        // Module-level <Group>/<AirStem>.lean: imports all five files.
-        let module_lean_path = recursion_dir.join(group).join(format!("{stem}.lean"));
-        write_lean_file(module_lean_path, |w| {
-            writeln!(w, "import {air_namespace}.Generated.Schema")?;
-            writeln!(w, "import {air_namespace}.Generated.Constraints")?;
-            writeln!(w, "import {air_namespace}.Generated.Interactions")?;
-            writeln!(w, "import {air_namespace}.Labels")?;
-            writeln!(w, "import {air_namespace}.Facts")?;
-            Ok(())
-        })?;
-
         eprintln!(
             "[lean]   [{i:02}] {air_name} → {}/{}/{{Generated/{{Schema,Constraints,Interactions}},Labels,Facts}}.lean",
             group, stem
@@ -487,6 +574,7 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
         });
     }
 
+    write_per_air_module_files(&recursion_dir, &emitted)?;
     write_root_module(output_dir.join(format!("{ROOT_MODULE}.lean")), &emitted)?;
 
     eprintln!(
@@ -504,24 +592,37 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
 }
 
 struct EmittedModule {
-    #[allow(dead_code)]
     group: &'static str,
-    #[allow(dead_code)]
     stem: String,
     air_namespace: String,
 }
 
-fn write_root_module(path: PathBuf, modules: &[EmittedModule]) -> Result<()> {
-    let mut imports = BTreeSet::new();
-    imports.insert(BUS_DEFS_IMPORT.to_string());
+/// Per-AIR module file `<Group>/<AirStem>.lean`: imports its own five
+/// sub-files (Schema, Constraints, Interactions, Labels, Facts).
+fn write_per_air_module_files(recursion_dir: &Path, modules: &[EmittedModule]) -> Result<()> {
     for m in modules {
-        imports.insert(format!("{}.Generated.Schema", m.air_namespace));
-        imports.insert(format!("{}.Generated.Constraints", m.air_namespace));
-        imports.insert(format!("{}.Generated.Interactions", m.air_namespace));
+        let path = recursion_dir.join(m.group).join(format!("{}.lean", m.stem));
+        let air_ns = &m.air_namespace;
+        write_lean_file(path, |w| {
+            writeln!(w, "import {air_ns}.Generated.Schema")?;
+            writeln!(w, "import {air_ns}.Generated.Constraints")?;
+            writeln!(w, "import {air_ns}.Generated.Interactions")?;
+            writeln!(w, "import {air_ns}.Labels")?;
+            writeln!(w, "import {air_ns}.Facts")?;
+            Ok(())
+        })?;
     }
+    Ok(())
+}
+
+/// Root `Recursion.lean`: one import line per AIR module (plus
+/// `Recursion.BusDefs`). The per-AIR module files handle their own
+/// nested imports.
+fn write_root_module(path: PathBuf, modules: &[EmittedModule]) -> Result<()> {
     write_lean_file(path, |w| {
-        for import in imports {
-            writeln!(w, "import {import}").wrap_err("write root import")?;
+        writeln!(w, "import {BUS_DEFS_IMPORT}")?;
+        for m in modules {
+            writeln!(w, "import {}", m.air_namespace)?;
         }
         Ok(())
     })

@@ -5967,7 +5967,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6014,7 +6014,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "cfg-if",
  "derive-new 0.7.0",
@@ -6039,7 +6039,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6066,7 +6066,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "cc",
  "glob",
@@ -6075,7 +6075,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6866,7 +6866,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "cfg-if",
  "derivative",
@@ -6901,7 +6901,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#2cdac3f89dcd73898d7bcae77e2aed4e91ed497f"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Frecursion-lean-generation#f0a0d0605a29f5507c4e038ca18cc8a356e761a7"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
