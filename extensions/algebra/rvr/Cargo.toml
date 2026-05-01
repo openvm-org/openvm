@@ -11,8 +11,8 @@ repository.workspace = true
 rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
-openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true
+openvm-algebra-utils.workspace = true
 openvm-instructions.workspace = true
 openvm-stark-backend.workspace = true
 

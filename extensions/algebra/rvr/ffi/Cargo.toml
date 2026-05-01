@@ -13,7 +13,7 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 rvr-openvm-ext-ffi-common.workspace = true
 
-blstrs.workspace = true
+blstrs = { workspace = true, features = ["__private_bench"] }
 halo2curves-axiom.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true

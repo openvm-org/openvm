@@ -5660,6 +5660,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "openvm-algebra-transpiler",
+ "openvm-algebra-utils",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -5675,6 +5676,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
+ "rvr-openvm-ext-algebra",
  "rvr-openvm-lift",
  "serde",
  "serde_with",
@@ -5745,6 +5747,15 @@ dependencies = [
  "openvm-transpiler",
  "rrs-lib",
  "strum 0.26.3",
+]
+
+[[package]]
+name = "openvm-algebra-utils"
+version = "2.0.0-beta.2"
+dependencies = [
+ "num-bigint 0.4.6",
+ "num-traits",
+ "rand 0.9.2",
 ]
 
 [[package]]
@@ -9012,8 +9023,8 @@ name = "rvr-openvm-ext-algebra"
 version = "2.0.0-beta.2"
 dependencies = [
  "num-bigint 0.4.6",
- "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
+ "openvm-algebra-utils",
  "openvm-instructions",
  "openvm-stark-backend",
  "rand 0.9.2",

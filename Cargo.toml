@@ -43,6 +43,7 @@ members = [
     "extensions/algebra/moduli-macros",
     "extensions/algebra/complex-macros",
     "extensions/algebra/tests",
+    "extensions/algebra/utils",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
@@ -191,6 +192,7 @@ openvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-fe
 openvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "extensions/algebra/moduli-macros", default-features = false }
 openvm-algebra-complex-macros = { path = "extensions/algebra/complex-macros", default-features = false }
+openvm-algebra-utils = { path = "extensions/algebra/utils", default-features = false }
 openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
 openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
