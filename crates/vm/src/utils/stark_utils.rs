@@ -102,6 +102,14 @@ where
     final_memory
 }
 
+// Periphery AIRs (memory/hash system chips not tied to executors)
+fn is_periphery_air(air_name: &str) -> bool {
+    air_name.contains("MemoryMerkleAir")
+        || air_name.contains("Poseidon2PeripheryAir")
+        || air_name.contains("PersistentBoundaryAir")
+        || air_name.contains("NativeAdapterAir")
+}
+
 // Compares the output of the interpreter and the AOT instance for pure and metered execution
 #[cfg(feature = "aot")]
 pub fn check_aot_equivalence<E, VB>(
@@ -300,11 +308,8 @@ where
                 continue;
             }
             let air_name = air_names.get(chip).copied().unwrap_or("unknown");
-            if air_name.contains("MemoryMerkleAir")
-                || air_name.contains("Poseidon2PeripheryAir")
-                || air_name.contains("PersistentBoundaryAir")
-                || air_name.contains("NativeAdapterAir")
-            {
+            // For periphery airs, overestimates are expected
+            if is_periphery_air(air_name) {
                 continue;
             }
             let interp_sum: u64 = interp_segments
@@ -488,12 +493,8 @@ fn validate_metered_estimates<E, VB>(
             seg_idx
         );
 
-        // For some airs, the overestimates are expected
-        if air_name.contains("MemoryMerkleAir")
-            || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("PersistentBoundaryAir")
-            || air_name.contains("NativeAdapterAir")
-        {
+        // For periphery airs, overestimates are expected
+        if is_periphery_air(air_name) {
             continue;
         }
 

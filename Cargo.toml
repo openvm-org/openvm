@@ -210,8 +210,6 @@ rvr-openvm = { path = "crates/rvr/rvr-openvm" }
 rvr-openvm-ir = { path = "crates/rvr/rvr-openvm-ir" }
 rvr-openvm-lift = { path = "crates/rvr/rvr-openvm-lift" }
 rvr-openvm-ext-ffi-common = { path = "crates/rvr/rvr-openvm-ffi-common" }
-rvr-openvm-test-utils = { path = "crates/rvr/rvr-openvm-test-utils" }
-rvr-openvm-tests = { path = "crates/rvr/rvr-openvm-tests" }
 rvr-openvm-ext-keccak = { path = "extensions/keccak256/rvr" }
 rvr-openvm-ext-keccak-ffi = { path = "extensions/keccak256/rvr/ffi" }
 rvr-openvm-ext-sha2 = { path = "extensions/sha2/rvr" }

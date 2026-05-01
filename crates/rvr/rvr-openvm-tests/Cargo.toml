@@ -1,6 +1,6 @@
 [package]
 name = "rvr-openvm-tests"
-description = "Cross-cutting integration tests for rvr-openvm (not tied to a single extension)"
+description = "End-to-end tests for rvr-openvm"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
