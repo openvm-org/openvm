@@ -95,7 +95,7 @@ mod tests {
             #[allow(unused_variables)]
             let state = interpreter.execute(stdin.clone(), None)?;
 
-            #[cfg(feature = "aot")]
+            #[cfg(any(feature = "aot", feature = "rvr"))]
             {
                 use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
                 let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;

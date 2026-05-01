@@ -32,6 +32,7 @@ eyre = { workspace = true }
 [features]
 default = ["tiny_keccak"]
 aot = ["openvm-sdk/aot"]
+rvr = ["openvm-sdk/rvr", "openvm-keccak256-circuit/rvr"]
 # Internal feature for testing only.
 cuda = ["openvm-keccak256-circuit/cuda"]
 # Enable tiny_keccak::Hasher trait implementation
