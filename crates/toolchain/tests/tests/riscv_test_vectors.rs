@@ -41,7 +41,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                 #[allow(unused_variables)]
                 let state = interpreter.execute(vec![], None)?;
 
-                #[cfg(feature = "aot")]
+                #[cfg(any(feature = "aot", feature = "rvr"))]
                 {
                     use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
                     let naive_interpreter = executor.interpreter_instance(&exe)?;
