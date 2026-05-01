@@ -1,5 +1,8 @@
 //! rvr lifter for the rv32im I/O sub-extension (HINT_STOREW, HINT_BUFFER,
 //! REVEAL).
+//!
+//! TODO: check if other RV32IM instructions/opcodes can be separated into
+//! extensions.
 
 use std::path::Path;
 

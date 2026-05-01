@@ -330,6 +330,7 @@ mod tests {
     // AOT and RVR skip this test since it is not a trusted program: both
     // compile to native code without OpenVM's runtime memory bounds checks,
     // so an out-of-bounds load doesn't surface as a Rust panic.
+    // TODO: add an untrusted/protected mode to rvr that does bounds checking.
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     fn test_load_x0() {
         let config = test_rv32im_config();

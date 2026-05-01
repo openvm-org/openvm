@@ -6,9 +6,6 @@
 //! - Phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd, Rv32HintInput, Rv32PrintStr,
 //!   Rv32HintRandom
 //! - STOREW e=2 dispatch (normal memory store)
-//!
-//! HINT_STOREW, HINT_BUFFER, and REVEAL (STOREW with e=3) are handled by the
-//! `Rv32IoExtension`.
 
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
@@ -60,9 +57,6 @@ pub fn lift_instruction<F: PrimeField32>(
         }
         return Some(body(pc, Instr::Nop));
     }
-
-    // HINT_STOREW / HINT_BUFFER are handled by `Rv32IoExtension` via the
-    // extension registry below.
 
     // Decode the e field to determine R-type vs I-type
     let e = field_to_u32(insn.e);

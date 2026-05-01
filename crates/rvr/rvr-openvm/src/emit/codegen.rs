@@ -66,8 +66,6 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
 
         // ── OpenVM system/IO instructions ────────────────────────────
-        // The rv32im I/O instructions (HINT_STOREW, HINT_BUFFER, REVEAL) are
-        // handled in the `Rv32IoExtension` and reach this match via `Instr::Ext`.
         Instr::Nop => {}
 
         Instr::HintInput => {
