@@ -10,18 +10,15 @@ pub struct EmitContext {
     indent: usize,
     /// Counter for unique variable names.
     var_counter: u32,
-    /// Chip index for hint_store operations (u32::MAX = no chip).
-    pub hint_store_chip_idx: u32,
 }
 
 impl EmitContext {
-    pub fn new(hot_regs: HashSet<u8>, hint_store_chip_idx: u32) -> Self {
+    pub fn new(hot_regs: HashSet<u8>) -> Self {
         Self {
             buf: String::with_capacity(1024),
             hot_regs,
             indent: 2,
             var_counter: 0,
-            hint_store_chip_idx,
         }
     }
 
