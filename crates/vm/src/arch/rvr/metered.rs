@@ -152,8 +152,6 @@ pub struct MeteredConfig {
     pub chunk_bits: u32,
     /// Number of address spaces configured.
     pub num_addr_spaces: usize,
-    /// Chip index for HINT_BUFFER/HINT_STOREW (for IO corrections).
-    pub hint_store_chip_idx: Option<u32>,
 }
 
 impl MeteredConfig {
@@ -161,7 +159,6 @@ impl MeteredConfig {
     pub fn chip_mapping(&self) -> ChipMapping {
         ChipMapping {
             pc_to_chip: self.pc_to_chip.clone(),
-            hint_store_chip_idx: self.hint_store_chip_idx,
             chip_widths: None,
         }
     }
@@ -177,7 +174,6 @@ pub fn build_metered_config<F, E>(
     interactions: &[usize],
     constant_trace_heights: &[Option<usize>],
     system_config: &SystemConfig,
-    hint_buffer_opcode: Option<VmOpcode>,
 ) -> MeteredConfig
 where
     F: PrimeField32,
@@ -185,13 +181,6 @@ where
     let program = &exe.program;
     let pc_base = program.pc_base;
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-
-    let hint_store_chip_idx = hint_buffer_opcode.and_then(|opcode| {
-        inventory
-            .instruction_lookup
-            .get(&opcode)
-            .map(|&executor_idx| executor_idx_to_air_idx[executor_idx as usize] as u32)
-    });
 
     let pc_to_chip: Vec<u32> = program
         .instructions_and_debug_infos
@@ -250,7 +239,6 @@ where
         addr_space_height,
         chunk_bits,
         num_addr_spaces,
-        hint_store_chip_idx,
     }
 }
 
@@ -747,7 +735,6 @@ where
             &ctx.segmentation_ctx.interactions,
             &constant_trace_heights,
             &self.system_config,
-            None,
         );
         trace_config.segmentation_config = ctx.segmentation_ctx.config.clone();
         trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns;
@@ -823,7 +810,6 @@ where
             &ctx.segmentation_ctx.interactions,
             &constant_trace_heights,
             &self.system_config,
-            None,
         );
         trace_config.segmentation_config = ctx.segmentation_ctx.config.clone();
         trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns;

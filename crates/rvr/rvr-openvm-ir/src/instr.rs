@@ -116,18 +116,6 @@ pub enum Instr {
     HintRandom {
         num_words_reg: Reg,
     },
-    HintStoreW {
-        ptr_reg: Reg,
-    },
-    HintBuffer {
-        ptr_reg: Reg,
-        num_words_reg: Reg,
-    },
-    Reveal {
-        src_reg: Reg,
-        ptr_reg: Reg,
-        offset: u32,
-    },
     /// Extension instruction (dispatched via trait object).
     Ext(Box<dyn ExtInstr>),
 }
@@ -191,9 +179,6 @@ impl Instr {
             Instr::HintInput => "hint_input",
             Instr::PrintStr { .. } => "print_str",
             Instr::HintRandom { .. } => "hint_random",
-            Instr::HintStoreW { .. } => "hint_storew",
-            Instr::HintBuffer { .. } => "hint_buffer",
-            Instr::Reveal { .. } => "reveal",
             Instr::Ext(e) => e.opname(),
         }
     }

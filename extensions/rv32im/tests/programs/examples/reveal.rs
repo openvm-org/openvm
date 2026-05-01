@@ -13,6 +13,8 @@ pub fn main() {
     reveal_bytes32(bytes);
     let x: u32 = core::hint::black_box(123);
     let y: u32 = core::hint::black_box(456);
+    // TODO: these reveal indices write past the default num_public_values size limit; check that
+    // going past the limit is properly handled
     reveal_u32(x, 8);
     reveal_u32(y, 10);
 }
