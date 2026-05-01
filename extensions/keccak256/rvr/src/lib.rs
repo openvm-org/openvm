@@ -11,7 +11,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
 
 /// keccak-f[1600]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
@@ -90,32 +90,40 @@ pub struct KeccakExtension {
 
 impl KeccakExtension {
     /// Pure-mode constructor; chip indices are unused (`trace_chip` is no-op).
-    pub fn new_pure(asm_staticlib_path: PathBuf) -> Self {
+    pub fn new_pure() -> Self {
         Self {
             xorin_chip_idx: u32::MAX,
             keccakf_op_chip_idx: u32::MAX,
             keccakf_perm_chip_idx: u32::MAX,
-            asm_staticlib_path,
+            asm_staticlib_path: default_staticlib_path(),
         }
     }
 
     /// Resolves chip indices from the VM config.
-    pub fn new(ctx: &RvrExtensionCtx, asm_staticlib_path: PathBuf) -> Result<Self, ExtensionError> {
+    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
         let xorin_chip_idx = ctx.require_opcode_air_idx(XorinOpcode::XORIN.global_opcode())?;
         let keccakf_op_chip_idx =
             ctx.require_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode())?;
         // KeccakfPermAir is inserted right before KeccakfOpAir in
         // Keccak256Rv32::extend_circuit, and the chip indices are set in
         // reverse order.
-        let keccakf_perm_chip_idx = keccakf_op_chip_idx + 1;
+        let keccakf_perm_chip_idx = if keccakf_op_chip_idx == NO_CHIP {
+            NO_CHIP
+        } else {
+            keccakf_op_chip_idx + 1
+        };
 
         Ok(Self {
             xorin_chip_idx,
             keccakf_op_chip_idx,
             keccakf_perm_chip_idx,
-            asm_staticlib_path,
+            asm_staticlib_path: default_staticlib_path(),
         })
     }
+}
+
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_KECCAK_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
