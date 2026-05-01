@@ -35,6 +35,11 @@ jobs:
               features: "aot",
             }
           - {
+              runner: "64cpu-linux-x64",
+              image: "ubuntu24-full-x64",
+              features: "rvr",
+            }
+          - {
               runner: "test-gpu-nvidia",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
