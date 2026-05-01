@@ -219,7 +219,7 @@ fn pipeline_cell_count_profiling() {
     use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
     use openvm_stark_sdk::{
         config::{
-            log_up_params::log_up_security_params_baby_bear_100_bits,
+            log_up_params::log_up_security_params_baby_bear_128_bits,
             root_params_with_128_bits_security,
         },
         openvm_stark_backend::test_utils::MixtureFixture,

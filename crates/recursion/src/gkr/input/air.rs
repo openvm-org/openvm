@@ -26,7 +26,7 @@ use crate::{
     },
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::proof_idx::{ProofIdxIoCols, ProofIdxSubAir},
-    utils::{assert_zeros, ext_field_subtract, pow_tidx_count},
+    utils::{assert_one_ext, assert_zeros, ext_field_subtract, pow_tidx_count},
 };
 
 #[repr(C)]
@@ -161,11 +161,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.alpha_logup,
         );
         // q0_claim must be ONE when no interactions to prevent proof malleability
-        let ef_one = [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO];
-        assert_array_eq(
+        assert_one_ext(
             &mut builder.when(not::<AB::Expr>(has_interactions.clone())),
             local.q0_claim,
-            ef_one,
         );
 
         ///////////////////////////////////////////////////////////////////////
