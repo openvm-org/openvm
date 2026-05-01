@@ -327,7 +327,10 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[cfg(not(feature = "aot"))] // AOT skips this test since it is not a trusted program
+    // AOT and RVR skip this test since it is not a trusted program: both
+    // compile to native code without OpenVM's runtime memory bounds checks,
+    // so an out-of-bounds load doesn't surface as a Rust panic.
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     fn test_load_x0() {
         let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
