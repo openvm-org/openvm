@@ -27,22 +27,30 @@ jobs:
     strategy:
       matrix:
         extension:
-          - { name: "rv32im", path: "rv32im", aot: false }
-          - { name: "keccak256", path: "keccak256", aot: false }
-          - { name: "sha2", path: "sha2", aot: false }
-          - { name: "bigint", path: "bigint", aot: false }
-          - { name: "algebra", path: "algebra", aot: false }
-          - { name: "ecc", path: "ecc", aot: false }
-          - { name: "pairing", path: "pairing", aot: false }
-          - { name: "deferral", path: "deferral", aot: false }
-          - { name: "rv32im", path: "rv32im", aot: true }
-          - { name: "keccak256", path: "keccak256", aot: true }
-          - { name: "sha2", path: "sha2", aot: true }
-          - { name: "bigint", path: "bigint", aot: true }
-          - { name: "algebra", path: "algebra", aot: true }
-          - { name: "ecc", path: "ecc", aot: true }
-          - { name: "pairing", path: "pairing", aot: true }
-          - { name: "deferral", path: "deferral", aot: true }
+          - { name: "rv32im", path: "rv32im", aot: false, rvr: false }
+          - { name: "keccak256", path: "keccak256", aot: false, rvr: false }
+          - { name: "sha2", path: "sha2", aot: false, rvr: false }
+          - { name: "bigint", path: "bigint", aot: false, rvr: false }
+          - { name: "algebra", path: "algebra", aot: false, rvr: false }
+          - { name: "ecc", path: "ecc", aot: false, rvr: false }
+          - { name: "pairing", path: "pairing", aot: false, rvr: false }
+          - { name: "deferral", path: "deferral", aot: false, rvr: false }
+          - { name: "rv32im", path: "rv32im", aot: true, rvr: false }
+          - { name: "keccak256", path: "keccak256", aot: true, rvr: false }
+          - { name: "sha2", path: "sha2", aot: true, rvr: false }
+          - { name: "bigint", path: "bigint", aot: true, rvr: false }
+          - { name: "algebra", path: "algebra", aot: true, rvr: false }
+          - { name: "ecc", path: "ecc", aot: true, rvr: false }
+          - { name: "pairing", path: "pairing", aot: true, rvr: false }
+          - { name: "deferral", path: "deferral", aot: true, rvr: false }
+          - { name: "rv32im", path: "rv32im", aot: false, rvr: true }
+          - { name: "keccak256", path: "keccak256", aot: false, rvr: true }
+          - { name: "sha2", path: "sha2", aot: false, rvr: true }
+          - { name: "bigint", path: "bigint", aot: false, rvr: true }
+          - { name: "algebra", path: "algebra", aot: false, rvr: true }
+          - { name: "ecc", path: "ecc", aot: false, rvr: true }
+          - { name: "pairing", path: "pairing", aot: false, rvr: true }
+          - { name: "deferral", path: "deferral", aot: false, rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
@@ -78,7 +86,15 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ${{ format('{0}{1}', matrix.extension.name, matrix.extension.aot && '-aot' || '') }} circuit crate tests
+      - name: Install clang-22 and lld (required for rvr)
+        if: matrix.extension.rvr == true
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
+
+      - name: Run ${{ format('{0}{1}{2}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '') }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
         run: |
           TEST_THREADS="--test-threads=32"
@@ -87,6 +103,8 @@ jobs:
           fi
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
+          elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
+            cargo nextest run --cargo-profile=fast --features rvr $TEST_THREADS --no-tests=pass --success-output=immediate
           else
             cargo nextest run --cargo-profile=fast $TEST_THREADS --no-tests=pass --success-output=immediate
           fi
@@ -102,13 +120,15 @@ jobs:
           fi
           cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
 
-      - name: Run ${{ format('{0}{1}', matrix.extension.name, matrix.extension.aot && '-aot' || '') }} integration tests
-        if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
+      - name: Run ${{ format('{0}{1}{2}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '') }} integration tests
+        if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != '' && (matrix.extension.rvr != true || matrix.extension.name == 'rv32im')
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
+          elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
+            cargo nextest run --cargo-profile=fast --features rvr --profile=heavy --no-tests=pass --success-output=immediate
           else
             cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
           fi
