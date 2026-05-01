@@ -69,8 +69,6 @@ pub struct CProject {
     pub pc_to_chip: Option<Vec<u32>>,
     /// Program PC base (used to compute pc_to_chip index).
     pub pc_base: u32,
-    /// Chip index for hint_store operations (u32::MAX = no chip).
-    pub hint_store_chip_idx: u32,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
     pub chip_widths: Option<Vec<u64>>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
@@ -92,7 +90,6 @@ impl CProject {
             enable_lto: true,
             pc_to_chip: None,
             pc_base: 0,
-            hint_store_chip_idx: u32::MAX,
             chip_widths: None,
             native_debug_info: false,
         }
@@ -448,7 +445,7 @@ impl CProject {
         .unwrap();
 
         // Body instructions (each in its own scope to avoid variable collisions).
-        let mut ctx = EmitContext::new(self.hot_regs.clone(), self.hint_store_chip_idx);
+        let mut ctx = EmitContext::new(self.hot_regs.clone());
 
         // In metered mode, instret is tracked via check_counter, not per-block.
         if self.tracer_mode != TracerMode::Metered {
