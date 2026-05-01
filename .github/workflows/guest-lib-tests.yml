@@ -37,6 +37,12 @@ jobs:
           - { name: "pairing", path: "pairing", rvr: false }
           - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
           - { name: "keccak256", path: "keccak256", rvr: true }
+          # TODO: add `{ name: "ff_derive", path: "ff_derive", rvr: true }` once
+          # the algebra k256/ECC TU coupling is resolved. Today algebra's
+          # `rvr_ext_k256.c` includes `rvr_ext_ecc.h` (it folds ECC k256 ops
+          # into the same TU so libsecp256k1 stays in one TU); registering
+          # ModularRvrExtension without EccRvrExtension makes `make` fail with
+          # `'rvr_ext_ecc.h' file not found`. See ModularRvrExtension::c_sources.
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails

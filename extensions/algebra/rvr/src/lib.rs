@@ -575,6 +575,16 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
     }
 
     fn c_sources(&self) -> Vec<(&str, &str)> {
+        // TODO: `rvr_ext_k256.c` folds ECC k256 ops into algebra's TU so
+        // libsecp256k1 stays in a single translation unit (see the comment
+        // at the top of `rvr_ext_k256_ec.h`). It `#include`s `rvr_ext_ecc.h`,
+        // which is owned by the ECC rvr extension. So registering
+        // `ModularRvrExtension` without `EccRvrExtension` builds/links with a
+        // missing-header error. Options: (1) gate the ECC fold-in behind a
+        // `-DRVR_EXT_K256_INCLUDE_ECC` cflag set by ECC's `extra_cflags()`;
+        // (2) emit `rvr_ext_k256.c` only when at least one configured
+        // modulus matches a known k256 field; (3) move the file into ECC
+        // and lose the modular k256 fast path when ECC isn't present.
         vec![("rvr_ext_k256.c", include_str!("../c/rvr_ext_k256.c"))]
     }
 
