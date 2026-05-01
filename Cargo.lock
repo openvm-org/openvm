@@ -9185,23 +9185,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rvr-openvm-tests"
-version = "2.0.0-beta.2"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-platform",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-transpiler",
- "rvr-openvm",
- "rvr-openvm-ir",
- "rvr-openvm-lift",
- "tempfile",
-]
-
-[[package]]
 name = "rvr-state"
 version = "2.0.0-beta.2"
 dependencies = [
