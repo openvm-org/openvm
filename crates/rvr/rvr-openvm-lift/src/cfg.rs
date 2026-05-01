@@ -425,9 +425,6 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u32>; NUM_REGS]) {
         | Instr::HintInput
         | Instr::PrintStr { .. }
         | Instr::HintRandom { .. }
-        | Instr::HintStoreW { .. }
-        | Instr::HintBuffer { .. }
-        | Instr::Reveal { .. }
         | Instr::Ext(_) => {}
     }
 }
@@ -725,9 +722,6 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
         | Instr::HintInput
         | Instr::PrintStr { .. }
         | Instr::HintRandom { .. }
-        | Instr::HintStoreW { .. }
-        | Instr::HintBuffer { .. }
-        | Instr::Reveal { .. }
         | Instr::Ext(_) => {}
     }
 }

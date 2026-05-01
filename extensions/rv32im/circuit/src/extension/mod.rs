@@ -29,7 +29,9 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_ext_rv32im::Rv32IoExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -81,7 +83,12 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 impl<F: PrimeField32> VmRvrExtension<F> for Rv32I {}
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Rv32Io {}
+impl<F: PrimeField32> VmRvrExtension<F> for Rv32Io {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+        registry
+            .register(Rv32IoExtension::new(ctx).expect("Rv32IoExtension chip resolution failed"));
+    }
+}
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Rv32M {}

@@ -5,21 +5,23 @@
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
 //! - Phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd, Rv32HintInput, Rv32PrintStr,
 //!   Rv32HintRandom
-//! - IO instructions: HINT_STOREW, HINT_BUFFER
-//! - STOREW address space dispatch: memory (e=2), reveal (e=3)
+//! - STOREW e=2 dispatch (normal memory store)
 
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
-    Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
+    MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
+    Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::{
     AluOp, BranchCond, Instr, InstrAt, LiftedInstr, MemWidth, MulDivOp, Terminator,
 };
+
+use crate::helpers::decode_imm_cg;
 
 /// Lift a single OpenVM instruction to the new IR types.
 ///
@@ -54,15 +56,6 @@ pub fn lift_instruction<F: PrimeField32>(
             return Some(lifted);
         }
         return Some(body(pc, Instr::Nop));
-    }
-
-    // HINT_STOREW: _,b,_,1,2 — pop 4 bytes from hint stream to mem[[b]_1]
-    if opcode == Rv32HintStoreOpcode::HINT_STOREW.global_opcode_usize() {
-        return Some(lift_hint_storew(insn, pc));
-    }
-    // HINT_BUFFER: a,b,_,1,2 — pop 4*[a]_1 bytes from hint stream to mem[[b]_1]
-    if opcode == Rv32HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
-        return Some(lift_hint_buffer(insn, pc));
     }
 
     // Decode the e field to determine R-type vs I-type
@@ -122,14 +115,12 @@ pub fn lift_instruction<F: PrimeField32>(
         return Some(lift_load(insn, pc, MemWidth::Half, true));
     }
     if opcode == Rv32LoadStoreOpcode::STOREW.global_opcode_usize() {
-        // Dispatch based on write address space (field e):
-        //   2 = main memory (normal store)
-        //   3 = user IO / reveal (public outputs)
+        // e = RV32_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
+        // handled by `Rv32IoExtension`.
         let addr_space = field_to_u32(insn.e);
-        return match addr_space {
-            3 => Some(lift_reveal(insn, pc)),
-            _ => Some(lift_store(insn, pc, MemWidth::Word)),
-        };
+        if addr_space != AS_PUBLIC_VALUES {
+            return Some(lift_store(insn, pc, MemWidth::Word));
+        }
     }
     if opcode == Rv32LoadStoreOpcode::STOREH.global_opcode_usize() {
         return Some(lift_store(insn, pc, MemWidth::Half));
@@ -231,17 +222,6 @@ pub fn field_to_i32<F: PrimeField32>(f: F) -> i32 {
 /// Decode register index from OpenVM operand (divided by RV32_REGISTER_NUM_LIMBS).
 pub fn decode_reg<F: PrimeField32>(f: F) -> u8 {
     (field_to_u32(f) / RV32_REGISTER_NUM_LIMBS as u32) as u8
-}
-
-/// Decode an immediate from the (c, g) field pair used by JALR, LOAD, and STORE.
-///
-/// OpenVM stores the lower 16 bits of the sign-extended immediate in `c`,
-/// and the sign bit in `g`. The full 32-bit value is reconstructed as:
-///   imm = (c & 0xFFFF) + g * 0xFFFF0000
-fn decode_imm_cg<F: PrimeField32>(insn: &Instruction<F>) -> u32 {
-    let low16 = field_to_u32(insn.c) & 0xffff;
-    let is_neg = field_to_u32(insn.g) != 0;
-    low16.wrapping_add(if is_neg { 0xFFFF0000 } else { 0 })
 }
 
 /// Sign-extend a 12-bit immediate stored in the low 24 bits.
@@ -498,38 +478,4 @@ fn lift_phantom<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr 
 
     // Unknown phantom — treat as nop (forward compatible).
     body(pc, Instr::Nop)
-}
-
-/// Lift HINT_STOREW: pop 4 bytes from hint_stream, write to mem[ptr].
-fn lift_hint_storew<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
-    let ptr_reg = decode_reg(insn.b);
-    body(pc, Instr::HintStoreW { ptr_reg })
-}
-
-/// Lift HINT_BUFFER: pop num_words*4 bytes from hint_stream, write sequentially.
-fn lift_hint_buffer<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
-    let num_words_reg = decode_reg(insn.a);
-    let ptr_reg = decode_reg(insn.b);
-    body(
-        pc,
-        Instr::HintBuffer {
-            ptr_reg,
-            num_words_reg,
-        },
-    )
-}
-
-/// Lift REVEAL (STOREW with e=3): write register value to user IO address space.
-fn lift_reveal<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
-    let src_reg = decode_reg(insn.a);
-    let ptr_reg = decode_reg(insn.b);
-    let offset = decode_imm_cg(insn);
-    body(
-        pc,
-        Instr::Reveal {
-            src_reg,
-            ptr_reg,
-            offset,
-        },
-    )
 }
