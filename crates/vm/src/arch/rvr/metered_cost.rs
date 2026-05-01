@@ -37,8 +37,6 @@ pub struct MeteredCostConfig {
     pub pc_base: u32,
     /// Per-AIR widths (for cost = height * width).
     pub widths: Vec<usize>,
-    /// Chip index for the HINT_STOREW/HINT_BUFFER executor (if present in program).
-    pub hint_store_chip_idx: Option<u32>,
 }
 
 impl MeteredCostConfig {
@@ -46,7 +44,6 @@ impl MeteredCostConfig {
     pub fn chip_mapping(&self) -> ChipMapping {
         ChipMapping {
             pc_to_chip: self.pc_to_chip.clone(),
-            hint_store_chip_idx: self.hint_store_chip_idx,
             chip_widths: Some(self.widths.iter().map(|&w| w as u64).collect()),
         }
     }
@@ -66,7 +63,6 @@ pub fn build_metered_cost_config<F, E>(
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     widths: &[usize],
-    hint_buffer_opcode: Option<VmOpcode>,
 ) -> MeteredCostConfig
 where
     F: PrimeField32,
@@ -75,13 +71,6 @@ where
     let pc_base = program.pc_base;
 
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-
-    let hint_store_chip_idx = hint_buffer_opcode.and_then(|opcode| {
-        inventory
-            .instruction_lookup
-            .get(&opcode)
-            .map(|&executor_idx| executor_idx_to_air_idx[executor_idx as usize] as u32)
-    });
 
     let pc_to_chip: Vec<u32> = program
         .instructions_and_debug_infos
@@ -107,7 +96,6 @@ where
         pc_to_chip,
         pc_base,
         widths: widths.to_vec(),
-        hint_store_chip_idx,
     }
 }
 
@@ -224,7 +212,6 @@ where
             self.inventory.as_ref(),
             &self.executor_idx_to_air_idx,
             &ctx.widths,
-            None,
         );
         // TODO: hoist compilation to instance construction; requires moving `ctx.widths` onto the
         // instance.
@@ -280,7 +267,6 @@ where
             self.inventory.as_ref(),
             &self.executor_idx_to_air_idx,
             &ctx.widths,
-            None,
         );
         let chips = metered_cost_config.chip_mapping();
 
