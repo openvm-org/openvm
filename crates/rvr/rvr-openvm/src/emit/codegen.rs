@@ -1,7 +1,5 @@
 //! C code generation for IR instructions and terminators.
 
-use openvm_instructions::riscv::RV32_MEMORY_AS;
-use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::*;
 
 use super::context::EmitContext;
@@ -68,6 +66,8 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
 
         // ── OpenVM system/IO instructions ────────────────────────────
+        // The rv32im I/O instructions (HINT_STOREW, HINT_BUFFER, REVEAL) are
+        // handled in the `Rv32IoExtension` and reach this match via `Instr::Ext`.
         Instr::Nop => {}
 
         Instr::HintInput => {
@@ -85,51 +85,6 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             ctx.extern_call("openvm_hint_random", &[&n]);
         }
 
-        // Memory-writing IO: traced register reads + trace-only mem access.
-        Instr::HintStoreW { ptr_reg } => {
-            let ptr = ctx.read_reg(*ptr_reg);
-            ctx.trace_mem_access(&ptr, RV32_MEMORY_AS);
-            ctx.extern_call("openvm_hint_storew", &[&ptr]);
-        }
-        Instr::HintBuffer {
-            ptr_reg,
-            num_words_reg,
-        } => {
-            let ptr = ctx.read_reg(*ptr_reg);
-            let n = ctx.read_reg(*num_words_reg);
-            let chip = ctx.hint_store_chip_idx;
-            // OpenVM's HINT_BUFFER executor adds `num_words` rows to its chip
-            // in one shot. We split that into two pieces:
-            //   - The block-entry chip accounting in `project.rs` already credited +1 to this PC's
-            //     chip (the static per-instruction contribution, like every other opcode).
-            //   - Here we add the remaining +(n - 1) at runtime, since `n` is a register value not
-            //     known at codegen time.
-            // The `n > 1` guard skips the call when the static +1 is already
-            // the whole answer (HINT_STOREW-shaped hints).
-            if chip != u32::MAX {
-                ctx.write_line(&format!("if ({n} > 1) {{"));
-                ctx.write_line(&format!("  trace_chip(state, {chip}u, {n} - 1);"));
-                ctx.write_line("}");
-            }
-            // TODO: change to trace_rd_mem_u32_range
-            ctx.write_line(&format!("if ({n} > 0) {{"));
-            ctx.write_line(&format!(
-                "  trace_mem_access_u32_range(state, {ptr}, {n}, {RV32_MEMORY_AS}u);"
-            ));
-            ctx.write_line("}");
-            ctx.extern_call("openvm_hint_buffer", &[&ptr, &n]);
-        }
-        Instr::Reveal {
-            src_reg,
-            ptr_reg,
-            offset,
-        } => {
-            let src = ctx.read_reg(*src_reg);
-            let ptr = ctx.read_reg(*ptr_reg);
-            ctx.trace_mem_access(&ptr, AS_PUBLIC_VALUES);
-            let off_s = hex_u32(*offset);
-            ctx.extern_call("openvm_reveal", &[&src, &ptr, &off_s]);
-        }
         Instr::Ext(ext) => {
             ext.emit_c(ctx);
         }

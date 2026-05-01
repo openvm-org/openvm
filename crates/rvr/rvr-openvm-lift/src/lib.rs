@@ -23,4 +23,4 @@ pub use convert::{
 pub use extension::{
     ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx, VmRvrExtension, NO_CHIP,
 };
-pub use helpers::decode_reg;
+pub use helpers::{decode_imm_cg, decode_reg};

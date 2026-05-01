@@ -80,6 +80,7 @@ members = [
     "crates/rvr/rvr-openvm-ir",
     "crates/rvr/rvr-openvm-lift",
     "crates/rvr/rvr-openvm-ffi-common",
+    "extensions/rv32im/rvr",
     "extensions/keccak256/rvr",
     "extensions/keccak256/rvr/ffi",
     "extensions/sha2/rvr",
@@ -209,6 +210,7 @@ rvr-openvm = { path = "crates/rvr/rvr-openvm" }
 rvr-openvm-ir = { path = "crates/rvr/rvr-openvm-ir" }
 rvr-openvm-lift = { path = "crates/rvr/rvr-openvm-lift" }
 rvr-openvm-ext-ffi-common = { path = "crates/rvr/rvr-openvm-ffi-common" }
+rvr-openvm-ext-rv32im = { path = "extensions/rv32im/rvr" }
 rvr-openvm-ext-keccak = { path = "extensions/keccak256/rvr" }
 rvr-openvm-ext-keccak-ffi = { path = "extensions/keccak256/rvr/ffi" }
 rvr-openvm-ext-sha2 = { path = "extensions/sha2/rvr" }

@@ -54,8 +54,6 @@ pub enum CompileError {
 pub struct ChipMapping {
     /// Per-PC chip index. Index i = chip for PC = pc_base + i*4.
     pub pc_to_chip: Vec<u32>,
-    /// Chip index for HINT_BUFFER/HINT_STOREW (None if not present).
-    pub hint_store_chip_idx: Option<u32>,
     /// Per-AIR widths (MeteredCost mode only). When present, the emitter
     /// precomputes `sum(width[chip] * count)` per block so the generated C
     /// increments `cost` by a single constant instead of loading from the
@@ -238,7 +236,6 @@ fn compile_impl<F: PrimeField32>(
     if let Some(chips) = opts.chips {
         project.pc_to_chip = Some(chips.pc_to_chip.clone());
         project.pc_base = exe.program.pc_base;
-        project.hint_store_chip_idx = chips.hint_store_chip_idx.unwrap_or(u32::MAX);
         project.chip_widths = chips.chip_widths.clone();
     }
 
