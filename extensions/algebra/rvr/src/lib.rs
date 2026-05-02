@@ -2,14 +2,17 @@
 //!
 //! Provides IR nodes for modular arithmetic (ADD, SUB, MUL, DIV, IS_EQ, SETUP),
 //! Fp2 (complex extension field) operations, and phantom instructions
-//! (HintNonQr, HintSqrt), plus the `AlgebraExtension` for lifting and
-//! executing them via double FFI.
+//! (HintNonQr, HintSqrt). Lifting/codegen is split across two `RvrExtension`s:
+//! [`ModularRvrExtension`] owns the modular ops, phantoms, and the FFI
+//! infrastructure (headers, sources, staticlib, secp256k1); [`Fp2RvrExtension`]
+//! owns fp2 ops only and relies on the modular half being registered for the
+//! shared FFI infra.
 
 use std::path::{Path, PathBuf};
 
 use num_bigint::BigUint;
-use openvm_algebra_circuit::find_non_qr;
 use openvm_algebra_transpiler::{Fp2Opcode, ModularPhantom, Rv32ModularArithmeticOpcode};
+use openvm_algebra_utils::find_non_qr;
 use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
@@ -446,20 +449,13 @@ impl ExtInstr for HintSqrtInstr {
     }
 }
 
-// ── Algebra extension ────────────────────────────────────────────────────────
+// ── Shared infrastructure ────────────────────────────────────────────────────
 
-/// Per-modulus info for the algebra extension.
+/// Per-modulus info shared by the algebra extensions.
 struct ModulusInfo {
     modulus_bytes: Vec<u8>,
     non_qr_bytes: Vec<u8>,
     num_limbs: u32,
-}
-
-/// The Algebra extension (modular arithmetic + Fp2 + phantom hints).
-pub struct AlgebraExtension {
-    moduli: Vec<ModulusInfo>,
-    fp2_moduli: Vec<ModulusInfo>,
-    staticlib_path: PathBuf,
 }
 
 /// Path to the secp256k1 submodule (resolved from this crate's manifest dir).
@@ -473,34 +469,34 @@ fn secp256k1_dir() -> PathBuf {
     dir
 }
 
-impl AlgebraExtension {
-    pub fn new_pure(
-        staticlib_path: PathBuf,
-        moduli: Vec<BigUint>,
-        fp2_moduli: Vec<BigUint>,
-    ) -> Self {
-        // Use the same deterministic seed as OpenVM for non-QR computation.
-        let mut rng = StdRng::from_seed([0u8; 32]);
-        let moduli = moduli
-            .into_iter()
-            .map(|m| make_modulus_info(&m, &mut rng))
-            .collect();
-        // Reuse the same deterministic seed here to match OpenVM's fixed NQR choice.
-        let mut rng2 = StdRng::from_seed([0u8; 32]);
-        let fp2_moduli = fp2_moduli
-            .into_iter()
-            .map(|m| make_modulus_info(&m, &mut rng2))
-            .collect();
-        Self {
-            moduli,
-            fp2_moduli,
-            staticlib_path,
-        }
-    }
+/// Default path to the algebra-ffi staticlib, populated by `build.rs`.
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_ALGEBRA_FFI_STATICLIB"))
+}
 
-    pub fn new(staticlib_path: PathBuf, moduli: Vec<BigUint>, fp2_moduli: Vec<BigUint>) -> Self {
-        Self::new_pure(staticlib_path, moduli, fp2_moduli)
-    }
+fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
+    // Use the same deterministic seed as OpenVM for non-QR computation.
+    // For ModularRvrExtension this matches the circuit-side
+    // `NonQrHintSubEx::new` (also `StdRng::from_seed([0u8; 32])`, single rng
+    // across the full modulus list), so rvr-emitted NQRs match what the
+    // circuit would compute.
+    //
+    // TODO: Fp2RvrExtension also calls this, but `try_lift_fp2` never reads
+    // `info.non_qr_bytes` — Fp2 NQR computation is dead work today. It also
+    // has a latent non-determinism: the same modulus appearing in both
+    // `moduli` and `fp2_moduli` is processed by two independent rngs (each
+    // freshly seeded here), so for primes that fall through to
+    // rejection-sampling in `find_non_qr` (anything not `p ≡ 3 (mod 4)` or
+    // `p ≡ 5 (mod 8)`), the NQR for the same prime can differ between lists.
+    // If a future Fp2 phantom ever consumes `info.non_qr_bytes`, this will
+    // diverge from what the circuit computes. Either drop NQR computation
+    // for fp2 (use a `make_fp2_moduli` that fills num_limbs+modulus_bytes
+    // only), or share rng state with the modular list.
+    let mut rng = StdRng::from_seed([0u8; 32]);
+    moduli
+        .into_iter()
+        .map(|m| make_modulus_info(&m, &mut rng))
+        .collect()
 }
 
 fn make_modulus_info(modulus: &BigUint, rng: &mut StdRng) -> ModulusInfo {
@@ -528,15 +524,37 @@ fn format_c_byte_array(bytes: &[u8]) -> String {
     format!("{{{}}}", inner.join(","))
 }
 
-impl<F: PrimeField32> RvrExtension<F> for AlgebraExtension {
+// ── Modular extension ────────────────────────────────────────────────────────
+
+/// Modular arithmetic + phantom hints. Owns the algebra FFI infrastructure
+/// (headers, sources, staticlib, secp256k1 build inputs) that is shared with
+/// [`Fp2RvrExtension`].
+pub struct ModularRvrExtension {
+    moduli: Vec<ModulusInfo>,
+    staticlib_path: PathBuf,
+}
+
+impl ModularRvrExtension {
+    /// Pure-mode constructor; equivalent to [`Self::new`] today (chip indices
+    /// are unused by this extension).
+    pub fn new_pure(moduli: Vec<BigUint>) -> Self {
+        Self {
+            moduli: make_moduli(moduli),
+            staticlib_path: default_staticlib_path(),
+        }
+    }
+
+    /// Standard constructor.
+    pub fn new(moduli: Vec<BigUint>) -> Self {
+        Self::new_pure(moduli)
+    }
+}
+
+impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
     fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if let Some(lifted) = self.try_lift_modular(insn, pc, opcode) {
-            return Some(lifted);
-        }
-
-        if let Some(lifted) = self.try_lift_fp2(insn, pc, opcode) {
             return Some(lifted);
         }
 
@@ -551,12 +569,22 @@ impl<F: PrimeField32> RvrExtension<F> for AlgebraExtension {
 
     fn c_headers(&self) -> Vec<(&str, &str)> {
         vec![
-            ("rvr_ext_algebra.h", include_str!("../c/rvr_ext_algebra.h")),
+            ("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h")),
             ("rvr_ext_k256_fe.h", include_str!("../c/rvr_ext_k256_fe.h")),
         ]
     }
 
     fn c_sources(&self) -> Vec<(&str, &str)> {
+        // TODO: `rvr_ext_k256.c` folds ECC k256 ops into algebra's TU so
+        // libsecp256k1 stays in a single translation unit (see the comment
+        // at the top of `rvr_ext_k256_ec.h`). It `#include`s `rvr_ext_ecc.h`,
+        // which is owned by the ECC rvr extension. So registering
+        // `ModularRvrExtension` without `EccRvrExtension` builds/links with a
+        // missing-header error. Options: (1) gate the ECC fold-in behind a
+        // `-DRVR_EXT_K256_INCLUDE_ECC` cflag set by ECC's `extra_cflags()`;
+        // (2) emit `rvr_ext_k256.c` only when at least one configured
+        // modulus matches a known k256 field; (3) move the file into ECC
+        // and lose the modular k256 fast path when ECC isn't present.
         vec![("rvr_ext_k256.c", include_str!("../c/rvr_ext_k256.c"))]
     }
 
@@ -584,7 +612,7 @@ impl<F: PrimeField32> RvrExtension<F> for AlgebraExtension {
     }
 }
 
-impl AlgebraExtension {
+impl ModularRvrExtension {
     fn try_lift_modular<F: PrimeField32>(
         &self,
         insn: &Instruction<F>,
@@ -694,6 +722,97 @@ impl AlgebraExtension {
         }))
     }
 
+    fn try_lift_phantom<F: PrimeField32>(
+        &self,
+        insn: &Instruction<F>,
+        pc: u32,
+    ) -> Option<LiftedInstr> {
+        let c_val = insn.c.as_canonical_u32();
+        let discriminant = (c_val & 0xffff) as u16;
+        let mod_idx = (c_val >> 16) as usize;
+
+        match ModularPhantom::from_repr(discriminant) {
+            Some(ModularPhantom::HintNonQr) => {
+                let info = self.moduli.get(mod_idx)?;
+                Some(LiftedInstr::Body(InstrAt {
+                    pc,
+                    instr: Instr::Ext(Box::new(HintNonQrInstr {
+                        non_qr_bytes: info.non_qr_bytes.clone(),
+                    })),
+                    source_loc: None,
+                }))
+            }
+            Some(ModularPhantom::HintSqrt) => {
+                let info = self.moduli.get(mod_idx)?;
+                let rs1_reg = decode_reg(insn.a);
+                Some(LiftedInstr::Body(InstrAt {
+                    pc,
+                    instr: Instr::Ext(Box::new(HintSqrtInstr {
+                        rs1_reg,
+                        num_limbs: info.num_limbs,
+                        modulus: info.modulus_bytes.clone(),
+                        non_qr_bytes: info.non_qr_bytes.clone(),
+                    })),
+                    source_loc: None,
+                }))
+            }
+            None => None,
+        }
+    }
+}
+
+// ── Fp2 extension ────────────────────────────────────────────────────────────
+
+/// Fp2 (complex extension field) arithmetic. The FFI infrastructure (headers,
+/// sources, staticlib, secp256k1 build inputs) is shared with — and owned by —
+/// [`ModularRvrExtension`]; this half returns empty values for them and relies
+/// on the modular half being registered alongside it.
+pub struct Fp2RvrExtension {
+    fp2_moduli: Vec<ModulusInfo>,
+}
+
+impl Fp2RvrExtension {
+    pub fn new_pure(fp2_moduli: Vec<BigUint>) -> Self {
+        Self {
+            fp2_moduli: make_moduli(fp2_moduli),
+        }
+    }
+
+    pub fn new(fp2_moduli: Vec<BigUint>) -> Self {
+        Self::new_pure(fp2_moduli)
+    }
+}
+
+impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+        let opcode = insn.opcode.as_usize();
+        self.try_lift_fp2(insn, pc, opcode)
+    }
+
+    fn c_headers(&self) -> Vec<(&str, &str)> {
+        vec![("rvr_ext_fp2.h", include_str!("../c/rvr_ext_fp2.h"))]
+    }
+
+    fn staticlib_paths(&self) -> Vec<&Path> {
+        // The algebra-ffi staticlib is owned by `ModularRvrExtension`; do not
+        // emit it again here.
+        //
+        // TODO: Reconsider having `ModularRvrExtension` owning the single
+        // staticlib used by both `ModularRvrExtension` and `Fp2RvrExtension`.
+        // Alternatives: (1) split the FFI into separate `*-modular-ffi` and
+        // `*-fp2-ffi` staticlibs so each half owns its own; (2) deduplicate
+        // staticlib paths in `ExtensionRegistry::staticlib_paths()` so both
+        // halves can return the same path safely.
+        Vec::new()
+    }
+
+    fn staticlib_path(&self) -> &Path {
+        // Unused: `staticlib_paths()` is overridden to return an empty list.
+        Path::new("")
+    }
+}
+
+impl Fp2RvrExtension {
     fn try_lift_fp2<F: PrimeField32>(
         &self,
         insn: &Instruction<F>,
@@ -772,43 +891,5 @@ impl AlgebraExtension {
             instr,
             source_loc: None,
         }))
-    }
-
-    fn try_lift_phantom<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u32,
-    ) -> Option<LiftedInstr> {
-        let c_val = insn.c.as_canonical_u32();
-        let discriminant = (c_val & 0xffff) as u16;
-        let mod_idx = (c_val >> 16) as usize;
-
-        match ModularPhantom::from_repr(discriminant) {
-            Some(ModularPhantom::HintNonQr) => {
-                let info = self.moduli.get(mod_idx)?;
-                Some(LiftedInstr::Body(InstrAt {
-                    pc,
-                    instr: Instr::Ext(Box::new(HintNonQrInstr {
-                        non_qr_bytes: info.non_qr_bytes.clone(),
-                    })),
-                    source_loc: None,
-                }))
-            }
-            Some(ModularPhantom::HintSqrt) => {
-                let info = self.moduli.get(mod_idx)?;
-                let rs1_reg = decode_reg(insn.a);
-                Some(LiftedInstr::Body(InstrAt {
-                    pc,
-                    instr: Instr::Ext(Box::new(HintSqrtInstr {
-                        rs1_reg,
-                        num_limbs: info.num_limbs,
-                        modulus: info.modulus_bytes.clone(),
-                        non_qr_bytes: info.non_qr_bytes.clone(),
-                    })),
-                    source_loc: None,
-                }))
-            }
-            None => None,
-        }
     }
 }
