@@ -151,12 +151,10 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                                     expr_evals[node_idx].as_basis_coefficients_slice(),
                                 );
                             }
-                            Entry::Permutation { .. } => unreachable!(),
                             Entry::Public => record.args[..D_EF].copy_from_slice(
                                 expr_evals[node_idx].as_basis_coefficients_slice(),
                             ),
                             Entry::Challenge => unreachable!(),
-                            Entry::Exposed => unreachable!(),
                         },
                         SymbolicExpressionNode::IsFirstRow => {
                             record.args[..D_EF].copy_from_slice(
@@ -286,10 +284,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                                 is_n_neg,
                             }));
                         }
-                        Entry::Permutation { .. }
-                        | Entry::Public
-                        | Entry::Challenge
-                        | Entry::Exposed => {
+                        Entry::Public | Entry::Challenge => {
                             unreachable!()
                         }
                     }
@@ -515,12 +510,10 @@ pub(crate) fn build_cached_trace_record(
                             record.attrs[1] = vk.dag_main_part_index_to_commit_index(part_index);
                             record.attrs[2] = offset;
                         }
-                        Entry::Permutation { .. } => unreachable!(),
                         Entry::Public => {
                             record.kind = NodeKind::VarPublicValue;
                         }
                         Entry::Challenge => unreachable!(),
-                        Entry::Exposed => unreachable!(),
                     }
                 }
                 SymbolicExpressionNode::IsFirstRow => {
@@ -630,7 +623,7 @@ pub(crate) fn build_cached_trace_record(
                         fanout: 0,
                     }
                 }
-                Entry::Permutation { .. } | Entry::Public | Entry::Challenge | Entry::Exposed => {
+                Entry::Public | Entry::Challenge => {
                     unreachable!()
                 }
             };
