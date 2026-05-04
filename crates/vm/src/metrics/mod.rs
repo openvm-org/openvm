@@ -116,7 +116,7 @@ impl VmMetrics {
                 let air_names = pk.air_name.clone();
                 let width = &pk.vk.params.width;
                 let main_width = width.main_width();
-                let total_width = width.total_width(PB::CHALLENGE_EXT_DEGREE as usize);
+                let total_width = width.total_width();
                 (air_names, main_width, total_width)
             })
             .multiunzip();
