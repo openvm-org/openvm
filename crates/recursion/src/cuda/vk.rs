@@ -33,7 +33,7 @@ impl VerifyingKeyGpu {
             .map(|vk| AirData {
                 num_cached: vk.num_cached_mains(),
                 num_interactions_per_row: vk.num_interactions(),
-                total_width: vk.params.width.total_width(0),
+                total_width: vk.params.width.total_width(),
                 has_preprocessed: vk.preprocessed_data.is_some(),
             })
             .collect_vec()
