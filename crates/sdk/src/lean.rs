@@ -1,5 +1,6 @@
-//! Driver: walk the recursion verifier circuit, render every supported
-//! AIR's symbolic constraints, and emit per-AIR Lean modules in the
+//! Driver: walk the leaf aggregation circuit (recursion verifier
+//! sub-circuit wrapped in `InnerCircuit`), render every supported AIR's
+//! symbolic constraints, and emit per-AIR Lean modules in the
 //! `Fundamentals.Air` dialect under
 //! `<output>/Recursion/<Group>/<AirStem>/Generated/{Schema,Constraints,Interactions}.lean`.
 //!
@@ -15,10 +16,10 @@ use std::{
     fs,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use eyre::{bail, Result, WrapErr};
+use openvm_continuations::circuit::Circuit;
 use openvm_recursion_circuit::{
     batch_constraint::{
         eq_airs::{
@@ -49,7 +50,6 @@ use openvm_recursion_circuit::{
         claims::StackingClaimsCols, eq_base::EqBaseCols, eq_bits::EqBitsCols,
         opening::OpeningClaimsCols, sumcheck::SumcheckRoundsCols, univariate::UnivariateRoundCols,
     },
-    system::{AggregationSubCircuit, VerifierConfig, VerifierSubCircuit},
     transcript::{merkle_verify::MerkleVerifyCols, transcript::TranscriptCols},
     whir::{
         final_poly_mle_eval::FinalyPolyMleEvalCols, final_poly_query_eval::FinalPolyQueryEvalCols,
@@ -64,9 +64,7 @@ use openvm_stark_backend::{
         air_file_stem, flat_columns_of, render_air, write_constraints, write_interactions,
         write_schema, BusBinding, LeanRenderOptions, LeanWriteOptions, RenderedAir,
     },
-    StarkEngine,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::DuplexSponge;
 
 use crate::{config, Sdk, SC};
 
@@ -85,44 +83,44 @@ const BABY_BEAR_P: u32 = 2_013_265_921;
 fn standard_bus_table() -> Vec<BusBinding> {
     let names: &[&str] = &[
         // External (system::BusInventory::new)
-        "transcriptBus",                  // 0
-        "poseidon2PermuteBus",            // 1
-        "poseidon2CompressBus",           // 2
-        "merkleVerifyBus",                // 3
-        "gkrModuleBus",                   // 4
-        "batchConstraintModuleBus",       // 5
-        "stackingModuleBus",              // 6
-        "whirModuleBus",                  // 7
-        "whirMuBus",                      // 8
-        "airShapeBus",                    // 9
-        "airPresenceBus",                 // 10
-        "hyperdimBus",                    // 11
-        "liftedHeightsBus",               // 12
-        "stackingIndicesBus",             // 13
-        "commitmentsBus",                 // 14
-        "publicValuesBus",                // 15
-        "selUniBus",                      // 16
-        "rangeCheckerBus",                // 17
-        "powerCheckerBus",                // 18
-        "expressionClaimNMaxBus",         // 19
-        "constraintsFoldingInputBus",     // 20
-        "interactionsFoldingInputBus",    // 21
-        "fractionFolderInputBus",         // 22
-        "nLiftBus",                       // 23
-        "eqNLogupNMaxBus",                // 24
-        "eq3bShapeBus",                   // 25
-        "xiRandomnessBus",                // 26
-        "constraintRandomnessBus",        // 27
-        "whirOpeningPointBus",            // 28
-        "whirOpeningPointLookupBus",      // 29
-        "columnClaimsBus",                // 30
-        "expBitsLenBus",                  // 31
-        "rightShiftBus",                  // 32
-        "eqNegBaseRandBus",               // 33
-        "eqNegResultBus",                 // 34
-        "cachedCommitBus",                // 35
-        "preHashBus",                     // 36
-        "finalStateBus",                  // 37
+        "transcriptBus",               // 0
+        "poseidon2PermuteBus",         // 1
+        "poseidon2CompressBus",        // 2
+        "merkleVerifyBus",             // 3
+        "gkrModuleBus",                // 4
+        "batchConstraintModuleBus",    // 5
+        "stackingModuleBus",           // 6
+        "whirModuleBus",               // 7
+        "whirMuBus",                   // 8
+        "airShapeBus",                 // 9
+        "airPresenceBus",              // 10
+        "hyperdimBus",                 // 11
+        "liftedHeightsBus",            // 12
+        "stackingIndicesBus",          // 13
+        "commitmentsBus",              // 14
+        "publicValuesBus",             // 15
+        "selUniBus",                   // 16
+        "rangeCheckerBus",             // 17
+        "powerCheckerBus",             // 18
+        "expressionClaimNMaxBus",      // 19
+        "constraintsFoldingInputBus",  // 20
+        "interactionsFoldingInputBus", // 21
+        "fractionFolderInputBus",      // 22
+        "nLiftBus",                    // 23
+        "eqNLogupNMaxBus",             // 24
+        "eq3bShapeBus",                // 25
+        "xiRandomnessBus",             // 26
+        "constraintRandomnessBus",     // 27
+        "whirOpeningPointBus",         // 28
+        "whirOpeningPointLookupBus",   // 29
+        "columnClaimsBus",             // 30
+        "expBitsLenBus",               // 31
+        "rightShiftBus",               // 32
+        "eqNegBaseRandBus",            // 33
+        "eqNegResultBus",              // 34
+        "cachedCommitBus",             // 35
+        "preHashBus",                  // 36
+        "finalStateBus",               // 37
     ];
     // Per-module internal buses, in module instantiation order:
     // transcript (0 buses), proof_shape (3), gkr (6), batch_constraint
@@ -130,16 +128,16 @@ fn standard_bus_table() -> Vec<BusBinding> {
     let module_internal_offset = 38;
     let module_internal_names: &[&str] = &[
         // ProofShapeModule (38–40)
-        "proofShapePermutationBus",   // 38
-        "startingTidxBus",            // 39
-        "numPvsBus",                  // 40
+        "proofShapePermutationBus", // 38
+        "startingTidxBus",          // 39
+        "numPvsBus",                // 40
         // GkrModule (41–46)
-        "gkrLayerInputBus",           // 41
-        "gkrLayerOutputBus",          // 42
-        "gkrSumcheckInputBus",        // 43
-        "gkrSumcheckOutputBus",       // 44
-        "gkrSumcheckChallengeBus",    // 45
-        "gkrXiSamplerBus",            // 46
+        "gkrLayerInputBus",        // 41
+        "gkrLayerOutputBus",       // 42
+        "gkrSumcheckInputBus",     // 43
+        "gkrSumcheckOutputBus",    // 44
+        "gkrSumcheckChallengeBus", // 45
+        "gkrXiSamplerBus",         // 46
         // BatchConstraintModule (47–59)
         "batchConstraintConductorBus", // 47
         "univariateSumcheckInputBus",  // 48
@@ -155,27 +153,27 @@ fn standard_bus_table() -> Vec<BusBinding> {
         "interactionsFoldingBus",      // 58
         "constraintsFoldingBus",       // 59
         // StackingModule (60–67)
-        "stackingTidxBus",             // 60
-        "claimCoefficientsBus",        // 61
-        "sumcheckClaimsBus",           // 62
-        "eqRandValuesBus",             // 63
-        "eqBaseBus",                   // 64
-        "eqBitsInternalBus",           // 65
-        "eqKernelLookupBus",           // 66
-        "eqBitsLookupBus",             // 67
+        "stackingTidxBus",      // 60
+        "claimCoefficientsBus", // 61
+        "sumcheckClaimsBus",    // 62
+        "eqRandValuesBus",      // 63
+        "eqBaseBus",            // 64
+        "eqBitsInternalBus",    // 65
+        "eqKernelLookupBus",    // 66
+        "eqBitsLookupBus",      // 67
         // WhirModule (68–79)
-        "whirSumcheckBus",             // 68
-        "whirAlphaBus",                // 69
-        "whirGammaBus",                // 70
-        "whirQueryBus",                // 71
-        "verifyQueriesBus",            // 72
-        "verifyQueryBus",              // 73
-        "whirEqAlphaUBus",             // 74
-        "whirFoldingBus",              // 75
-        "finalPolyMleEvalBus",         // 76
-        "finalPolyQueryEvalBus",       // 77
-        "whirFinalPolyBus",            // 78
-        "finalPolyFoldingBus",         // 79
+        "whirSumcheckBus",       // 68
+        "whirAlphaBus",          // 69
+        "whirGammaBus",          // 70
+        "whirQueryBus",          // 71
+        "verifyQueriesBus",      // 72
+        "verifyQueryBus",        // 73
+        "whirEqAlphaUBus",       // 74
+        "whirFoldingBus",        // 75
+        "finalPolyMleEvalBus",   // 76
+        "finalPolyQueryEvalBus", // 77
+        "whirFinalPolyBus",      // 78
+        "finalPolyFoldingBus",   // 79
     ];
     let mut bindings: Vec<BusBinding> = names
         .iter()
@@ -194,6 +192,16 @@ fn standard_bus_table() -> Vec<BusBinding> {
                 lean_name: (*n).to_string(),
             }),
     );
+    // Buses added by `InnerCircuit` on top of the verifier sub-circuit
+    // (allocated at `next_bus_idx`, i.e. starting at 80).
+    let leaf_bus_offset = module_internal_offset + module_internal_names.len();
+    let leaf_bus_names: &[&str] = &[
+        "pvsAirConsistencyBus", // 80
+    ];
+    bindings.extend(leaf_bus_names.iter().enumerate().map(|(i, n)| BusBinding {
+        vk_index: (leaf_bus_offset + i) as BusIndex,
+        lean_name: (*n).to_string(),
+    }));
     bindings
 }
 
@@ -201,6 +209,13 @@ fn standard_bus_table() -> Vec<BusBinding> {
 /// goes into. Determines its Lean namespace.
 fn air_group(air_name: &str) -> Result<&'static str> {
     Ok(match air_name {
+        n if n.starts_with("DeferralPvsAir")
+            || n.starts_with("UnsetPvsAir")
+            || n.starts_with("VerifierPvsAir")
+            || n.starts_with("VmPvsAir") =>
+        {
+            "Continuations"
+        }
         n if n.starts_with("ConstraintsFoldingAir")
             || n.starts_with("Eq3bAir")
             || n.starts_with("EqNegAir")
@@ -267,6 +282,15 @@ fn air_group(air_name: &str) -> Result<&'static str> {
 /// (multi-partition, encoder-parameterized, etc.).
 fn flat_column_names(air_name: &str) -> Option<Vec<String>> {
     Some(match air_name {
+        // Leaf-circuit-only AIRs (added by `InnerCircuit` wrapping the
+        // verifier sub-circuit). The continuations Cols structs don't
+        // derive `LeanColumns`, so columns are hardcoded here. For the
+        // non-deferral leaf the widths match `Cols<u8>` exactly:
+        // `VerifierPvsAir` has zero deferral cols, and `VmPvsAir` has
+        // zero trailing deferral_flag col.
+        n if n.starts_with("VerifierPvsAir") => verifier_pvs_air_columns(),
+        n if n.starts_with("VmPvsAir") => vm_pvs_air_columns(),
+        n if n.starts_with("UnsetPvsAir") => unset_pvs_air_columns(),
         n if n.starts_with("FractionsFolderAir") => flat_columns_of::<FractionsFolderCols<u8>>(),
         n if n.starts_with("UnivariateSumcheckAir") => {
             flat_columns_of::<UnivariateSumcheckCols<u8>>()
@@ -403,6 +427,107 @@ fn proof_shape_air_columns() -> Vec<String> {
     cols
 }
 
+/// Join two name fragments with `_`, treating an empty fragment as
+/// "no fragment" (so an empty prefix produces unprefixed names like
+/// `internal_flag` rather than `_internal_flag`).
+fn join_name(a: &str, b: &str) -> String {
+    if a.is_empty() {
+        b.to_string()
+    } else if b.is_empty() {
+        a.to_string()
+    } else {
+        format!("{a}_{b}")
+    }
+}
+
+fn vk_commit_columns(prefix: &str) -> Vec<String> {
+    let mut cols = Vec::with_capacity(16);
+    for i in 0..8 {
+        cols.push(join_name(prefix, &format!("cached_commit_{i}")));
+    }
+    for i in 0..8 {
+        cols.push(join_name(prefix, &format!("vk_pre_hash_{i}")));
+    }
+    cols
+}
+
+fn verifier_base_pvs_columns(prefix: &str) -> Vec<String> {
+    let mut cols = vec![join_name(prefix, "internal_flag")];
+    cols.extend(vk_commit_columns(&join_name(prefix, "app_vk_commit")));
+    cols.extend(vk_commit_columns(&join_name(prefix, "leaf_vk_commit")));
+    cols.extend(vk_commit_columns(&join_name(
+        prefix,
+        "internal_for_leaf_vk_commit",
+    )));
+    cols.push(join_name(prefix, "recursion_flag"));
+    cols.extend(vk_commit_columns(&join_name(
+        prefix,
+        "internal_recursive_vk_commit",
+    )));
+    cols
+}
+
+fn vm_pvs_columns(prefix: &str) -> Vec<String> {
+    let mut cols = Vec::new();
+    for i in 0..8 {
+        cols.push(join_name(prefix, &format!("program_commit_{i}")));
+    }
+    cols.push(join_name(prefix, "initial_pc"));
+    cols.push(join_name(prefix, "final_pc"));
+    cols.push(join_name(prefix, "exit_code"));
+    cols.push(join_name(prefix, "is_terminate"));
+    for i in 0..8 {
+        cols.push(join_name(prefix, &format!("initial_root_{i}")));
+    }
+    for i in 0..8 {
+        cols.push(join_name(prefix, &format!("final_root_{i}")));
+    }
+    cols
+}
+
+/// Names for the AIR's flat public-value list, in the order matching
+/// the AIR's `BaseAirWithPublicValues::num_public_values()` flattening.
+/// Returned slice is empty for AIRs without public values.
+fn flat_pv_names(air_name: &str) -> Vec<String> {
+    if air_name.starts_with("VerifierPvsAir") {
+        // Non-deferral leaf: VerifierBasePvs::<F>::width() = 66 PVs in
+        // the order of `VerifierBasePvs`'s field declarations.
+        verifier_base_pvs_columns("")
+    } else if air_name.starts_with("VmPvsAir") {
+        // VmPvs::<F>::width() = 28 PVs.
+        vm_pvs_columns("")
+    } else {
+        Vec::new()
+    }
+}
+
+fn verifier_pvs_air_columns() -> Vec<String> {
+    let mut cols = vec![
+        "proof_idx".to_string(),
+        "is_valid".to_string(),
+        "has_verifier_pvs".to_string(),
+    ];
+    cols.extend(verifier_base_pvs_columns("child_pvs"));
+    debug_assert_eq!(cols.len(), 3 + 1 + 4 * 16 + 1);
+    cols
+}
+
+fn vm_pvs_air_columns() -> Vec<String> {
+    let mut cols = vec![
+        "proof_idx".to_string(),
+        "is_valid".to_string(),
+        "is_last".to_string(),
+        "has_verifier_pvs".to_string(),
+    ];
+    cols.extend(vm_pvs_columns("child_pvs"));
+    debug_assert_eq!(cols.len(), 4 + 28);
+    cols
+}
+
+fn unset_pvs_air_columns() -> Vec<String> {
+    vec!["proof_idx".to_string(), "is_valid".to_string()]
+}
+
 fn whir_round_air_columns() -> Vec<String> {
     // 45 base columns + ENC_WIDTH=2 (`whir_round_enc_*`) = 47. The
     // standard Sdk uses the enc2 variant; if a future config picks
@@ -410,9 +535,11 @@ fn whir_round_air_columns() -> Vec<String> {
     flat_columns_of::<WhirRoundCols<u8, 2>>()
 }
 
-/// Generates Lean files for the verifier recursion circuit AIRs under a
-/// `Recursion` tree at `output_dir`.
-pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) -> Result<()> {
+/// Generates Lean files for the leaf aggregation circuit AIRs under a
+/// `Recursion` tree at `output_dir`. The leaf circuit is the recursion
+/// verifier sub-circuit wrapped in `InnerCircuit` (with deferral
+/// disabled, matching `Sdk::standard`'s leaf prover keygen).
+pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Result<()> {
     let output_dir = output_dir.as_ref();
     fs::create_dir_all(output_dir).wrap_err("create Lean output dir")?;
 
@@ -424,29 +551,14 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
     let app_params = openvm_stark_sdk::config::app_params_with_100_bits_security(
         openvm_stark_sdk::config::MAX_APP_LOG_STACKED_HEIGHT,
     );
-    let leaf_params = agg_params.leaf.clone();
     let sdk = Sdk::standard(app_params, agg_params);
 
-    let app_vk = sdk.app_pk().app_vm_pk.vm_pk.get_vk();
-    eprintln!(
-        "[lean] app_vk has {} AIRs",
-        app_vk.inner.per_air.len()
-    );
-
-    let verifier_config = VerifierConfig {
-        continuations_enabled: true,
-        final_state_bus_enabled: false,
-        has_cached: true,
-    };
-    let circuit =
-        VerifierSubCircuit::<MAX_NUM_PROOFS>::new_with_options(Arc::new(app_vk), verifier_config);
-    let airs = circuit.airs::<SC>();
-    eprintln!("[lean] VerifierSubCircuit has {} AIRs", airs.len());
-
-    let engine = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine::<
-        DuplexSponge,
-    >::new(leaf_params);
-    let (_pk, vk) = engine.keygen(&airs);
+    eprintln!("[lean] Running leaf prover keygen via SDK...");
+    let agg_prover = sdk.agg_prover();
+    let leaf_circuit = agg_prover.leaf_prover.get_circuit();
+    let vk = agg_prover.leaf_prover.get_vk();
+    let airs = Circuit::<SC>::airs(&*leaf_circuit);
+    eprintln!("[lean] Leaf circuit has {} AIRs", airs.len());
 
     let bus_table = standard_bus_table();
 
@@ -493,10 +605,7 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
         let expected_width: usize =
             cached_widths.iter().sum::<usize>() + air_vk.params.width.common_main;
         if column_names.len() != expected_width {
-            skipped.push((
-                air_name.clone(),
-                "column count mismatch with main_width",
-            ));
+            skipped.push((air_name.clone(), "column count mismatch with main_width"));
             continue;
         }
 
@@ -514,6 +623,7 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
             schema_import: schema_import.clone(),
             constraints_import: constraints_import.clone(),
             partition_offsets: partition_offsets.clone(),
+            public_value_names: flat_pv_names(&air_name),
         };
 
         let rendered: RenderedAir = match render_air(
@@ -535,8 +645,7 @@ pub fn generate_lean_files_for_recursion_circuit<P: AsRef<Path>>(output_dir: P) 
             .wrap_err_with(|| format!("create dir {}", generated_dir.display()))?;
 
         write_lean_file(generated_dir.join("Schema.lean"), |w| {
-            write_schema(w, &air_name, &column_names, &opts)
-                .wrap_err("write Schema.lean")?;
+            write_schema(w, &air_name, &column_names, &opts).wrap_err("write Schema.lean")?;
             Ok(())
         })?;
         write_lean_file(generated_dir.join("Constraints.lean"), |w| {
@@ -655,8 +764,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generates_lean_files_for_recursion_circuit() {
+    fn generates_lean_files_for_leaf_circuit() {
         let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lean_out");
-        generate_lean_files_for_recursion_circuit(output_dir).unwrap();
+        generate_lean_files_for_leaf_circuit(output_dir).unwrap();
     }
 }
