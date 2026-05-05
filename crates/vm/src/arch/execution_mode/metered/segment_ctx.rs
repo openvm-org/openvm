@@ -38,10 +38,17 @@ const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 /// In total we have `3 \* mat_eval_bytes = 6 \* main_cnt` bytes. This makes the main cell secondary
 /// weight in base field elements (4 bytes) `6 / 4 = 1.5`.
 const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 1.5;
-/// Each interaction contributes 2 * D_EF base field elements to the GKR fractional
-/// sumcheck leaves (Frac<EF> = (p, q) pairs). Workspace overhead (work_buffer at
-/// ~1/32 of leaves, tmp_block_sums at ~1/256) totals ~4% of the leaf memory.
-const DEFAULT_INTERACTION_CELL_WEIGHT: f64 = (2 * D_EF) as f64 * 1.04;
+/// Each interaction contributes `2 * D_EF` base field elements to the real GKR fractional
+/// sumcheck leaves (`Frac<EF> = (p, q)` pairs). The CUDA GKR prover virtualizes input padding, so
+/// this is weighted by the real interaction count instead of the next power of two.
+///
+/// The remaining scratch buffers are still sized from the logical power-of-two length. With
+/// precompute-M enabled, `work_buffer` is at most `logical_len / 16` leaves, and
+/// `tmp_block_sums` is approximately `logical_len / 256` leaves. Since
+/// `logical_len <= 2 * real_len`, the worst-case scratch overhead is
+/// `2 * (1 / 16 + 1 / 256)` of the real leaf memory.
+const DEFAULT_INTERACTION_CELL_WEIGHT: f64 =
+    (2 * D_EF) as f64 * (1.0 + 2.0 * (1.0 / 16.0 + 1.0 / 256.0));
 /// Constant overhead for interaction memory: sqrt-decomposed eq buffers, M matrix,
 /// and misc small buffers. Bounded by ~2 MB assuming fewer than 2^32 leaves.
 const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
@@ -219,24 +226,42 @@ impl SegmentationCtx {
             .unwrap_or((0, "unknown"))
     }
 
-    /// Calculate total memory in bytes based on trace heights and widths.
+    /// Convert main and interaction cell counts to memory bytes.
     /// Formula: base_field_size * (main_cell_weight * main_cells + interaction_cell_weight *
     /// interaction_cells)
     #[inline(always)]
-    fn calculate_total_memory(
+    fn counts_to_memory(
         &self,
-        trace_heights: &[u32],
+        main_cnt: usize,
+        interaction_cnt: usize,
     ) -> (
         usize, /* memory */
         usize, /* main */
         usize, /* interaction */
     ) {
-        debug_assert_eq!(trace_heights.len(), self.widths.len());
-
         let main_weight = self.config.main_cell_weight;
         let main_secondary_weight = self.config.main_cell_secondary_weight;
         let interaction_weight = self.config.interaction_cell_weight;
         let base_field_size = self.config.base_field_size;
+
+        let main_memory = main_cnt * main_weight * base_field_size;
+        let main_secondary_memory =
+            ceil_weighted_bytes(main_cnt, base_field_size, main_secondary_weight);
+        let interaction_memory =
+            ceil_weighted_bytes(interaction_cnt, base_field_size, interaction_weight)
+                + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
+        (
+            main_memory + max(main_secondary_memory, interaction_memory),
+            main_memory,
+            interaction_memory,
+        )
+    }
+
+    /// Sum padded main and interaction cell counts across all chips.
+    #[inline(always)]
+    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize) {
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
 
         let mut main_cnt = 0;
         let mut interaction_cnt = 0;
@@ -249,20 +274,21 @@ impl SegmentationCtx {
             main_cnt += padded_height * width;
             interaction_cnt += padded_height * interactions;
         }
+        (main_cnt, interaction_cnt)
+    }
 
-        let main_memory = main_cnt * main_weight * base_field_size;
-        let main_secondary_memory =
-            ceil_weighted_bytes(main_cnt, base_field_size, main_secondary_weight);
-        let interaction_memory = ceil_weighted_bytes(
-            (interaction_cnt + 1).next_power_of_two(),
-            base_field_size,
-            interaction_weight,
-        ) + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
-        (
-            main_memory + max(main_secondary_memory, interaction_memory),
-            main_memory,
-            interaction_memory,
-        )
+    /// Calculate total memory in bytes based on trace heights and widths.
+    #[inline(always)]
+    fn calculate_total_memory(
+        &self,
+        trace_heights: &[u32],
+    ) -> (
+        usize, /* memory */
+        usize, /* main */
+        usize, /* interaction */
+    ) {
+        let (main_cnt, interaction_cnt) = self.calculate_cell_counts(trace_heights);
+        self.counts_to_memory(main_cnt, interaction_cnt)
     }
 
     /// Calculate the total interactions based on trace heights
@@ -302,10 +328,6 @@ impl SegmentationCtx {
             return false;
         }
 
-        let main_weight = self.config.main_cell_weight;
-        let main_secondary_weight = self.config.main_cell_secondary_weight;
-        let interaction_weight = self.config.interaction_cell_weight;
-        let base_field_size = self.config.base_field_size;
         let mut main_cnt = 0usize;
         let mut interaction_cnt = 0usize;
         for (i, (((padded_height, width), interactions), is_constant)) in trace_heights
@@ -333,25 +355,17 @@ impl SegmentationCtx {
             main_cnt += padded_height as usize * width;
             interaction_cnt += padded_height as usize * interactions;
         }
-        let main_memory = main_cnt * main_weight * base_field_size;
-        let main_secondary_memory =
-            ceil_weighted_bytes(main_cnt, base_field_size, main_secondary_weight);
-        // interaction rounding to match n_logup calculation
-        let interaction_memory = ceil_weighted_bytes(
-            (interaction_cnt + 1).next_power_of_two(),
-            base_field_size,
-            interaction_weight,
-        ) + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
-        let total_memory = main_memory + max(main_secondary_memory, interaction_memory);
 
+        let (total_memory, main_memory, interaction_memory) =
+            self.counts_to_memory(main_cnt, interaction_cnt);
         if total_memory > self.config.limits.max_memory {
             tracing::info!(
-                "overshoot: instret {:10} | total memory ({:10}) > max ({:10}) | main ({:10}) | interaction ({:10})",
+                "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
                 instret,
-                total_memory,
-                self.config.limits.max_memory,
-                main_cnt,
-                interaction_cnt
+                ByteSize::b(total_memory as u64),
+                ByteSize::b(self.config.limits.max_memory as u64),
+                ByteSize::b(main_memory as u64),
+                ByteSize::b(interaction_memory as u64),
             );
             return true;
         }
