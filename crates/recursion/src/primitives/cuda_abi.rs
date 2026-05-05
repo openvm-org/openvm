@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 use crate::primitives::exp_bits_len::ExpBitsLenRecord;
 
@@ -13,12 +13,14 @@ extern "C" {
         d_cpu_range_count: *const u32,
         d_trace: *mut F,
         n: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _range_checker_recursion_tracegen(
         d_count: *const u32,
         d_trace: *mut F,
         num_bits: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _exp_bits_len_tracegen(
@@ -27,6 +29,7 @@ extern "C" {
         d_trace: *mut F,
         height: usize,
         num_valid_rows: usize,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
@@ -37,6 +40,7 @@ pub unsafe fn pow_checker_tracegen(
     d_cpu_range_count: Option<&DeviceBuffer<u32>>,
     d_trace: &DeviceBuffer<F>,
     n: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_pow_checker_tracegen(
         d_pow_count,
@@ -51,6 +55,7 @@ pub unsafe fn pow_checker_tracegen(
             .unwrap_or(std::ptr::null()),
         d_trace.as_mut_ptr(),
         n,
+        stream,
     ))
 }
 
@@ -58,11 +63,13 @@ pub unsafe fn range_checker_tracegen(
     d_count: *const u32,
     d_trace: &DeviceBuffer<F>,
     num_bits: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_range_checker_recursion_tracegen(
         d_count,
         d_trace.as_mut_ptr(),
         num_bits,
+        stream,
     ))
 }
 
@@ -72,6 +79,7 @@ pub unsafe fn exp_bits_len_tracegen(
     d_trace: &DeviceBuffer<F>,
     height: usize,
     num_valid_rows: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_exp_bits_len_tracegen(
         d_requests.as_ptr(),
@@ -79,5 +87,6 @@ pub unsafe fn exp_bits_len_tracegen(
         d_trace.as_mut_ptr(),
         height,
         num_valid_rows,
+        stream,
     ))
 }

@@ -19,29 +19,35 @@ use crate::{
     SC,
 };
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: DeferralHookTraceGen<PB>,
-    > DeferralHookProver<PB, S, T>
+impl<PB, S, T> DeferralHookProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proof: Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
-    ) -> ProvingContext<PB> {
+        device_ctx: &DC,
+    ) -> ProvingContext<PB>
+    where
+        S: VerifierTraceGen<PB, SC, DC>,
+        T: DeferralHookTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         let DeferralHookPreCtx {
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
-        } = self
-            .agg_node_tracegen
-            .pre_verifier_subcircuit_tracegen(&proof, leaf_children);
+        } = self.agg_node_tracegen.pre_verifier_subcircuit_tracegen(
+            &proof,
+            leaf_children,
+            device_ctx,
+        );
 
         let range_check_inputs = vec![];
         let mut external_data = VerifierExternalData {
@@ -61,6 +67,7 @@ where
                 CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone()),
                 proof_slice,
                 &mut external_data,
+                device_ctx,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();

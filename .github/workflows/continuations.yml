@@ -21,21 +21,28 @@ jobs:
   tests:
     name: Recursion tests
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=16cpu-linux-arm64
+      - runs-on=${{ github.run_id }}/runner=16cpu-linux-arm64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v6
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
 
       - name: Run tests
         working-directory: crates/continuations
         run: |
-          rustup component add rust-src --toolchain nightly-2025-08-02
+          rustup component add rust-src --toolchain nightly-2026-01-18
           cargo nextest run
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

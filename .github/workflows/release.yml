@@ -5,35 +5,39 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag (e.g., v1.5.0)"
+        description: "Version tag (e.g., v2.0.0-beta.2)"
         required: true
-        default: "v1.5.0"
+        default: "v2.0.0-beta.2"
         type: string
 
 env:
-  S3_BUCKET: openvm-public-artifacts-us-east-1
+  S3_BUCKET: ${{ vars.OPENVM_S3_ARTIFACTS_BUCKET }}
 
 jobs:
   upload-setup:
     runs-on:
       - runs-on=${{ github.run_id }}/runner=64cpu-linux-x64/extras=s3-cache/disk=large
     steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - name: Checkout base branch
         uses: actions/checkout@v5
 
       - name: Set version
-        run: echo "version=${{ github.event.inputs.version || 'v1.5.0' }}" >> $GITHUB_ENV
-
-      - name: Install solc # svm should support arm64 linux
-        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+        run: echo "version=${{ github.event.inputs.version || 'v2.0.0-beta.2' }}" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Install solc # svm should support arm64 linux
+        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
       # Checkout and test tagged version
       - name: Checkout tagged version
@@ -42,7 +46,9 @@ jobs:
           ref: ${{ env.version }}
 
       - name: Build tagged CLI
-        run: cargo install --force --locked --path crates/cli cargo-openvm
+        run: |
+          cargo build --release --locked -p cargo-openvm
+          echo "${{ github.workspace }}/target/release" >> $GITHUB_PATH
 
       - name: Run setup from tagged version
         run: |
@@ -55,3 +61,7 @@ jobs:
 
       - name: Sync ~/.openvm with S3 bucket in tagged dir
         run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

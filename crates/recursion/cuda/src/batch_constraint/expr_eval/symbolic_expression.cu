@@ -353,7 +353,8 @@ extern "C" int _sym_expr_common_tracegen(
     size_t num_records_per_proof,
     const FpExt *d_sumcheck_rnds,
     const size_t *d_sumcheck_bounds,
-    const CachedRecord *d_cached_records
+    const CachedRecord *d_cached_records,
+    cudaStream_t stream
 ) {
     // Unused because expr_evals[i].len() is always the number of all airs,
     // plus 1 for unused variables.
@@ -363,7 +364,7 @@ extern "C" int _sym_expr_common_tracegen(
     assert((height & (height - 1)) == 0);
     size_t total_slots = height * max_num_proofs;
     auto [grid, block] = kernel_launch_params(total_slots, 512);
-    symbolic_expression_tracegen<<<grid, block>>>(
+    symbolic_expression_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         l_skip,

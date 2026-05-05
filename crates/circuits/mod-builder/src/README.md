@@ -75,7 +75,7 @@ We call this operation a "save" and we say that we "saved" the expression $xy + 
 We can continue to use `z` as usual, for instance `let w = z + b` will result in `w` storing the constraint $z + b$.
 When we are done, we call `w.save_output()` to save $w$.
 This will add the constraint $z + b - w$ and the compute $z + b$.
-It will also mark $w$ as an output variable, which means it will be written to memory by the `FieldExpressionCoreChip`.
+It will also mark $w$ as an output variable, which means it will be written to memory by the `FieldExpressionCoreAir`.
 
 Note that the variables in the expression tree don't actually have names, they are just numbered starting from 0.
 
@@ -130,7 +130,7 @@ However, there are some cases that all-0 row doesn't satisfy the constraints: wh
 - Some chips involve constant values, so their constraints will not be satisfied by all-0 rows.
   For these chips, we will pad the trace with a "dummy row".
   This dummy row will be created by evaluating the constraints with all-0 inputs and all-0 flags, and setting `is_valid` to 0.
-  See the `FieldExpressionCoreChip::finalize` method for details.
+  See the `ExprBuilder::finalize` method for details.
 
 ## Note on value of `range_checker_bits`
 
@@ -155,7 +155,7 @@ See the [examples section](#examples) for code examples to follow along with.
 3. Wrap the `ExprBuilder` in an `Rc<RefCell<ExprBuilder>>` so that it can be shared between multiple `FieldVariable`s.
    (You will be passing it into each `FieldVariable` that you create.)
 
-4. Create `FieldVariable`s using `ExprBuilder::new_input` and `ExprBuilder::new_constant`.
+4. Create `FieldVariable`s using `ExprBuilder::new_input` and `ExprBuilder::new_const`.
 
 5. Use the `FieldVariable`s to build the expression.
    Just use the `FieldVariables` as algebraic variables to construct expressions.

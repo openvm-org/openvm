@@ -201,13 +201,14 @@ extern "C" int _rv32_load_store_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
-    rv32_load_store_tracegen<<<grid, block>>>(
+    rv32_load_store_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

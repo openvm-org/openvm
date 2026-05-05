@@ -10,9 +10,9 @@ See a working example [here](https://github.com/openvm-org/openvm/blob/main/exam
 To use the K256 guest library, add the following dependencies to `Cargo.toml`:
 
 ```toml
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
-openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
-openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0", package = "k256" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2" }
+openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2", package = "k256" }
 ```
 
 The guest library provides a `Secp256k1Coord`, which represents a field element on the coordinate field of Secp256k1, and a `Secp256k1Point`, which represents an Secp256k1 elliptic curve point.
@@ -52,4 +52,4 @@ The `supported_moduli` parameter is a list of moduli that the guest program will
 
 The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections. The order of curves in `[[app_vm_config.ecc.supported_curves]]` must match the order in the `sw_init!` macro.
 Also, the `struct_name` field must be the name of the elliptic curve struct created by `sw_declare!`.
-In this example, the `Secp256k1Point` struct is created in `openvm_ecc_guest::k256`.
+In this example, the `Secp256k1Point` struct is provided by the `openvm-k256` crate.

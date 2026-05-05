@@ -50,6 +50,7 @@ moduli_init! {
 ```
 
 This step enumerates the declared moduli (e.g., `0` for the first one, `1` for the second one) and sets up internal linkage so the compiler can generate the appropriate RISC-V instructions associated with each modulus.
+During `cargo openvm build`, OpenVM generates an `openvm_init.rs` file, and `openvm::init!()` includes that file in the final guest binary.
 
 **Summary**:
 
@@ -80,7 +81,7 @@ moduli_init! {
     "21888242871839275222246405745257275088696311157297823662689037894645226208583"
 }
 complex_init! {
-    "Bn254Fp2" { mod_idx = 0 },
+    "Bn254Fp2" { mod_idx = 1 },
 }
 */
 ```
@@ -114,9 +115,10 @@ To have the correct imports for the above example, add the following to the `Car
 
 ```toml
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0" }
-serde = { version = "1.0.216", default-features = false }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2", features = ["std"] }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2" }
+serde = { version = "1.0.216" }
+num-bigint = { version = "0.4.6", features = ["serde"] }
 ```
 
 Here is the full `openvm.toml` to accompany the above example:

@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::{DeviceDataTransporter, ProverBackend, ProvingContext},
-    StarkEngine, SystemParams,
+    EngineDeviceCtx, StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
 use p3_bn254::Bn254;
@@ -28,6 +28,9 @@ use crate::{
 
 mod trace;
 
+/// RootProver does not store a device context because it uses late binding:
+/// the engine (and its device context) is created at prove time, not at construction.
+/// This allows the prover to be device-agnostic until proving begins.
 pub struct RootProver<S: AggregationSubCircuit, T> {
     pk: Arc<MultiStarkProvingKey<RootSC>>,
     vk: Arc<MultiStarkVerifyingKey<RootSC>>,
@@ -47,8 +50,8 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         E: StarkEngine<SC = RootSC>,
         E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
         <E::PB as ProverBackend>::Matrix: Clone,
-        S: VerifierTraceGen<E::PB, RootSC>,
-        T: RootTraceGen<E::PB>,
+        S: VerifierTraceGen<E::PB, RootSC, EngineDeviceCtx<E>>,
+        T: RootTraceGen<E::PB, EngineDeviceCtx<E>>,
     {
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info::<_, RootSC>(&ctx.per_trace, &self.circuit.airs());
@@ -81,8 +84,8 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     where
         E: StarkEngine<SC = RootSC>,
         E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
-        S: VerifierTraceGen<E::PB, RootSC>,
-        T: RootTraceGen<E::PB>,
+        S: VerifierTraceGen<E::PB, RootSC, EngineDeviceCtx<E>>,
+        T: RootTraceGen<E::PB, EngineDeviceCtx<E>>,
         E::PD: DeviceDataTransporter<RootSC, E::PB> + Clone,
         <E::PB as ProverBackend>::Val: Field + PrimeField32,
         <E::PB as ProverBackend>::Matrix: Clone,
@@ -132,8 +135,8 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
     where
         E: StarkEngine<SC = RootSC>,
         E::PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
-        S: VerifierTraceGen<E::PB, RootSC>,
-        T: RootTraceGen<E::PB>,
+        S: VerifierTraceGen<E::PB, RootSC, EngineDeviceCtx<E>>,
+        T: RootTraceGen<E::PB, EngineDeviceCtx<E>>,
         <E::PB as ProverBackend>::Val: Field + PrimeField32,
         <E::PB as ProverBackend>::Matrix: Clone,
     {

@@ -60,13 +60,14 @@ extern "C" int _alu_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
-    uint32_t timestamp_max_bits
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(Rv32BaseAluCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    alu_tracegen<<<grid, block>>>(
+    alu_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

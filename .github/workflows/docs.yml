@@ -27,23 +27,27 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32/extras=s3-cache
     steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cargo check
         run: cargo check
 
       - name: Build documentation
-        run: cargo +nightly-2025-08-19 doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --features "cuda"
+        run: cargo +nightly-2026-01-18 doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --features "cuda"
 
       # We only want the index page to display workspace crates, so we build
       # separately and copy over the index as a hack
       - name: Build index page
         run: |
-          cargo +nightly-2025-08-19 doc --workspace --no-deps --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --target-dir target/doc-nodeps
+          cargo +nightly-2026-01-18 doc --workspace --no-deps --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --target-dir target/doc-nodeps
           cp target/doc-nodeps/doc/index.html target/doc/
           cp target/doc-nodeps/doc/crates.js target/doc/
         env:
@@ -74,3 +78,7 @@ jobs:
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
         run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.event.inputs.tag }}/
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

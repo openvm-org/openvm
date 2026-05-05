@@ -456,6 +456,7 @@ where
                 STOREW | STOREH | STOREB => {
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
+
                     timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {

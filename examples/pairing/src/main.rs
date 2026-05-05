@@ -15,8 +15,7 @@ use openvm_pairing::{
 openvm::init!();
 /* The init! macro will expand to the following
 openvm_algebra_moduli_macros::moduli_init! {
-    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
-    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
 }
 
 openvm_algebra_complex_macros::complex_init! {

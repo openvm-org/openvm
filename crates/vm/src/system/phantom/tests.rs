@@ -82,7 +82,7 @@ fn test_cuda_phantom_tracegen() {
         execution_bridge: tester.execution_bridge(),
         phantom_opcode,
     };
-    let gpu_chip = PhantomChipGPU::new();
+    let gpu_chip = PhantomChipGPU::new(tester.range_checker().device_ctx.clone());
     let cpu_chip = PhantomChip::new(PhantomFiller, tester.dummy_memory_helper());
     let mut harness =
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, NUM_NOPS);

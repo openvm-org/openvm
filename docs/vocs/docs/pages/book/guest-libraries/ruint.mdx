@@ -1,6 +1,6 @@
 # Ruint
 
-The Ruint guest library is a fork of [ruint](https://github.com/recmo/uint) that allows for patching of U256 operations with logic from [openvm-bigint-guest](/book/acceleration-using-extensions/big-integer).
+The Ruint guest library is [a fork of ruint](https://github.com/openvm-org/uint) that allows for patching of U256 operations with logic from [openvm-bigint-guest](/book/acceleration-using-extensions/big-integer).
 
 ## Example matrix multiplication using `U256`
 
@@ -10,10 +10,11 @@ See the full example [here](https://github.com/openvm-org/openvm/blob/main/examp
 // [!include ~/snippets/examples/u256/src/main.rs]
 ```
 
-To be able to import the `U256` struct, add the following to your `Cargo.toml` file:
+To use `U256` outside the monorepo, add the following to your `Cargo.toml` file:
 
 ```toml
-openvm-ruint = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0", package = "ruint" }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0-beta.2", features = ["std"] }
+openvm-ruint = { git = "https://github.com/openvm-org/uint.git", branch = "v1.14.0-openvm", package = "ruint" }
 ```
 
 ### Example matrix multiplication using `I256`
@@ -24,10 +25,13 @@ See the full example [here](https://github.com/openvm-org/openvm/blob/main/examp
 // [!include ~/snippets/examples/i256/src/main.rs]
 ```
 
-To be able to import the `I256` struct, add the following to your `Cargo.toml` file:
+This example uses `alloy_primitives::I256`, which depends on `ruint`. The snippet below is the equivalent setup for using it outside the monorepo; the checked-in example uses a local `path` patch instead.
 
 ```toml
-openvm-ruint = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.5.0", package = "ruint" }
+alloy-primitives = "1.1.2"
+
+[patch.crates-io]
+ruint = { git = "https://github.com/openvm-org/uint.git", branch = "v1.14.0-openvm" }
 ```
 
 ### Config parameters

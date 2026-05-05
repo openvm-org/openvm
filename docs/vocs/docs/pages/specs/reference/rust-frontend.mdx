@@ -15,9 +15,9 @@ OpenVM Rust frontend below.
 
 The OpenVM Rust frontend supports the following host and guest target and toolchains:
 
-- **Host**: We support `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu` with Rust 1.90.0: `rustc 1.90.0 (1159e78c4 2025-09-14)`.
+- **Host**: We support `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu` with Rust 1.91.1.
 For reproducible builds, we recommend using the `x86_64-unknown-linux-gnu` platform.
-- **Guest**: `riscv32im-risc0-zkvm-elf` with Rust `nightly-2025-08-02`: `rustc 1.90.0-nightly (4b55fe199 2025-08-01)`.
+- **Guest**: `riscv32im-risc0-zkvm-elf` with Rust `nightly-2026-01-18`: `rustc 1.94.0-nightly (fe98ddcfc 2026-01-17)`.
 
 The `riscv32im-risc0-zkvm-elf` guest target incorporates special support for
 zkVMs and has official support by the
@@ -36,7 +36,7 @@ through the `"std"` feature.  This section documents the different features of t
 ### Memory Allocator
 
 OpenVM supports 512MB of guest memory, with stack growing down from `STACK_TOP = 0x0020_0400`.
-program loading starting at `TEXT_START = 0x0020_0800`, and heap starting right afterwards.
+Program loading starting at `TEXT_START = 0x0020_0800`, and heap starting right afterwards.
 We support two allocators:
 
 - A **bump** allocator which increments a heap pointer for each successive allocation without
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn sys_getenv(
     _varname_len: usize,
 ) -> usize;
 ```
-This function always returns `0`, which is equivalent to `std::env::var` always returning `None`.
+This function always returns `0`, which is equivalent to `std::env::var_os` always returning `Some("")`.
 
 ```rust
 pub extern "C" fn sys_argc() -> usize;

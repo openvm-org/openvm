@@ -22,7 +22,7 @@ use rand::Rng;
 use {
     crate::{
         bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
-        utils::test_gpu_engine_small,
+        utils::{test_device_ctx, test_gpu_engine_small},
         Chip,
     },
     dummy::cuda::DummyInteractionChipGPU,
@@ -262,7 +262,9 @@ fn test_cuda_bitwise_op_lookup() {
     const BIT_MASK: u32 = (1 << CUDA_NUM_BITS) - 1;
 
     let mut rng = create_seeded_rng();
-    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::new());
+    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::new(
+        test_device_ctx(),
+    ));
 
     let random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
@@ -298,8 +300,10 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
 
     let mut rng = create_seeded_rng();
     let bus = BitwiseOperationLookupBus::new(0);
+    let device_ctx = test_device_ctx();
     let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::hybrid(
         Arc::new(BitwiseOperationLookupChip::new(bus)),
+        device_ctx.clone(),
     ));
 
     let gpu_random_values = (0..NUM_INPUTS)
@@ -338,7 +342,7 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
                 .chain(cpu_values.iter().map(|v| F::from_u32(v[3]))),
         )
         .collect::<Vec<_>>()
-        .to_device()
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let dummy_air = DummyInteractionAir::new(4, true, bus.inner.index);

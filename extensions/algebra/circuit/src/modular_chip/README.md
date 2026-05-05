@@ -58,16 +58,16 @@ To constrain `b < N`, we add the following constraints:
 By our claim, on non-setup rows, this is equivalent to constraining `b[i] = N[i]` for `i > b_diff_idx`.
 - when `lt_marker[i]` is not 0 or 2 (and hence must be 1), constrain `b_lt_diff = N[i] - b[i]`.
 This index `i` is the proposed `b_diff_idx`.
-- when `is_setup = 0`, range check `b_lt_diff` to be in `[1, 2^LIMB_BITS - 1)` which implies `b_lt_diff > 0`. 
+- when `is_setup = 0`, range check `b_lt_diff - 1` to be in `[0, 2^LIMB_BITS)`, which is equivalent to constraining `b_lt_diff` to be in `[1, 2^LIMB_BITS)` and hence `b_lt_diff > 0`.
 
 Thus, we have constrained that `b[i] == N[i]` for some `i` (namely `b_diff_idx`) and `b[j] < N[j]` for all `j > i` on non-setup rows as needed.
 
 To constrain `c < N`, we add the following constraints:
 - when `prefix_sum` is not `c_lt_mark` or `final_sum`, `c[i] = N[i]`.
 By our claim, this is equivalent to constraining `c[i] = N[i]` for `i > c_diff_idx`.
-- when `lt_marker[i]` is not 0 or 3 (and hence must be 2), constrain `c_lt_diff = N[i] - c[i]`.
+- when `lt_marker[i]` is not 0 or `3 - c_lt_mark` (and hence must be `c_lt_mark`), constrain `c_lt_diff = N[i] - c[i]`.
 This index `i` is the proposed `c_diff_idx`.
-- when `is_setup = 0`, range check `c_lt_diff` to be in `[1, 2^LIMB_BITS - 1)` which implies `c_lt_diff > 0`. 
+- when `is_setup = 0`, range check `c_lt_diff - 1` to be in `[0, 2^LIMB_BITS)`, which is equivalent to constraining `c_lt_diff` to be in `[1, 2^LIMB_BITS)` and hence `c_lt_diff > 0`.
 
 Thus, we have constrained that `c[i] == N[i]` for some `i` (namely `c_diff_idx`) and `c[j] < N[j]` for all `j > i` on non-setup rows as needed.
 

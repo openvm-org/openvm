@@ -113,7 +113,7 @@ where
         }
 
         // Validate tag
-        let tag = Tag::from_u8(bytes[0]).unwrap();
+        let tag = Tag::from_u8(bytes[0]).map_err(|_| Error::new())?;
 
         // Validate length
         let expected_len = tag.message_len(Coordinate::<C>::NUM_LIMBS);
@@ -438,7 +438,9 @@ where
         // This should get compiled out:
         assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
         // IntMod limbs are currently always bytes
-        assert_eq!(sig.len(), <C as IntrinsicCurve>::Scalar::NUM_LIMBS * 2);
+        if sig.len() != <C as IntrinsicCurve>::Scalar::NUM_LIMBS * 2 {
+            return Err(Error::new());
+        }
         // Signature is default encoded in big endian bytes
         let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
         // Note: Scalar internally stores using little endian
@@ -452,7 +454,7 @@ where
         let prehash_bytes = bits2field::<C>(prehash)?;
         // If prehash is longer than Scalar::NUM_LIMBS, take leftmost bytes
         let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
-        // from_be_bytes still works if len < Scalar::NUM_LIMBS
+        // from_be_bytes_unchecked zero-pads if len < Scalar::NUM_LIMBS
         // we don't need to reduce because IntMod is up to modular equivalence
         let z = Scalar::<C>::from_be_bytes_unchecked(&prehash_bytes[..prehash_bytes.len() - trim]);
 
@@ -509,7 +511,9 @@ where
     // This should get compiled out:
     assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
     // IntMod limbs are currently always bytes
-    assert_eq!(sig.len(), Scalar::<C>::NUM_LIMBS * 2);
+    if sig.len() != Scalar::<C>::NUM_LIMBS * 2 {
+        return Err(Error::new());
+    }
     // Signature is default encoded in big endian bytes
     let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
     // Note: Scalar internally stores using little endian
@@ -523,7 +527,7 @@ where
     let prehash_bytes = bits2field::<C>(prehash)?;
     // If prehash is longer than Scalar::NUM_LIMBS, take leftmost bytes
     let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
-    // from_be_bytes still works if len < Scalar::NUM_LIMBS
+    // from_be_bytes_unchecked zero-pads if len < Scalar::NUM_LIMBS
     // we don't need to reduce because IntMod is up to modular equivalence
     let z = Scalar::<C>::from_be_bytes_unchecked(&prehash_bytes[..prehash_bytes.len() - trim]);
 

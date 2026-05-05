@@ -29,7 +29,7 @@ jobs:
         extension:
           - { name: "rv32im", path: "rv32im", aot: false }
           - { name: "keccak256", path: "keccak256", aot: false }
-          - { name: "sha256", path: "sha256", aot: false }
+          - { name: "sha2", path: "sha2", aot: false }
           - { name: "bigint", path: "bigint", aot: false }
           - { name: "algebra", path: "algebra", aot: false }
           - { name: "ecc", path: "ecc", aot: false }
@@ -37,7 +37,7 @@ jobs:
           - { name: "deferral", path: "deferral", aot: false }
           - { name: "rv32im", path: "rv32im", aot: true }
           - { name: "keccak256", path: "keccak256", aot: true }
-          - { name: "sha256", path: "sha256", aot: true }
+          - { name: "sha2", path: "sha2", aot: true }
           - { name: "bigint", path: "bigint", aot: true }
           - { name: "algebra", path: "algebra", aot: true }
           - { name: "ecc", path: "ecc", aot: true }
@@ -53,6 +53,8 @@ jobs:
 
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
@@ -70,6 +72,7 @@ jobs:
           exit 0
 
       - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -103,9 +106,13 @@ jobs:
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2025-08-02
+          rustup component add rust-src --toolchain nightly-2026-01-18
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
           else
             cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
           fi
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

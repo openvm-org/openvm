@@ -498,7 +498,10 @@ impl AggregateMetrics {
         if let Some(summary) = summary {
             // Special handling for execute_metered metrics (not aggregated across segments
             // in the app proof case)
-            if metric_name == EXECUTE_METERED_TIME_LABEL && is_app_proof_group(group_name) {
+            if (metric_name == EXECUTE_METERED_TIME_LABEL
+                || metric_name == EXECUTE_METERED_INSNS_LABEL)
+                && is_app_proof_group(group_name)
+            {
                 writeln!(
                     writer,
                     "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
@@ -662,6 +665,7 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_E1_TIME_LABEL,
     EXECUTE_E1_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
+    EXECUTE_METERED_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
     EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,

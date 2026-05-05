@@ -16,7 +16,11 @@ use {
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
-    openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_cuda_common::{
+        common::get_device,
+        copy::MemCopyH2D as _,
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
+    },
     openvm_stark_backend::p3_field::PrimeField32,
 };
 
@@ -144,6 +148,10 @@ fn test_cuda_tracegen_poseidon2() {
     const SBOX_REGS: usize = 1;
     const HALF_FULL_ROUNDS: usize = 4; // Constant for BabyBear
     const PARTIAL_ROUNDS: usize = 13; // Constant for BabyBear
+    let device_ctx = GpuDeviceCtx {
+        device_id: get_device().unwrap() as u32,
+        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+    };
 
     // Generate random states and prepare GPU inputs
     let mut rng = create_seeded_rng();
@@ -156,7 +164,7 @@ fn test_cuda_tracegen_poseidon2() {
         .iter()
         .flat_map(|r| r.iter().copied())
         .collect::<Vec<_>>()
-        .to_device()
+        .to_device_on(&device_ctx)
         .unwrap();
 
     // Launch GPU tracegen
@@ -166,16 +174,22 @@ fn test_cuda_tracegen_poseidon2() {
         + PARTIAL_ROUNDS * (SBOX_REGS + 1)
         + HALF_FULL_ROUNDS * (WIDTH * SBOX_REGS + WIDTH);
 
-    let gpu_mat = DeviceMatrix::<F>::with_capacity(N, num_cols);
+    let gpu_mat = DeviceMatrix::<F>::with_capacity_on(N, num_cols, &device_ctx);
 
     unsafe {
-        poseidon2::dummy_tracegen(gpu_mat.buffer(), &inputs_dev, SBOX_REGS as u32, N as u32)
-            .expect("GPU tracegen failed");
+        poseidon2::dummy_tracegen(
+            gpu_mat.buffer(),
+            &inputs_dev,
+            SBOX_REGS as u32,
+            N as u32,
+            device_ctx.stream.as_raw(),
+        )
+        .expect("GPU tracegen failed");
     }
 
     // Run CPU tracegen and compare results
     let config = Poseidon2Config::<BabyBear>::default();
     let chip: Poseidon2SubChip<_, SBOX_REGS> = Poseidon2SubChip::new(config.constants);
     let cpu_trace = Arc::new(chip.generate_trace(cpu_inputs));
-    assert_eq_host_and_device_matrix(cpu_trace, &gpu_mat);
+    assert_eq_host_and_device_matrix(cpu_trace, &gpu_mat, &device_ctx);
 }

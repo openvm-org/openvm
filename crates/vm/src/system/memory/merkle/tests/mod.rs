@@ -191,24 +191,20 @@ fn random_test(
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
         height + 3,
         20,
         17,
-        32,
     );
 
     let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
@@ -284,24 +280,20 @@ fn expand_test_no_accesses() {
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
         height + 3,
         20,
         17,
-        32,
     );
     let md = mem_config.memory_dimensions();
 
@@ -333,24 +325,20 @@ fn expand_test_negative() {
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
         height + 3,
         20,
         17,
-        32,
     );
     let md = mem_config.memory_dimensions();
 

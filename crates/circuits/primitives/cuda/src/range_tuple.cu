@@ -27,10 +27,11 @@ extern "C" int _range_tuple_checker_tracegen(
     Fp *d_trace,
     const uint32_t *d_sizes,
     uint32_t num_dims,
-    size_t num_bins
+    size_t num_bins,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(num_bins);
-    range_tuple_checker_tracegen<<<grid, block>>>(
+    range_tuple_checker_tracegen<<<grid, block, 0, stream>>>(
         d_count, d_cpu_count, d_trace, d_sizes, num_dims, num_bins
     );
     return CHECK_KERNEL();

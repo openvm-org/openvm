@@ -27,11 +27,8 @@ openvm-continuations = { workspace = true, features = ["root-prover"] }
 openvm-sdk-config = { workspace = true }
 p3-bn254 = { workspace = true }
 
-# TODO: revisit these pinned AWS SDK versions after the next MSRV update.
-# Keep pinned for rustc 1.90.0 compatibility, but avoid legacy AWS default features
-# that pull the old rustls 0.21 / rustls-webpki 0.101 path into the lockfile.
-aws-sdk-s3 = { version = "=1.119.0", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
-aws-config = { version = "=1.8.12", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.122", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
+aws-config = { version = "1.8.13", default-features = false, features = ["default-https-client", "rt-tokio"] }
 tokio = { version = "1.46.1", features = ["rt", "rt-multi-thread", "macros"] }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true

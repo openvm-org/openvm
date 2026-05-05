@@ -13,7 +13,7 @@ mod guest_tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sha256_transpiler::Sha256TranspilerExtension;
+    use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -99,7 +99,7 @@ mod guest_tests {
             CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig,
             Rv32WeierstrassConfigExecutor,
         };
-        use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256ProverExt};
+        use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
         use serde::{Deserialize, Serialize};
         #[cfg(feature = "cuda")]
         use {
@@ -125,14 +125,14 @@ mod guest_tests {
             #[config(generics = true)]
             pub weierstrass: Rv32WeierstrassConfig,
             #[extension]
-            pub sha256: Sha256,
+            pub sha2: Sha2,
         }
 
         impl EcdsaConfig {
             pub fn new(curves: Vec<CurveConfig>) -> Self {
                 Self {
                     weierstrass: Rv32WeierstrassConfig::new(curves),
-                    sha256: Default::default(),
+                    sha2: Default::default(),
                 }
             }
         }
@@ -166,6 +166,7 @@ mod guest_tests {
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<SC>,
+                device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
             ) -> Result<
                 VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
                 ChipInventoryError,
@@ -174,11 +175,12 @@ mod guest_tests {
                     &Rv32WeierstrassBuilder,
                     &config.weierstrass,
                     circuit,
+                    device_ctx,
                 )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<E, _, _>::extend_prover(
-                    &Sha256ProverExt,
-                    &config.sha256,
+                    &Sha2ProverExt,
+                    &config.sha2,
                     inventory,
                 )?;
                 Ok(chip_complex)
@@ -195,6 +197,7 @@ mod guest_tests {
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<BabyBearPoseidon2Config>,
+                device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
             ) -> Result<
                 VmChipComplex<
                     BabyBearPoseidon2Config,
@@ -209,11 +212,12 @@ mod guest_tests {
                         &Rv32WeierstrassBuilder,
                         &config.weierstrass,
                         circuit,
+                        device_ctx,
                     )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
-                    &Sha256ProverExt,
-                    &config.sha256,
+                    &Sha2ProverExt,
+                    &config.sha2,
                     inventory,
                 )?;
                 Ok(chip_complex)
@@ -235,7 +239,7 @@ mod guest_tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Sha256TranspilerExtension),
+                .with_extension(Sha2TranspilerExtension),
         )?;
         air_test(EcdsaBuilder, config, openvm_exe);
         Ok(())

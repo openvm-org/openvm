@@ -15,18 +15,22 @@ use openvm_stark_backend::{
     prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
-use rustc_hash::FxHashSet;
 use tracing::instrument;
 
-use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
+use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
     primitives::Chip,
     system::memory::{
-        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        controller::CHUNK, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
         TimestampedEquipartition,
     },
 };
+
+/// Number of DEFAULT_BLOCK_SIZE blocks per CHUNK (e.g., 2 for 8/4).
+/// Blocks are on the same row only for Merkle tree hashing (8 bytes at a time).
+/// Memory bus interactions use per-block timestamps.
+pub const BLOCKS_PER_CHUNK: usize = CHUNK / DEFAULT_BLOCK_SIZE;
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
@@ -41,7 +45,10 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
     pub leaf_label: T,
     pub values: [T; CHUNK],
     pub hash: [T; CHUNK],
-    pub timestamp: T,
+    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block within the chunk has its own timestamp.
+    /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
+    /// at t=0 final).
+    pub timestamps: [T; BLOCKS_PER_CHUNK],
 }
 
 /// Imposes the following constraints:
@@ -53,7 +60,6 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 ///   `merkle_bus`.
 #[derive(Clone, Debug)]
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
-    pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
@@ -80,12 +86,14 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
-        // Constrain that an "initial" row has timestamp zero.
+        // Constrain that an "initial" row has all timestamp zero.
         // Since `direction` is constrained to be in {-1, 0, 1}, we can select `direction == 1`
         // with the constraint below.
-        builder
-            .when(local.expand_direction * (local.expand_direction + AB::F::ONE))
-            .assert_zero(local.timestamp);
+        let mut when_initial =
+            builder.when(local.expand_direction * (local.expand_direction + AB::F::ONE));
+        for i in 0..BLOCKS_PER_CHUNK {
+            when_initial.assert_zero(local.timestamps[i]);
+        }
 
         let mut expand_fields = vec![
             // direction =  1 => is_final = 0
@@ -108,29 +116,31 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction,
         );
 
-        self.memory_bus
-            .send(
-                MemoryAddress::new(
-                    local.address_space,
-                    local.leaf_label * AB::F::from_usize(CHUNK),
-                ),
-                local.values.to_vec(),
-                local.timestamp,
-            )
-            .eval(builder, local.expand_direction);
+        let chunk_size_f = AB::F::from_usize(CHUNK);
+        for block_idx in 0..BLOCKS_PER_CHUNK {
+            let offset = AB::F::from_usize(block_idx * DEFAULT_BLOCK_SIZE);
+            // Split the 1xCHUNK leaf into DEFAULT_BLOCK_SIZE-sized bus messages.
+            // Each block uses its own timestamp - untouched blocks stay at t=0.
+            self.memory_bus
+                .send(
+                    MemoryAddress::new(
+                        local.address_space,
+                        local.leaf_label * chunk_size_f + offset,
+                    ),
+                    local.values
+                        [block_idx * DEFAULT_BLOCK_SIZE..(block_idx + 1) * DEFAULT_BLOCK_SIZE]
+                        .to_vec(),
+                    local.timestamps[block_idx],
+                )
+                .eval(builder, local.expand_direction);
+        }
     }
 }
 
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    pub touched_labels: TouchedLabels<F, CHUNK>,
+    touched_labels: Option<Vec<FinalTouchedLabel<F, CHUNK>>>,
     overridden_height: Option<usize>,
-}
-
-#[derive(Debug)]
-pub enum TouchedLabels<F, const CHUNK: usize> {
-    Running(FxHashSet<(u32, u32)>),
-    Final(Vec<FinalTouchedLabel<F, CHUNK>>),
 }
 
 #[derive(Debug)]
@@ -141,55 +151,52 @@ pub struct FinalTouchedLabel<F, const CHUNK: usize> {
     final_values: [F; CHUNK],
     init_hash: [F; CHUNK],
     final_hash: [F; CHUNK],
-    final_timestamp: u32,
+    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block has its own timestamp.
+    final_timestamps: [u32; BLOCKS_PER_CHUNK],
 }
 
-impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
-    fn default() -> Self {
-        Self::Running(FxHashSet::default())
-    }
-}
+type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timestamp, values)
+type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
+pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
-impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
-    fn touch(&mut self, address_space: u32, label: u32) {
-        match self {
-            TouchedLabels::Running(touched_labels) => {
-                touched_labels.insert((address_space, label));
-            }
-            _ => panic!("Cannot touch after finalization"),
-        }
-    }
+pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
+    final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+) -> ChunkedTouchedMemory<F> {
+    let mut enriched: Vec<EnrichedEntry<F>> = final_memory
+        .par_iter()
+        .map(|&((addr_space, ptr), ts_values)| {
+            let chunk_label = ptr / CHUNK as u32;
+            let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
+            let key = (addr_space, chunk_label);
+            let block_info = (block_idx, ts_values.timestamp, ts_values.values);
+            (key, block_info)
+        })
+        .collect();
+    enriched.sort_unstable_by_key(|(key, _)| *key);
 
-    pub fn is_empty(&self) -> bool {
-        match self {
-            TouchedLabels::Running(touched_labels) => touched_labels.is_empty(),
-            TouchedLabels::Final(touched_labels) => touched_labels.is_empty(),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            TouchedLabels::Running(touched_labels) => touched_labels.len(),
-            TouchedLabels::Final(touched_labels) => touched_labels.len(),
-        }
-    }
+    enriched
+        .chunk_by(|a, b| a.0 == b.0)
+        .map(|group| {
+            let key = group[0].0;
+            let blocks = group.iter().map(|&(_, info)| info).collect();
+            (key, blocks)
+        })
+        .collect()
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     pub fn new(
-        memory_dimensions: MemoryDimensions,
         memory_bus: MemoryBus,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
         Self {
             air: PersistentBoundaryAir {
-                memory_dims: memory_dimensions,
                 memory_bus,
                 merkle_bus,
                 compression_bus,
             },
-            touched_labels: Default::default(),
+            touched_labels: None,
             overridden_height: None,
         }
     }
@@ -198,42 +205,51 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         self.overridden_height = Some(overridden_height);
     }
 
-    pub fn touch_range(&mut self, address_space: u32, pointer: u32, len: u32) {
-        let start_label = pointer / CHUNK as u32;
-        let end_label = (pointer + len - 1) / CHUNK as u32;
-        for label in start_label..=end_label {
-            self.touched_labels.touch(address_space, label);
-        }
-    }
-
+    /// Finalize the boundary chip with per-block timestamped memory.
+    ///
+    /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity (4 bytes per entry, single timestamp
+    /// each). This function rechunks into CHUNK-sized (8 bytes) groups with per-block
+    /// timestamps. Untouched blocks within a touched chunk get values from initial_memory and
+    /// timestamp 0.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
-        // Only touched stuff
-        final_memory: &TimestampedEquipartition<F, CHUNK>,
+        // Touched stuff at DEFAULT_BLOCK_SIZE granularity
+        final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
         hasher: &H,
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        let final_touched_labels: Vec<_> = final_memory
-            .par_iter()
-            .map(|&((addr_space, ptr), ts_values)| {
-                let TimestampedValues { timestamp, values } = ts_values;
+        let final_touched_labels: Vec<_> = group_touched_memory_by_chunk(final_memory)
+            .into_par_iter()
+            .map(|((addr_space, chunk_label), blocks)| {
+                let chunk_ptr = chunk_label * CHUNK as u32;
                 // SAFETY: addr_space from `final_memory` are all in bounds
-                let init_values = array::from_fn(|i| unsafe {
-                    initial_memory.get_f::<F>(addr_space, ptr + i as u32)
+                let init_values: [F; CHUNK] = array::from_fn(|i| unsafe {
+                    initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
                 });
+
+                let mut final_values = init_values;
+                let mut timestamps = [0u32; BLOCKS_PER_CHUNK];
+
+                for (block_idx, ts, values) in blocks {
+                    timestamps[block_idx] = ts;
+                    for (i, &val) in values.iter().enumerate() {
+                        final_values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
+                    }
+                }
+
                 let initial_hash = hasher.hash(&init_values);
-                let final_hash = hasher.hash(&values);
+                let final_hash = hasher.hash(&final_values);
                 FinalTouchedLabel {
                     address_space: addr_space,
-                    label: ptr / CHUNK as u32,
+                    label: chunk_label,
                     init_values,
-                    final_values: values,
+                    final_values,
                     init_hash: initial_hash,
                     final_hash,
-                    final_timestamp: timestamp,
+                    final_timestamps: timestamps,
                 }
             })
             .collect();
@@ -241,7 +257,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             hasher.receive(&l.init_values);
             hasher.receive(&l.final_values);
         }
-        self.touched_labels = TouchedLabels::Final(final_touched_labels);
+        self.touched_labels = Some(final_touched_labels);
     }
 }
 
@@ -252,9 +268,13 @@ where
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let trace = {
+            let touched_labels = self
+                .touched_labels
+                .as_ref()
+                .expect("Cannot generate trace before finalization");
             let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-            let mut height = (2 * self.touched_labels.len()).next_power_of_two();
+            let mut height = (2 * touched_labels.len()).next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
                 oh = oh.next_power_of_two();
                 assert!(
@@ -264,11 +284,6 @@ where
                 height = oh;
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
-
-            let touched_labels = match &self.touched_labels {
-                TouchedLabels::Final(touched_labels) => touched_labels,
-                _ => panic!("Cannot generate trace before finalization"),
-            };
 
             rows.par_chunks_mut(2 * width)
                 .zip(touched_labels.par_iter())
@@ -280,7 +295,7 @@ where
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
-                        timestamp: Val::<SC>::from_u32(INITIAL_TIMESTAMP),
+                        timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_CHUNK],
                     };
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {
@@ -289,7 +304,7 @@ where
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
                         values: touched_label.final_values,
                         hash: touched_label.final_hash,
-                        timestamp: Val::<SC>::from_u32(touched_label.final_timestamp),
+                        timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
                     };
                 });
             RowMajorMatrix::new(rows, width)

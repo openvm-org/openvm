@@ -23,7 +23,7 @@ use crate::{
     call::{DeferralCallAir, DeferralCallChipGpu},
     count::{DeferralCircuitCountAir, DeferralCircuitCountChipGpu},
     output::{DeferralOutputAir, DeferralOutputChipGpu},
-    poseidon2::{poseidon2_buffer_capacity, DeferralPoseidon2Air, DeferralPoseidon2ChipGpu},
+    poseidon2::{DeferralPoseidon2Air, DeferralPoseidon2ChipGpu},
     DeferralExtension, Rv32DeferralConfig,
 };
 
@@ -47,28 +47,31 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         let count = Arc::new(if num_deferral_circuits == 0 {
             DeviceBuffer::<u32>::new()
         } else {
-            DeviceBuffer::<u32>::with_capacity(num_deferral_circuits)
+            DeviceBuffer::<u32>::with_capacity_on(num_deferral_circuits, &range_checker.device_ctx)
         });
         if num_deferral_circuits > 0 {
-            count.fill_zero().unwrap();
+            count.fill_zero_on(&range_checker.device_ctx).unwrap();
         }
-
-        let max_trace_height = inventory
-            .config()
-            .segmentation_config
-            .limits
-            .max_trace_height as usize;
-        let poseidon2_capacity = poseidon2_buffer_capacity(max_trace_height.max(1));
 
         inventory.next_air::<DeferralCircuitCountAir>()?;
         let count_chip = Arc::new(DeferralCircuitCountChipGpu::new(
             count.clone(),
             num_deferral_circuits,
+            range_checker.device_ctx.clone(),
         ));
         inventory.add_periphery_chip(count_chip);
 
         inventory.next_air::<DeferralPoseidon2Air<CudaF>>()?;
-        let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(poseidon2_capacity, 1));
+        let max_trace_height = inventory
+            .config()
+            .segmentation_config
+            .limits
+            .max_trace_height as usize;
+        let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(
+            max_trace_height.max(1),
+            1,
+            range_checker.device_ctx.clone(),
+        ));
         let poseidon2_shared = poseidon2_chip.shared_buffer();
         inventory.add_periphery_chip(poseidon2_chip);
 
@@ -112,6 +115,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<BabyBearPoseidon2Config>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
     ) -> Result<
         VmChipComplex<
             BabyBearPoseidon2Config,
@@ -125,6 +129,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32DeferralGpuBuilder {
             &SystemGpuBuilder,
             &config.system,
             circuit,
+            device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(

@@ -27,15 +27,15 @@ __global__ void cukernel_poseidon2_tracegen(Fp *output, Fp *inputs, uint32_t n) 
         PARTIAL_ROUNDS>(row, state);
 }
 
-extern "C" int _poseidon2_dummy_tracegen(Fp *output, Fp *inputs, uint32_t sbox_regs, uint32_t n) {
+extern "C" int _poseidon2_dummy_tracegen(Fp *output, Fp *inputs, uint32_t sbox_regs, uint32_t n, cudaStream_t stream) {
 
     auto [grid, block] = kernel_launch_params(n);
     switch (sbox_regs) {
     case 1:
-        cukernel_poseidon2_tracegen<16, 7, 1, 4, 13><<<grid, block>>>(output, inputs, n);
+        cukernel_poseidon2_tracegen<16, 7, 1, 4, 13><<<grid, block, 0, stream>>>(output, inputs, n);
         break;
     case 0:
-        cukernel_poseidon2_tracegen<16, 7, 0, 4, 13><<<grid, block>>>(output, inputs, n);
+        cukernel_poseidon2_tracegen<16, 7, 0, 4, 13><<<grid, block, 0, stream>>>(output, inputs, n);
         break;
     default:
         return cudaErrorInvalidConfiguration;
