@@ -21,7 +21,7 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
-    field::baby_bear::{BabyBearChip, BabyBearExt4Wire},
+    field::baby_bear::{BabyBearChip, BabyBearExt5Wire},
     RootEF, RootF,
 };
 
@@ -78,7 +78,7 @@ fn ext_to_u64(ext: RootEF) -> [u64; NATIVE_EF_DEGREE] {
 
 #[test]
 fn transcript_outputs_match_native_interleaved_flow() {
-    let observed_ext_coeffs = [5, 7, 11, 13];
+    let observed_ext_coeffs = [5, 7, 11, 13, 17];
     let digest = [Bn254Scalar::from_u64(0x1234_5678)];
 
     // Convenience alias for trait method disambiguation.
@@ -161,7 +161,7 @@ fn transcript_outputs_match_native_interleaved_flow() {
         transcript.observe(ctx, &two);
         transcript.observe(ctx, &three);
 
-        let observed_ext = BabyBearExt4Wire(core::array::from_fn(|i| {
+        let observed_ext = BabyBearExt5Wire(core::array::from_fn(|i| {
             baby_bear.load_witness(ctx, RootF::from_u64(observed_ext_coeffs[i]))
         }));
         transcript.observe_ext(ctx, &observed_ext);

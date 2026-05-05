@@ -58,7 +58,7 @@ extensions and system configuration your VM will use. To do this, you can use th
         .io(Default::default())
         .build()
         .optimize();
-    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_params = app_params_with_128_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_params = AggregationSystemParams::default();
     let sdk = Sdk::new(AppConfig::new(vm_config, app_params), agg_params)?;
 ```
@@ -67,7 +67,7 @@ A custom OpenVM configuration can also be specified in an `openvm.toml` file and
 
 ```rust
     let app_vm_config = SdkVmConfig::from_toml(include_str!("your_path_project_root/openvm.toml"))?;
-    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_params = app_params_with_128_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_params = AggregationSystemParams::default();
     Sdk::new(AppConfig::new(app_vm_config, app_params), agg_params)?;
 ```
@@ -78,7 +78,7 @@ A custom OpenVM configuration can also be specified in an `openvm.toml` file and
 ```rust
 use openvm_sdk::{config::{AggregationSystemParams, AppConfig}, Sdk};
 use openvm_sdk_config::SdkVmConfig;
-use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
+use openvm_stark_sdk::config::{app_params_with_128_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 ```
 
 </details>

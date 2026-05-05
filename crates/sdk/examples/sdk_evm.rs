@@ -4,7 +4,7 @@ use std::fs;
 use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_sdk::{config::AggregationSystemParams, Sdk, StdIn};
-use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
+use openvm_stark_sdk::config::{app_params_with_128_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// ```
     // [!region build]
     // 1. Initialize the SDK with the RV32IM preset and default aggregation parameters.
-    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_params = app_params_with_128_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_params = AggregationSystemParams::default();
     let sdk = Sdk::riscv32(app_params, agg_params);
 

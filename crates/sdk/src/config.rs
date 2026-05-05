@@ -2,8 +2,8 @@ use clap::Args;
 use openvm_sdk_config::SdkVmConfig;
 use openvm_stark_backend::SystemParams;
 use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security, internal_params_with_100_bits_security,
-    leaf_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT,
+    app_params_with_128_bits_security, internal_params_with_128_bits_security,
+    leaf_params_with_128_bits_security, MAX_APP_LOG_STACKED_HEIGHT,
 };
 pub use openvm_stark_sdk::config::{
     DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP, DEFAULT_INTERNAL_LOG_BLOWUP,
@@ -20,7 +20,7 @@ pub const MAX_NUM_CHILDREN_LEAF: usize = 4;
 pub const MAX_NUM_CHILDREN_INTERNAL: usize = 3;
 
 fn default_system_params() -> SystemParams {
-    app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT)
+    app_params_with_128_bits_security(MAX_APP_LOG_STACKED_HEIGHT)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, derive_new::new)]
@@ -54,8 +54,8 @@ pub struct AggregationSystemParams {
 impl Default for AggregationSystemParams {
     fn default() -> Self {
         Self {
-            leaf: leaf_params_with_100_bits_security(),
-            internal: internal_params_with_100_bits_security(),
+            leaf: leaf_params_with_128_bits_security(),
+            internal: internal_params_with_128_bits_security(),
         }
     }
 }
