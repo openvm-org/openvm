@@ -1,14 +1,14 @@
 // [!region dependencies]
 use openvm_build::GuestOptions;
 use openvm_sdk::{config::AggregationSystemParams, prover::verify_app_proof, Sdk, StdIn};
-use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
+use openvm_stark_sdk::config::{app_params_with_128_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
 // [!endregion dependencies]
 
 #[allow(unused_variables, unused_doc_comments)]
 fn main() -> eyre::Result<()> {
     // [!region init]
     // 1. Initialize the SDK with the standard configuration.
-    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_params = app_params_with_128_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_params = AggregationSystemParams::default();
     let sdk = Sdk::standard(app_params, agg_params);
     // [!endregion init]

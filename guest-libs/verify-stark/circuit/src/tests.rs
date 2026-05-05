@@ -28,12 +28,12 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        app_params_with_100_bits_security,
+        app_params_with_128_bits_security,
         baby_bear_poseidon2::{
             default_duplex_sponge_recorder, poseidon2_compress_with_capacity, DIGEST_SIZE, F,
         },
-        internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
-        root_params_with_100_bits_security,
+        internal_params_with_128_bits_security, leaf_params_with_128_bits_security,
+        root_params_with_128_bits_security,
     },
     utils::setup_tracing_with_log_level,
 };
@@ -100,7 +100,7 @@ fn run_leaf_aggregation(
         .map(F::from_u8)
         .to_vec();
 
-    let engine = Engine::new(app_params_with_100_bits_security(21));
+    let engine = Engine::new(app_params_with_128_bits_security(21));
     let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
@@ -108,7 +108,7 @@ fn run_leaf_aggregation(
 
     let leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_pk.get_vk()),
-        leaf_params_with_100_bits_security(),
+        leaf_params_with_128_bits_security(),
         false,
         None,
     );
@@ -135,7 +135,7 @@ fn run_full_aggregation(
 
     let internal_for_leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_vk,
-        internal_params_with_100_bits_security(),
+        internal_params_with_128_bits_security(),
         false,
         None,
     );
@@ -144,7 +144,7 @@ fn run_full_aggregation(
 
     let internal_recursive_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
-        internal_params_with_100_bits_security(),
+        internal_params_with_128_bits_security(),
         true,
         None,
     );
@@ -179,7 +179,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
     let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
         internal_recursive_vk.clone(),
         internal_recursive_pcs_data.commitment.into(),
-        root_params_with_100_bits_security(),
+        root_params_with_128_bits_security(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
         None,

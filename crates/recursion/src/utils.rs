@@ -42,33 +42,33 @@ pub fn base_to_ext<FA>(x: impl Into<FA>) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    [x.into(), FA::ZERO, FA::ZERO, FA::ZERO]
+    [x.into(), FA::ZERO, FA::ZERO, FA::ZERO, FA::ZERO]
 }
 
 pub fn ext_field_one_minus<FA>(x: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
-    [FA::ONE - x0, -x1, -x2, -x3]
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
+    [FA::ONE - x0, -x1, -x2, -x3, -x4]
 }
 
 pub fn ext_field_add<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
-    let [y0, y1, y2, y3] = y.map(Into::into);
-    [x0 + y0, x1 + y1, x2 + y2, x3 + y3]
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
+    let [y0, y1, y2, y3, y4] = y.map(Into::into);
+    [x0 + y0, x1 + y1, x2 + y2, x3 + y3, x4 + y4]
 }
 
 pub fn ext_field_subtract<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
-    let [y0, y1, y2, y3] = y.map(Into::into);
-    [x0 - y0, x1 - y1, x2 - y2, x3 - y3]
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
+    let [y0, y1, y2, y3, y4] = y.map(Into::into);
+    [x0 - y0, x1 - y1, x2 - y2, x3 - y3, x4 - y4]
 }
 
 pub fn ext_field_multiply<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
@@ -76,14 +76,17 @@ where
     FA: PrimeCharacteristicRing,
     FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
-    let [y0, y1, y2, y3] = y.map(Into::into);
-
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
+    let [y0, y1, y2, y3, y4] = y.map(Into::into);
     let w = FA::from_prime_subfield(FA::PrimeSubfield::W);
 
-    let z0_beta_terms = x1.clone() * y3.clone() + x2.clone() * y2.clone() + x3.clone() * y1.clone();
-    let z1_beta_terms = x2.clone() * y3.clone() + x3.clone() * y2.clone();
-    let z2_beta_terms = x3.clone() * y3.clone();
+    let z0_beta_terms = x1.clone() * y4.clone()
+        + x2.clone() * y3.clone()
+        + x3.clone() * y2.clone()
+        + x4.clone() * y1.clone();
+    let z1_beta_terms = x2.clone() * y4.clone() + x3.clone() * y3.clone() + x4.clone() * y2.clone();
+    let z2_beta_terms = x3.clone() * y4.clone() + x4.clone() * y3.clone();
+    let z3_beta_terms = x4.clone() * y4.clone();
 
     [
         x0.clone() * y0.clone() + z0_beta_terms * w.clone(),
@@ -91,8 +94,13 @@ where
         x0.clone() * y2.clone()
             + x1.clone() * y1.clone()
             + x2.clone() * y0.clone()
-            + z2_beta_terms * w,
-        x0 * y3 + x1 * y2 + x2 * y1 + x3 * y0,
+            + z2_beta_terms * w.clone(),
+        x0.clone() * y3.clone()
+            + x1.clone() * y2.clone()
+            + x2.clone() * y1.clone()
+            + x3.clone() * y0.clone()
+            + z3_beta_terms * w,
+        x0 * y4 + x1 * y3 + x2 * y2 + x3 * y1 + x4 * y0,
     ]
 }
 
@@ -100,33 +108,39 @@ pub fn ext_field_add_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [
 where
     FA: PrimeCharacteristicRing,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
-    [x0 + y.into(), x1, x2, x3]
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
+    [x0 + y.into(), x1, x2, x3, x4]
 }
 
 pub fn ext_field_subtract_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
-    [x0 - y.into(), x1, x2, x3]
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
+    [x0 - y.into(), x1, x2, x3, x4]
 }
 
 pub fn scalar_subtract_ext_field<FA>(x: impl Into<FA>, y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    let [y0, y1, y2, y3] = y.map(Into::into);
-    [x.into() - y0, -y1, -y2, -y3]
+    let [y0, y1, y2, y3, y4] = y.map(Into::into);
+    [x.into() - y0, -y1, -y2, -y3, -y4]
 }
 
 pub fn ext_field_multiply_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
 {
-    let [x0, x1, x2, x3] = x.map(Into::into);
+    let [x0, x1, x2, x3, x4] = x.map(Into::into);
     let y = y.into();
-    [x0 * y.clone(), x1 * y.clone(), x2 * y.clone(), x3 * y]
+    [
+        x0 * y.clone(),
+        x1 * y.clone(),
+        x2 * y.clone(),
+        x3 * y.clone(),
+        x4 * y,
+    ]
 }
 
 pub fn eq_1<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]

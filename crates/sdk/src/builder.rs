@@ -21,7 +21,7 @@ use {
 use {
     crate::{keygen::RootProvingKey, prover::RootProver},
     openvm_stark_backend::SystemParams,
-    openvm_stark_sdk::config::root_params_with_100_bits_security,
+    openvm_stark_sdk::config::root_params_with_128_bits_security,
 };
 
 use crate::{
@@ -297,7 +297,7 @@ where
         #[cfg(feature = "root-prover")]
         let root_source = self
             .root_source
-            .unwrap_or_else(|| RootSource::Params(root_params_with_100_bits_security()));
+            .unwrap_or_else(|| RootSource::Params(root_params_with_128_bits_security()));
         #[cfg(feature = "evm-prove")]
         let halo2_source = self.halo2_source.unwrap_or(Halo2Source::Config {
             shape: StaticVerifierShape::default(),

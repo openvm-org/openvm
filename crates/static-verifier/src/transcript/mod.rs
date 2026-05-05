@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
+        BabyBearChip, BabyBearExt5Wire, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
         BABY_BEAR_MODULUS_U64,
     },
     hash::{
@@ -349,7 +349,7 @@ impl TranscriptChip {
 
     pub fn sample_ext(&mut self, ctx: &mut Context<Fr>) -> BabyBearExtWire {
         let coeffs = array::from_fn(|_| self.sample(ctx));
-        BabyBearExt4Wire(coeffs)
+        BabyBearExt5Wire(coeffs)
     }
 
     pub fn sample_bits(&mut self, ctx: &mut Context<Fr>, bits: usize) -> AssignedValue<Fr> {
