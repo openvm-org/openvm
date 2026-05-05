@@ -93,7 +93,9 @@ pub(in crate::tests) fn internal_system_params() -> SystemParams {
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
 pub(in crate::tests) fn root_system_params() -> SystemParams {
     use openvm_stark_sdk::config::root_params_with_128_bits_security;
-    root_params_with_128_bits_security()
+    let mut ret = root_params_with_128_bits_security();
+    ret.w_stack = 32;
+    ret
 }
 
 pub(in crate::tests) fn test_rv32im_config() -> Rv32ImConfig {
