@@ -18,9 +18,9 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        app_params_with_100_bits_security,
+        app_params_with_128_bits_security,
         baby_bear_poseidon2::{DIGEST_SIZE, F},
-        internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
+        internal_params_with_128_bits_security, leaf_params_with_128_bits_security,
     },
     utils::setup_tracing_with_log_level,
 };
@@ -79,21 +79,27 @@ const LOG_MAX_TRACE_HEIGHT: usize = 20;
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
 pub(in crate::tests) fn app_system_params() -> SystemParams {
-    app_params_with_100_bits_security(21)
+    app_params_with_128_bits_security(21)
 }
 
 pub(in crate::tests) fn leaf_system_params() -> SystemParams {
-    leaf_params_with_100_bits_security()
+    leaf_params_with_128_bits_security()
 }
 
 pub(in crate::tests) fn internal_system_params() -> SystemParams {
-    internal_params_with_100_bits_security()
+    internal_params_with_128_bits_security()
 }
 
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
 pub(in crate::tests) fn root_system_params() -> SystemParams {
-    use openvm_stark_sdk::config::root_params_with_100_bits_security;
-    root_params_with_100_bits_security()
+    let mut ret = openvm_stark_sdk::config::root_params_with_128_bits_security();
+    ret.w_stack = 32;
+    ret
+}
+
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
+pub(in crate::tests) fn hook_system_params() -> SystemParams {
+    openvm_stark_sdk::config::hook_params_with_128_bits_security()
 }
 
 pub(in crate::tests) fn test_rv32im_config() -> Rv32ImConfig {
@@ -640,7 +646,7 @@ fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
     let deferral_hook_prover = DeferralHookProver::new::<Engine>(
         deferral_internal_recursive_vk,
         internal_recursive_cached_commit,
-        root_system_params(),
+        hook_system_params(),
     );
     let root_proof =
         deferral_hook_prover.prove::<Engine>(final_inner_proof.clone(), leaf_children)?;

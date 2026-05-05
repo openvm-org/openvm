@@ -2,7 +2,6 @@
 #include "fpext.h"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
-#include "types.h"
 #include "util.cuh"
 #include <cassert>
 #include <cstddef>

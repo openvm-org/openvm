@@ -19,7 +19,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExt4Wire, BabyBearExtChip, BabyBearExtWire, BabyBearWire,
+        BabyBearChip, BabyBearExt5Wire, BabyBearExtChip, BabyBearExtWire, BabyBearWire,
         BABY_BEAR_EXT_DEGREE,
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
@@ -596,7 +596,7 @@ pub(crate) fn constrain_whir_verification(
                 let opened_values = merkle_path
                     .leaf_values
                     .iter()
-                    .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx])))
+                    .map(|row| BabyBearExt5Wire(core::array::from_fn(|idx| row[idx])))
                     .collect::<Vec<_>>();
                 binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, zi_root)
             };

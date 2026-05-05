@@ -329,12 +329,7 @@ where
             SelUniBusMessage {
                 n: -AB::Expr::from_usize(self.l_skip),
                 is_first: AB::Expr::ONE,
-                value: [
-                    AB::Expr::ONE,
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                ],
+                value: base_to_ext(AB::Expr::ONE),
             },
             local.is_first * local.sel_first_count,
         );
@@ -344,12 +339,7 @@ where
             SelUniBusMessage {
                 n: -AB::Expr::from_usize(self.l_skip),
                 is_first: AB::Expr::ZERO,
-                value: [
-                    AB::Expr::ONE,
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                ],
+                value: base_to_ext(AB::Expr::ONE),
             },
             local.is_first * local.sel_last_trans_count,
         );

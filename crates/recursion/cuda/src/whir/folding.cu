@@ -2,11 +2,8 @@
 #include "fpext.h"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
-#include "types.h"
 
-#include <cstddef>
 #include <cstdint>
-#include <stdio.h>
 
 template <typename T> struct WhirFoldingCols {
     T is_valid;

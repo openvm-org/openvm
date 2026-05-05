@@ -8,8 +8,8 @@ use openvm_deferral_circuit::DeferralFn;
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
-        app_params_with_100_bits_security, internal_params_with_100_bits_security,
-        root_params_with_100_bits_security,
+        app_params_with_128_bits_security, hook_params_with_128_bits_security,
+        internal_params_with_128_bits_security,
     },
     utils::setup_tracing,
 };
@@ -45,7 +45,7 @@ cfg_if::cfg_if! {
 /// Creates a fibonacci SDK with standard test parameters.
 fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let n_stack = 19;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let app_params = app_params_with_128_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
     let sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
     (sdk, app_params, agg_params)
@@ -75,7 +75,7 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
     let system_config = sdk.app_config().app_vm_config.as_ref().clone();
     let memory_dimensions = system_config.memory_config.memory_dimensions();
     let num_user_pvs = system_config.num_public_values;
-    let def_circuit_params = internal_params_with_100_bits_security();
+    let def_circuit_params = internal_params_with_128_bits_security();
     let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
         ir_pcs_data.commitment.into(),
@@ -86,7 +86,7 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
         0,
     );
     let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
-    let hook_params = root_params_with_100_bits_security();
+    let hook_params = hook_params_with_128_bits_security();
     let agg_config = AggregationConfig {
         params: agg_params.clone(),
     };
@@ -247,7 +247,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     let nested_verify_prover = VerifyProver::new::<E>(
         vs_ir_vk,
         vs_ir_pcs_data.commitment.into(),
-        internal_params_with_100_bits_security(),
+        internal_params_with_128_bits_security(),
         vs_system_config.memory_config.memory_dimensions(),
         vs_system_config.num_public_values,
         Some(expected_def_hook_commit),
@@ -398,7 +398,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     };
 
     // Root verifier params matching pipeline_cell_count_profiling in static-verifier
-    let root_params = root_params_with_100_bits_security();
+    let root_params = root_params_with_128_bits_security();
     let cache_dir = std::env::var("OPENVM_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
     std::fs::create_dir_all(&cache_dir)?;
 
@@ -425,7 +425,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         } else {
             eprintln!("Generating root proof via SDK pipeline (this takes a while)...");
             let n_stack = 19;
-            let app_params = openvm_stark_sdk::config::app_params_with_100_bits_security(
+            let app_params = openvm_stark_sdk::config::app_params_with_128_bits_security(
                 DEFAULT_APP_L_SKIP + n_stack,
             );
             let agg_params = AggregationSystemParams::default();

@@ -35,16 +35,16 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     pub is_first_in_commit: T,
     pub is_first_in_coset: T,
     pub flags: [T; CHUNK],
-    pub codeword_value_acc: [T; 4],
-    pub codeword_value_next_acc: [T; 4],
+    pub codeword_value_acc: [T; D_EF],
+    pub codeword_value_next_acc: [T; D_EF],
     /// Stores clamped even powers for the current chunk base exponent `b`:
     /// mu^(min(b + 2k, opened_row_len - 1)) for k in [0, CHUNK / 2).
-    pub mu_pows_even_clamped: [[T; 4]; CHUNK / 2],
+    pub mu_pows_even_clamped: [[T; D_EF]; CHUNK / 2],
     /// Stores mu^(min(b + CHUNK - 1, opened_row_len - 1)) for the current
     /// chunk base exponent `b`.
     /// Here opened_row_len is the opened row length for the current commit.
-    pub mu_pow_last_clamped: [T; 4],
-    pub mu: [T; 4],
+    pub mu_pow_last_clamped: [T; D_EF],
+    pub mu: [T; D_EF],
     pub pre_state: [T; POSEIDON2_WIDTH],
     pub post_state: [T; POSEIDON2_WIDTH],
     pub twiddle: T,
@@ -162,12 +162,12 @@ where
         assert_array_eq(
             &mut builder.when(local.is_first_in_coset),
             local.mu_pows_even_clamped[0],
-            [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO],
+            array::from_fn(|i| if i == 0 { AB::F::ONE } else { AB::F::ZERO }),
         );
         assert_array_eq(
             &mut builder.when(local.is_first_in_coset),
             local.codeword_value_acc,
-            [AB::F::ZERO; 4],
+            [AB::F::ZERO; D_EF],
         );
 
         builder
