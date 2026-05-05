@@ -14,7 +14,7 @@ use crate::{
     bus::TranscriptBus,
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{ext_field_add, ext_field_multiply},
+    utils::{base_to_ext, ext_field_add, ext_field_multiply},
     whir::bus::{
         VerifyQueriesBus, VerifyQueriesBusMessage, VerifyQueryBus, VerifyQueryBusMessage,
         WhirQueryBus, WhirQueryBusMessage,
@@ -175,12 +175,7 @@ where
             WhirQueryBusMessage {
                 whir_round: local.whir_round.into(),
                 query_idx: local.query_idx.into() + AB::Expr::ONE,
-                value: [
-                    local.zi.into(),
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                ],
+                value: base_to_ext(local.zi),
             },
             is_enabled,
         );

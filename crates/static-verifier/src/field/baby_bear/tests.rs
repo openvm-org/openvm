@@ -106,12 +106,14 @@ fn baby_bear_ext_mul_matches_native_binomial_extension() {
     run_mock(|builder| {
         let range = builder.range_chip();
         let base_chip = BabyBearChip::new(Arc::new(range));
-        let ext_chip = BabyBearExt4Chip::new(base_chip);
+        let ext_chip = BabyBearExt5Chip::new(base_chip);
         let ctx = builder.main(0);
         let gate = ext_chip.base().gate();
 
-        let lhs_native = RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([3, 5, 7, 11][i]));
-        let rhs_native = RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([2, 4, 6, 8][i]));
+        let lhs_native =
+            RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([3, 5, 7, 11, 13][i]));
+        let rhs_native =
+            RootEF::from_basis_coefficients_fn(|i| RootF::from_u64([2, 4, 6, 8, 10][i]));
 
         let lhs = ext_chip.load_witness(ctx, lhs_native);
         let rhs = ext_chip.load_witness(ctx, rhs_native);
@@ -130,19 +132,19 @@ fn baby_bear_ext_mul_matches_native_binomial_extension() {
         let prod_native = lhs_native * rhs_native;
         let sqr_native = lhs_native * lhs_native;
 
-        let expected_sum = core::array::from_fn::<_, 4, _>(|i| {
+        let expected_sum = core::array::from_fn::<_, BABY_BEAR_EXT_DEGREE, _>(|i| {
             <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&sum_native)[i]
                 .as_canonical_u64()
         });
-        let expected_diff = core::array::from_fn::<_, 4, _>(|i| {
+        let expected_diff = core::array::from_fn::<_, BABY_BEAR_EXT_DEGREE, _>(|i| {
             <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&diff_native)[i]
                 .as_canonical_u64()
         });
-        let expected_prod = core::array::from_fn::<_, 4, _>(|i| {
+        let expected_prod = core::array::from_fn::<_, BABY_BEAR_EXT_DEGREE, _>(|i| {
             <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&prod_native)[i]
                 .as_canonical_u64()
         });
-        let expected_sqr = core::array::from_fn::<_, 4, _>(|i| {
+        let expected_sqr = core::array::from_fn::<_, BABY_BEAR_EXT_DEGREE, _>(|i| {
             <RootEF as BasedVectorSpace<RootF>>::as_basis_coefficients_slice(&sqr_native)[i]
                 .as_canonical_u64()
         });

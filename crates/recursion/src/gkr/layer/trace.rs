@@ -6,7 +6,7 @@ use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{air::reduce_to_single_evaluation, GkrLayerCols};
-use crate::tracegen::RowMajorChip;
+use crate::{tracegen::RowMajorChip, utils::base_to_ext};
 
 /// Minimal record for parallel gkr layer trace generation
 #[derive(Debug, Clone, Default)]
@@ -123,10 +123,10 @@ impl RowMajorChip<F> for GkrLayerTraceGenerator {
                         cols.proof_idx = F::from_usize(proof_idx);
                         cols.is_first = F::ONE;
                         cols.is_dummy = F::ONE;
-                        cols.sumcheck_claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                        cols.q_xi_0 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                        cols.q_xi_1 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                        cols.denom_claim = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                        cols.sumcheck_claim_in = base_to_ext(F::ONE);
+                        cols.q_xi_0 = base_to_ext(F::ONE);
+                        cols.q_xi_1 = base_to_ext(F::ONE);
+                        cols.denom_claim = base_to_ext(F::ONE);
                         return;
                     }
 

@@ -423,12 +423,7 @@ where
                 assert_array_eq(
                     &mut builder.when(is_sel.clone() * cols.is_n_neg),
                     arg_ef1,
-                    [
-                        AB::Expr::ONE,
-                        AB::Expr::ZERO,
-                        AB::Expr::ZERO,
-                        AB::Expr::ZERO,
-                    ],
+                    base_to_ext::<AB::Expr>(AB::Expr::ONE),
                 );
             }
             let is_mult = enc.get_flag_expr::<AB>(NodeKind::InteractionMult as usize, &flags);
