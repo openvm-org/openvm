@@ -20,9 +20,7 @@ use openvm_stark_backend::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
     },
-    p3_field::{
-        BasedVectorSpace, InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
-    },
+    p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField},
     p3_util::log2_ceil_usize,
     proof::Proof,
     prover::{
@@ -867,10 +865,7 @@ where
             .map(|pk| {
                 let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
                 let air_names = pk.air_name.clone();
-                // TODO[jpw]: revisit v2 width calculation
-                let width = pk.vk.params.width.total_width(
-                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
-                );
+                let width = pk.vk.params.width.total_width();
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
                 (constant_trace_height, air_names, width, num_interactions)
             })
@@ -907,11 +902,7 @@ where
             .pk
             .per_air
             .iter()
-            .map(|pk| {
-                pk.vk.params.width.total_width(
-                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
-                )
-            })
+            .map(|pk| pk.vk.params.width.total_width())
             .collect();
 
         self.executor().build_metered_cost_ctx(&widths)

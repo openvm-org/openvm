@@ -101,7 +101,7 @@ pub(super) fn flatten_constraint_node(
                 data2: 0,
                 constant: F::ZERO,
             },
-            Entry::Permutation { .. } | Entry::Challenge | Entry::Exposed => unreachable!(),
+            Entry::Challenge => unreachable!(),
         },
         SymbolicExpressionNode::IsFirstRow => FlatSymbolicConstraintNode {
             kind: NodeKind::SelIsFirst as u8,
@@ -191,7 +191,7 @@ pub(super) fn flatten_unused_symbolic_variable(
             offset: offset as u32,
         },
         Entry::Public => unreachable!("public variable cannot be unused"),
-        Entry::Permutation { .. } | Entry::Challenge | Entry::Exposed => {
+        Entry::Challenge => {
             unreachable!("variable type not supported")
         }
     }

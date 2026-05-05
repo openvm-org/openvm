@@ -539,13 +539,11 @@ impl BatchConstraintBlob {
                                 expr_evals[node_idx] = openings[sorted_idx][part]
                                     [var.index * openings_per_col + offset];
                             }
-                            Entry::Permutation { .. } => unreachable!(),
                             Entry::Public => {
                                 expr_evals[node_idx] =
                                     EF::from(proof.public_values[air_idx][var.index]);
                             }
                             Entry::Challenge => unreachable!(),
-                            Entry::Exposed => unreachable!(),
                         },
                         SymbolicExpressionNode::IsFirstRow => {
                             expr_evals[node_idx] = is_first_row_by_log_height[vdata.log_height];
@@ -613,10 +611,7 @@ impl BatchConstraintBlob {
                             expr_evals[node_idx] = openings[sorted_idx][part]
                                 [unused_var.index * openings_per_col + offset];
                         }
-                        Entry::Permutation { .. }
-                        | Entry::Public
-                        | Entry::Challenge
-                        | Entry::Exposed => {
+                        Entry::Public | Entry::Challenge => {
                             unreachable!()
                         }
                     }
