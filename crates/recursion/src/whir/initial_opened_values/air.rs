@@ -1,6 +1,8 @@
 use core::{array, borrow::Borrow};
 
-use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -23,7 +25,7 @@ use crate::{
 
 // (proof_idx, query_idx, coset_idx, commit_idx, col_chunk_idx)
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     pub proof_idx: T,
     pub query_idx: T,
@@ -54,6 +56,8 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     pub merkle_idx_bit_src: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(InitialOpenedValuesCols<F>)]
 pub struct InitialOpenedValuesAir {
     pub stacking_indices_bus: StackingIndicesBus,
     pub whir_mu_bus: WhirMuBus,
@@ -65,7 +69,6 @@ pub struct InitialOpenedValuesAir {
     pub k: usize,
 }
 
-impl<F> ColumnsAir<F> for InitialOpenedValuesAir {}
 impl BaseAirWithPublicValues<F> for InitialOpenedValuesAir {}
 impl PartitionedBaseAir<F> for InitialOpenedValuesAir {}
 

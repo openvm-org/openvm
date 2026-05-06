@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 use std::borrow::BorrowMut;
 
-use openvm_circuit_primitives::ColumnsAir;
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
@@ -70,7 +70,7 @@ pub(crate) fn sample_exp_bits_len_requests(num_requests: usize) -> Vec<ExpBitsLe
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 struct ExpBitsLenLookupCols<T> {
     enabled: T,
     base: T,
@@ -79,12 +79,11 @@ struct ExpBitsLenLookupCols<T> {
     result: T,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, ColumnsAir)]
+#[columns_via(ExpBitsLenLookupCols<F>)]
 struct ExpBitsLenLookupAir {
     exp_bits_len_bus: ExpBitsLenBus,
 }
-
-impl<F> ColumnsAir<F> for ExpBitsLenLookupAir {}
 
 impl<F> BaseAir<F> for ExpBitsLenLookupAir {
     fn width(&self) -> usize {
