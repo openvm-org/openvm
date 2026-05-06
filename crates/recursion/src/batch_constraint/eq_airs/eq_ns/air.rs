@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
-    ColumnsAir, SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -29,7 +29,7 @@ use crate::{
     },
 };
 
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, Clone, Copy, StructReflection)]
 #[repr(C)]
 pub struct EqNsColumns<T> {
     pub is_valid: T,
@@ -59,6 +59,8 @@ pub struct EqNsColumns<T> {
     pub sel_last_and_trans_count: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(EqNsColumns<F>)]
 pub struct EqNsAir {
     pub zero_n_bus: EqZeroNBus,
     pub xi_bus: XiRandomnessBus,
@@ -70,7 +72,6 @@ pub struct EqNsAir {
     pub l_skip: usize,
 }
 
-impl<F> ColumnsAir<F> for EqNsAir {}
 impl<F> BaseAirWithPublicValues<F> for EqNsAir {}
 impl<F> PartitionedBaseAir<F> for EqNsAir {}
 
