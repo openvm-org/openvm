@@ -45,7 +45,7 @@ pub struct IsLessThanCols<T> {
 #[derive(Clone, Copy)]
 pub struct IsLtTestAir(pub IsLtSubAir);
 
-impl<F: Field> ColumnsAir<F> for IsLtTestAir {}
+impl ColumnsAir for IsLtTestAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {

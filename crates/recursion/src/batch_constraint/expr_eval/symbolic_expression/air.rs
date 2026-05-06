@@ -118,7 +118,7 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub cnt_proofs: usize,
     pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
-impl<F: Field> ColumnsAir<F> for SymbolicExpressionAir<F> {}
+impl<F: Field> ColumnsAir for SymbolicExpressionAir<F> {}
 
 impl<F: Field> SymbolicExpressionAir<F> {
     fn has_cached(&self) -> bool {

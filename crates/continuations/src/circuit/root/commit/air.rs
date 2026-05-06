@@ -29,7 +29,7 @@ pub struct UserPvsCommitAir {
     encoder: Encoder,
     num_user_pvs: usize,
 }
-impl<F> ColumnsAir<F> for UserPvsCommitAir {}
+impl ColumnsAir for UserPvsCommitAir {}
 
 impl UserPvsCommitAir {
     pub fn new(

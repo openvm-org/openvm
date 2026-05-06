@@ -5,21 +5,25 @@ extern crate proc_macro;
 use itertools::multiunzip;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, LitStr, Meta};
+use syn::{
+    parse_macro_input,
+    visit_mut::{self, VisitMut},
+    Data, DeriveInput, Fields, GenericParam, LitStr, Meta,
+};
 
 mod cols_ref;
 use cols_ref::cols_ref_impl;
 
-/// Derives `ColumnsAir<F>` for an AIR struct.
+/// Derives `ColumnsAir` for an AIR struct.
 ///
 /// `#[columns_via(SomeCols<F, ...>)]` is required and selects the column struct
 /// whose `StructReflectionHelper::struct_reflection()` (typically derived via
 /// `#[derive(StructReflection)]`) provides the column names. If the AIR has no
-/// columns to reflect, write the impl by hand instead of using this derive.
+/// columns to reflect, write `impl ColumnsAir for X {}` by hand instead.
 ///
-/// If the struct already has a type parameter named `F`, the impl reuses it. Otherwise
-/// an `F: Field` parameter is injected on the impl. The `F` written in
-/// `#[columns_via(...)]` refers to that parameter.
+/// `StructReflectionHelper::struct_reflection()` is invariant in the column
+/// element type, so `F` in `#[columns_via(...)]` is rewritten to `u8` by the
+/// macro — the attribute syntax just stays familiar.
 #[proc_macro_derive(ColumnsAir, attributes(columns_via))]
 pub fn columns_air_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
@@ -35,36 +39,23 @@ pub fn columns_air_derive(input: TokenStream) -> TokenStream {
             return syn::Error::new_spanned(
                 &ast.ident,
                 "#[derive(ColumnsAir)] requires a `#[columns_via(ColsTy<F, ...>)]` attribute. \
-                 If the AIR has no columns to reflect, write `impl ColumnsAir<F> for X {}` by hand.",
+                 If the AIR has no columns to reflect, write `impl ColumnsAir for X {}` by hand.",
             )
             .to_compile_error()
             .into();
         }
     };
 
-    let cols_ty: syn::Type = match columns_via.parse_args() {
+    let mut cols_ty: syn::Type = match columns_via.parse_args() {
         Ok(ty) => ty,
         Err(err) => return err.to_compile_error().into(),
     };
+    FToU8.visit_type_mut(&mut cols_ty);
 
-    let has_f_generic = ast.generics.params.iter().any(|p| {
-        matches!(
-            p,
-            GenericParam::Type(t) if t.ident == "F"
-        )
-    });
-
-    let mut impl_generics_owned = ast.generics.clone();
-    if !has_f_generic {
-        impl_generics_owned.params.push(syn::parse_quote! {
-            F: ::openvm_stark_backend::p3_field::Field
-        });
-    }
-    let (impl_generics, _, _) = impl_generics_owned.split_for_impl();
-    let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
 
     quote! {
-        impl #impl_generics ::openvm_circuit_primitives::ColumnsAir<F>
+        impl #impl_generics ::openvm_circuit_primitives::ColumnsAir
             for #name #ty_generics
             #where_clause
         {
@@ -74,6 +65,23 @@ pub fn columns_air_derive(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+/// Rewrites every bare `F` type reference to `u8`. `StructReflectionHelper` is
+/// element-type invariant, so this lets the emitted `<Cols<u8> as ...>` call
+/// resolve regardless of whether the AIR carries an `F` generic.
+struct FToU8;
+
+impl VisitMut for FToU8 {
+    fn visit_type_path_mut(&mut self, tp: &mut syn::TypePath) {
+        if tp.qself.is_none() && tp.path.segments.len() == 1 {
+            let seg = &mut tp.path.segments[0];
+            if seg.ident == "F" && seg.arguments.is_empty() {
+                seg.ident = syn::Ident::new("u8", seg.ident.span());
+            }
+        }
+        visit_mut::visit_type_path_mut(self, tp);
+    }
 }
 
 #[proc_macro_derive(AlignedBorrow)]

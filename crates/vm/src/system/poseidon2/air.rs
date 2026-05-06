@@ -34,10 +34,7 @@ impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
     for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
 {
 }
-impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir<F>
-    for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
-{
-}
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir for Poseidon2PeripheryAir<F, SBOX_REGISTERS> {}
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F>
     for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
 {

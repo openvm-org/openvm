@@ -15,7 +15,7 @@ pub struct ProgramDummyAir {
     pub bus: ProgramBus,
 }
 
-impl<F: Field> ColumnsAir<F> for ProgramDummyAir {}
+impl ColumnsAir for ProgramDummyAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {

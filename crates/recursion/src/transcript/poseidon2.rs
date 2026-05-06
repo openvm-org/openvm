@@ -35,7 +35,7 @@ pub struct Poseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {}
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir for Poseidon2Air<F, SBOX_REGISTERS> {}
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {
     fn width(&self) -> usize {

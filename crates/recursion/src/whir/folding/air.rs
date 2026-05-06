@@ -45,7 +45,7 @@ pub struct WhirFoldingAir {
 
 impl BaseAirWithPublicValues<F> for WhirFoldingAir {}
 impl PartitionedBaseAir<F> for WhirFoldingAir {}
-impl ColumnsAir<F> for WhirFoldingAir {}
+impl ColumnsAir for WhirFoldingAir {}
 
 impl BaseAir<F> for WhirFoldingAir {
     fn width(&self) -> usize {

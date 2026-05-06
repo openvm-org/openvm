@@ -72,7 +72,7 @@ pub struct MemoryDummyAir {
 
 impl<F> BaseAirWithPublicValues<F> for MemoryDummyAir {}
 impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
-impl<F> ColumnsAir<F> for MemoryDummyAir {}
+impl ColumnsAir for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
         DEFAULT_BLOCK_SIZE + 4

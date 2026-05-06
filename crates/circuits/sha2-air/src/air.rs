@@ -31,7 +31,7 @@ pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     _phantom: PhantomData<C>,
 }
 
-impl<F, C: Sha2BlockHasherSubairConfig> ColumnsAir<F> for Sha2BlockHasherSubAir<C> {}
+impl<C: Sha2BlockHasherSubairConfig> ColumnsAir for Sha2BlockHasherSubAir<C> {}
 
 impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, private_bus_idx: BusIndex) -> Self {

@@ -26,7 +26,7 @@ const fn width<const DEPTH_MINUS_ONE: usize>() -> usize {
 #[derive(Clone, Copy)]
 struct TestAir<const DEPTH_MINUS_ONE: usize>;
 
-impl<F: Field, const DEPTH_MINUS_ONE: usize> ColumnsAir<F> for TestAir<DEPTH_MINUS_ONE> {}
+impl<const DEPTH_MINUS_ONE: usize> ColumnsAir for TestAir<DEPTH_MINUS_ONE> {}
 impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAirWithPublicValues<F>
     for TestAir<DEPTH_MINUS_ONE>
 {

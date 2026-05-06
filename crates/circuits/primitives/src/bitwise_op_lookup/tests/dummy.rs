@@ -11,7 +11,7 @@ use crate::{bitwise_op_lookup::bus::BitwiseOperationLookupBus, ColumnsAir};
 pub struct DummyAir {
     bus: BitwiseOperationLookupBus,
 }
-impl<F: Field> ColumnsAir<F> for DummyAir {}
+impl ColumnsAir for DummyAir {}
 
 impl DummyAir {
     pub fn new(bus: BitwiseOperationLookupBus) -> Self {

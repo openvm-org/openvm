@@ -51,7 +51,7 @@ pub struct FieldExpressionCoreAir {
     // We don't support 2-op chip that doesn't need setup right now.
 }
 
-impl<F: Field> ColumnsAir<F> for FieldExpressionCoreAir {}
+impl ColumnsAir for FieldExpressionCoreAir {}
 
 impl FieldExpressionCoreAir {
     pub fn new(

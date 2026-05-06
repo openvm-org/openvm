@@ -63,12 +63,12 @@ pub type ExecutorId = u32;
 /// Trait upcasting (stable since Rust 1.86) coerces `Arc<dyn AnyAirWithColumns<SC>>` to
 /// `Arc<dyn AnyAir<SC>>` in argument position, so [`AirRefWithColumns`] passes transparently to
 /// stark-backend APIs that expect [`AirRef`](openvm_stark_backend::AirRef).
-pub trait AnyAirWithColumns<SC: StarkProtocolConfig>: AnyAir<SC> + ColumnsAir<Val<SC>> {}
+pub trait AnyAirWithColumns<SC: StarkProtocolConfig>: AnyAir<SC> + ColumnsAir {}
 
 impl<SC, T> AnyAirWithColumns<SC> for T
 where
     SC: StarkProtocolConfig,
-    T: AnyAir<SC> + ColumnsAir<Val<SC>>,
+    T: AnyAir<SC> + ColumnsAir,
 {
 }
 

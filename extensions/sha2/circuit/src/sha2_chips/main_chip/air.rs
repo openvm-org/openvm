@@ -40,7 +40,7 @@ pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     _phantom: PhantomData<C>,
 }
 
-impl<F, C: Sha2MainChipConfig> ColumnsAir<F> for Sha2MainAir<C> {}
+impl<C: Sha2MainChipConfig> ColumnsAir for Sha2MainAir<C> {}
 
 impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
     pub fn new(

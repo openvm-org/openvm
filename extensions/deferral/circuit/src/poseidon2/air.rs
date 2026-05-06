@@ -29,7 +29,7 @@ pub struct DeferralPoseidon2Air<F: Field> {
     pub bus: LookupBus,
 }
 
-impl<F: Field> ColumnsAir<F> for DeferralPoseidon2Air<F> {}
+impl<F: Field> ColumnsAir for DeferralPoseidon2Air<F> {}
 
 impl<F: Field> DeferralPoseidon2Air<F> {
     pub fn new(config: Poseidon2Config<F>, bus: LookupBus) -> Self {

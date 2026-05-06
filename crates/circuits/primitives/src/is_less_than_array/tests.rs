@@ -53,10 +53,7 @@ impl<F: Field, const NUM: usize, const AUX_LEN: usize> PartitionedBaseAir<F>
     for IsLtArrayTestAir<NUM, AUX_LEN>
 {
 }
-impl<F: Field, const NUM: usize, const AUX_LEN: usize> ColumnsAir<F>
-    for IsLtArrayTestAir<NUM, AUX_LEN>
-{
-}
+impl<const NUM: usize, const AUX_LEN: usize> ColumnsAir for IsLtArrayTestAir<NUM, AUX_LEN> {}
 
 impl<AB: InteractionBuilder, const NUM: usize, const AUX_LEN: usize> Air<AB>
     for IsLtArrayTestAir<NUM, AUX_LEN>

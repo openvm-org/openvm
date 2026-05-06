@@ -12,7 +12,7 @@ use crate::{var_range::bus::VariableRangeCheckerBus, ColumnsAir};
 pub struct TestSendAir {
     bus: VariableRangeCheckerBus,
 }
-impl<F: Field> ColumnsAir<F> for TestSendAir {}
+impl ColumnsAir for TestSendAir {}
 
 impl TestSendAir {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
@@ -46,7 +46,7 @@ pub struct TestRangeCheckAir {
     bus: VariableRangeCheckerBus,
     max_bits: usize,
 }
-impl<F: Field> ColumnsAir<F> for TestRangeCheckAir {}
+impl ColumnsAir for TestRangeCheckAir {}
 
 impl TestRangeCheckAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {

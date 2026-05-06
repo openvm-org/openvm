@@ -34,7 +34,7 @@ pub struct KeccakfPermAir {
     pub keccakf_state_bus: PermutationCheckBus,
 }
 
-impl<F> ColumnsAir<F> for KeccakfPermAir {}
+impl ColumnsAir for KeccakfPermAir {}
 
 impl<T: Copy> KeccakfPermCols<T> {
     pub fn postimage(&self, y: usize, x: usize, limb: usize) -> T {

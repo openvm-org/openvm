@@ -62,7 +62,7 @@ impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> Partitione
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }
-impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> ColumnsAir<F>
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> ColumnsAir
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }

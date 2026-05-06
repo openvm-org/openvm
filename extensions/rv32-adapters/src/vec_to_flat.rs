@@ -74,7 +74,6 @@ where
 }
 
 impl<
-        F,
         A,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
@@ -82,7 +81,7 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
         const TOTAL_WRITE_SIZE: usize,
-    > ColumnsAir<F>
+    > ColumnsAir
     for VecToFlatAluAdapterAir<
         A,
         NUM_READS,
@@ -93,7 +92,7 @@ impl<
         TOTAL_WRITE_SIZE,
     >
 where
-    A: ColumnsAir<F>,
+    A: ColumnsAir,
 {
 }
 
@@ -366,16 +365,15 @@ where
 }
 
 impl<
-        F,
         A,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > ColumnsAir<F>
+    > ColumnsAir
     for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
-    A: ColumnsAir<F>,
+    A: ColumnsAir,
 {
 }
 

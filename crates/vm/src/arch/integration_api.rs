@@ -244,23 +244,15 @@ where
 {
 }
 
-impl<F, A, M> ColumnsAir<F> for VmAirWrapper<A, M>
+impl<A, M> ColumnsAir for VmAirWrapper<A, M>
 where
-    A: ColumnsAir<F>,
-    M: ColumnsAir<F>,
+    A: ColumnsAir,
+    M: ColumnsAir,
 {
     fn columns(&self) -> Option<Vec<String>> {
-        let mut cols = self.adapter.columns().unwrap_or_else(|| {
-            (0..self.adapter.width())
-                .map(|i| format!("adapter[{i}]"))
-                .collect()
-        });
-        cols.extend(self.core.columns().unwrap_or_else(|| {
-            (0..self.core.width())
-                .map(|i| format!("core[{i}]"))
-                .collect()
-        }));
-        Some(cols)
+        let adapter_cols = self.adapter.columns()?;
+        let core_cols = self.core.columns()?;
+        Some(adapter_cols.into_iter().chain(core_cols).collect())
     }
 }
 

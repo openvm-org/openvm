@@ -79,7 +79,7 @@ impl<const N: usize> RangeTupleCheckerAir<N> {
 }
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
-impl<F: Field, const N: usize> ColumnsAir<F> for RangeTupleCheckerAir<N> {
+impl<const N: usize> ColumnsAir for RangeTupleCheckerAir<N> {
     // Implemented manually because struct reflection does not work on `RangeTupleColsRef`.
     fn columns(&self) -> Option<Vec<String>> {
         Some(

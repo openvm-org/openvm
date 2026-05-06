@@ -17,7 +17,7 @@ pub struct ListAir {
     pub bus: RangeCheckBus,
 }
 
-impl<F: Field> ColumnsAir<F> for ListAir {}
+impl ColumnsAir for ListAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for ListAir {}
 impl<F: Field> PartitionedBaseAir<F> for ListAir {}
 impl<F: Field> BaseAir<F> for ListAir {
