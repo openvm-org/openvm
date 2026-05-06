@@ -74,7 +74,7 @@ pub struct SumcheckRoundsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(SumcheckRoundsCols<F>)]
+#[columns_via(SumcheckRoundsCols<u8>)]
 pub struct SumcheckRoundsAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,

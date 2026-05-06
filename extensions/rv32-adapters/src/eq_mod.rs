@@ -64,7 +64,7 @@ pub struct Rv32IsEqualModAdapterCols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
+#[columns_via(Rv32IsEqualModAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
 pub struct Rv32IsEqualModAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,

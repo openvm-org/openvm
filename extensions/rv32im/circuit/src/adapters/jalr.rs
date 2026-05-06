@@ -44,7 +44,7 @@ pub struct Rv32JalrAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32JalrAdapterCols<F>)]
+#[columns_via(Rv32JalrAdapterCols<u8>)]
 pub struct Rv32JalrAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,

@@ -61,7 +61,7 @@ pub struct MultilinearSumcheckCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(MultilinearSumcheckCols<F>)]
+#[columns_via(MultilinearSumcheckCols<u8>)]
 pub struct MultilinearSumcheckAir {
     pub max_constraint_degree: usize,
     pub claim_bus: SumcheckClaimBus,

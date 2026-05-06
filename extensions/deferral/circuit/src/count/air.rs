@@ -21,7 +21,7 @@ pub struct DeferralCircuitCountCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(DeferralCircuitCountCols<F>)]
+#[columns_via(DeferralCircuitCountCols<u8>)]
 pub struct DeferralCircuitCountAir {
     pub lookup_bus: DeferralCircuitCountBus,
     pub num_deferral_circuits: usize,

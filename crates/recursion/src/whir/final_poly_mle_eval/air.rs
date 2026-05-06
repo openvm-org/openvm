@@ -51,7 +51,7 @@ pub struct FinalyPolyMleEvalCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(FinalyPolyMleEvalCols<F>)]
+#[columns_via(FinalyPolyMleEvalCols<u8>)]
 pub struct FinalPolyMleEvalAir {
     pub whir_opening_point_bus: WhirOpeningPointBus,
     pub whir_opening_point_lookup_bus: WhirOpeningPointLookupBus,

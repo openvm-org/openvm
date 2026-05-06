@@ -47,7 +47,7 @@ pub struct Rv32JalrCoreCols<T> {
 }
 
 #[derive(Debug, Clone, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32JalrCoreCols<F>)]
+#[columns_via(Rv32JalrCoreCols<u8>)]
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,

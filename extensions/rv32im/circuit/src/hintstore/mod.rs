@@ -75,7 +75,7 @@ pub struct Rv32HintStoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32HintStoreCols<F>)]
+#[columns_via(Rv32HintStoreCols<u8>)]
 pub struct Rv32HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

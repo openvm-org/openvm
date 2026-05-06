@@ -51,7 +51,7 @@ pub(in crate::whir::final_poly_query_eval) struct FinalPolyQueryEvalCols<T> {
 }
 
 #[derive(Debug, ColumnsAir)]
-#[columns_via(FinalPolyQueryEvalCols<F>)]
+#[columns_via(FinalPolyQueryEvalCols<u8>)]
 pub struct FinalPolyQueryEvalAir {
     pub query_bus: WhirQueryBus,
     pub alpha_bus: WhirAlphaBus,

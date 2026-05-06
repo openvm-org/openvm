@@ -50,7 +50,7 @@ pub struct UnivariateRoundCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(UnivariateRoundCols<F>)]
+#[columns_via(UnivariateRoundCols<u8>)]
 pub struct UnivariateRoundAir {
     // External buses
     pub transcript_bus: TranscriptBus,

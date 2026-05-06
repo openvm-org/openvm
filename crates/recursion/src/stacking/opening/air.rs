@@ -85,7 +85,7 @@ pub struct OpeningClaimsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(OpeningClaimsCols<F>)]
+#[columns_via(OpeningClaimsCols<u8>)]
 pub struct OpeningClaimsAir {
     // External buses
     pub lifted_heights_bus: LiftedHeightsBus,

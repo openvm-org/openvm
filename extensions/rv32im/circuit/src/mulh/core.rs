@@ -40,7 +40,7 @@ pub struct MulHCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(MulHCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
+#[columns_via(MulHCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct MulHCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,

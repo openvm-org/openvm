@@ -80,7 +80,7 @@ struct ExpBitsLenLookupCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, ColumnsAir)]
-#[columns_via(ExpBitsLenLookupCols<F>)]
+#[columns_via(ExpBitsLenLookupCols<u8>)]
 struct ExpBitsLenLookupAir {
     exp_bits_len_bus: ExpBitsLenBus,
 }

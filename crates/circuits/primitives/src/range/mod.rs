@@ -46,7 +46,7 @@ pub const NUM_RANGE_COLS: usize = size_of::<RangeCols<u8>>();
 pub const NUM_RANGE_PREPROCESSED_COLS: usize = size_of::<RangePreprocessedCols<u8>>();
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(RangeCols<F>)]
+#[columns_via(RangeCols<u8>)]
 pub struct RangeCheckerAir {
     pub bus: RangeCheckBus,
 }

@@ -64,7 +64,7 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
 }
 
 #[derive(Debug, Clone, derive_new::new, ColumnsAir)]
-#[columns_via(LoadStoreCoreCols<F, NUM_CELLS>)]
+#[columns_via(LoadStoreCoreCols<u8, NUM_CELLS>)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }

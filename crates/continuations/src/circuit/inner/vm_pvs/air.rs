@@ -34,7 +34,7 @@ pub struct VmPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(VmPvsCols<F>)]
+#[columns_via(VmPvsCols<u8>)]
 pub struct VmPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

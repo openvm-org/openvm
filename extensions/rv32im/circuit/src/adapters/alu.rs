@@ -53,7 +53,7 @@ pub struct Rv32BaseAluAdapterCols<T> {
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32BaseAluAdapterCols<F>)]
+#[columns_via(Rv32BaseAluAdapterCols<u8>)]
 pub struct Rv32BaseAluAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,

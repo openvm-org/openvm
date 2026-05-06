@@ -20,7 +20,7 @@ pub struct UnsetPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(UnsetPvsCols<F>)]
+#[columns_via(UnsetPvsCols<u8>)]
 pub struct UnsetPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub pvs_air_consistency_bus: PvsAirConsistencyBus,

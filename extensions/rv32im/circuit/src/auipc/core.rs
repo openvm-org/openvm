@@ -41,7 +41,7 @@ pub struct Rv32AuipcCoreCols<T> {
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32AuipcCoreCols<F>)]
+#[columns_via(Rv32AuipcCoreCols<u8>)]
 pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }

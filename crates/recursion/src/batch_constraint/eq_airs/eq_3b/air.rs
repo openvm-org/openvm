@@ -57,7 +57,7 @@ pub struct Eq3bColumns<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(Eq3bColumns<F>)]
+#[columns_via(Eq3bColumns<u8>)]
 pub struct Eq3bAir {
     pub eq_3b_bus: Eq3bBus,
     pub eq_3b_shape_bus: Eq3bShapeBus,

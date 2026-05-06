@@ -52,7 +52,7 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
 }
 
 #[derive(Debug, Clone, derive_new::new, ColumnsAir)]
-#[columns_via(LoadSignExtendCoreCols<F, NUM_CELLS>)]
+#[columns_via(LoadSignExtendCoreCols<u8, NUM_CELLS>)]
 pub struct LoadSignExtendCoreAir<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
 }

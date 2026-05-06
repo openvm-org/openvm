@@ -49,7 +49,7 @@ pub struct ConstraintsFoldingCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(ConstraintsFoldingCols<F>)]
+#[columns_via(ConstraintsFoldingCols<u8>)]
 pub struct ConstraintsFoldingAir {
     pub transcript_bus: TranscriptBus,
     pub constraint_bus: ConstraintsFoldingBus,

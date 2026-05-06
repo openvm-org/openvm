@@ -73,7 +73,7 @@ pub struct GkrLayerSumcheckCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(GkrLayerSumcheckCols<F>)]
+#[columns_via(GkrLayerSumcheckCols<u8>)]
 pub struct GkrLayerSumcheckAir {
     pub transcript_bus: TranscriptBus,
     pub xi_randomness_bus: XiRandomnessBus,

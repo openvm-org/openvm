@@ -44,7 +44,7 @@ pub struct Rv32MultAdapterCols<T> {
 /// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
 /// Operand d can only be 1, and there is no immediate support.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32MultAdapterCols<F>)]
+#[columns_via(Rv32MultAdapterCols<u8>)]
 pub struct Rv32MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,

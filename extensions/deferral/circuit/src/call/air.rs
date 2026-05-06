@@ -82,7 +82,7 @@ pub struct DeferralCallCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(DeferralCallCoreCols<F>)]
+#[columns_via(DeferralCallCoreCols<u8>)]
 pub struct DeferralCallCoreAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
@@ -249,7 +249,7 @@ pub struct DeferralCallAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(DeferralCallAdapterCols<F>)]
+#[columns_via(DeferralCallAdapterCols<u8>)]
 pub struct DeferralCallAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

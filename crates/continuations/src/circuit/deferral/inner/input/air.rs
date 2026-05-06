@@ -46,7 +46,7 @@ pub struct InputCommitCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(InputCommitCols<F>)]
+#[columns_via(InputCommitCols<u8>)]
 pub struct InputCommitAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2PermuteBus,

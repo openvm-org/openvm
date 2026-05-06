@@ -60,7 +60,7 @@ pub struct EqNsColumns<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqNsColumns<F>)]
+#[columns_via(EqNsColumns<u8>)]
 pub struct EqNsAir {
     pub zero_n_bus: EqZeroNBus,
     pub xi_bus: XiRandomnessBus,

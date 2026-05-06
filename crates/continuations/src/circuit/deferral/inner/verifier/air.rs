@@ -41,7 +41,7 @@ pub enum DeferralChildLevel {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(DeferralVerifierPvsCols<F>)]
+#[columns_via(DeferralVerifierPvsCols<u8>)]
 pub struct DeferralVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

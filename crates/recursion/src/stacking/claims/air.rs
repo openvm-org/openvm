@@ -70,7 +70,7 @@ pub struct StackingClaimsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(StackingClaimsCols<F>)]
+#[columns_via(StackingClaimsCols<u8>)]
 pub struct StackingClaimsAir {
     // External buses
     pub stacking_indices_bus: StackingIndicesBus,

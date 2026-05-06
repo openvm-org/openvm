@@ -42,7 +42,7 @@ pub struct GkrXiSamplerCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(GkrXiSamplerCols<F>)]
+#[columns_via(GkrXiSamplerCols<u8>)]
 pub struct GkrXiSamplerAir {
     pub xi_randomness_bus: XiRandomnessBus,
     pub transcript_bus: TranscriptBus,

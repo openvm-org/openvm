@@ -33,7 +33,7 @@ pub struct PublicValuesCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(PublicValuesCols<F>)]
+#[columns_via(PublicValuesCols<u8>)]
 pub struct PublicValuesAir {
     pub public_values_bus: PublicValuesBus,
     pub num_pvs_bus: NumPublicValuesBus,

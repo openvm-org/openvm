@@ -67,7 +67,7 @@ pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
+#[columns_via(DivRemCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct DivRemCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,

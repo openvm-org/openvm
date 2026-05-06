@@ -54,7 +54,7 @@ pub struct ExpBitsLenCols<T> {
 }
 
 #[derive(Debug, derive_new::new, ColumnsAir)]
-#[columns_via(ExpBitsLenCols<F>)]
+#[columns_via(ExpBitsLenCols<u8>)]
 pub struct ExpBitsLenAir {
     pub exp_bits_len_bus: ExpBitsLenBus,
     pub right_shift_bus: RightShiftBus,

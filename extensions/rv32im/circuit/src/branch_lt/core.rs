@@ -50,7 +50,7 @@ pub struct BranchLessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(BranchLessThanCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
+#[columns_via(BranchLessThanCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct BranchLessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
     offset: usize,

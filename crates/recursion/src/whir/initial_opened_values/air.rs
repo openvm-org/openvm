@@ -57,7 +57,7 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(InitialOpenedValuesCols<F>)]
+#[columns_via(InitialOpenedValuesCols<u8>)]
 pub struct InitialOpenedValuesAir {
     pub stacking_indices_bus: StackingIndicesBus,
     pub whir_mu_bus: WhirMuBus,

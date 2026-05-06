@@ -64,7 +64,7 @@ pub struct GkrInputCols<T> {
 
 /// The GkrInputAir handles reading and passing the GkrInput
 #[derive(ColumnsAir)]
-#[columns_via(GkrInputCols<F>)]
+#[columns_via(GkrInputCols<u8>)]
 pub struct GkrInputAir {
     // System Params
     pub l_skip: usize,

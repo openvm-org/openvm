@@ -52,7 +52,7 @@ pub struct UnivariateSumcheckCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(UnivariateSumcheckCols<F>)]
+#[columns_via(UnivariateSumcheckCols<u8>)]
 pub struct UnivariateSumcheckAir {
     /// The univariate domain size is `2^{l_skip}`
     pub l_skip: usize,

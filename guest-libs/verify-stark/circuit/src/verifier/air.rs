@@ -65,7 +65,7 @@ pub struct DeferredVerifyPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(DeferredVerifyPvsCols<F>)]
+#[columns_via(DeferredVerifyPvsCols<u8>)]
 pub struct DeferredVerifyPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

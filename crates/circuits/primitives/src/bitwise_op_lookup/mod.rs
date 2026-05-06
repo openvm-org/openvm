@@ -44,7 +44,7 @@ pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
 pub const NUM_BITWISE_OP_LOOKUP_MULT_COLS: usize = 2;
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(BitwiseOperationLookupCols<F, NUM_BITS>)]
+#[columns_via(BitwiseOperationLookupCols<u8, NUM_BITS>)]
 pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
 }

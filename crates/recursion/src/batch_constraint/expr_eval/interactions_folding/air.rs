@@ -65,7 +65,7 @@ pub struct InteractionsFoldingCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(InteractionsFoldingCols<F>)]
+#[columns_via(InteractionsFoldingCols<u8>)]
 pub struct InteractionsFoldingAir {
     pub interaction_bus: InteractionsFoldingBus,
     pub interactions_folding_input_bus: InteractionsFoldingInputBus,

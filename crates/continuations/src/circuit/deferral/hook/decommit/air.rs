@@ -26,7 +26,7 @@ pub struct MerkleDecommitCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(MerkleDecommitCols<F>)]
+#[columns_via(MerkleDecommitCols<u8>)]
 pub struct MerkleDecommitAir {
     pub subair: MerkleTreeSubAir,
     pub io_commit_bus: IoCommitBus,

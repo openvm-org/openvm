@@ -47,7 +47,7 @@ mod tests;
 const NUM_PHANTOM_OPERANDS: usize = 3;
 
 #[derive(Clone, Debug, ColumnsAir)]
-#[columns_via(PhantomCols<F>)]
+#[columns_via(PhantomCols<u8>)]
 pub struct PhantomAir {
     pub execution_bridge: ExecutionBridge,
     /// Global opcode for PhantomOpcode

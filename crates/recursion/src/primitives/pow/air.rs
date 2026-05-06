@@ -24,7 +24,7 @@ pub struct PowerCheckerCols<T> {
 }
 
 #[derive(Debug, ColumnsAir)]
-#[columns_via(PowerCheckerCols<F>)]
+#[columns_via(PowerCheckerCols<u8>)]
 pub struct PowerCheckerAir<const BASE: usize, const N: usize> {
     pub pow_bus: PowerCheckerBus,
     pub range_bus: RangeCheckerBus,

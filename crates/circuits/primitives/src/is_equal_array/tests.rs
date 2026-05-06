@@ -46,7 +46,7 @@ pub struct IsEqArrayCols<T, const N: usize> {
 }
 
 #[derive(Clone, Copy, ColumnsAir)]
-#[columns_via(IsEqArrayCols<F, N>)]
+#[columns_via(IsEqArrayCols<u8, N>)]
 pub struct IsEqArrayTestAir<const N: usize>(IsEqArraySubAir<N>);
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}

@@ -41,7 +41,7 @@ pub struct DeferralAggPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(DeferralAggPvsCols<F>)]
+#[columns_via(DeferralAggPvsCols<u8>)]
 pub struct DeferralAggPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2CompressBus,

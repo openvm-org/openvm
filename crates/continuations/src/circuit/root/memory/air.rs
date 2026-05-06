@@ -39,7 +39,7 @@ pub struct UserPvsInMemoryCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(UserPvsInMemoryCols<F>)]
+#[columns_via(UserPvsInMemoryCols<u8>)]
 pub struct UserPvsInMemoryAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub merkle_root_bus: MerkleRootBus,

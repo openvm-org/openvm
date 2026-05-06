@@ -51,7 +51,7 @@ pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
 }
 
 #[derive(Clone, Copy, ColumnsAir)]
-#[columns_via(AssertLessThanCols<F, AUX_LEN>)]
+#[columns_via(AssertLessThanCols<u8, AUX_LEN>)]
 pub struct AssertLtTestAir<const AUX_LEN: usize>(pub AssertLtSubAir);
 
 impl<F: Field, const AUX_LEN: usize> BaseAirWithPublicValues<F> for AssertLtTestAir<AUX_LEN> {}

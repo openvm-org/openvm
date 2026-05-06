@@ -45,7 +45,7 @@ pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(NonInitialOpenedValuesCols<F>)]
+#[columns_via(NonInitialOpenedValuesCols<u8>)]
 pub struct NonInitialOpenedValuesAir {
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,

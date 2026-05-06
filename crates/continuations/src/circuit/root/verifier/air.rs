@@ -55,7 +55,7 @@ pub struct RootVerifierPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(RootVerifierPvsCols<F>)]
+#[columns_via(RootVerifierPvsCols<u8>)]
 pub struct RootVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

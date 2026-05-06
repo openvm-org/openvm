@@ -74,7 +74,7 @@ pub struct EqBaseCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqBaseCols<F>)]
+#[columns_via(EqBaseCols<u8>)]
 pub struct EqBaseAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,

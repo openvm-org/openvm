@@ -46,7 +46,7 @@ pub struct FractionsFolderCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(FractionsFolderCols<F>)]
+#[columns_via(FractionsFolderCols<u8>)]
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,

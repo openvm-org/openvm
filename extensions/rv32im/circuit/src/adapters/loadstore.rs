@@ -102,7 +102,7 @@ pub struct Rv32LoadStoreAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32LoadStoreAdapterCols<F>)]
+#[columns_via(Rv32LoadStoreAdapterCols<u8>)]
 pub struct Rv32LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,

@@ -34,7 +34,7 @@ mod tests;
 pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
 
 #[derive(Debug, Clone, Copy, ColumnsAir)]
-#[columns_via(ConnectorCols<F>)]
+#[columns_via(ConnectorCols<u8>)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,

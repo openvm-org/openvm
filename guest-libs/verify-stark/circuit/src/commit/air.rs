@@ -27,7 +27,7 @@ use crate::{
  * - leaf payload is sent on `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
 #[derive(ColumnsAir)]
-#[columns_via(MerkleTreeCols<F>)]
+#[columns_via(MerkleTreeCols<u8>)]
 pub struct UserPvsCommitValuesAir {
     pub subair: MerkleTreeSubAir,
     pub output_val_bus: OutputValBus,

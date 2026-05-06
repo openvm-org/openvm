@@ -88,7 +88,7 @@ pub(super) struct MerkleVerifyLog {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(MerkleVerifyCols<F>)]
+#[columns_via(MerkleVerifyCols<u8>)]
 pub struct MerkleVerifyAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,

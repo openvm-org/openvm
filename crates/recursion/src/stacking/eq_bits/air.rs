@@ -50,7 +50,7 @@ pub struct EqBitsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqBitsCols<F>)]
+#[columns_via(EqBitsCols<u8>)]
 pub struct EqBitsAir {
     // Internal buses
     pub eq_bits_internal_bus: EqBitsInternalBus,

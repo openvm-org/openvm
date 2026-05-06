@@ -39,7 +39,7 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
+#[columns_via(BaseAluCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
     pub offset: usize,

@@ -42,7 +42,7 @@ pub struct IsEqualCols<T> {
 }
 
 #[derive(Clone, Copy, ColumnsAir)]
-#[columns_via(IsEqualCols<F>)]
+#[columns_via(IsEqualCols<u8>)]
 pub struct IsEqTestAir(pub IsEqSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}

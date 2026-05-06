@@ -50,7 +50,7 @@ pub struct DeferralAccMerklePathsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(DeferralAccMerklePathsCols<F>)]
+#[columns_via(DeferralAccMerklePathsCols<u8>)]
 pub struct DeferralAccMerklePathsAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub def_acc_paths_bus: DeferralAccPathBus,

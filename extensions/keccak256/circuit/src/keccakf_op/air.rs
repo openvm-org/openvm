@@ -28,7 +28,7 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(KeccakfOpCols<F>)]
+#[columns_via(KeccakfOpCols<u8>)]
 pub struct KeccakfOpAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

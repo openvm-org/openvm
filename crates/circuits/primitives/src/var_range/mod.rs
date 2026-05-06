@@ -50,7 +50,7 @@ pub struct VariableRangeCols<T> {
 pub const NUM_VARIABLE_RANGE_COLS: usize = size_of::<VariableRangeCols<u8>>();
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(VariableRangeCols<F>)]
+#[columns_via(VariableRangeCols<u8>)]
 pub struct VariableRangeCheckerAir {
     pub bus: VariableRangeCheckerBus,
 }

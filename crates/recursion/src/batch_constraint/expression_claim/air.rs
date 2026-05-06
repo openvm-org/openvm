@@ -93,7 +93,7 @@ pub struct ExpressionClaimCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(ExpressionClaimCols<F>)]
+#[columns_via(ExpressionClaimCols<u8>)]
 pub struct ExpressionClaimAir {
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub expr_claim_bus: ExpressionClaimBus,

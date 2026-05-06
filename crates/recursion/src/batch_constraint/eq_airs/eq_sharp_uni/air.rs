@@ -47,7 +47,7 @@ pub struct EqSharpUniCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqSharpUniCols<F>)]
+#[columns_via(EqSharpUniCols<u8>)]
 pub struct EqSharpUniAir {
     pub xi_bus: XiRandomnessBus,
     pub eq_bus: EqSharpUniBus,
@@ -295,7 +295,7 @@ pub struct EqSharpUniReceiverCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqSharpUniReceiverCols<F>)]
+#[columns_via(EqSharpUniReceiverCols<u8>)]
 pub struct EqSharpUniReceiverAir {
     pub r_bus: BatchConstraintConductorBus,
     pub eq_bus: EqSharpUniBus,

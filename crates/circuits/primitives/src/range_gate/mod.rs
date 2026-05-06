@@ -47,7 +47,7 @@ pub const NUM_RANGE_GATE_COLS: usize = size_of::<RangeGateCols<u8>>();
 pub const RANGE_GATE_COL_MAP: RangeGateCols<usize> = make_col_map();
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(RangeGateCols<F>)]
+#[columns_via(RangeGateCols<u8>)]
 pub struct RangeCheckerGateAir {
     pub bus: RangeCheckBus,
 }

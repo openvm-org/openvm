@@ -41,7 +41,7 @@ pub struct VerifierPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(VerifierPvsCols<F>)]
+#[columns_via(VerifierPvsCols<u8>)]
 pub struct VerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

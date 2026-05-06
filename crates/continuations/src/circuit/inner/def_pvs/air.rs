@@ -43,7 +43,7 @@ pub struct DeferralPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(DeferralPvsCols<F>)]
+#[columns_via(DeferralPvsCols<u8>)]
 pub struct DeferralPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

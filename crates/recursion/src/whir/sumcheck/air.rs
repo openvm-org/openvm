@@ -57,7 +57,7 @@ pub struct SumcheckCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(SumcheckCols<F>)]
+#[columns_via(SumcheckCols<u8>)]
 pub struct SumcheckAir {
     pub sumcheck_bus: WhirSumcheckBus,
     pub alpha_bus: WhirAlphaBus,

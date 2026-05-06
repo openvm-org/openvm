@@ -36,7 +36,7 @@ pub struct EqUniCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqUniCols<F>)]
+#[columns_via(EqUniCols<u8>)]
 pub struct EqUniAir {
     pub zero_n_bus: EqZeroNBus,
     pub r_xi_bus: BatchConstraintConductorBus,

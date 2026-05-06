@@ -61,7 +61,7 @@ pub struct EqNegCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(EqNegCols<F>)]
+#[columns_via(EqNegCols<u8>)]
 pub struct EqNegAir {
     pub result_bus: EqNegResultBus,
     pub base_rand_bus: EqNegBaseRandBus,

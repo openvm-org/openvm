@@ -26,7 +26,7 @@ use openvm_stark_backend::{
 use crate::xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS};
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(XorinVmCols<F>)]
+#[columns_via(XorinVmCols<u8>)]
 pub struct XorinVmAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

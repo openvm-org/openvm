@@ -48,7 +48,7 @@ pub struct WhirQueryCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(WhirQueryCols<F>)]
+#[columns_via(WhirQueryCols<u8>)]
 pub struct WhirQueryAir {
     pub transcript_bus: TranscriptBus,
     pub verify_queries_bus: VerifyQueriesBus,

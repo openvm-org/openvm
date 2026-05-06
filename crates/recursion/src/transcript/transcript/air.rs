@@ -41,7 +41,7 @@ pub struct TranscriptCols<T> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(TranscriptCols<F>)]
+#[columns_via(TranscriptCols<u8>)]
 pub struct TranscriptAir {
     pub transcript_bus: TranscriptBus,
     pub poseidon2_permute_bus: Poseidon2PermuteBus,

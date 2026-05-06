@@ -33,7 +33,7 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(BranchEqualCoreCols<F, NUM_LIMBS>)]
+#[columns_via(BranchEqualCoreCols<u8, NUM_LIMBS>)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
     offset: usize,
     pc_step: u32,

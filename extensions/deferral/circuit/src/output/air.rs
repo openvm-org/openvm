@@ -86,7 +86,7 @@ pub struct DeferralOutputCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(DeferralOutputCols<F>)]
+#[columns_via(DeferralOutputCols<u8>)]
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

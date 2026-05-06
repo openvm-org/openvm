@@ -19,7 +19,7 @@ pub struct RangeCheckerCols<T> {
 }
 
 #[derive(Debug, ColumnsAir)]
-#[columns_via(RangeCheckerCols<F>)]
+#[columns_via(RangeCheckerCols<u8>)]
 pub struct RangeCheckerAir<const NUM_BITS: usize> {
     pub bus: RangeCheckerBus,
 }

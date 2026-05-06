@@ -36,7 +36,7 @@ pub struct OnionHashCols<F> {
 }
 
 #[derive(ColumnsAir)]
-#[columns_via(OnionHashCols<F>)]
+#[columns_via(OnionHashCols<u8>)]
 pub struct OnionHashAir {
     pub poseidon2_bus: Poseidon2CompressBus,
     pub def_circuit_commit_bus: DefCircuitCommitBus,

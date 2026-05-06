@@ -70,7 +70,7 @@ pub struct GkrLayerCols<T> {
 
 /// The GkrLayerAir handles layer-to-layer transitions in the GKR protocol
 #[derive(ColumnsAir)]
-#[columns_via(GkrLayerCols<F>)]
+#[columns_via(GkrLayerCols<u8>)]
 pub struct GkrLayerAir {
     // External buses
     pub xi_randomness_bus: XiRandomnessBus,

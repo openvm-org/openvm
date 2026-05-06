@@ -39,7 +39,7 @@ pub struct Rv32JalLuiCoreCols<T> {
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32JalLuiCoreCols<F>)]
+#[columns_via(Rv32JalLuiCoreCols<u8>)]
 pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }

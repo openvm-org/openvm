@@ -34,7 +34,7 @@ pub struct ProgramExecutionCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(ProgramCols<F>)]
+#[columns_via(ProgramCols<u8>)]
 pub struct ProgramAir {
     pub bus: ProgramBus,
 }

@@ -72,7 +72,7 @@ pub struct Rv32VecHeapAdapterCols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32VecHeapAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>)]
+#[columns_via(Rv32VecHeapAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>)]
 pub struct Rv32VecHeapAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,

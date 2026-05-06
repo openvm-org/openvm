@@ -37,7 +37,7 @@ pub struct Rv32BranchAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv32BranchAdapterCols<F>)]
+#[columns_via(Rv32BranchAdapterCols<u8>)]
 pub struct Rv32BranchAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
