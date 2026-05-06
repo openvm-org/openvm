@@ -45,6 +45,8 @@ pub struct IsLessThanCols<T> {
 #[derive(Clone, Copy)]
 pub struct IsLtTestAir(pub IsLtSubAir);
 
+// No columns provided: `IsLessThanCols` intentionally uses `Vec<T>` for `lower_decomp` (see comment
+// on the struct), so it can't derive `StructReflection`.
 impl ColumnsAir for IsLtTestAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}

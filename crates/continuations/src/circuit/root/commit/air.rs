@@ -29,6 +29,8 @@ pub struct UserPvsCommitAir {
     encoder: Encoder,
     num_user_pvs: usize,
 }
+// No columns provided: width is dynamic — `MerkleTreeCols` followed by encoder flags whose count
+// depends on `num_user_pvs`.
 impl ColumnsAir for UserPvsCommitAir {}
 
 impl UserPvsCommitAir {

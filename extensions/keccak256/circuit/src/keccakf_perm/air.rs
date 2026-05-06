@@ -34,6 +34,8 @@ pub struct KeccakfPermAir {
     pub keccakf_state_bus: PermutationCheckBus,
 }
 
+// No columns provided: `KeccakfPermCols` embeds external `KeccakCols` (from `p3-keccak-air`)
+// which doesn't derive `StructReflection`.
 impl ColumnsAir for KeccakfPermAir {}
 
 impl<T: Copy> KeccakfPermCols<T> {

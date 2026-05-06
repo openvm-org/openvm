@@ -51,6 +51,7 @@ pub struct FieldExpressionCoreAir {
     // We don't support 2-op chip that doesn't need setup right now.
 }
 
+// No columns provided: wraps `FieldExpr`, whose column layout is built dynamically.
 impl ColumnsAir for FieldExpressionCoreAir {}
 
 impl FieldExpressionCoreAir {

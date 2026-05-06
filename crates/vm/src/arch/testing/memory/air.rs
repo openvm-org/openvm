@@ -72,6 +72,8 @@ pub struct MemoryDummyAir {
 
 impl<F> BaseAirWithPublicValues<F> for MemoryDummyAir {}
 impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
+// No columns provided: test dummy whose columns are accessed via `DummyMemoryInteractionColsRef`,
+// a slice-borrowing ref struct rather than a reflectable owned struct.
 impl ColumnsAir for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {

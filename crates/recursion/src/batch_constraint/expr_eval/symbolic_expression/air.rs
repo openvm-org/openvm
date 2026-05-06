@@ -118,6 +118,8 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub cnt_proofs: usize,
     pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
+// No columns provided: width is dynamic, depending on `cnt_proofs` and on whether
+// `dag_commit_subair` is present, and mixes several column structs.
 impl<F: Field> ColumnsAir for SymbolicExpressionAir<F> {}
 
 impl<F: Field> SymbolicExpressionAir<F> {

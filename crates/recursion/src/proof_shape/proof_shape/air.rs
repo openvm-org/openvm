@@ -190,6 +190,8 @@ impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
     for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
 {
 }
+// No columns provided: width is dynamic — `ProofShapeCols` plus encoder flags plus
+// `max_cached * DIGEST_SIZE` cached commit columns.
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir
     for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
 {

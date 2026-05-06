@@ -75,6 +75,8 @@ pub struct WhirRoundAir {
 
 impl BaseAirWithPublicValues<F> for WhirRoundAir {}
 impl PartitionedBaseAir<F> for WhirRoundAir {}
+// No columns provided: `WhirRoundCols` is parameterized by `ENC_WIDTH` chosen at runtime (1, 2, or
+// 3), so there is no single static layout to reflect.
 impl ColumnsAir for WhirRoundAir {}
 
 impl<F> BaseAir<F> for WhirRoundAir {

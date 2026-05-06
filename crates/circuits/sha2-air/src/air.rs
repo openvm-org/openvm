@@ -31,6 +31,8 @@ pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     _phantom: PhantomData<C>,
 }
 
+// No columns provided: width is the config-dependent `C::SUBAIR_WIDTH` and rows are accessed via
+// `Sha2{Round,Digest}ColsRef` (slice-borrowing ref structs, no static `Cols` to reflect).
 impl<C: Sha2BlockHasherSubairConfig> ColumnsAir for Sha2BlockHasherSubAir<C> {}
 
 impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {

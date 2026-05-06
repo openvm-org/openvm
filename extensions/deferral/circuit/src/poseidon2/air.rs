@@ -29,6 +29,8 @@ pub struct DeferralPoseidon2Air<F: Field> {
     pub bus: LookupBus,
 }
 
+// No columns provided: `DeferralPoseidon2Cols` embeds external `Poseidon2SubCols` which doesn't
+// derive `StructReflection`.
 impl<F: Field> ColumnsAir for DeferralPoseidon2Air<F> {}
 
 impl<F: Field> DeferralPoseidon2Air<F> {

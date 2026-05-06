@@ -34,6 +34,8 @@ impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
     for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
 {
 }
+// No columns provided: columns embed external `Poseidon2SubCols` which doesn't derive
+// `StructReflection`.
 impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir
     for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
 {

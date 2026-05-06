@@ -11,6 +11,7 @@ use crate::{bitwise_op_lookup::bus::BitwiseOperationLookupBus, ColumnsAir};
 pub struct DummyAir {
     bus: BitwiseOperationLookupBus,
 }
+// No columns provided: test dummy with 4 anonymous columns and no matching `Cols` struct.
 impl ColumnsAir for DummyAir {}
 
 impl DummyAir {

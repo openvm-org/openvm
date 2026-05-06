@@ -40,6 +40,8 @@ pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     _phantom: PhantomData<C>,
 }
 
+// No columns provided: width is the config-dependent `C::MAIN_CHIP_WIDTH` and rows are accessed
+// via `Sha2ColsRef` (a slice-borrowing ref struct, no static `Cols`).
 impl<C: Sha2MainChipConfig> ColumnsAir for Sha2MainAir<C> {}
 
 impl<C: Sha2MainChipConfig> Sha2MainAir<C> {

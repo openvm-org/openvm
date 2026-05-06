@@ -62,6 +62,8 @@ impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> Partitione
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }
+// No columns provided: `Poseidon2Cols` (from external `p3-poseidon2-air`) doesn't derive
+// `StructReflection`.
 impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> ColumnsAir
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {

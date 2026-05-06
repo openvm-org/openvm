@@ -317,6 +317,8 @@ impl Deref for FieldExpr {
 
 impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
 impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
+// No columns provided: width is built dynamically from the expression and `FieldExprCols` uses
+// `Vec<Vec<T>>`.
 impl ColumnsAir for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {

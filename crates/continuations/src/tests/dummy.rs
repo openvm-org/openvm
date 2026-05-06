@@ -18,6 +18,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use crate::{circuit::deferral::DeferralCircuitPvs, SC};
 
 pub(in crate::tests) struct EmptyAirWithPvs(pub(in crate::tests) usize);
+// No columns provided: test dummy with a single anonymous column and no matching `Cols` struct.
 impl ColumnsAir for EmptyAirWithPvs {}
 
 impl<F> BaseAir<F> for EmptyAirWithPvs {

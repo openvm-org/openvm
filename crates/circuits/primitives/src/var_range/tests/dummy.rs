@@ -12,6 +12,7 @@ use crate::{var_range::bus::VariableRangeCheckerBus, ColumnsAir};
 pub struct TestSendAir {
     bus: VariableRangeCheckerBus,
 }
+// No columns provided: test dummy whose 2-element row `[value, max_bits]` has no `Cols` struct.
 impl ColumnsAir for TestSendAir {}
 
 impl TestSendAir {
@@ -46,6 +47,7 @@ pub struct TestRangeCheckAir {
     bus: VariableRangeCheckerBus,
     max_bits: usize,
 }
+// No columns provided: test dummy whose single-column row `[value]` has no `Cols` struct.
 impl ColumnsAir for TestRangeCheckAir {}
 
 impl TestRangeCheckAir {

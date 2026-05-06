@@ -48,6 +48,8 @@ pub struct DagCommitSubAir<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
 }
 
+// No columns provided: `DagCommitCols` embeds external `Poseidon2SubCols` which doesn't derive
+// `StructReflection`.
 impl<F: Field> ColumnsAir for DagCommitSubAir<F> {}
 
 impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> DagCommitSubAir<F> {
