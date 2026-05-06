@@ -23,10 +23,9 @@ const fn width<const DEPTH_MINUS_ONE: usize>() -> usize {
     size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>)]
 struct TestAir<const DEPTH_MINUS_ONE: usize>;
-
-impl<const DEPTH_MINUS_ONE: usize> ColumnsAir for TestAir<DEPTH_MINUS_ONE> {}
 impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAirWithPublicValues<F>
     for TestAir<DEPTH_MINUS_ONE>
 {

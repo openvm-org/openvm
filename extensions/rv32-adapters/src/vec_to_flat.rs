@@ -94,6 +94,9 @@ impl<
 where
     A: ColumnsAir,
 {
+    fn columns(&self) -> Option<Vec<String>> {
+        self.0.columns()
+    }
 }
 
 impl<
@@ -375,6 +378,9 @@ impl<
 where
     A: ColumnsAir,
 {
+    fn columns(&self) -> Option<Vec<String>> {
+        self.0.columns()
+    }
 }
 
 impl<

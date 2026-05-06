@@ -1,6 +1,8 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -16,7 +18,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct WhirFoldingCols<T> {
     pub is_valid: T,
     pub proof_idx: T,
@@ -37,6 +39,8 @@ pub struct WhirFoldingCols<T> {
     pub alpha: [T; 4],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(WhirFoldingCols<u8>)]
 pub struct WhirFoldingAir {
     pub alpha_bus: WhirAlphaBus,
     pub folding_bus: WhirFoldingBus,
@@ -45,7 +49,6 @@ pub struct WhirFoldingAir {
 
 impl BaseAirWithPublicValues<F> for WhirFoldingAir {}
 impl PartitionedBaseAir<F> for WhirFoldingAir {}
-impl ColumnsAir for WhirFoldingAir {}
 
 impl BaseAir<F> for WhirFoldingAir {
     fn width(&self) -> usize {

@@ -35,7 +35,8 @@ pub struct IsLtArrayCols<T, const NUM: usize, const AUX_LEN: usize> {
     pub aux: IsLtArrayAuxCols<T, NUM, AUX_LEN>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(IsLtArrayCols<u8, NUM, AUX_LEN>)]
 pub struct IsLtArrayTestAir<const NUM: usize, const AUX_LEN: usize>(IsLtArraySubAir<NUM>);
 
 impl<F: Field, const NUM: usize, const AUX_LEN: usize> BaseAirWithPublicValues<F>
@@ -53,7 +54,6 @@ impl<F: Field, const NUM: usize, const AUX_LEN: usize> PartitionedBaseAir<F>
     for IsLtArrayTestAir<NUM, AUX_LEN>
 {
 }
-impl<const NUM: usize, const AUX_LEN: usize> ColumnsAir for IsLtArrayTestAir<NUM, AUX_LEN> {}
 
 impl<AB: InteractionBuilder, const NUM: usize, const AUX_LEN: usize> Air<AB>
     for IsLtArrayTestAir<NUM, AUX_LEN>
