@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
 use num_traits::Zero;
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{
@@ -19,7 +19,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -28,8 +28,8 @@ use openvm_mod_circuit_builder::{
     ExprBuilderConfig,
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
-use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg};
-use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
+use openvm_riscv_adapters::{rv64_write_heap_default, write_ptr_reg};
+use openvm_riscv_circuit::adapters::RV64_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -61,7 +61,7 @@ type F = BabyBear;
 mod addsub_tests {
     use super::*;
 
-    const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
+    const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
 
     type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
         F,
@@ -77,12 +77,12 @@ mod addsub_tests {
     ) -> (
         Harness<BLOCKS, BLOCK_SIZE>,
         (
-            BitwiseOperationLookupAir<RV32_CELL_BITS>,
-            SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+            BitwiseOperationLookupAir<RV64_CELL_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
         ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -133,7 +133,7 @@ mod addsub_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -210,19 +210,19 @@ mod addsub_tests {
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
-        let ptr_as = RV32_REGISTER_AS as usize;
+        let ptr_as = RV64_REGISTER_AS as usize;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 3 * RV32_REGISTER_NUM_LIMBS;
-        let addr_ptr3 = 6 * RV32_REGISTER_NUM_LIMBS;
+        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
 
-        let data_as = RV32_MEMORY_AS as usize;
+        let data_as = RV64_MEMORY_AS as usize;
         let address1 = gen_pointer(rng, BLOCK_SIZE) as u32;
         let address2 = gen_pointer(rng, BLOCK_SIZE) as u32;
         let address3 = gen_pointer(rng, BLOCK_SIZE) as u32;
 
-        write_ptr_reg(tester, ptr_as, addr_ptr1, address1);
-        write_ptr_reg(tester, ptr_as, addr_ptr2, address2);
-        write_ptr_reg(tester, ptr_as, addr_ptr3, address3);
+        write_ptr_reg(tester, ptr_as, addr_ptr1, address1.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr2, address2.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr3, address3.into());
 
         let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS)
             .into_iter()
@@ -276,7 +276,7 @@ mod addsub_tests {
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -363,7 +363,7 @@ mod addsub_tests {
         let mut tester =
             GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -435,7 +435,7 @@ mod addsub_tests {
 mod muldiv_tests {
     use super::*;
 
-    const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
+    const MUL_LOCAL: usize = Rv64ModularArithmeticOpcode::MUL as usize;
     type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
         F,
         ModularExecutor<BLOCKS, BLOCK_SIZE>,
@@ -450,12 +450,12 @@ mod muldiv_tests {
     ) -> (
         Harness<BLOCKS, BLOCK_SIZE>,
         (
-            BitwiseOperationLookupAir<RV32_CELL_BITS>,
-            SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+            BitwiseOperationLookupAir<RV64_CELL_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
         ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -508,7 +508,7 @@ mod muldiv_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
@@ -586,19 +586,19 @@ mod muldiv_tests {
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
-        let ptr_as = RV32_REGISTER_AS as usize;
+        let ptr_as = RV64_REGISTER_AS as usize;
         let addr_ptr1 = 0;
-        let addr_ptr2 = 12;
-        let addr_ptr3 = 24;
+        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
 
-        let data_as = RV32_MEMORY_AS as usize;
+        let data_as = RV64_MEMORY_AS as usize;
         let address1 = gen_pointer(rng, BLOCK_SIZE) as u32;
         let address2 = gen_pointer(rng, BLOCK_SIZE) as u32;
         let address3 = gen_pointer(rng, BLOCK_SIZE) as u32;
 
-        write_ptr_reg(tester, ptr_as, addr_ptr1, address1);
-        write_ptr_reg(tester, ptr_as, addr_ptr2, address2);
-        write_ptr_reg(tester, ptr_as, addr_ptr3, address3);
+        write_ptr_reg(tester, ptr_as, addr_ptr1, address1.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr2, address2.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr3, address3.into());
 
         let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS)
             .into_iter()
@@ -657,7 +657,7 @@ mod muldiv_tests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
 
         let (mut harness, bitwise) = create_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
 
@@ -739,7 +739,7 @@ mod muldiv_tests {
         let mut tester =
             GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
@@ -810,8 +810,8 @@ mod muldiv_tests {
 #[cfg(test)]
 mod is_equal_tests {
     use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
-    use openvm_rv32_adapters::{
-        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
+    use openvm_riscv_adapters::{
+        Rv64IsEqualModAdapterAir, Rv64IsEqualModAdapterExecutor, Rv64IsEqualModAdapterFiller,
     };
     use openvm_stark_backend::{
         p3_air::BaseAir,
@@ -848,7 +848,7 @@ mod is_equal_tests {
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
 
         let air = ModularIsEqualAir::new(
-            Rv32IsEqualModAdapterAir::new(
+            Rv64IsEqualModAdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 bitwise_bus,
@@ -857,13 +857,13 @@ mod is_equal_tests {
             ModularIsEqualCoreAir::new(modulus.clone(), bitwise_bus, offset),
         );
         let executor = VmModularIsEqualExecutor::new(
-            Rv32IsEqualModAdapterExecutor::new(tester.address_bits()),
+            Rv64IsEqualModAdapterExecutor::new(tester.address_bits()),
             offset,
             modulus_limbs,
         );
         let chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(
-                Rv32IsEqualModAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
+                Rv64IsEqualModAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
                 offset,
                 modulus_limbs,
                 bitwise_chip.clone(),
@@ -899,7 +899,7 @@ mod is_equal_tests {
             (
                 modulus_limbs,
                 [F::ZERO; TOTAL_LIMBS],
-                offset + Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize,
+                offset + Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize,
             )
         } else {
             let b = b.unwrap_or(
@@ -911,10 +911,10 @@ mod is_equal_tests {
                 generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(modulus, rng).map(F::from_u32)
             });
 
-            (b, c, offset + Rv32ModularArithmeticOpcode::IS_EQ as usize)
+            (b, c, offset + Rv64ModularArithmeticOpcode::IS_EQ as usize)
         };
 
-        let instruction = rv32_write_heap_default::<TOTAL_LIMBS>(tester, vec![b], vec![c], opcode);
+        let instruction = rv64_write_heap_default::<TOTAL_LIMBS>(tester, vec![b], vec![c], opcode);
 
         tester.execute(executor, arena, &instruction);
     }
@@ -1026,12 +1026,12 @@ mod is_equal_tests {
     ) -> GpuHarness<NUM_LANES, LANE_SIZE, TOTAL_LIMBS> {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
             bitwise_bus,
         ));
 
         let air = ModularIsEqualAir::new(
-            Rv32IsEqualModAdapterAir::new(
+            Rv64IsEqualModAdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 bitwise_bus,
@@ -1041,14 +1041,14 @@ mod is_equal_tests {
         );
 
         let executor = VmModularIsEqualExecutor::new(
-            Rv32IsEqualModAdapterExecutor::new(tester.address_bits()),
+            Rv64IsEqualModAdapterExecutor::new(tester.address_bits()),
             offset,
             modulus_limbs,
         );
 
         let cpu_chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(
-                Rv32IsEqualModAdapterFiller::new(tester.address_bits(), dummy_bitwise_chip.clone()),
+                Rv64IsEqualModAdapterFiller::new(tester.address_bits(), dummy_bitwise_chip.clone()),
                 offset,
                 modulus_limbs,
                 dummy_bitwise_chip.clone(),
@@ -1060,7 +1060,7 @@ mod is_equal_tests {
         let hybrid_chip = HybridModularIsEqualChip::new(
             ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
                 ModularIsEqualFiller::new(
-                    Rv32IsEqualModAdapterFiller::new(
+                    Rv64IsEqualModAdapterFiller::new(
                         tester.address_bits(),
                         tester.cpu_bitwise_op_lookup(),
                     ),
@@ -1087,7 +1087,7 @@ mod is_equal_tests {
         num_ops: usize,
     ) {
         use openvm_circuit::arch::EmptyAdapterCoreLayout;
-        use openvm_rv32_adapters::Rv32IsEqualModAdapterRecord;
+        use openvm_riscv_adapters::Rv64IsEqualModAdapterRecord;
 
         use crate::modular_chip::ModularIsEqualRecord;
 
@@ -1123,7 +1123,7 @@ mod is_equal_tests {
         }
 
         type Record<'a, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize> = (
-            &'a mut Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            &'a mut Rv64IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             &'a mut ModularIsEqualRecord<TOTAL_LIMBS>,
         );
         harness
@@ -1133,7 +1133,7 @@ mod is_equal_tests {
                 &mut harness.matrix_arena,
                 EmptyAdapterCoreLayout::<
                     F,
-                    Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+                    Rv64IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
                 >::new(),
             );
 

@@ -23,7 +23,7 @@ openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
@@ -42,9 +42,6 @@ cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-openvm-pairing-guest = { workspace = true }
-
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
@@ -60,8 +57,8 @@ rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []
-tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "openvm-ecc-circuit/aot", "halo2curves-axiom/asm"]
+tco = ["openvm-riscv-circuit/tco", "openvm-ecc-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot", "openvm-ecc-circuit/aot", "halo2curves-axiom/asm"]
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",
@@ -77,5 +74,5 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-algebra-circuit/touchemall",
     "openvm-ecc-circuit/touchemall",
-    "openvm-rv32im-circuit/touchemall",
+    "openvm-riscv-circuit/touchemall",
 ]

@@ -4,7 +4,7 @@ use std::{
 };
 
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
@@ -13,9 +13,10 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::FieldExprVecHeapExecutor;
@@ -184,7 +185,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
         let c = c.as_canonical_u32();
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
-        if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
+        if d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -231,17 +232,17 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
 
             Ok(op)
         } else {
-            let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize
-                || local_opcode == Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize;
+            let is_setup = local_opcode == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize
+                || local_opcode == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize;
 
             let op = if is_setup {
                 None
             } else {
                 match local_opcode {
-                    x if x == Rv32ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
-                    x if x == Rv32ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
-                    x if x == Rv32ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
-                    x if x == Rv32ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
+                    x if x == Rv64ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
+                    x if x == Rv64ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
+                    x if x == Rv64ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
+                    x if x == Rv64ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
                     _ => unreachable!(),
                 }
             };
@@ -392,11 +393,11 @@ unsafe fn execute_e12_impl<
 ) {
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
 
     let output_data = if IS_FP2 {
@@ -405,11 +406,11 @@ unsafe fn execute_e12_impl<
         field_operation::<FIELD_TYPE, BLOCKS, BLOCK_SIZE, OP>(read_data)
     };
 
-    let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     for (i, block) in output_data.into_iter().enumerate() {
-        exec_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
     let pc = exec_state.pc();
@@ -428,11 +429,11 @@ unsafe fn execute_e12_generic_impl<
 ) {
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
     let read_data_dyn: DynArray<u8> = read_data.into();
 
@@ -442,12 +443,12 @@ unsafe fn execute_e12_generic_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
-        exec_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
     let pc = exec_state.pc();
@@ -469,10 +470,10 @@ unsafe fn execute_e12_setup_impl<
     // Read the first input (which should be the prime)
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
 
     // Extract first field element as the prime
@@ -498,12 +499,12 @@ unsafe fn execute_e12_setup_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
-        exec_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

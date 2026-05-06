@@ -10,13 +10,13 @@ repository.workspace = true
 [dependencies]
 openvm-algebra-moduli-macros = { workspace = true }
 openvm-algebra-complex-macros = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
+openvm-riscv-guest = { workspace = true }
 openvm-custom-insn = { workspace = true }
 serde-big-array.workspace = true
 strum_macros.workspace = true
 once_cell = { workspace = true, features = ["race", "alloc"] }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+[target.'cfg(not(target_os = "none"))'.dependencies]
 num-bigint.workspace = true
 halo2curves-axiom = { workspace = true, optional = true }
 
@@ -25,3 +25,6 @@ halo2curves-axiom = { workspace = true, optional = true }
 [features]
 default = []
 halo2curves = ["dep:halo2curves-axiom"]
+
+[lints]
+workspace = true

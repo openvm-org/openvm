@@ -32,14 +32,13 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
+    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
 
     // CUDA is little-endian, so the u64 word and byte representations below are the same memory
     // layout.
@@ -58,7 +57,7 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     KECCAKF_OP_WRITE(rd_ptr, rec.rd_ptr);
 
     // Write buffer_ptr_limbs
-    uint8_t buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS];
+    uint8_t buffer_ptr_limbs[RV64_WORD_NUM_LIMBS];
     buffer_ptr_limbs[0] = rec.buffer_ptr & 0xFF;
     buffer_ptr_limbs[1] = (rec.buffer_ptr >> 8) & 0xFF;
     buffer_ptr_limbs[2] = (rec.buffer_ptr >> 16) & 0xFF;
@@ -75,8 +74,8 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     mem_helper.fill(KECCAKF_OP_SLICE(rd_aux.base), rec.rd_aux.prev_timestamp, ts);
     ts++;
 
-    // Fill buffer_word_aux - memory writes for 50 words
-    for (uint32_t w = 0; w < KECCAK_WIDTH_WORDS; w++) {
+    // Fill buffer_word_aux - memory writes for 25 words
+    for (uint32_t w = 0; w < KECCAK_WIDTH_MEM_OPS; w++) {
         mem_helper.fill(
             KECCAKF_OP_SLICE(buffer_word_aux[w]), rec.buffer_word_aux[w].prev_timestamp, ts
         );
@@ -84,9 +83,9 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     }
 
     // Range check for buffer pointer (scaled MSB limb)
-    constexpr uint32_t RV32_TOTAL_BITS = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS;
-    uint32_t scaled_limb = (buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1])
-                           << (RV32_TOTAL_BITS - pointer_max_bits);
+    constexpr uint32_t RV64_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
+    uint32_t scaled_limb = (buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1])
+                           << (RV64_TOTAL_BITS - pointer_max_bits);
     bitwise_lookup.add_range(scaled_limb, scaled_limb);
 
     // Range check for postimage bytes (pairs)
@@ -105,7 +104,6 @@ __global__ void keccakf_op_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -131,7 +129,6 @@ __global__ void keccakf_op_tracegen(
             d_range_checker_ptr,
             range_checker_num_bins,
             d_bitwise_lookup_ptr,
-            bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits
         );
@@ -152,12 +149,10 @@ extern "C" int _keccakf_op_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
     assert(width == sizeof(KeccakfOpCols<uint8_t>));
 
     uint32_t num_records = d_records.len();
@@ -172,7 +167,6 @@ extern "C" int _keccakf_op_tracegen(
         d_range_checker_ptr,
         range_checker_num_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );

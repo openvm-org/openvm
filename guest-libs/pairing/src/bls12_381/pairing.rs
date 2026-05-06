@@ -15,21 +15,21 @@ use openvm_pairing_guest::{
         MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
     },
 };
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
 use openvm_pairing_guest::{
     halo2curves_shims::bls12_381::Bls12_381 as Halo2CurvesBls12_381, pairing::FinalExp,
 };
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 use {
     core::mem::MaybeUninit,
     openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     openvm_platform::custom_insn_r,
-    openvm_rv32im_guest,
-    openvm_rv32im_guest::hint_buffer_chunked,
+    openvm_riscv_guest,
+    openvm_riscv_guest::hint_buffer_chunked,
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
 use crate::bls12_381::utils::{
     convert_bls12381_fp2_to_halo2_fq2, convert_bls12381_fp_to_halo2_fq,
     convert_bls12381_halo2_fq12_to_fp12,
@@ -246,7 +246,7 @@ impl PairingCheck for Bls12_381 {
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> (Self::Fp12, Self::Fp12) {
-        #[cfg(not(target_os = "zkvm"))]
+        #[cfg(not(openvm_intrinsics))]
         {
             #[cfg(not(feature = "halo2curves"))]
             panic!("`halo2curves` feature must be enabled to use pairing check hint on host");
@@ -278,13 +278,13 @@ impl PairingCheck for Bls12_381 {
                 (c, s)
             }
         }
-        #[cfg(target_os = "zkvm")]
+        #[cfg(openvm_intrinsics)]
         {
             let mut hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
             // We do not rely on the slice P's memory layout since rust does not guarantee it across
             // compiler versions.
-            let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
-            let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
+            let p_fat_ptr = (P.as_ptr() as u64, P.len() as u64);
+            let q_fat_ptr = (Q.as_ptr() as u64, Q.len() as u64);
             unsafe {
                 custom_insn_r!(
                     opcode = OPCODE,
@@ -295,7 +295,7 @@ impl PairingCheck for Bls12_381 {
                     rs2 = In &q_fat_ptr
                 );
                 let ptr = hint.as_mut_ptr() as *mut u8;
-                hint_buffer_chunked(ptr, (48 * 12 * 2) / 4 as usize);
+                hint_buffer_chunked(ptr, (48 * 12 * 2) / openvm_riscv_guest::HINT_WORD_BYTES);
                 hint.assume_init()
             }
         }

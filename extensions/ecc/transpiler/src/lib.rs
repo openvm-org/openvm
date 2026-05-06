@@ -1,11 +1,11 @@
+use openvm_decoder::instruction_formats::RType;
 use openvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
+    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
@@ -14,7 +14,7 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[opcode_offset = 0x600]
 #[allow(non_camel_case_types)]
 #[repr(usize)]
-pub enum Rv32WeierstrassOpcode {
+pub enum Rv64WeierstrassOpcode {
     EC_ADD_NE,
     SETUP_EC_ADD_NE,
     EC_DOUBLE,
@@ -43,23 +43,23 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
         let instruction = {
             // short weierstrass ec
             assert!(
-                Rv32WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize
+                Rv64WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize
             );
             let dec_insn = RType::new(instruction_u32);
             let base_funct7 = (dec_insn.funct7 as u8) % SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS;
             let curve_idx =
                 ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize;
-            let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
+            let curve_idx_shift = curve_idx * Rv64WeierstrassOpcode::COUNT;
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
-                    0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
-                    _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
+                    0 => Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
+                    _ => Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
                 };
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
-                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
-                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+                    F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs2),
                     F::ONE, // d_as = 1
                     F::TWO, // e_as = 2
                     F::ZERO,
@@ -68,13 +68,13 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
-                        Rv32WeierstrassOpcode::EC_ADD_NE as usize
-                            + Rv32WeierstrassOpcode::CLASS_OFFSET
+                        Rv64WeierstrassOpcode::EC_ADD_NE as usize
+                            + Rv64WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        Rv32WeierstrassOpcode::EC_DOUBLE as usize
-                            + Rv32WeierstrassOpcode::CLASS_OFFSET
+                        Rv64WeierstrassOpcode::EC_DOUBLE as usize
+                            + Rv64WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

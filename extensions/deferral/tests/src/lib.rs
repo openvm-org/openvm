@@ -12,13 +12,13 @@ mod tests {
         utils::{air_test_with_min_segments, test_system_config},
     };
     use openvm_deferral_circuit::{
-        DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
+        DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
     };
     use openvm_deferral_transpiler::DeferralTranspilerExtension;
     use openvm_instructions::{exe::VmExe, DEFERRAL_AS};
-    use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::DIGEST_SIZE,
@@ -38,14 +38,14 @@ mod tests {
     const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
     const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
-    fn make_config(num_deferrals: usize) -> Rv32DeferralConfig {
+    fn make_config(num_deferrals: usize) -> Rv64DeferralConfig {
         let mut system = test_system_config();
         system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-        Rv32DeferralConfig {
+        Rv64DeferralConfig {
             system,
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             deferral: make_deferral_extension(num_deferrals),
         }
     }
@@ -83,19 +83,19 @@ mod tests {
         DeferralExtension::new(fns, commits)
     }
 
-    fn run_test(config: Rv32DeferralConfig, example_name: &str, streams: Streams<F>) -> Result<()> {
+    fn run_test(config: Rv64DeferralConfig, example_name: &str, streams: Streams<F>) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(DeferralTranspilerExtension::new(
                     config.deferral.def_circuit_commits.clone(),
                 )),
         )?;
-        air_test_with_min_segments(Rv32DeferralBuilder, config, exe, streams, 1).unwrap();
+        air_test_with_min_segments(Rv64DeferralBuilder, config, exe, streams, 1).unwrap();
         Ok(())
     }
 

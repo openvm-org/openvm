@@ -4,7 +4,7 @@ use std::{
 };
 
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
     system::memory::{
@@ -22,10 +22,11 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32IsEqualModAdapterExecutor;
+use openvm_riscv_adapters::Rv64IsEqualModAdapterExecutor;
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -259,9 +260,9 @@ where
 
         let expected_opcode = AB::Expr::from_usize(self.offset)
             + cols.is_setup
-                * AB::Expr::from_usize(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize)
+                * AB::Expr::from_usize(Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize)
             + (AB::Expr::ONE - cols.is_setup)
-                * AB::Expr::from_usize(Rv32ModularArithmeticOpcode::IS_EQ as usize);
+                * AB::Expr::from_usize(Rv64ModularArithmeticOpcode::IS_EQ as usize);
         let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
@@ -342,11 +343,11 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =
-            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        matches!(
+            Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        debug_assert!(matches!(
             local_opcode,
-            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
-        );
+            Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
+        ));
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -357,7 +358,7 @@ where
             .into();
 
         core_record.is_setup = instruction.opcode.local_opcode_idx(self.offset)
-            == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
+            == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
         let mut write_data = [0u8; WRITE_LIMBS];
         write_data[0] = (core_record.b == core_record.c) as u8;
@@ -377,7 +378,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32ModularArithmeticOpcode::from_usize(opcode - self.offset)
+            Rv64ModularArithmeticOpcode::from_usize(opcode - self.offset)
         )
     }
 }
@@ -454,7 +455,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
     VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        adapter: Rv64IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
         modulus_limbs: [u8; TOTAL_LIMBS],
     ) -> Self {
@@ -490,7 +491,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         } = inst;
 
         let local_opcode =
-            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.0.offset));
+            Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.0.offset));
 
         // Validate instruction format
         let a = a.as_canonical_u32();
@@ -498,13 +499,13 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         let c = c.as_canonical_u32();
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
-        if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
+        if d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         if !matches!(
             local_opcode,
-            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+            Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
         ) {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -516,7 +517,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
             modulus_limbs: self.0.modulus_limbs,
         };
 
-        let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ISEQ;
+        let is_setup = local_opcode == Rv64ModularArithmeticOpcode::SETUP_ISEQ;
 
         Ok(is_setup)
     }
@@ -698,16 +699,16 @@ unsafe fn execute_e12_impl<
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    // Read register values
+    // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
-            exec_state.vm_read::<_, LANE_SIZE>(RV32_MEMORY_AS, address + (i * LANE_SIZE) as u32)
+            exec_state.vm_read::<_, LANE_SIZE>(RV64_MEMORY_AS, address + (i * LANE_SIZE) as u32)
         })
         .concat()
         .try_into()
@@ -722,12 +723,12 @@ unsafe fn execute_e12_impl<
     let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
     debug_assert!(c_cmp, "{:?} >= {:?}", c, pre_compute.modulus_limbs);
 
-    // Compute result
-    let mut write_data = [0u8; RV32_REGISTER_NUM_LIMBS];
+    // Compute result (RV64: 8-byte result register)
+    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
     write_data[0] = (b == c) as u8;
 
     // Write result to register
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

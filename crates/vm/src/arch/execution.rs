@@ -177,14 +177,14 @@ pub trait AotExecutor<F> {
     }
 
     /*
-    Function: Generate x86 assembly for the given RV32 instruction, and transfer control to the next RV32 instruction
+    Function: Generate x86 assembly for the given RISC-V instruction, and transfer control to the next RISC-V instruction
 
     Preconditions:
     x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
     - instruction: the instruction to be executed
 
     Postcondition:
-    - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
+    - x86's PC should be set to the label of the next RISC-V instruction, and transfers control to the next instruction
     */
     fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         unimplemented!()

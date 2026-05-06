@@ -4,9 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-openvm = { workspace = true, features = [
-    "std",
-] }
+openvm = { workspace = true }
 openvm-algebra-guest.workspace = true
 openvm-ecc-guest.workspace = true
 openvm-pairing = { workspace = true, features = [
@@ -19,7 +17,11 @@ openvm-k256.workspace = true
 openvm-p256.workspace = true
 openvm-bigint-guest.workspace = true
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
-serde = "1.0"
+serde = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [features]
 default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

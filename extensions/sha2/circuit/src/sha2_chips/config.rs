@@ -6,8 +6,8 @@ use sha2::{
 use crate::{Sha2BlockHasherVmConfig, Sha2MainChipConfig};
 
 pub const SHA2_REGISTER_READS: usize = 3;
-pub const SHA2_READ_SIZE: usize = 4;
-pub const SHA2_WRITE_SIZE: usize = 4;
+pub const SHA2_READ_SIZE: usize = 8;
+pub const SHA2_WRITE_SIZE: usize = 8;
 
 pub trait Sha2Config: Sha2MainChipConfig + Sha2BlockHasherVmConfig {
     /// Number of bits used to store the message length (part of the message padding)

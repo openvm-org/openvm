@@ -47,7 +47,7 @@ fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
-    let sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
+    let sdk = Sdk::riscv64(app_params.clone(), agg_params.clone());
     (sdk, app_params, agg_params)
 }
 
@@ -93,7 +93,7 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
     DeferralProver::new(verify_stark_prover, agg_config, hook_params)
 }
 
-/// Builds a deferral-enabled riscv32 SDK whose App VM inventory includes the
+/// Builds a deferral-enabled riscv64 SDK whose App VM inventory includes the
 /// deferral periphery chips (DeferralPoseidon2Chip, count chip, etc.).
 fn make_deferral_enabled_sdk(
     fib_sdk: &Sdk,
@@ -104,7 +104,7 @@ fn make_deferral_enabled_sdk(
     let deferral_ext =
         deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
 
-    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
+    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv64();
     vm_config.deferral = Some(deferral_ext);
     vm_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
@@ -434,7 +434,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 include_bytes!("../programs/examples/fibonacci.elf"),
                 MEM_SIZE as u32,
             )?;
-            let sdk = Sdk::riscv32(app_params, agg_params);
+            let sdk = Sdk::riscv64(app_params, agg_params);
             let app_exe = sdk.convert_to_exe(elf)?;
 
             // Compute trace heights for root prover with profiling params
