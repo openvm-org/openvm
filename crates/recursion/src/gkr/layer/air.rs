@@ -89,6 +89,7 @@ impl<F: Field> BaseAir<F> for GkrLayerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrLayerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrLayerAir {}
+
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,

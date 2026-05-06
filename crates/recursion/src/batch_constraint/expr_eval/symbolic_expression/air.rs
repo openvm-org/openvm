@@ -154,6 +154,7 @@ impl<F: Field> PartitionedBaseAir<F> for SymbolicExpressionAir<F> {
             }
     }
 }
+
 impl<F: Field> BaseAir<F> for SymbolicExpressionAir<F> {
     fn width(&self) -> usize {
         let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();

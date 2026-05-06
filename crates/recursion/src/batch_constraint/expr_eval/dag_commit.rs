@@ -80,6 +80,7 @@ impl<F: Field> BaseAir<F> for DagCommitSubAir<F> {
         DagCommitCols::<u8>::width()
     }
 }
+
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> SubAir<AB>
     for DagCommitSubAir<AB::F>
 {

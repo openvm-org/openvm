@@ -59,6 +59,7 @@ pub struct WhirQueryAir {
 
 impl BaseAirWithPublicValues<F> for WhirQueryAir {}
 impl PartitionedBaseAir<F> for WhirQueryAir {}
+
 impl<F> BaseAir<F> for WhirQueryAir {
     fn width(&self) -> usize {
         WhirQueryCols::<F>::width()

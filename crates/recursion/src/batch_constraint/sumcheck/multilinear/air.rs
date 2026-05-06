@@ -71,6 +71,7 @@ pub struct MultilinearSumcheckAir {
 
 impl<F> BaseAirWithPublicValues<F> for MultilinearSumcheckAir {}
 impl<F> PartitionedBaseAir<F> for MultilinearSumcheckAir {}
+
 impl<F> BaseAir<F> for MultilinearSumcheckAir {
     fn width(&self) -> usize {
         MultilinearSumcheckCols::<F>::width()

@@ -83,7 +83,6 @@ pub struct DeferralOutputCols<T> {
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(DeferralOutputCols<F>)]
-
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -100,6 +99,7 @@ impl<F> BaseAir<F> for DeferralOutputAir {
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputAir {}
+
 impl<AB> Air<AB> for DeferralOutputAir
 where
     AB: InteractionBuilder,

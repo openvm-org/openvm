@@ -58,6 +58,7 @@ impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
     for Poseidon2Air<F, SBOX_REGISTERS>
 {
 }
+
 impl<AB: AirBuilder + InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
     for Poseidon2Air<AB::F, SBOX_REGISTERS>
 {

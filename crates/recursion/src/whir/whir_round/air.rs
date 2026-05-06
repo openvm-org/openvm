@@ -76,6 +76,7 @@ pub struct WhirRoundAir {
 impl BaseAirWithPublicValues<F> for WhirRoundAir {}
 impl PartitionedBaseAir<F> for WhirRoundAir {}
 impl<F> ColumnsAir<F> for WhirRoundAir {}
+
 impl<F> BaseAir<F> for WhirRoundAir {
     fn width(&self) -> usize {
         match self.whir_round_encoder.width() {

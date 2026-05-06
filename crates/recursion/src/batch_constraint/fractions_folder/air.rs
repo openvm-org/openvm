@@ -56,6 +56,7 @@ pub struct FractionsFolderAir {
 
 impl<F> BaseAirWithPublicValues<F> for FractionsFolderAir {}
 impl<F> PartitionedBaseAir<F> for FractionsFolderAir {}
+
 impl<F> BaseAir<F> for FractionsFolderAir {
     fn width(&self) -> usize {
         FractionsFolderCols::<F>::width()

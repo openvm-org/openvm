@@ -68,6 +68,7 @@ pub struct FinalPolyMleEvalAir {
 
 impl BaseAirWithPublicValues<F> for FinalPolyMleEvalAir {}
 impl PartitionedBaseAir<F> for FinalPolyMleEvalAir {}
+
 impl<F> BaseAir<F> for FinalPolyMleEvalAir {
     fn width(&self) -> usize {
         FinalyPolyMleEvalCols::<F>::width()

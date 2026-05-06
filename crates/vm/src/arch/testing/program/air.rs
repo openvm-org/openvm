@@ -11,12 +11,11 @@ use super::ProgramTester;
 use crate::system::program::ProgramBus;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
-
 pub struct ProgramDummyAir {
     pub bus: ProgramBus,
 }
-impl<F: Field> ColumnsAir<F> for ProgramDummyAir {}
 
+impl<F: Field> ColumnsAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {

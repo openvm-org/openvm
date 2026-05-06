@@ -57,6 +57,7 @@ impl<F: Field> BaseAir<F> for GkrXiSamplerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrXiSamplerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrXiSamplerAir {}
+
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,

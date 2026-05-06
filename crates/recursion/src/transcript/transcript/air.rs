@@ -53,6 +53,7 @@ impl<F: Field> BaseAir<F> for TranscriptAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for TranscriptAir {}
 impl<F: Field> PartitionedBaseAir<F> for TranscriptAir {}
+
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

@@ -69,10 +69,11 @@ pub struct EqNsAir {
 
     pub l_skip: usize,
 }
-impl<F> ColumnsAir<F> for EqNsAir {}
 
+impl<F> ColumnsAir<F> for EqNsAir {}
 impl<F> BaseAirWithPublicValues<F> for EqNsAir {}
 impl<F> PartitionedBaseAir<F> for EqNsAir {}
+
 impl<F> BaseAir<F> for EqNsAir {
     fn width(&self) -> usize {
         EqNsColumns::<F>::width()

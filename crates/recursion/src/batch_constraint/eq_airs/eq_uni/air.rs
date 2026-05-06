@@ -42,6 +42,7 @@ pub struct EqUniAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqUniAir {}
 impl<F> PartitionedBaseAir<F> for EqUniAir {}
+
 impl<F> BaseAir<F> for EqUniAir {
     fn width(&self) -> usize {
         EqUniCols::<F>::width()

@@ -80,6 +80,7 @@ impl<const N: usize> RangeTupleCheckerAir<N> {
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> ColumnsAir<F> for RangeTupleCheckerAir<N> {}
+
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {
         N + 1

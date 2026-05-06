@@ -106,6 +106,7 @@ impl<F: Field> BaseAir<F> for GkrLayerSumcheckAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrLayerSumcheckAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrLayerSumcheckAir {}
+
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,

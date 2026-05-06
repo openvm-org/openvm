@@ -61,6 +61,7 @@ pub struct EqBitsAir {
 
 impl BaseAirWithPublicValues<F> for EqBitsAir {}
 impl PartitionedBaseAir<F> for EqBitsAir {}
+
 impl<F> BaseAir<F> for EqBitsAir {
     fn width(&self) -> usize {
         EqBitsCols::<F>::width()

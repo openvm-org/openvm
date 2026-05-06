@@ -95,6 +95,7 @@ impl<F: Field> BaseAir<F> for DeferralCallCoreAir {
     }
 }
 impl<F: Field> BaseAirWithPublicValues<F> for DeferralCallCoreAir {}
+
 impl<AB, I> VmCoreAir<AB, I> for DeferralCallCoreAir
 where
     AB: InteractionBuilder,
@@ -261,6 +262,7 @@ impl<F: Field> BaseAir<F> for DeferralCallAdapterAir {
         DeferralCallAdapterCols::<F>::width()
     }
 }
+
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
     type Interface = DeferralCallAdapterInterface;
 

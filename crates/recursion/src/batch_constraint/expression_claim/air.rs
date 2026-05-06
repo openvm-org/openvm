@@ -103,6 +103,7 @@ pub struct ExpressionClaimAir {
 
 impl<F> BaseAirWithPublicValues<F> for ExpressionClaimAir {}
 impl<F> PartitionedBaseAir<F> for ExpressionClaimAir {}
+
 impl<F> BaseAir<F> for ExpressionClaimAir {
     fn width(&self) -> usize {
         ExpressionClaimCols::<F>::width()

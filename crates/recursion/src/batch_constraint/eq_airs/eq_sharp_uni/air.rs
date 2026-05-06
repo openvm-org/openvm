@@ -55,6 +55,7 @@ pub struct EqSharpUniAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqSharpUniAir {}
 impl<F> PartitionedBaseAir<F> for EqSharpUniAir {}
+
 impl<F> BaseAir<F> for EqSharpUniAir {
     fn width(&self) -> usize {
         EqSharpUniCols::<F>::width()
@@ -302,6 +303,7 @@ pub struct EqSharpUniReceiverAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqSharpUniReceiverAir {}
 impl<F> PartitionedBaseAir<F> for EqSharpUniReceiverAir {}
+
 impl<F> BaseAir<F> for EqSharpUniReceiverAir {
     fn width(&self) -> usize {
         EqSharpUniReceiverCols::<F>::width()

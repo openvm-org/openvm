@@ -64,10 +64,11 @@ pub struct InitialOpenedValuesAir {
     pub initial_log_domain_size: usize,
     pub k: usize,
 }
-impl<F> ColumnsAir<F> for InitialOpenedValuesAir {}
 
+impl<F> ColumnsAir<F> for InitialOpenedValuesAir {}
 impl BaseAirWithPublicValues<F> for InitialOpenedValuesAir {}
 impl PartitionedBaseAir<F> for InitialOpenedValuesAir {}
+
 impl<F> BaseAir<F> for InitialOpenedValuesAir {
     fn width(&self) -> usize {
         InitialOpenedValuesCols::<F>::width()

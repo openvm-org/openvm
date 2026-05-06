@@ -64,6 +64,7 @@ pub struct UnivariateRoundAir {
 
 impl BaseAirWithPublicValues<F> for UnivariateRoundAir {}
 impl PartitionedBaseAir<F> for UnivariateRoundAir {}
+
 impl<F> BaseAir<F> for UnivariateRoundAir {
     fn width(&self) -> usize {
         UnivariateRoundCols::<F>::width()

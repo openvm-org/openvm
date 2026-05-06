@@ -74,6 +74,7 @@ pub struct InteractionsFoldingAir {
 
 impl<F> BaseAirWithPublicValues<F> for InteractionsFoldingAir {}
 impl<F> PartitionedBaseAir<F> for InteractionsFoldingAir {}
+
 impl<F> BaseAir<F> for InteractionsFoldingAir {
     fn width(&self) -> usize {
         InteractionsFoldingCols::<F>::width()

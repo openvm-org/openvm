@@ -65,6 +65,7 @@ pub struct UnivariateSumcheckAir {
 
 impl<F> BaseAirWithPublicValues<F> for UnivariateSumcheckAir {}
 impl<F> PartitionedBaseAir<F> for UnivariateSumcheckAir {}
+
 impl<F> BaseAir<F> for UnivariateSumcheckAir {
     fn width(&self) -> usize {
         UnivariateSumcheckCols::<F>::width()

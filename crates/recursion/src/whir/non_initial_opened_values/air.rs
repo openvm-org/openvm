@@ -50,10 +50,11 @@ pub struct NonInitialOpenedValuesAir {
     pub k: usize,
     pub initial_log_domain_size: usize,
 }
-impl<F> ColumnsAir<F> for NonInitialOpenedValuesAir {}
 
+impl<F> ColumnsAir<F> for NonInitialOpenedValuesAir {}
 impl BaseAirWithPublicValues<F> for NonInitialOpenedValuesAir {}
 impl PartitionedBaseAir<F> for NonInitialOpenedValuesAir {}
+
 impl<F> BaseAir<F> for NonInitialOpenedValuesAir {
     fn width(&self) -> usize {
         NonInitialOpenedValuesCols::<F>::width()

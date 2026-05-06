@@ -70,6 +70,7 @@ pub struct SumcheckAir {
 
 impl BaseAirWithPublicValues<F> for SumcheckAir {}
 impl PartitionedBaseAir<F> for SumcheckAir {}
+
 impl<F> BaseAir<F> for SumcheckAir {
     fn width(&self) -> usize {
         SumcheckCols::<F>::width()

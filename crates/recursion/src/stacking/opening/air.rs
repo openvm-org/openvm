@@ -105,6 +105,7 @@ pub struct OpeningClaimsAir {
 
 impl BaseAirWithPublicValues<F> for OpeningClaimsAir {}
 impl PartitionedBaseAir<F> for OpeningClaimsAir {}
+
 impl<F> BaseAir<F> for OpeningClaimsAir {
     fn width(&self) -> usize {
         OpeningClaimsCols::<F>::width()

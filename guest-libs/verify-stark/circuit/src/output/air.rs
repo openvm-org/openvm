@@ -41,7 +41,6 @@ pub struct DeferralOutputCommitCols<F> {
 
 #[derive(Debug, ColumnsAir)]
 #[columns_via(DeferralOutputCommitCols<F>)]
-
 pub struct DeferralOutputCommitAir {
     pub poseidon2_bus: Poseidon2PermuteBus,
     pub range_bus: RangeCheckerBus,

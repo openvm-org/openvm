@@ -59,6 +59,7 @@ pub struct ConstraintsFoldingAir {
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
 impl<F> PartitionedBaseAir<F> for ConstraintsFoldingAir {}
+
 impl<F> BaseAir<F> for ConstraintsFoldingAir {
     fn width(&self) -> usize {
         ConstraintsFoldingCols::<F>::width()

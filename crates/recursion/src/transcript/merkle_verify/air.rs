@@ -105,6 +105,7 @@ impl<F: Field> BaseAir<F> for MerkleVerifyAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for MerkleVerifyAir {}
 impl<F: Field> PartitionedBaseAir<F> for MerkleVerifyAir {}
+
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

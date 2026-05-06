@@ -90,6 +90,7 @@ pub struct StackingClaimsAir {
 
 impl BaseAirWithPublicValues<F> for StackingClaimsAir {}
 impl PartitionedBaseAir<F> for StackingClaimsAir {}
+
 impl<F> BaseAir<F> for StackingClaimsAir {
     fn width(&self) -> usize {
         StackingClaimsCols::<F>::width()
