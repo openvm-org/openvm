@@ -1,10 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{
-    is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
-    utils::{assert_array_eq, not},
-    ColumnsAir, SubAir,
-};
+use openvm_circuit_primitives::{is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo}, utils::{assert_array_eq, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -28,7 +24,7 @@ use crate::{
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, Clone, Copy, Debug, StructReflection)]
 #[repr(C)]
 pub struct UnivariateSumcheckCols<T> {
     pub is_valid: T,
@@ -52,6 +48,7 @@ pub struct UnivariateSumcheckCols<T> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(UnivariateSumcheckCols<F>)]
 pub struct UnivariateSumcheckAir {
     /// The univariate domain size is `2^{l_skip}`
     pub l_skip: usize,

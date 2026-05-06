@@ -17,8 +17,8 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{circuit::deferral::DeferralCircuitPvs, SC};
 
-#[derive(ColumnsAir)]
 pub(in crate::tests) struct EmptyAirWithPvs(pub(in crate::tests) usize);
+impl<F> ColumnsAir<F> for EmptyAirWithPvs {}
 
 impl<F> BaseAir<F> for EmptyAirWithPvs {
     fn width(&self) -> usize {

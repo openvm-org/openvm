@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// Expects the message to be padded to a multiple of C::BLOCK_WORDS * C::WORD_BITS bits
-#[derive(Clone, Debug, ColumnsAir)]
+#[derive(Clone, Debug)]
 
 pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
@@ -31,6 +31,7 @@ pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub private_bus: PermutationCheckBus,
     _phantom: PhantomData<C>,
 }
+impl<F, C: Sha2BlockHasherSubairConfig> ColumnsAir<F> for Sha2BlockHasherSubAir<C> {}
 
 impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, private_bus_idx: BusIndex) -> Self {

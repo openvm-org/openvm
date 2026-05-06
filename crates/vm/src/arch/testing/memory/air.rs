@@ -65,14 +65,14 @@ impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
 }
 
 /// AIR width = DEFAULT_BLOCK_SIZE + 4 (addr_space, ptr, data[DEFAULT_BLOCK_SIZE], timestamp, count)
-#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-
+#[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct MemoryDummyAir {
     pub bus: MemoryBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for MemoryDummyAir {}
 impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
+impl<F> ColumnsAir<F> for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
         DEFAULT_BLOCK_SIZE + 4

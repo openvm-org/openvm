@@ -8,10 +8,10 @@ use openvm_stark_backend::{
 
 use crate::{bitwise_op_lookup::bus::BitwiseOperationLookupBus, ColumnsAir};
 
-#[derive(ColumnsAir)]
 pub struct DummyAir {
     bus: BitwiseOperationLookupBus,
 }
+impl<F: Field> ColumnsAir<F> for DummyAir {}
 
 impl DummyAir {
     pub fn new(bus: BitwiseOperationLookupBus) -> Self {

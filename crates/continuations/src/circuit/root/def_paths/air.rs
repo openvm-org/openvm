@@ -3,10 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit::{
     arch::instructions::DEFERRAL_AS, system::memory::dimensions::MemoryDimensions,
 };
-use openvm_circuit_primitives::{
-    utils::{and, assert_array_eq, not},
-    ColumnsAir, SubAir,
-};
+use openvm_circuit_primitives::{utils::{and, assert_array_eq, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::bus::Poseidon2CompressBus;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -30,7 +27,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralAccMerklePathsCols<F> {
     pub is_valid: F,
     pub is_right_child: F,
@@ -50,6 +47,7 @@ pub struct DeferralAccMerklePathsCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(DeferralAccMerklePathsCols<F>)]
 pub struct DeferralAccMerklePathsAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub def_acc_paths_bus: DeferralAccPathBus,

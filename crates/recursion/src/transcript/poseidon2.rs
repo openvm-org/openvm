@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 use std::{array::from_fn, sync::Arc};
 
-use openvm_circuit_primitives::ColumnsAir;
+use openvm_circuit_primitives::{ColumnsAir, StructReflectionHelper};
 use openvm_poseidon2_air::{
     Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
 };
@@ -29,7 +29,15 @@ pub struct Poseidon2Cols<T, const SBOX_REGISTERS: usize> {
     pub compress_mult: T,
 }
 
+/// Manual impl because Poseidon2SubCols is an external type without StructReflection.
+impl<T, const SBOX_REGISTERS: usize> StructReflectionHelper for Poseidon2Cols<T, SBOX_REGISTERS> {
+    fn struct_reflection() -> Option<Vec<String>> {
+        None
+    }
+}
+
 #[derive(ColumnsAir)]
+#[columns_via(Poseidon2Cols<F, SBOX_REGISTERS>)]
 pub struct Poseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub poseidon2_permute_bus: Poseidon2PermuteBus,

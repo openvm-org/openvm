@@ -42,9 +42,10 @@ pub struct IsLessThanCols<T> {
 
 /// Note that this air has no const generics. The parameters such as `max_bits, decomp_limbs` are
 /// all configured in the constructor at runtime.
-#[derive(Clone, Copy, ColumnsAir)]
+#[derive(Clone, Copy)]
 
 pub struct IsLtTestAir(pub IsLtSubAir);
+impl<F: Field> ColumnsAir<F> for IsLtTestAir {}
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}

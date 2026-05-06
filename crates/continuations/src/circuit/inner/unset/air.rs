@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::ColumnsAir;
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -13,13 +13,14 @@ use p3_matrix::Matrix;
 use crate::circuit::inner::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct UnsetPvsCols<F> {
     pub proof_idx: F,
     pub is_valid: F,
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(UnsetPvsCols<F>)]
 pub struct UnsetPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub pvs_air_consistency_bus: PvsAirConsistencyBus,

@@ -2,7 +2,9 @@ use core::borrow::Borrow;
 use std::{array::from_fn, sync::Arc};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{
+    encoder::Encoder, utils::assert_array_eq, ColumnsAir, StructReflectionHelper, SubAir,
+};
 use openvm_poseidon2_air::{
     Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip, Poseidon2SubCols,
     BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH,
@@ -36,6 +38,13 @@ pub struct DagCommitCols<T> {
     pub is_constraint: T,
 }
 
+/// Manual impl because Poseidon2SubCols is an external type without StructReflection.
+impl<T> StructReflectionHelper for DagCommitCols<T> {
+    fn struct_reflection() -> Option<Vec<String>> {
+        None
+    }
+}
+
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct DagCommitPvs<T> {
@@ -45,6 +54,7 @@ pub struct DagCommitPvs<T> {
 /// Sub-AIR to compute the onion hash of one digest per row. Expects each AIR
 /// that uses it to have DagCommitPvs as its public value representation.
 #[derive(ColumnsAir)]
+#[columns_via(DagCommitCols<F>)]
 pub struct DagCommitSubAir<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
 }

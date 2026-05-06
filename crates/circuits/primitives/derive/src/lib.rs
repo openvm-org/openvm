@@ -12,23 +12,40 @@ use cols_ref::cols_ref_impl;
 
 /// Derives `ColumnsAir<F>` for an AIR struct.
 ///
-/// By default the impl uses the trait's default `columns()` method (returns `None`).
-/// Add `#[columns_via(SomeCols<F, ...>)]` to delegate to the column struct's
-/// `StructReflectionHelper::struct_reflection()` (typically derived via
-/// `#[derive(StructReflection)]`).
+/// `#[columns_via(SomeCols<F, ...>)]` is required and selects the column struct
+/// whose `StructReflectionHelper::struct_reflection()` (typically derived via
+/// `#[derive(StructReflection)]`) provides the column names. If the AIR has no
+/// columns to reflect, write the impl by hand instead of using this derive.
 ///
 /// If the struct already has a type parameter named `F`, the impl reuses it. Otherwise
-/// an unbounded `F` is injected on the impl. The `F` written in `#[columns_via(...)]`
-/// refers to that parameter.
+/// an `F: Field` parameter is injected on the impl. The `F` written in
+/// `#[columns_via(...)]` refers to that parameter.
 #[proc_macro_derive(ColumnsAir, attributes(columns_via))]
 pub fn columns_air_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
 
-    let columns_via = ast
+    let columns_via = match ast
         .attrs
         .iter()
-        .find(|attr| attr.path().is_ident("columns_via"));
+        .find(|attr| attr.path().is_ident("columns_via"))
+    {
+        Some(attr) => attr,
+        None => {
+            return syn::Error::new_spanned(
+                &ast.ident,
+                "#[derive(ColumnsAir)] requires a `#[columns_via(ColsTy<F, ...>)]` attribute. \
+                 If the AIR has no columns to reflect, write `impl ColumnsAir<F> for X {}` by hand.",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+
+    let cols_ty: syn::Type = match columns_via.parse_args() {
+        Ok(ty) => ty,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
     let has_f_generic = ast.generics.params.iter().any(|p| matches!(
         p,
@@ -44,27 +61,14 @@ pub fn columns_air_derive(input: TokenStream) -> TokenStream {
     let (impl_generics, _, _) = impl_generics_owned.split_for_impl();
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
 
-    let body = match columns_via {
-        Some(attr) => {
-            let cols_ty: syn::Type = match attr.parse_args() {
-                Ok(ty) => ty,
-                Err(err) => return err.to_compile_error().into(),
-            };
-            quote! {
-                fn columns(&self) -> Option<Vec<String>> {
-                    <#cols_ty as ::openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-                }
-            }
-        }
-        None => quote! {},
-    };
-
     quote! {
         impl #impl_generics ::openvm_circuit_primitives::ColumnsAir<F>
             for #name #ty_generics
             #where_clause
         {
-            #body
+            fn columns(&self) -> Option<Vec<String>> {
+                <#cols_ty as ::openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+            }
         }
     }
     .into()

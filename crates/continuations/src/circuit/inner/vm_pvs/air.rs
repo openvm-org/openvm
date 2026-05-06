@@ -1,10 +1,7 @@
 use std::borrow::Borrow;
 
 use openvm_circuit::system::connector::DEFAULT_SUSPEND_EXIT_CODE;
-use openvm_circuit_primitives::{
-    utils::{and, assert_array_eq, not},
-    ColumnsAir,
-};
+use openvm_circuit_primitives::{utils::{and, assert_array_eq, not}, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage,
 };
@@ -24,7 +21,7 @@ use crate::circuit::inner::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct VmPvsCols<F> {
     pub proof_idx: F,
     pub is_valid: F,
@@ -34,6 +31,7 @@ pub struct VmPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(VmPvsCols<F>)]
 pub struct VmPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

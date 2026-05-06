@@ -7043,6 +7043,7 @@ dependencies = [
  "bitcode",
  "eyre",
  "openvm-circuit",
+ "openvm-circuit-primitives",
  "openvm-recursion-circuit-derive",
  "openvm-stark-backend",
  "openvm-stark-sdk",

@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::not, ColumnsAir};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::{
     bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
     prelude::DIGEST_SIZE,
@@ -22,7 +22,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct OnionHashCols<F> {
     pub row_idx: F,
     pub is_valid: F,
@@ -36,6 +36,7 @@ pub struct OnionHashCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(OnionHashCols<F>)]
 pub struct OnionHashAir {
     pub poseidon2_bus: Poseidon2CompressBus,
     pub def_circuit_commit_bus: DefCircuitCommitBus,

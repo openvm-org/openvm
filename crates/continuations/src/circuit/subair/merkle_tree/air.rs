@@ -1,4 +1,4 @@
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{StructReflection, StructReflectionHelper, SubAir};
 use openvm_recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::interaction::InteractionBuilder;
@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Copy, Clone, Debug)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone, Debug)]
 pub struct MerkleTreeCols<T> {
     pub row_idx: T,
 

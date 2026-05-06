@@ -79,11 +79,12 @@ struct ExpBitsLenLookupCols<T> {
     result: T,
 }
 
-#[derive(Clone, Copy, Debug, ColumnsAir)]
+#[derive(Clone, Copy, Debug)]
 
 struct ExpBitsLenLookupAir {
     exp_bits_len_bus: ExpBitsLenBus,
 }
+impl<F> ColumnsAir<F> for ExpBitsLenLookupAir {}
 
 impl<F> BaseAir<F> for ExpBitsLenLookupAir {
     fn width(&self) -> usize {

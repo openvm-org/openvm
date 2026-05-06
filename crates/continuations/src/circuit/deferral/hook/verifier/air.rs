@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_circuit_primitives::{ColumnsAir, SubAir};
+use openvm_circuit_primitives::{ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
     PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
@@ -36,7 +36,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralHookPvsCols<F> {
     pub verifier_pvs: VerifierBasePvs<F>,
     pub def_pvs: DeferralAggregationPvs<F>,
@@ -53,6 +53,7 @@ pub struct DeferralHookPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(DeferralHookPvsCols<F>)]
 pub struct DeferralHookPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

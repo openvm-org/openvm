@@ -48,7 +48,7 @@ pub(in crate::whir::final_poly_query_eval) struct FinalPolyQueryEvalCols<T> {
     pub do_carry: T,
 }
 
-#[derive(Debug, ColumnsAir)]
+#[derive(Debug)]
 
 pub struct FinalPolyQueryEvalAir {
     pub query_bus: WhirQueryBus,
@@ -60,6 +60,7 @@ pub struct FinalPolyQueryEvalAir {
     pub k_whir: usize,
     pub log_final_poly_len: usize,
 }
+impl<F> ColumnsAir<F> for FinalPolyQueryEvalAir {}
 
 impl BaseAirWithPublicValues<F> for FinalPolyQueryEvalAir {}
 impl PartitionedBaseAir<F> for FinalPolyQueryEvalAir {}

@@ -103,7 +103,6 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
     pub(in crate::batch_constraint) is_n_neg: T,
 }
 
-#[derive(ColumnsAir)]
 pub struct SymbolicExpressionAir<F: Field> {
     pub expr_bus: SymbolicExpressionBus,
     pub hyperdim_bus: HyperdimBus,
@@ -119,6 +118,7 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub cnt_proofs: usize,
     pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
+impl<F: Field> ColumnsAir<F> for SymbolicExpressionAir<F> {}
 
 impl<F: Field> SymbolicExpressionAir<F> {
     fn has_cached(&self) -> bool {

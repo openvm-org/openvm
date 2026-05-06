@@ -42,7 +42,6 @@ pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols
     pub yi: [T; D_EF],
 }
 
-#[derive(ColumnsAir)]
 pub struct NonInitialOpenedValuesAir {
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
@@ -51,6 +50,7 @@ pub struct NonInitialOpenedValuesAir {
     pub k: usize,
     pub initial_log_domain_size: usize,
 }
+impl<F> ColumnsAir<F> for NonInitialOpenedValuesAir {}
 
 impl BaseAirWithPublicValues<F> for NonInitialOpenedValuesAir {}
 impl PartitionedBaseAir<F> for NonInitialOpenedValuesAir {}

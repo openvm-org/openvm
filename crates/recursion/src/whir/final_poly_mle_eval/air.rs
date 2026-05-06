@@ -8,7 +8,9 @@
 
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -28,7 +30,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct FinalyPolyMleEvalCols<T> {
     pub is_enabled: T,
     pub proof_idx: T,
@@ -49,6 +51,7 @@ pub struct FinalyPolyMleEvalCols<T> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(FinalyPolyMleEvalCols<F>)]
 pub struct FinalPolyMleEvalAir {
     pub whir_opening_point_bus: WhirOpeningPointBus,
     pub whir_opening_point_lookup_bus: WhirOpeningPointLookupBus,

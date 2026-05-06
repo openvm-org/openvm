@@ -13,11 +13,11 @@ use crate::{
     Sha2BlockHasherVmConfig, INNER_OFFSET,
 };
 
-#[derive(ColumnsAir)]
 pub struct Sha2BlockHasherVmAir<C: Sha2BlockHasherVmConfig> {
     pub inner: Sha2BlockHasherSubAir<C>,
     pub sha2_bus: PermutationCheckBus,
 }
+impl<F: Field, C: Sha2BlockHasherVmConfig> ColumnsAir<F> for Sha2BlockHasherVmAir<C> {}
 
 impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
     pub fn new(

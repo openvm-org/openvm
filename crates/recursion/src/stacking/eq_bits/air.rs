@@ -1,9 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{
-    utils::{and, not},
-    ColumnsAir, SubAir,
-};
+use openvm_circuit_primitives::{utils::{and, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -28,7 +25,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct EqBitsCols<F> {
     // Proof index columns for continuations
     pub proof_idx: F,
@@ -50,6 +47,7 @@ pub struct EqBitsCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(EqBitsCols<F>)]
 pub struct EqBitsAir {
     // Internal buses
     pub eq_bits_internal_bus: EqBitsInternalBus,

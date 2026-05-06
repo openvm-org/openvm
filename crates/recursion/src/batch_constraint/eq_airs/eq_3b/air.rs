@@ -56,7 +56,6 @@ pub struct Eq3bColumns<T> {
     pub eq: [T; D_EF],
 }
 
-#[derive(ColumnsAir)]
 pub struct Eq3bAir {
     pub eq_3b_bus: Eq3bBus,
     pub eq_3b_shape_bus: Eq3bShapeBus,
@@ -64,6 +63,7 @@ pub struct Eq3bAir {
 
     pub l_skip: usize,
 }
+impl<F> ColumnsAir<F> for Eq3bAir {}
 
 impl<F> BaseAirWithPublicValues<F> for Eq3bAir {}
 impl<F> PartitionedBaseAir<F> for Eq3bAir {}

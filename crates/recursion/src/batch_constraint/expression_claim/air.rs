@@ -1,9 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    ColumnsAir, SubAir,
-};
+use openvm_circuit_primitives::{utils::{assert_array_eq, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -50,7 +47,7 @@ use crate::{
 /// ```
 ///
 /// `is_interaction` is derived as `1 - group_idx` (not a separate column).
-#[derive(AlignedBorrow, Copy, Clone, Debug)]
+#[derive(AlignedBorrow, Copy, Clone, Debug, StructReflection)]
 #[repr(C)]
 pub struct ExpressionClaimCols<T> {
     // --- Loop structure (enforced by NestedForLoopSubAir<4>) ---
@@ -93,6 +90,7 @@ pub struct ExpressionClaimCols<T> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(ExpressionClaimCols<F>)]
 pub struct ExpressionClaimAir {
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub expr_claim_bus: ExpressionClaimBus,

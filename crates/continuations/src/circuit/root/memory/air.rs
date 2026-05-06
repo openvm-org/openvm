@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::PUBLIC_VALUES_AS,
 };
-use openvm_circuit_primitives::{ColumnsAir, SubAir};
+use openvm_circuit_primitives::{ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::bus::Poseidon2CompressBus;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -24,7 +24,7 @@ use crate::circuit::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct UserPvsInMemoryCols<F> {
     // 0 for invalid, 1 for valid, 2 for valid first row
     pub is_valid: F,
@@ -39,6 +39,7 @@ pub struct UserPvsInMemoryCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(UserPvsInMemoryCols<F>)]
 pub struct UserPvsInMemoryAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub merkle_root_bus: MerkleRootBus,

@@ -1,9 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{
-    utils::{and, assert_array_eq, not, or},
-    ColumnsAir, SubAir,
-};
+use openvm_circuit_primitives::{utils::{and, assert_array_eq, not, or}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -22,7 +19,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct TranscriptCols<T> {
     pub proof_idx: T,
     pub is_proof_start: T,
@@ -41,6 +38,7 @@ pub struct TranscriptCols<T> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(TranscriptCols<F>)]
 pub struct TranscriptAir {
     pub transcript_bus: TranscriptBus,
     pub poseidon2_permute_bus: Poseidon2PermuteBus,

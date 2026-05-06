@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::not, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::utils::assert_zeros;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -16,7 +16,7 @@ use crate::circuit::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct MerkleDecommitCols<F> {
     pub merkle_tree_cols: MerkleTreeCols<F>,
     pub send_commits: F,
@@ -24,6 +24,7 @@ pub struct MerkleDecommitCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(MerkleDecommitCols<F>)]
 pub struct MerkleDecommitAir {
     pub subair: MerkleTreeSubAir,
     pub io_commit_bus: IoCommitBus,

@@ -11,12 +11,13 @@ use openvm_stark_backend::{
 use super::columns::{ListCols, NUM_LIST_COLS};
 use crate::{range::bus::RangeCheckBus, ColumnsAir};
 
-#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 
 pub struct ListAir {
     /// The index for the Range Checker bus.
     pub bus: RangeCheckBus,
 }
+impl<F: Field> ColumnsAir<F> for ListAir {}
 
 impl<F: Field> BaseAirWithPublicValues<F> for ListAir {}
 impl<F: Field> PartitionedBaseAir<F> for ListAir {}

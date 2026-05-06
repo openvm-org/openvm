@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::ColumnsAir;
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -12,13 +12,14 @@ use p3_matrix::Matrix;
 use crate::primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage};
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct RangeCheckerCols<T> {
     pub value: T,
     pub mult: T,
 }
 
 #[derive(Debug, ColumnsAir)]
+#[columns_via(RangeCheckerCols<F>)]
 
 pub struct RangeCheckerAir<const NUM_BITS: usize> {
     pub bus: RangeCheckerBus,

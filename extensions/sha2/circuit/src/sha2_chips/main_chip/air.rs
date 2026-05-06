@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 use super::config::Sha2MainChipConfig;
 use crate::{MessageType, Sha2ColsRef, SHA2_READ_SIZE, SHA2_WRITE_SIZE};
 
-#[derive(Clone, Debug, ColumnsAir)]
+#[derive(Clone, Debug)]
 
 pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     pub execution_bridge: ExecutionBridge,
@@ -40,6 +40,7 @@ pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     pub offset: usize,
     _phantom: PhantomData<C>,
 }
+impl<F, C: Sha2MainChipConfig> ColumnsAir<F> for Sha2MainAir<C> {}
 
 impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
     pub fn new(

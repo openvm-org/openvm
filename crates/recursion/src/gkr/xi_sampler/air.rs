@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 use std::convert::Into;
 
-use openvm_circuit_primitives::{ColumnsAir, SubAir};
+use openvm_circuit_primitives::{ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -20,7 +20,7 @@ use crate::{
 // perf(ayush): can probably get rid of this whole air if challenges -> transcript
 // interactions are constrained in batch constraint module
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct GkrXiSamplerCols<T> {
     /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
@@ -42,6 +42,7 @@ pub struct GkrXiSamplerCols<T> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(GkrXiSamplerCols<F>)]
 pub struct GkrXiSamplerAir {
     pub xi_randomness_bus: XiRandomnessBus,
     pub transcript_bus: TranscriptBus,

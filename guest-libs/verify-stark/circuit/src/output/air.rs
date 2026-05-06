@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow, ColumnsAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_continuations::utils::digests_to_poseidon2_input;
 use openvm_deferral_circuit::canonicity::{CanonicityAuxCols, CanonicitySubAir};
 use openvm_recursion_circuit::{
@@ -25,7 +25,7 @@ const fn exact_div_or_panic(a: usize, b: usize) -> usize {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralOutputCommitCols<F> {
     pub is_valid: F,
     pub is_first: F,
@@ -40,6 +40,7 @@ pub struct DeferralOutputCommitCols<F> {
 }
 
 #[derive(Debug, ColumnsAir)]
+#[columns_via(DeferralOutputCommitCols<F>)]
 
 pub struct DeferralOutputCommitAir {
     pub poseidon2_bus: Poseidon2PermuteBus,

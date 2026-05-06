@@ -26,12 +26,12 @@ use crate::{
  * - root commitment is sent to `MerkleRootBus`
  * - leaf payload is sent on `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
-#[derive(ColumnsAir)]
 pub struct UserPvsCommitValuesAir {
     pub subair: MerkleTreeSubAir,
     pub output_val_bus: OutputValBus,
     num_user_pvs: usize,
 }
+impl<F> ColumnsAir<F> for UserPvsCommitValuesAir {}
 
 impl UserPvsCommitValuesAir {
     pub fn new(

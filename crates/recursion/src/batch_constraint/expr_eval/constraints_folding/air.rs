@@ -1,9 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    ColumnsAir, SubAir,
-};
+use openvm_circuit_primitives::{utils::{assert_array_eq, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -26,7 +23,7 @@ use crate::{
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
-#[derive(AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, Copy, Clone, StructReflection)]
 #[repr(C)]
 pub struct ConstraintsFoldingCols<T> {
     pub is_valid: T,
@@ -49,6 +46,7 @@ pub struct ConstraintsFoldingCols<T> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(ConstraintsFoldingCols<F>)]
 pub struct ConstraintsFoldingAir {
     pub transcript_bus: TranscriptBus,
     pub constraint_bus: ConstraintsFoldingBus,

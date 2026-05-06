@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, iter::once, sync::Arc};
 
-use openvm_circuit_primitives::{AlignedBorrow, ColumnsAir};
+use openvm_circuit_primitives::{AlignedBorrow, ColumnsAir, StructReflectionHelper};
 use openvm_poseidon2_air::{
     Poseidon2Config, Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
 };
@@ -24,7 +24,15 @@ pub struct DeferralPoseidon2Cols<T> {
     pub capacity_mult: T,
 }
 
+/// Manual impl because Poseidon2SubCols is an external type without StructReflection.
+impl<T> StructReflectionHelper for DeferralPoseidon2Cols<T> {
+    fn struct_reflection() -> Option<Vec<String>> {
+        None
+    }
+}
+
 #[derive(ColumnsAir)]
+#[columns_via(DeferralPoseidon2Cols<F>)]
 pub struct DeferralPoseidon2Air<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub bus: LookupBus,

@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
-use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
@@ -39,7 +39,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct RootVerifierPvsCols<F> {
     pub child_verifier_pvs: VerifierBasePvs<F>,
     pub child_vm_pvs: VmPvs<F>,
@@ -53,6 +53,7 @@ pub struct RootVerifierPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(RootVerifierPvsCols<F>)]
 pub struct RootVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

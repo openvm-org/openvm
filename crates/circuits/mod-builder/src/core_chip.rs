@@ -26,7 +26,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::builder::{FieldExpr, FieldExprCols};
 
-#[derive(Clone, ColumnsAir)]
+#[derive(Clone)]
 
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -51,6 +51,7 @@ pub struct FieldExpressionCoreAir {
     //   opcode_flag_idx = [0, 1], where 0 is mul_flag, 1 is div_flag, in the builder
     // We don't support 2-op chip that doesn't need setup right now.
 }
+impl<F: Field> ColumnsAir<F> for FieldExpressionCoreAir {}
 
 impl FieldExpressionCoreAir {
     pub fn new(

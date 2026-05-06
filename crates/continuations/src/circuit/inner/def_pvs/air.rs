@@ -1,9 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    ColumnsAir,
-};
+use openvm_circuit_primitives::{utils::{assert_array_eq, not}, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
     PublicValuesBus, PublicValuesBusMessage,
@@ -29,7 +26,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralPvsCols<F> {
     pub row_idx: F,
     pub deferral_flag: F,
@@ -43,6 +40,7 @@ pub struct DeferralPvsCols<F> {
 }
 
 #[derive(ColumnsAir)]
+#[columns_via(DeferralPvsCols<F>)]
 pub struct DeferralPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
