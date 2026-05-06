@@ -48,6 +48,7 @@ pub struct FinalyPolyMleEvalCols<T> {
     pub num_nodes_in_layer: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct FinalPolyMleEvalAir {
     pub whir_opening_point_bus: WhirOpeningPointBus,
     pub whir_opening_point_lookup_bus: WhirOpeningPointLookupBus,
@@ -64,8 +65,6 @@ pub struct FinalPolyMleEvalAir {
 
 impl BaseAirWithPublicValues<F> for FinalPolyMleEvalAir {}
 impl PartitionedBaseAir<F> for FinalPolyMleEvalAir {}
-impl<F> ColumnsAir<F> for FinalPolyMleEvalAir {}
-
 impl<F> BaseAir<F> for FinalPolyMleEvalAir {
     fn width(&self) -> usize {
         FinalyPolyMleEvalCols::<F>::width()

@@ -67,6 +67,7 @@ pub struct GkrLayerCols<T> {
 }
 
 /// The GkrLayerAir handles layer-to-layer transitions in the GKR protocol
+#[derive(ColumnsAir)]
 pub struct GkrLayerAir {
     // External buses
     pub xi_randomness_bus: XiRandomnessBus,
@@ -87,8 +88,6 @@ impl<F: Field> BaseAir<F> for GkrLayerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrLayerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrLayerAir {}
-impl<F: Field> ColumnsAir<F> for GkrLayerAir {}
-
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,

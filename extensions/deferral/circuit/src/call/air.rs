@@ -81,7 +81,8 @@ pub struct DeferralCallCoreCols<T> {
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+
 pub struct DeferralCallCoreAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
@@ -94,8 +95,6 @@ impl<F: Field> BaseAir<F> for DeferralCallCoreAir {
     }
 }
 impl<F: Field> BaseAirWithPublicValues<F> for DeferralCallCoreAir {}
-impl<F: Field> ColumnsAir<F> for DeferralCallCoreAir {}
-
 impl<AB, I> VmCoreAir<AB, I> for DeferralCallCoreAir
 where
     AB: InteractionBuilder,
@@ -248,7 +247,8 @@ pub struct DeferralCallAdapterCols<T> {
     pub new_output_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+
 pub struct DeferralCallAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -261,12 +261,6 @@ impl<F: Field> BaseAir<F> for DeferralCallAdapterAir {
         DeferralCallAdapterCols::<F>::width()
     }
 }
-impl<F: Field> ColumnsAir<F> for DeferralCallAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        None
-    }
-}
-
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
     type Interface = DeferralCallAdapterInterface;
 

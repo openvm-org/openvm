@@ -42,6 +42,7 @@ pub struct DeferralPvsCols<F> {
     pub child_pvs: DeferralPvs<F>,
 }
 
+#[derive(ColumnsAir)]
 pub struct DeferralPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
@@ -61,7 +62,6 @@ impl<F> BaseAirWithPublicValues<F> for DeferralPvsAir {
         DeferralPvs::<u8>::width()
     }
 }
-impl<F> ColumnsAir<F> for DeferralPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for DeferralPvsAir {

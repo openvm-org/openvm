@@ -42,12 +42,12 @@ pub struct IsLessThanCols<T> {
 
 /// Note that this air has no const generics. The parameters such as `max_bits, decomp_limbs` are
 /// all configured in the constructor at runtime.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+
 pub struct IsLtTestAir(pub IsLtSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
-impl<F: Field> ColumnsAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {
     fn width(&self) -> usize {
         // Cannot use size_of because Cols has Vec<T> which is stored on the heap

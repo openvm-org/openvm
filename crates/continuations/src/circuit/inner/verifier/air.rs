@@ -40,6 +40,7 @@ pub struct VerifierPvsCols<F> {
     pub child_pvs: VerifierBasePvs<F>,
 }
 
+#[derive(ColumnsAir)]
 pub struct VerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
@@ -58,7 +59,6 @@ impl<F> BaseAirWithPublicValues<F> for VerifierPvsAir {
         VerifierBasePvs::<u8>::width() + self.deferral_config.num_public_values()
     }
 }
-impl<F> ColumnsAir<F> for VerifierPvsAir {}
 impl<F> PartitionedBaseAir<F> for VerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for VerifierPvsAir {

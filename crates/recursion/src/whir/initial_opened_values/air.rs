@@ -54,6 +54,7 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     pub merkle_idx_bit_src: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct InitialOpenedValuesAir {
     pub stacking_indices_bus: StackingIndicesBus,
     pub whir_mu_bus: WhirMuBus,
@@ -67,8 +68,6 @@ pub struct InitialOpenedValuesAir {
 
 impl BaseAirWithPublicValues<F> for InitialOpenedValuesAir {}
 impl PartitionedBaseAir<F> for InitialOpenedValuesAir {}
-impl<F> ColumnsAir<F> for InitialOpenedValuesAir {}
-
 impl<F> BaseAir<F> for InitialOpenedValuesAir {
     fn width(&self) -> usize {
         InitialOpenedValuesCols::<F>::width()

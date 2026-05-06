@@ -33,6 +33,7 @@ pub struct VmPvsCols<F> {
     pub child_pvs: VmPvs<F>,
 }
 
+#[derive(ColumnsAir)]
 pub struct VmPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
@@ -50,7 +51,6 @@ impl<F> BaseAirWithPublicValues<F> for VmPvsAir {
         VmPvs::<u8>::width()
     }
 }
-impl<F> ColumnsAir<F> for VmPvsAir {}
 impl<F> PartitionedBaseAir<F> for VmPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for VmPvsAir {

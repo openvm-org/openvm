@@ -56,6 +56,7 @@ pub struct Eq3bColumns<T> {
     pub eq: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct Eq3bAir {
     pub eq_3b_bus: Eq3bBus,
     pub eq_3b_shape_bus: Eq3bShapeBus,
@@ -66,8 +67,6 @@ pub struct Eq3bAir {
 
 impl<F> BaseAirWithPublicValues<F> for Eq3bAir {}
 impl<F> PartitionedBaseAir<F> for Eq3bAir {}
-impl<F> ColumnsAir<F> for Eq3bAir {}
-
 impl<F> BaseAir<F> for Eq3bAir {
     fn width(&self) -> usize {
         Eq3bColumns::<F>::width()

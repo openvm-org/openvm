@@ -30,6 +30,7 @@ pub struct PublicValuesCols<F> {
     pub value: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct PublicValuesAir {
     pub public_values_bus: PublicValuesBus,
     pub num_pvs_bus: NumPublicValuesBus,
@@ -44,8 +45,6 @@ impl<F> BaseAir<F> for PublicValuesAir {
 }
 impl<F> BaseAirWithPublicValues<F> for PublicValuesAir {}
 impl<F> PartitionedBaseAir<F> for PublicValuesAir {}
-impl<F> ColumnsAir<F> for PublicValuesAir {}
-
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PublicValuesAir
 where
     AB::F: PrimeField32,

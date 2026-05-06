@@ -79,7 +79,8 @@ struct ExpBitsLenLookupCols<T> {
     result: T,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, ColumnsAir)]
+
 struct ExpBitsLenLookupAir {
     exp_bits_len_bus: ExpBitsLenBus,
 }
@@ -91,7 +92,6 @@ impl<F> BaseAir<F> for ExpBitsLenLookupAir {
 }
 
 impl<F> BaseAirWithPublicValues<F> for ExpBitsLenLookupAir {}
-impl<F> ColumnsAir<F> for ExpBitsLenLookupAir {}
 impl<F> PartitionedBaseAir<F> for ExpBitsLenLookupAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpBitsLenLookupAir {

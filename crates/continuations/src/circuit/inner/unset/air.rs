@@ -19,6 +19,7 @@ pub struct UnsetPvsCols<F> {
     pub is_valid: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct UnsetPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub pvs_air_consistency_bus: PvsAirConsistencyBus,
@@ -33,7 +34,6 @@ impl<F> BaseAir<F> for UnsetPvsAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UnsetPvsAir {}
-impl<F> ColumnsAir<F> for UnsetPvsAir {}
 impl<F> PartitionedBaseAir<F> for UnsetPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnsetPvsAir {

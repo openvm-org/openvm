@@ -87,6 +87,7 @@ pub(super) struct MerkleVerifyLog {
     pub commit_minor: usize,
 }
 
+#[derive(ColumnsAir)]
 pub struct MerkleVerifyAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,
@@ -103,8 +104,6 @@ impl<F: Field> BaseAir<F> for MerkleVerifyAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for MerkleVerifyAir {}
 impl<F: Field> PartitionedBaseAir<F> for MerkleVerifyAir {}
-impl<F: Field> ColumnsAir<F> for MerkleVerifyAir {}
-
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

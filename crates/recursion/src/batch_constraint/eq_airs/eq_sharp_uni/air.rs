@@ -46,6 +46,7 @@ pub struct EqSharpUniCols<T> {
     pub is_first_iter: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct EqSharpUniAir {
     pub xi_bus: XiRandomnessBus,
     pub eq_bus: EqSharpUniBus,
@@ -56,8 +57,6 @@ pub struct EqSharpUniAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqSharpUniAir {}
 impl<F> PartitionedBaseAir<F> for EqSharpUniAir {}
-impl<F> ColumnsAir<F> for EqSharpUniAir {}
-
 impl<F> BaseAir<F> for EqSharpUniAir {
     fn width(&self) -> usize {
         EqSharpUniCols::<F>::width()
@@ -293,6 +292,7 @@ pub struct EqSharpUniReceiverCols<T> {
     pub cur_sum: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct EqSharpUniReceiverAir {
     pub r_bus: BatchConstraintConductorBus,
     pub eq_bus: EqSharpUniBus,
@@ -303,8 +303,6 @@ pub struct EqSharpUniReceiverAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqSharpUniReceiverAir {}
 impl<F> PartitionedBaseAir<F> for EqSharpUniReceiverAir {}
-impl<F> ColumnsAir<F> for EqSharpUniReceiverAir {}
-
 impl<F> BaseAir<F> for EqSharpUniReceiverAir {
     fn width(&self) -> usize {
         EqSharpUniReceiverCols::<F>::width()

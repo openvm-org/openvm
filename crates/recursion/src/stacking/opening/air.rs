@@ -84,6 +84,7 @@ pub struct OpeningClaimsCols<F> {
     pub s_0: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct OpeningClaimsAir {
     // External buses
     pub lifted_heights_bus: LiftedHeightsBus,
@@ -106,8 +107,6 @@ pub struct OpeningClaimsAir {
 
 impl BaseAirWithPublicValues<F> for OpeningClaimsAir {}
 impl PartitionedBaseAir<F> for OpeningClaimsAir {}
-impl<F> ColumnsAir<F> for OpeningClaimsAir {}
-
 impl<F> BaseAir<F> for OpeningClaimsAir {
     fn width(&self) -> usize {
         OpeningClaimsCols::<F>::width()

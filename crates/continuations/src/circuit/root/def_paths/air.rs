@@ -49,6 +49,7 @@ pub struct DeferralAccMerklePathsCols<F> {
     pub is_unset: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct DeferralAccMerklePathsAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub def_acc_paths_bus: DeferralAccPathBus,
@@ -90,7 +91,6 @@ impl<F> BaseAir<F> for DeferralAccMerklePathsAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralAccMerklePathsAir {}
-impl<F> ColumnsAir<F> for DeferralAccMerklePathsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralAccMerklePathsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir {

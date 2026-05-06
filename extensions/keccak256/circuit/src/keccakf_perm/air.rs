@@ -34,7 +34,8 @@ impl<T> StructReflectionHelper for KeccakfPermCols<T> {
 /// A periphery AIR that wraps the Plonky3 AIR with a direct interaction on a [PermutationCheckBus].
 /// The AIR assumes but does not constrain that the timestamp in the bus should be unique for each
 /// distinct preimage state.
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+
 pub struct KeccakfPermAir {
     /// Direct bus with keccakf pre- or post-state. Bus message is `prestate_u16_limbs ||
     /// poststate_u16_limbs`
@@ -59,7 +60,6 @@ pub const NUM_KECCAKF_PERM_COLS: usize = size_of::<KeccakfPermCols<u8>>();
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfPermAir {}
 impl<F> PartitionedBaseAir<F> for KeccakfPermAir {}
-impl<F> ColumnsAir<F> for KeccakfPermAir {}
 impl<F> BaseAir<F> for KeccakfPermAir {
     fn width(&self) -> usize {
         NUM_KECCAKF_PERM_COLS

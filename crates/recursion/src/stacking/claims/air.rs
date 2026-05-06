@@ -69,6 +69,7 @@ pub struct StackingClaimsCols<F> {
     pub whir_claim: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct StackingClaimsAir {
     // External buses
     pub stacking_indices_bus: StackingIndicesBus,
@@ -91,8 +92,6 @@ pub struct StackingClaimsAir {
 
 impl BaseAirWithPublicValues<F> for StackingClaimsAir {}
 impl PartitionedBaseAir<F> for StackingClaimsAir {}
-impl<F> ColumnsAir<F> for StackingClaimsAir {}
-
 impl<F> BaseAir<F> for StackingClaimsAir {
     fn width(&self) -> usize {
         StackingClaimsCols::<F>::width()

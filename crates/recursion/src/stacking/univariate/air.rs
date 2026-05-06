@@ -49,6 +49,7 @@ pub struct UnivariateRoundCols<F> {
     pub poly_rand_eval: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct UnivariateRoundAir {
     // External buses
     pub transcript_bus: TranscriptBus,
@@ -65,8 +66,6 @@ pub struct UnivariateRoundAir {
 
 impl BaseAirWithPublicValues<F> for UnivariateRoundAir {}
 impl PartitionedBaseAir<F> for UnivariateRoundAir {}
-impl<F> ColumnsAir<F> for UnivariateRoundAir {}
-
 impl<F> BaseAir<F> for UnivariateRoundAir {
     fn width(&self) -> usize {
         UnivariateRoundCols::<F>::width()

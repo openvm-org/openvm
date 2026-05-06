@@ -54,6 +54,7 @@ pub struct SumcheckCols<T> {
     pub alpha_lookup_count: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct SumcheckAir {
     pub sumcheck_bus: WhirSumcheckBus,
     pub alpha_bus: WhirAlphaBus,
@@ -68,8 +69,6 @@ pub struct SumcheckAir {
 
 impl BaseAirWithPublicValues<F> for SumcheckAir {}
 impl PartitionedBaseAir<F> for SumcheckAir {}
-impl<F> ColumnsAir<F> for SumcheckAir {}
-
 impl<F> BaseAir<F> for SumcheckAir {
     fn width(&self) -> usize {
         SumcheckCols::<F>::width()

@@ -40,6 +40,7 @@ pub struct TranscriptCols<T> {
     pub post_state: [T; POSEIDON2_WIDTH],
 }
 
+#[derive(ColumnsAir)]
 pub struct TranscriptAir {
     pub transcript_bus: TranscriptBus,
     pub poseidon2_permute_bus: Poseidon2PermuteBus,
@@ -54,8 +55,6 @@ impl<F: Field> BaseAir<F> for TranscriptAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for TranscriptAir {}
 impl<F: Field> PartitionedBaseAir<F> for TranscriptAir {}
-impl<F: Field> ColumnsAir<F> for TranscriptAir {}
-
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

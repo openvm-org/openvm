@@ -26,6 +26,7 @@ use crate::{
  * - root commitment is sent to `MerkleRootBus`
  * - leaf payload is sent on `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
+#[derive(ColumnsAir)]
 pub struct UserPvsCommitValuesAir {
     pub subair: MerkleTreeSubAir,
     pub output_val_bus: OutputValBus,
@@ -65,7 +66,6 @@ impl<F> BaseAir<F> for UserPvsCommitValuesAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsCommitValuesAir {}
-impl<F> ColumnsAir<F> for UserPvsCommitValuesAir {}
 impl<F> PartitionedBaseAir<F> for UserPvsCommitValuesAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

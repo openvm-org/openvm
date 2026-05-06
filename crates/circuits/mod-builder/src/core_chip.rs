@@ -26,7 +26,8 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::builder::{FieldExpr, FieldExprCols};
 
-#[derive(Clone)]
+#[derive(Clone, ColumnsAir)]
+
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
 
@@ -98,8 +99,6 @@ impl<F: Field> BaseAir<F> for FieldExpressionCoreAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for FieldExpressionCoreAir {}
-impl<F: Field> ColumnsAir<F> for FieldExpressionCoreAir {}
-
 impl<AB: InteractionBuilder, I> VmCoreAir<AB, I> for FieldExpressionCoreAir
 where
     I: VmAdapterInterface<AB::Expr>,

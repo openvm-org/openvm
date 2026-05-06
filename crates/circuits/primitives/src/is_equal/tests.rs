@@ -41,12 +41,12 @@ pub struct IsEqualCols<T> {
     pub inv: T,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+
 pub struct IsEqTestAir(pub IsEqSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsEqTestAir {}
-impl<F: Field> ColumnsAir<F> for IsEqTestAir {}
 impl<F: Field> BaseAir<F> for IsEqTestAir {
     fn width(&self) -> usize {
         IsEqualCols::<F>::width()

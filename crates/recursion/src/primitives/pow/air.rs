@@ -23,7 +23,8 @@ pub struct PowerCheckerCols<T> {
     pub mult_range: T,
 }
 
-#[derive(Debug)]
+#[derive(Debug, ColumnsAir)]
+
 pub struct PowerCheckerAir<const BASE: usize, const N: usize> {
     pub pow_bus: PowerCheckerBus,
     pub range_bus: RangeCheckerBus,
@@ -34,7 +35,6 @@ impl<F, const BASE: usize, const N: usize> BaseAir<F> for PowerCheckerAir<BASE, 
         PowerCheckerCols::<F>::width()
     }
 }
-impl<F, const BASE: usize, const N: usize> ColumnsAir<F> for PowerCheckerAir<BASE, N> {}
 impl<F, const B: usize, const N: usize> BaseAirWithPublicValues<F> for PowerCheckerAir<B, N> {}
 impl<F, const B: usize, const N: usize> PartitionedBaseAir<F> for PowerCheckerAir<B, N> {}
 

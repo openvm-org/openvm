@@ -50,12 +50,12 @@ pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+
 pub struct AssertLtTestAir<const AUX_LEN: usize>(pub AssertLtSubAir);
 
 impl<F: Field, const AUX_LEN: usize> BaseAirWithPublicValues<F> for AssertLtTestAir<AUX_LEN> {}
 impl<F: Field, const AUX_LEN: usize> PartitionedBaseAir<F> for AssertLtTestAir<AUX_LEN> {}
-impl<F: Field, const AUX_LEN: usize> ColumnsAir<F> for AssertLtTestAir<AUX_LEN> {}
 impl<F: Field, const AUX_LEN: usize> BaseAir<F> for AssertLtTestAir<AUX_LEN> {
     fn width(&self) -> usize {
         AssertLessThanCols::<F, AUX_LEN>::width()

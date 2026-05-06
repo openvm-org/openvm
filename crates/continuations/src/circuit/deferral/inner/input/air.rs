@@ -43,6 +43,7 @@ pub struct InputCommitCols<F> {
     pub res_right: [F; DIGEST_SIZE],
 }
 
+#[derive(ColumnsAir)]
 pub struct InputCommitAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2PermuteBus,
@@ -56,7 +57,6 @@ impl<F> BaseAir<F> for InputCommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for InputCommitAir {}
-impl<F> ColumnsAir<F> for InputCommitAir {}
 impl<F> PartitionedBaseAir<F> for InputCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for InputCommitAir {

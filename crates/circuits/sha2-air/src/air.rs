@@ -22,7 +22,8 @@ use crate::{
 };
 
 /// Expects the message to be padded to a multiple of C::BLOCK_WORDS * C::WORD_BITS bits
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+
 pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
@@ -48,8 +49,6 @@ impl<F, C: Sha2BlockHasherSubairConfig> BaseAir<F> for Sha2BlockHasherSubAir<C> 
         C::SUBAIR_WIDTH
     }
 }
-impl<F, C: Sha2BlockHasherSubairConfig> ColumnsAir<F> for Sha2BlockHasherSubAir<C> {}
-
 impl<AB: InteractionBuilder, C: Sha2BlockHasherSubairConfig> SubAir<AB>
     for Sha2BlockHasherSubAir<C>
 {

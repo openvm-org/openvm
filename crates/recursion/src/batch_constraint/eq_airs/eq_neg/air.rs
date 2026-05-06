@@ -60,6 +60,7 @@ pub struct EqNegCols<F> {
     pub one_half_pow: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct EqNegAir {
     pub result_bus: EqNegResultBus,
     pub base_rand_bus: EqNegBaseRandBus,
@@ -70,7 +71,6 @@ pub struct EqNegAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqNegAir {}
 impl<F> PartitionedBaseAir<F> for EqNegAir {}
-impl<F> ColumnsAir<F> for EqNegAir {}
 impl<F> BaseAir<F> for EqNegAir {
     fn width(&self) -> usize {
         EqNegCols::<F>::width()

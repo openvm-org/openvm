@@ -29,6 +29,7 @@ pub struct Poseidon2Cols<T, const SBOX_REGISTERS: usize> {
     pub compress_mult: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct Poseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub poseidon2_permute_bus: Poseidon2PermuteBus,
@@ -49,8 +50,6 @@ impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
     for Poseidon2Air<F, SBOX_REGISTERS>
 {
 }
-impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {}
-
 impl<AB: AirBuilder + InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
     for Poseidon2Air<AB::F, SBOX_REGISTERS>
 {

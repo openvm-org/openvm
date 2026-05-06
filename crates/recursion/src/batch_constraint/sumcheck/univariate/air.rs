@@ -51,6 +51,7 @@ pub struct UnivariateSumcheckCols<T> {
     pub tidx: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct UnivariateSumcheckAir {
     /// The univariate domain size is `2^{l_skip}`
     pub l_skip: usize,
@@ -67,8 +68,6 @@ pub struct UnivariateSumcheckAir {
 
 impl<F> BaseAirWithPublicValues<F> for UnivariateSumcheckAir {}
 impl<F> PartitionedBaseAir<F> for UnivariateSumcheckAir {}
-impl<F> ColumnsAir<F> for UnivariateSumcheckAir {}
-
 impl<F> BaseAir<F> for UnivariateSumcheckAir {
     fn width(&self) -> usize {
         UnivariateSumcheckCols::<F>::width()

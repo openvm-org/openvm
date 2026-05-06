@@ -58,6 +58,7 @@ pub struct MultilinearSumcheckCols<T> {
     pub tidx: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct MultilinearSumcheckAir {
     pub max_constraint_degree: usize,
     pub claim_bus: SumcheckClaimBus,
@@ -69,8 +70,6 @@ pub struct MultilinearSumcheckAir {
 
 impl<F> BaseAirWithPublicValues<F> for MultilinearSumcheckAir {}
 impl<F> PartitionedBaseAir<F> for MultilinearSumcheckAir {}
-impl<F> ColumnsAir<F> for MultilinearSumcheckAir {}
-
 impl<F> BaseAir<F> for MultilinearSumcheckAir {
     fn width(&self) -> usize {
         MultilinearSumcheckCols::<F>::width()

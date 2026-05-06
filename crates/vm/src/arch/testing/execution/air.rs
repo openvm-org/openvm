@@ -21,14 +21,14 @@ pub struct DummyExecutionInteractionCols<T> {
     pub final_state: ExecutionState<T>,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+
 pub struct ExecutionDummyAir {
     pub bus: ExecutionBus,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for ExecutionDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ExecutionDummyAir {}
-impl<F: Field> ColumnsAir<F> for ExecutionDummyAir {}
 impl<F: Field> BaseAir<F> for ExecutionDummyAir {
     fn width(&self) -> usize {
         size_of::<DummyExecutionInteractionCols<u8>>()

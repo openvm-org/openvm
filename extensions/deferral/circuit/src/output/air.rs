@@ -85,7 +85,8 @@ pub struct DeferralOutputCols<T> {
     pub poseidon2_res: [T; DIGEST_SIZE],
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -102,8 +103,6 @@ impl<F> BaseAir<F> for DeferralOutputAir {
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputAir {}
-impl<F> ColumnsAir<F> for DeferralOutputAir {}
-
 impl<AB> Air<AB> for DeferralOutputAir
 where
     AB: InteractionBuilder,

@@ -52,6 +52,7 @@ pub struct RootVerifierPvsCols<F> {
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
 }
 
+#[derive(ColumnsAir)]
 pub struct RootVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
@@ -82,7 +83,6 @@ impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir {
         RootVerifierPvs::<u8>::width()
     }
 }
-impl<F: Field> ColumnsAir<F> for RootVerifierPvsAir {}
 impl<F: Field> PartitionedBaseAir<F> for RootVerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

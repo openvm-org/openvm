@@ -67,7 +67,8 @@ impl<'a, T> RangeTupleColsRefMut<'a, T> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, ColumnsAir)]
+
 pub struct RangeTupleCheckerAir<const N: usize> {
     pub bus: RangeTupleCheckerBus<N>,
 }
@@ -79,8 +80,6 @@ impl<const N: usize> RangeTupleCheckerAir<N> {
 }
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
-impl<F: Field, const N: usize> ColumnsAir<F> for RangeTupleCheckerAir<N> {}
-
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {
         N + 1

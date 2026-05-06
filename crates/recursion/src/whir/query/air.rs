@@ -45,6 +45,7 @@ pub struct WhirQueryCols<T> {
     pub post_claim: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct WhirQueryAir {
     pub transcript_bus: TranscriptBus,
     pub verify_queries_bus: VerifyQueriesBus,
@@ -57,8 +58,6 @@ pub struct WhirQueryAir {
 
 impl BaseAirWithPublicValues<F> for WhirQueryAir {}
 impl PartitionedBaseAir<F> for WhirQueryAir {}
-impl<F> ColumnsAir<F> for WhirQueryAir {}
-
 impl<F> BaseAir<F> for WhirQueryAir {
     fn width(&self) -> usize {
         WhirQueryCols::<F>::width()

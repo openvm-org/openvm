@@ -39,7 +39,8 @@ pub struct DeferralOutputCommitCols<F> {
     pub canonicity_aux: [CanonicityAuxCols<F>; VALS_IN_DIGEST],
 }
 
-#[derive(Debug)]
+#[derive(Debug, ColumnsAir)]
+
 pub struct DeferralOutputCommitAir {
     pub poseidon2_bus: Poseidon2PermuteBus,
     pub range_bus: RangeCheckerBus,
@@ -55,7 +56,6 @@ impl<F> BaseAir<F> for DeferralOutputCommitAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralOutputCommitAir {}
-impl<F> ColumnsAir<F> for DeferralOutputCommitAir {}
 impl<F> PartitionedBaseAir<F> for DeferralOutputCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir

@@ -46,6 +46,7 @@ pub struct WhirRoundCols<T, const ENC_WIDTH: usize> {
     pub whir_round_enc: [T; ENC_WIDTH],
 }
 
+#[derive(ColumnsAir)]
 pub struct WhirRoundAir {
     // extra-module buses
     pub whir_module_bus: WhirModuleBus,
@@ -75,8 +76,6 @@ pub struct WhirRoundAir {
 
 impl BaseAirWithPublicValues<F> for WhirRoundAir {}
 impl PartitionedBaseAir<F> for WhirRoundAir {}
-impl<F> ColumnsAir<F> for WhirRoundAir {}
-
 impl<F> BaseAir<F> for WhirRoundAir {
     fn width(&self) -> usize {
         match self.whir_round_encoder.width() {

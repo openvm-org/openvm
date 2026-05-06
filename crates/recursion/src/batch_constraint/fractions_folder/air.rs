@@ -43,6 +43,7 @@ pub struct FractionsFolderCols<T> {
     pub cur_hash: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,
@@ -54,8 +55,6 @@ pub struct FractionsFolderAir {
 
 impl<F> BaseAirWithPublicValues<F> for FractionsFolderAir {}
 impl<F> PartitionedBaseAir<F> for FractionsFolderAir {}
-impl<F> ColumnsAir<F> for FractionsFolderAir {}
-
 impl<F> BaseAir<F> for FractionsFolderAir {
     fn width(&self) -> usize {
         FractionsFolderCols::<F>::width()

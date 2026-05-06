@@ -40,6 +40,7 @@ pub struct DeferralAggPvsCols<F> {
     pub child_pvs: DeferralCircuitPvs<F>,
 }
 
+#[derive(ColumnsAir)]
 pub struct DeferralAggPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2CompressBus,
@@ -57,7 +58,6 @@ impl<F> BaseAirWithPublicValues<F> for DeferralAggPvsAir {
         DeferralAggregationPvs::<u8>::width()
     }
 }
-impl<F> ColumnsAir<F> for DeferralAggPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferralAggPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

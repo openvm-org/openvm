@@ -64,6 +64,7 @@ pub struct InteractionsFoldingCols<T> {
     pub final_acc_denom: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct InteractionsFoldingAir {
     pub interaction_bus: InteractionsFoldingBus,
     pub interactions_folding_input_bus: InteractionsFoldingInputBus,
@@ -75,8 +76,6 @@ pub struct InteractionsFoldingAir {
 
 impl<F> BaseAirWithPublicValues<F> for InteractionsFoldingAir {}
 impl<F> PartitionedBaseAir<F> for InteractionsFoldingAir {}
-impl<F> ColumnsAir<F> for InteractionsFoldingAir {}
-
 impl<F> BaseAir<F> for InteractionsFoldingAir {
     fn width(&self) -> usize {
         InteractionsFoldingCols::<F>::width()

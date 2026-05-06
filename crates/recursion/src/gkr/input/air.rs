@@ -63,6 +63,7 @@ pub struct GkrInputCols<T> {
 }
 
 /// The GkrInputAir handles reading and passing the GkrInput
+#[derive(ColumnsAir)]
 pub struct GkrInputAir {
     // System Params
     pub l_skip: usize,
@@ -87,7 +88,6 @@ impl<F: Field> BaseAir<F> for GkrInputAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrInputAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrInputAir {}
-impl<F: Field> ColumnsAir<F> for GkrInputAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
     fn eval(&self, builder: &mut AB) {

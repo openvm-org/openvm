@@ -45,12 +45,12 @@ pub struct IsEqArrayCols<T, const N: usize> {
     aux: IsEqArrayAuxCols<T, N>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+
 pub struct IsEqArrayTestAir<const N: usize>(IsEqArraySubAir<N>);
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for IsEqArrayTestAir<N> {}
-impl<F: Field, const N: usize> ColumnsAir<F> for IsEqArrayTestAir<N> {}
 impl<F: Field, const N: usize> BaseAir<F> for IsEqArrayTestAir<N> {
     fn width(&self) -> usize {
         IsEqArrayCols::<F, N>::width()

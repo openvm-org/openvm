@@ -35,6 +35,7 @@ pub struct EqUniCols<T> {
     pub idx: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct EqUniAir {
     pub zero_n_bus: EqZeroNBus,
     pub r_xi_bus: BatchConstraintConductorBus,
@@ -43,8 +44,6 @@ pub struct EqUniAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqUniAir {}
 impl<F> PartitionedBaseAir<F> for EqUniAir {}
-impl<F> ColumnsAir<F> for EqUniAir {}
-
 impl<F> BaseAir<F> for EqUniAir {
     fn width(&self) -> usize {
         EqUniCols::<F>::width()

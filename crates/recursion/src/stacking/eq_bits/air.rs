@@ -49,6 +49,7 @@ pub struct EqBitsCols<F> {
     pub u_val: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct EqBitsAir {
     // Internal buses
     pub eq_bits_internal_bus: EqBitsInternalBus,
@@ -62,8 +63,6 @@ pub struct EqBitsAir {
 
 impl BaseAirWithPublicValues<F> for EqBitsAir {}
 impl PartitionedBaseAir<F> for EqBitsAir {}
-impl<F> ColumnsAir<F> for EqBitsAir {}
-
 impl<F> BaseAir<F> for EqBitsAir {
     fn width(&self) -> usize {
         EqBitsCols::<F>::width()

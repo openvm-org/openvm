@@ -17,6 +17,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{circuit::deferral::DeferralCircuitPvs, SC};
 
+#[derive(ColumnsAir)]
 pub(in crate::tests) struct EmptyAirWithPvs(pub(in crate::tests) usize);
 
 impl<F> BaseAir<F> for EmptyAirWithPvs {
@@ -29,7 +30,6 @@ impl<F> BaseAirWithPublicValues<F> for EmptyAirWithPvs {
         self.0
     }
 }
-impl<F> ColumnsAir<F> for EmptyAirWithPvs {}
 impl<F> PartitionedBaseAir<F> for EmptyAirWithPvs {}
 impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
     fn eval(&self, builder: &mut AB) {

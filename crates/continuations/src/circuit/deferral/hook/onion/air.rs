@@ -35,6 +35,7 @@ pub struct OnionHashCols<F> {
     pub output_onion: [F; DIGEST_SIZE],
 }
 
+#[derive(ColumnsAir)]
 pub struct OnionHashAir {
     pub poseidon2_bus: Poseidon2CompressBus,
     pub def_circuit_commit_bus: DefCircuitCommitBus,
@@ -48,7 +49,6 @@ impl<F> BaseAir<F> for OnionHashAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for OnionHashAir {}
-impl<F> ColumnsAir<F> for OnionHashAir {}
 impl<F> PartitionedBaseAir<F> for OnionHashAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for OnionHashAir {

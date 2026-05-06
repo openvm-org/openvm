@@ -70,6 +70,7 @@ pub struct GkrLayerSumcheckCols<T> {
     pub eq_out: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
 pub struct GkrLayerSumcheckAir {
     pub transcript_bus: TranscriptBus,
     pub xi_randomness_bus: XiRandomnessBus,
@@ -104,8 +105,6 @@ impl<F: Field> BaseAir<F> for GkrLayerSumcheckAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrLayerSumcheckAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrLayerSumcheckAir {}
-impl<F: Field> ColumnsAir<F> for GkrLayerSumcheckAir {}
-
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,

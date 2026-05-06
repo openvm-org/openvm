@@ -44,6 +44,7 @@ pub struct DagCommitPvs<T> {
 
 /// Sub-AIR to compute the onion hash of one digest per row. Expects each AIR
 /// that uses it to have DagCommitPvs as its public value representation.
+#[derive(ColumnsAir)]
 pub struct DagCommitSubAir<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
 }
@@ -69,8 +70,6 @@ impl<F: Field> BaseAir<F> for DagCommitSubAir<F> {
         DagCommitCols::<u8>::width()
     }
 }
-impl<F: Field> ColumnsAir<F> for DagCommitSubAir<F> {}
-
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> SubAir<AB>
     for DagCommitSubAir<AB::F>
 {

@@ -52,6 +52,7 @@ pub struct DeferralHookPvsCols<F> {
     pub output_onion_padded: [F; DIGEST_SIZE],
 }
 
+#[derive(ColumnsAir)]
 pub struct DeferralHookPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
@@ -106,7 +107,6 @@ impl<F: Field> BaseAirWithPublicValues<F> for DeferralHookPvsAir {
         DeferralPvs::<u8>::width()
     }
 }
-impl<F: Field> ColumnsAir<F> for DeferralHookPvsAir {}
 impl<F: Field> PartitionedBaseAir<F> for DeferralHookPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

@@ -103,6 +103,7 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
     pub(in crate::batch_constraint) is_n_neg: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct SymbolicExpressionAir<F: Field> {
     pub expr_bus: SymbolicExpressionBus,
     pub hyperdim_bus: HyperdimBus,
@@ -153,8 +154,6 @@ impl<F: Field> PartitionedBaseAir<F> for SymbolicExpressionAir<F> {
             }
     }
 }
-impl<F: Field> ColumnsAir<F> for SymbolicExpressionAir<F> {}
-
 impl<F: Field> BaseAir<F> for SymbolicExpressionAir<F> {
     fn width(&self) -> usize {
         let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();

@@ -73,6 +73,7 @@ pub struct SumcheckRoundsCols<F> {
     pub eq_rot_mult: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct SumcheckRoundsAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
@@ -91,8 +92,6 @@ pub struct SumcheckRoundsAir {
 
 impl BaseAirWithPublicValues<F> for SumcheckRoundsAir {}
 impl PartitionedBaseAir<F> for SumcheckRoundsAir {}
-impl<F> ColumnsAir<F> for SumcheckRoundsAir {}
-
 impl<F> BaseAir<F> for SumcheckRoundsAir {
     fn width(&self) -> usize {
         SumcheckRoundsCols::<F>::width()

@@ -38,6 +38,7 @@ pub struct UserPvsInMemoryCols<F> {
     pub merkle_path_branch_bits: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct UserPvsInMemoryAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub merkle_root_bus: MerkleRootBus,
@@ -76,7 +77,6 @@ impl<F> BaseAir<F> for UserPvsInMemoryAir {
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsInMemoryAir {}
-impl<F> ColumnsAir<F> for UserPvsInMemoryAir {}
 impl<F> PartitionedBaseAir<F> for UserPvsInMemoryAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {

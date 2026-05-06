@@ -41,6 +41,7 @@ pub struct GkrXiSamplerCols<T> {
     pub tidx: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct GkrXiSamplerAir {
     pub xi_randomness_bus: XiRandomnessBus,
     pub transcript_bus: TranscriptBus,
@@ -55,8 +56,6 @@ impl<F: Field> BaseAir<F> for GkrXiSamplerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for GkrXiSamplerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrXiSamplerAir {}
-impl<F: Field> ColumnsAir<F> for GkrXiSamplerAir {}
-
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,

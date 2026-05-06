@@ -62,6 +62,7 @@ pub struct DeferredVerifyPvsCols<F> {
     pub final_transcript_state: [F; POSEIDON2_WIDTH],
 }
 
+#[derive(ColumnsAir)]
 pub struct DeferredVerifyPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
@@ -95,7 +96,6 @@ impl<F> BaseAirWithPublicValues<F> for DeferredVerifyPvsAir {
         DeferralCircuitPvs::<u8>::width()
     }
 }
-impl<F> ColumnsAir<F> for DeferredVerifyPvsAir {}
 impl<F> PartitionedBaseAir<F> for DeferredVerifyPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>

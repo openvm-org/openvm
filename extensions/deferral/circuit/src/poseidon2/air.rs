@@ -24,6 +24,7 @@ pub struct DeferralPoseidon2Cols<T> {
     pub capacity_mult: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct DeferralPoseidon2Air<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub bus: LookupBus,
@@ -44,7 +45,6 @@ impl<F: Field> BaseAir<F> for DeferralPoseidon2Air<F> {
     }
 }
 impl<F: Field> BaseAirWithPublicValues<F> for DeferralPoseidon2Air<F> {}
-impl<F: Field> ColumnsAir<F> for DeferralPoseidon2Air<F> {}
 impl<F: Field> PartitionedBaseAir<F> for DeferralPoseidon2Air<F> {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralPoseidon2Air<AB::F> {

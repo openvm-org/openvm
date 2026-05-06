@@ -92,6 +92,7 @@ pub struct ExpressionClaimCols<T> {
     pub num_multilinear_sumcheck_rounds: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct ExpressionClaimAir {
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub expr_claim_bus: ExpressionClaimBus,
@@ -104,8 +105,6 @@ pub struct ExpressionClaimAir {
 
 impl<F> BaseAirWithPublicValues<F> for ExpressionClaimAir {}
 impl<F> PartitionedBaseAir<F> for ExpressionClaimAir {}
-impl<F> ColumnsAir<F> for ExpressionClaimAir {}
-
 impl<F> BaseAir<F> for ExpressionClaimAir {
     fn width(&self) -> usize {
         ExpressionClaimCols::<F>::width()

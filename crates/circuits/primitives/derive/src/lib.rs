@@ -17,8 +17,9 @@ use cols_ref::cols_ref_impl;
 /// `StructReflectionHelper::struct_reflection()` (typically derived via
 /// `#[derive(StructReflection)]`).
 ///
-/// The derive injects `F: Field` as a new generic on the impl. The `F` written in
-/// `#[columns_via(...)]` refers to that injected parameter.
+/// If the struct already has a type parameter named `F`, the impl reuses it. Otherwise
+/// an unbounded `F` is injected on the impl. The `F` written in `#[columns_via(...)]`
+/// refers to that parameter.
 #[proc_macro_derive(ColumnsAir, attributes(columns_via))]
 pub fn columns_air_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
@@ -29,10 +30,17 @@ pub fn columns_air_derive(input: TokenStream) -> TokenStream {
         .iter()
         .find(|attr| attr.path().is_ident("columns_via"));
 
+    let has_f_generic = ast.generics.params.iter().any(|p| matches!(
+        p,
+        GenericParam::Type(t) if t.ident == "F"
+    ));
+
     let mut impl_generics_owned = ast.generics.clone();
-    impl_generics_owned.params.push(syn::parse_quote! {
-        F: ::openvm_stark_backend::p3_field::Field
-    });
+    if !has_f_generic {
+        impl_generics_owned.params.push(syn::parse_quote! {
+            F: ::openvm_stark_backend::p3_field::Field
+        });
+    }
     let (impl_generics, _, _) = impl_generics_owned.split_for_impl();
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
 

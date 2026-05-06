@@ -10,14 +10,14 @@ use openvm_stark_backend::{
 use super::ProgramTester;
 use crate::system::program::ProgramBus;
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+
 pub struct ProgramDummyAir {
     pub bus: ProgramBus,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
-impl<F: Field> ColumnsAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {
     fn width(&self) -> usize {
         ProgramTester::<F>::width()

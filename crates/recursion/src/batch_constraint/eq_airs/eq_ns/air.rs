@@ -59,6 +59,7 @@ pub struct EqNsColumns<T> {
     pub sel_last_and_trans_count: T,
 }
 
+#[derive(ColumnsAir)]
 pub struct EqNsAir {
     pub zero_n_bus: EqZeroNBus,
     pub xi_bus: XiRandomnessBus,
@@ -72,8 +73,6 @@ pub struct EqNsAir {
 
 impl<F> BaseAirWithPublicValues<F> for EqNsAir {}
 impl<F> PartitionedBaseAir<F> for EqNsAir {}
-impl<F> ColumnsAir<F> for EqNsAir {}
-
 impl<F> BaseAir<F> for EqNsAir {
     fn width(&self) -> usize {
         EqNsColumns::<F>::width()

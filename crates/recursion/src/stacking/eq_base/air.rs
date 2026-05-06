@@ -73,6 +73,7 @@ pub struct EqBaseCols<F> {
     pub mult_neg: F,
 }
 
+#[derive(ColumnsAir)]
 pub struct EqBaseAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
@@ -91,8 +92,6 @@ pub struct EqBaseAir {
 
 impl BaseAirWithPublicValues<F> for EqBaseAir {}
 impl PartitionedBaseAir<F> for EqBaseAir {}
-impl<F> ColumnsAir<F> for EqBaseAir {}
-
 impl<F> BaseAir<F> for EqBaseAir {
     fn width(&self) -> usize {
         EqBaseCols::<F>::width()

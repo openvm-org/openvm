@@ -24,6 +24,7 @@ pub(super) const MAX_ENCODER_DEGREE: u32 = 3;
  * - internal nodes receive children from an internal permutation bus
  * - root commitment is sent to `MerkleRootBus`
  */
+#[derive(ColumnsAir)]
 pub struct UserPvsCommitAir {
     pub subair: MerkleTreeSubAir,
     encoder: Encoder,
@@ -67,7 +68,6 @@ impl<F> BaseAirWithPublicValues<F> for UserPvsCommitAir {
         self.num_user_pvs
     }
 }
-impl<F> ColumnsAir<F> for UserPvsCommitAir {}
 impl<F> PartitionedBaseAir<F> for UserPvsCommitAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
