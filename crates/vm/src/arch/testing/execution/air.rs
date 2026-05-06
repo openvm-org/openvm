@@ -22,7 +22,7 @@ pub struct DummyExecutionInteractionCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-
+#[columns_via(DummyExecutionInteractionCols<F>)]
 pub struct ExecutionDummyAir {
     pub bus: ExecutionBus,
 }

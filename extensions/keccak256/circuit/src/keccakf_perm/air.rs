@@ -35,7 +35,7 @@ impl<T> StructReflectionHelper for KeccakfPermCols<T> {
 /// The AIR assumes but does not constrain that the timestamp in the bus should be unique for each
 /// distinct preimage state.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-
+#[columns_via(KeccakfPermCols<F>)]
 pub struct KeccakfPermAir {
     /// Direct bus with keccakf pre- or post-state. Bus message is `prestate_u16_limbs ||
     /// poststate_u16_limbs`

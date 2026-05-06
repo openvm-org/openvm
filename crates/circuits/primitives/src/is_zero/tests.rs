@@ -42,7 +42,7 @@ pub struct IsZeroCols<T> {
 }
 
 #[derive(Copy, Clone, ColumnsAir)]
-
+#[columns_via(IsZeroCols<F>)]
 pub struct IsZeroTestAir(IsZeroSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsZeroTestAir {}

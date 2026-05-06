@@ -70,7 +70,7 @@ pub struct DeferralCallWrites<B, F> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralCallCoreCols<T> {
     pub is_valid: T,
     pub deferral_idx: T,
@@ -82,7 +82,7 @@ pub struct DeferralCallCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-
+#[columns_via(DeferralCallCoreCols<F>)]
 pub struct DeferralCallCoreAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
