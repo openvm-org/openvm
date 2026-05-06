@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, iter};
 
-use openvm_circuit_primitives::{ColumnsAir, StructReflectionHelper};
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
@@ -24,23 +24,17 @@ pub struct KeccakfPermCols<T> {
     pub timestamp: T,
 }
 
-/// Manual impl because KeccakCols is an external type without StructReflection.
-impl<T> StructReflectionHelper for KeccakfPermCols<T> {
-    fn struct_reflection() -> Option<Vec<String>> {
-        None
-    }
-}
-
 /// A periphery AIR that wraps the Plonky3 AIR with a direct interaction on a [PermutationCheckBus].
 /// The AIR assumes but does not constrain that the timestamp in the bus should be unique for each
 /// distinct preimage state.
-#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(KeccakfPermCols<F>)]
+#[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfPermAir {
     /// Direct bus with keccakf pre- or post-state. Bus message is `prestate_u16_limbs ||
     /// poststate_u16_limbs`
     pub keccakf_state_bus: PermutationCheckBus,
 }
+
+impl<F> ColumnsAir<F> for KeccakfPermAir {}
 
 impl<T: Copy> KeccakfPermCols<T> {
     pub fn postimage(&self, y: usize, x: usize, limb: usize) -> T {
