@@ -43,7 +43,8 @@ pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
 /// Number of multiplicity columns (mult_range and mult_xor)
 pub const NUM_BITWISE_OP_LOOKUP_MULT_COLS: usize = 2;
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(BitwiseOperationLookupCols<F, NUM_BITS>)]
 pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
 }
@@ -55,11 +56,6 @@ impl<F: Field, const NUM_BITS: usize> BaseAirWithPublicValues<F>
 impl<F: Field, const NUM_BITS: usize> PartitionedBaseAir<F>
     for BitwiseOperationLookupAir<NUM_BITS>
 {
-}
-impl<F: Field, const NUM_BITS: usize> ColumnsAir<F> for BitwiseOperationLookupAir<NUM_BITS> {
-    fn columns(&self) -> Option<Vec<String>> {
-        <BitwiseOperationLookupCols<F, NUM_BITS> as crate::StructReflectionHelper>::struct_reflection()
-    }
 }
 impl<F: Field, const NUM_BITS: usize> BaseAir<F> for BitwiseOperationLookupAir<NUM_BITS> {
     fn width(&self) -> usize {

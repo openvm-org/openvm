@@ -52,7 +52,8 @@ pub struct Rv32BaseAluAdapterCols<T> {
 /// Reads instructions of the form OP a, b, c, d, e where \[a:4\]_d = \[b:4\]_d op \[c:4\]_e.
 /// Operand d can only be 1, and e can be either 1 (for register reads) or 0 (when c
 /// is an immediate).
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32BaseAluAdapterCols<F>)]
 pub struct Rv32BaseAluAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -62,11 +63,6 @@ pub struct Rv32BaseAluAdapterAir {
 impl<F: Field> BaseAir<F> for Rv32BaseAluAdapterAir {
     fn width(&self) -> usize {
         Rv32BaseAluAdapterCols::<F>::width()
-    }
-}
-impl<F: Field> ColumnsAir<F> for Rv32BaseAluAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32BaseAluAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

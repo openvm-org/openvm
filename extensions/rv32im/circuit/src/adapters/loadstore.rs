@@ -101,7 +101,8 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub needs_write: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32LoadStoreAdapterCols<F>)]
 pub struct Rv32LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
@@ -112,11 +113,6 @@ pub struct Rv32LoadStoreAdapterAir {
 impl<F: Field> BaseAir<F> for Rv32LoadStoreAdapterAir {
     fn width(&self) -> usize {
         Rv32LoadStoreAdapterCols::<F>::width()
-    }
-}
-impl<F: Field> ColumnsAir<F> for Rv32LoadStoreAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32LoadStoreAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

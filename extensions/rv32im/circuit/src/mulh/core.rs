@@ -39,7 +39,8 @@ pub struct MulHCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_mulhu_flag: T,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(MulHCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
 pub struct MulHCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,
@@ -55,13 +56,6 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
     for MulHCoreAir<NUM_LIMBS, LIMB_BITS>
 {
-}
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir<F>
-    for MulHCoreAir<NUM_LIMBS, LIMB_BITS>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <MulHCoreCols<F, NUM_LIMBS, LIMB_BITS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>

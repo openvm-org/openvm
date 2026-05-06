@@ -33,7 +33,8 @@ pub struct ProgramExecutionCols<T> {
     pub g: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(ProgramCols<F>)]
 pub struct ProgramAir {
     pub bus: ProgramBus,
 }
@@ -45,11 +46,6 @@ impl<F: Field> PartitionedBaseAir<F> for ProgramAir {
     }
     fn common_main_width(&self) -> usize {
         1
-    }
-}
-impl<F: Field> ColumnsAir<F> for ProgramAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <ProgramCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 impl<F: Field> BaseAir<F> for ProgramAir {

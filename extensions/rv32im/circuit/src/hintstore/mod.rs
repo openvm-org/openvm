@@ -74,7 +74,8 @@ pub struct Rv32HintStoreCols<T> {
     pub num_words_aux_cols: MemoryReadAuxCols<T>,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32HintStoreCols<F>)]
 pub struct Rv32HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -91,11 +92,6 @@ impl<F: Field> BaseAir<F> for Rv32HintStoreAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32HintStoreAir {}
 impl<F: Field> PartitionedBaseAir<F> for Rv32HintStoreAir {}
-impl<F: Field> ColumnsAir<F> for Rv32HintStoreAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32HintStoreCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     fn eval(&self, builder: &mut AB) {

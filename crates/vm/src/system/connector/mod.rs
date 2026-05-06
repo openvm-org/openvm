@@ -33,7 +33,8 @@ mod tests;
 /// But we will use this value when generating the proof.
 pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, ColumnsAir)]
+#[columns_via(ConnectorCols<F>)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
@@ -77,11 +78,6 @@ impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
-impl<F: Field> ColumnsAir<F> for VmConnectorAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <ConnectorCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
         ConnectorCols::<F>::width()

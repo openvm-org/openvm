@@ -43,7 +43,8 @@ pub struct Rv32JalrAdapterCols<T> {
     pub needs_write: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32JalrAdapterCols<F>)]
 pub struct Rv32JalrAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
@@ -52,11 +53,6 @@ pub struct Rv32JalrAdapterAir {
 impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
     fn width(&self) -> usize {
         Rv32JalrAdapterCols::<F>::width()
-    }
-}
-impl<F: Field> ColumnsAir<F> for Rv32JalrAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32JalrAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

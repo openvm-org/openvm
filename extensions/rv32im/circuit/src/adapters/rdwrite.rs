@@ -43,14 +43,16 @@ pub struct Rv32CondRdWriteAdapterCols<T> {
 }
 
 /// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32RdWriteAdapterCols<F>)]
 pub struct Rv32RdWriteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32CondRdWriteAdapterCols<F>)]
 pub struct Rv32CondRdWriteAdapterAir {
     inner: Rv32RdWriteAdapterAir,
 }
@@ -60,20 +62,10 @@ impl<F: Field> BaseAir<F> for Rv32RdWriteAdapterAir {
         Rv32RdWriteAdapterCols::<F>::width()
     }
 }
-impl<F: Field> ColumnsAir<F> for Rv32RdWriteAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32RdWriteAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<F: Field> BaseAir<F> for Rv32CondRdWriteAdapterAir {
     fn width(&self) -> usize {
         Rv32CondRdWriteAdapterCols::<F>::width()
-    }
-}
-impl<F: Field> ColumnsAir<F> for Rv32CondRdWriteAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32CondRdWriteAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

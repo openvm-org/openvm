@@ -40,7 +40,8 @@ pub struct Rv32AuipcCoreCols<T> {
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug, Clone, Copy, derive_new::new)]
+#[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32AuipcCoreCols<F>)]
 pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
@@ -52,11 +53,6 @@ impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcCoreAir {}
-impl<F: Field> ColumnsAir<F> for Rv32AuipcCoreAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32AuipcCoreCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<AB, I> VmCoreAir<AB, I> for Rv32AuipcCoreAir
 where

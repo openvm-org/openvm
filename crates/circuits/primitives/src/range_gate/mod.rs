@@ -46,18 +46,14 @@ impl<T: Clone> RangeGateCols<T> {
 pub const NUM_RANGE_GATE_COLS: usize = size_of::<RangeGateCols<u8>>();
 pub const RANGE_GATE_COL_MAP: RangeGateCols<usize> = make_col_map();
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(RangeGateCols<F>)]
 pub struct RangeCheckerGateAir {
     pub bus: RangeCheckBus,
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for RangeCheckerGateAir {}
 impl<F: Field> PartitionedBaseAir<F> for RangeCheckerGateAir {}
-impl<F: Field> ColumnsAir<F> for RangeCheckerGateAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <RangeGateCols<F> as crate::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<F: Field> BaseAir<F> for RangeCheckerGateAir {
     fn width(&self) -> usize {
         NUM_RANGE_GATE_COLS

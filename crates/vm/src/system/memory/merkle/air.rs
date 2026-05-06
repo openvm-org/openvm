@@ -11,7 +11,8 @@ use openvm_stark_backend::{
 
 use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(MemoryMerkleCols<F, CHUNK>)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
     pub merkle_bus: PermutationCheckBus,
@@ -19,11 +20,6 @@ pub struct MemoryMerkleAir<const CHUNK: usize> {
 }
 
 impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
-impl<const CHUNK: usize, F: Field> ColumnsAir<F> for MemoryMerkleAir<CHUNK> {
-    fn columns(&self) -> Option<Vec<String>> {
-        <MemoryMerkleCols<F, CHUNK> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
     fn width(&self) -> usize {
         MemoryMerkleCols::<F, CHUNK>::width()

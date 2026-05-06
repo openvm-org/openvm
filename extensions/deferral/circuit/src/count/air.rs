@@ -20,7 +20,8 @@ pub struct DeferralCircuitCountCols<T> {
     pub mult: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(DeferralCircuitCountCols<F>)]
 pub struct DeferralCircuitCountAir {
     pub lookup_bus: DeferralCircuitCountBus,
     pub num_deferral_circuits: usize,
@@ -33,11 +34,6 @@ impl<F> BaseAir<F> for DeferralCircuitCountAir {
 }
 impl<F> BaseAirWithPublicValues<F> for DeferralCircuitCountAir {}
 impl<F> PartitionedBaseAir<F> for DeferralCircuitCountAir {}
-impl<F> ColumnsAir<F> for DeferralCircuitCountAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <DeferralCircuitCountCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<AB> Air<AB> for DeferralCircuitCountAir
 where

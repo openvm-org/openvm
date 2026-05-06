@@ -27,7 +27,8 @@ use crate::{
     KECCAK_WORD_SIZE,
 };
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(KeccakfOpCols<F>)]
 pub struct KeccakfOpAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -43,11 +44,6 @@ pub struct KeccakfOpAir {
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfOpAir {}
 impl<F> PartitionedBaseAir<F> for KeccakfOpAir {}
-impl<F> ColumnsAir<F> for KeccakfOpAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <KeccakfOpCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<F> BaseAir<F> for KeccakfOpAir {
     fn width(&self) -> usize {
         NUM_KECCAKF_OP_COLS

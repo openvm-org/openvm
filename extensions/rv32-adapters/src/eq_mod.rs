@@ -63,7 +63,8 @@ pub struct Rv32IsEqualModAdapterCols<
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
 pub struct Rv32IsEqualModAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -87,20 +88,6 @@ impl<
 {
     fn width(&self) -> usize {
         Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width()
-    }
-}
-
-impl<
-        F: Field,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCK_SIZE: usize,
-        const TOTAL_READ_SIZE: usize,
-    > ColumnsAir<F>
-    for Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

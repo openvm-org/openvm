@@ -43,7 +43,8 @@ pub struct Rv32MultAdapterCols<T> {
 
 /// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
 /// Operand d can only be 1, and there is no immediate support.
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32MultAdapterCols<F>)]
 pub struct Rv32MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -52,11 +53,6 @@ pub struct Rv32MultAdapterAir {
 impl<F: Field> BaseAir<F> for Rv32MultAdapterAir {
     fn width(&self) -> usize {
         Rv32MultAdapterCols::<F>::width()
-    }
-}
-impl<F: Field> ColumnsAir<F> for Rv32MultAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32MultAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

@@ -36,7 +36,8 @@ pub struct Rv32BranchAdapterCols<T> {
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32BranchAdapterCols<F>)]
 pub struct Rv32BranchAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -45,11 +46,6 @@ pub struct Rv32BranchAdapterAir {
 impl<F: Field> BaseAir<F> for Rv32BranchAdapterAir {
     fn width(&self) -> usize {
         Rv32BranchAdapterCols::<F>::width()
-    }
-}
-impl<F: Field> ColumnsAir<F> for Rv32BranchAdapterAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32BranchAdapterCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

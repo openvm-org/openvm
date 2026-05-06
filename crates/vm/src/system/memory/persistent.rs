@@ -59,7 +59,8 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 /// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
 ///   `merkle_bus`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(PersistentBoundaryCols<F, CHUNK>)]
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
@@ -74,11 +75,6 @@ impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
 
 impl<const CHUNK: usize, F> BaseAirWithPublicValues<F> for PersistentBoundaryAir<CHUNK> {}
 impl<const CHUNK: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<CHUNK> {}
-impl<const CHUNK: usize, F> ColumnsAir<F> for PersistentBoundaryAir<CHUNK> {
-    fn columns(&self) -> Option<Vec<String>> {
-        <PersistentBoundaryCols<F, CHUNK> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<CHUNK> {
     fn eval(&self, builder: &mut AB) {

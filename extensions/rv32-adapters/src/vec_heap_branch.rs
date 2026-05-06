@@ -59,7 +59,8 @@ pub struct Rv32VecHeapBranchAdapterCols<
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>)]
 pub struct Rv32VecHeapBranchAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -77,14 +78,6 @@ impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_
 {
     fn width(&self) -> usize {
         Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width()
-    }
-}
-
-impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
-    ColumnsAir<F> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 

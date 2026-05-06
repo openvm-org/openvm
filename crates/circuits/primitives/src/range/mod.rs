@@ -45,7 +45,8 @@ pub struct RangePreprocessedCols<T> {
 pub const NUM_RANGE_COLS: usize = size_of::<RangeCols<u8>>();
 pub const NUM_RANGE_PREPROCESSED_COLS: usize = size_of::<RangePreprocessedCols<u8>>();
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(RangeCols<F>)]
 pub struct RangeCheckerAir {
     pub bus: RangeCheckBus,
 }
@@ -58,11 +59,6 @@ impl RangeCheckerAir {
 
 impl<F: Field> BaseAirWithPublicValues<F> for RangeCheckerAir {}
 impl<F: Field> PartitionedBaseAir<F> for RangeCheckerAir {}
-impl<F: Field> ColumnsAir<F> for RangeCheckerAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <RangeCols<F> as crate::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<F: Field> BaseAir<F> for RangeCheckerAir {
     fn width(&self) -> usize {
         NUM_RANGE_COLS

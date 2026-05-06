@@ -49,18 +49,14 @@ pub const NUM_XOR_LOOKUP_PREPROCESSED_COLS: usize = size_of::<XorLookupPreproces
 
 /// Xor via preprocessed lookup table. Can only be used if inputs have less than approximately
 /// 10-bits.
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(XorLookupCols<F>)]
 pub struct XorLookupAir<const M: usize> {
     pub bus: XorBus,
 }
 
 impl<F: Field, const M: usize> BaseAirWithPublicValues<F> for XorLookupAir<M> {}
 impl<F: Field, const M: usize> PartitionedBaseAir<F> for XorLookupAir<M> {}
-impl<F: Field, const M: usize> ColumnsAir<F> for XorLookupAir<M> {
-    fn columns(&self) -> Option<Vec<String>> {
-        <XorLookupCols<F> as crate::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
     fn width(&self) -> usize {
         NUM_XOR_LOOKUP_COLS

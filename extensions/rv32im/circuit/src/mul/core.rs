@@ -30,7 +30,8 @@ pub struct MultiplicationCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub is_valid: T,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
 pub struct MultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
     pub offset: usize,
@@ -46,13 +47,6 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
     for MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>
 {
-}
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir<F>
-    for MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>

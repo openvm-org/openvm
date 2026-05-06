@@ -46,7 +46,8 @@ mod tests;
 /// discriminant.
 const NUM_PHANTOM_OPERANDS: usize = 3;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(PhantomCols<F>)]
 pub struct PhantomAir {
     pub execution_bridge: ExecutionBridge,
     /// Global opcode for PhantomOpcode
@@ -69,11 +70,6 @@ impl<F: Field> BaseAir<F> for PhantomAir {
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for PhantomAir {}
-impl<F: Field> ColumnsAir<F> for PhantomAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <PhantomCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 impl<F: Field> BaseAirWithPublicValues<F> for PhantomAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {

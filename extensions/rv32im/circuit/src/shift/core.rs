@@ -53,7 +53,8 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 /// RV32 shift AIR.
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RV32 specs for SLL/SRL/SRA.
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS>)]
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
@@ -70,13 +71,6 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
     for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
-}
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir<F>
-    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>

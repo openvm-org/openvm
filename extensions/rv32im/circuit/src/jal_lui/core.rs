@@ -38,7 +38,8 @@ pub struct Rv32JalLuiCoreCols<T> {
     pub is_lui: T,
 }
 
-#[derive(Debug, Clone, Copy, derive_new::new)]
+#[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32JalLuiCoreCols<F>)]
 pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
@@ -50,11 +51,6 @@ impl<F: Field> BaseAir<F> for Rv32JalLuiCoreAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiCoreAir {}
-impl<F: Field> ColumnsAir<F> for Rv32JalLuiCoreAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32JalLuiCoreCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<AB, I> VmCoreAir<AB, I> for Rv32JalLuiCoreAir
 where

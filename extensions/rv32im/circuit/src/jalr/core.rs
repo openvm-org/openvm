@@ -46,7 +46,8 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32JalrCoreCols<F>)]
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
@@ -59,11 +60,6 @@ impl<F: Field> BaseAir<F> for Rv32JalrCoreAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrCoreAir {}
-impl<F: Field> ColumnsAir<F> for Rv32JalrCoreAir {
-    fn columns(&self) -> Option<Vec<String>> {
-        <Rv32JalrCoreCols<F> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<AB, I> VmCoreAir<AB, I> for Rv32JalrCoreAir
 where

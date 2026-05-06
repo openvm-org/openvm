@@ -32,7 +32,8 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
     pub diff_inv_marker: [T; NUM_LIMBS],
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(BranchEqualCoreCols<F, NUM_LIMBS>)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
     offset: usize,
     pc_step: u32,
@@ -46,11 +47,6 @@ impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIM
 impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F>
     for BranchEqualCoreAir<NUM_LIMBS>
 {
-}
-impl<F: Field, const NUM_LIMBS: usize> ColumnsAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
-    fn columns(&self) -> Option<Vec<String>> {
-        <BranchEqualCoreCols<F, NUM_LIMBS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
 }
 
 impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualCoreAir<NUM_LIMBS>

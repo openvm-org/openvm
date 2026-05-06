@@ -68,7 +68,8 @@ pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     pub c_lt_mark: T,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(ModularIsEqualCoreCols<F, READ_LIMBS>)]
 pub struct ModularIsEqualCoreAir<
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
@@ -112,13 +113,6 @@ impl<F: Field, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BIT
 impl<F: Field, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
     BaseAirWithPublicValues<F> for ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 {
-}
-impl<F: Field, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    ColumnsAir<F> for ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <ModularIsEqualCoreCols<F, READ_LIMBS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
 }
 
 impl<AB, I, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>

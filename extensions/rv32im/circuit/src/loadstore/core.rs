@@ -63,7 +63,8 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[columns_via(LoadStoreCoreCols<F, NUM_CELLS>)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
@@ -75,11 +76,6 @@ impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for LoadStoreCoreAir<NUM_CELLS
 }
 
 impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F> for LoadStoreCoreAir<NUM_CELLS> {}
-impl<F: Field, const NUM_CELLS: usize> ColumnsAir<F> for LoadStoreCoreAir<NUM_CELLS> {
-    fn columns(&self) -> Option<Vec<String>> {
-        <LoadStoreCoreCols<F, NUM_CELLS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
-}
 
 impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<NUM_CELLS>
 where

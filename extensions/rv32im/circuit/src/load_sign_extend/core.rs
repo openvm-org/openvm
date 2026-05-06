@@ -51,7 +51,8 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub prev_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[columns_via(LoadSignExtendCoreCols<F, NUM_CELLS>)]
 pub struct LoadSignExtendCoreAir<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
 }
@@ -67,13 +68,6 @@ impl<F: Field, const NUM_CELLS: usize, const LIMB_BITS: usize> BaseAir<F>
 impl<F: Field, const NUM_CELLS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
     for LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>
 {
-}
-impl<F: Field, const NUM_CELLS: usize, const LIMB_BITS: usize> ColumnsAir<F>
-    for LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>
-{
-    fn columns(&self) -> Option<Vec<String>> {
-        <LoadSignExtendCoreCols<F, NUM_CELLS> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
-    }
 }
 
 impl<AB, I, const NUM_CELLS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
