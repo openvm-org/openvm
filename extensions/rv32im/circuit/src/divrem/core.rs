@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     utils::{not, select},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 use strum::IntoEnumIterator;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // b = c * q + r for some 0 <= |r| < |c| and sign(r) = sign(b) or r = 0.
     pub b: [T; NUM_LIMBS],
@@ -66,7 +66,8 @@ pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_remu_flag: T,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(DivRemCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct DivRemCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,

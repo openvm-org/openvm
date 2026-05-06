@@ -18,7 +18,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -42,7 +42,7 @@ use openvm_stark_backend::{
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv32VecHeapBranchAdapterCols<
     T,
     const NUM_READS: usize,
@@ -59,7 +59,8 @@ pub struct Rv32VecHeapBranchAdapterCols<
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32VecHeapBranchAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, READ_SIZE>)]
 pub struct Rv32VecHeapBranchAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,

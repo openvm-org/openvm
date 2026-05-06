@@ -1,6 +1,8 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -21,7 +23,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub(in crate::whir::final_poly_query_eval) struct FinalPolyQueryEvalCols<T> {
     pub is_enabled: T,
     // loop indices
@@ -48,7 +50,8 @@ pub(in crate::whir::final_poly_query_eval) struct FinalPolyQueryEvalCols<T> {
     pub do_carry: T,
 }
 
-#[derive(Debug)]
+#[derive(Debug, ColumnsAir)]
+#[columns_via(FinalPolyQueryEvalCols<u8>)]
 pub struct FinalPolyQueryEvalAir {
     pub query_bus: WhirQueryBus,
     pub alpha_bus: WhirAlphaBus,

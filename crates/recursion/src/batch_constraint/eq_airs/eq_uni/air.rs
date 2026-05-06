@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -22,7 +22,7 @@ use crate::{
     utils::{assert_one_ext, ext_field_add, ext_field_multiply, ext_field_one_minus},
 };
 
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, Clone, Copy, StructReflection)]
 #[repr(C)]
 pub struct EqUniCols<T> {
     pub is_valid: T,
@@ -35,6 +35,8 @@ pub struct EqUniCols<T> {
     pub idx: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(EqUniCols<u8>)]
 pub struct EqUniAir {
     pub zero_n_bus: EqZeroNBus,
     pub r_xi_bus: BatchConstraintConductorBus,

@@ -16,6 +16,7 @@ zkhash = { workspace = true }
 
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
+openvm-circuit-primitives = { workspace = true, default-features = false }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 

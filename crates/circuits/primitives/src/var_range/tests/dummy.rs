@@ -6,12 +6,14 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::var_range::bus::VariableRangeCheckerBus;
+use crate::{var_range::bus::VariableRangeCheckerBus, ColumnsAir};
 
 // dummy AIR for testing VariableRangeCheckerBus::send
 pub struct TestSendAir {
     bus: VariableRangeCheckerBus,
 }
+// No columns provided: test dummy whose 2-element row `[value, max_bits]` has no `Cols` struct.
+impl ColumnsAir for TestSendAir {}
 
 impl TestSendAir {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
@@ -45,6 +47,8 @@ pub struct TestRangeCheckAir {
     bus: VariableRangeCheckerBus,
     max_bits: usize,
 }
+// No columns provided: test dummy whose single-column row `[value]` has no `Cols` struct.
+impl ColumnsAir for TestRangeCheckAir {}
 
 impl TestRangeCheckAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
@@ -85,6 +89,7 @@ pub mod cuda {
 
     use crate::{
         cuda_abi::var_range::dummy_tracegen, var_range::VariableRangeCheckerChipGPU, Chip,
+        ColumnsAir,
     };
 
     /// Width of the dummy trace: [count, value, bits] = 3 columns

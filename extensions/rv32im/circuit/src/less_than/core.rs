@@ -10,7 +10,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -24,7 +24,7 @@ use openvm_stark_backend::{
 use strum::IntoEnumIterator;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
@@ -44,7 +44,8 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub diff_val: T,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(LessThanCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct LessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
     offset: usize,

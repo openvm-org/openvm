@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, iter};
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
@@ -32,6 +33,10 @@ pub struct KeccakfPermAir {
     /// poststate_u16_limbs`
     pub keccakf_state_bus: PermutationCheckBus,
 }
+
+// No columns provided: `KeccakfPermCols` embeds external `KeccakCols` (from `p3-keccak-air`)
+// which doesn't derive `StructReflection`.
+impl ColumnsAir for KeccakfPermAir {}
 
 impl<T: Copy> KeccakfPermCols<T> {
     pub fn postimage(&self, y: usize, x: usize, limb: usize) -> T {

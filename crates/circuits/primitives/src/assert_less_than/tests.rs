@@ -34,6 +34,7 @@ use super::*;
 use crate::{
     utils::test_engine_small,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 
 // We only create an Air for testing purposes
@@ -41,7 +42,7 @@ use crate::{
 // repr(C) is needed to make sure that the compiler does not reorder the fields
 // we assume the order of the fields when using borrow or borrow_mut
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug, new)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug, new)]
 pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub x: T,
     pub y: T,
@@ -49,7 +50,8 @@ pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(AssertLessThanCols<u8, AUX_LEN>)]
 pub struct AssertLtTestAir<const AUX_LEN: usize>(pub AssertLtSubAir);
 
 impl<F: Field, const AUX_LEN: usize> BaseAirWithPublicValues<F> for AssertLtTestAir<AUX_LEN> {}

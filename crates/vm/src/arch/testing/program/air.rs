@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
@@ -14,6 +15,9 @@ pub struct ProgramDummyAir {
     pub bus: ProgramBus,
 }
 
+// No columns provided: test dummy whose row is `ProgramExecutionCols` plus a trailing `count`
+// column, with no matching `Cols` struct.
+impl ColumnsAir for ProgramDummyAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramDummyAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramDummyAir {}
 impl<F: Field> BaseAir<F> for ProgramDummyAir {

@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -30,7 +30,7 @@ use crate::adapters::{
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv32AuipcCoreCols<T> {
     pub is_valid: T,
     // The limbs of the immediate except the least significant limb since it is always 0
@@ -40,7 +40,8 @@ pub struct Rv32AuipcCoreCols<T> {
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
-#[derive(Debug, Clone, Copy, derive_new::new)]
+#[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32AuipcCoreCols<u8>)]
 pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }

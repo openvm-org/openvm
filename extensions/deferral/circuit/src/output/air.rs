@@ -11,6 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -40,7 +41,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralOutputCols<T> {
     // Indicates the status of this row, i.e. if it is valid and where it is in a
     // section of rows that correspond to a single opcode invocation
@@ -84,7 +85,8 @@ pub struct DeferralOutputCols<T> {
     pub poseidon2_res: [T; DIGEST_SIZE],
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(DeferralOutputCols<u8>)]
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

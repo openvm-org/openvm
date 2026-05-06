@@ -9,7 +9,9 @@ use openvm_circuit::{
         SystemPort,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
+};
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -37,6 +39,10 @@ pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     pub offset: usize,
     _phantom: PhantomData<C>,
 }
+
+// No columns provided: width is the config-dependent `C::MAIN_CHIP_WIDTH` and rows are accessed
+// via `Sha2ColsRef` (a slice-borrowing ref struct, no static `Cols`).
+impl<C: Sha2MainChipConfig> ColumnsAir for Sha2MainAir<C> {}
 
 impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
     pub fn new(

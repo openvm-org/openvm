@@ -1,7 +1,7 @@
 use core::array;
 use std::{borrow::Borrow, sync::Arc};
 
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
@@ -118,6 +118,9 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub cnt_proofs: usize,
     pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
+// No columns provided: width is dynamic, depending on `cnt_proofs` and on whether
+// `dag_commit_subair` is present, and mixes several column structs.
+impl<F: Field> ColumnsAir for SymbolicExpressionAir<F> {}
 
 impl<F: Field> SymbolicExpressionAir<F> {
     fn has_cached(&self) -> bool {

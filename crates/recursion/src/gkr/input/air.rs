@@ -3,7 +3,7 @@ use core::borrow::Borrow;
 use openvm_circuit_primitives::{
     is_zero::{IsZeroAuxCols, IsZeroIo, IsZeroSubAir},
     utils::{assert_array_eq, not, or},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -30,7 +30,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct GkrInputCols<T> {
     /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
@@ -63,6 +63,8 @@ pub struct GkrInputCols<T> {
 }
 
 /// The GkrInputAir handles reading and passing the GkrInput
+#[derive(ColumnsAir)]
+#[columns_via(GkrInputCols<u8>)]
 pub struct GkrInputAir {
     // System Params
     pub l_skip: usize,

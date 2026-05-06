@@ -1,5 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, marker::PhantomData};
 
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -243,6 +244,18 @@ where
 {
 }
 
+impl<A, M> ColumnsAir for VmAirWrapper<A, M>
+where
+    A: ColumnsAir,
+    M: ColumnsAir,
+{
+    fn columns(&self) -> Option<Vec<String>> {
+        let adapter_cols = self.adapter.columns()?;
+        let core_cols = self.core.columns()?;
+        Some(adapter_cols.into_iter().chain(core_cols).collect())
+    }
+}
+
 impl<AB, A, M> Air<AB> for VmAirWrapper<A, M>
 where
     AB: AirBuilder,
@@ -380,7 +393,7 @@ pub struct DynArray<T>(pub Vec<T>);
 // =================================================================================================
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct MinimalInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
@@ -389,7 +402,7 @@ pub struct MinimalInstruction<T> {
 
 // This ProcessedInstruction is used by rv32_rdwrite
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct ImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
@@ -399,7 +412,7 @@ pub struct ImmInstruction<T> {
 
 // This ProcessedInstruction is used by rv32_jalr
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct SignedImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number

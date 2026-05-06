@@ -21,14 +21,14 @@ use openvm_stark_backend::{
 };
 
 use super::bus::XorBus;
-use crate::Chip;
+use crate::{Chip, ColumnsAir, StructReflection, StructReflectionHelper};
 
 #[cfg(test)]
 mod tests;
 
 /// Columns for the main trace of the XOR lookup
 #[repr(C)]
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorLookupCols<T> {
     /// Multiplicity counter tracking the number of XOR operations requested for each triple
     pub mult: T,
@@ -36,7 +36,7 @@ pub struct XorLookupCols<T> {
 
 /// Columns for the preprocessed table of the XOR lookup
 #[repr(C)]
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,
@@ -49,7 +49,8 @@ pub const NUM_XOR_LOOKUP_PREPROCESSED_COLS: usize = size_of::<XorLookupPreproces
 
 /// Xor via preprocessed lookup table. Can only be used if inputs have less than approximately
 /// 10-bits.
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(XorLookupCols<u8>)]
 pub struct XorLookupAir<const M: usize> {
     pub bus: XorBus,
 }

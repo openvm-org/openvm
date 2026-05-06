@@ -28,17 +28,21 @@ use {
 };
 
 use super::{IsZeroIo, IsZeroSubAir};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsZeroCols<T> {
     pub x: T,
     pub out: T,
     pub inv: T,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, ColumnsAir)]
+#[columns_via(IsZeroCols<u8>)]
 pub struct IsZeroTestAir(IsZeroSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsZeroTestAir {}

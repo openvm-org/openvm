@@ -8,7 +8,7 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir};
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -27,7 +27,8 @@ use crate::{
     KECCAK_WORD_SIZE,
 };
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(KeccakfOpCols<u8>)]
 pub struct KeccakfOpAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

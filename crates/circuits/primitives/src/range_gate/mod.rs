@@ -20,12 +20,13 @@ use openvm_stark_backend::{
 };
 
 pub use crate::range::RangeCheckBus;
+use crate::{ColumnsAir, StructReflection, StructReflectionHelper};
 
 #[cfg(test)]
 mod tests;
 
 #[repr(C)]
-#[derive(Copy, Clone, Default, AlignedBorrow)]
+#[derive(Copy, Clone, Default, AlignedBorrow, StructReflection)]
 pub struct RangeGateCols<T> {
     /// Column with sequential values from 0 to range_max-1
     pub counter: T,
@@ -45,7 +46,8 @@ impl<T: Clone> RangeGateCols<T> {
 pub const NUM_RANGE_GATE_COLS: usize = size_of::<RangeGateCols<u8>>();
 pub const RANGE_GATE_COL_MAP: RangeGateCols<usize> = make_col_map();
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(RangeGateCols<u8>)]
 pub struct RangeCheckerGateAir {
     pub bus: RangeCheckBus,
 }

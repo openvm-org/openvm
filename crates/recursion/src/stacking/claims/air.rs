@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -28,7 +28,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct StackingClaimsCols<F> {
     // Proof index columns for continuations
     pub proof_idx: F,
@@ -69,6 +69,8 @@ pub struct StackingClaimsCols<F> {
     pub whir_claim: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(StackingClaimsCols<u8>)]
 pub struct StackingClaimsAir {
     // External buses
     pub stacking_indices_bus: StackingIndicesBus,

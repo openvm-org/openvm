@@ -1,7 +1,9 @@
 use core::borrow::Borrow;
 use std::array::from_fn;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -21,7 +23,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols<T> {
     pub is_enabled: T,
     // Indices
@@ -42,6 +44,8 @@ pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols
     pub yi: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(NonInitialOpenedValuesCols<u8>)]
 pub struct NonInitialOpenedValuesAir {
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,

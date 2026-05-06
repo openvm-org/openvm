@@ -27,10 +27,13 @@ use {
 };
 
 use super::{IsEqSubAir, IsEqualIo};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsEqualCols<T> {
     pub x: T,
     pub y: T,
@@ -38,7 +41,8 @@ pub struct IsEqualCols<T> {
     pub inv: T,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(IsEqualCols<u8>)]
 pub struct IsEqTestAir(pub IsEqSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}

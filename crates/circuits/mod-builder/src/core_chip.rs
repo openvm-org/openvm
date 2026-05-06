@@ -13,7 +13,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    ColumnsAir, SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -50,6 +50,9 @@ pub struct FieldExpressionCoreAir {
     //   opcode_flag_idx = [0, 1], where 0 is mul_flag, 1 is div_flag, in the builder
     // We don't support 2-op chip that doesn't need setup right now.
 }
+
+// No columns provided: wraps `FieldExpr`, whose column layout is built dynamically.
+impl ColumnsAir for FieldExpressionCoreAir {}
 
 impl FieldExpressionCoreAir {
     pub fn new(

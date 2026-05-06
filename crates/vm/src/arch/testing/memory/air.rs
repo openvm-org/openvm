@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use openvm_circuit_primitives::Chip;
+use openvm_circuit_primitives::{Chip, ColumnsAir};
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -72,6 +72,9 @@ pub struct MemoryDummyAir {
 
 impl<F> BaseAirWithPublicValues<F> for MemoryDummyAir {}
 impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
+// No columns provided: test dummy whose columns are accessed via `DummyMemoryInteractionColsRef`,
+// a slice-borrowing ref struct rather than a reflectable owned struct.
+impl ColumnsAir for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
         DEFAULT_BLOCK_SIZE + 4

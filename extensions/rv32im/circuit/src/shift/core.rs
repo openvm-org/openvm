@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 use strum::IntoEnumIterator;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
@@ -53,7 +53,8 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 /// RV32 shift AIR.
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RV32 specs for SLL/SRL/SRA.
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(ShiftCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
