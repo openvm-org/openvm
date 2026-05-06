@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_circuit_primitives::{ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper, SubAir};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
     PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,

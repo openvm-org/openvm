@@ -1,6 +1,10 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo}, utils::{assert_array_eq, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
+    utils::{assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,

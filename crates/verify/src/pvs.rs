@@ -11,7 +11,9 @@ pub const CONSTRAINT_EVAL_AIR_ID: usize = 3;
 pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
 
 #[repr(C)]
-#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(
+    AlignedBorrow, StructReflection, Clone, Copy, Debug, Serialize, Deserialize, PartialEq,
+)]
 pub struct VkCommit<F> {
     /// Cached trace commit of this verifier circuit's SymbolicExpressionAir, which is derived
     /// from its child_vk.

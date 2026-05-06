@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::{and, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::{and, not},
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,

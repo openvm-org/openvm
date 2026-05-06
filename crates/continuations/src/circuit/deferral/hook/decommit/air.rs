@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::not, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::not, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit::utils::assert_zeros;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{

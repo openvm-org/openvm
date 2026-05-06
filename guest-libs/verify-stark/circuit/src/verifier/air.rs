@@ -1,7 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
-use openvm_circuit_primitives::{utils::assert_array_eq, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_continuations::{
     circuit::{
         deferral::DeferralCircuitPvs,

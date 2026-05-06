@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::not, AlignedBorrow, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::not, AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };

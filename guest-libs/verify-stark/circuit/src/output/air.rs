@@ -1,7 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{utils::assert_array_eq, AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_continuations::utils::digests_to_poseidon2_input;
 use openvm_deferral_circuit::canonicity::{CanonicityAuxCols, CanonicitySubAir};
 use openvm_recursion_circuit::{

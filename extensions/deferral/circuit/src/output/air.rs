@@ -8,7 +8,11 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::{assert_array_eq, not}, ColumnsAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus,
+    utils::{assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{

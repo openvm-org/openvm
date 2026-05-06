@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 use std::convert::Into;
 
-use openvm_circuit_primitives::{ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,

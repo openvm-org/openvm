@@ -1,6 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{utils::{and, not}, ColumnsAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::{and, not},
+    ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, PreHashBus, PreHashMessage, PublicValuesBus,
     PublicValuesBusMessage,

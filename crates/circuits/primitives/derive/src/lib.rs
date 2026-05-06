@@ -47,10 +47,12 @@ pub fn columns_air_derive(input: TokenStream) -> TokenStream {
         Err(err) => return err.to_compile_error().into(),
     };
 
-    let has_f_generic = ast.generics.params.iter().any(|p| matches!(
-        p,
-        GenericParam::Type(t) if t.ident == "F"
-    ));
+    let has_f_generic = ast.generics.params.iter().any(|p| {
+        matches!(
+            p,
+            GenericParam::Type(t) if t.ident == "F"
+        )
+    });
 
     let mut impl_generics_owned = ast.generics.clone();
     if !has_f_generic {

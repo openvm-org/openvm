@@ -1,7 +1,10 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_circuit_primitives::{utils::{and, assert_array_eq, not}, ColumnsAir, SubAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::{and, assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, PreHashBus, PreHashMessage, PublicValuesBus,

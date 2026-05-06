@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 
 use openvm_circuit::system::connector::DEFAULT_SUSPEND_EXIT_CODE;
-use openvm_circuit_primitives::{utils::{and, assert_array_eq, not}, ColumnsAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::{and, assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage,
 };

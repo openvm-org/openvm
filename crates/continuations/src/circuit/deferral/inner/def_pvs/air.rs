@@ -1,6 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{utils::{assert_array_eq, not}, ColumnsAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    utils::{assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_recursion_circuit::{
     bus::{
         Poseidon2CompressBus, Poseidon2CompressMessage, PublicValuesBus, PublicValuesBusMessage,
