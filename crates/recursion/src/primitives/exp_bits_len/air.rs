@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::ColumnsAir;
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -16,7 +16,7 @@ use crate::primitives::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct ExpBitsLenCols<T> {
     /// Marks rows that belong to an `ExpBitsLen` request rather than trailing padding.
     pub is_valid: T,
@@ -53,7 +53,8 @@ pub struct ExpBitsLenCols<T> {
     pub shift_mult: T,
 }
 
-#[derive(Debug, derive_new::new)]
+#[derive(Debug, derive_new::new, ColumnsAir)]
+#[columns_via(ExpBitsLenCols<F>)]
 pub struct ExpBitsLenAir {
     pub exp_bits_len_bus: ExpBitsLenBus,
     pub right_shift_bus: RightShiftBus,
@@ -69,7 +70,6 @@ fn assert_babybear_field<F: PrimeField32>() {
 
 impl<F: PrimeField32> BaseAirWithPublicValues<F> for ExpBitsLenAir {}
 impl<F: PrimeField32> PartitionedBaseAir<F> for ExpBitsLenAir {}
-impl<F: PrimeField32> ColumnsAir<F> for ExpBitsLenAir {}
 
 impl<F: PrimeField32> BaseAir<F> for ExpBitsLenAir {
     fn width(&self) -> usize {
