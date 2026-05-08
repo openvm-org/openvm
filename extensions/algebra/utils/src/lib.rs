@@ -4,6 +4,11 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
 use rand::RngCore;
 
+/// Deterministic seed for the non-QR rng. Shared so `NonQrHintSubEx`
+/// (circuit-side) and `ModularRvrExtension`/`Fp2RvrExtension` (rvr lift-side)
+/// produce identical non-QRs for the same modulus list.
+pub const NQR_RNG_SEED: [u8; 32] = [0u8; 32];
+
 /// Returns a non-quadratic residue in the field of order `modulus`.
 ///
 /// Uses fixed shortcuts when `modulus % 4 == 3` (return `-1`) or

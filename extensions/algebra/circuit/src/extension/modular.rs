@@ -3,7 +3,7 @@ use std::{array, sync::Arc};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
-use openvm_algebra_utils::find_non_qr;
+use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_circuit::{
     self,
     arch::{
@@ -532,7 +532,7 @@ pub(crate) mod phantom {
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
-    use super::{find_non_qr, mod_sqrt};
+    use super::{find_non_qr, mod_sqrt, NQR_RNG_SEED};
     use crate::{NUM_LIMBS_32, NUM_LIMBS_48};
 
     #[derive(derive_new::new)]
@@ -625,7 +625,7 @@ pub(crate) mod phantom {
             // instances of the VM. The seed determines the runtime of Tonelli-Shanks, if the
             // algorithm is necessary, which affects the time it takes to construct and initialize
             // the VM but does not affect the runtime.
-            let mut rng = StdRng::from_seed([0u8; 32]);
+            let mut rng = StdRng::from_seed(NQR_RNG_SEED);
             let non_qrs = supported_moduli
                 .iter()
                 .map(|modulus| find_non_qr(modulus, &mut rng))

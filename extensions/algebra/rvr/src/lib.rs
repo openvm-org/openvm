@@ -13,9 +13,6 @@ pub use fp2::{Fp2ArithInstr, Fp2RvrExtension, Fp2SetupInstr};
 pub use modular::{
     HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModIsEqInstr, ModSetupInstr, ModularRvrExtension,
 };
-use num_bigint::BigUint;
-use openvm_algebra_utils::find_non_qr;
-use rand::{rngs::StdRng, SeedableRng};
 
 // ── Modular arithmetic operations ────────────────────────────────────────────
 
@@ -164,59 +161,6 @@ pub(crate) fn detect_known_field(modulus_bytes: &[u8]) -> Option<KnownField> {
         .iter()
         .find(|(bytes, _)| *bytes == modulus_bytes)
         .map(|(_, f)| *f)
-}
-
-// ── Shared infrastructure ────────────────────────────────────────────────────
-
-/// Per-modulus info shared by the algebra extensions.
-pub(crate) struct ModulusInfo {
-    pub(crate) modulus_bytes: Vec<u8>,
-    pub(crate) non_qr_bytes: Vec<u8>,
-    pub(crate) num_limbs: u32,
-}
-
-pub(crate) fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
-    // Use the same deterministic seed as OpenVM for non-QR computation.
-    // For ModularRvrExtension this matches the circuit-side
-    // `NonQrHintSubEx::new` (also `StdRng::from_seed([0u8; 32])`, single rng
-    // across the full modulus list), so rvr-emitted NQRs match what the
-    // circuit would compute.
-    //
-    // TODO: Fp2RvrExtension also calls this, but `try_lift_fp2` never reads
-    // `info.non_qr_bytes` — Fp2 NQR computation is dead work today. It also
-    // has a latent non-determinism: the same modulus appearing in both
-    // `moduli` and `fp2_moduli` is processed by two independent rngs (each
-    // freshly seeded here), so for primes that fall through to
-    // rejection-sampling in `find_non_qr` (anything not `p ≡ 3 (mod 4)` or
-    // `p ≡ 5 (mod 8)`), the NQR for the same prime can differ between lists.
-    // If a future Fp2 phantom ever consumes `info.non_qr_bytes`, this will
-    // diverge from what the circuit computes. Either drop NQR computation
-    // for fp2 (use a `make_fp2_moduli` that fills num_limbs+modulus_bytes
-    // only), or share rng state with the modular list.
-    let mut rng = StdRng::from_seed([0u8; 32]);
-    moduli
-        .into_iter()
-        .map(|m| make_modulus_info(&m, &mut rng))
-        .collect()
-}
-
-fn make_modulus_info(modulus: &BigUint, rng: &mut StdRng) -> ModulusInfo {
-    let bytes = modulus.bits().div_ceil(8) as usize;
-    assert!(
-        bytes <= 48,
-        "modulus exceeds maximum supported size of 384 bits"
-    );
-    let num_limbs = if bytes <= 32 { 32u32 } else { 48u32 };
-    let mut modulus_bytes = modulus.to_bytes_le();
-    modulus_bytes.resize(num_limbs as usize, 0);
-    let non_qr = find_non_qr(modulus, rng);
-    let mut non_qr_bytes = non_qr.to_bytes_le();
-    non_qr_bytes.resize(num_limbs as usize, 0);
-    ModulusInfo {
-        modulus_bytes,
-        non_qr_bytes,
-        num_limbs,
-    }
 }
 
 /// Format a byte slice as a C array initializer: `{0x2f, 0xfc, ...}`

@@ -35,10 +35,12 @@ fn main() {
         "cargo:rustc-env=RVR_ALGEBRA_FP2_FFI_STATICLIB={}",
         fp2_path.display()
     );
+    println!("cargo:rerun-if-changed=ffi/common/Cargo.toml");
+    println!("cargo:rerun-if-changed=ffi/common/src/lib.rs");
     println!("cargo:rerun-if-changed=ffi/modular/Cargo.toml");
-    println!("cargo:rerun-if-changed=ffi/modular/src");
+    println!("cargo:rerun-if-changed=ffi/modular/src/lib.rs");
     println!("cargo:rerun-if-changed=ffi/fp2/Cargo.toml");
-    println!("cargo:rerun-if-changed=ffi/fp2/src");
+    println!("cargo:rerun-if-changed=ffi/fp2/src/lib.rs");
 }
 
 fn build_subffi(crate_dir: &Path, target_dir: &Path, lib_name: &str, crate_name: &str) -> PathBuf {

@@ -5,13 +5,53 @@ use std::path::{Path, PathBuf};
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
+use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
+use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
-use crate::{detect_known_field, format_c_byte_array, make_moduli, ModOp, ModulusInfo};
+use crate::{detect_known_field, format_c_byte_array, ModOp};
+
+/// Per-modulus info for the modular extension. Includes a precomputed non-QR
+/// for the `HintNonQr` / `HintSqrt` phantoms.
+struct ModulusInfo {
+    modulus_bytes: Vec<u8>,
+    non_qr_bytes: Vec<u8>,
+    num_limbs: u32,
+}
+
+fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
+    // Use the same deterministic seed as the circuit-side `NonQrHintSubEx::new`
+    // (single rng across the full modulus list), so rvr-emitted NQRs match
+    // what the circuit would compute.
+    let mut rng = StdRng::from_seed(NQR_RNG_SEED);
+    moduli
+        .into_iter()
+        .map(|m| make_modulus_info(&m, &mut rng))
+        .collect()
+}
+
+fn make_modulus_info(modulus: &BigUint, rng: &mut StdRng) -> ModulusInfo {
+    let bytes = modulus.bits().div_ceil(8) as usize;
+    assert!(
+        bytes <= 48,
+        "modulus exceeds maximum supported size of 384 bits"
+    );
+    let num_limbs = if bytes <= 32 { 32u32 } else { 48u32 };
+    let mut modulus_bytes = modulus.to_bytes_le();
+    modulus_bytes.resize(num_limbs as usize, 0);
+    let non_qr = find_non_qr(modulus, rng);
+    let mut non_qr_bytes = non_qr.to_bytes_le();
+    non_qr_bytes.resize(num_limbs as usize, 0);
+    ModulusInfo {
+        modulus_bytes,
+        non_qr_bytes,
+        num_limbs,
+    }
+}
 
 // ── Modular arithmetic IR ────────────────────────────────────────────────────
 
