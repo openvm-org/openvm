@@ -122,7 +122,17 @@ where
 pub struct Keccak256;
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {}
+impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {
+    fn extend_rvr(
+        &self,
+        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
+        ctx: &rvr_openvm_lift::RvrExtensionCtx,
+    ) {
+        let ext = rvr_openvm_ext_keccak::KeccakExtension::new(ctx)
+            .expect("failed to construct rvr KeccakExtension");
+        registry.register(ext);
+    }
+}
 
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
