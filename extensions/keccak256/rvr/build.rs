@@ -15,7 +15,13 @@ fn main() {
 
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let status = Command::new(&cargo)
-        .args(["build", "--release", "--manifest-path"])
+        .args([
+            "build",
+            "--release",
+            "--config",
+            "profile.release.lto=false",
+            "--manifest-path",
+        ])
         .arg(&ffi_manifest)
         .arg("--target-dir")
         .arg(&ffi_target_dir)
