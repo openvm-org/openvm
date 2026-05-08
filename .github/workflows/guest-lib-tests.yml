@@ -29,13 +29,14 @@ jobs:
     strategy:
       matrix:
         crate:
-          - { name: "sha2", path: "sha2" }
-          - { name: "keccak256", path: "keccak256" }
-          - { name: "ff_derive", path: "ff_derive" }
-          - { name: "k256", path: "k256" }
-          - { name: "p256", path: "p256" }
-          - { name: "pairing", path: "pairing" }
-          - { name: "verify-stark", path: "verify-stark/circuit" }
+          - { name: "sha2", path: "sha2", rvr: false }
+          - { name: "keccak256", path: "keccak256", rvr: false }
+          - { name: "ff_derive", path: "ff_derive", rvr: false }
+          - { name: "k256", path: "k256", rvr: false }
+          - { name: "p256", path: "p256", rvr: false }
+          - { name: "pairing", path: "pairing", rvr: false }
+          - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
+          - { name: "keccak256", path: "keccak256", rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
@@ -49,6 +50,11 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
+      - name: Init keccak rvr FFI submodules
+        if: matrix.crate.name == 'keccak256' && matrix.crate.rvr == true
+        run: |
+          git submodule update --init extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init extensions/keccak256/rvr/ffi/xkcp
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -72,12 +78,22 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ${{ matrix.crate.name }} guest library tests
+      - name: Install clang-22 and lld (required for rvr)
+        if: matrix.crate.rvr == true
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
+
+      - name: Run ${{ format('{0}{1}', matrix.crate.name, matrix.crate.rvr && '-rvr' || '') }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
           EXTRA_ARGS=()
-          if [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
+          if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
+            EXTRA_ARGS+=(--features=rvr)
+          elif [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
             EXTRA_ARGS+=(--features=aot)
           elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             EXTRA_ARGS+=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
