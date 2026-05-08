@@ -62,7 +62,6 @@ jobs:
           - { extension: cuda, mode: default }
           - { extension: cuda, mode: aot }
           - { extension: cuda, mode: rvr }
-          - { extension: keccak256, mode: rvr }
           - { extension: sha2, mode: rvr }
           - { extension: bigint, mode: rvr }
           - { extension: algebra, mode: rvr }

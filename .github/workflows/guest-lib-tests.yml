@@ -61,14 +61,22 @@ jobs:
   integration-tests:
     needs: changes
     if: needs.changes.outputs.crates != '[]'
-    name: ${{ matrix.crate }}
+    name: ${{ format('{0} ({1})', matrix.crate, matrix.mode == 'rvr' && 'RVR' || matrix.mode) }}
     strategy:
       matrix:
         crate: ${{ fromJSON(needs.changes.outputs.crates) }}
-        mode: [default]
+        mode: [default, rvr]
         exclude:
           - { crate: shared, mode: default }
+          - { crate: shared, mode: rvr }
           - { crate: cuda, mode: default }
+          - { crate: cuda, mode: rvr }
+          - { crate: sha2, mode: rvr }
+          - { crate: ff_derive, mode: rvr }
+          - { crate: k256, mode: rvr }
+          - { crate: p256, mode: rvr }
+          - { crate: pairing, mode: rvr }
+          - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/guest-lib-tests.group.yml
