@@ -2,23 +2,20 @@
 //!
 //! Provides IR nodes for modular arithmetic (ADD, SUB, MUL, DIV, IS_EQ, SETUP),
 //! Fp2 (complex extension field) operations, and phantom instructions
-//! (HintNonQr, HintSqrt). Lifting/codegen is split across two `RvrExtension`s:
-//! [`ModularRvrExtension`] owns the modular ops, phantoms, and the FFI
-//! infrastructure (headers, sources, staticlib, secp256k1); [`Fp2RvrExtension`]
-//! owns fp2 ops only and relies on the modular half being registered for the
-//! shared FFI infra.
+//! (HintNonQr, HintSqrt). Lifting/codegen splits across [`ModularRvrExtension`]
+//! (modular + phantoms; ships the lift-time C and libsecp256k1 inputs for
+//! k256) and [`Fp2RvrExtension`] (fp2 ops only; Rust-only).
 
-use std::path::{Path, PathBuf};
+mod fp2;
+mod modular;
 
+pub use fp2::{Fp2ArithInstr, Fp2RvrExtension, Fp2SetupInstr};
+pub use modular::{
+    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModIsEqInstr, ModSetupInstr, ModularRvrExtension,
+};
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::{Fp2Opcode, ModularPhantom, Rv32ModularArithmeticOpcode};
 use openvm_algebra_utils::find_non_qr;
-use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
-use strum::EnumCount;
 
 // ── Modular arithmetic operations ────────────────────────────────────────────
 
@@ -34,7 +31,7 @@ pub enum ModOp {
 impl ModOp {
     /// Lower-case op name used as a suffix in the generated C function name
     /// (e.g. `rvr_ext_mod_add`, `rvr_ext_mod_sub_k256_coord`).
-    fn c_name(self) -> &'static str {
+    pub(crate) fn c_name(self) -> &'static str {
         match self {
             Self::Add => "add",
             Self::Sub => "sub",
@@ -48,7 +45,7 @@ impl ModOp {
 
 /// Known field types that have optimized native FFI implementations.
 #[derive(Debug, Clone, Copy)]
-enum KnownField {
+pub(crate) enum KnownField {
     K256Coord,
     K256Scalar,
     P256Coord,
@@ -61,7 +58,7 @@ enum KnownField {
 
 impl KnownField {
     /// C function name suffix for this field.
-    fn c_suffix(self) -> &'static str {
+    pub(crate) fn c_suffix(self) -> &'static str {
         match self {
             Self::K256Coord => "k256_coord",
             Self::K256Scalar => "k256_scalar",
@@ -75,7 +72,7 @@ impl KnownField {
     }
 
     /// Fp2 C function name suffix (only valid for base fields of Fp2-capable curves).
-    fn fp2_c_suffix(self) -> Option<&'static str> {
+    pub(crate) fn fp2_c_suffix(self) -> Option<&'static str> {
         match self {
             Self::Bn254Fq => Some("bn254"),
             Self::Bls12381Fq => Some("bls12_381"),
@@ -162,319 +159,23 @@ static KNOWN_FIELDS: &[(&[u8], KnownField)] = &[
 ];
 
 /// Detect a known field from its modulus bytes (LE, padded).
-fn detect_known_field(modulus_bytes: &[u8]) -> Option<KnownField> {
+pub(crate) fn detect_known_field(modulus_bytes: &[u8]) -> Option<KnownField> {
     KNOWN_FIELDS
         .iter()
         .find(|(bytes, _)| *bytes == modulus_bytes)
         .map(|(_, f)| *f)
 }
 
-/// IR node for modular arithmetic (ADD, SUB, MUL, DIV).
-#[derive(Debug, Clone)]
-pub struct ModArithInstr {
-    pub op: ModOp,
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-    pub modulus: Vec<u8>,
-}
-
-impl ExtInstr for ModArithInstr {
-    fn opname(&self) -> &str {
-        "mod_arith"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        let op_name = self.op.c_name();
-        if let Some(field) = detect_known_field(&self.modulus) {
-            let suffix = field.c_suffix();
-            ctx.write_line(&format!(
-                "rvr_ext_mod_{op_name}_{suffix}(state, {rd}, {rs1}, {rs2});",
-            ));
-        } else {
-            let mod_literal = format_c_byte_array(&self.modulus);
-            ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            ctx.write_line(&format!(
-                "rvr_ext_mod_{op_name}(state, {rd}, {rs1}, {rs2}, {}u, mod_);",
-                self.num_limbs
-            ));
-            ctx.write_line("}");
-        }
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-/// IR node for modular IS_EQ.
-#[derive(Debug, Clone)]
-pub struct ModIsEqInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-    pub modulus: Vec<u8>,
-}
-
-impl ExtInstr for ModIsEqInstr {
-    fn opname(&self) -> &str {
-        "mod_iseq"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        if let Some(field) = detect_known_field(&self.modulus) {
-            let suffix = field.c_suffix();
-            ctx.write_reg(
-                self.rd_reg,
-                &format!("rvr_ext_mod_iseq_{suffix}(state, {rs1}, {rs2})"),
-            );
-        } else {
-            let mod_literal = format_c_byte_array(&self.modulus);
-            ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            ctx.write_reg(
-                self.rd_reg,
-                &format!(
-                    "rvr_ext_mod_iseq(state, {rs1}, {rs2}, {}u, mod_)",
-                    self.num_limbs
-                ),
-            );
-            ctx.write_line("}");
-        }
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-/// IR node for modular SETUP (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
-#[derive(Debug, Clone)]
-pub struct ModSetupInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-}
-
-impl ExtInstr for ModSetupInstr {
-    fn opname(&self) -> &str {
-        "mod_setup"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        ctx.write_line(&format!(
-            "rvr_ext_mod_setup(state, {rd}, {rs1}, {rs2}, {}u);",
-            self.num_limbs
-        ));
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-// ── Fp2 (complex extension field) operations ─────────────────────────────────
-
-/// IR node for Fp2 arithmetic (ADD, SUB, MUL, DIV).
-#[derive(Debug, Clone)]
-pub struct Fp2ArithInstr {
-    pub op: ModOp,
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-    pub modulus: Vec<u8>,
-}
-
-impl ExtInstr for Fp2ArithInstr {
-    fn opname(&self) -> &str {
-        "fp2_arith"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        let op_name = self.op.c_name();
-        let fp2_suffix = detect_known_field(&self.modulus).and_then(|f| f.fp2_c_suffix());
-        if let Some(suffix) = fp2_suffix {
-            ctx.write_line(&format!(
-                "rvr_ext_fp2_{op_name}_{suffix}(state, {rd}, {rs1}, {rs2});",
-            ));
-        } else {
-            let mod_literal = format_c_byte_array(&self.modulus);
-            ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            ctx.write_line(&format!(
-                "rvr_ext_fp2_{op_name}(state, {rd}, {rs1}, {rs2}, {}u, mod_);",
-                self.num_limbs
-            ));
-            ctx.write_line("}");
-        }
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-/// IR node for Fp2 SETUP (SETUP_ADDSUB, SETUP_MULDIV).
-#[derive(Debug, Clone)]
-pub struct Fp2SetupInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-}
-
-impl ExtInstr for Fp2SetupInstr {
-    fn opname(&self) -> &str {
-        "fp2_setup"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        ctx.write_line(&format!(
-            "rvr_ext_fp2_setup(state, {rd}, {rs1}, {rs2}, {}u);",
-            self.num_limbs
-        ));
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-// ── Phantom instructions (HintNonQr, HintSqrt) ──────────────────────────────
-
-/// IR node for HintNonQr phantom instruction.
-#[derive(Debug, Clone)]
-pub struct HintNonQrInstr {
-    pub non_qr_bytes: Vec<u8>,
-}
-
-impl ExtInstr for HintNonQrInstr {
-    fn opname(&self) -> &str {
-        "hint_nonqr"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let literal = format_c_byte_array(&self.non_qr_bytes);
-        ctx.write_line("{");
-        ctx.write_line(&format!("static const uint8_t nqr[] = {literal};"));
-        ctx.write_line(&format!(
-            "ext_hint_stream_set(nqr, {}u);",
-            self.non_qr_bytes.len()
-        ));
-        ctx.write_line("}");
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-/// IR node for HintSqrt phantom instruction.
-#[derive(Debug, Clone)]
-pub struct HintSqrtInstr {
-    pub rs1_reg: Reg,
-    pub num_limbs: u32,
-    pub modulus: Vec<u8>,
-    pub non_qr_bytes: Vec<u8>,
-}
-
-impl ExtInstr for HintSqrtInstr {
-    fn opname(&self) -> &str {
-        "hint_sqrt"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let mod_literal = format_c_byte_array(&self.modulus);
-        let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
-        ctx.write_line("{");
-        ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-        ctx.write_line(&format!("static const uint8_t nqr[] = {nqr_literal};"));
-        ctx.write_line(&format!(
-            "rvr_ext_algebra_hint_sqrt(state, {rs1}, {}u, mod_, nqr);",
-            self.num_limbs
-        ));
-        ctx.write_line("}");
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
 // ── Shared infrastructure ────────────────────────────────────────────────────
 
 /// Per-modulus info shared by the algebra extensions.
-struct ModulusInfo {
-    modulus_bytes: Vec<u8>,
-    non_qr_bytes: Vec<u8>,
-    num_limbs: u32,
+pub(crate) struct ModulusInfo {
+    pub(crate) modulus_bytes: Vec<u8>,
+    pub(crate) non_qr_bytes: Vec<u8>,
+    pub(crate) num_limbs: u32,
 }
 
-/// Path to the secp256k1 submodule (resolved from this crate's manifest dir).
-fn secp256k1_dir() -> PathBuf {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffi/secp256k1");
-    assert!(
-        dir.join("src/secp256k1.c").exists(),
-        "missing secp256k1 submodule at {}. Run `git submodule update --init --recursive`.",
-        dir.display()
-    );
-    dir
-}
-
-/// Default path to the algebra-ffi staticlib, populated by `build.rs`.
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_ALGEBRA_FFI_STATICLIB"))
-}
-
-fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
+pub(crate) fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
     // Use the same deterministic seed as OpenVM for non-QR computation.
     // For ModularRvrExtension this matches the circuit-side
     // `NonQrHintSubEx::new` (also `StdRng::from_seed([0u8; 32])`, single rng
@@ -519,377 +220,7 @@ fn make_modulus_info(modulus: &BigUint, rng: &mut StdRng) -> ModulusInfo {
 }
 
 /// Format a byte slice as a C array initializer: `{0x2f, 0xfc, ...}`
-fn format_c_byte_array(bytes: &[u8]) -> String {
+pub(crate) fn format_c_byte_array(bytes: &[u8]) -> String {
     let inner: Vec<String> = bytes.iter().map(|b| format!("0x{b:02x}")).collect();
     format!("{{{}}}", inner.join(","))
-}
-
-// ── Modular extension ────────────────────────────────────────────────────────
-
-/// Modular arithmetic + phantom hints. Owns the algebra FFI infrastructure
-/// (headers, sources, staticlib, secp256k1 build inputs) that is shared with
-/// [`Fp2RvrExtension`].
-pub struct ModularRvrExtension {
-    moduli: Vec<ModulusInfo>,
-    staticlib_path: PathBuf,
-}
-
-impl ModularRvrExtension {
-    /// Pure-mode constructor; equivalent to [`Self::new`] today (chip indices
-    /// are unused by this extension).
-    pub fn new_pure(moduli: Vec<BigUint>) -> Self {
-        Self {
-            moduli: make_moduli(moduli),
-            staticlib_path: default_staticlib_path(),
-        }
-    }
-
-    /// Standard constructor.
-    pub fn new(moduli: Vec<BigUint>) -> Self {
-        Self::new_pure(moduli)
-    }
-}
-
-impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
-        let opcode = insn.opcode.as_usize();
-
-        if let Some(lifted) = self.try_lift_modular(insn, pc, opcode) {
-            return Some(lifted);
-        }
-
-        if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
-            if let Some(lifted) = self.try_lift_phantom(insn, pc) {
-                return Some(lifted);
-            }
-        }
-
-        None
-    }
-
-    fn c_headers(&self) -> Vec<(&str, &str)> {
-        vec![
-            ("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h")),
-            ("rvr_ext_k256_fe.h", include_str!("../c/rvr_ext_k256_fe.h")),
-        ]
-    }
-
-    fn c_sources(&self) -> Vec<(&str, &str)> {
-        // TODO: `rvr_ext_k256.c` folds ECC k256 ops into algebra's TU so
-        // libsecp256k1 stays in a single translation unit (see the comment
-        // at the top of `rvr_ext_k256_ec.h`). It `#include`s `rvr_ext_ecc.h`,
-        // which is owned by the ECC rvr extension. So registering
-        // `ModularRvrExtension` without `EccRvrExtension` builds/links with a
-        // missing-header error. Options: (1) gate the ECC fold-in behind a
-        // `-DRVR_EXT_K256_INCLUDE_ECC` cflag set by ECC's `extra_cflags()`;
-        // (2) emit `rvr_ext_k256.c` only when at least one configured
-        // modulus matches a known k256 field; (3) move the file into ECC
-        // and lose the modular k256 fast path when ECC isn't present.
-        vec![("rvr_ext_k256.c", include_str!("../c/rvr_ext_k256.c"))]
-    }
-
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
-    }
-
-    fn extra_c_source_paths(&self) -> Vec<PathBuf> {
-        let dir = secp256k1_dir();
-        vec![
-            dir.join("src/precomputed_ecmult.c"),
-            dir.join("src/precomputed_ecmult_gen.c"),
-        ]
-    }
-
-    fn extra_cflags(&self) -> Vec<String> {
-        let dir = secp256k1_dir();
-        vec![
-            format!("-I{}", dir.join("src").display()),
-            format!("-I{}", dir.display()),
-            "-DSECP256K1_BUILD".to_string(),
-            "-Wno-unused-function".to_string(),
-            "-Wno-unused-parameter".to_string(),
-        ]
-    }
-}
-
-impl ModularRvrExtension {
-    fn try_lift_modular<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u32,
-        opcode: usize,
-    ) -> Option<LiftedInstr> {
-        let base_offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET;
-        let count = Rv32ModularArithmeticOpcode::COUNT;
-
-        if opcode < base_offset {
-            return None;
-        }
-        let relative = opcode - base_offset;
-        let mod_idx = relative / count;
-        let local = relative % count;
-
-        if mod_idx >= self.moduli.len() {
-            return None;
-        }
-
-        let info = &self.moduli[mod_idx];
-        let rd_reg = decode_reg(insn.a);
-        let rs1_reg = decode_reg(insn.b);
-        let rs2_reg = decode_reg(insn.c);
-
-        let instr: Instr = match local {
-            x if x == Rv32ModularArithmeticOpcode::ADD as usize => {
-                Instr::Ext(Box::new(ModArithInstr {
-                    op: ModOp::Add,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                    modulus: info.modulus_bytes.clone(),
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::SUB as usize => {
-                Instr::Ext(Box::new(ModArithInstr {
-                    op: ModOp::Sub,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                    modulus: info.modulus_bytes.clone(),
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize => {
-                Instr::Ext(Box::new(ModSetupInstr {
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::MUL as usize => {
-                Instr::Ext(Box::new(ModArithInstr {
-                    op: ModOp::Mul,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                    modulus: info.modulus_bytes.clone(),
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::DIV as usize => {
-                Instr::Ext(Box::new(ModArithInstr {
-                    op: ModOp::Div,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                    modulus: info.modulus_bytes.clone(),
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize => {
-                Instr::Ext(Box::new(ModSetupInstr {
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::IS_EQ as usize => {
-                Instr::Ext(Box::new(ModIsEqInstr {
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                    modulus: info.modulus_bytes.clone(),
-                }))
-            }
-            x if x == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize => {
-                Instr::Ext(Box::new(ModSetupInstr {
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    num_limbs: info.num_limbs,
-                }))
-            }
-            _ => return None,
-        };
-
-        Some(LiftedInstr::Body(InstrAt {
-            pc,
-            instr,
-            source_loc: None,
-        }))
-    }
-
-    fn try_lift_phantom<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u32,
-    ) -> Option<LiftedInstr> {
-        let c_val = insn.c.as_canonical_u32();
-        let discriminant = (c_val & 0xffff) as u16;
-        let mod_idx = (c_val >> 16) as usize;
-
-        match ModularPhantom::from_repr(discriminant) {
-            Some(ModularPhantom::HintNonQr) => {
-                let info = self.moduli.get(mod_idx)?;
-                Some(LiftedInstr::Body(InstrAt {
-                    pc,
-                    instr: Instr::Ext(Box::new(HintNonQrInstr {
-                        non_qr_bytes: info.non_qr_bytes.clone(),
-                    })),
-                    source_loc: None,
-                }))
-            }
-            Some(ModularPhantom::HintSqrt) => {
-                let info = self.moduli.get(mod_idx)?;
-                let rs1_reg = decode_reg(insn.a);
-                Some(LiftedInstr::Body(InstrAt {
-                    pc,
-                    instr: Instr::Ext(Box::new(HintSqrtInstr {
-                        rs1_reg,
-                        num_limbs: info.num_limbs,
-                        modulus: info.modulus_bytes.clone(),
-                        non_qr_bytes: info.non_qr_bytes.clone(),
-                    })),
-                    source_loc: None,
-                }))
-            }
-            None => None,
-        }
-    }
-}
-
-// ── Fp2 extension ────────────────────────────────────────────────────────────
-
-/// Fp2 (complex extension field) arithmetic. The FFI infrastructure (headers,
-/// sources, staticlib, secp256k1 build inputs) is shared with — and owned by —
-/// [`ModularRvrExtension`]; this half returns empty values for them and relies
-/// on the modular half being registered alongside it.
-pub struct Fp2RvrExtension {
-    fp2_moduli: Vec<ModulusInfo>,
-}
-
-impl Fp2RvrExtension {
-    pub fn new_pure(fp2_moduli: Vec<BigUint>) -> Self {
-        Self {
-            fp2_moduli: make_moduli(fp2_moduli),
-        }
-    }
-
-    pub fn new(fp2_moduli: Vec<BigUint>) -> Self {
-        Self::new_pure(fp2_moduli)
-    }
-}
-
-impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
-        let opcode = insn.opcode.as_usize();
-        self.try_lift_fp2(insn, pc, opcode)
-    }
-
-    fn c_headers(&self) -> Vec<(&str, &str)> {
-        vec![("rvr_ext_fp2.h", include_str!("../c/rvr_ext_fp2.h"))]
-    }
-
-    fn staticlib_paths(&self) -> Vec<&Path> {
-        // The algebra-ffi staticlib is owned by `ModularRvrExtension`; do not
-        // emit it again here.
-        //
-        // TODO: Reconsider having `ModularRvrExtension` owning the single
-        // staticlib used by both `ModularRvrExtension` and `Fp2RvrExtension`.
-        // Alternatives: (1) split the FFI into separate `*-modular-ffi` and
-        // `*-fp2-ffi` staticlibs so each half owns its own; (2) deduplicate
-        // staticlib paths in `ExtensionRegistry::staticlib_paths()` so both
-        // halves can return the same path safely.
-        Vec::new()
-    }
-
-    fn staticlib_path(&self) -> &Path {
-        // Unused: `staticlib_paths()` is overridden to return an empty list.
-        Path::new("")
-    }
-}
-
-impl Fp2RvrExtension {
-    fn try_lift_fp2<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u32,
-        opcode: usize,
-    ) -> Option<LiftedInstr> {
-        let base_offset = Fp2Opcode::CLASS_OFFSET;
-        let count = Fp2Opcode::COUNT;
-
-        if opcode < base_offset {
-            return None;
-        }
-        let relative = opcode - base_offset;
-        let fp2_idx = relative / count;
-        let local = relative % count;
-
-        if fp2_idx >= self.fp2_moduli.len() {
-            return None;
-        }
-
-        let info = &self.fp2_moduli[fp2_idx];
-        let rd_reg = decode_reg(insn.a);
-        let rs1_reg = decode_reg(insn.b);
-        let rs2_reg = decode_reg(insn.c);
-
-        let instr: Instr = match local {
-            x if x == Fp2Opcode::ADD as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Add,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Sub,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(Fp2SetupInstr {
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-            })),
-            x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Mul,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Div,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(Fp2SetupInstr {
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-            })),
-            _ => return None,
-        };
-
-        Some(LiftedInstr::Body(InstrAt {
-            pc,
-            instr,
-            source_loc: None,
-        }))
-    }
 }
