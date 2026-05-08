@@ -279,10 +279,7 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
 
-# Point halo2-base / halo2-ecc at the GPU fork of halo2-axiom (halo2-gpu)
-# so the CUDA prover path is exercised. Tracks the Phase 1 cuda-common
-# migration branch; once that work merges back into halo2-gpu's main
-# line, switch this to a stable branch or pinned rev. Tracking INT-6841
-# / INT-7555.
+# Override halo2-axiom with the GPU fork (axiom-crypto/halo2-gpu) so
+# the CUDA prover path is exercised end-to-end.
 [patch.crates-io]
-halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", branch = "feat/cuda-common-bn254" }
+halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", rev = "c879c054" }
