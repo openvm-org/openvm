@@ -64,6 +64,11 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
+      - name: Init keccak rvr FFI submodules
+        if: matrix.extension.name == 'keccak256' && matrix.extension.rvr == true
+        run: |
+          git submodule update --init extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init extensions/keccak256/rvr/ffi/xkcp
       - uses: dorny/paths-filter@v3
         id: filter
         with:
