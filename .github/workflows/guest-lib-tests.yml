@@ -36,6 +36,7 @@ jobs:
           - { name: "p256", path: "p256", rvr: false }
           - { name: "pairing", path: "pairing", rvr: false }
           - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
+          - { name: "sha2", path: "sha2", rvr: true }
           - { name: "keccak256", path: "keccak256", rvr: true }
           - { name: "ff_derive", path: "ff_derive", rvr: true }
         platform:

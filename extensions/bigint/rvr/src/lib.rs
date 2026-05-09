@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
-use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
 use strum::EnumCount;
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────

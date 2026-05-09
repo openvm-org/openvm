@@ -32,5 +32,6 @@ default = ["import_sha2"]
 # Enable sha2::Digest trait implementation
 import_sha2 = ["dep:sha2"]
 aot = ["openvm-sdk/aot"]
+rvr = ["openvm-sdk/rvr", "openvm-sha2-circuit/rvr"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]

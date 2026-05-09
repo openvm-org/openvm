@@ -9,7 +9,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
 
 /// IR node for a SHA-256 compress instruction.
 ///
@@ -108,45 +108,55 @@ pub struct Sha2Extension {
 impl Sha2Extension {
     /// Create a `Sha2Extension` for pure execution where chip indices
     /// don't matter (trace_chip is a no-op in pure mode).
-    pub fn new_pure(staticlib_path: PathBuf) -> Self {
+    pub fn new_pure() -> Self {
         Self {
             sha256_main_chip_idx: u32::MAX,
             sha256_block_hasher_chip_idx: u32::MAX,
             sha512_main_chip_idx: u32::MAX,
             sha512_block_hasher_chip_idx: u32::MAX,
-            staticlib_path,
+            staticlib_path: default_staticlib_path(),
         }
     }
 
     /// Create a new `Sha2Extension`, resolving chip indices from the VM config.
-    ///
-    /// - `ctx`: opcode/executor/AIR mappings
-    /// - `staticlib_path`: path to the pre-built sha2 staticlib
-    pub fn new(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Result<Self, ExtensionError> {
+    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
         // SHA-256 main chip AIR index
         let sha256_main_chip_idx =
             ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA256.global_opcode())?;
 
         // SHA-256 block hasher: in extend_circuit, the block hasher is added right before
         // the main chip. Due to reverse ordering of AIR indices,
-        // block_hasher_air_idx = main_air_idx + 1.
-        let sha256_block_hasher_chip_idx = sha256_main_chip_idx + 1;
+        // block_hasher_air_idx = main_air_idx + 1. Stay NO_CHIP-safe in case
+        // pure execution sneaks a NO_CHIP `main_chip_idx` through here.
+        let sha256_block_hasher_chip_idx = if sha256_main_chip_idx == NO_CHIP {
+            NO_CHIP
+        } else {
+            sha256_main_chip_idx + 1
+        };
 
         // SHA-512 main chip AIR index
         let sha512_main_chip_idx =
             ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA512.global_opcode())?;
 
         // SHA-512 block hasher: same pattern as SHA-256.
-        let sha512_block_hasher_chip_idx = sha512_main_chip_idx + 1;
+        let sha512_block_hasher_chip_idx = if sha512_main_chip_idx == NO_CHIP {
+            NO_CHIP
+        } else {
+            sha512_main_chip_idx + 1
+        };
 
         Ok(Self {
             sha256_main_chip_idx,
             sha256_block_hasher_chip_idx,
             sha512_main_chip_idx,
             sha512_block_hasher_chip_idx,
-            staticlib_path,
+            staticlib_path: default_staticlib_path(),
         })
     }
+}
+
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_SHA2_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {

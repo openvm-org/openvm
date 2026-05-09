@@ -6868,6 +6868,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
+ "rvr-openvm-ext-sha2",
  "rvr-openvm-lift",
  "serde",
  "sha2 0.10.9",
