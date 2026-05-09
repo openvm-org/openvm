@@ -248,20 +248,20 @@ pub struct Int256Extension {
 impl Int256Extension {
     /// Create a `Int256Extension` for pure execution where chip indices
     /// don't matter (trace_chip is a no-op in pure mode).
-    pub fn new_pure(staticlib_path: PathBuf) -> Self {
+    pub fn new_pure() -> Self {
         Self {
-            base_alu_chip_idx: u32::MAX,
-            shift_chip_idx: u32::MAX,
-            less_than_chip_idx: u32::MAX,
-            mul_chip_idx: u32::MAX,
-            branch_eq_chip_idx: u32::MAX,
-            branch_lt_chip_idx: u32::MAX,
-            staticlib_path,
+            base_alu_chip_idx: NO_CHIP,
+            shift_chip_idx: NO_CHIP,
+            less_than_chip_idx: NO_CHIP,
+            mul_chip_idx: NO_CHIP,
+            branch_eq_chip_idx: NO_CHIP,
+            branch_lt_chip_idx: NO_CHIP,
+            staticlib_path: default_staticlib_path(),
         }
     }
 
     /// Create a new `Int256Extension`, resolving chip indices from the VM config.
-    pub fn new(ctx: &RvrExtensionCtx, staticlib_path: PathBuf) -> Result<Self, ExtensionError> {
+    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
         let base_alu_chip_idx =
             ctx.require_opcode_air_idx(Rv32BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode())?;
         let shift_chip_idx =
@@ -284,7 +284,7 @@ impl Int256Extension {
             mul_chip_idx,
             branch_eq_chip_idx,
             branch_lt_chip_idx,
-            staticlib_path,
+            staticlib_path: default_staticlib_path(),
         })
     }
 
@@ -329,6 +329,10 @@ fn decode_imm<F: PrimeField32>(f: F) -> i32 {
     } else {
         v as i32
     }
+}
+
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_BIGINT_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
