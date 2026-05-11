@@ -1,0 +1,20 @@
+[package]
+name = "rvr-openvm-ext-algebra-ffi-common"
+description = "Shared FFI helpers for rvr-openvm-ext-algebra modular and fp2 staticlibs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+rvr-openvm-ext-ffi-common.workspace = true
+
+# `__private_bench` re-exports `blstrs::{Fp, Fp2, Fp12}`, which are otherwise
+# crate-private. We need `Fp`/`Fp2` for the BLS12-381 base-field fast path; the
+# public API only exposes `Scalar`/`G1`/`G2`/pairings. Same rationale applies to
+# the other algebra-extension Cargo.toml files that enable this feature.
+blstrs = { workspace = true, features = ["__private_bench"] }
+halo2curves-axiom.workspace = true
+num-bigint.workspace = true
+num-integer.workspace = true
