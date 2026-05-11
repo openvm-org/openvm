@@ -18,6 +18,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;
+mod add_sub;
 mod auipc;
 mod base_alu;
 mod branch_eq;
@@ -33,6 +34,7 @@ mod loadstore;
 mod mul;
 mod mulh;
 mod shift;
+mod xor_or_and;
 
 pub use auipc::*;
 pub use base_alu::*;
