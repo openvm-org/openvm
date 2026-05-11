@@ -33,6 +33,11 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
+      - name: Init rvr FFI submodules
+        run: |
+          git submodule update --init extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init extensions/keccak256/rvr/ffi/xkcp
+          git submodule update --init --recursive extensions/algebra/rvr/ffi/modular/secp256k1
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: mozilla-actions/sccache-action@v0.0.9

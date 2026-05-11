@@ -55,14 +55,11 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
-      - name: Init keccak rvr FFI submodules
-        if: matrix.crate.name == 'keccak256' && matrix.crate.rvr == true
+      - name: Init rvr FFI submodules
+        if: matrix.crate.rvr == true
         run: |
           git submodule update --init extensions/keccak256/rvr/ffi/openssl
           git submodule update --init extensions/keccak256/rvr/ffi/xkcp
-      - name: Init algebra rvr FFI submodules
-        if: matrix.crate.name == 'ff_derive' && matrix.crate.rvr == true
-        run: |
           git submodule update --init --recursive extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dorny/paths-filter@v3
         id: filter
