@@ -39,6 +39,8 @@ jobs:
           - { name: "sha2", path: "sha2", rvr: true }
           - { name: "keccak256", path: "keccak256", rvr: true }
           - { name: "ff_derive", path: "ff_derive", rvr: true }
+          - { name: "k256", path: "k256", rvr: true }
+          - { name: "p256", path: "p256", rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails

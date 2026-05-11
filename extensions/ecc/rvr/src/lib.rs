@@ -7,7 +7,6 @@
 
 use std::path::{Path, PathBuf};
 
-use openvm_ecc_circuit::CurveConfig;
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
@@ -45,8 +44,8 @@ impl KnownCurve {
         }
     }
 
-    fn from_config(curve: &CurveConfig) -> Option<Self> {
-        match curve.struct_name.as_str() {
+    fn from_struct_name(struct_name: &str) -> Option<Self> {
+        match struct_name {
             "Secp256k1Point" => Some(Self::K256),
             "P256Point" => Some(Self::P256),
             "Bn254G1Affine" => Some(Self::Bn254),
@@ -131,7 +130,7 @@ impl ExtInstr for EcDoubleInstr {
 /// Information about a registered curve (for Weierstrass ECC opcodes).
 #[derive(Debug, Clone)]
 pub struct CurveInfo {
-    curve: KnownCurve,
+    curve: Option<KnownCurve>,
 }
 
 /// The ECC extension: handles Weierstrass EC opcodes (EC_ADD_NE, EC_DOUBLE + setups).
@@ -141,13 +140,11 @@ pub struct EccExtension {
 }
 
 impl EccExtension {
-    fn from_curve_configs(curves: Vec<CurveConfig>, staticlib_path: PathBuf) -> Self {
-        let curves = curves
+    fn from_struct_names(struct_names: Vec<String>, staticlib_path: PathBuf) -> Self {
+        let curves = struct_names
             .into_iter()
-            .map(|curve| CurveInfo {
-                curve: KnownCurve::from_config(&curve).unwrap_or_else(|| {
-                    panic!("unsupported ECC curve config: {}", curve.struct_name)
-                }),
+            .map(|name| CurveInfo {
+                curve: KnownCurve::from_struct_name(&name),
             })
             .collect();
         Self {
@@ -160,8 +157,7 @@ impl EccExtension {
         let curves = curves
             .into_iter()
             .map(|curve_id| CurveInfo {
-                curve: KnownCurve::from_id(curve_id)
-                    .unwrap_or_else(|| panic!("unsupported ECC curve id: {curve_id}")),
+                curve: KnownCurve::from_id(curve_id),
             })
             .collect();
         Self {
@@ -171,21 +167,26 @@ impl EccExtension {
     }
 
     /// Create for pure execution (chip indices are unused).
-    pub fn new_pure(staticlib_path: PathBuf, curves: Vec<u32>) -> Self {
-        Self::from_curve_ids(curves, staticlib_path)
+    pub fn new_pure(curves: Vec<u32>) -> Self {
+        Self::from_curve_ids(curves, default_staticlib_path())
     }
 
-    pub fn new_pure_from_configs(staticlib_path: PathBuf, curves: Vec<CurveConfig>) -> Self {
-        Self::from_curve_configs(curves, staticlib_path)
+    pub fn new_pure_from_struct_names(struct_names: Vec<String>) -> Self {
+        Self::from_struct_names(struct_names, default_staticlib_path())
     }
 
-    pub fn new(staticlib_path: PathBuf, curves_info: Vec<u32>) -> Self {
-        Self::from_curve_ids(curves_info, staticlib_path)
+    pub fn new(curves_info: Vec<u32>) -> Self {
+        Self::from_curve_ids(curves_info, default_staticlib_path())
     }
 
-    pub fn new_from_configs(staticlib_path: PathBuf, curves: Vec<CurveConfig>) -> Self {
-        Self::from_curve_configs(curves, staticlib_path)
+    pub fn new_from_struct_names(struct_names: Vec<String>) -> Self {
+        Self::from_struct_names(struct_names, default_staticlib_path())
     }
+}
+
+/// Default path to the ECC FFI staticlib, populated by `extensions/ecc/rvr/build.rs`.
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_ECC_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for EccExtension {
@@ -205,7 +206,8 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
         if curve_idx >= self.curves.len() {
             return None;
         }
-        let curve = &self.curves[curve_idx];
+        // Skip lifting opcodes for curves not in the rvr-known set.
+        let curve = self.curves[curve_idx].curve?;
 
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
@@ -218,14 +220,14 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
-                    curve: curve.curve,
+                    curve,
                     is_setup: local_opcode == SETUP_EC_ADD_NE,
                 })
             }
             EC_DOUBLE | SETUP_EC_DOUBLE => Box::new(EcDoubleInstr {
                 rd_reg,
                 rs1_reg,
-                curve: curve.curve,
+                curve,
                 is_setup: local_opcode == SETUP_EC_DOUBLE,
             }),
         };
@@ -238,12 +240,10 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
     }
 
     fn c_headers(&self) -> Vec<(&str, &str)> {
-        /* rvr_ext_k256_ec.h is a private implementation include for
-         * rvr_ext_k256.c. It expands to code only when that TU opts in. */
-        vec![
-            ("rvr_ext_ecc.h", include_str!("../c/rvr_ext_ecc.h")),
-            ("rvr_ext_k256_ec.h", include_str!("../c/rvr_ext_k256_ec.h")),
-        ]
+        // K-256 EC ops are bundled into the modular staticlib via libsecp256k1
+        // (see `extensions/algebra/rvr/ffi/modular/c/rvr_ext_modular.c`); their
+        // declarations live in `rvr_ext_ecc.h` alongside the other curves'.
+        vec![("rvr_ext_ecc.h", include_str!("../c/rvr_ext_ecc.h"))]
     }
 
     fn staticlib_path(&self) -> &Path {
