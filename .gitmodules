@@ -4,8 +4,8 @@
 [submodule "crates/sdk/contracts/lib/forge-std"]
 	path = crates/sdk/contracts/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-[submodule "extensions/algebra/rvr/ffi/secp256k1"]
-	path = extensions/algebra/rvr/ffi/secp256k1
+[submodule "extensions/algebra/rvr/ffi/modular/secp256k1"]
+	path = extensions/algebra/rvr/ffi/modular/secp256k1
 	url = https://github.com/bitcoin-core/secp256k1.git
 [submodule "extensions/keccak256/rvr/ffi/xkcp"]
 	path = extensions/keccak256/rvr/ffi/xkcp

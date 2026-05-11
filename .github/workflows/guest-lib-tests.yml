@@ -72,7 +72,6 @@ jobs:
           - { crate: cuda, mode: default }
           - { crate: cuda, mode: rvr }
           - { crate: sha2, mode: rvr }
-          - { crate: ff_derive, mode: rvr }
           - { crate: k256, mode: rvr }
           - { crate: p256, mode: rvr }
           - { crate: pairing, mode: rvr }
