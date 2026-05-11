@@ -20,7 +20,9 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
+openvm-algebra-utils = { workspace = true }
 rvr-openvm-lift = { workspace = true, optional = true }
+rvr-openvm-ext-algebra = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
@@ -50,7 +52,11 @@ test-case = { workspace = true }
 default = []
 tco = ["openvm-rv32im-circuit/tco"]
 aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "halo2curves-axiom/asm"]
-rvr = ["dep:rvr-openvm-lift", "openvm-rv32im-circuit/rvr"]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-algebra",
+    "openvm-rv32im-circuit/rvr",
+]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
