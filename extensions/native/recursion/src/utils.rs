@@ -1,6 +1,7 @@
 use openvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use openvm_stark_backend::p3_field::{
-    coset::TwoAdicMultiplicativeCoset, PrimeCharacteristicRing, TwoAdicField,
+    absorb_radix_bits, coset::TwoAdicMultiplicativeCoset, PrimeCharacteristicRing, PrimeField32,
+    TwoAdicField,
 };
 use openvm_stark_sdk::config::FriParameters;
 
@@ -52,6 +53,53 @@ pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -
     let felts = builder.var_to_64bits_f_circuit(val);
     assert!(n <= felts.len());
     felts[0..n].to_vec()
+}
+
+/// In-circuit equivalent of [`p3_field::reduce_packed`].
+pub fn reduce_packed<C: Config>(
+    builder: &mut Builder<C>,
+    vals: &[Felt<C::F>],
+    radix_bits: u32,
+) -> Var<C::N> {
+    debug_assert!((absorb_radix_bits::<C::F>() <= radix_bits) && (radix_bits < 64));
+    let base = C::N::from_u64(1u64 << radix_bits);
+    let result: Var<C::N> = builder.eval(C::N::ZERO);
+    for val in vals.iter().rev() {
+        let val = builder.cast_felt_to_var(*val);
+        builder.assign(&result, result * base + val);
+    }
+    result
+}
+
+/// In-circuit equivalent of [`p3_field::reduce_packed_shifted`].
+pub fn reduce_packed_shifted<C: Config>(
+    builder: &mut Builder<C>,
+    vals: &[Felt<C::F>],
+    radix_bits: u32,
+) -> Var<C::N> {
+    debug_assert!((radix_bits < 64) && ((C::F::ORDER_U32 as u64) < (1u64 << radix_bits)));
+    let base = C::N::from_u64(1u64 << radix_bits);
+    let result: Var<C::N> = builder.eval(C::N::ZERO);
+    for val in vals.iter().rev() {
+        let val = builder.cast_felt_to_var(*val);
+        builder.assign(&result, result * base + (val + C::N::ONE));
+    }
+    result
+}
+
+/// In-circuit equivalent of [`p3_field::split_pf_to_field_order_limbs`]: decompose `val` (a Var
+/// in `C::N`) into `n` little-endian base-|F| Felt limbs. Constraints are emitted so that the
+/// witnessed limbs are exactly the canonical decomposition.
+pub fn split_pf_to_field_order_limbs<C: Config>(
+    builder: &mut Builder<C>,
+    val: Var<C::N>,
+    n: usize,
+) -> Vec<Felt<C::F>> {
+    builder.var_to_field_order_f_limbs_circuit(val, n)
+}
+
+pub fn absorb_radix_bits_for_config<C: Config>() -> u32 {
+    absorb_radix_bits::<C::F>()
 }
 
 /// Eval two expressions, return in the reversed order if cond == 1. Otherwise, return in the

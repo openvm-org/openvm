@@ -26,7 +26,7 @@ use crate::{
 };
 
 const WIDTH: usize = 3;
-const RATE: usize = 16;
+const RATE: usize = 2;
 const DIGEST_WIDTH: usize = 1;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
