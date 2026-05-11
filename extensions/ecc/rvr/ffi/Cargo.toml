@@ -11,7 +11,10 @@ repository.workspace = true
 crate-type = ["staticlib"]
 
 [dependencies]
-rvr-openvm-ext-algebra-ffi.workspace = true
+# Shared helpers (read_field_256/write_field_256/etc.) live in
+# rvr-openvm-ext-algebra-ffi-common (rlib). K-256 EC ops live in the modular
+# staticlib (via libsecp256k1) so this crate does not redefine them.
+rvr-openvm-ext-algebra-ffi-common.workspace = true
 rvr-openvm-ext-ffi-common.workspace = true
 
 openvm-circuit-primitives.workspace = true
