@@ -37,6 +37,7 @@ jobs:
           - { name: "pairing", path: "pairing", rvr: false }
           - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
           - { name: "keccak256", path: "keccak256", rvr: true }
+          - { name: "ff_derive", path: "ff_derive", rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
@@ -55,6 +56,10 @@ jobs:
         run: |
           git submodule update --init extensions/keccak256/rvr/ffi/openssl
           git submodule update --init extensions/keccak256/rvr/ffi/xkcp
+      - name: Init algebra rvr FFI submodules
+        if: matrix.crate.name == 'ff_derive' && matrix.crate.rvr == true
+        run: |
+          git submodule update --init --recursive extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dorny/paths-filter@v3
         id: filter
         with:
