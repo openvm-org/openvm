@@ -36,6 +36,7 @@ mod mulh;
 mod shift;
 mod xor_or_and;
 
+pub use add_sub::*;
 pub use auipc::*;
 pub use base_alu::*;
 pub use branch_eq::*;
@@ -50,6 +51,7 @@ pub use loadstore::*;
 pub use mul::*;
 pub use mulh::*;
 pub use shift::*;
+pub use xor_or_and::*;
 
 mod extension;
 pub use extension::*;
