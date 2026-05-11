@@ -43,6 +43,7 @@ members = [
   "extensions/algebra/moduli-macros",
   "extensions/algebra/complex-macros",
   "extensions/algebra/tests",
+  "extensions/algebra/utils",
   "extensions/bigint/circuit",
   "extensions/bigint/transpiler",
   "extensions/bigint/guest",
@@ -88,7 +89,9 @@ members = [
   "extensions/bigint/rvr",
   "extensions/bigint/rvr/ffi",
   "extensions/algebra/rvr",
-  "extensions/algebra/rvr/ffi",
+  "extensions/algebra/rvr/ffi/common",
+  "extensions/algebra/rvr/ffi/modular",
+  "extensions/algebra/rvr/ffi/fp2",
   "extensions/ecc/rvr",
   "extensions/ecc/rvr/ffi",
   "extensions/pairing/rvr",
@@ -190,6 +193,7 @@ openvm-algebra-transpiler = { version = "2.0.0", path = "extensions/algebra/tran
 openvm-algebra-guest = { version = "2.0.0", path = "extensions/algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { version = "2.0.0", path = "extensions/algebra/moduli-macros", default-features = false }
 openvm-algebra-complex-macros = { version = "2.0.0", path = "extensions/algebra/complex-macros", default-features = false }
+openvm-algebra-utils = { version = "2.0.0", path = "extensions/algebra/utils", default-features = false }
 openvm-ecc-circuit = { version = "2.0.0", path = "extensions/ecc/circuit", default-features = false }
 openvm-ecc-transpiler = { version = "2.0.0", path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { version = "2.0.0", path = "extensions/ecc/guest", default-features = false }
@@ -216,7 +220,9 @@ rvr-openvm-ext-sha2-ffi = { path = "extensions/sha2/rvr/ffi" }
 rvr-openvm-ext-bigint = { path = "extensions/bigint/rvr" }
 rvr-openvm-ext-bigint-ffi = { path = "extensions/bigint/rvr/ffi" }
 rvr-openvm-ext-algebra = { path = "extensions/algebra/rvr" }
-rvr-openvm-ext-algebra-ffi = { path = "extensions/algebra/rvr/ffi" }
+rvr-openvm-ext-algebra-ffi-common = { path = "extensions/algebra/rvr/ffi/common" }
+rvr-openvm-ext-algebra-modular-ffi = { path = "extensions/algebra/rvr/ffi/modular" }
+rvr-openvm-ext-algebra-fp2-ffi = { path = "extensions/algebra/rvr/ffi/fp2" }
 rvr-openvm-ext-ecc = { path = "extensions/ecc/rvr" }
 rvr-openvm-ext-ecc-ffi = { path = "extensions/ecc/rvr/ffi" }
 rvr-openvm-ext-pairing = { path = "extensions/pairing/rvr" }
