@@ -8,31 +8,19 @@
 //! generated C code (via `trace_io_*` functions in tracer headers). These
 //! callbacks are pure IO logic.
 
-use std::{
-    collections::{HashMap, VecDeque},
-    ffi::c_void,
-    io::Write,
-};
+use std::{collections::VecDeque, ffi::c_void, io::Write, sync::Arc};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 
-// ── Deferral lookup data ───────────────────────────────────────────────────
+use crate::arch::deferral::{DeferralState, InputMapVal};
 
-/// Pre-computed deferral call lookup table: (def_idx, input_commit) → output_key.
-pub type DeferralCallMap =
-    HashMap<(u32, [u8; DEFERRAL_COMMIT_NUM_BYTES]), [u8; DEFERRAL_OUTPUT_KEY_BYTES]>;
+/// `input_raw → output_raw`.
+pub type DeferralFnPtr = Arc<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
 
-/// Pre-computed deferral output lookup table: output_commit → output_raw.
-pub type DeferralOutputMap = HashMap<[u8; DEFERRAL_COMMIT_NUM_BYTES], Vec<u8>>;
-
-/// Pre-computed deferral lookup data, populated before execution.
-#[derive(Default)]
-pub struct DeferralData {
-    pub call_entries: DeferralCallMap,
-    pub output_entries: DeferralOutputMap,
-}
+/// `(def_idx, output_raw) → output_commit`.
+pub type DeferralHashFn = Arc<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
 
 /// All IO execution state, owned by Rust.
 pub struct OpenVmIoState {
@@ -44,8 +32,9 @@ pub struct OpenVmIoState {
     pub memory: *mut u8,
     /// Persistent RNG matching openvm's `StdRng::seed_from_u64(0)`.
     pub rng: StdRng,
-    /// Pre-computed deferral lookup data (empty when no deferral extension).
-    pub deferral: DeferralData,
+    pub deferrals: Vec<DeferralState>,
+    pub deferral_fns: Vec<DeferralFnPtr>,
+    pub deferral_hash: Option<DeferralHashFn>,
 }
 
 /// Function-pointer struct passed to C via `register_openvm_callbacks`.
@@ -61,7 +50,8 @@ pub struct OpenVmHostCallbacks {
     pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
     pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
     pub deferral_call_lookup: unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut u8) -> i32,
-    pub deferral_output_lookup: unsafe extern "C" fn(*mut c_void, *const u8, *mut u8, u32) -> i32,
+    pub deferral_output_lookup:
+        unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut u8, u32) -> i32,
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -170,9 +160,8 @@ pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8,
 
 // ── Deferral callbacks ─────────────────────────────────────────────────────
 
-/// Deferral CALL lookup: find output_key for (def_idx, input_commit).
-///
-/// Returns 1 on success (output_key_out written), 0 on miss.
+/// Deferral CALL lookup; same `Raw → Output` transition as `DeferralFn::execute`.
+/// Returns 1 on hit, 0 on miss.
 ///
 /// # Safety
 ///
@@ -184,22 +173,51 @@ pub unsafe extern "C" fn host_deferral_call_lookup(
     input_commit: *const u8,
     output_key_out: *mut u8,
 ) -> i32 {
-    let io = &*(ctx as *const OpenVmIoState);
-    let ic: [u8; DEFERRAL_COMMIT_NUM_BYTES] =
-        std::slice::from_raw_parts(input_commit, DEFERRAL_COMMIT_NUM_BYTES)
-            .try_into()
-            .unwrap();
-    if let Some(ok) = io.deferral.call_entries.get(&(def_idx, ic)) {
-        std::ptr::copy_nonoverlapping(ok.as_ptr(), output_key_out, DEFERRAL_OUTPUT_KEY_BYTES);
-        1
-    } else {
-        0
-    }
+    let io = &mut *(ctx as *mut OpenVmIoState);
+    let ic: Vec<u8> = std::slice::from_raw_parts(input_commit, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
+
+    let Some(state) = io.deferrals.get_mut(def_idx as usize) else {
+        return 0;
+    };
+
+    let (output_commit, output_len) = match state.get_input(&ic).clone() {
+        InputMapVal::Output(commit) => {
+            let len = state.get_output(&commit).len() as u64;
+            let arr: [u8; DEFERRAL_COMMIT_NUM_BYTES] = commit.as_slice().try_into().unwrap();
+            (arr, len)
+        }
+        InputMapVal::Raw(input_raw) => {
+            let func = io
+                .deferral_fns
+                .get(def_idx as usize)
+                .expect("deferral CALL: def_idx has no closure registered")
+                .clone();
+            let hash = io
+                .deferral_hash
+                .as_ref()
+                .expect("deferral CALL: hash_output not configured")
+                .clone();
+            let output_raw = func(&input_raw);
+            let commit = hash(def_idx, &output_raw);
+            let len = output_raw.len() as u64;
+            io.deferrals[def_idx as usize].store_output(&ic, commit.to_vec(), output_raw);
+            (commit, len)
+        }
+    };
+
+    let mut output_key = [0u8; DEFERRAL_OUTPUT_KEY_BYTES];
+    output_key[..DEFERRAL_COMMIT_NUM_BYTES].copy_from_slice(&output_commit);
+    output_key[DEFERRAL_COMMIT_NUM_BYTES..].copy_from_slice(&output_len.to_le_bytes());
+    std::ptr::copy_nonoverlapping(
+        output_key.as_ptr(),
+        output_key_out,
+        DEFERRAL_OUTPUT_KEY_BYTES,
+    );
+    1
 }
 
-/// Deferral OUTPUT lookup: find raw output for output_commit.
-///
-/// Returns 1 on success (output_raw_out written), 0 on miss.
+/// Deferral OUTPUT lookup: `deferrals[def_idx].output_map[output_commit]`.
+/// Returns 1 on hit, 0 on miss.
 ///
 /// # Safety
 ///
@@ -207,22 +225,20 @@ pub unsafe extern "C" fn host_deferral_call_lookup(
 /// `output_raw_out` must point to at least `expected_len` writable bytes.
 pub unsafe extern "C" fn host_deferral_output_lookup(
     ctx: *mut c_void,
+    def_idx: u32,
     output_commit: *const u8,
     output_raw_out: *mut u8,
     expected_len: u32,
 ) -> i32 {
     let io = &*(ctx as *const OpenVmIoState);
-    let oc: [u8; DEFERRAL_COMMIT_NUM_BYTES] =
-        std::slice::from_raw_parts(output_commit, DEFERRAL_COMMIT_NUM_BYTES)
-            .try_into()
-            .unwrap();
-    if let Some(raw) = io.deferral.output_entries.get(&oc) {
-        debug_assert_eq!(raw.len(), expected_len as usize);
-        std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len());
-        1
-    } else {
-        0
-    }
+    let oc: Vec<u8> = std::slice::from_raw_parts(output_commit, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
+    let Some(state) = io.deferrals.get(def_idx as usize) else {
+        return 0;
+    };
+    let raw = state.get_output(&oc);
+    debug_assert_eq!(raw.len(), expected_len as usize);
+    std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len());
+    1
 }
 
 // ── Conversion helpers ──────────────────────────────────────────────────────

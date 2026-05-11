@@ -206,6 +206,9 @@ where
             .into_iter()
             .map(|f| f.as_canonical_u32() as u8)
             .collect();
+        let deferrals = inputs.deferrals;
+        let deferral_fns = inputs.deferral_fns;
+        let deferral_hash = inputs.deferral_hash;
 
         let metered_cost_config = build_metered_cost_config(
             self.exe.as_ref(),
@@ -230,7 +233,9 @@ where
             input_stream,
             hint_stream,
             metered_cost_config,
-            Default::default(),
+            deferrals,
+            deferral_fns,
+            deferral_hash,
         )
         .map_err(map_rvr_execute_error)?;
 
@@ -257,7 +262,7 @@ where
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         let pc = from_state.pc();
         let mut guest_memory = from_state.memory;
-        let (input_stream, hint_stream, deferrals) = streams_to_io_seed(from_state.streams);
+        let seed = streams_to_io_seed(from_state.streams);
         let rng = from_state.rng;
         #[cfg(feature = "metrics")]
         let metrics = from_state.metrics;
@@ -292,8 +297,14 @@ where
         state.tracer.chip_widths = widths_u64.as_ptr();
         state.tracer.cost = 0;
 
-        let mut io_state = build_io_state(input_stream, memory.as_mut_ptr(), Default::default());
-        io_state.hint_stream = hint_stream;
+        let mut io_state = build_io_state(
+            seed.input_stream,
+            memory.as_mut_ptr(),
+            seed.deferrals,
+            seed.deferral_fns,
+            seed.deferral_hash,
+        );
+        io_state.hint_stream = seed.hint_stream;
         io_state.hint_pos = 0;
         io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
         io_state.rng = rng;
@@ -318,10 +329,13 @@ where
             &memory,
             &io_state.public_values,
         );
+        let deferrals = std::mem::take(&mut io_state.deferrals);
+        let deferral_fns = std::mem::take(&mut io_state.deferral_fns);
+        let deferral_hash = io_state.deferral_hash.take();
         let to_state = VmState::new(
             state.pc,
             guest_memory,
-            streams_from_io_state(&io_state, deferrals),
+            streams_from_io_state(&io_state, deferrals, deferral_fns, deferral_hash),
             io_state.rng,
             #[cfg(feature = "metrics")]
             metrics,

@@ -108,9 +108,13 @@ pub enum GenerationError {
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
-    /// Stores cached deferred operation inputs and outputs. Each idx corresponds to a
+    /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
+    #[cfg(feature = "rvr")]
+    pub deferral_fns: Vec<rvr::io::DeferralFnPtr>,
+    #[cfg(feature = "rvr")]
+    pub deferral_hash: Option<rvr::io::DeferralHashFn>,
 }
 
 impl<F> Streams<F> {
@@ -119,6 +123,10 @@ impl<F> Streams<F> {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
+            #[cfg(feature = "rvr")]
+            deferral_fns: Vec::default(),
+            #[cfg(feature = "rvr")]
+            deferral_hash: None,
         }
     }
 }
@@ -268,9 +276,16 @@ pub(crate) fn read_public_values_from_guest_memory(guest_memory: &GuestMemory) -
 }
 
 #[cfg(feature = "rvr")]
-pub(crate) fn streams_to_io_seed<F: PrimeField32>(
-    streams: Streams<F>,
-) -> (VecDeque<Vec<u8>>, Vec<u8>, Vec<DeferralState>) {
+pub(crate) struct RvrIoSeed {
+    pub input_stream: VecDeque<Vec<u8>>,
+    pub hint_stream: Vec<u8>,
+    pub deferrals: Vec<DeferralState>,
+    pub deferral_fns: Vec<rvr::io::DeferralFnPtr>,
+    pub deferral_hash: Option<rvr::io::DeferralHashFn>,
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) fn streams_to_io_seed<F: PrimeField32>(streams: Streams<F>) -> RvrIoSeed {
     let mut input_stream = VecDeque::with_capacity(streams.input_stream.len());
     for vec in streams.input_stream {
         input_stream.push_back(
@@ -284,13 +299,21 @@ pub(crate) fn streams_to_io_seed<F: PrimeField32>(
         .into_iter()
         .map(|f| f.as_canonical_u32() as u8)
         .collect();
-    (input_stream, hint_stream, streams.deferrals)
+    RvrIoSeed {
+        input_stream,
+        hint_stream,
+        deferrals: streams.deferrals,
+        deferral_fns: streams.deferral_fns,
+        deferral_hash: streams.deferral_hash,
+    }
 }
 
 #[cfg(feature = "rvr")]
 pub(crate) fn streams_from_io_state<F: PrimeField32>(
     io_state: &rvr::io::OpenVmIoState,
     deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<rvr::io::DeferralFnPtr>,
+    deferral_hash: Option<rvr::io::DeferralHashFn>,
 ) -> Streams<F> {
     let input_stream = io_state
         .input_stream
@@ -307,6 +330,8 @@ pub(crate) fn streams_from_io_state<F: PrimeField32>(
         input_stream,
         hint_stream,
         deferrals,
+        deferral_fns,
+        deferral_hash,
     }
 }
 
