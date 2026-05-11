@@ -1,6 +1,6 @@
 [package]
-name = "rvr-openvm-ext-algebra-ffi"
-description = "Field arithmetic staticlib for rvr-openvm-ext-algebra"
+name = "rvr-openvm-ext-algebra-fp2-ffi"
+description = "Fp2 (complex extension field) arithmetic staticlib for rvr-openvm-ext-algebra"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,14 +8,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [lib]
-crate-type = ["staticlib", "rlib"]
+crate-type = ["staticlib"]
 
 [dependencies]
+rvr-openvm-ext-algebra-ffi-common.workspace = true
 rvr-openvm-ext-ffi-common.workspace = true
 
-blstrs.workspace = true
+blstrs = { workspace = true, features = ["__private_bench"] }
 halo2curves-axiom.workspace = true
 num-bigint.workspace = true
-num-integer.workspace = true
-num-traits.workspace = true
 paste = "1"

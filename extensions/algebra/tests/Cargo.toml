@@ -24,5 +24,6 @@ num-bigint.workspace = true
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 aot = ["openvm-ecc-circuit/aot"]
+rvr = ["openvm-ecc-circuit/rvr"]
 cuda = ["openvm-algebra-circuit/cuda", "openvm-ecc-circuit/cuda"]
 touchemall = ["cuda", "openvm-algebra-circuit/touchemall", "openvm-ecc-circuit/touchemall"]

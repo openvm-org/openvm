@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_ecc_circuit::{ec_add_ne_expr, ec_double_ne_expr};
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, ExprBuilderConfig};
-use rvr_openvm_ext_algebra_ffi::{
+use rvr_openvm_ext_algebra_ffi_common::{
     read_bls12_381_fq, read_field_256, write_bls12_381_fq, write_field_256, BLS12_381_ELEM_BYTES,
     FIELD_256_BYTES,
 };
