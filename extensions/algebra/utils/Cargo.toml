@@ -1,0 +1,13 @@
+[package]
+name = "openvm-algebra-utils"
+description = "Shared algebra helpers (number theory) used by the algebra circuit, rvr lifter, etc."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+rand = { workspace = true }
