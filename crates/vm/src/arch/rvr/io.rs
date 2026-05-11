@@ -165,22 +165,23 @@ pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8,
 ///
 /// # Safety
 ///
-/// `input_commit` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
+/// `input_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
 /// `output_key_out` must point to `DEFERRAL_OUTPUT_KEY_BYTES` writable bytes.
 pub unsafe extern "C" fn host_deferral_call_lookup(
     ctx: *mut c_void,
     def_idx: u32,
-    input_commit: *const u8,
+    input_commit_raw: *const u8,
     output_key_out: *mut u8,
 ) -> i32 {
     let io = &mut *(ctx as *mut OpenVmIoState);
-    let ic: Vec<u8> = std::slice::from_raw_parts(input_commit, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
+    let input_commit: Vec<u8> =
+        std::slice::from_raw_parts(input_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
 
     let Some(state) = io.deferrals.get_mut(def_idx as usize) else {
         return 0;
     };
 
-    let (output_commit, output_len) = match state.get_input(&ic).clone() {
+    let (output_commit, output_len) = match state.get_input(&input_commit).clone() {
         InputMapVal::Output(commit) => {
             let len = state.get_output(&commit).len() as u64;
             let arr: [u8; DEFERRAL_COMMIT_NUM_BYTES] = commit.as_slice().try_into().unwrap();
@@ -200,7 +201,7 @@ pub unsafe extern "C" fn host_deferral_call_lookup(
             let output_raw = func(&input_raw);
             let commit = hash(def_idx, &output_raw);
             let len = output_raw.len() as u64;
-            io.deferrals[def_idx as usize].store_output(&ic, commit.to_vec(), output_raw);
+            io.deferrals[def_idx as usize].store_output(&input_commit, commit.to_vec(), output_raw);
             (commit, len)
         }
     };
@@ -221,22 +222,24 @@ pub unsafe extern "C" fn host_deferral_call_lookup(
 ///
 /// # Safety
 ///
-/// `output_commit` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
+/// `output_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
 /// `output_raw_out` must point to at least `expected_len` writable bytes.
 pub unsafe extern "C" fn host_deferral_output_lookup(
     ctx: *mut c_void,
     def_idx: u32,
-    output_commit: *const u8,
+    output_commit_raw: *const u8,
     output_raw_out: *mut u8,
     expected_len: u32,
 ) -> i32 {
     let io = &*(ctx as *const OpenVmIoState);
-    let oc: Vec<u8> = std::slice::from_raw_parts(output_commit, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
+    let output_commit: Vec<u8> =
+        std::slice::from_raw_parts(output_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
     let Some(state) = io.deferrals.get(def_idx as usize) else {
         return 0;
     };
-    let raw = state.get_output(&oc);
-    debug_assert_eq!(raw.len(), expected_len as usize);
+    let raw = state.get_output(&output_commit);
+    // TODO: change these panics to something better to handle across the FFI boundary.
+    assert_eq!(raw.len(), expected_len as usize);
     std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len());
     1
 }

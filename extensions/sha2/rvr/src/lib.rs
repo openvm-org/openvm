@@ -110,10 +110,10 @@ impl Sha2Extension {
     /// don't matter (trace_chip is a no-op in pure mode).
     pub fn new_pure() -> Self {
         Self {
-            sha256_main_chip_idx: u32::MAX,
-            sha256_block_hasher_chip_idx: u32::MAX,
-            sha512_main_chip_idx: u32::MAX,
-            sha512_block_hasher_chip_idx: u32::MAX,
+            sha256_main_chip_idx: NO_CHIP,
+            sha256_block_hasher_chip_idx: NO_CHIP,
+            sha512_main_chip_idx: NO_CHIP,
+            sha512_block_hasher_chip_idx: NO_CHIP,
             staticlib_path: default_staticlib_path(),
         }
     }

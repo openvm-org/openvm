@@ -203,9 +203,11 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
         let curve_idx = offset / ecc_count;
         let local_op = offset % ecc_count;
 
-        if curve_idx >= self.curves.len() {
-            return None;
-        }
+        assert!(
+            curve_idx < self.curves.len(),
+            "ECC opcode references unregistered curve_idx {curve_idx} (only {} curves registered)",
+            self.curves.len(),
+        );
         // Skip lifting opcodes for curves not in the rvr-known set.
         let curve = self.curves[curve_idx].curve?;
 
