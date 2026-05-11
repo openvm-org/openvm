@@ -41,6 +41,7 @@ jobs:
           - { name: "ff_derive", path: "ff_derive", rvr: true }
           - { name: "k256", path: "k256", rvr: true }
           - { name: "p256", path: "p256", rvr: true }
+          - { name: "pairing", path: "pairing", rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
@@ -100,7 +101,11 @@ jobs:
           rustup component add rust-src --toolchain nightly-2026-01-18
           EXTRA_ARGS=()
           if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
-            EXTRA_ARGS+=(--features=rvr)
+            if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+              EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
+            else
+              EXTRA_ARGS+=(--features=rvr)
+            fi
           elif [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
             EXTRA_ARGS+=(--features=aot)
           elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then

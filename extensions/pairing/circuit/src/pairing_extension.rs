@@ -23,7 +23,7 @@ use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -69,7 +69,11 @@ pub struct PairingExtension {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {}
+impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+        registry.register(rvr_openvm_ext_pairing::PairingExtension::new());
+    }
+}
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
