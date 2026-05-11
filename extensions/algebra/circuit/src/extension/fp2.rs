@@ -23,7 +23,7 @@ use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -74,7 +74,16 @@ impl Fp2Extension {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {}
+impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+        let fp2_moduli = self
+            .supported_moduli
+            .iter()
+            .map(|(_, m)| m.clone())
+            .collect();
+        registry.register(rvr_openvm_ext_algebra::Fp2RvrExtension::new(fp2_moduli));
+    }
+}
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
