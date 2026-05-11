@@ -1,8 +1,13 @@
-use itertools::Itertools;
 use openvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
-use openvm_stark_backend::p3_field::{Field, PrimeCharacteristicRing};
+use openvm_stark_backend::p3_field::{
+    max_shifted_absorb_injective_limbs, Field, PrimeCharacteristicRing,
+};
 
-use crate::{utils::reduce_32, vars::OuterDigestVariable, OUTER_DIGEST_SIZE};
+use crate::{
+    utils::{absorb_radix_bits_for_config, reduce_packed_shifted},
+    vars::OuterDigestVariable,
+    OUTER_DIGEST_SIZE,
+};
 
 pub const SPONGE_SIZE: usize = 3;
 pub const RATE: usize = 2;
@@ -30,18 +35,23 @@ impl<C: Config> Poseidon2CircuitBuilder<C> for Builder<C> {
             C::F::bits(),
             openvm_stark_sdk::p3_baby_bear::BabyBear::bits()
         );
-        let num_f_elms = C::N::bits() / C::F::bits();
         let mut state: [Var<C::N>; SPONGE_SIZE] = [
             self.eval(C::N::ZERO),
             self.eval(C::N::ZERO),
             self.eval(C::N::ZERO),
         ];
-        // <Poseidon2 RATE> * <Felt per Var>
-        let felt_per_chunk = RATE * num_f_elms;
-        for block_chunk in &input.iter().chunks(felt_per_chunk) {
-            for (chunk_id, chunk) in (&block_chunk.chunks(num_f_elms)).into_iter().enumerate() {
-                let chunk = chunk.collect_vec().into_iter().copied().collect::<Vec<_>>();
-                state[chunk_id] = reduce_32(self, chunk.as_slice());
+        // Mirrors `MultiField32PaddingFreeSponge::hash_iter`: chunks of
+        // `RATE * num_f_elms` F values per permutation, packing each `num_f_elms` chunk into
+        // one PF rate slot via `reduce_packed_shifted`.
+        let num_f_elms = max_shifted_absorb_injective_limbs::<C::F, C::N>();
+        let radix_bits = absorb_radix_bits_for_config::<C>();
+        for block_chunk in input.chunks(RATE * num_f_elms) {
+            for (chunk_id, chunk) in block_chunk.chunks(num_f_elms).enumerate() {
+                let packed = reduce_packed_shifted(self, chunk, radix_bits);
+                // Wrap in builder.eval to give state[chunk_id] a fresh Var: the halo2 lowering
+                // of CircuitPoseidon2Permute rebinds each state Var's value to the post-perm
+                // result, so aliasing the `packed` Var would corrupt it on subsequent uses.
+                state[chunk_id] = self.eval(packed);
             }
             p2_permute_mut_impl(self, state);
         }

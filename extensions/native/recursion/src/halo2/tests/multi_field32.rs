@@ -1,7 +1,9 @@
 use openvm_native_compiler::ir::{Builder, ExtConst, Witness};
 use openvm_stark_backend::{
     p3_challenger::{CanObserve, CanSample, FieldChallenger},
-    p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing},
+    p3_field::{
+        extension::BinomialExtensionField, max_absorb_injective_limbs, PrimeCharacteristicRing,
+    },
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254::Bn254,
@@ -50,6 +52,77 @@ fn test_challenger() {
     builder.assert_felt_eq(gt2, result2);
     let result3 = challenger.sample(&mut builder);
     builder.assert_felt_eq(gt3, result3);
+
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
+}
+
+/// Sample many times in a row with no intermediate observes so that the squeeze buffer is
+/// exhausted and `sample` must trigger fresh duplexings. Exercises the
+/// `f_squeeze_buffer.is_empty() && inner_output_buffer.is_empty()` branch.
+#[test]
+fn test_challenger_sample_chain_matches_native() {
+    let perm = root_perm();
+    let mut native = OuterChallenger::new(perm.clone()).unwrap();
+    for i in 0..3u8 {
+        native.observe(BabyBear::from_u8(i));
+    }
+    let n_samples = 16;
+    let gt: Vec<BabyBear> = (0..n_samples).map(|_| native.sample()).collect();
+
+    let mut builder = Builder::<OuterConfig>::default();
+    builder.flags.static_only = true;
+    let mut challenger = MultiField32ChallengerVariable::new(&mut builder);
+    for i in 0..3u8 {
+        let v = builder.eval(BabyBear::from_u8(i));
+        challenger.observe(&mut builder, v);
+    }
+    for expected in gt {
+        let got = challenger.sample(&mut builder);
+        builder.assert_felt_eq(expected, got);
+    }
+
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
+}
+
+/// Observe enough `F` values to fully fill `absorb_num_f_elms * RATE` so `observe` triggers an
+/// in-line flush, then sample. Verifies the auto-flush path is consistent with native.
+#[test]
+fn test_challenger_full_batch_observe_matches_native() {
+    let perm = root_perm();
+    let mut native = OuterChallenger::new(perm.clone()).unwrap();
+    // OuterChallenger uses RATE=2 (sponge slots per permute). Pull absorb_num_f_elms from p3 so
+    // we exactly cross several flush boundaries regardless of the field choice.
+    let absorb_num_f_elms = max_absorb_injective_limbs::<BabyBear, Bn254>();
+    let rate = 2usize;
+    let n = absorb_num_f_elms * rate * 3 + 1;
+    for i in 0..n {
+        native.observe(BabyBear::from_usize(i));
+    }
+    let gt: BabyBear = native.sample();
+
+    let mut builder = Builder::<OuterConfig>::default();
+    builder.flags.static_only = true;
+    let mut challenger = MultiField32ChallengerVariable::new(&mut builder);
+    for i in 0..n {
+        let v = builder.eval(BabyBear::from_usize(i));
+        challenger.observe(&mut builder, v);
+    }
+    let result = challenger.sample(&mut builder);
+    builder.assert_felt_eq(gt, result);
 
     Halo2Prover::mock::<OuterConfig>(
         10,

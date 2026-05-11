@@ -194,6 +194,8 @@ pub enum DslIr<C: Config> {
     CircuitNum2BitsF(Felt<C::F>, Vec<Var<C::N>>),
     /// Decompose a Var into 16-bit limbs.
     CircuitVarTo64BitsF(Var<C::N>, [Felt<C::F>; 4]),
+    /// Decompose a Var into base-|F| limbs. Should only be used when target is a circuit.
+    CircuitVarToFieldOrderLimbsF(Var<C::N>, Vec<Felt<C::F>>),
 
     // Hashing.
     /// Permutes an array of baby bear elements using Poseidon2 (output = p2_permute(array)).

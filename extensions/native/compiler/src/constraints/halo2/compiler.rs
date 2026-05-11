@@ -7,9 +7,12 @@ use std::{
 };
 
 use itertools::Itertools;
+use num_bigint::BigUint;
 #[cfg(feature = "metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
-use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeCharacteristicRing, PrimeField};
+use openvm_stark_backend::p3_field::{
+    ExtensionField, Field, PrimeCharacteristicRing, PrimeField, PrimeField32,
+};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254::Bn254};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
@@ -18,7 +21,7 @@ use snark_verifier_sdk::snark_verifier::{
             RangeInstructions,
         },
         halo2_proofs::halo2curves::bn256::Fr,
-        utils::{biguint_to_fe, decompose_fe_to_u64_limbs, ScalarField},
+        utils::{biguint_to_fe, decompose_fe_to_u64_limbs, fe_to_biguint, ScalarField},
         AssignedValue, Context, QuantumCell,
     },
     util::arithmetic::{Field as _, PrimeField as _},
@@ -388,6 +391,14 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                             felts.insert(o.0, l);
                         }
                     }
+                    DslIr::CircuitVarToFieldOrderLimbsF(value, output) => {
+                        let x = vars[&value.0];
+                        let limbs =
+                            var_to_babybear_field_order_limbs(ctx, &range, gate, x, output.len());
+                        for (o, l) in output.into_iter().zip_eq(limbs) {
+                            felts.insert(o.0, l);
+                        }
+                    }
                     DslIr::CircuitPoseidon2Permute(state_vars) => {
                         let mut state =
                             Poseidon2State::<Fr, POSEIDON2_T>::new(state_vars.map(|x| vars[&x.0]));
@@ -599,6 +610,131 @@ fn fr_to_u64_limbs(fr: &Fr) -> [u64; 4] {
     // We need 64-bit limbs but `decompose_fe_to_u64_limbs` only support `bit_len < 64`.
     let limbs = decompose_fe_to_u64_limbs(fr, 8, 32);
     std::array::from_fn(|i| limbs[2 * i] + limbs[2 * i + 1] * (1 << 32))
+}
+
+/// Bounds for the base-BabyBear decomposition (depend on `num_limbs = k`).
+struct BaseBabyBearDecompBounds {
+    /// floor((q-1) / p^k) as a field element.
+    top_quotient_max_fe: Fr,
+    /// floor((q-1) / p^k) + 1.
+    top_quotient_max_plus_one: BigUint,
+    /// One more than the maximum lower part when top quotient is at its max.
+    lower_max_plus_one: BigUint,
+    /// p^k as a BigUint.
+    pow_k: BigUint,
+}
+
+fn base_baby_bear_decomp_bounds(num_limbs: usize) -> BaseBabyBearDecompBounds {
+    let p = BigUint::from(BabyBear::ORDER_U32);
+    let one = BigUint::from(1u64);
+    let modulus = fe_to_biguint(&(Fr::ZERO - Fr::ONE)) + &one;
+    let modulus_minus_one = &modulus - &one;
+    let pow_k = p.pow(num_limbs as u32);
+    let q_k_max = &modulus_minus_one / &pow_k;
+    let lower_max = modulus_minus_one - &q_k_max * &pow_k;
+    BaseBabyBearDecompBounds {
+        top_quotient_max_fe: biguint_to_fe(&q_k_max),
+        top_quotient_max_plus_one: &q_k_max + &one,
+        lower_max_plus_one: lower_max + one,
+        pow_k,
+    }
+}
+
+/// Decompose a Bn254 element `packed` into `num_limbs` little-endian base-|F| (BabyBear) digits
+/// using the witness-and-verify pattern.
+///
+/// Constrains `packed = top_quotient * p^k + sum(limbs[i] * p^i)` where `k = num_limbs` and `p`
+/// is the BabyBear modulus, including the boundary check that pins the witness to the canonical
+/// decomposition: when `top_quotient == floor((q-1) / p^k)`, the lower part must not exceed
+/// `(q-1) - top_quotient * p^k`. Without this check, the same `packed` would admit multiple
+/// valid limb decompositions.
+fn var_to_babybear_field_order_limbs(
+    ctx: &mut Context<Fr>,
+    range: &RangeChip<Fr>,
+    gate: &GateChip<Fr>,
+    packed: AssignedValue<Fr>,
+    num_limbs: usize,
+) -> Vec<AssignedBabyBear> {
+    let bounds = base_baby_bear_decomp_bounds(num_limbs);
+    let p = BigUint::from(BabyBear::ORDER_U32);
+    let one = BigUint::from(1u64);
+
+    // Witness: compute digits and top quotient out-of-circuit.
+    let mut value = fe_to_biguint(packed.value());
+    let output_digits_big: Vec<BigUint> = (0..num_limbs)
+        .map(|_| {
+            let digit = &value % &p;
+            value /= &p;
+            digit
+        })
+        .collect();
+    let top_quotient_big = value;
+
+    // Load each digit witness.
+    let output_digits: Vec<AssignedBabyBear> = output_digits_big
+        .iter()
+        .map(|digit| {
+            let v = ctx.load_witness(biguint_to_fe(digit));
+            AssignedBabyBear {
+                value: v,
+                max_bits: 31,
+            }
+        })
+        .collect();
+
+    // Load top quotient witness.
+    let top_quotient = ctx.load_witness(biguint_to_fe(&top_quotient_big));
+
+    // Constrain.
+    for digit in &output_digits {
+        range.check_less_than_safe(ctx, digit.value, BabyBear::ORDER_U32 as u64);
+    }
+    let top_quotient_valid =
+        range.is_big_less_than_safe(ctx, top_quotient, bounds.top_quotient_max_plus_one.clone());
+    gate.assert_is_const(ctx, &top_quotient_valid, &Fr::ONE);
+
+    // Verify recomposition: lower = sum(digit_i * p^i)
+    let lower = gate.inner_product(
+        ctx,
+        output_digits.iter().map(|d| d.value),
+        std::iter::successors(Some(one), |power| Some(power * &p))
+            .take(num_limbs)
+            .map(|power| QuantumCell::Constant(biguint_to_fe(&power))),
+    );
+
+    // packed == top_quotient * p^k + lower
+    let recomposed = gate.mul_add(
+        ctx,
+        top_quotient,
+        QuantumCell::Constant(biguint_to_fe(&bounds.pow_k)),
+        lower,
+    );
+    ctx.constrain_equal(&packed, &recomposed);
+
+    // Boundary check: when top_quotient is at max, lower must not exceed the remainder.
+    let at_top_boundary = gate.is_equal(
+        ctx,
+        top_quotient,
+        QuantumCell::Constant(bounds.top_quotient_max_fe),
+    );
+    // Range-check lower against p^k (not lower_max_plus_one) because lower can be
+    // any value in [0, p^k - 1] and p^k may need more bits than lower_max_plus_one.
+    // Using is_big_less_than_safe with lower_max_plus_one would derive an insufficient
+    // range_bits from lower_max_plus_one.bits() (e.g. 152 vs the 155 bits needed).
+    let lower_range_bits =
+        (bounds.pow_k.bits() as usize).div_ceil(range.lookup_bits()) * range.lookup_bits();
+    range.range_check(ctx, lower, lower_range_bits);
+    let lower_is_valid = range.is_less_than(
+        ctx,
+        lower,
+        QuantumCell::Constant(biguint_to_fe(&bounds.lower_max_plus_one)),
+        lower_range_bits,
+    );
+    let lower_is_invalid = gate.not(ctx, lower_is_valid);
+    let lower_violation = gate.mul(ctx, at_top_boundary, lower_is_invalid);
+    gate.assert_is_const(ctx, &lower_violation, &Fr::ZERO);
+
+    output_digits
 }
 
 fn var_to_u64_limbs(

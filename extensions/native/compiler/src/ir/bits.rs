@@ -89,4 +89,15 @@ impl<C: Config> Builder<C> {
         self.push(DslIr::CircuitVarTo64BitsF(value, ret));
         ret
     }
+
+    /// Decompose a Var into little-endian base-|F| Felt limbs inside a circuit.
+    pub fn var_to_field_order_f_limbs_circuit(
+        &mut self,
+        value: Var<C::N>,
+        n: usize,
+    ) -> Vec<Felt<C::F>> {
+        let ret = (0..n).map(|_| self.uninit()).collect::<Vec<_>>();
+        self.push(DslIr::CircuitVarToFieldOrderLimbsF(value, ret.clone()));
+        ret
+    }
 }
