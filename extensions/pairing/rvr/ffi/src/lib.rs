@@ -11,7 +11,7 @@ use openvm_pairing_guest::{
     halo2curves_shims::{bls12_381::Bls12_381, bn254::Bn254},
     pairing::{FinalExp, MultiMillerLoop},
 };
-use rvr_openvm_ext_algebra_ffi::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
+use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u32_range_wrapper, rd_mem_u32_wrapper, WORD_SIZE,
 };

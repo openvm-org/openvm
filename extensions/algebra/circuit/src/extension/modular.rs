@@ -3,6 +3,7 @@ use std::{array, sync::Arc};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
+use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_circuit::{
     self,
     arch::{
@@ -28,9 +29,8 @@ use openvm_rv32_adapters::{
     Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
-use rand::RngCore;
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -67,7 +67,13 @@ impl ModularExtension {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {}
+impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+        registry.register(rvr_openvm_ext_algebra::ModularRvrExtension::new(
+            self.supported_moduli.clone(),
+        ));
+    }
+}
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
@@ -526,7 +532,7 @@ pub(crate) mod phantom {
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
-    use super::{find_non_qr, mod_sqrt};
+    use super::{find_non_qr, mod_sqrt, NQR_RNG_SEED};
     use crate::{NUM_LIMBS_32, NUM_LIMBS_48};
 
     #[derive(derive_new::new)]
@@ -619,7 +625,7 @@ pub(crate) mod phantom {
             // instances of the VM. The seed determines the runtime of Tonelli-Shanks, if the
             // algorithm is necessary, which affects the time it takes to construct and initialize
             // the VM but does not affect the runtime.
-            let mut rng = StdRng::from_seed([0u8; 32]);
+            let mut rng = StdRng::from_seed(NQR_RNG_SEED);
             let non_qrs = supported_moduli
                 .iter()
                 .map(|modulus| find_non_qr(modulus, &mut rng))
@@ -724,37 +730,6 @@ pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigU
             c = &b * &b % modulus;
             t = ((t * &b % modulus) * &b) % modulus;
             r = (r * b) % modulus;
-        }
-    }
-}
-
-// Returns a non-quadratic residue in the field
-pub fn find_non_qr(modulus: &BigUint, rng: &mut impl RngCore) -> BigUint {
-    if modulus % 4u32 == BigUint::from(3u8) {
-        // p = 3 mod 4 then -1 is a quadratic residue
-        modulus - BigUint::one()
-    } else if modulus % 8u32 == BigUint::from(5u8) {
-        // p = 5 mod 8 then 2 is a non-quadratic residue
-        // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
-        BigUint::from_u8(2u8).unwrap()
-    } else {
-        // Sample uniformly from [2, modulus - 1) using rejection sampling
-        let range = modulus - 3u32; // number of values in [2, modulus-1)
-        let mut buf = vec![0u8; modulus.to_bytes_be().len()];
-        let exponent = (modulus - BigUint::one()) >> 1;
-        loop {
-            // Rejection sample for uniform distribution
-            rng.fill_bytes(&mut buf);
-            let val = BigUint::from_bytes_be(&buf);
-            if val >= range {
-                continue;
-            }
-            let non_qr = val + 2u32;
-            // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
-            // If the result is p-1, then non_qr is a quadratic nonresidue
-            if non_qr.modpow(&exponent, modulus) == modulus - BigUint::one() {
-                return non_qr;
-            }
         }
     }
 }
