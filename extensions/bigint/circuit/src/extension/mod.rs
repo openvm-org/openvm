@@ -75,7 +75,17 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Int256 {}
+impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
+    fn extend_rvr(
+        &self,
+        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
+        ctx: &rvr_openvm_lift::RvrExtensionCtx,
+    ) {
+        let ext = rvr_openvm_ext_bigint::Int256Extension::new(ctx)
+            .expect("failed to construct rvr Int256Extension");
+        registry.register(ext);
+    }
+}
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(

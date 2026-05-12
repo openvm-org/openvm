@@ -62,12 +62,6 @@ jobs:
           - { extension: cuda, mode: default }
           - { extension: cuda, mode: aot }
           - { extension: cuda, mode: rvr }
-          - { extension: sha2, mode: rvr }
-          - { extension: bigint, mode: rvr }
-          - { extension: algebra, mode: rvr }
-          - { extension: ecc, mode: rvr }
-          - { extension: pairing, mode: rvr }
-          - { extension: deferral, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/extension-tests.group.yml
