@@ -25,6 +25,7 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 - (Recursion) Validate that each AIR proof's `exposed_values_after_challenge` length matches verifier key advice, preventing injection of extra post-challenge exposed-value vectors.
 - (Recursion) Fix `add_felt_exti` ASM lowering to correctly compute `lhs + rhs[0]` for the base coefficient instead of silently dropping `rhs[0]`.
 - (Recursion) Constrain `VERIFY_BATCH` inside-row hashing to start at the correct `opened_values` index and prevent `opened_index` from advancing across row boundaries.
+- (Recursion) Update Plonky3 to v0.4.3. The static verifier challenger now mirrors `MultiField32Challenger` from that release: Each absorb packs the pending `F` scalars and tags the block with the number of `F` elements consumed, and each squeeze splits the `PF` rate cells into canonical base-`|F|` limbs. Also adds a DSL primitive (`CircuitVarToFieldOrderLimbsF`) that constrains the in-circuit base-`|F|` decomposition to be canonical.
 - (Guest Library/IO) Add checked arithmetic to hint stream read and deserialization buffer allocation to prevent integer overflow from untrusted hint lengths.
 - (Guest Library/Algebra) Ensure zero is always reported as a perfect square in modular arithmetic.
 - (Guest Library/Pairing) Add Fp6 subfield checks for the hinted scalar factor in `openvm-pairing` BN254/BLS12-381 pairing check optimization.
