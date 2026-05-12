@@ -102,7 +102,7 @@ mod tests {
             #[allow(unused_variables)]
             let state = interpreter.execute(stdin.clone(), None)?;
 
-            #[cfg(feature = "aot")]
+            #[cfg(any(feature = "aot", feature = "rvr"))]
             {
                 let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
                 let naive_state = naive_interpreter.execute(stdin, None)?;
@@ -140,7 +140,7 @@ mod tests {
         #[allow(unused_variables)]
         let state = interpreter.execute(stdin.clone(), None)?;
 
-        #[cfg(feature = "aot")]
+        #[cfg(any(feature = "aot", feature = "rvr"))]
         {
             let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
             let naive_state = naive_interpreter.execute(stdin, None)?;
