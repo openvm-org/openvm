@@ -39,11 +39,12 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-      - name: Init keccak rvr FFI submodules
-        if: inputs.mode == 'rvr' && contains(inputs.extensions, 'keccak256')
+      - name: Init rvr FFI submodules
+        if: inputs.mode == 'rvr'
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/xkcp
+          git submodule update --init --recursive --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"

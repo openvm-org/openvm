@@ -79,9 +79,21 @@ pub struct PairingExtension {
 }
 
 impl PairingExtension {
-    pub fn new(staticlib_path: PathBuf) -> Self {
-        Self { staticlib_path }
+    pub fn new() -> Self {
+        Self {
+            staticlib_path: default_staticlib_path(),
+        }
     }
+}
+
+impl Default for PairingExtension {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_PAIRING_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for PairingExtension {

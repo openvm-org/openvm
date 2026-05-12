@@ -13,8 +13,8 @@ use super::{
     io::{
         convert_input_stream, host_deferral_call_lookup, host_deferral_output_lookup,
         host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
-        host_hint_stream_set, host_print_str, host_reveal, DeferralData, OpenVmHostCallbacks,
-        OpenVmIoState,
+        host_hint_stream_set, host_print_str, host_reveal, DeferralFnPtr, DeferralHashFn,
+        OpenVmHostCallbacks, OpenVmIoState,
     },
     metered::{
         metered_periodic_check, MeteredConfig, MeteredTracer, MeteredTracerData, RvrMeteredResult,
@@ -29,6 +29,7 @@ use super::{
         MeteredCostState, MeteredState, PureState,
     },
 };
+use crate::arch::deferral::DeferralState;
 
 /// Result of executing via rvr.
 pub struct RvrExecutionResult {
@@ -88,7 +89,9 @@ enum ExecuteOutcome {
 pub fn build_io_state(
     input_stream: VecDeque<Vec<u8>>,
     memory: *mut u8,
-    deferral: DeferralData,
+    deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<DeferralFnPtr>,
+    deferral_hash: Option<DeferralHashFn>,
 ) -> OpenVmIoState {
     OpenVmIoState {
         input_stream,
@@ -97,7 +100,9 @@ pub fn build_io_state(
         public_values: Vec::new(),
         memory,
         rng: StdRng::seed_from_u64(0),
-        deferral,
+        deferrals,
+        deferral_fns,
+        deferral_hash,
     }
 }
 
@@ -215,7 +220,9 @@ pub fn execute<F: PrimeField32>(
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
     hint_stream: Vec<u8>,
-    deferral: DeferralData,
+    deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<DeferralFnPtr>,
+    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrExecutionResult, ExecuteError> {
     let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = PureTracerData;
@@ -225,7 +232,9 @@ pub fn execute<F: PrimeField32>(
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
         memory.as_mut_ptr(),
-        deferral,
+        deferrals,
+        deferral_fns,
+        deferral_hash,
     );
     io_state.hint_stream = hint_stream;
     io_state.hint_pos = 0;
@@ -252,13 +261,16 @@ pub fn execute<F: PrimeField32>(
 }
 
 /// Execute a VmExe with metered cost tracking, tracking per-chip trace costs.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
     hint_stream: Vec<u8>,
     metered_cost_config: MeteredCostConfig,
-    deferral: DeferralData,
+    deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<DeferralFnPtr>,
+    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = MeteredCostData::default();
@@ -273,7 +285,9 @@ pub fn execute_metered_cost<F: PrimeField32>(
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
         memory.as_mut_ptr(),
-        deferral,
+        deferrals,
+        deferral_fns,
+        deferral_hash,
     );
     io_state.hint_stream = hint_stream;
     io_state.hint_pos = 0;
@@ -307,13 +321,16 @@ pub fn execute_metered_cost<F: PrimeField32>(
 /// Execute a VmExe with an instruction limit.
 ///
 /// Suspends via target_instret when instret reaches the limit.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_with_limit<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
     hint_stream: Vec<u8>,
     instruction_limit: u64,
-    deferral: DeferralData,
+    deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<DeferralFnPtr>,
+    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrLimitedResult, ExecuteError> {
     let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = PureTracerData;
@@ -324,7 +341,9 @@ pub fn execute_with_limit<F: PrimeField32>(
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
         memory.as_mut_ptr(),
-        deferral,
+        deferrals,
+        deferral_fns,
+        deferral_hash,
     );
     io_state.hint_stream = hint_stream;
     io_state.hint_pos = 0;
@@ -361,6 +380,7 @@ pub fn execute_with_limit<F: PrimeField32>(
 }
 
 /// Execute a VmExe with metered cost and an instruction limit.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_metered_cost_with_limit<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
@@ -368,7 +388,9 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
     hint_stream: Vec<u8>,
     metered_cost_config: MeteredCostConfig,
     instruction_limit: u64,
-    deferral: DeferralData,
+    deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<DeferralFnPtr>,
+    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrMeteredCostLimitedResult, ExecuteError> {
     let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = MeteredCostData::default();
@@ -384,7 +406,9 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
         memory.as_mut_ptr(),
-        deferral,
+        deferrals,
+        deferral_fns,
+        deferral_hash,
     );
     io_state.hint_stream = hint_stream;
     io_state.hint_pos = 0;
@@ -424,13 +448,16 @@ pub fn execute_metered_cost_with_limit<F: PrimeField32>(
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
     exe: &VmExe<F>,
     input_stream: VecDeque<Vec<F>>,
     hint_stream: Vec<u8>,
     trace_config: MeteredConfig,
-    deferral: DeferralData,
+    deferrals: Vec<DeferralState>,
+    deferral_fns: Vec<DeferralFnPtr>,
+    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrMeteredResult, ExecuteError> {
     let mut memory = GuardedMemory::new(MEM_SIZE)?;
     let mut tracer_data = MeteredTracerData::default();
@@ -457,7 +484,9 @@ pub fn execute_metered<F: PrimeField32>(
     let mut io_state = build_io_state(
         convert_input_stream(&input_stream),
         memory.as_mut_ptr(),
-        deferral,
+        deferrals,
+        deferral_fns,
+        deferral_hash,
     );
     io_state.hint_stream = hint_stream;
     io_state.hint_pos = 0;

@@ -68,7 +68,17 @@ pub struct DeferralExtension {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: VmField> VmRvrExtension<F> for DeferralExtension {}
+impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
+    fn extend_rvr(
+        &self,
+        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
+        ctx: &rvr_openvm_lift::RvrExtensionCtx,
+    ) {
+        let ext = rvr_openvm_ext_deferral::DeferralRvrExtension::new(ctx)
+            .expect("failed to construct rvr DeferralRvrExtension");
+        registry.register(ext);
+    }
+}
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(

@@ -39,14 +39,12 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-      - name: Init keccak rvr FFI submodules
-        if: inputs.mode == 'rvr' && contains(inputs.crates, 'keccak256')
+      - name: Init rvr FFI submodules
+        if: inputs.mode == 'rvr'
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/xkcp
-      - name: Init algebra rvr FFI submodules
-        if: inputs.mode == 'rvr' && contains(inputs.crates, 'ff_derive')
-        run: git submodule update --init --recursive --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --recursive --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
@@ -132,7 +130,11 @@ jobs:
                 extra_args=(--run-ignored=all)
               fi
             elif [[ "${{ inputs.mode }}" == "rvr" ]]; then
-              extra_args=(--features=rvr)
+              if [[ "$crate" == "pairing" ]]; then
+                extra_args=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
+              else
+                extra_args=(--features=rvr)
+              fi
             elif [[ "$crate" == "pairing" ]]; then
               extra_args=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
             elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
