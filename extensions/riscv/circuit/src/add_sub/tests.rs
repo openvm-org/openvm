@@ -180,7 +180,7 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 fn rand_rv64_add_sub_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
-    let mut tester = VmChipTestBuilder::default_persistent();
+    let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
