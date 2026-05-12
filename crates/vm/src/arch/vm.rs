@@ -112,10 +112,6 @@ pub struct Streams<F> {
     /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
-    #[cfg(feature = "rvr")]
-    pub deferral_fns: Vec<rvr::io::DeferralFnPtr>,
-    #[cfg(feature = "rvr")]
-    pub deferral_hash: Option<rvr::io::DeferralHashFn>,
 }
 
 impl<F> Streams<F> {
@@ -124,10 +120,6 @@ impl<F> Streams<F> {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
-            #[cfg(feature = "rvr")]
-            deferral_fns: Vec::default(),
-            #[cfg(feature = "rvr")]
-            deferral_hash: None,
         }
     }
 }

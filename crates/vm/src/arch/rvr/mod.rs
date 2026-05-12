@@ -23,7 +23,6 @@ pub use execute::{
     execute_metered_cost_with_limit, execute_with_limit, register_and_execute, ExecuteError,
     RvrExecutionResult, RvrLimitedResult, RvrMeteredCostLimitedResult, RvrMeteredCostResult,
 };
-pub use io::{DeferralFnPtr, DeferralHashFn};
 pub use metered::{
     build_metered_config, MeteredConfig, RvrMeteredInstance, RvrMeteredResult, RvrSegment,
 };

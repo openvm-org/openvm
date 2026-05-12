@@ -102,9 +102,10 @@ pub fn build_callbacks<F: PrimeField32>(
 
 /// Construct an `OpenVmIoState` borrowing the relevant fields of `vm_state`.
 ///
-/// Splits `vm_state` into disjoint borrows: `streams` fields (mutable for the
-/// active streams + deferral cache, immutable for the registered closures),
-/// `rng`, and the `PUBLIC_VALUES_AS` byte slice from `memory`.
+/// Splits `vm_state.streams` (active streams + deferral cache), `rng`, and
+/// the `PUBLIC_VALUES_AS` byte slice from `memory`. The registered deferral
+/// closures and hasher live in `rvr-openvm-ext-deferral`'s thread-local
+/// runtime — see `host_deferral_call_lookup`.
 fn build_io_state_borrowed<'a, F: PrimeField32>(
     vm_state: &'a mut VmState<F, GuestMemory>,
     memory_ptr: *mut u8,
@@ -117,8 +118,6 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
         memory_ptr,
         public_values: public_values_slice(&mut vm_state.memory.memory),
         deferrals: &mut streams.deferrals,
-        deferral_fns: streams.deferral_fns.as_slice(),
-        deferral_hash: streams.deferral_hash.as_ref(),
         _marker: PhantomData,
     }
 }

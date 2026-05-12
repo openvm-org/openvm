@@ -12,7 +12,7 @@
 //! generated C code (via `trace_io_*` functions in tracer headers). These
 //! callbacks are pure IO logic.
 
-use std::{collections::VecDeque, ffi::c_void, io::Write, marker::PhantomData, sync::Arc};
+use std::{collections::VecDeque, ffi::c_void, io::Write, marker::PhantomData};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
@@ -20,18 +20,12 @@ use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_B
 
 use crate::arch::deferral::{DeferralState, InputMapVal};
 
-/// `input_raw → output_raw`.
-pub type DeferralFnPtr = Arc<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
-
-/// `(def_idx, output_raw) → output_commit`.
-pub type DeferralHashFn = Arc<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
-
 /// IO execution state borrowed from the host `VmState<F>` for the duration of
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
 /// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
-/// (raw because the C engine accesses it directly via pointer). Deferrals
-/// stay in the closure-based form: the host evaluates `deferral_fns[idx]`
-/// lazily on cache-miss, hashes the output, and caches into `deferrals`.
+/// (raw because the C engine accesses it directly via pointer). The deferral
+/// cache lives here; the registered closures and hasher live in
+/// `rvr-openvm-ext-deferral`'s thread-local runtime.
 pub struct OpenVmIoState<'a, F: PrimeField32> {
     pub input_stream: &'a mut VecDeque<Vec<F>>,
     pub hint_stream: &'a mut VecDeque<F>,
@@ -39,8 +33,6 @@ pub struct OpenVmIoState<'a, F: PrimeField32> {
     pub memory_ptr: *mut u8,
     pub public_values: &'a mut [u8],
     pub deferrals: &'a mut Vec<DeferralState>,
-    pub deferral_fns: &'a [DeferralFnPtr],
-    pub deferral_hash: Option<&'a DeferralHashFn>,
     pub _marker: PhantomData<&'a mut F>,
 }
 
@@ -182,6 +174,10 @@ pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
 /// Deferral CALL lookup; same `Raw → Output` transition as `DeferralFn::execute`.
 /// Returns 1 on hit, 0 on miss.
 ///
+/// The closure-evaluation side (Raw → Output_raw + commit) is delegated to
+/// `rvr-openvm-ext-deferral`'s thread-local runtime, installed at
+/// `DeferralExtension::extend_rvr` time. This callback only owns the cache.
+///
 /// # Safety
 ///
 /// `input_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
@@ -207,17 +203,8 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
             (arr, len)
         }
         InputMapVal::Raw(input_raw) => {
-            let func = io
-                .deferral_fns
-                .get(def_idx as usize)
-                .expect("deferral CALL: def_idx has no closure registered")
-                .clone();
-            let hash = io
-                .deferral_hash
-                .expect("deferral CALL: hash_output not configured")
-                .clone();
-            let output_raw = func(&input_raw);
-            let commit = hash(def_idx, &output_raw);
+            let (commit, output_raw) =
+                rvr_openvm_ext_deferral::eval_deferral_call(def_idx, &input_raw);
             let len = output_raw.len() as u64;
             io.deferrals[def_idx as usize].store_output(&input_commit, commit.to_vec(), output_raw);
             (commit, len)

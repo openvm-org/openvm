@@ -18,6 +18,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::DeferralCallExecutor;
 use crate::{
+    def_fn::execute_deferral_fn,
     poseidon2::deferral_poseidon2_chip,
     utils::{
         byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
@@ -194,7 +195,8 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     let old_output_acc = join_memory_ops(old_output_acc_chunks);
 
     let poseidon2_chip = deferral_poseidon2_chip();
-    let (output_commit, output_len) = pre_compute.deferral_fn.execute(
+    let (output_commit, output_len) = execute_deferral_fn(
+        &pre_compute.deferral_fn,
         &input_commit_bytes.to_vec(),
         &mut exec_state.streams.deferrals[pre_compute.deferral_idx as usize],
         pre_compute.deferral_idx,

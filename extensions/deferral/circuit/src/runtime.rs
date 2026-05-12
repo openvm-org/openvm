@@ -1,28 +1,16 @@
-//! F-typed builders for the rvr-side deferral fields on `Streams<F>`.
+//! F-typed builder for the rvr deferral output hasher.
 //!
-//! TODO: drop this module once rvr execution is unified onto openvm
-//! `VmState<F>`.
+//! The hasher is constructed from a Poseidon2 chip parameterized over `F` and
+//! handed off to `rvr-openvm-ext-deferral`'s thread-local runtime by
+//! `DeferralExtension::extend_rvr`.
 
 use std::sync::Arc;
 
-use openvm_circuit::arch::{
-    rvr::{DeferralFnPtr, DeferralHashFn},
-    VmField,
-};
+use openvm_circuit::arch::VmField;
+use rvr_openvm_ext_deferral::DeferralHashFn;
 use rvr_openvm_ext_ffi_common::DEFERRAL_COMMIT_NUM_BYTES;
 
-use crate::{def_fn::hash_output_raw, poseidon2::deferral_poseidon2_chip, DeferralExtension};
-
-pub fn make_deferral_fns(extension: &DeferralExtension) -> Vec<DeferralFnPtr> {
-    extension
-        .fns
-        .iter()
-        .map(|fn_arc| {
-            let fn_arc = Arc::clone(fn_arc);
-            Arc::new(move |input: &[u8]| fn_arc.call_raw(input)) as DeferralFnPtr
-        })
-        .collect()
-}
+use crate::{def_fn::hash_output_raw, poseidon2::deferral_poseidon2_chip};
 
 pub fn make_deferral_hash<F: VmField>() -> DeferralHashFn {
     let hasher = deferral_poseidon2_chip::<F>();

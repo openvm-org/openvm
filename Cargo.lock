@@ -5837,6 +5837,7 @@ dependencies = [
  "rand 0.9.2",
  "rustc-hash 2.1.1",
  "rvr-openvm",
+ "rvr-openvm-ext-deferral",
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -8925,6 +8926,7 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-stark-backend",
+ "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]

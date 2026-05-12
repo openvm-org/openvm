@@ -1,13 +1,81 @@
 //! Deferral extension for rvr-openvm: IR nodes for CALL/OUTPUT and the
 //! `DeferralRvrExtension` for lifting them via double FFI.
+//!
+//! Also owns the host-side deferral runtime: thread-local storage for the
+//! registered deferral closures and output hasher, populated by
+//! `DeferralExtension::extend_rvr` and consumed during rvr execution by
+//! `openvm-circuit`'s `host_deferral_call_lookup` (on cache miss).
 
-use std::path::{Path, PathBuf};
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_ffi_common::DEFERRAL_COMMIT_NUM_BYTES;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
+
+// ── Host-side deferral runtime ────────────────────────────────────────────────
+
+/// `input_raw → output_raw` closure registered by the host.
+pub type DeferralFnPtr = Arc<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
+
+/// `(def_idx, output_raw) → output_commit` hasher registered by the host.
+pub type DeferralHashFn = Arc<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
+
+#[derive(Default)]
+struct DeferralRuntime {
+    fns: Vec<DeferralFnPtr>,
+    hash: Option<DeferralHashFn>,
+}
+
+thread_local! {
+    static DEFERRAL_RUNTIME: RefCell<DeferralRuntime> = RefCell::new(DeferralRuntime::default());
+}
+
+/// Install the host-side deferral closures and output hasher into this
+/// thread's TLS. Overwrites any prior installation. Called by
+/// `DeferralExtension::extend_rvr` while the rvr `ExtensionRegistry` is being
+/// built; the values stay live until the next install (or thread exit).
+pub fn install_deferral_runtime(fns: Vec<DeferralFnPtr>, hash: DeferralHashFn) {
+    DEFERRAL_RUNTIME.with(|r| {
+        let mut r = r.borrow_mut();
+        r.fns = fns;
+        r.hash = Some(hash);
+    });
+}
+
+/// Evaluate a registered deferral closure: returns `(output_commit, output_raw)`.
+///
+/// Called from openvm-circuit's `host_deferral_call_lookup` on cache miss
+/// (when the cache holds `Raw(input_raw)` but no resolved output yet).
+///
+/// # Panics
+///
+/// Panics if `def_idx` has no registered closure, or no hasher was installed.
+pub fn eval_deferral_call(
+    def_idx: u32,
+    input_raw: &[u8],
+) -> ([u8; DEFERRAL_COMMIT_NUM_BYTES], Vec<u8>) {
+    DEFERRAL_RUNTIME.with(|r| {
+        let r = r.borrow();
+        let func = r
+            .fns
+            .get(def_idx as usize)
+            .expect("deferral CALL: def_idx has no closure registered");
+        let hash = r
+            .hash
+            .as_ref()
+            .expect("deferral CALL: hash_output not configured");
+        let output_raw = func(input_raw);
+        let output_commit = hash(def_idx, &output_raw);
+        (output_commit, output_raw)
+    })
+}
 
 // ── IR Nodes ──────────────────────────────────────────────────────────────────
 

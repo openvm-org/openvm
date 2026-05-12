@@ -11,8 +11,6 @@ mod tests {
         },
         utils::{air_test_with_min_segments, test_system_config},
     };
-    #[cfg(feature = "rvr")]
-    use openvm_deferral_circuit::runtime::{make_deferral_fns, make_deferral_hash};
     use openvm_deferral_circuit::{
         DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
     };
@@ -85,11 +83,7 @@ mod tests {
         DeferralExtension::new(fns, commits)
     }
 
-    fn run_test(
-        config: Rv32DeferralConfig,
-        example_name: &str,
-        #[cfg_attr(not(feature = "rvr"), allow(unused_mut))] mut streams: Streams<F>,
-    ) -> Result<()> {
+    fn run_test(config: Rv32DeferralConfig, example_name: &str, streams: Streams<F>) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -101,11 +95,10 @@ mod tests {
                     config.deferral.def_circuit_commits.clone(),
                 )),
         )?;
-        #[cfg(feature = "rvr")]
-        {
-            streams.deferral_fns = make_deferral_fns(&config.deferral);
-            streams.deferral_hash = Some(make_deferral_hash::<F>());
-        }
+        // Under `rvr`, the deferral closures + hasher are installed into
+        // `rvr-openvm-ext-deferral`'s thread-local runtime by
+        // `DeferralExtension::extend_rvr` when the rvr instance is built.
+        // The test side doesn't need to thread anything extra through.
         air_test_with_min_segments(Rv32DeferralBuilder, config, exe, streams, 1).unwrap();
         Ok(())
     }
