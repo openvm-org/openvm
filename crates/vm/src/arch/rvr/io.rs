@@ -1,18 +1,13 @@
 //! OpenVM IO runtime: Rust-side IO state with FFI callbacks.
 //!
-//! All execution IO state lives on the openvm `VmState<F>`. The C engine
-//! invokes Rust callbacks via function pointers registered through
-//! `register_openvm_callbacks`; the callbacks themselves are generic over
-//! the openvm field `F` and read/write VmState directly. `Streams<F>` is
-//! consumed lazily in field-element form — the F→u8 cast happens one byte
-//! at a time inside `host_hint_storew`/`host_hint_buffer` rather than
-//! upfront.
-//!
-//! Metering adjustments for IO instructions are handled entirely in the
-//! generated C code (via `trace_io_*` functions in tracer headers). These
-//! callbacks are pure IO logic.
+//! All execution IO state lives on the openvm `VmState<F>`; callbacks are
+//! generic over the openvm field `F` and read/write VmState directly.
+//! `Streams<F>` is consumed lazily — the F→u8 cast happens one byte at a
+//! time inside the storew/buffer callbacks rather than upfront. Metering
+//! adjustments for IO instructions are handled entirely in the generated C
+//! code; these callbacks are pure IO logic.
 
-use std::{collections::VecDeque, ffi::c_void, io::Write, marker::PhantomData};
+use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
@@ -23,9 +18,7 @@ use crate::arch::deferral::{DeferralState, InputMapVal};
 /// IO execution state borrowed from the host `VmState<F>` for the duration of
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
 /// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
-/// (raw because the C engine accesses it directly via pointer). The deferral
-/// cache lives here; the registered closures and hasher live in
-/// `rvr-openvm-ext-deferral`'s thread-local runtime.
+/// (raw because the C engine accesses it directly via pointer).
 pub struct OpenVmIoState<'a, F: PrimeField32> {
     pub input_stream: &'a mut VecDeque<Vec<F>>,
     pub hint_stream: &'a mut VecDeque<F>,
@@ -33,10 +26,8 @@ pub struct OpenVmIoState<'a, F: PrimeField32> {
     pub memory_ptr: *mut u8,
     pub public_values: &'a mut [u8],
     pub deferrals: &'a mut Vec<DeferralState>,
-    pub _marker: PhantomData<&'a mut F>,
 }
 
-/// Function-pointer struct passed to C via `register_openvm_callbacks`.
 /// Must match the C `OpenVmHostCallbacks` layout exactly.
 #[repr(C)]
 pub struct OpenVmHostCallbacks {
@@ -173,12 +164,9 @@ pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
 
 // ── Deferral callbacks ─────────────────────────────────────────────────────
 
-/// Deferral CALL lookup; same `Raw → Output` transition as `DeferralFn::execute`.
-/// Returns 1 on hit, 0 on miss.
-///
-/// The closure-evaluation side (Raw → Output_raw + commit) is delegated to
-/// `rvr-openvm-ext-deferral`'s thread-local runtime, installed at
-/// `DeferralExtension::extend_rvr` time. This callback only owns the cache.
+/// Deferral CALL lookup. Returns 1 on hit, 0 on miss. The closure-evaluation
+/// side (Raw → Output_raw + commit) is delegated to a thread-local runtime;
+/// this callback only owns the cache.
 ///
 /// # Safety
 ///

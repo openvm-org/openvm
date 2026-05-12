@@ -1,8 +1,4 @@
 //! F-typed builder for the rvr deferral output hasher.
-//!
-//! The hasher is constructed from a Poseidon2 chip parameterized over `F` and
-//! handed off to `rvr-openvm-ext-deferral`'s thread-local runtime by
-//! `DeferralExtension::extend_rvr`.
 
 use std::sync::Arc;
 

@@ -11,8 +11,6 @@ use super::{
     metered_cost::{MeteredCostMeter, PureTracer},
 };
 
-// ── Generic tracer pointer wrapper ───────────────────────────────────────────
-
 /// A payload type that can sit behind a [`TracerPtr`]. The const `KIND`
 /// matches the tracer-kind ABI the rvr-generated C code expects.
 pub trait TracerPayload {
@@ -22,11 +20,6 @@ pub trait TracerPayload {
 /// `#[repr(transparent)]` pointer to a tracer payload. Matches the C
 /// `Tracer*` ABI (8 bytes). Default is a null pointer; consumers set the
 /// pointer at execute-time via `TracerPtr(&mut payload)`.
-///
-/// All three concrete tracer wrappers (`PureTracer`, `MeteredCostMeter`,
-/// `MeteredTracer`) are type aliases of `TracerPtr<P>` for the matching
-/// payload `P`, so the boilerplate `Default`/`TracerState`/`Deref`/`DerefMut`
-/// impls live once here rather than three times.
 #[repr(transparent)]
 pub struct TracerPtr<T>(pub *mut T);
 
@@ -61,13 +54,8 @@ impl<T> std::ops::DerefMut for TracerPtr<T> {
     }
 }
 
-/// Type alias for RV32 state with PureTracer and instret-based suspension.
 pub type PureState = RvState<rvr_state::Rv32, PureTracer, InstretSuspender>;
-
-/// Type alias for RV32 state with MeteredCostMeter and instret-based suspension.
 pub type MeteredCostState = RvState<rvr_state::Rv32, MeteredCostMeter, InstretSuspender>;
-
-/// Type alias for RV32 state with MeteredTracer and instret-based suspension.
 pub type MeteredState = RvState<rvr_state::Rv32, MeteredTracer, InstretSuspender>;
 
 /// Build a `PureState` whose memory pointer aliases `memory_ptr` and pc starts at `pc`.
@@ -86,7 +74,6 @@ pub fn init_rvr_state(memory_ptr: *mut u8, pc: u32) -> PureState {
     state
 }
 
-/// Build a `MeteredCostState`. See [`init_rvr_state`] for safety.
 pub fn init_rvr_state_with_metered_cost(memory_ptr: *mut u8, pc: u32) -> MeteredCostState {
     let mut state = MeteredCostState::new();
     state.set_memory(memory_ptr);
@@ -95,7 +82,6 @@ pub fn init_rvr_state_with_metered_cost(memory_ptr: *mut u8, pc: u32) -> Metered
     state
 }
 
-/// Build a `MeteredState`. See [`init_rvr_state`] for safety.
 pub fn init_rvr_state_with_metered(memory_ptr: *mut u8, pc: u32) -> MeteredState {
     let mut state = MeteredState::new();
     state.set_memory(memory_ptr);

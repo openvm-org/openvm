@@ -95,10 +95,6 @@ mod tests {
                     config.deferral.def_circuit_commits.clone(),
                 )),
         )?;
-        // Under `rvr`, the deferral closures + hasher are installed into
-        // `rvr-openvm-ext-deferral`'s thread-local runtime by
-        // `DeferralExtension::extend_rvr` when the rvr instance is built.
-        // The test side doesn't need to thread anything extra through.
         air_test_with_min_segments(Rv32DeferralBuilder, config, exe, streams, 1).unwrap();
         Ok(())
     }

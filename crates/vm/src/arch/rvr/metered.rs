@@ -11,7 +11,7 @@ use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 
 use super::{
-    bridge::{ensure_rvr_outcome, map_rvr_compile_error, map_rvr_execute_error},
+    bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
     compile_metered, compile_metered_with_extensions, execute_metered,
     state::{MeteredState, TracerPayload, TracerPtr},
@@ -90,7 +90,6 @@ impl TracerPayload for MeteredTracerData {
     const KIND: u32 = 11;
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
 pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -731,14 +730,6 @@ where
             metrics::gauge!("execute_metered_insn_mi/s")
                 .set(insns as f64 / elapsed.as_micros() as f64);
         }
-
-        ensure_rvr_outcome(
-            "metered execution from state",
-            metered_result.state.is_terminated(),
-            metered_result.state.is_suspended(),
-            metered_result.state.result_code(),
-            false,
-        )?;
 
         let segments = metered_result
             .segments

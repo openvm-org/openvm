@@ -1,10 +1,6 @@
 //! Deferral extension for rvr-openvm: IR nodes for CALL/OUTPUT and the
-//! `DeferralRvrExtension` for lifting them via double FFI.
-//!
-//! Also owns the host-side deferral runtime: thread-local storage for the
-//! registered deferral closures and output hasher, populated by
-//! `DeferralExtension::extend_rvr` and consumed during rvr execution by
-//! `openvm-circuit`'s `host_deferral_call_lookup` (on cache miss).
+//! `DeferralRvrExtension` for lifting them via double FFI. Also owns the
+//! host-side deferral runtime in thread-local storage.
 
 use std::{
     cell::RefCell,
@@ -18,8 +14,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::DEFERRAL_COMMIT_NUM_BYTES;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
-
-// ── Host-side deferral runtime ────────────────────────────────────────────────
 
 /// `input_raw → output_raw` closure registered by the host.
 pub type DeferralFnPtr = Arc<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
@@ -38,9 +32,7 @@ thread_local! {
 }
 
 /// Install the host-side deferral closures and output hasher into this
-/// thread's TLS. Overwrites any prior installation. Called by
-/// `DeferralExtension::extend_rvr` while the rvr `ExtensionRegistry` is being
-/// built; the values stay live until the next install (or thread exit).
+/// thread's TLS. Overwrites any prior installation.
 pub fn install_deferral_runtime(fns: Vec<DeferralFnPtr>, hash: DeferralHashFn) {
     DEFERRAL_RUNTIME.with(|r| {
         let mut r = r.borrow_mut();
@@ -50,9 +42,6 @@ pub fn install_deferral_runtime(fns: Vec<DeferralFnPtr>, hash: DeferralHashFn) {
 }
 
 /// Evaluate a registered deferral closure: returns `(output_commit, output_raw)`.
-///
-/// Called from openvm-circuit's `host_deferral_call_lookup` on cache miss
-/// (when the cache holds `Raw(input_raw)` but no resolved output yet).
 ///
 /// # Panics
 ///

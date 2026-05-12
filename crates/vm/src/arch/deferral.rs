@@ -8,11 +8,6 @@ pub type InputCommit = Vec<u8>;
 pub type OutputCommit = Vec<u8>;
 
 /// A registered deferral closure: `input_raw → output_raw`.
-///
-/// Lives here (not in the deferral extension) because `Streams<F>` carries
-/// `Vec<Arc<DeferralFn>>` for rvr-mode lazy lookups, and `Streams<F>` is in
-/// `openvm-circuit`. Methods that need the deferral Poseidon2 hasher
-/// (`execute_deferral_fn`) stay in `openvm-deferral-circuit`.
 #[allow(clippy::type_complexity)]
 pub struct DeferralFn {
     f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,

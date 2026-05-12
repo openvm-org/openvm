@@ -3,11 +3,7 @@ use std::sync::Arc;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{
-    bridge::{ensure_rvr_outcome, map_rvr_execute_error},
-    execute::execute,
-    RvrCompiled,
-};
+use super::{bridge::map_rvr_execute_error, execute::execute, RvrCompiled};
 use crate::{
     arch::{ExecutionError, Streams, SystemConfig, VmState},
     system::memory::online::GuestMemory,
@@ -44,6 +40,7 @@ where
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
+        #[allow(unused_variables)]
         let result = tracing::info_span!("execute_e1")
             .in_scope(|| execute(&self.compiled, &mut vm_state, num_insns))
             .map_err(map_rvr_execute_error)?;
@@ -55,13 +52,6 @@ where
             metrics::counter!("execute_e1_insns").absolute(insns);
             metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
         }
-        ensure_rvr_outcome(
-            "execution from state",
-            result.state.is_terminated(),
-            result.suspended,
-            result.state.result_code(),
-            num_insns.is_some(),
-        )?;
         Ok(vm_state)
     }
 }

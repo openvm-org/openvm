@@ -7,7 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 
 use super::{
-    bridge::{ensure_rvr_outcome, map_rvr_compile_error, map_rvr_execute_error},
+    bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
     compile_metered_cost, compile_metered_cost_with_extensions, execute_metered_cost,
     state::{TracerPayload, TracerPtr},
@@ -113,7 +113,6 @@ impl TracerPayload for MeteredCostData {
     const KIND: u32 = 10;
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
 pub type MeteredCostMeter = TracerPtr<MeteredCostData>;
 
 /// C-compatible pure tracer data.
@@ -128,7 +127,6 @@ impl TracerPayload for PureTracerData {
     const KIND: u32 = 12;
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
 pub type PureTracer = TracerPtr<PureTracerData>;
 
 /// Prepare metering data from a `MeteredCostConfig`.
@@ -185,20 +183,12 @@ where
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = result.instret;
+            let insns = result.state.instret;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!("execute_metered_cost_insns").absolute(insns);
             metrics::gauge!("execute_metered_cost_insn_mi/s")
                 .set(insns as f64 / elapsed.as_micros() as f64);
         }
-
-        ensure_rvr_outcome(
-            "metered-cost execution from state",
-            result.state.is_terminated(),
-            result.suspended,
-            result.state.result_code(),
-            false,
-        )?;
 
         let mut output_ctx = ctx;
         output_ctx.instret = result.state.instret;

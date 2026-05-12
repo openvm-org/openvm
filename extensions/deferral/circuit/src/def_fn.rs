@@ -1,7 +1,5 @@
 use std::array::from_fn;
 
-// Re-export `DeferralFn` so `use openvm_deferral_circuit::DeferralFn` keeps
-// working after the type moved upstream into `openvm-circuit`.
 pub use openvm_circuit::arch::deferral::DeferralFn;
 use openvm_circuit::arch::{
     deferral::{DeferralResult, DeferralState, InputCommit, InputMapVal, OutputCommit, OutputRaw},
@@ -19,9 +17,7 @@ pub struct RawDeferralResult {
 }
 
 /// Execute `def_fn` against `state`, hashing the output via `hasher` and
-/// caching the result. Used to be `DeferralFn::execute`; moved here as a free
-/// function because the inherent impl must live in `DeferralFn`'s home crate
-/// (`openvm-circuit`), which can't depend on the Poseidon2 chip.
+/// caching the result.
 pub fn execute_deferral_fn<F: VmField>(
     def_fn: &DeferralFn,
     input_commit: &InputCommit,

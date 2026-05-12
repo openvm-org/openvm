@@ -74,10 +74,6 @@ impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
         registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
         ctx: &rvr_openvm_lift::RvrExtensionCtx,
     ) {
-        // Install host-side deferral closures + hasher into the deferral crate's
-        // thread-local runtime. Consumed during rvr execution by
-        // `openvm-circuit`'s `host_deferral_call_lookup` on cache miss.
-        // Overwrites any prior installation on this thread.
         let raw_fns: Vec<rvr_openvm_ext_deferral::DeferralFnPtr> = self
             .fns
             .iter()

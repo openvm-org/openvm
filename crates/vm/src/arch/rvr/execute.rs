@@ -4,12 +4,8 @@
 //! transient `RvState` scratch struct aliases VmState's memory and registers,
 //! and `OpenVmIoState` borrows VmState's `Streams<F>` and rng. There is no
 //! separately-owned guest memory or stream conversion.
-//!
-//! The three public entrypoints (`execute`, `execute_metered_cost`,
-//! `execute_metered`) share their FFI/outcome/writeback logic through
-//! [`run_and_finalize`] and the [`RvrStateInspect`] trait.
 
-use std::{ffi::c_void, marker::PhantomData};
+use std::ffi::c_void;
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{InstretSuspender, RvState, TracerState, NUM_REGS_I};
@@ -47,22 +43,18 @@ pub enum ExecuteError {
     MemoryAlloc(#[from] rvr_state::MemoryError),
 }
 
-/// Result of a pure (non-metered) execute. Covers both the limited and
-/// unlimited cases — `suspended` is `false` for unlimited runs.
+/// `suspended` is `false` for unlimited runs.
 pub struct RvrPureResult {
     pub state: PureState,
     pub suspended: bool,
 }
 
-/// Result of metered-cost execution. Covers both the limited and unlimited
-/// cases — `suspended` is `false` for unlimited runs.
+/// `suspended` is `false` for unlimited runs.
 pub struct RvrMeteredCostResult {
     pub state: MeteredCostState,
     pub cost: u64,
     pub suspended: bool,
 }
-
-// ── Outcome classification ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExecuteOutcome {
@@ -72,10 +64,6 @@ enum ExecuteOutcome {
 }
 
 /// Read-only view of any RV32 rvr state, regardless of tracer variant.
-///
-/// A blanket impl below covers `PureState`, `MeteredCostState`, and
-/// `MeteredState`, so generic helpers can inspect a state without naming
-/// the concrete tracer type.
 pub trait RvrStateInspect {
     fn pc(&self) -> u32;
     fn instret(&self) -> u64;
@@ -122,7 +110,6 @@ impl<T: TracerState> RvrStateInspect for RvState<rvr_state::Rv32, T, InstretSusp
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Build callbacks bound to an `OpenVmIoState<'a, F>`.
 pub fn build_callbacks<F: PrimeField32>(
     io_state: &mut OpenVmIoState<'_, F>,
 ) -> OpenVmHostCallbacks {
@@ -140,12 +127,6 @@ pub fn build_callbacks<F: PrimeField32>(
     }
 }
 
-/// Construct an `OpenVmIoState` borrowing the relevant fields of `vm_state`.
-///
-/// Splits `vm_state.streams` (active streams + deferral cache), `rng`, and
-/// the `PUBLIC_VALUES_AS` byte slice from `memory`. The registered deferral
-/// closures and hasher live in `rvr-openvm-ext-deferral`'s thread-local
-/// runtime — see `host_deferral_call_lookup`.
 fn build_io_state_borrowed<'a, F: PrimeField32>(
     vm_state: &'a mut VmState<F, GuestMemory>,
     memory_ptr: *mut u8,
@@ -158,7 +139,6 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
         memory_ptr,
         public_values: public_values_slice(&mut vm_state.memory.memory),
         deferrals: &mut streams.deferrals,
-        _marker: PhantomData,
     }
 }
 
@@ -240,14 +220,10 @@ where
     F: PrimeField32,
     S: RvrStateInspect,
 {
-    // SAFETY: state pointer is valid and matches the tracer variant. `io_state`
-    // is scoped so the borrow of `vm_state` ends before we touch `vm_state` again.
-    let exec_result = {
-        let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
-        let callbacks = build_callbacks(&mut io_state);
-        unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }
-    };
-    exec_result?;
+    // SAFETY: state pointer is valid and matches the tracer variant.
+    let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
+    let callbacks = build_callbacks(&mut io_state);
+    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
 
     let outcome = outcome_of(state);
     let success = match outcome {
@@ -365,8 +341,6 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer = TracerPtr(&mut tracer_data);
 
     let mut seg_state = SegmentationState::new(trace_config);
-
-    // Wire up the C tracer fields
     state.tracer.trace_heights = seg_state.trace_heights_ptr();
     state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
     state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();
@@ -375,8 +349,6 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.pv_page_buf_len = 0;
     state.tracer.deferral_page_buf_len = 0;
     state.tracer.last_mem_page = NO_LAST_PAGE;
-
-    // Wire up inline callback for periodic segmentation checks.
     state.tracer.check_counter = seg_state.config().segment_check_insns as u32;
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
