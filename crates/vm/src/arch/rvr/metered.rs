@@ -9,13 +9,12 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
-use rvr_state::TracerState;
 
 use super::{
     bridge::{ensure_rvr_outcome, map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
     compile_metered, compile_metered_with_extensions, execute_metered,
-    state::MeteredState,
+    state::{MeteredState, TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
@@ -87,33 +86,12 @@ impl Default for MeteredTracerData {
     }
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct MeteredTracer(pub *mut MeteredTracerData);
-
-impl Default for MeteredTracer {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
-impl TracerState for MeteredTracer {
+impl TracerPayload for MeteredTracerData {
     const KIND: u32 = 11;
 }
 
-impl std::ops::Deref for MeteredTracer {
-    type Target = MeteredTracerData;
-    fn deref(&self) -> &MeteredTracerData {
-        unsafe { &*self.0 }
-    }
-}
-
-impl std::ops::DerefMut for MeteredTracer {
-    fn deref_mut(&mut self) -> &mut MeteredTracerData {
-        unsafe { &mut *self.0 }
-    }
-}
+/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
+pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 
 // ── Configuration ────────────────────────────────────────────────────────────
 

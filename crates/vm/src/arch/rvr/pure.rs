@@ -5,7 +5,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
     bridge::{ensure_rvr_outcome, map_rvr_execute_error},
-    execute::{execute, execute_with_limit},
+    execute::execute,
     RvrCompiled,
 };
 use crate::{
@@ -44,45 +44,22 @@ where
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
-        let (terminated, suspended, exit_code, _instret) = tracing::info_span!("execute_e1")
-            .in_scope(|| -> Result<(bool, bool, u8, u64), ExecutionError> {
-                match num_insns {
-                    Some(limit) => {
-                        let result = execute_with_limit(&self.compiled, &mut vm_state, limit)
-                            .map_err(map_rvr_execute_error)?;
-                        Ok((
-                            result.state.is_terminated(),
-                            result.suspended,
-                            result.state.result_code(),
-                            result.instret,
-                        ))
-                    }
-                    None => {
-                        let result = execute(&self.compiled, &mut vm_state)
-                            .map_err(map_rvr_execute_error)?;
-                        Ok((
-                            result.state.is_terminated(),
-                            false,
-                            result.state.result_code(),
-                            result.state.instret,
-                        ))
-                    }
-                }
-            })?;
+        let result = tracing::info_span!("execute_e1")
+            .in_scope(|| execute(&self.compiled, &mut vm_state, num_insns))
+            .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = _instret;
+            let insns = result.state.instret;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!("execute_e1_insns").absolute(insns);
             metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
         }
-
         ensure_rvr_outcome(
             "execution from state",
-            terminated,
-            suspended,
-            exit_code,
+            result.state.is_terminated(),
+            result.suspended,
+            result.state.result_code(),
             num_insns.is_some(),
         )?;
         Ok(vm_state)

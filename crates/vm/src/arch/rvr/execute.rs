@@ -4,10 +4,15 @@
 //! transient `RvState` scratch struct aliases VmState's memory and registers,
 //! and `OpenVmIoState` borrows VmState's `Streams<F>` and rng. There is no
 //! separately-owned guest memory or stream conversion.
+//!
+//! The three public entrypoints (`execute`, `execute_metered_cost`,
+//! `execute_metered`) share their FFI/outcome/writeback logic through
+//! [`run_and_finalize`] and the [`RvrStateInspect`] trait.
 
 use std::{ffi::c_void, marker::PhantomData};
 
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_state::{InstretSuspender, RvState, TracerState, NUM_REGS_I};
 
 use super::{
     bridge::{public_values_slice, read_rv32_registers, rv32_memory_ptr, write_rv32_registers},
@@ -18,24 +23,16 @@ use super::{
         OpenVmHostCallbacks, OpenVmIoState,
     },
     metered::{
-        metered_periodic_check, MeteredConfig, MeteredTracer, MeteredTracerData, RvrMeteredResult,
+        metered_periodic_check, MeteredConfig, MeteredTracerData, RvrMeteredResult,
         SegmentationState, NO_LAST_PAGE,
     },
-    metered_cost::{
-        prepare_metered_cost, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-        PureTracerData,
-    },
+    metered_cost::{prepare_metered_cost, MeteredCostConfig, MeteredCostData, PureTracerData},
     state::{
         init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost,
-        MeteredCostState, MeteredState, PureState,
+        MeteredCostState, PureState, TracerPtr,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
-
-/// Result of executing via rvr (state moved out for tracer/instret access).
-pub struct RvrExecutionResult {
-    pub state: PureState,
-}
 
 /// Error during execution.
 #[derive(Debug, thiserror::Error)]
@@ -50,30 +47,22 @@ pub enum ExecuteError {
     MemoryAlloc(#[from] rvr_state::MemoryError),
 }
 
-/// Result of executing with an instruction limit via rvr.
-pub struct RvrLimitedResult {
+/// Result of a pure (non-metered) execute. Covers both the limited and
+/// unlimited cases — `suspended` is `false` for unlimited runs.
+pub struct RvrPureResult {
     pub state: PureState,
-    pub instret: u64,
     pub suspended: bool,
 }
 
-/// Result of metered cost execution via rvr.
+/// Result of metered-cost execution. Covers both the limited and unlimited
+/// cases — `suspended` is `false` for unlimited runs.
 pub struct RvrMeteredCostResult {
     pub state: MeteredCostState,
     pub cost: u64,
-    pub instret: u64,
     pub suspended: bool,
 }
 
-/// Result of metered cost execution with an instruction limit via rvr.
-pub struct RvrMeteredCostLimitedResult {
-    pub state: MeteredCostState,
-    pub cost: u64,
-    pub instret: u64,
-    pub suspended: bool,
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Outcome classification ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExecuteOutcome {
@@ -81,6 +70,57 @@ enum ExecuteOutcome {
     Terminated,
     Suspended,
 }
+
+/// Read-only view of any RV32 rvr state, regardless of tracer variant.
+///
+/// A blanket impl below covers `PureState`, `MeteredCostState`, and
+/// `MeteredState`, so generic helpers can inspect a state without naming
+/// the concrete tracer type.
+pub trait RvrStateInspect {
+    fn pc(&self) -> u32;
+    fn instret(&self) -> u64;
+    fn regs(&self) -> &[u32; NUM_REGS_I];
+    fn is_terminated(&self) -> bool;
+    fn is_suspended(&self) -> bool;
+    fn result_code(&self) -> u8;
+    fn as_void_ptr(&mut self) -> *mut c_void;
+}
+
+fn outcome_of<S: RvrStateInspect>(state: &S) -> ExecuteOutcome {
+    if state.is_terminated() {
+        ExecuteOutcome::Terminated
+    } else if state.is_suspended() {
+        ExecuteOutcome::Suspended
+    } else {
+        ExecuteOutcome::Running
+    }
+}
+
+impl<T: TracerState> RvrStateInspect for RvState<rvr_state::Rv32, T, InstretSuspender> {
+    fn pc(&self) -> u32 {
+        self.pc
+    }
+    fn instret(&self) -> u64 {
+        self.instret
+    }
+    fn regs(&self) -> &[u32; NUM_REGS_I] {
+        &self.regs
+    }
+    fn is_terminated(&self) -> bool {
+        Self::is_terminated(self)
+    }
+    fn is_suspended(&self) -> bool {
+        Self::is_suspended(self)
+    }
+    fn result_code(&self) -> u8 {
+        Self::result_code(self)
+    }
+    fn as_void_ptr(&mut self) -> *mut c_void {
+        Self::as_void_ptr(self)
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Build callbacks bound to an `OpenVmIoState<'a, F>`.
 pub fn build_callbacks<F: PrimeField32>(
@@ -183,54 +223,23 @@ fn execution_error(
     }
 }
 
-fn outcome_from_pure_state(state: &PureState) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
-    }
-}
-
-fn outcome_from_metered_cost_state(state: &MeteredCostState) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
-    }
-}
-
-fn outcome_from_metered_state(state: &MeteredState) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
-    }
-}
-
-// ── Public execute functions ─────────────────────────────────────────────────
-
-/// Execute a VmExe using a compiled rvr shared library against the given
-/// `vm_state`. Pc / regs / streams / rng are read from and written to
-/// `vm_state` directly.
-pub fn execute<F: PrimeField32>(
+/// Run the FFI execute against `vm_state` + `state`, validate the outcome,
+/// and on success write the final pc/regs back into `vm_state`.
+///
+/// `allow_suspended` permits `Suspended` as a successful outcome (the
+/// limit-armed callers pass `true`; unlimited callers pass `false`).
+fn run_and_finalize<F, S>(
     compiled: &RvrCompiled,
     vm_state: &mut VmState<F, GuestMemory>,
-) -> Result<RvrExecutionResult, ExecuteError> {
-    let pc = vm_state.pc();
-    let initial_regs = read_rv32_registers(vm_state);
-    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
-
-    let mut tracer_data = PureTracerData;
-    let mut state = init_rvr_state(memory_ptr, pc);
-    state.regs = initial_regs;
-    state.tracer = PureTracer(&mut tracer_data);
-
+    state: &mut S,
+    memory_ptr: *mut u8,
+    allow_suspended: bool,
+    failure_prefix: &str,
+) -> Result<ExecuteOutcome, ExecuteError>
+where
+    F: PrimeField32,
+    S: RvrStateInspect,
+{
     // SAFETY: state pointer is valid and matches the tracer variant. `io_state`
     // is scoped so the borrow of `vm_state` ends before we touch `vm_state` again.
     let exec_result = {
@@ -240,27 +249,73 @@ pub fn execute<F: PrimeField32>(
     };
     exec_result?;
 
-    let outcome = outcome_from_pure_state(&state);
-    if outcome == ExecuteOutcome::Terminated && state.is_terminated() && state.result_code() == 0 {
-        write_rv32_registers(vm_state, &state.regs);
-        vm_state.set_pc(state.pc);
-        Ok(RvrExecutionResult { state })
+    let outcome = outcome_of(state);
+    let success = match outcome {
+        ExecuteOutcome::Terminated => state.is_terminated() && state.result_code() == 0,
+        ExecuteOutcome::Suspended => allow_suspended,
+        ExecuteOutcome::Running => false,
+    };
+
+    if success {
+        write_rv32_registers(vm_state, state.regs());
+        vm_state.set_pc(state.pc());
+        Ok(outcome)
     } else {
         Err(execution_error(
-            "execution failed",
+            failure_prefix,
             outcome,
-            state.pc,
-            state.instret,
+            state.pc(),
+            state.instret(),
             state.result_code(),
         ))
     }
 }
 
-/// Execute a VmExe with metered cost tracking, tracking per-chip trace costs.
+// ── Public execute functions ─────────────────────────────────────────────────
+
+/// Execute a VmExe using a compiled rvr shared library against `vm_state`.
+///
+/// If `limit` is `Some(n)`, the suspender is armed at `n` instructions and a
+/// `Suspended` outcome is accepted as success; otherwise only `Terminated`
+/// (with exit-code 0) succeeds.
+pub fn execute<F: PrimeField32>(
+    compiled: &RvrCompiled,
+    vm_state: &mut VmState<F, GuestMemory>,
+    limit: Option<u64>,
+) -> Result<RvrPureResult, ExecuteError> {
+    let pc = vm_state.pc();
+    let initial_regs = read_rv32_registers(vm_state);
+    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
+
+    let mut tracer_data = PureTracerData;
+    let mut state = init_rvr_state(memory_ptr, pc);
+    state.regs = initial_regs;
+    state.tracer = TracerPtr(&mut tracer_data);
+    if let Some(n) = limit {
+        state.suspender.set_target(n);
+    }
+
+    let outcome = run_and_finalize(
+        compiled,
+        vm_state,
+        &mut state,
+        memory_ptr,
+        limit.is_some(),
+        "execution failed",
+    )?;
+    Ok(RvrPureResult {
+        state,
+        suspended: outcome == ExecuteOutcome::Suspended,
+    })
+}
+
+/// Execute a VmExe with metered cost tracking. If `limit` is `Some(n)`, the
+/// suspender is armed at `n` instructions and `Suspended` counts as success.
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     vm_state: &mut VmState<F, GuestMemory>,
     metered_cost_config: MeteredCostConfig,
+    limit: Option<u64>,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
@@ -269,166 +324,29 @@ pub fn execute_metered_cost<F: PrimeField32>(
     let mut tracer_data = MeteredCostData::default();
     let mut state = init_rvr_state_with_metered_cost(memory_ptr, pc);
     state.regs = initial_regs;
-    state.tracer = MeteredCostMeter(&mut tracer_data);
+    state.tracer = TracerPtr(&mut tracer_data);
 
     let widths_u64 = prepare_metered_cost(&metered_cost_config);
     state.tracer.chip_widths = widths_u64.as_ptr();
     state.tracer.cost = 0;
+    if let Some(n) = limit {
+        state.suspender.set_target(n);
+    }
 
-    // SAFETY: state pointer is valid and matches the tracer variant. `io_state`
-    // is scoped so the borrow of `vm_state` ends before we touch `vm_state` again.
-    let exec_result = {
-        let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
-        let callbacks = build_callbacks(&mut io_state);
-        unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }
-    };
-    exec_result?;
-
-    let outcome = outcome_from_metered_cost_state(&state);
+    let outcome = run_and_finalize(
+        compiled,
+        vm_state,
+        &mut state,
+        memory_ptr,
+        limit.is_some(),
+        "metered-cost execution failed",
+    )?;
     let cost = state.tracer.cost;
-    let instret = state.instret;
-
-    if outcome == ExecuteOutcome::Terminated && state.is_terminated() && state.result_code() == 0 {
-        write_rv32_registers(vm_state, &state.regs);
-        vm_state.set_pc(state.pc);
-        Ok(RvrMeteredCostResult {
-            state,
-            cost,
-            instret,
-            suspended: false,
-        })
-    } else {
-        Err(execution_error(
-            "metered-cost execution failed",
-            outcome,
-            state.pc,
-            instret,
-            state.result_code(),
-        ))
-    }
-}
-
-/// Execute a VmExe with an instruction limit. Suspends via `target_instret`
-/// when instret reaches the limit.
-pub fn execute_with_limit<F: PrimeField32>(
-    compiled: &RvrCompiled,
-    vm_state: &mut VmState<F, GuestMemory>,
-    instruction_limit: u64,
-) -> Result<RvrLimitedResult, ExecuteError> {
-    let pc = vm_state.pc();
-    let initial_regs = read_rv32_registers(vm_state);
-    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
-
-    let mut tracer_data = PureTracerData;
-    let mut state = init_rvr_state(memory_ptr, pc);
-    state.regs = initial_regs;
-    state.tracer = PureTracer(&mut tracer_data);
-    state.suspender.set_target(instruction_limit);
-
-    // SAFETY: state pointer is valid and matches the tracer variant. `io_state`
-    // is scoped so the borrow of `vm_state` ends before we touch `vm_state` again.
-    let exec_result = {
-        let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
-        let callbacks = build_callbacks(&mut io_state);
-        unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }
-    };
-    exec_result?;
-
-    let outcome = outcome_from_pure_state(&state);
-    let instret = state.instret;
-
-    match outcome {
-        ExecuteOutcome::Suspended => {
-            write_rv32_registers(vm_state, &state.regs);
-            vm_state.set_pc(state.pc);
-            Ok(RvrLimitedResult {
-                state,
-                instret,
-                suspended: true,
-            })
-        }
-        ExecuteOutcome::Terminated if state.is_terminated() && state.result_code() == 0 => {
-            write_rv32_registers(vm_state, &state.regs);
-            vm_state.set_pc(state.pc);
-            Ok(RvrLimitedResult {
-                state,
-                instret,
-                suspended: false,
-            })
-        }
-        _ => Err(execution_error(
-            "limited execution failed",
-            outcome,
-            state.pc,
-            instret,
-            state.result_code(),
-        )),
-    }
-}
-
-/// Execute a VmExe with metered cost and an instruction limit.
-pub fn execute_metered_cost_with_limit<F: PrimeField32>(
-    compiled: &RvrCompiled,
-    vm_state: &mut VmState<F, GuestMemory>,
-    metered_cost_config: MeteredCostConfig,
-    instruction_limit: u64,
-) -> Result<RvrMeteredCostLimitedResult, ExecuteError> {
-    let pc = vm_state.pc();
-    let initial_regs = read_rv32_registers(vm_state);
-    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
-
-    let mut tracer_data = MeteredCostData::default();
-    let mut state = init_rvr_state_with_metered_cost(memory_ptr, pc);
-    state.regs = initial_regs;
-    state.tracer = MeteredCostMeter(&mut tracer_data);
-
-    let widths_u64 = prepare_metered_cost(&metered_cost_config);
-    state.tracer.chip_widths = widths_u64.as_ptr();
-    state.tracer.cost = 0;
-    state.suspender.set_target(instruction_limit);
-
-    // SAFETY: state pointer is valid and matches the tracer variant. `io_state`
-    // is scoped so the borrow of `vm_state` ends before we touch `vm_state` again.
-    let exec_result = {
-        let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
-        let callbacks = build_callbacks(&mut io_state);
-        unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }
-    };
-    exec_result?;
-
-    let outcome = outcome_from_metered_cost_state(&state);
-    let cost = state.tracer.cost;
-    let instret = state.instret;
-
-    match outcome {
-        ExecuteOutcome::Suspended => {
-            write_rv32_registers(vm_state, &state.regs);
-            vm_state.set_pc(state.pc);
-            Ok(RvrMeteredCostLimitedResult {
-                state,
-                cost,
-                instret,
-                suspended: true,
-            })
-        }
-        ExecuteOutcome::Terminated if state.is_terminated() && state.result_code() == 0 => {
-            write_rv32_registers(vm_state, &state.regs);
-            vm_state.set_pc(state.pc);
-            Ok(RvrMeteredCostLimitedResult {
-                state,
-                cost,
-                instret,
-                suspended: false,
-            })
-        }
-        _ => Err(execution_error(
-            "limited metered-cost execution failed",
-            outcome,
-            state.pc,
-            instret,
-            state.result_code(),
-        )),
-    }
+    Ok(RvrMeteredCostResult {
+        state,
+        cost,
+        suspended: outcome == ExecuteOutcome::Suspended,
+    })
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.
@@ -444,7 +362,7 @@ pub fn execute_metered<F: PrimeField32>(
     let mut tracer_data = MeteredTracerData::default();
     let mut state = init_rvr_state_with_metered(memory_ptr, pc);
     state.regs = initial_regs;
-    state.tracer = MeteredTracer(&mut tracer_data);
+    state.tracer = TracerPtr(&mut tracer_data);
 
     let mut seg_state = SegmentationState::new(trace_config);
 
@@ -463,34 +381,20 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
-    // SAFETY: state pointer is valid and matches the tracer variant. `io_state`
-    // is scoped so the borrow of `vm_state` ends before we touch `vm_state` again.
-    let exec_result = {
-        let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
-        let callbacks = build_callbacks(&mut io_state);
-        unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }
-    };
-    exec_result?;
+    run_and_finalize(
+        compiled,
+        vm_state,
+        &mut state,
+        memory_ptr,
+        false,
+        "metered execution failed",
+    )?;
 
-    let outcome = outcome_from_metered_state(&state);
-    if outcome == ExecuteOutcome::Terminated && state.is_terminated() && state.result_code() == 0 {
-        seg_state.on_termination(
-            state.tracer.mem_page_buf_len,
-            state.tracer.pv_page_buf_len,
-            state.tracer.deferral_page_buf_len,
-            state.tracer.check_counter,
-        );
-    } else {
-        return Err(execution_error(
-            "metered execution failed",
-            outcome,
-            state.pc,
-            state.instret,
-            state.result_code(),
-        ));
-    }
-
-    write_rv32_registers(vm_state, &state.regs);
-    vm_state.set_pc(state.pc);
+    seg_state.on_termination(
+        state.tracer.mem_page_buf_len,
+        state.tracer.pv_page_buf_len,
+        state.tracer.deferral_page_buf_len,
+        state.tracer.check_counter,
+    );
     Ok(seg_state.into_result(state))
 }

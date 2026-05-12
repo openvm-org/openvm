@@ -5,12 +5,12 @@ use std::sync::Arc;
 use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
-use rvr_state::TracerState;
 
 use super::{
     bridge::{ensure_rvr_outcome, map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
     compile_metered_cost, compile_metered_cost_with_extensions, execute_metered_cost,
+    state::{TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
@@ -109,33 +109,12 @@ impl Default for MeteredCostData {
     }
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct MeteredCostMeter(pub *mut MeteredCostData);
-
-impl Default for MeteredCostMeter {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
-impl TracerState for MeteredCostMeter {
+impl TracerPayload for MeteredCostData {
     const KIND: u32 = 10;
 }
 
-impl std::ops::Deref for MeteredCostMeter {
-    type Target = MeteredCostData;
-    fn deref(&self) -> &MeteredCostData {
-        unsafe { &*self.0 }
-    }
-}
-
-impl std::ops::DerefMut for MeteredCostMeter {
-    fn deref_mut(&mut self) -> &mut MeteredCostData {
-        unsafe { &mut *self.0 }
-    }
-}
+/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
+pub type MeteredCostMeter = TracerPtr<MeteredCostData>;
 
 /// C-compatible pure tracer data.
 ///
@@ -145,33 +124,12 @@ impl std::ops::DerefMut for MeteredCostMeter {
 #[derive(Clone, Copy, Default)]
 pub struct PureTracerData;
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct PureTracer(pub *mut PureTracerData);
-
-impl Default for PureTracer {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
-impl TracerState for PureTracer {
+impl TracerPayload for PureTracerData {
     const KIND: u32 = 12;
 }
 
-impl std::ops::Deref for PureTracer {
-    type Target = PureTracerData;
-    fn deref(&self) -> &PureTracerData {
-        unsafe { &*self.0 }
-    }
-}
-
-impl std::ops::DerefMut for PureTracer {
-    fn deref_mut(&mut self) -> &mut PureTracerData {
-        unsafe { &mut *self.0 }
-    }
-}
+/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
+pub type PureTracer = TracerPtr<PureTracerData>;
 
 /// Prepare metering data from a `MeteredCostConfig`.
 ///
@@ -222,7 +180,7 @@ where
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let result = tracing::info_span!("execute_metered_cost")
-            .in_scope(|| execute_metered_cost(&compiled, &mut vm_state, metered_cost_config))
+            .in_scope(|| execute_metered_cost(&compiled, &mut vm_state, metered_cost_config, None))
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
@@ -243,7 +201,7 @@ where
         )?;
 
         let mut output_ctx = ctx;
-        output_ctx.instret = result.instret;
+        output_ctx.instret = result.state.instret;
         output_ctx.cost = result.cost;
 
         Ok((output_ctx, vm_state))
