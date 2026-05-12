@@ -163,7 +163,7 @@ mod aot {
         //     }
         // }
         // ```
-        //
+        // 
         // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
         // Inputs:
         // - `chunk`: always CHUNK (8), the merkle leaf size.
