@@ -64,11 +64,12 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
-      - name: Init keccak rvr FFI submodules
-        if: matrix.extension.name == 'keccak256' && matrix.extension.rvr == true
+      - name: Init rvr FFI submodules
+        if: matrix.extension.rvr == true
         run: |
           git submodule update --init extensions/keccak256/rvr/ffi/openssl
           git submodule update --init extensions/keccak256/rvr/ffi/xkcp
+          git submodule update --init --recursive extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -126,7 +127,7 @@ jobs:
           cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
 
       - name: Run ${{ format('{0}{1}{2}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '') }} integration tests
-        if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != '' && (matrix.extension.rvr != true || matrix.extension.name == 'rv32im')
+        if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
