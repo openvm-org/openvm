@@ -20,8 +20,8 @@ typedef struct {
   void (*hint_stream_set)(void* ctx, const uint8_t* data, uint32_t len);
   int (*deferral_call_lookup)(void* ctx, uint32_t def_idx, const uint8_t* input_commit,
                               uint8_t* output_key_out);
-  int (*deferral_output_lookup)(void* ctx, const uint8_t* output_commit, uint8_t* output_raw_out,
-                                uint32_t expected_len);
+  int (*deferral_output_lookup)(void* ctx, uint32_t def_idx, const uint8_t* output_commit,
+                                uint8_t* output_raw_out, uint32_t expected_len);
 } OpenVmHostCallbacks;
 
 /* NOT thread-safe: installs one process-global host callback set. */
@@ -56,7 +56,8 @@ int ext_deferral_call_lookup(uint32_t def_idx, const uint8_t* input_commit,
   return g_host.deferral_call_lookup(g_host.ctx, def_idx, input_commit, output_key_out);
 }
 
-int ext_deferral_output_lookup(const uint8_t* output_commit, uint8_t* output_raw_out,
-                               uint32_t expected_len) {
-  return g_host.deferral_output_lookup(g_host.ctx, output_commit, output_raw_out, expected_len);
+int ext_deferral_output_lookup(uint32_t def_idx, const uint8_t* output_commit,
+                               uint8_t* output_raw_out, uint32_t expected_len) {
+  return g_host.deferral_output_lookup(g_host.ctx, def_idx, output_commit, output_raw_out,
+                                       expected_len);
 }
