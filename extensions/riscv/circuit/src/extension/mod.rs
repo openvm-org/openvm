@@ -115,6 +115,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {}
     )
 )]
 pub enum Rv64IExecutor {
+    AddSub(Rv64AddSubExecutor),
     BaseAlu(Rv64BaseAluExecutor),
     BaseAluW(Rv64BaseAluWExecutor),
     LessThan(Rv64LessThanExecutor),
@@ -163,9 +164,20 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
+        let add_sub =
+            Rv64AddSubExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            add_sub,
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
+        )?;
+
         let base_alu =
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
-        inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            base_alu,
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|x| x.global_opcode()),
+        )?;
 
         let base_alu_w =
             Rv64BaseAluWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
