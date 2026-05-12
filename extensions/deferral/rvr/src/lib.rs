@@ -1,26 +1,13 @@
-//! Deferral extension for rvr-openvm.
-//!
-//! Provides IR nodes for the two deferral opcodes (CALL and OUTPUT) and the
-//! `DeferralRvrExtension` for lifting and executing them via double FFI.
-//!
-//! Pre-computed deferral results are produced by [`precompute`] and stored in
-//! `OpenVmIoState.deferral` before execution.
+//! Deferral extension for rvr-openvm: IR nodes for CALL/OUTPUT and the
+//! `DeferralRvrExtension` for lifting them via double FFI.
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use openvm_circuit::arch::VmField;
-use openvm_deferral_circuit::{
-    generate_deferral_results, poseidon2::deferral_poseidon2_chip, RawDeferralResult,
-};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
 
 // ── IR Nodes ──────────────────────────────────────────────────────────────────
 
@@ -89,28 +76,6 @@ impl ExtInstr for DeferralOutputInstr {
     }
 }
 
-// ── Pre-computed data ─────────────────────────────────────────────────────────
-
-/// Pre-computed deferral results, matching the layout in `OpenVmIoState.deferral`.
-pub struct DeferralPrecomputedData {
-    /// (def_idx, input_commit) → output_key
-    pub call_entries:
-        HashMap<(u32, [u8; DEFERRAL_COMMIT_NUM_BYTES]), [u8; DEFERRAL_OUTPUT_KEY_BYTES]>,
-    /// output_commit → output_raw
-    pub output_entries: HashMap<[u8; DEFERRAL_COMMIT_NUM_BYTES], Vec<u8>>,
-}
-
-/// Deferral function type: maps raw input bytes to raw output bytes.
-pub type DeferralFnBox = Box<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
-
-/// Per-circuit deferral inputs for pre-computation.
-pub struct DeferralCircuitInputs {
-    /// The deferral function: maps raw input to raw output.
-    pub func: DeferralFnBox,
-    /// Known (input_commit, input_raw) pairs.
-    pub inputs: Vec<(Vec<u8>, Vec<u8>)>,
-}
-
 // ── Extension ─────────────────────────────────────────────────────────────────
 
 /// The Deferral extension (CALL + OUTPUT opcodes).
@@ -124,34 +89,40 @@ pub struct DeferralRvrExtension {
 
 impl DeferralRvrExtension {
     /// Create for pure execution (chip indices don't matter).
-    pub fn new_pure(staticlib_path: PathBuf) -> Self {
+    pub fn new_pure() -> Self {
         Self {
-            call_chip_idx: u32::MAX,
-            output_chip_idx: u32::MAX,
-            poseidon2_chip_idx: u32::MAX,
-            staticlib_path,
+            call_chip_idx: NO_CHIP,
+            output_chip_idx: NO_CHIP,
+            poseidon2_chip_idx: NO_CHIP,
+            staticlib_path: default_staticlib_path(),
         }
     }
 
     /// Create with chip indices resolved from the VM config.
-    pub fn new<F: VmField>(
-        ctx: &RvrExtensionCtx,
-        staticlib_path: PathBuf,
-    ) -> Result<Self, ExtensionError> {
+    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
         let call_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::CALL.global_opcode())?;
         let output_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::OUTPUT.global_opcode())?;
         // Poseidon2 periphery chip: in extend_circuit, the hasher is added
         // right before the CALL chip. Due to reverse ordering of AIR indices,
-        // poseidon2_air_idx = call_air_idx + 1.
-        let poseidon2_chip_idx = call_chip_idx + 1;
+        // poseidon2_air_idx = call_air_idx + 1. Stay NO_CHIP-safe in case
+        // pure execution sneaks a NO_CHIP `call_chip_idx` through here.
+        let poseidon2_chip_idx = if call_chip_idx == NO_CHIP {
+            NO_CHIP
+        } else {
+            call_chip_idx + 1
+        };
 
         Ok(Self {
             call_chip_idx,
             output_chip_idx,
             poseidon2_chip_idx,
-            staticlib_path,
+            staticlib_path: default_staticlib_path(),
         })
     }
+}
+
+fn default_staticlib_path() -> PathBuf {
+    PathBuf::from(env!("RVR_DEFERRAL_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
@@ -203,47 +174,5 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
 
     fn staticlib_path(&self) -> &Path {
         &self.staticlib_path
-    }
-}
-
-// ── Pre-computation ───────────────────────────────────────────────────────────
-
-pub fn precompute<F: VmField>(circuit_inputs: &[DeferralCircuitInputs]) -> DeferralPrecomputedData {
-    let hasher = deferral_poseidon2_chip::<F>();
-
-    let mut call_entries = HashMap::new();
-    let mut output_entries = HashMap::new();
-
-    for (def_idx, ci) in circuit_inputs.iter().enumerate() {
-        let raw_results: Vec<RawDeferralResult> = ci
-            .inputs
-            .iter()
-            .map(|(input_commit, input_raw)| {
-                let output_raw = (ci.func)(input_raw);
-                RawDeferralResult::new(input_commit.clone(), output_raw)
-            })
-            .collect();
-
-        let results = generate_deferral_results::<F>(raw_results, def_idx as u32, &hasher);
-
-        for result in &results {
-            let input_commit: [u8; DEFERRAL_COMMIT_NUM_BYTES] =
-                result.input.as_slice().try_into().unwrap();
-            let output_commit: [u8; DEFERRAL_COMMIT_NUM_BYTES] =
-                result.output_commit.as_slice().try_into().unwrap();
-            let output_len = result.output_raw.len() as u64;
-
-            let mut output_key = [0u8; DEFERRAL_OUTPUT_KEY_BYTES];
-            output_key[..DEFERRAL_COMMIT_NUM_BYTES].copy_from_slice(&output_commit);
-            output_key[DEFERRAL_COMMIT_NUM_BYTES..].copy_from_slice(&output_len.to_le_bytes());
-
-            call_entries.insert((def_idx as u32, input_commit), output_key);
-            output_entries.insert(output_commit, result.output_raw.clone());
-        }
-    }
-
-    DeferralPrecomputedData {
-        call_entries,
-        output_entries,
     }
 }
