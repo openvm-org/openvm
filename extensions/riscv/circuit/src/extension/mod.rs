@@ -267,6 +267,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             }
         };
 
+        let add_sub = Rv64AddSubAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            AddSubCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(add_sub);
+
         let base_alu = Rv64BaseAluAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             BaseAluCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
@@ -394,6 +400,17 @@ where
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
+        inventory.next_air::<Rv64AddSubAir>()?;
+        let add_sub = Rv64AddSubChip::new(
+            AddSubFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(add_sub);
+
         inventory.next_air::<Rv64BaseAluAir>()?;
         let base_alu = Rv64BaseAluChip::new(
             BaseAluFiller::new(
