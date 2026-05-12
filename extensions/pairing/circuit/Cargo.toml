@@ -28,6 +28,7 @@ openvm-algebra-circuit = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 rvr-openvm-lift = { workspace = true, optional = true }
+rvr-openvm-ext-pairing = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 
@@ -65,6 +66,7 @@ tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
 aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "openvm-ecc-circuit/aot", "halo2curves-axiom/asm"]
 rvr = [
     "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-pairing",
     "openvm-rv32im-circuit/rvr",
     "openvm-algebra-circuit/rvr",
     "openvm-ecc-circuit/rvr",
