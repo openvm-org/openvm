@@ -1,24 +1,15 @@
 use std::sync::Arc;
 
 use openvm_instructions::exe::VmExe;
-use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_state::GuardedMemory;
 
 use super::{
-    build_callbacks, build_io_state, execute, execute_with_limit, register_and_execute,
-    state::{init_rvr_state, state_as_void_ptr},
-    PureTracer, PureTracerData, RvrCompiled,
+    bridge::{ensure_rvr_outcome, map_rvr_execute_error},
+    execute::{execute, execute_with_limit},
+    RvrCompiled,
 };
 use crate::{
-    arch::{
-        vm::{
-            copy_guest_memory_to_rvr_memory, ensure_rvr_outcome, map_rvr_execute_error,
-            read_public_values_from_guest_memory, read_rv32_regs_from_guest_memory, state_from_rvr,
-            streams_from_io_state, streams_to_io_seed, write_rvr_memory_to_guest_memory,
-        },
-        ExecutionError, Streams, SystemConfig, VmState,
-    },
+    arch::{ExecutionError, Streams, SystemConfig, VmState},
     system::memory::online::GuestMemory,
 };
 
@@ -32,173 +23,68 @@ impl<F> RvrPureInstance<F>
 where
     F: PrimeField32,
 {
-    // TODO: deduplicate `execute` and `execute_from_state` — they share the rvr invocation
-    // and result-translation logic and only differ in how the initial state is set up.
     pub fn execute(
         &self,
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let inputs = inputs.into();
-        let input_stream = inputs.input_stream;
-        let hint_stream: Vec<u8> = inputs
-            .hint_stream
-            .into_iter()
-            .map(|f| f.as_canonical_u32() as u8)
-            .collect();
-        let deferrals = inputs.deferrals;
-        let deferral_fns = inputs.deferral_fns;
-        let deferral_hash = inputs.deferral_hash;
-
-        if let Some(limit) = num_insns {
-            #[cfg(feature = "metrics")]
-            let start = std::time::Instant::now();
-            let result = tracing::info_span!("execute_e1")
-                .in_scope(|| {
-                    execute_with_limit(
-                        &self.compiled,
-                        self.exe.as_ref(),
-                        input_stream,
-                        hint_stream,
-                        limit,
-                        deferrals,
-                        deferral_fns,
-                        deferral_hash,
-                    )
-                })
-                .map_err(map_rvr_execute_error)?;
-            #[cfg(feature = "metrics")]
-            {
-                let elapsed = start.elapsed();
-                let insns = result.instret;
-                tracing::info!("instructions_executed={insns}");
-                metrics::counter!("execute_e1_insns").absolute(insns);
-                metrics::gauge!("execute_e1_insn_mi/s")
-                    .set(insns as f64 / elapsed.as_micros() as f64);
-            }
-            return Ok(state_from_rvr(
-                &self.system_config,
-                self.exe.as_ref(),
-                result.state.pc,
-                &result.state.regs,
-                &result.memory,
-                &[],
-            ));
-        }
-
-        #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
-        let result = tracing::info_span!("execute_e1")
-            .in_scope(|| {
-                execute(
-                    &self.compiled,
-                    self.exe.as_ref(),
-                    input_stream,
-                    hint_stream,
-                    deferrals,
-                    deferral_fns,
-                    deferral_hash,
-                )
-            })
-            .map_err(map_rvr_execute_error)?;
-        #[cfg(feature = "metrics")]
-        {
-            let elapsed = start.elapsed();
-            let insns = result.state.instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_e1_insns").absolute(insns);
-            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
-        }
-
-        Ok(state_from_rvr(
+        let vm_state = VmState::initial(
             &self.system_config,
-            self.exe.as_ref(),
-            result.state.pc,
-            &result.state.regs,
-            &result.memory,
-            &result.public_values,
-        ))
+            &self.exe.init_memory,
+            self.exe.pc_start,
+            inputs,
+        );
+        self.execute_from_state(vm_state, num_insns)
     }
 
     pub fn execute_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        mut vm_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let pc = from_state.pc();
-        let mut guest_memory = from_state.memory;
-        let seed = streams_to_io_seed(from_state.streams);
-        let rng = from_state.rng;
-        #[cfg(feature = "metrics")]
-        let metrics = from_state.metrics;
-
-        let mut memory = GuardedMemory::new(MEM_SIZE)
-            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
-
-        let mut tracer_data = PureTracerData;
-        let mut state = init_rvr_state(self.exe.as_ref(), &mut memory);
-        state.tracer = PureTracer(&mut tracer_data);
-        state.pc = pc;
-        state
-            .regs
-            .copy_from_slice(&read_rv32_regs_from_guest_memory(&guest_memory));
-        copy_guest_memory_to_rvr_memory(&guest_memory, &mut memory);
-        match num_insns {
-            Some(limit) => state.suspender.set_target(limit),
-            None => state.suspender.disable(),
-        }
-
-        let mut io_state = build_io_state(
-            seed.input_stream,
-            memory.as_mut_ptr(),
-            seed.deferrals,
-            seed.deferral_fns,
-            seed.deferral_hash,
-        );
-        io_state.hint_stream = seed.hint_stream;
-        io_state.hint_pos = 0;
-        io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
-        io_state.rng = rng;
-        let callbacks = build_callbacks(&mut io_state);
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
-        tracing::info_span!("execute_e1")
-            .in_scope(|| unsafe {
-                register_and_execute(&self.compiled, &callbacks, state_as_void_ptr(&mut state))
-            })
-            .map_err(map_rvr_execute_error)?;
+        let (terminated, suspended, exit_code, _instret) = tracing::info_span!("execute_e1")
+            .in_scope(|| -> Result<(bool, bool, u8, u64), ExecutionError> {
+                match num_insns {
+                    Some(limit) => {
+                        let result = execute_with_limit(&self.compiled, &mut vm_state, limit)
+                            .map_err(map_rvr_execute_error)?;
+                        Ok((
+                            result.state.is_terminated(),
+                            result.suspended,
+                            result.state.result_code(),
+                            result.instret,
+                        ))
+                    }
+                    None => {
+                        let result = execute(&self.compiled, &mut vm_state)
+                            .map_err(map_rvr_execute_error)?;
+                        Ok((
+                            result.state.is_terminated(),
+                            false,
+                            result.state.result_code(),
+                            result.state.instret,
+                        ))
+                    }
+                }
+            })?;
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = state.instret;
+            let insns = _instret;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!("execute_e1_insns").absolute(insns);
             metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
         }
+
         ensure_rvr_outcome(
             "execution from state",
-            state.is_terminated(),
-            state.is_suspended(),
-            state.result_code(),
+            terminated,
+            suspended,
+            exit_code,
             num_insns.is_some(),
         )?;
-
-        write_rvr_memory_to_guest_memory(
-            &mut guest_memory,
-            &state.regs,
-            &memory,
-            &io_state.public_values,
-        );
-        let deferrals = std::mem::take(&mut io_state.deferrals);
-        let deferral_fns = std::mem::take(&mut io_state.deferral_fns);
-        let deferral_hash = io_state.deferral_hash.take();
-        Ok(VmState::new(
-            state.pc,
-            guest_memory,
-            streams_from_io_state(&io_state, deferrals, deferral_fns, deferral_hash),
-            io_state.rng,
-            #[cfg(feature = "metrics")]
-            metrics,
-        ))
+        Ok(vm_state)
     }
 }

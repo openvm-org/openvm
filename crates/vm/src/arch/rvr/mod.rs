@@ -1,6 +1,7 @@
 //! OpenVM-owned rvr integration layer.
 
 mod abi_consts;
+pub mod bridge;
 pub mod compile;
 pub mod debug;
 pub mod execute;
@@ -18,7 +19,7 @@ pub use compile::{
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{
-    build_callbacks, build_io_state, execute, execute_metered, execute_metered_cost,
+    build_callbacks, execute, execute_metered, execute_metered_cost,
     execute_metered_cost_with_limit, execute_with_limit, register_and_execute, ExecuteError,
     RvrExecutionResult, RvrLimitedResult, RvrMeteredCostLimitedResult, RvrMeteredCostResult,
 };
