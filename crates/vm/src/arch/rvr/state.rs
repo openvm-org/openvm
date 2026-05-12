@@ -4,12 +4,15 @@
 //! by fixed offsets. It is built fresh per execution and points at VmState's
 //! existing memory buffer; we do not own a separate allocation.
 
+use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{InstretSuspender, Rv32, RvState, TracerState};
 
 use super::{
+    bridge::rv32_memory_ptr,
     metered::MeteredTracer,
     metered_cost::{MeteredCostMeter, PureTracer},
 };
+use crate::{arch::VmState, system::memory::online::GuestMemory};
 
 /// A payload type that can sit behind a [`TracerPtr`]. The const `KIND`
 /// matches the tracer-kind ABI the rvr-generated C code expects.
@@ -66,15 +69,17 @@ pub type PureState = RvState<Rv32, PureTracer, InstretSuspender>;
 pub type MeteredCostState = RvState<Rv32, MeteredCostMeter, InstretSuspender>;
 pub type MeteredState = RvState<Rv32, MeteredTracer, InstretSuspender>;
 
-/// Build a `PureState` whose memory pointer aliases `memory_ptr` and pc starts at `pc`.
+/// Build a `PureState` whose memory pointer aliases `vm_state`'s
+/// `RV32_MEMORY_AS` segment, with pc set to `pc`. Suspender is disabled by
+/// default; the caller may re-arm it via `state.suspender.set_target(_)`.
 ///
-/// Suspender is disabled by default; the caller may re-arm it via `state.suspender.set_target(_)`.
-///
-/// # Safety
-///
-/// `memory_ptr` must be a valid mutable pointer to at least `MEM_SIZE` bytes that stay
-/// alive and untouched by anything else for the duration of rvr execution.
-pub fn init_rvr_state(memory_ptr: *mut u8, pc: u32) -> PureState {
+/// The stored pointer is dereferenced later by the rvr C engine; the segment
+/// must stay alive and be uniquely accessed for the duration of rvr execution.
+pub fn init_rvr_state<F: PrimeField32>(
+    vm_state: &mut VmState<F, GuestMemory>,
+    pc: u32,
+) -> PureState {
+    let memory_ptr = rv32_memory_ptr(vm_state);
     let mut state = PureState::new();
     state.set_memory(memory_ptr);
     state.pc = pc;
@@ -82,7 +87,11 @@ pub fn init_rvr_state(memory_ptr: *mut u8, pc: u32) -> PureState {
     state
 }
 
-pub fn init_rvr_state_with_metered_cost(memory_ptr: *mut u8, pc: u32) -> MeteredCostState {
+pub fn init_rvr_state_with_metered_cost<F: PrimeField32>(
+    vm_state: &mut VmState<F, GuestMemory>,
+    pc: u32,
+) -> MeteredCostState {
+    let memory_ptr = rv32_memory_ptr(vm_state);
     let mut state = MeteredCostState::new();
     state.set_memory(memory_ptr);
     state.pc = pc;
@@ -90,7 +99,11 @@ pub fn init_rvr_state_with_metered_cost(memory_ptr: *mut u8, pc: u32) -> Metered
     state
 }
 
-pub fn init_rvr_state_with_metered(memory_ptr: *mut u8, pc: u32) -> MeteredState {
+pub fn init_rvr_state_with_metered<F: PrimeField32>(
+    vm_state: &mut VmState<F, GuestMemory>,
+    pc: u32,
+) -> MeteredState {
+    let memory_ptr = rv32_memory_ptr(vm_state);
     let mut state = MeteredState::new();
     state.set_memory(memory_ptr);
     state.pc = pc;

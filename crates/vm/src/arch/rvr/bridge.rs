@@ -18,12 +18,12 @@ use crate::{
     },
 };
 
-/// Mut pointer + size of the RV32 main memory address space inside `vm_state`.
+/// Mut pointer to the RV32 main memory address space inside `vm_state`.
 /// The pointer is stable for the lifetime of `vm_state.memory`'s backing.
-pub fn rv32_memory_ptr<F>(vm_state: &mut VmState<F, GuestMemory>) -> (*mut u8, usize) {
-    let mem = &mut vm_state.memory.memory.mem[RV32_MEMORY_AS as usize];
-    let len = mem.size();
-    (mem.as_mut_slice().as_mut_ptr(), len)
+pub fn rv32_memory_ptr<F>(vm_state: &mut VmState<F, GuestMemory>) -> *mut u8 {
+    vm_state.memory.memory.mem[RV32_MEMORY_AS as usize]
+        .as_mut_slice()
+        .as_mut_ptr()
 }
 
 pub fn public_values_slice(memory: &mut AddressMap) -> &mut [u8] {

@@ -129,8 +129,8 @@ pub fn build_callbacks<F: PrimeField32>(
 
 fn build_io_state_borrowed<'a, F: PrimeField32>(
     vm_state: &'a mut VmState<F, GuestMemory>,
-    memory_ptr: *mut u8,
 ) -> OpenVmIoState<'a, F> {
+    let memory_ptr = rv32_memory_ptr(vm_state);
     let streams = &mut vm_state.streams;
     OpenVmIoState {
         input_stream: &mut streams.input_stream,
@@ -212,7 +212,6 @@ fn run_and_finalize<F, S>(
     compiled: &RvrCompiled,
     vm_state: &mut VmState<F, GuestMemory>,
     state: &mut S,
-    memory_ptr: *mut u8,
     allow_suspended: bool,
     failure_prefix: &str,
 ) -> Result<ExecuteOutcome, ExecuteError>
@@ -220,8 +219,7 @@ where
     F: PrimeField32,
     S: RvrStateInspect,
 {
-    // SAFETY: state pointer is valid and matches the tracer variant.
-    let mut io_state = build_io_state_borrowed(vm_state, memory_ptr);
+    let mut io_state = build_io_state_borrowed(vm_state);
     let callbacks = build_callbacks(&mut io_state);
     unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
 
@@ -261,10 +259,9 @@ pub fn execute<F: PrimeField32>(
 ) -> Result<RvrPureResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
-    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
 
     let mut tracer_data = PureTracerData;
-    let mut state = init_rvr_state(memory_ptr, pc);
+    let mut state = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
     if let Some(n) = limit {
@@ -275,7 +272,6 @@ pub fn execute<F: PrimeField32>(
         compiled,
         vm_state,
         &mut state,
-        memory_ptr,
         limit.is_some(),
         "execution failed",
     )?;
@@ -295,10 +291,9 @@ pub fn execute_metered_cost<F: PrimeField32>(
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
-    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
 
     let mut tracer_data = MeteredCostData::default();
-    let mut state = init_rvr_state_with_metered_cost(memory_ptr, pc);
+    let mut state = init_rvr_state_with_metered_cost(vm_state, pc);
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
 
@@ -313,7 +308,6 @@ pub fn execute_metered_cost<F: PrimeField32>(
         compiled,
         vm_state,
         &mut state,
-        memory_ptr,
         limit.is_some(),
         "metered-cost execution failed",
     )?;
@@ -333,10 +327,9 @@ pub fn execute_metered<F: PrimeField32>(
 ) -> Result<RvrMeteredResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
-    let (memory_ptr, _) = rv32_memory_ptr(vm_state);
 
     let mut tracer_data = MeteredTracerData::default();
-    let mut state = init_rvr_state_with_metered(memory_ptr, pc);
+    let mut state = init_rvr_state_with_metered(vm_state, pc);
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
 
@@ -357,7 +350,6 @@ pub fn execute_metered<F: PrimeField32>(
         compiled,
         vm_state,
         &mut state,
-        memory_ptr,
         false,
         "metered execution failed",
     )?;
