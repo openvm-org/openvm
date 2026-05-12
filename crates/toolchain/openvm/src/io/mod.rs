@@ -116,16 +116,6 @@ pub fn reveal_u64(x: u64, index: usize) {
     println!("reveal {} at byte location {}", x, index * 8);
 }
 
-/// Store u64 `x` to the native address `native_addr` as 8 field element in byte.
-#[allow(unused_variables)]
-#[inline(always)]
-pub fn store_u64_to_native(native_addr: u64, x: u64) {
-    #[cfg(openvm_intrinsics)]
-    openvm_riscv_guest::store_to_native!(native_addr, x);
-    #[cfg(not(openvm_intrinsics))]
-    panic!("store_to_native_u64 cannot run on non-zkVM platforms");
-}
-
 /// A no-alloc writer to print to stdout on host machine for debugging purposes.
 pub struct Writer;
 
