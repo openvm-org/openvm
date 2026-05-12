@@ -9,6 +9,8 @@ pub mod canonicity;
 pub mod count;
 pub mod output;
 pub mod poseidon2;
+#[cfg(feature = "rvr")]
+pub mod runtime;
 
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda_abi;
