@@ -143,9 +143,11 @@ pub extern "C" fn host_reveal<F: PrimeField32>(
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let start = ptr as usize + offset as usize;
     let end = start + 4;
-    if end > io.public_values.len() {
-        return;
-    }
+    assert!(
+        end <= io.public_values.len(),
+        "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
+        io.public_values.len(),
+    );
     io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
 }
 
