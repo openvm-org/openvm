@@ -118,7 +118,17 @@ where
 pub struct Sha2;
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Sha2 {}
+impl<F: PrimeField32> VmRvrExtension<F> for Sha2 {
+    fn extend_rvr(
+        &self,
+        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
+        ctx: &rvr_openvm_lift::RvrExtensionCtx,
+    ) {
+        let ext = rvr_openvm_ext_sha2::Sha2Extension::new(ctx)
+            .expect("failed to construct rvr Sha2Extension");
+        registry.register(ext);
+    }
+}
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
