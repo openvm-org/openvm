@@ -13,12 +13,12 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    BaseAirWithPublicValues,
 };
 
 #[repr(C)]
