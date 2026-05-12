@@ -17,7 +17,7 @@ void ext_hint_stream_set(const uint8_t* data, uint32_t len);
 /* Deferral extension callbacks (called by deferral FFI staticlib). */
 int ext_deferral_call_lookup(uint32_t def_idx, const uint8_t* input_commit,
                              uint8_t* output_key_out);
-int ext_deferral_output_lookup(const uint8_t* output_commit, uint8_t* output_raw_out,
-                               uint32_t expected_len);
+int ext_deferral_output_lookup(uint32_t def_idx, const uint8_t* output_commit,
+                               uint8_t* output_raw_out, uint32_t expected_len);
 
 #endif /* OPENVM_IO_H */

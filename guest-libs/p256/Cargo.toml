@@ -36,6 +36,7 @@ openvm-sha2-circuit = { path = "../../extensions/sha2/circuit", default-features
 openvm-sha2-transpiler = { path = "../../extensions/sha2/transpiler", default-features = false }
 openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
 openvm-toolchain-tests = { path = "../../crates/toolchain/tests", default-features = false }
+rvr-openvm-lift = { path = "../../crates/rvr/rvr-openvm-lift" }
 
 openvm-stark-backend.workspace = true
 openvm-cpu-backend = { workspace = true }
@@ -73,7 +74,7 @@ cuda = [
 ]
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot"]
-rvr = []
+rvr = ["openvm-ecc-circuit/rvr", "openvm-sha2-circuit/rvr"]
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }

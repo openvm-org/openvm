@@ -87,7 +87,7 @@ pub unsafe extern "C" fn rvr_ext_deferral_output(
     state: *mut c_void,
     output_ptr: u32,
     input_ptr: u32,
-    _def_idx: u32,
+    def_idx: u32,
     output_chip_idx: u32,
     poseidon2_chip_idx: u32,
 ) {
@@ -107,6 +107,7 @@ pub unsafe extern "C" fn rvr_ext_deferral_output(
     // Look up pre-computed raw output via host callback, write directly to a local buffer.
     let mut output_raw = vec![0u8; output_len];
     let found = ext_deferral_output_lookup(
+        def_idx,
         output_commit.as_ptr(),
         output_raw.as_mut_ptr(),
         output_len as u32,
