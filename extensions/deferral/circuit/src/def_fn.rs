@@ -31,6 +31,10 @@ impl DeferralFn {
         Self { f: Box::new(f) }
     }
 
+    pub fn call_raw(&self, input_raw: &[u8]) -> OutputRaw {
+        (self.f)(input_raw)
+    }
+
     pub fn execute<F: VmField>(
         &self,
         input_commit: &InputCommit,
@@ -73,7 +77,7 @@ pub fn generate_deferral_results<F: VmField>(
         .collect()
 }
 
-fn hash_output_raw<F: VmField>(
+pub(crate) fn hash_output_raw<F: VmField>(
     hasher: &DeferralPoseidon2Chip<F>,
     deferral_idx: u32,
     output_ref: &[u8],
