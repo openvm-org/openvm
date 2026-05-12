@@ -196,7 +196,7 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
 
     let poseidon2_chip = deferral_poseidon2_chip();
     let (output_commit, output_len) = execute_deferral_fn(
-        &pre_compute.deferral_fn,
+        pre_compute.deferral_fn,
         &input_commit_bytes.to_vec(),
         &mut exec_state.streams.deferrals[pre_compute.deferral_idx as usize],
         pre_compute.deferral_idx,

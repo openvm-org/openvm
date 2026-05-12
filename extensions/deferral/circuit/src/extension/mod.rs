@@ -23,7 +23,9 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_ext_deferral::{install_deferral_runtime, DeferralFnPtr, DeferralRvrExtension};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -69,25 +71,23 @@ pub struct DeferralExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
-    fn extend_rvr(
-        &self,
-        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
-        ctx: &rvr_openvm_lift::RvrExtensionCtx,
-    ) {
-        let raw_fns: Vec<rvr_openvm_ext_deferral::DeferralFnPtr> = self
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+        let raw_fns: Vec<DeferralFnPtr> = self
             .fns
             .iter()
             .map(|fn_arc| {
                 let fn_arc = Arc::clone(fn_arc);
-                Arc::new(move |input: &[u8]| fn_arc.call_raw(input))
-                    as rvr_openvm_ext_deferral::DeferralFnPtr
+                Arc::new(move |input: &[u8]| fn_arc.call_raw(input)) as DeferralFnPtr
             })
             .collect();
         let hash = crate::runtime::make_deferral_hash::<F>();
-        rvr_openvm_ext_deferral::install_deferral_runtime(raw_fns, hash);
+        // `install_deferral_runtime` overwrites a thread-local with no cleanup, so callers must
+        // re-register before each execution — otherwise a later run on the same thread (e.g. a
+        // following test) would see the previous extension's closures.
+        install_deferral_runtime(raw_fns, hash);
 
-        let ext = rvr_openvm_ext_deferral::DeferralRvrExtension::new(ctx)
-            .expect("failed to construct rvr DeferralRvrExtension");
+        let ext =
+            DeferralRvrExtension::new(ctx).expect("failed to construct rvr DeferralRvrExtension");
         registry.register(ext);
     }
 }

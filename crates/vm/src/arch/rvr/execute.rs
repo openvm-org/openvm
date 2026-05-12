@@ -8,7 +8,7 @@
 use std::ffi::c_void;
 
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_state::{InstretSuspender, RvState, TracerState, NUM_REGS_I};
+use rvr_state::{MemoryError, Rv32, RvState, SuspenderState, TracerState, NUM_REGS_I};
 
 use super::{
     bridge::{public_values_slice, read_rv32_registers, rv32_memory_ptr, write_rv32_registers},
@@ -40,7 +40,7 @@ pub enum ExecuteError {
     #[error("guest exited with non-zero exit code: {0}")]
     GuestExit(u8),
     #[error("memory allocation failed: {0}")]
-    MemoryAlloc(#[from] rvr_state::MemoryError),
+    MemoryAlloc(#[from] MemoryError),
 }
 
 /// `suspended` is `false` for unlimited runs.
@@ -84,7 +84,7 @@ fn outcome_of<S: RvrStateInspect>(state: &S) -> ExecuteOutcome {
     }
 }
 
-impl<T: TracerState> RvrStateInspect for RvState<rvr_state::Rv32, T, InstretSuspender> {
+impl<T: TracerState, S: SuspenderState> RvrStateInspect for RvState<Rv32, T, S> {
     fn pc(&self) -> u32 {
         self.pc
     }

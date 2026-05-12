@@ -31,20 +31,17 @@ pub fn public_values_slice(memory: &mut AddressMap) -> &mut [u8] {
 }
 
 pub fn read_rv32_registers<F>(vm_state: &VmState<F, GuestMemory>) -> [u32; NUM_REGS_I] {
-    let mem = &vm_state.memory.memory.mem[RV32_REGISTER_AS as usize];
-    let bytes = mem.as_slice();
+    let bytes = vm_state.memory.memory.mem[RV32_REGISTER_AS as usize].as_slice();
     let mut regs = [0u32; NUM_REGS_I];
-    for (i, chunk) in bytes.chunks_exact(4).take(NUM_REGS_I).enumerate() {
-        regs[i] = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+    for (reg, chunk) in regs.iter_mut().zip(bytes.chunks_exact(4)) {
+        *reg = u32::from_le_bytes(chunk.try_into().unwrap());
     }
     regs
 }
 
 pub fn write_rv32_registers<F>(vm_state: &mut VmState<F, GuestMemory>, regs: &[u32; NUM_REGS_I]) {
-    let mem = &mut vm_state.memory.memory.mem[RV32_REGISTER_AS as usize];
-    let bytes = mem.as_mut_slice();
-    for (i, reg) in regs.iter().enumerate() {
-        let dst = &mut bytes[i * 4..i * 4 + 4];
+    let bytes = vm_state.memory.memory.mem[RV32_REGISTER_AS as usize].as_mut_slice();
+    for (reg, dst) in regs.iter().zip(bytes.chunks_exact_mut(4)) {
         dst.copy_from_slice(&reg.to_le_bytes());
     }
 }

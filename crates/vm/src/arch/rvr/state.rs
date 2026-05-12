@@ -4,7 +4,7 @@
 //! by fixed offsets. It is built fresh per execution and points at VmState's
 //! existing memory buffer; we do not own a separate allocation.
 
-use rvr_state::{InstretSuspender, RvState, TracerState};
+use rvr_state::{InstretSuspender, Rv32, RvState, TracerState};
 
 use super::{
     metered::MeteredTracer,
@@ -44,19 +44,27 @@ impl<T: TracerPayload> TracerState for TracerPtr<T> {
 impl<T> std::ops::Deref for TracerPtr<T> {
     type Target = T;
     fn deref(&self) -> &T {
+        debug_assert!(
+            !self.0.is_null(),
+            "TracerPtr dereferenced before payload was assigned"
+        );
         unsafe { &*self.0 }
     }
 }
 
 impl<T> std::ops::DerefMut for TracerPtr<T> {
     fn deref_mut(&mut self) -> &mut T {
+        debug_assert!(
+            !self.0.is_null(),
+            "TracerPtr dereferenced before payload was assigned"
+        );
         unsafe { &mut *self.0 }
     }
 }
 
-pub type PureState = RvState<rvr_state::Rv32, PureTracer, InstretSuspender>;
-pub type MeteredCostState = RvState<rvr_state::Rv32, MeteredCostMeter, InstretSuspender>;
-pub type MeteredState = RvState<rvr_state::Rv32, MeteredTracer, InstretSuspender>;
+pub type PureState = RvState<Rv32, PureTracer, InstretSuspender>;
+pub type MeteredCostState = RvState<Rv32, MeteredCostMeter, InstretSuspender>;
+pub type MeteredState = RvState<Rv32, MeteredTracer, InstretSuspender>;
 
 /// Build a `PureState` whose memory pointer aliases `memory_ptr` and pc starts at `pc`.
 ///

@@ -11,6 +11,7 @@ use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
+use rvr_openvm_ext_deferral::eval_deferral_call;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 
 use crate::arch::deferral::{DeferralState, InputMapVal};
@@ -193,8 +194,7 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
             (arr, len)
         }
         InputMapVal::Raw(input_raw) => {
-            let (commit, output_raw) =
-                rvr_openvm_ext_deferral::eval_deferral_call(def_idx, &input_raw);
+            let (commit, output_raw) = eval_deferral_call(def_idx, &input_raw);
             let len = output_raw.len() as u64;
             io.deferrals[def_idx as usize].store_output(&input_commit, commit.to_vec(), output_raw);
             (commit, len)
