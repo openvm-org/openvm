@@ -10,13 +10,23 @@ use openvm_circuit::{
 };
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
+        testing::{
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            RANGE_TUPLE_CHECKER_BUS,
+        },
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::range_tuple::{
-    RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    range_tuple::{
+        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+        SharedRangeTupleCheckerChip,
+    },
 };
 use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
@@ -83,6 +93,7 @@ fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
     Rv64MultiplicationAir,
@@ -91,7 +102,11 @@ fn create_harness_fields(
 ) {
     let air = Rv64MultiplicationAir::new(
         Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
-        MultiplicationCoreAir::new(*range_tuple_chip.bus(), MulOpcode::CLASS_OFFSET),
+        MultiplicationCoreAir::new(
+            *range_tuple_chip.bus(),
+            bitwise_chip.bus(),
+            MulOpcode::CLASS_OFFSET,
+        ),
     );
     let executor =
         Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
@@ -99,6 +114,7 @@ fn create_harness_fields(
         MultiplicationFiller::new(
             Rv64MultAdapterFiller,
             range_tuple_chip,
+            bitwise_chip,
             MulOpcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -111,20 +127,34 @@ fn create_harness(
 ) -> (
     Harness,
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
+    (
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    ),
 ) {
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         range_tuple_chip.clone(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-    (harness, (range_tuple_chip.air, range_tuple_chip))
+    (
+        harness,
+        (range_tuple_chip.air, range_tuple_chip),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -165,7 +195,7 @@ fn run_rv64_mul_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, range_tuple) = create_harness(&mut tester);
+    let (mut harness, range_tuple, bitwise) = create_harness(&mut tester);
     let num_ops = 100;
     for _ in 0..num_ops {
         set_and_execute(
@@ -183,6 +213,7 @@ fn run_rv64_mul_rand_test() {
         .build()
         .load(harness)
         .load_periphery(range_tuple)
+        .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -205,7 +236,7 @@ fn run_negative_mul_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, range_tuple) = create_harness(&mut tester);
+    let (mut harness, range_tuple, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -232,6 +263,7 @@ fn run_negative_mul_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(range_tuple)
+        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -478,10 +510,16 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_range_tuple_chip,
+        dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64MultiplicationChipGpu::new(

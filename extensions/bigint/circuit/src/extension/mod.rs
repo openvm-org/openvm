@@ -242,7 +242,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
                 bitwise_lu,
                 pointer_max_bits,
             )),
-            MultiplicationCoreAir::new(range_tuple_checker, Rv64Mul256Opcode::CLASS_OFFSET),
+            MultiplicationCoreAir::new(range_tuple_checker, bitwise_lu, Rv64Mul256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(mult);
 
@@ -362,6 +362,7 @@ where
             MultiplicationFiller::new(
                 Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                 range_tuple_checker.clone(),
+                bitwise_lu.clone(),
                 Rv64Mul256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),

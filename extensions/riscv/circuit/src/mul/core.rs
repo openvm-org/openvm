@@ -8,6 +8,7 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -34,6 +35,7 @@ pub struct MultiplicationCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
 #[columns_via(MultiplicationCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct MultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub offset: usize,
 }
 
@@ -92,6 +94,17 @@ where
                 .eval(builder, cols.is_valid);
         }
 
+        // Range-check read columns b, c to [0, 256). After the memory-bus
+        // packing to 4 field elements (commit 6), the bus carries
+        // `b[2k] + 256·b[2k+1]` as a single field element, so without local u8
+        // checks the prover could split that value differently between b[2k]
+        // and b[2k+1]. The send_range checks both arguments to [0, 256).
+        for i in 0..NUM_LIMBS {
+            self.bitwise_lookup_bus
+                .send_range(b[i], c[i])
+                .eval(builder, cols.is_valid);
+        }
+
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, MulOpcode::MUL);
 
         AdapterAirContext {
@@ -124,11 +137,12 @@ pub struct MultiplicationExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub offset: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MultiplicationFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -137,6 +151,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub fn new(
         adapter: A,
         range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
@@ -157,6 +172,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             adapter,
             offset,
             range_tuple_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -239,6 +255,13 @@ where
 
         for (a, carry) in a.iter().zip(carry.iter()) {
             self.range_tuple_chip.add_count(&[*a as u32, *carry]);
+        }
+
+        // Mirror the AIR's `send_range(b[i], c[i])` so the bitwise lookup bus
+        // stays balanced. See AIR comment for soundness motivation.
+        for (b_val, c_val) in record.b.iter().zip(record.c.iter()) {
+            self.bitwise_lookup_chip
+                .request_range(*b_val as u32, *c_val as u32);
         }
 
         // write in reverse order

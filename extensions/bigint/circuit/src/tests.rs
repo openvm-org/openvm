@@ -168,7 +168,11 @@ fn create_mul_harness_fields(
             bitwise_chip.bus(),
             address_bits,
         )),
-        MultiplicationCoreAir::new(*range_tuple_chip.bus(), Rv64Mul256Opcode::CLASS_OFFSET),
+        MultiplicationCoreAir::new(
+            *range_tuple_chip.bus(),
+            bitwise_chip.bus(),
+            Rv64Mul256Opcode::CLASS_OFFSET,
+        ),
     );
     let executor = Rv64Multiplication256Executor::new(
         AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
@@ -176,8 +180,9 @@ fn create_mul_harness_fields(
     );
     let chip = Rv64Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip),
+            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
             range_tuple_chip,
+            bitwise_chip,
             Rv64Mul256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
