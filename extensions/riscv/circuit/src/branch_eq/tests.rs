@@ -1,11 +1,18 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -37,7 +44,7 @@ use {
 use super::{core::run_eq, BranchEqualCoreCols, Rv64BranchEqualChip};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller,
+        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_CELL_BITS,
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
@@ -53,6 +60,7 @@ type Harness =
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
     Rv64BranchEqualAir,
@@ -61,7 +69,11 @@ fn create_harness_fields(
 ) {
     let air = Rv64BranchEqualAir::new(
         Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
-        BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        BranchEqualCoreAir::new(
+            bitwise_chip.bus(),
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        ),
     );
     let executor = Rv64BranchEqualExecutor::new(
         Rv64BranchAdapterExecutor,
@@ -71,6 +83,7 @@ fn create_harness_fields(
     let chip = Rv64BranchEqualChip::new(
         BranchEqualFiller::new(
             Rv64BranchAdapterFiller,
+            bitwise_chip,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -79,13 +92,28 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
+fn create_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -147,7 +175,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -162,7 +190,11 @@ fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -185,7 +217,7 @@ fn run_negative_branch_eq_test(
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -216,6 +248,7 @@ fn run_negative_branch_eq_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -322,7 +355,7 @@ fn rv64_bne_invalid_inv_marker_negative_test() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, _bitwise) = create_harness(&mut tester);
 
     let x = [19, 4, 179, 60, 201, 77, 1, 240];
     let y = [19, 32, 180, 60, 201, 77, 1, 240];
@@ -397,9 +430,14 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
+        dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());

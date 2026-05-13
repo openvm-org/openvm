@@ -245,7 +245,11 @@ fn create_beq_harness_fields(
             bitwise_chip.bus(),
             address_bits,
         )),
-        BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        BranchEqualCoreAir::new(
+            bitwise_chip.bus(),
+            Rv64BranchEqual256Opcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        ),
     );
     let executor = Rv64BranchEqual256Executor::new(
         BranchAdapterExecutor::new(Rv64VecHeapBranchAdapterExecutor::new(address_bits)),
@@ -254,7 +258,8 @@ fn create_beq_harness_fields(
     );
     let chip = Rv64BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip),
+            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            bitwise_chip,
             Rv64BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
