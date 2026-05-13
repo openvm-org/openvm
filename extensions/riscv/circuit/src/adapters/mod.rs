@@ -161,8 +161,10 @@ pub fn timed_read<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
+    // - Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are
+    //   u16-celled post Stage 1.6; passing `T = u8` routes through the byte-view
+    //   dispatch on `TracingMemory::read`, which requires `N = MEMORY_BLOCK_BYTES`.
+    //   `ptr` is the byte pointer (= bus pointer for u16 ASes).
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
         unsafe { memory.read::<u8, N>(address_space, ptr) }
@@ -188,9 +190,7 @@ pub fn timed_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
+    // SAFETY: see `timed_read` — u8 byte-view dispatch against u16-celled storage.
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
         unsafe { memory.write::<u8, N>(address_space, ptr, data) }

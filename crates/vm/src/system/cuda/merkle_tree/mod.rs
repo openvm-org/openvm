@@ -1,7 +1,7 @@
 use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH, BUS_PTR_SCALE},
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
@@ -232,7 +232,11 @@ impl MemoryMerkleTree {
             );
         }
 
-        let label_max_bits = mem_config.pointer_max_bits - log2_ceil_usize(DIGEST_WIDTH);
+        // Universal formula: `label_max_bits = address_height` =
+        // `pointer_max_bits - log2(BUS_PTR_SCALE) - log2(DIGEST_WIDTH)`.
+        let label_max_bits = mem_config.pointer_max_bits
+            - log2_ceil_usize(BUS_PTR_SCALE)
+            - log2_ceil_usize(DIGEST_WIDTH);
 
         let zero_hash = DeviceBuffer::<H>::with_capacity_on(label_max_bits + 1, &device_ctx);
         let top_roots = DeviceBuffer::<H>::with_capacity_on(2 * num_addr_spaces - 1, &device_ctx);
