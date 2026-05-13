@@ -8,7 +8,10 @@ use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::{encoder::Encoder, AlignedBorrow, AlignedBytesBorrow, SubAir};
+use openvm_circuit_primitives::{
+    encoder::Encoder, AlignedBorrow, AlignedBytesBorrow, ColumnsAir, StructReflection,
+    StructReflectionHelper, SubAir,
+};
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
 };
@@ -206,7 +209,8 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ColumnsAir)]
+#[columns_via(LoadStoreCoreCols<u8, NUM_CELLS>)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
     encoder: Encoder,

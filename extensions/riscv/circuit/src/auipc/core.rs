@@ -31,7 +31,7 @@ use crate::adapters::{
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64AuipcCoreCols<T> {
     pub is_valid: T,
     pub is_sign_extend: T,
@@ -42,7 +42,8 @@ pub struct Rv64AuipcCoreCols<T> {
     pub rd_data: [T; RV64_WORD_NUM_LIMBS],
 }
 
-#[derive(Debug, Clone, Copy, derive_new::new)]
+#[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64AuipcCoreCols<u8>)]
 pub struct Rv64AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }

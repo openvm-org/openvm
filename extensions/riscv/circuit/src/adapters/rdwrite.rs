@@ -31,7 +31,7 @@ use super::RV64_REGISTER_NUM_LIMBS;
 use crate::adapters::tracing_write;
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64RdWriteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
@@ -39,21 +39,23 @@ pub struct Rv64RdWriteAdapterCols<T> {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64CondRdWriteAdapterCols<T> {
     pub inner: Rv64RdWriteAdapterCols<T>,
     pub needs_write: T,
 }
 
 /// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64RdWriteAdapterCols<u8>)]
 pub struct Rv64RdWriteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64CondRdWriteAdapterCols<u8>)]
 pub struct Rv64CondRdWriteAdapterAir {
     inner: Rv64RdWriteAdapterAir,
 }

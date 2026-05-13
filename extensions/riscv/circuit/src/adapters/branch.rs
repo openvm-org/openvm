@@ -28,7 +28,7 @@ use super::RV64_REGISTER_NUM_LIMBS;
 use crate::adapters::tracing_read;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct Rv64BranchAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
@@ -36,7 +36,8 @@ pub struct Rv64BranchAdapterCols<T> {
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64BranchAdapterCols<u8>)]
 pub struct Rv64BranchAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,

@@ -80,7 +80,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadStoreAdapt
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
@@ -106,7 +106,8 @@ pub struct Rv64LoadStoreAdapterCols<T> {
     pub needs_write: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64LoadStoreAdapterCols<u8>)]
 pub struct Rv64LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
