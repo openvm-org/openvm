@@ -42,8 +42,12 @@ __device__ inline bool same_output_block(
 /// field elements. The output values must be in Montgomery form because they are
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
 /// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
-/// DEFERRAL_AS stores field elements (4 bytes per cell, already Montgomery-encoded).
-/// Other address spaces store u8 cells (1 byte per cell).
+///
+/// `chunk_ptr` is a **cell index** (the partition key carries cell_idx, not the
+/// normalized bus pointer). Cell sizes per AS:
+/// - DEFERRAL_AS: 4 bytes per cell (Fp), already Montgomery-encoded.
+/// - Other ASes: 2 bytes per cell (u16) in little-endian byte layout post Stage
+///   1.6 cell-type flip.
 __device__ inline void read_initial_chunk(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
@@ -60,18 +64,21 @@ __device__ inline void read_initial_chunk(
         return;
     }
     if (address_space == DEFERRAL_AS) {
-        // F-type cells: 4 bytes per cell, already raw Montgomery u32
+        // F-type cells: 4 bytes per cell, already raw Montgomery u32.
         uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + chunk_ptr;
         #pragma unroll
         for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
             out_values[i] = cells[i];
         }
     } else {
-        // U8 cells: 1 byte per cell, convert to Montgomery form
-        size_t byte_offset = static_cast<size_t>(chunk_ptr);
+        // u16 cells, little-endian. Each cell occupies 2 bytes at byte offset
+        // `2 * (chunk_ptr + i)`.
+        size_t base = static_cast<size_t>(chunk_ptr) * 2;
         #pragma unroll
         for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
-            out_values[i] = Fp(mem[byte_offset + i]).asRaw();
+            uint32_t cell = uint32_t(mem[base + 2 * i])
+                | (uint32_t(mem[base + 2 * i + 1]) << 8);
+            out_values[i] = Fp(cell).asRaw();
         }
     }
 }
