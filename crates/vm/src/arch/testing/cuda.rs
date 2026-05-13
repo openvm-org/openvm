@@ -52,7 +52,8 @@ use crate::{
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH, BUS_PTR_SCALE,
+        MEMORY_BLOCK_BYTES,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -243,8 +244,11 @@ pub struct GpuChipTestBuilder {
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+        // Tests use `gen_pointer` over the full byte range, but `num_cells` is in
+        // u16 cells post Stage 1.6 flip — saturate at the per-AS cell budget
+        // implied by `pointer_max_bits` (= 2^(pointer_max_bits - log2(BUS_PTR_SCALE))).
+        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+            1 << (mem_config.pointer_max_bits - BUS_PTR_SCALE.trailing_zeros() as usize);
         Self::new(mem_config, default_var_range_checker_bus())
     }
 }
@@ -341,14 +345,17 @@ impl GpuChipTestBuilder {
             register,
             (pointer as u64).to_le_bytes().map(F::from_u8),
         );
-        // Always write in BLOCK_FE_WIDTH-byte chunks to match the fixed block size.
+        // Heap payload writes go through the byte-view dispatch
+        // (`DeviceMemoryTester::write::<MEMORY_BLOCK_BYTES>`) so this works
+        // against u16-celled storage post Stage 1.6 flip. NUM_LIMBS must be
+        // a multiple of `MEMORY_BLOCK_BYTES`.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
-                self.write::<BLOCK_FE_WIDTH>(
+            for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+                self.write::<MEMORY_BLOCK_BYTES>(
                     2usize,
                     ptr + j,
-                    write[j..j + BLOCK_FE_WIDTH].try_into().unwrap(),
+                    write[j..j + MEMORY_BLOCK_BYTES].try_into().unwrap(),
                 );
             }
         }

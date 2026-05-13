@@ -422,7 +422,10 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{vm_poseidon2_config, AddressSpaceHostLayout, MemoryCellType, MemoryConfig},
+        arch::{
+            vm_poseidon2_config, AddressSpaceHostLayout, MemoryCellType, MemoryConfig,
+            BUS_PTR_SCALE, U16_CELL_SIZE,
+        },
         system::{
             cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
@@ -457,10 +460,21 @@ mod tests {
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
             let max_cells = 1 << 16;
-            addr_spaces[RV64_REGISTER_AS as usize].num_cells = 32 * size_of::<u64>();
+            // RV64_REGISTER_AS is u16-celled post-flip; num_cells is in cells.
+            addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+                32 * size_of::<u64>() / U16_CELL_SIZE;
             addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
-            MemoryConfig::new(2, addr_spaces, max_cells.ilog2() as usize, 29, 17)
+            // pointer_max_bits = log2(max_cells) + log2(BUS_PTR_SCALE) so that the
+            // max bus pointer `BUS_PTR_SCALE * (num_cells - 1)` fits in the configured
+            // bit width post Stage 1.6 flip.
+            MemoryConfig::new(
+                2,
+                addr_spaces,
+                max_cells.ilog2() as usize + BUS_PTR_SCALE.trailing_zeros() as usize,
+                29,
+                17,
+            )
         };
 
         let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
