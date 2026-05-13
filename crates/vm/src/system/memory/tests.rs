@@ -46,8 +46,14 @@ fn test_memory_write(its: usize) {
 #[test_case(0)]
 fn test_cuda_memory_write(its: usize) {
     use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
-    let mut tester =
-        GpuChipTestBuilder::new(MemoryConfig::default(), default_var_range_checker_bus());
+    // The default PUBLIC_VALUES_AS sizing (`DEFAULT_MAX_NUM_PUBLIC_VALUES /
+    // U16_CELL_SIZE = 16` cells) is too small for the random `max_ptr = 20`
+    // cell range the helper uses. Bump it so all three writable address
+    // spaces fit the test's pointer range.
+    let mut mem_config = MemoryConfig::default();
+    use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
+    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 10;
+    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");
