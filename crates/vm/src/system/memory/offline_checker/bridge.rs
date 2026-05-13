@@ -1,20 +1,14 @@
 use getset::CopyGetters;
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLessThanIo, AssertLtSubAir},
-    is_zero::{IsZeroIo, IsZeroSubAir},
-    utils::not,
     var_range::VariableRangeCheckerBus,
     SubAir,
 };
-use openvm_stark_backend::{
-    interaction::InteractionBuilder, p3_air::AirBuilder, p3_field::PrimeCharacteristicRing,
-};
+use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeCharacteristicRing};
 
 use super::bus::MemoryBus;
 use crate::system::memory::{
-    offline_checker::columns::{
-        MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
-    },
+    offline_checker::columns::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
     MemoryAddress,
 };
 
@@ -64,24 +58,6 @@ impl MemoryBridge {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
             data: data.map(Into::into),
-            timestamp: timestamp.into(),
-            aux,
-        }
-    }
-
-    /// Prepare a logical memory read or immediate operation.
-    #[must_use]
-    pub fn read_or_immediate<'a, T, V>(
-        &self,
-        address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: impl Into<T>,
-        timestamp: impl Into<T>,
-        aux: &'a MemoryReadOrImmediateAuxCols<V>,
-    ) -> MemoryReadOrImmediateOperation<'a, T, V> {
-        MemoryReadOrImmediateOperation {
-            offline_checker: self.offline_checker,
-            address: MemoryAddress::from(address),
-            data: data.into(),
             timestamp: timestamp.into(),
             aux,
         }
@@ -153,74 +129,6 @@ impl<F: PrimeCharacteristicRing, V: Copy + Into<F>, const N: usize>
             self.timestamp.clone(),
             self.aux.base.prev_timestamp,
             enabled,
-        );
-    }
-}
-
-/// Constraints and interactions for a logical memory read of `(address, data)` at time `timestamp`,
-/// supporting `address.address_space = 0` for immediates.
-///
-/// If `address.address_space` is non-zero, it behaves like `MemoryReadOperation`. Otherwise,
-/// it constrains the immediate value appropriately.
-///
-/// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
-/// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
-/// to be `AB::Var`.
-pub struct MemoryReadOrImmediateOperation<'a, T, V> {
-    offline_checker: MemoryOfflineChecker,
-    address: MemoryAddress<T, T>,
-    data: T,
-    timestamp: T,
-    aux: &'a MemoryReadOrImmediateAuxCols<V>,
-}
-
-/// The max degree of constraints is:
-/// IsZeroSubAir.subair_eval:
-///         deg(enabled) + max(deg(address.address_space) + deg(aux.is_immediate),
-///                           deg(address.address_space) + deg(aux.is_zero_aux))
-/// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
-/// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
-/// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
-impl<F: PrimeCharacteristicRing, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
-    /// Evaluate constraints and send/receive interactions.
-    pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
-    where
-        AB: InteractionBuilder<Var = V, Expr = F>,
-    {
-        let enabled = enabled.into();
-
-        // `is_immediate` should be an indicator for `address_space == 0` (when `enabled`).
-        {
-            let is_zero_io = IsZeroIo::new(
-                self.address.address_space.clone(),
-                self.aux.is_immediate.into(),
-                enabled.clone(),
-            );
-            IsZeroSubAir.eval(builder, (is_zero_io, self.aux.is_zero_aux));
-        }
-        // When `is_immediate`, the data should be the pointer value.
-        builder
-            .when(self.aux.is_immediate)
-            .assert_eq(self.data.clone(), self.address.pointer.clone());
-
-        // Timestamps should be increasing (when enabled).
-        self.offline_checker.eval_timestamps(
-            builder,
-            self.timestamp.clone(),
-            &self.aux.base,
-            enabled.clone(),
-        );
-
-        #[allow(clippy::cloned_ref_to_slice_refs)]
-        self.offline_checker.eval_bulk_access(
-            builder,
-            self.address,
-            #[allow(clippy::cloned_ref_to_slice_refs)]
-            &[self.data.clone()],
-            &[self.data],
-            self.timestamp,
-            self.aux.base.prev_timestamp,
-            enabled * not(self.aux.is_immediate),
         );
     }
 }
