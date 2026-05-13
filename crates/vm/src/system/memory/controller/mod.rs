@@ -42,7 +42,7 @@ pub const DIGEST_WIDTH: usize = 8;
 pub const BUS_LEAF_STRIDE: usize = BUS_PTR_SCALE * DIGEST_WIDTH;
 
 const _: () = assert!(
-    DIGEST_WIDTH % BLOCK_FE_WIDTH == 0,
+    DIGEST_WIDTH.is_multiple_of(BLOCK_FE_WIDTH),
     "DIGEST_WIDTH must be divisible by BLOCK_FE_WIDTH so BLOCKS_PER_LEAF is integer-valued"
 );
 

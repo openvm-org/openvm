@@ -323,7 +323,7 @@ where
         let mut acc = AB::Expr::ZERO;
         let mut mult: u64 = 1;
         for k in 0..pack_ratio {
-            acc = acc + AB::Expr::from_u64(mult) * data[i * pack_ratio + k].clone();
+            acc += AB::Expr::from_u64(mult) * data[i * pack_ratio + k].clone();
             mult *= 256;
         }
         packed.push(acc);
