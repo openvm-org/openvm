@@ -624,6 +624,12 @@ impl TracingMemory {
 
     /// Atomic byte-view read. `byte_ptr` is a byte address into the AS's
     /// storage backing; returns the raw `N` bytes.
+    ///
+    /// # Safety
+    /// - `byte_ptr` must be aligned to `N` and `N` must equal
+    ///   `MEMORY_BLOCK_BYTES` (= cell_size * BLOCK_FE_WIDTH).
+    /// - `byte_ptr + N` must be within the AS's storage backing.
+    /// - `address_space` must be a valid configured address space.
     #[inline(always)]
     pub unsafe fn read_bytes<const N: usize>(
         &mut self,
@@ -639,6 +645,9 @@ impl TracingMemory {
     }
 
     /// Atomic byte-view write. See [`TracingMemory::read_bytes`].
+    ///
+    /// # Safety
+    /// Same as [`TracingMemory::read_bytes`].
     #[inline(always)]
     pub unsafe fn write_bytes<const N: usize>(
         &mut self,
