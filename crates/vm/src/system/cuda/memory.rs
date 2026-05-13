@@ -340,16 +340,8 @@ mod tests {
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, MEMORY_BLOCK_BYTES>(
-                RV64_REGISTER_AS,
-                0,
-                [1, 2, 3, 4, 5, 6, 7, 8],
-            );
-            memory.write::<u8, MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
-                0,
-                [9, 10, 11, 12, 0, 0, 0, 0],
-            );
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, [9, 10, 11, 12, 0, 0, 0, 0]);
         }
 
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
@@ -424,16 +416,8 @@ mod tests {
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, MEMORY_BLOCK_BYTES>(
-                RV64_REGISTER_AS,
-                0,
-                [1, 2, 3, 4, 5, 6, 7, 8],
-            );
-            memory.write::<u8, MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
-                0,
-                [9, 10, 11, 12, 0, 0, 0, 0],
-            );
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, [9, 10, 11, 12, 0, 0, 0, 0]);
         }
 
         let mut final_memory = memory.clone();
