@@ -4,7 +4,11 @@ use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    utils::not,
+    ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::BranchEqualOpcode;
@@ -35,6 +39,7 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(BranchEqualCoreCols<u8, NUM_LIMBS>)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     offset: usize,
     pc_step: u32,
 }
@@ -100,6 +105,19 @@ where
         }
         builder.when(is_valid.clone()).assert_one(sum);
 
+        // Range-check read columns a, b to [0, 256). After the memory-bus pack
+        // (commit 6) pairs share a packed field element on the bus; without
+        // local u8 checks the prover could re-split values across (a[2i],
+        // a[2i+1]) or (b[2i], b[2i+1]).
+        for i in 0..NUM_LIMBS / 2 {
+            self.bitwise_lookup_bus
+                .send_range(a[i * 2], a[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+            self.bitwise_lookup_bus
+                .send_range(b[i * 2], b[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+        }
+
         let expected_opcode = flags
             .iter()
             .zip(BranchEqualOpcode::iter())
@@ -146,9 +164,10 @@ pub struct BranchEqualExecutor<A, const NUM_LIMBS: usize> {
     pub pc_step: u32,
 }
 
-#[derive(Clone, Copy, derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     adapter: A,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub offset: usize,
     pub pc_step: u32,
 }
@@ -235,6 +254,17 @@ where
 
         core_row.imm = F::from_u32(record.imm);
         core_row.cmp_result = F::from_bool(cmp_result);
+
+        // Mirror AIR's u8 range-checks on read pairs (a[2i], a[2i+1]) and
+        // (b[2i], b[2i+1]) so the bitwise-lookup bus stays balanced.
+        for pair in record.a.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
+        for pair in record.b.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
 
         core_row.b = record.b.map(F::from_u8);
         core_row.a = record.a.map(F::from_u8);

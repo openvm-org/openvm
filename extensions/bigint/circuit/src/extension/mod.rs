@@ -220,7 +220,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
                 bitwise_lu,
                 pointer_max_bits,
             )),
-            BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(
+                bitwise_lu,
+                Rv64BranchEqual256Opcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
         );
         inventory.add_air(beq);
 
@@ -339,6 +343,7 @@ where
         let beq = Rv64BranchEqual256Chip::new(
             BranchEqualFiller::new(
                 Rv64VecHeapBranchAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                bitwise_lu.clone(),
                 Rv64BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
