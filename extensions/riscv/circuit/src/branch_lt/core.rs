@@ -147,6 +147,15 @@ where
             )
             .eval(builder, is_valid.clone());
 
+        // Range-check the non-MSB read limbs a[0..NUM_LIMBS-1] and b[0..NUM_LIMBS-1] to
+        // [0, 256). After the bus pack (commit 6) these limbs share a packed field
+        // element with their neighbors and need local u8 checks for soundness.
+        for i in 0..NUM_LIMBS - 1 {
+            self.bus
+                .send_range(a[i], b[i])
+                .eval(builder, is_valid.clone());
+        }
+
         // Range check to ensure diff_val is non-zero.
         self.bus
             .send_range(cols.diff_val - AB::Expr::ONE, AB::F::ZERO)
@@ -326,6 +335,12 @@ where
 
         self.bitwise_lookup_chip
             .request_range(a_msb_range, b_msb_range);
+
+        // Mirror AIR's non-MSB read-side u8 range-checks for (a[i], b[i]).
+        for i in 0..NUM_LIMBS - 1 {
+            self.bitwise_lookup_chip
+                .request_range(record.a[i] as u32, record.b[i] as u32);
+        }
 
         core_row.diff_marker = [F::ZERO; NUM_LIMBS];
 
